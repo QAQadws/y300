@@ -147,6 +147,7 @@ final class YamiboForumClientBuilder {
               : null),
     );
     final unusedImages = factory.createUnusedImageAttachments(formhash);
+    final dailySignIn = factory.createDailySignIn();
     final standardPlan = ForumClientSourcePlan(
       forumDirectory: forumHome.directory,
       forumHome: forumHome.home,
@@ -163,6 +164,8 @@ final class YamiboForumClientBuilder {
         directory: favoriteThreadDirectory,
       ),
       currentUserProfile: factory.createCurrentUserProfile(),
+      dailySignIn: dailySignIn.repository,
+      dailySignInCommand: dailySignIn.command,
       notifications: factory.createNotifications(),
       privateMessages: factory.createPrivateMessages(),
       stickerCatalog: factory.createStickerCatalog(store: stickerCatalogStore),

@@ -28,4 +28,16 @@ void main() {
 
     expect(redactor.redact(uri), uri);
   });
+
+  test('redacts the opaque daily sign value regardless of query case', () {
+    final redacted = redactor.redact(
+      Uri.parse(
+        'https://bbs.yamibo.com/plugin.php?id=zqlj_sign&Sign=opaque-fixture-value',
+      ),
+    );
+
+    expect(redacted.queryParameters['Sign'], '[REDACTED]');
+    expect(redacted.toString(), isNot(contains('opaque-fixture-value')));
+    expect(redacted.queryParameters['id'], 'zqlj_sign');
+  });
 }

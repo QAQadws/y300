@@ -134,6 +134,30 @@ enum ForumUserProfileView {
   self,
 }
 
+/// Available actions on a verified user's own forum profile.
+enum ForumUserProfileActionKind {
+  /// Topics created by the user.
+  threads,
+
+  /// Blog entries created by the user.
+  blogs,
+
+  /// Forum favorites, distinct from local app favorites.
+  forumFavorites,
+
+  /// Private messages.
+  messages,
+
+  /// Friends.
+  friends,
+
+  /// Forum account settings.
+  settings,
+
+  /// Credit transaction history.
+  creditHistory,
+}
+
 /// Query parameters for forum user profile.
 final class ForumUserProfileQuery {
   /// Creates a [ForumUserProfileQuery].
@@ -163,6 +187,7 @@ final class ForumUserProfileData {
     required this.identity,
     required this.metrics,
     required this.details,
+    this.actions = const [],
     this.avatarUrl,
     this.coverUrl,
     this.signatureHtml,
@@ -185,6 +210,9 @@ final class ForumUserProfileData {
 
   /// Details.
   final List<ForumUserProfileDetail> details;
+
+  /// Actions advertised by the verified self-profile, in server order.
+  final List<ForumUserProfileActionKind> actions;
 }
 
 /// Source-neutral forum user profile metric.
@@ -233,6 +261,9 @@ enum ForumUserProfileCapability {
 
   /// Ordered details.
   orderedDetails,
+
+  /// Ordered, validated self-profile actions.
+  orderedActions,
 }
 
 /// Capabilities declared by the forum user profile source.

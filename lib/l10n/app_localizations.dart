@@ -6687,6 +6687,42 @@ abstract class AppLocalizations {
   /// **'消息提醒'**
   String get profileMessages;
 
+  /// No description provided for @profileMyThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的主题'**
+  String get profileMyThreads;
+
+  /// No description provided for @profileForumFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛收藏'**
+  String get profileForumFavorites;
+
+  /// No description provided for @profileFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友'**
+  String get profileFriends;
+
+  /// No description provided for @profileSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'资料设置'**
+  String get profileSettings;
+
+  /// No description provided for @profileCreditHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'积分明细'**
+  String get profileCreditHistory;
+
+  /// No description provided for @profileNoAdditionalDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无其他资料'**
+  String get profileNoAdditionalDetails;
+
   /// No description provided for @profileSignature.
   ///
   /// In zh, this message translates to:
@@ -7367,6 +7403,162 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'打开主题首页'**
   String get threadPostOpenHome;
+
+  /// No description provided for @moreDailySignIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'每日签到'**
+  String get moreDailySignIn;
+
+  /// No description provided for @moreDailySignInSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看今日状态并手动签到'**
+  String get moreDailySignInSubtitle;
+
+  /// No description provided for @dailySignInTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'每日签到'**
+  String get dailySignInTitle;
+
+  /// No description provided for @dailySignInChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在核对论坛签到状态…'**
+  String get dailySignInChecking;
+
+  /// No description provided for @dailySignInSigned.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日已签到'**
+  String get dailySignInSigned;
+
+  /// No description provided for @dailySignInUnsigned.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日尚未签到'**
+  String get dailySignInUnsigned;
+
+  /// No description provided for @dailySignInLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后查看签到状态'**
+  String get dailySignInLoginRequired;
+
+  /// No description provided for @dailySignInFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认签到状态，请稍后重试。'**
+  String get dailySignInFailed;
+
+  /// No description provided for @dailySignInPluginUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛签到页暂不可用。'**
+  String get dailySignInPluginUnavailable;
+
+  /// No description provided for @dailySignInSignNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即签到'**
+  String get dailySignInSignNow;
+
+  /// No description provided for @dailySignInSubmitting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在签到…'**
+  String get dailySignInSubmitting;
+
+  /// No description provided for @dailySignInVerify.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新核验'**
+  String get dailySignInVerify;
+
+  /// No description provided for @dailySignInRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新状态'**
+  String get dailySignInRefresh;
+
+  /// No description provided for @dailySignInOpenForum.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开论坛签到页'**
+  String get dailySignInOpenForum;
+
+  /// No description provided for @dailySignInStatistics.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的签到统计'**
+  String get dailySignInStatistics;
+
+  /// No description provided for @dailySignInOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次签到结果无法确认。请先重新核验；应用不会自动再次提交。'**
+  String get dailySignInOutcomeUnknown;
+
+  /// No description provided for @dailySignInUnknownButSigned.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次请求结果不明；论坛页面显示今日已签到。'**
+  String get dailySignInUnknownButSigned;
+
+  /// No description provided for @dailySignInApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'签到成功，论坛已确认今日记录。'**
+  String get dailySignInApplied;
+
+  /// No description provided for @dailySignInPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号没有签到权限。'**
+  String get dailySignInPermissionDenied;
+
+  /// No description provided for @dailySignInTimeWindowClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前时段尚未开放签到。'**
+  String get dailySignInTimeWindowClosed;
+
+  /// No description provided for @dailySignInRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛未接受本次签到，请稍后核验。'**
+  String get dailySignInRejected;
+
+  /// No description provided for @dailySignInNotSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次未提交签到，请核对最新状态后再试。'**
+  String get dailySignInNotSent;
+
+  /// No description provided for @dailySignInDayChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛日期已变化，本次未提交。请核对最新状态后再试。'**
+  String get dailySignInDayChanged;
+
+  /// No description provided for @dailySignInRetryUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'再次尝试签到'**
+  String get dailySignInRetryUnknown;
+
+  /// No description provided for @dailySignInRetryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认再次提交？'**
+  String get dailySignInRetryTitle;
+
+  /// No description provided for @dailySignInRetryBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次请求可能已经生效，即使当前页面仍显示未签到。继续将重新读取页面并发送一次新的签到请求。'**
+  String get dailySignInRetryBody;
 }
 
 class _AppLocalizationsDelegate

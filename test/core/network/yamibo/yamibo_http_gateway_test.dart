@@ -546,6 +546,152 @@ void main() {
       expect(adapter.fetchCount, 2);
     });
 
+    test('sign command disables WAF replay through the package bridge', () async {
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(statusCode: 405, textBody: 'Method Not Allowed'),
+        _ScriptedResponse(textBody: 'unexpected second submission'),
+      ]);
+      final logOutput = _MemoryLogOutput();
+      var recoveryCalls = 0;
+      final coordinator =
+          WafChallengeRecoveryCoordinator(retryCooldown: Duration.zero)
+            ..attachLauncher((_) async {
+              recoveryCalls += 1;
+              return WafChallengeRecoveryResult.verified;
+            });
+      final gateway = _buildGateway(
+        adapter: adapter,
+        logOutput: logOutput,
+        wafChallengeRecoveryCoordinator: coordinator,
+      );
+      final network = Y300ForumClientNetworkAdapter(
+        gateway: gateway,
+        apiOrigin: Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+        siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+        resourceUserAgent: BrowserUserAgents.mobile,
+      );
+
+      final result = await network.send(
+        forum.ForumRequest(
+          method: forum.ForumRequestMethod.get,
+          uri: Uri.parse(
+            'https://bbs.yamibo.com/plugin.php?id=zqlj_sign&sign=opaque-fixture-value',
+          ),
+          context: const forum.ForumRequestContext(
+            operation: 'daily_sign_in.submit',
+          ),
+          followRedirects: false,
+          allowWafReplay: false,
+        ),
+      );
+
+      expect(
+        result,
+        isA<forum.ForumTransportError<forum.ForumResponse<Object?>>>(),
+      );
+      expect(adapter.fetchCount, 1);
+      expect(adapter.requests.single.followRedirects, isFalse);
+      expect(recoveryCalls, 0);
+      expect(
+        logOutput.lines.join('\n'),
+        isNot(contains('opaque-fixture-value')),
+      );
+    });
+
+    test('sign transport errors exclude the one-use value', () async {
+      final signUri = Uri.parse(
+        'https://bbs.yamibo.com/plugin.php?id=zqlj_sign&sign=opaque-fixture-value',
+      );
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) => handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+                message: 'connection failed for opaque-fixture-value',
+                error: 'opaque-fixture-value',
+              ),
+            ),
+          ),
+        );
+      final logOutput = _MemoryLogOutput();
+      final gateway = YamiboHttpGateway(
+        cookieStore: CookieStore(),
+        logger: Logger(
+          printer: SimplePrinter(colors: false),
+          output: logOutput,
+          filter: ProductionFilter(),
+          level: Level.trace,
+        ),
+        dio: dio,
+      );
+
+      final result = await gateway.getText(
+        signUri,
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'daily_sign_in.submit',
+        ),
+        followRedirects: false,
+        allowWafReplay: false,
+      );
+
+      expect(result.isFailure, isTrue);
+      expect(
+        result.errorOrNull?.message,
+        isNot(contains('opaque-fixture-value')),
+      );
+      expect(result.errorOrNull?.raw, isNull);
+      expect(
+        logOutput.lines.join('\n'),
+        isNot(contains('opaque-fixture-value')),
+      );
+    });
+
+    test('sign command does not follow a redirect through the bridge', () async {
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(
+          statusCode: 302,
+          headers: <String, List<String>>{
+            'location': <String>['/plugin.php?id=zqlj_sign'],
+          },
+        ),
+        _ScriptedResponse(textBody: 'unexpected redirected GET'),
+      ]);
+      final network = Y300ForumClientNetworkAdapter(
+        gateway: _buildGateway(adapter: adapter),
+        apiOrigin: Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+        siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+        resourceUserAgent: BrowserUserAgents.mobile,
+      );
+
+      final result = await network.send(
+        forum.ForumRequest(
+          method: forum.ForumRequestMethod.get,
+          uri: Uri.parse(
+            'https://bbs.yamibo.com/plugin.php?id=zqlj_sign&sign=opaque-fixture-value',
+          ),
+          context: const forum.ForumRequestContext(
+            operation: 'daily_sign_in.submit',
+          ),
+          followRedirects: false,
+          allowWafReplay: false,
+        ),
+      );
+
+      expect(
+        result,
+        isA<forum.ForumTransportSuccess<forum.ForumResponse<Object?>>>(),
+      );
+      final response =
+          (result as forum.ForumTransportSuccess<forum.ForumResponse<Object?>>)
+              .response;
+      expect(response.statusCode, 302);
+      expect(adapter.requests.single.followRedirects, isFalse);
+      expect(adapter.fetchCount, 1);
+    });
+
     test(
       'native clearance probe classifies a WAF 405 without opening recovery',
       () async {

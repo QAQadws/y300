@@ -236,6 +236,7 @@ final class Y300ForumClientNetworkAdapter
             headers: request.headers,
             cancelToken: cancelToken,
             followRedirects: request.followRedirects,
+            allowWafReplay: request.allowWafReplay,
           ),
         ),
         forum.ForumResponseType.json => _mapResult(
@@ -244,6 +245,8 @@ final class Y300ForumClientNetworkAdapter
             context: context,
             headers: request.headers,
             cancelToken: cancelToken,
+            followRedirects: request.followRedirects,
+            allowWafReplay: request.allowWafReplay,
           ),
         ),
         forum.ForumResponseType.bytes => _mapResult(
@@ -252,6 +255,8 @@ final class Y300ForumClientNetworkAdapter
             context: context,
             headers: request.headers,
             cancelToken: cancelToken,
+            followRedirects: request.followRedirects,
+            allowWafReplay: request.allowWafReplay,
           ),
         ),
       };
@@ -278,6 +283,7 @@ final class Y300ForumClientNetworkAdapter
           },
           headers: request.headers,
           cancelToken: cancelToken,
+          allowWafReplay: request.allowWafReplay,
           options: Options(
             responseType: ResponseType.plain,
             followRedirects: request.followRedirects,
@@ -302,6 +308,7 @@ final class Y300ForumClientNetworkAdapter
           headers: request.headers,
           cancelToken: cancelToken,
           followRedirects: request.followRedirects,
+          allowWafReplay: request.allowWafReplay,
         ),
       );
     }
@@ -322,6 +329,7 @@ final class Y300ForumClientNetworkAdapter
           headers: request.headers,
           cancelToken: cancelToken,
           followRedirects: request.followRedirects,
+          allowWafReplay: request.allowWafReplay,
         ),
       ),
       forum.ForumResponseType.json => _mapResult(
@@ -332,6 +340,7 @@ final class Y300ForumClientNetworkAdapter
           headers: request.headers,
           cancelToken: cancelToken,
           followRedirects: request.followRedirects,
+          allowWafReplay: request.allowWafReplay,
         ),
       ),
       forum.ForumResponseType.bytes => const forum.ForumTransportError(

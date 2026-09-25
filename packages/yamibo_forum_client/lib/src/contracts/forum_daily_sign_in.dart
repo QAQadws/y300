@@ -121,10 +121,18 @@ abstract interface class ForumDailySignInRepository {
 /// Request to sign in the authenticated user for the current forum day.
 final class ForumDailySignInRequest {
   /// Creates a daily sign-in request.
-  const ForumDailySignInRequest({required this.userId, this.cancellation});
+  const ForumDailySignInRequest({
+    required this.userId,
+    this.expectedForumDay,
+    this.cancellation,
+  });
 
   /// Expected forum user ID, checked against the current session.
   final String userId;
+
+  /// Optional day shown to the caller before confirmation, in `YYYYMMDD`.
+  /// A changed day prevents submission even if a fresh page is unsigned.
+  final String? expectedForumDay;
 
   /// Optional caller-owned cancellation signal.
   final ForumRequestCancellation? cancellation;

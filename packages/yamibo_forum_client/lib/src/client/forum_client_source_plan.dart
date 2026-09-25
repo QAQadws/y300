@@ -2,6 +2,7 @@ import '../contracts/comic_contracts.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_daily_sign_in.dart';
 import '../contracts/forum_authentication.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_image_attachments.dart';
@@ -36,6 +37,8 @@ final class ForumClientSourcePlan {
     this.favoriteForumCommand,
     this.favoriteThreadCommand,
     this.currentUserProfile,
+    this.dailySignIn,
+    this.dailySignInCommand,
     this.notifications,
     this.privateMessages,
     this.stickerCatalog,
@@ -93,6 +96,8 @@ final class ForumClientSourcePlan {
     favoriteThreadCommand:
         overrides.favoriteThreadCommand ?? favoriteThreadCommand,
     currentUserProfile: overrides.currentUserProfile ?? currentUserProfile,
+    dailySignIn: overrides.dailySignIn ?? dailySignIn,
+    dailySignInCommand: overrides.dailySignInCommand ?? dailySignInCommand,
     notifications: overrides.notifications ?? notifications,
     privateMessages: overrides.privateMessages ?? privateMessages,
     stickerCatalog: overrides.stickerCatalog ?? stickerCatalog,
@@ -172,6 +177,12 @@ final class ForumClientSourcePlan {
 
   /// Source for the authenticated user's profile projection.
   final CurrentUserProfileRepository? currentUserProfile;
+
+  /// Network-only source for today's authenticated sign-in state.
+  final ForumDailySignInRepository? dailySignIn;
+
+  /// Command for one ordinary daily sign-in attempt.
+  final ForumDailySignInCommand? dailySignInCommand;
 
   /// Source for notification pages.
   final ForumNotificationRepository? notifications;

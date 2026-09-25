@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -23,6 +24,8 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
+import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
+import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 import '../../../support/favorite_command_test_support.dart';
@@ -72,6 +75,8 @@ void main() {
     expect(find.text('登录'), findsOneWidget);
     expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
     expect(find.text('我的资料'), findsOneWidget);
+    expect(find.byKey(const Key('more-daily-sign-in-entry')), findsOneWidget);
+    expect(find.text('每日签到'), findsOneWidget);
     expect(find.byKey(const Key('more-unused-images-entry')), findsOneWidget);
     expect(find.text('未使用图片管理'), findsOneWidget);
     expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
@@ -90,6 +95,10 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
     expect(find.text('管理缓存与离线内容'), findsOneWidget);
+    await _scrollUntilVisibleIfNeeded(
+      tester,
+      find.byKey(const Key('more-download-queue-entry')),
+    );
     expect(find.byKey(const Key('more-download-queue-entry')), findsOneWidget);
     expect(find.text('缓存队列'), findsOneWidget);
     expect(find.text('暂无缓存任务'), findsOneWidget);
@@ -164,6 +173,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await _scrollUntilVisibleIfNeeded(tester, find.text('快取佇列'));
     expect(find.text('快取佇列'), findsOneWidget);
     expect(find.text('目前沒有快取工作'), findsOneWidget);
     expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
@@ -208,6 +218,9 @@ void main() {
       ProviderScope(
         overrides: [
           ...forumAuthOverrides(repository),
+          dailySignInRepositoryProvider.overrideWithValue(
+            _SignedDailySignInRepository(),
+          ),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -236,6 +249,13 @@ void main() {
     expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
     expect(find.text('退出登录'), findsOneWidget);
     expect(find.text('当前账号：tester'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('more-daily-sign-in-entry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DailySignInPage), findsOneWidget);
+    expect(find.text('今日已签到'), findsOneWidget);
+    Navigator.of(tester.element(find.byType(DailySignInPage))).pop();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('more-my-profile-entry')));
     await tester.pumpAndSettle();
@@ -1096,4 +1116,32 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
     required Map<String, String> cookies,
     String path = '/',
   }) async {}
+}
+
+class _SignedDailySignInRepository implements ForumDailySignInRepository {
+  @override
+  ForumDailySignInSourceCapabilities get capabilities =>
+      ForumDailySignInSourceCapabilities(
+        values: DataCapabilitySet.supported(
+          ForumDailySignInReadCapability.values,
+        ),
+      );
+
+  @override
+  Future<
+    DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
+  >
+  load(ForumDailySignInQuery query) async => DataReadSuccess(
+    data: ForumDailySignInSnapshot(
+      userId: query.userId,
+      forumDay: '20260925',
+      status: ForumDailySignInStatus.signed,
+    ),
+    capabilities: ForumDailySignInReadCapabilities(
+      values: DataCapabilitySet.supported(
+        ForumDailySignInReadCapability.values,
+      ),
+    ),
+    metadata: const DataReadMetadata.network(),
+  );
 }

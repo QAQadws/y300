@@ -32,15 +32,15 @@ void main() {
     expect(find.byKey(const Key('my-message-center-tabs')), findsOneWidget);
     expect(find.text('提醒 1'), findsOneWidget);
     expect(find.byKey(const Key('my-notification-list')), findsOneWidget);
-    expect(find.text('筱林透'), findsOneWidget);
+    expect(find.text('示例用户'), findsOneWidget);
     expect(_richTextContaining('点评了您'), findsOneWidget);
 
     await tester.tap(find.text('消息 1'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('my-private-message-list')), findsOneWidget);
-    expect(find.text('嗨！28君好'), findsOneWidget);
-    expect(find.text('好的，我QQ就是2834758851'), findsOneWidget);
+    expect(find.text('测试消息'), findsOneWidget);
+    expect(find.text('收到，这是一条测试消息'), findsOneWidget);
   });
 
   testWidgets('localizes Traditional Chinese chrome and preserves messages', (
@@ -66,7 +66,7 @@ void main() {
 
     expect(find.text('訊息提醒'), findsOneWidget);
     expect(find.text('提醒 1'), findsOneWidget);
-    expect(find.text('筱林透'), findsOneWidget);
+    expect(find.text('示例用户'), findsOneWidget);
   });
 
   testWidgets('localizes Traditional Chinese chrome and preserves messages', (
@@ -92,7 +92,7 @@ void main() {
 
     expect(find.text('訊息提醒'), findsOneWidget);
     expect(find.text('提醒 1'), findsOneWidget);
-    expect(find.text('筱林透'), findsOneWidget);
+    expect(find.text('示例用户'), findsOneWidget);
   });
 }
 
@@ -109,13 +109,13 @@ class _FakeMyMessageRepository implements MyMessageRepository {
           perPage: 30,
           items: [
             MyNotificationItem(
-              id: '4117644',
+              id: '42',
               type: 'pcomment',
               isNew: false,
-              authorId: '8',
-              author: '筱林透',
-              noteHtml: '<a href="home.php?mod=space&uid=8">筱林透</a> 点评了您',
-              dateline: '2026-06-21 12:00',
+              authorId: '12',
+              author: '示例用户',
+              noteHtml: '<a href="home.php?mod=space&uid=12">示例用户</a> 点评了您',
+              dateline: '2025-01-02 12:00',
             ),
           ],
         ),
@@ -125,16 +125,16 @@ class _FakeMyMessageRepository implements MyMessageRepository {
           perPage: 15,
           items: [
             MyPrivateMessageItem(
-              plid: '133466',
-              pmid: '133466',
+              plid: '77',
+              pmid: '77',
               isNew: false,
-              subject: '嗨！28君好',
-              fromUid: '597454',
-              fromName: '2834758851',
-              toUid: '8',
-              toName: '筱林透',
-              message: '好的，我QQ就是2834758851',
-              dateline: '2026-5-11 19:50',
+              subject: '测试消息',
+              fromUid: '42',
+              fromName: '示例发件人',
+              toUid: '12',
+              toName: '示例用户',
+              message: '收到，这是一条测试消息',
+              dateline: '2025-01-02 12:30',
             ),
           ],
         ),

@@ -23,6 +23,7 @@ import 'package:y300/features/more/presentation/data_storage_sheet.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
+import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 
@@ -77,6 +78,19 @@ class _MorePageState extends ConsumerState<MorePage> {
             ),
             onTap: authSession.isLoggedIn
                 ? () => _openMyProfileWebViewPage(context, authSession)
+                : () => _openLoginPage(context),
+          ),
+          ListTile(
+            key: const Key('more-daily-sign-in-entry'),
+            leading: const Icon(Icons.event_available_outlined),
+            title: Text(l10n.moreDailySignIn),
+            subtitle: Text(l10n.moreDailySignInSubtitle),
+            onTap: authSession.isLoggedIn
+                ? () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DailySignInPage(),
+                    ),
+                  )
                 : () => _openLoginPage(context),
           ),
           ListTile(

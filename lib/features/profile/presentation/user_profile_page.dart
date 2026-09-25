@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
@@ -6,8 +8,9 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/my_message_center_page.dart';
-import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
+import 'package:y300/features/profile/presentation/my_profile_action_navigation.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -21,6 +24,8 @@ final class ForumUserProfilePageState {
     this.metadata,
     this.failure,
     this.isRefreshing = false,
+    this.ownerUid,
+    this.ownerRevision,
   });
 
   final ForumUserProfileData? data;
@@ -29,6 +34,8 @@ final class ForumUserProfilePageState {
   final DataReadFailure<ForumUserProfileData, ForumUserProfileReadCapabilities>?
   failure;
   final bool isRefreshing;
+  final String? ownerUid;
+  final int? ownerRevision;
 
   ForumUserProfilePageState copyWith({
     ForumUserProfileData? data,
@@ -38,6 +45,8 @@ final class ForumUserProfilePageState {
     failure,
     bool? isRefreshing,
     bool clearFailure = false,
+    String? ownerUid,
+    int? ownerRevision,
   }) {
     return ForumUserProfilePageState(
       data: data ?? this.data,
@@ -45,6 +54,8 @@ final class ForumUserProfilePageState {
       metadata: metadata ?? this.metadata,
       failure: clearFailure ? null : (failure ?? this.failure),
       isRefreshing: isRefreshing ?? this.isRefreshing,
+      ownerUid: ownerUid ?? this.ownerUid,
+      ownerRevision: ownerRevision ?? this.ownerRevision,
     );
   }
 }
@@ -103,50 +114,111 @@ final class UserProfilePageController
 
 final class MyUserProfilePageController
     extends AsyncNotifier<ForumUserProfilePageState> {
-  String? _resolvedUserId;
+  int _requestGeneration = 0;
 
   @override
-  Future<ForumUserProfilePageState> build() async {
-    final userId = await _resolveCurrentUid(ref);
-    _resolvedUserId = userId;
-    return _load(
-      userId,
-      previous: null,
-      cachePolicy: CacheLoadPolicy.cacheFirst,
-    );
+  Future<ForumUserProfilePageState> build() {
+    final generation = ++_requestGeneration;
+    final owner = ref.watch(verifiedProfileOwnerProvider);
+    ref.onDispose(() => _requestGeneration++);
+    if (owner == null) return Future.value(const ForumUserProfilePageState());
+    return _load(owner, previous: null, generation: generation);
   }
 
   Future<void> refresh() async {
-    final previous = state.value ?? const ForumUserProfilePageState();
+    final owner = _currentOwner();
+    final previous = state.asData?.value;
+    if (owner == null ||
+        previous == null ||
+        previous.ownerUid != owner.uid ||
+        previous.ownerRevision != owner.revision ||
+        previous.isRefreshing) {
+      return;
+    }
+    final generation = ++_requestGeneration;
     state = AsyncData(
       previous.copyWith(isRefreshing: true, clearFailure: true),
     );
-    final userId = _resolvedUserId ?? await _resolveCurrentUid(ref);
-    _resolvedUserId = userId;
-    state = AsyncData(
-      await _load(
-        userId,
-        previous: previous,
-        cachePolicy: CacheLoadPolicy.networkFirst,
-      ),
-    );
+    final next = await _load(owner, previous: previous, generation: generation);
+    if (ref.mounted &&
+        generation == _requestGeneration &&
+        _currentOwner() == owner) {
+      state = AsyncData(next);
+    }
   }
 
+  VerifiedProfileOwner? _currentOwner() =>
+      ref.read(verifiedProfileOwnerProvider);
+
   Future<ForumUserProfilePageState> _load(
-    String userId, {
+    VerifiedProfileOwner owner, {
     required ForumUserProfilePageState? previous,
-    required CacheLoadPolicy cachePolicy,
+    required int generation,
   }) async {
-    final result = await ref
-        .read(forumUserProfileRepositoryProvider)
-        .load(
-          ForumUserProfileQuery(
-            userId: userId,
-            view: ForumUserProfileView.self,
-          ),
-          cachePolicy: cachePolicy,
+    late final DataReadResult<
+      ForumUserProfileData,
+      ForumUserProfileReadCapabilities
+    >
+    result;
+    try {
+      result = await ref
+          .read(forumUserProfileRepositoryProvider)
+          .load(
+            ForumUserProfileQuery(
+              userId: owner.uid,
+              view: ForumUserProfileView.self,
+            ),
+            cachePolicy: CacheLoadPolicy.networkFirst,
+          );
+    } on Object {
+      result = const DataReadFailure(
+        kind: DataReadFailureKind.unknown,
+        diagnosticMessage: 'self_profile_read_failed',
+      );
+    }
+    if (!ref.mounted ||
+        generation != _requestGeneration ||
+        _currentOwner() != owner) {
+      return const ForumUserProfilePageState();
+    }
+    if (result
+        case DataReadSuccess<
+          ForumUserProfileData,
+          ForumUserProfileReadCapabilities
+        >(
+          :final data,
+          :final metadata,
+        )
+        when data.identity.userId == owner.uid &&
+            metadata.origin == DataReadOrigin.network &&
+            metadata.freshness == DataReadFreshness.current) {
+      return _profileStateFromResult(
+        result,
+        previous: null,
+      ).copyWith(ownerUid: owner.uid, ownerRevision: owner.revision);
+    }
+    final failure =
+        result.failureOrNull ??
+        const DataReadFailure<
+          ForumUserProfileData,
+          ForumUserProfileReadCapabilities
+        >(
+          kind: DataReadFailureKind.parse,
+          diagnosticMessage: 'self_profile_identity_or_provenance_unverified',
         );
-    return _profileStateFromResult(result, previous: previous);
+    final canRetain =
+        previous?.ownerUid == owner.uid &&
+        previous?.ownerRevision == owner.revision &&
+        (failure.kind == DataReadFailureKind.network ||
+            failure.kind == DataReadFailureKind.timeout);
+    return ForumUserProfilePageState(
+      data: canRetain ? previous?.data : null,
+      capabilities: canRetain ? previous?.capabilities : null,
+      metadata: canRetain ? previous?.metadata : null,
+      failure: failure,
+      ownerUid: owner.uid,
+      ownerRevision: owner.revision,
+    );
   }
 }
 
@@ -173,36 +245,6 @@ ForumUserProfilePageState _profileStateFromResult(
     failure: result.failureOrNull,
     isRefreshing: false,
   );
-}
-
-Future<String> _resolveCurrentUid(Ref ref) async {
-  final sessionUid = ref
-      .read(yamiboSessionStoreProvider)
-      .readCurrent()
-      ?.uid
-      .trim();
-  if (sessionUid != null && sessionUid.isNotEmpty && sessionUid != '0') {
-    return sessionUid;
-  }
-
-  final authSession = await ref.read(authSessionControllerProvider.future);
-  final authUid = authSession.uid.trim();
-  if (authUid.isNotEmpty && authUid != '0') {
-    return authUid;
-  }
-
-  final profileResult = await ref
-      .read(currentUserProfileRepositoryProvider)
-      .load(const CurrentUserProfileQuery());
-  if (profileResult case DataReadSuccess<
-    CurrentUserProfileData,
-    CurrentUserProfileReadCapabilities
-  >(
-    :final data,
-  )) {
-    return data.identity.userId;
-  }
-  throw profileResult.failureOrNull!;
 }
 
 class UserProfilePage extends ConsumerWidget {
@@ -260,9 +302,17 @@ class MyProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authSessionControllerProvider);
+    final revision = ref.watch(profileSessionRevisionProvider);
+    final owner = ref.watch(verifiedProfileOwnerProvider);
     final asyncProfile = ref.watch(myUserProfileProvider);
     final pageState = asyncProfile.value;
-    final profile = pageState?.data;
+    final profile =
+        owner != null &&
+            pageState?.ownerUid == owner.uid &&
+            pageState?.ownerRevision == owner.revision
+        ? pageState?.data
+        : null;
     final imageReferer = ref.watch(forumImageRefererProvider);
     final palette = _UserProfilePalette.resolve(Theme.of(context));
     final l10n = AppLocalizations.of(context);
@@ -280,43 +330,82 @@ class MyProfilePage extends ConsumerWidget {
           ),
         ],
       ),
-      body: profile != null
+      // Owner checks precede the cached AsyncValue so a late result cannot
+      // reveal a previous account during logout or an account transition.
+      body: owner == null
+          ? auth.isLoading || revision.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Center(child: Text(l10n.profileLoginRequired))
+          : profile != null
           ? RefreshIndicator(
               onRefresh: ref.read(myUserProfileProvider.notifier).refresh,
               child: _UserProfileContent(
                 profile: profile,
                 capabilities: pageState?.capabilities,
                 failure: pageState?.failure,
+                isRefreshing: pageState?.isRefreshing == true,
+                signInPanel: const DailySignInPanel(),
                 palette: palette,
                 imageReferer: imageReferer,
                 isMyProfile: true,
-                onOpenMessages: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const MyMessageCenterPage(),
-                    ),
-                  );
-                },
-                onOpenBlogs: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ProfileBlogPage(
-                        initialScope: UserBlogFeedScope.self,
-                      ),
-                    ),
-                  );
-                },
+                onOpenAction: (action) => openMyProfileAction(
+                  context: context,
+                  ref: ref,
+                  action: action,
+                  userId: owner.uid,
+                  isCurrentOwner: () =>
+                      ref.read(verifiedProfileOwnerProvider) == owner,
+                ),
               ),
             )
-          : asyncProfile.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _UserProfileError(
-              error: pageState?.failure ?? asyncProfile.error,
-              palette: palette,
-              onRetry: ref.read(myUserProfileProvider.notifier).refresh,
+          : ListView(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: DailySignInPanel(),
+                ),
+                if (asyncProfile.isLoading ||
+                    pageState?.ownerUid != owner.uid ||
+                    pageState?.ownerRevision != owner.revision)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  _UserProfileError(
+                    error: pageState?.failure ?? asyncProfile.error,
+                    message:
+                        pageState?.failure?.kind ==
+                            DataReadFailureKind.unauthorized
+                        ? l10n.profileLoginRequired
+                        : null,
+                    palette: palette,
+                    onRetry: () {
+                      if (pageState?.failure?.kind ==
+                          DataReadFailureKind.unauthorized) {
+                        unawaited(_retryVerifiedMyProfile(context, ref));
+                      } else if (asyncProfile.hasError ||
+                          pageState?.ownerUid == null) {
+                        ref.invalidate(myUserProfileProvider);
+                      } else {
+                        unawaited(
+                          ref.read(myUserProfileProvider.notifier).refresh(),
+                        );
+                      }
+                    },
+                  ),
+              ],
             ),
     );
   }
+}
+
+Future<void> _retryVerifiedMyProfile(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  await ref.read(authSessionControllerProvider.notifier).refresh();
+  if (context.mounted) ref.invalidate(myUserProfileProvider);
 }
 
 class _UserProfileContent extends StatelessWidget {
@@ -327,12 +416,10 @@ class _UserProfileContent extends StatelessWidget {
     required this.palette,
     required this.imageReferer,
     required this.isMyProfile,
-    this.onOpenMessages,
-    this.onOpenBlogs,
-  }) : assert(
-         !isMyProfile || (onOpenMessages != null && onOpenBlogs != null),
-         'My profile actions require both navigation callbacks.',
-       );
+    this.isRefreshing = false,
+    this.onOpenAction,
+    this.signInPanel,
+  }) : assert(!isMyProfile || onOpenAction != null);
 
   final ForumUserProfileData profile;
   final ForumUserProfileReadCapabilities? capabilities;
@@ -340,8 +427,9 @@ class _UserProfileContent extends StatelessWidget {
   final _UserProfilePalette palette;
   final String imageReferer;
   final bool isMyProfile;
-  final VoidCallback? onOpenMessages;
-  final VoidCallback? onOpenBlogs;
+  final bool isRefreshing;
+  final ValueChanged<ForumUserProfileActionKind>? onOpenAction;
+  final Widget? signInPanel;
 
   @override
   Widget build(BuildContext context) {
@@ -354,11 +442,36 @@ class _UserProfileContent extends StatelessWidget {
         profile.signatureHtml?.trim().isNotEmpty == true;
     final showDetails =
         capabilities?.supports(ForumUserProfileCapability.orderedDetails) ==
-        true;
+            true &&
+        profile.details.any((detail) => detail.value.trim().isNotEmpty);
+    final actions =
+        isMyProfile &&
+            capabilities?.supports(ForumUserProfileCapability.orderedActions) ==
+                true
+        ? profile.actions
+        : const <ForumUserProfileActionKind>[];
+    final hasAdditionalDetails =
+        (showMetrics && profile.metrics.isNotEmpty) ||
+        showSignature ||
+        (showDetails &&
+            profile.details.any(
+              (detail) =>
+                  detail.label.trim().toLowerCase() != 'uid' &&
+                  detail.value.trim().isNotEmpty,
+            ));
     return ListView(
       key: const Key('user-profile-page-list'),
       padding: EdgeInsets.zero,
       children: [
+        if (signInPanel != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: signInPanel!,
+          ),
+        if (isRefreshing)
+          const LinearProgressIndicator(
+            key: Key('user-profile-refresh-progress'),
+          ),
         if (failure != null)
           Padding(
             padding: const EdgeInsets.all(12),
@@ -389,14 +502,14 @@ class _UserProfileContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (isMyProfile)
+                    if (actions.isNotEmpty)
                       _ActionGrid(
                         palette: palette,
-                        onOpenMessages: onOpenMessages!,
-                        onOpenBlogs: onOpenBlogs!,
+                        actions: actions,
+                        onOpenAction: onOpenAction!,
                       ),
                     if (showSignature) ...[
-                      if (isMyProfile) const SizedBox(height: 12),
+                      if (actions.isNotEmpty) const SizedBox(height: 12),
                       _SignatureSection(
                         profile: profile,
                         palette: palette,
@@ -404,9 +517,14 @@ class _UserProfileContent extends StatelessWidget {
                       ),
                     ],
                     if (showDetails) ...[
-                      if (isMyProfile || showSignature)
+                      if (actions.isNotEmpty || showSignature)
                         const SizedBox(height: 12),
                       _DetailsSection(profile: profile, palette: palette),
+                    ],
+                    if (!hasAdditionalDetails) ...[
+                      if (actions.isNotEmpty || showDetails)
+                        const SizedBox(height: 12),
+                      _EmptyDetailsCard(palette: palette),
                     ],
                   ],
                 ),
@@ -545,50 +663,73 @@ class _MetricCard extends StatelessWidget {
 class _ActionGrid extends StatelessWidget {
   const _ActionGrid({
     required this.palette,
-    required this.onOpenMessages,
-    required this.onOpenBlogs,
+    required this.actions,
+    required this.onOpenAction,
   });
 
   final _UserProfilePalette palette;
-  final VoidCallback onOpenMessages;
-  final VoidCallback onOpenBlogs;
+  final List<ForumUserProfileActionKind> actions;
+  final ValueChanged<ForumUserProfileActionKind> onOpenAction;
 
   @override
   Widget build(BuildContext context) {
-    final actions = _buildActions(context);
+    final tiles = [
+      for (final kind in actions)
+        _ProfileAction(
+          kind,
+          _labelFor(context, kind),
+          _iconFor(kind),
+          onTap: () => onOpenAction(kind),
+        ),
+    ];
     return Container(
       key: const Key('user-profile-actions'),
       padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(palette),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: actions.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 3.6,
-        ),
-        itemBuilder: (context, index) {
-          final action = actions[index];
-          return _ActionTile(action: action, palette: palette);
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final tileWidth = constraints.maxWidth >= 420
+              ? (constraints.maxWidth - 12) / 2
+              : constraints.maxWidth;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final action in tiles)
+                SizedBox(
+                  width: tileWidth,
+                  child: _ActionTile(action: action, palette: palette),
+                ),
+            ],
+          );
         },
       ),
     );
   }
 
-  List<_ProfileAction> _buildActions(BuildContext context) {
+  String _labelFor(BuildContext context, ForumUserProfileActionKind kind) {
     final l10n = AppLocalizations.of(context);
-    return <_ProfileAction>[
-      _ProfileAction(l10n.profileMyBlogs, Icons.sms, onTap: onOpenBlogs),
-      _ProfileAction(
-        l10n.profileMessages,
-        Icons.notifications,
-        onTap: onOpenMessages,
-      ),
-    ];
+    return switch (kind) {
+      ForumUserProfileActionKind.threads => l10n.profileMyThreads,
+      ForumUserProfileActionKind.blogs => l10n.profileMyBlogs,
+      ForumUserProfileActionKind.forumFavorites => l10n.profileForumFavorites,
+      ForumUserProfileActionKind.messages => l10n.profileMessages,
+      ForumUserProfileActionKind.friends => l10n.profileFriends,
+      ForumUserProfileActionKind.settings => l10n.profileSettings,
+      ForumUserProfileActionKind.creditHistory => l10n.profileCreditHistory,
+    };
   }
+
+  IconData _iconFor(ForumUserProfileActionKind kind) => switch (kind) {
+    ForumUserProfileActionKind.threads => Icons.article_outlined,
+    ForumUserProfileActionKind.blogs => Icons.edit_note_outlined,
+    ForumUserProfileActionKind.forumFavorites => Icons.bookmarks_outlined,
+    ForumUserProfileActionKind.messages => Icons.notifications_outlined,
+    ForumUserProfileActionKind.friends => Icons.people_outline,
+    ForumUserProfileActionKind.settings => Icons.manage_accounts_outlined,
+    ForumUserProfileActionKind.creditHistory =>
+      Icons.account_balance_wallet_outlined,
+  };
 }
 
 class _ActionTile extends StatelessWidget {
@@ -603,30 +744,34 @@ class _ActionTile extends StatelessWidget {
       color: palette.actionBackground,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
+        key: Key('user-profile-action-${action.kind.name}'),
         borderRadius: BorderRadius.circular(8),
         onTap: action.onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: palette.actionIconBackground,
-                child: Icon(action.icon, size: 17, color: palette.onAccent),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  action.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.title,
-                    fontWeight: FontWeight.w600,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: palette.actionIconBackground,
+                  child: Icon(action.icon, size: 17, color: palette.onAccent),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    action.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: palette.title,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -691,6 +836,24 @@ class _DetailsSection extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EmptyDetailsCard extends StatelessWidget {
+  const _EmptyDetailsCard({required this.palette});
+
+  final _UserProfilePalette palette;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('user-profile-empty-details'),
+    padding: const EdgeInsets.all(18),
+    decoration: _cardDecoration(palette),
+    child: Text(
+      AppLocalizations.of(context).profileNoAdditionalDetails,
+      textAlign: TextAlign.center,
+      style: TextStyle(color: palette.muted),
+    ),
+  );
 }
 
 class _SectionCard extends StatelessWidget {
@@ -772,9 +935,11 @@ class _UserProfileError extends StatelessWidget {
     required this.error,
     required this.palette,
     required this.onRetry,
+    this.message,
   });
 
   final Object? error;
+  final String? message;
   final _UserProfilePalette palette;
   final VoidCallback onRetry;
 
@@ -789,7 +954,7 @@ class _UserProfileError extends StatelessWidget {
             Icon(Icons.error_outline, color: palette.accent, size: 34),
             const SizedBox(height: 12),
             Text(
-              _profileErrorText(context, error),
+              message ?? _profileErrorText(context, error),
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.body),
             ),
@@ -806,8 +971,9 @@ class _UserProfileError extends StatelessWidget {
 }
 
 class _ProfileAction {
-  const _ProfileAction(this.label, this.icon, {required this.onTap});
+  const _ProfileAction(this.kind, this.label, this.icon, {required this.onTap});
 
+  final ForumUserProfileActionKind kind;
   final String label;
   final IconData icon;
   final VoidCallback onTap;

@@ -4065,6 +4065,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileMessages => '消息提醒';
 
   @override
+  String get profileMyThreads => '我的主题';
+
+  @override
+  String get profileForumFavorites => '论坛收藏';
+
+  @override
+  String get profileFriends => '好友';
+
+  @override
+  String get profileSettings => '资料设置';
+
+  @override
+  String get profileCreditHistory => '积分明细';
+
+  @override
+  String get profileNoAdditionalDetails => '暂无其他资料';
+
+  @override
   String get profileSignature => '个人签名';
 
   @override
@@ -4526,6 +4544,85 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get threadPostOpenHome => '打开主题首页';
+
+  @override
+  String get moreDailySignIn => '每日签到';
+
+  @override
+  String get moreDailySignInSubtitle => '查看今日状态并手动签到';
+
+  @override
+  String get dailySignInTitle => '每日签到';
+
+  @override
+  String get dailySignInChecking => '正在核对论坛签到状态…';
+
+  @override
+  String get dailySignInSigned => '今日已签到';
+
+  @override
+  String get dailySignInUnsigned => '今日尚未签到';
+
+  @override
+  String get dailySignInLoginRequired => '请先登录后查看签到状态';
+
+  @override
+  String get dailySignInFailed => '暂时无法确认签到状态，请稍后重试。';
+
+  @override
+  String get dailySignInPluginUnavailable => '论坛签到页暂不可用。';
+
+  @override
+  String get dailySignInSignNow => '立即签到';
+
+  @override
+  String get dailySignInSubmitting => '正在签到…';
+
+  @override
+  String get dailySignInVerify => '重新核验';
+
+  @override
+  String get dailySignInRefresh => '刷新状态';
+
+  @override
+  String get dailySignInOpenForum => '打开论坛签到页';
+
+  @override
+  String get dailySignInStatistics => '我的签到统计';
+
+  @override
+  String get dailySignInOutcomeUnknown => '本次签到结果无法确认。请先重新核验；应用不会自动再次提交。';
+
+  @override
+  String get dailySignInUnknownButSigned => '本次请求结果不明；论坛页面显示今日已签到。';
+
+  @override
+  String get dailySignInApplied => '签到成功，论坛已确认今日记录。';
+
+  @override
+  String get dailySignInPermissionDenied => '当前账号没有签到权限。';
+
+  @override
+  String get dailySignInTimeWindowClosed => '当前时段尚未开放签到。';
+
+  @override
+  String get dailySignInRejected => '论坛未接受本次签到，请稍后核验。';
+
+  @override
+  String get dailySignInNotSent => '本次未提交签到，请核对最新状态后再试。';
+
+  @override
+  String get dailySignInDayChanged => '论坛日期已变化，本次未提交。请核对最新状态后再试。';
+
+  @override
+  String get dailySignInRetryUnknown => '再次尝试签到';
+
+  @override
+  String get dailySignInRetryTitle => '确认再次提交？';
+
+  @override
+  String get dailySignInRetryBody =>
+      '上次请求可能已经生效，即使当前页面仍显示未签到。继续将重新读取页面并发送一次新的签到请求。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -8590,6 +8687,24 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileMessages => '訊息提醒';
 
   @override
+  String get profileMyThreads => '我的主題';
+
+  @override
+  String get profileForumFavorites => '論壇收藏';
+
+  @override
+  String get profileFriends => '好友';
+
+  @override
+  String get profileSettings => '資料設定';
+
+  @override
+  String get profileCreditHistory => '積分明細';
+
+  @override
+  String get profileNoAdditionalDetails => '暫無其他資料';
+
+  @override
   String get profileSignature => '個人簽名';
 
   @override
@@ -9051,4 +9166,83 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadPostOpenHome => '開啟主題首頁';
+
+  @override
+  String get moreDailySignIn => '每日簽到';
+
+  @override
+  String get moreDailySignInSubtitle => '查看今日狀態並手動簽到';
+
+  @override
+  String get dailySignInTitle => '每日簽到';
+
+  @override
+  String get dailySignInChecking => '正在核對論壇簽到狀態…';
+
+  @override
+  String get dailySignInSigned => '今日已簽到';
+
+  @override
+  String get dailySignInUnsigned => '今日尚未簽到';
+
+  @override
+  String get dailySignInLoginRequired => '請先登入後查看簽到狀態';
+
+  @override
+  String get dailySignInFailed => '暫時無法確認簽到狀態，請稍後重試。';
+
+  @override
+  String get dailySignInPluginUnavailable => '論壇簽到頁暫時無法使用。';
+
+  @override
+  String get dailySignInSignNow => '立即簽到';
+
+  @override
+  String get dailySignInSubmitting => '正在簽到…';
+
+  @override
+  String get dailySignInVerify => '重新核驗';
+
+  @override
+  String get dailySignInRefresh => '重新整理狀態';
+
+  @override
+  String get dailySignInOpenForum => '開啟論壇簽到頁';
+
+  @override
+  String get dailySignInStatistics => '我的簽到統計';
+
+  @override
+  String get dailySignInOutcomeUnknown => '本次簽到結果無法確認。請先重新核驗；應用不會自動再次提交。';
+
+  @override
+  String get dailySignInUnknownButSigned => '本次請求結果不明；論壇頁面顯示今日已簽到。';
+
+  @override
+  String get dailySignInApplied => '簽到成功，論壇已確認今日記錄。';
+
+  @override
+  String get dailySignInPermissionDenied => '目前帳號沒有簽到權限。';
+
+  @override
+  String get dailySignInTimeWindowClosed => '目前時段尚未開放簽到。';
+
+  @override
+  String get dailySignInRejected => '論壇未接受本次簽到，請稍後核驗。';
+
+  @override
+  String get dailySignInNotSent => '本次未提交簽到，請核對最新狀態後再試。';
+
+  @override
+  String get dailySignInDayChanged => '論壇日期已變更，本次未提交。請核對最新狀態後再試。';
+
+  @override
+  String get dailySignInRetryUnknown => '再次嘗試簽到';
+
+  @override
+  String get dailySignInRetryTitle => '確認再次提交？';
+
+  @override
+  String get dailySignInRetryBody =>
+      '上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。';
 }

@@ -28,7 +28,7 @@ void main() {
         config: config,
         network: _ScenarioNetwork(profileBody: _profileHtml),
       ).createForumUserProfile(),
-      query: const ForumUserProfileQuery(userId: '509957'),
+      query: const ForumUserProfileQuery(userId: '4242'),
     ),
   );
   runForumSearchContractSuite(
@@ -72,7 +72,7 @@ void main() {
       ).createForumUserProfile();
 
       final result = await repository.load(
-        const ForumUserProfileQuery(userId: '509957'),
+        const ForumUserProfileQuery(userId: '4242'),
       );
 
       final success =
@@ -81,12 +81,12 @@ void main() {
                 ForumUserProfileData,
                 ForumUserProfileReadCapabilities
               >;
-      expect(success.data.identity.userId, '509957');
+      expect(success.data.identity.userId, '4242');
       expect(success.data.identity.displayName, 'Fixture user');
       expect(success.data.details.single.label, 'UID');
-      expect(success.data.details.single.value, '509957');
+      expect(success.data.details.single.value, '4242');
       expect(success.metadata.origin, DataReadOrigin.network);
-      expect(network.requests.single.uri.queryParameters['uid'], '509957');
+      expect(network.requests.single.uri.queryParameters['uid'], '4242');
     },
   );
 
@@ -99,14 +99,14 @@ void main() {
 
     final result = await repository.load(
       const ForumUserProfileQuery(
-        userId: '509957',
+        userId: '4242',
         view: ForumUserProfileView.self,
       ),
     );
 
     final data = result.dataOrNull!;
     expect(data.details.map((item) => (item.label, item.value)).toList(), [
-      ('UID', '509957'),
+      ('UID', '4242'),
       ('Custom field B', 'Second'),
       ('Custom field A', 'First'),
     ]);
@@ -114,18 +114,27 @@ void main() {
       ('Posts', '12'),
       ('Credits', '34'),
     ]);
+    expect(data.actions, [
+      ForumUserProfileActionKind.creditHistory,
+      ForumUserProfileActionKind.threads,
+      ForumUserProfileActionKind.blogs,
+      ForumUserProfileActionKind.forumFavorites,
+      ForumUserProfileActionKind.messages,
+      ForumUserProfileActionKind.friends,
+      ForumUserProfileActionKind.settings,
+    ]);
     expect(network.requests.single.uri.queryParameters['mycenter'], '1');
   });
 
   test('self profile keeps privacy-omitted fields absent', () async {
     final repository = ForumClientAdapterFactory(
       config: config,
-      network: _ScenarioNetwork(profileBody: _profileHtml),
+      network: _ScenarioNetwork(profileBody: _selfSparseProfileHtml),
     ).createForumUserProfile();
 
     final result = await repository.load(
       const ForumUserProfileQuery(
-        userId: '509957',
+        userId: '4242',
         view: ForumUserProfileView.self,
       ),
     );
@@ -140,6 +149,7 @@ void main() {
     expect(success.data.metrics, isEmpty);
     expect(success.data.coverUrl, isNull);
     expect(success.data.signatureHtml, isNull);
+    expect(success.data.actions, isEmpty);
     expect(
       success.capabilities.supports(ForumUserProfileCapability.coverReference),
       isFalse,
@@ -147,6 +157,287 @@ void main() {
     expect(
       success.capabilities.supports(ForumUserProfileCapability.signatureMarkup),
       isFalse,
+    );
+  });
+
+  test(
+    'public profile does not require visitor and owner UID to match',
+    () async {
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _ScenarioNetwork(profileBody: _profileHtml),
+          ).createForumUserProfile().load(
+            const ForumUserProfileQuery(userId: '4242'),
+          );
+
+      expect(result.dataOrNull?.identity.userId, '4242');
+      expect(result.dataOrNull?.actions, isEmpty);
+      final success =
+          result
+              as DataReadSuccess<
+                ForumUserProfileData,
+                ForumUserProfileReadCapabilities
+              >;
+      expect(
+        success.capabilities.supports(
+          ForumUserProfileCapability.orderedActions,
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test('public profile keeps its existing redirect tolerance', () async {
+    final result = await ForumClientAdapterFactory(
+      config: config,
+      network: _ScenarioNetwork(
+        profileBody: _profileHtml,
+        profileUri: Uri.parse(
+          'https://example.test/home.php?mod=space&uid=4242&do=profile&mycenter=1&mobile=2',
+        ),
+      ),
+    ).createForumUserProfile().load(const ForumUserProfileQuery(userId: '4242'));
+
+    expect(result.dataOrNull?.identity.userId, '4242');
+  });
+
+  test('self profile rejects guests and login pages as unauthorized', () async {
+    final bodies = [
+      _selfProfileHtml.replaceFirst("discuz_uid = '4242'", "discuz_uid = '0'"),
+      '<html><body><form id="loginform"></form></body></html>',
+    ];
+    for (final body in bodies) {
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _ScenarioNetwork(profileBody: body),
+          ).createForumUserProfile().load(
+            const ForumUserProfileQuery(
+              userId: '4242',
+              view: ForumUserProfileView.self,
+            ),
+          );
+      expect(result.failureOrNull?.kind, DataReadFailureKind.unauthorized);
+    }
+  });
+
+  test(
+    'self profile fails closed on ambiguous identity and missing UID',
+    () async {
+      final bodies = <String>[
+        _selfProfileHtml.replaceFirst(
+          "discuz_uid = '4242'",
+          "discuz_uid = '9999'",
+        ),
+        _selfProfileHtml.replaceFirst("discuz_uid = '4242'", ''),
+        _selfProfileHtml.replaceFirst(
+          "discuz_uid = '4242'",
+          "discuz_uid = '4242'; discuz_uid = '4242'",
+        ),
+        _selfProfileHtml.replaceFirst(
+          'UID<span>4242</span>',
+          'UID<span>9999</span>',
+        ),
+        _selfProfileHtml.replaceFirst(
+          'UID<span>4242</span>',
+          'UID<span> </span>',
+        ),
+        _selfProfileHtml.replaceFirst('UID<span>4242</span>', ''),
+        _selfProfileHtml.replaceFirst(
+          '<li>UID<span>4242</span></li>',
+          '<li>UID<span>4242</span></li><li>UID<span>4242</span></li>',
+        ),
+        _selfProfileHtml.replaceFirst(
+          '</body>',
+          '<div class="myinfo_list"><ul><li>UID<span>4242</span></li></ul></div></body>',
+        ),
+        'error page',
+      ];
+      for (final body in bodies) {
+        final result =
+            await ForumClientAdapterFactory(
+              config: config,
+              network: _ScenarioNetwork(profileBody: body),
+            ).createForumUserProfile().load(
+              const ForumUserProfileQuery(
+                userId: '4242',
+                view: ForumUserProfileView.self,
+              ),
+            );
+        expect(result.failureOrNull?.kind, DataReadFailureKind.parse);
+        expect(result.dataOrNull, isNull);
+      }
+    },
+  );
+
+  test('self profile rejects redirects and invalid final URIs', () async {
+    const context =
+        'home.php?mod=space&uid=4242&do=profile&mycenter=1&mobile=2';
+    for (final location in [
+      'https://other.test/$context',
+      'http://example.test/$context',
+      'https://example.test:8443/$context',
+      'https://person@example.test/$context',
+      'https://example.test/member.php?mod=logging',
+      'https://example.test/home.php?mod=space&uid=4242&do=profile&mobile=2',
+      'https://example.test/$context&uid=4242',
+      'https://example.test/$context&submit=1',
+      'https://example.test/$context#profile',
+    ]) {
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _ScenarioNetwork(
+              profileBody: _selfProfileHtml,
+              profileUri: Uri.parse(location),
+            ),
+          ).createForumUserProfile().load(
+            const ForumUserProfileQuery(
+              userId: '4242',
+              view: ForumUserProfileView.self,
+            ),
+          );
+      expect(
+        result.failureOrNull?.code,
+        'forum_user_profile_context_invalid',
+        reason: location,
+      );
+    }
+    final redirectResult =
+        await ForumClientAdapterFactory(
+          config: config,
+          network: _ScenarioNetwork(
+            profileBody: _selfProfileHtml,
+            profileStatusCode: 302,
+          ),
+        ).createForumUserProfile().load(
+          const ForumUserProfileQuery(
+            userId: '4242',
+            view: ForumUserProfileView.self,
+          ),
+        );
+    expect(
+      redirectResult.failureOrNull?.code,
+      'forum_user_profile_context_invalid',
+    );
+  });
+
+  test(
+    'self profile skips empty optional fields and reads sibling signature',
+    () async {
+      final body = _selfProfileHtml
+          .replaceFirst(
+            'Custom field B<span>Second</span>',
+            'Custom field B<span> </span>',
+          )
+          .replaceFirst('Posts<span>12</span>', 'Posts<span> </span>')
+          .replaceFirst(
+            '<li>Custom field A<span>First</span></li>',
+            '<li>Custom field A<span>First</span></li><li class="sig"><p>Signature</p></li>',
+          );
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _ScenarioNetwork(profileBody: body),
+          ).createForumUserProfile().load(
+            const ForumUserProfileQuery(
+              userId: '4242',
+              view: ForumUserProfileView.self,
+            ),
+          );
+      expect(result.dataOrNull?.details.map((item) => item.label), [
+        'UID',
+        'Custom field A',
+      ]);
+      expect(result.dataOrNull?.metrics.map((item) => item.label), ['Credits']);
+      expect(result.dataOrNull?.signatureHtml, contains('Signature'));
+    },
+  );
+
+  test('self profile ignores missing or untrusted operation links', () async {
+    const original =
+        'home.php?mod=space&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2';
+    for (final replacement in [
+      '#',
+      'https://other.test/home.php?mod=space&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2',
+      'http://example.test/home.php?mod=space&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2',
+      'https://example.test:8443/home.php?mod=space&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2',
+      'home.php?mod=space&amp;uid=9999&amp;do=thread&amp;view=me&amp;mobile=2',
+      'home.php?mod=space&amp;uid=4242&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2',
+      'home.php?mod=space&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2&amp;submit=1',
+      'home.php?mod=space&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2#frag',
+    ]) {
+      final result =
+          await ForumClientAdapterFactory(
+            config: config,
+            network: _ScenarioNetwork(
+              profileBody: _selfProfileHtml.replaceFirst(original, replacement),
+            ),
+          ).createForumUserProfile().load(
+            const ForumUserProfileQuery(
+              userId: '4242',
+              view: ForumUserProfileView.self,
+            ),
+          );
+      expect(
+        result.dataOrNull?.actions,
+        isNot(contains(ForumUserProfileActionKind.threads)),
+        reason: replacement,
+      );
+    }
+    final noActions = _selfSparseProfileHtml.replaceFirst(
+      '</body>',
+      '<div class="myinfo_list_ico"><a href="plugin.php?id=zqlj_sign&amp;mobile=2">Sign in</a></div></body>',
+    );
+    final result =
+        await ForumClientAdapterFactory(
+          config: config,
+          network: _ScenarioNetwork(profileBody: noActions),
+        ).createForumUserProfile().load(
+          const ForumUserProfileQuery(
+            userId: '4242',
+            view: ForumUserProfileView.self,
+          ),
+        );
+    expect(result.dataOrNull?.actions, isEmpty);
+    final success =
+        result
+            as DataReadSuccess<
+              ForumUserProfileData,
+              ForumUserProfileReadCapabilities
+            >;
+    expect(
+      success.capabilities.supports(ForumUserProfileCapability.orderedActions),
+      isTrue,
+    );
+
+    final unsafeBody = _selfProfileHtml
+        .replaceFirst(
+          "onclick=\"window.location.href='home.php?mod=spacecp&amp;ac=credit&amp;op=log'\"",
+          'onclick="alert(1)"',
+        )
+        .replaceFirst(
+          'href="home.php?mod=spacecp&amp;mobile=2"',
+          'href="https://other.test/home.php?mod=spacecp&amp;mobile=2"',
+        );
+    final unsafeResult =
+        await ForumClientAdapterFactory(
+          config: config,
+          network: _ScenarioNetwork(profileBody: unsafeBody),
+        ).createForumUserProfile().load(
+          const ForumUserProfileQuery(
+            userId: '4242',
+            view: ForumUserProfileView.self,
+          ),
+        );
+    expect(
+      unsafeResult.dataOrNull?.actions,
+      isNot(contains(ForumUserProfileActionKind.creditHistory)),
+    );
+    expect(
+      unsafeResult.dataOrNull?.actions,
+      isNot(contains(ForumUserProfileActionKind.settings)),
     );
   });
 
@@ -375,9 +666,17 @@ void main() {
 }
 
 final class _ScenarioNetwork implements ForumClientNetwork {
-  _ScenarioNetwork({this.profileBody, this.postLocation, this.initialBody});
+  _ScenarioNetwork({
+    this.profileBody,
+    this.profileUri,
+    this.profileStatusCode = 200,
+    this.postLocation,
+    this.initialBody,
+  });
 
   final String? profileBody;
+  final Uri? profileUri;
+  final int profileStatusCode;
   final String? postLocation;
   final String? initialBody;
   final List<ForumRequest> requests = [];
@@ -419,8 +718,8 @@ final class _ScenarioNetwork implements ForumClientNetwork {
     String body,
   ) => ForumTransportSuccess(
     ForumResponse(
-      uri: request.uri,
-      statusCode: 200,
+      uri: profileBody == null ? request.uri : profileUri ?? request.uri,
+      statusCode: profileBody == null ? 200 : profileStatusCode,
       headers: const {},
       body: body,
     ),
@@ -473,35 +772,51 @@ ${nextPage == null ? '' : '<div class="pg"><a class="nxt" href="search.php?mod=f
 ''';
 
 const _profileHtml = '''
-<html><body><div class="userinfo">
+<html><head><script>var discuz_uid = '7654';</script></head><body><div class="userinfo">
   <div class="avatar_m"><img src="/avatar.jpg"></div>
   <h2 class="name">Fixture user</h2>
   <div class="myinfo_list"><ul>
-    <li><b>Profile</b></li><li>UID<span>509957</span></li>
+    <li><b>Profile</b></li><li>UID<span>4242</span></li>
   </ul></div>
 </div><a href="member.php?mod=logging&amp;action=logout">Logout</a></body></html>
 ''';
 
 const _selfProfileHtml = '''
-<html><body><div class="userinfo">
+<html><head><script>var discuz_uid = '4242';</script></head><body><div class="userinfo">
   <h2 class="name">Fixture user</h2>
-  <div class="user_box"><ul>
+</div>
+<div class="user_box" onclick="window.location.href='home.php?mod=spacecp&amp;ac=credit&amp;op=log'"><ul>
     <li>Posts<span>12</span></li><li>Credits<span>34</span></li>
   </ul></div>
+<div class="myinfo_list_ico"><ul>
+  <li><a href="home.php?mod=space&amp;uid=4242&amp;do=thread&amp;view=me&amp;mobile=2">Topics</a></li>
+  <li><a href="home.php?mod=space&amp;uid=4242&amp;do=blog&amp;view=me&amp;mobile=2">Blogs</a></li>
+  <li><a href="home.php?mod=space&amp;uid=4242&amp;do=favorite&amp;view=me&amp;type=thread&amp;mobile=2">Favorites</a></li>
+  <li><a href="home.php?mod=space&amp;do=pm&amp;mobile=2">Messages</a></li>
+  <li><a href="home.php?mod=space&amp;do=friend&amp;mobile=2">Friends</a></li>
+  <li><a href="plugin.php?id=zqlj_sign&amp;mobile=2">Sign in</a></li>
+</ul></div>
   <div class="myinfo_list"><ul>
-    <li><b>Profile</b></li><li>UID<span>509957</span></li>
+    <li><b>Profile</b><span class="mtxt"><a href="home.php?mod=spacecp&amp;mobile=2">Settings</a></span></li>
+    <li>UID<span>4242</span></li>
     <li>Custom field B<span>Second</span></li>
     <li>Custom field A<span>First</span></li>
-  </ul></div>
-</div><a href="member.php?mod=logging&amp;action=logout">Logout</a></body></html>
+  </ul></div><a href="member.php?mod=logging&amp;action=logout">Logout</a></body></html>
+''';
+
+const _selfSparseProfileHtml = '''
+<html><head><script>var discuz_uid = '4242';</script></head><body>
+<div class="userinfo"><h2 class="name">Fixture user</h2></div>
+<div class="myinfo_list"><ul><li><b>Profile</b></li><li>UID<span>4242</span></li></ul></div>
+</body></html>
 ''';
 
 const _currentProfileBody = <String, Object?>{
   'Variables': <String, Object?>{
-    'member_uid': '509957',
+    'member_uid': '4242',
     'member_username': 'Fixture user',
     'space': <String, Object?>{
-      'uid': '509957',
+      'uid': '4242',
       'username': 'Fixture user',
       'credits': '12',
       'posts': '3',

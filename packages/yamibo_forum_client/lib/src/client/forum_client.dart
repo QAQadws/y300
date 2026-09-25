@@ -5,6 +5,7 @@ import '../contracts/data_command_contract.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_daily_sign_in.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_image_attachments.dart';
 import '../contracts/forum_authentication.dart';
@@ -161,6 +162,13 @@ final class YamiboForumClient {
   /// Configured current-user profile source, if installed.
   CurrentUserProfileRepository? get currentUserProfile =>
       sourcePlan.currentUserProfile;
+
+  /// Configured network-only daily sign-in status source, if installed.
+  ForumDailySignInRepository? get dailySignIn => sourcePlan.dailySignIn;
+
+  /// Configured ordinary daily sign-in command, if installed.
+  ForumDailySignInCommand? get dailySignInCommand =>
+      sourcePlan.dailySignInCommand;
 
   /// Configured public-profile source, if installed.
   ForumUserProfileRepository? get forumUserProfile =>
@@ -549,6 +557,21 @@ final class YamiboForumClient {
   }) =>
       sourcePlan.currentUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
+
+  /// Loads a fresh sign-in page without any document-cache fallback.
+  Future<
+    DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
+  >
+  loadDailySignIn(ForumDailySignInQuery query) =>
+      sourcePlan.dailySignIn?.load(query) ??
+      unsupported<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>();
+
+  /// Attempts one ordinary sign-in using a fresh page-local action.
+  Future<DataCommandResult<ForumDailySignInReceipt>> signInToday(
+    ForumDailySignInRequest request,
+  ) =>
+      sourcePlan.dailySignInCommand?.execute(request) ??
+      Future.value(const DataCommandUnsupported<ForumDailySignInReceipt>());
 
   /// Loads forum user profile and returns a structured result.
   Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>

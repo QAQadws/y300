@@ -17,31 +17,65 @@ abstract final class DiscuzProfileAuthPageDetector {
   }
 }
 
+final class ForumUserProfileUnauthorized implements Exception {
+  const ForumUserProfileUnauthorized();
+}
+
 final class ForumUserProfileHtmlParser {
   const ForumUserProfileHtmlParser({required this.siteOrigin});
 
   final Uri siteOrigin;
 
+  bool isExpectedSelfResponseUri({
+    required Uri uri,
+    required String expectedUserId,
+  }) {
+    if (!_sameOrigin(uri) || uri.path != '/home.php' || uri.hasFragment) {
+      return false;
+    }
+    return _matchesQuery(uri, {
+      'mod': 'space',
+      'uid': expectedUserId,
+      'do': 'profile',
+      'mobile': '2',
+      'mycenter': '1',
+    });
+  }
+
   ForumUserProfileData parse({
     required String html,
     required String expectedUserId,
+    ForumUserProfileView view = ForumUserProfileView.public,
   }) {
     final document = html_parser.parse(html);
-    final root = document.querySelector('.userinfo');
-    if (root == null) {
+    if (view == ForumUserProfileView.self) {
+      final signedInUserId = _signedInUserId(document);
+      if (signedInUserId == '0') {
+        throw const ForumUserProfileUnauthorized();
+      }
+      if (signedInUserId != expectedUserId) {
+        throw const FormatException('profile_session_identity_mismatch');
+      }
+    }
+    final roots = document.querySelectorAll('.userinfo');
+    final scope = document.body;
+    if (roots.length != 1 || scope == null) {
       throw const FormatException('profile_root_missing');
     }
+    final root = roots.single;
     final username = _clean(root.querySelector('h2.name')?.text ?? '');
     if (username.isEmpty) {
       throw const FormatException('profile_name_missing');
     }
-    final details = _details(root);
+    // Discuz renders metrics and details as siblings of `.userinfo`.
+    final details = _details(scope);
     final ids = details
         .where((item) => item.label.toUpperCase() == 'UID')
         .map((item) => item.value.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet();
-    if (ids.length != 1 || ids.single != expectedUserId.trim()) {
+        .toList(growable: false);
+    if (ids.length != 1 ||
+        !RegExp(r'^[1-9]\d*$').hasMatch(ids.single) ||
+        ids.single != expectedUserId.trim()) {
       throw const FormatException('profile_identity_mismatch');
     }
     final resolver = ForumUriResolver(siteOrigin: siteOrigin);
@@ -53,11 +87,31 @@ final class ForumUserProfileHtmlParser {
       ),
       coverUrl: _cover(document, resolver),
       signatureHtml: _optionalMarkup(
-        root.querySelector('.myinfo_list li.sig')?.innerHtml,
+        scope.querySelector('.myinfo_list li.sig')?.innerHtml,
       ),
-      metrics: List.unmodifiable(_metrics(root)),
+      metrics: List.unmodifiable(_metrics(scope)),
       details: List.unmodifiable(details),
+      actions: view == ForumUserProfileView.self
+          ? List.unmodifiable(_actions(scope, resolver, expectedUserId))
+          : const [],
     );
+  }
+
+  String _signedInUserId(html_dom.Document document) {
+    final matches = document
+        .querySelectorAll('script')
+        .expand(
+          (script) => RegExp(
+            r'''(?:^|[,;\s])discuz_uid\s*=\s*(['"])(\d+)\1''',
+          ).allMatches(script.text),
+        )
+        .toList(growable: false);
+    if (matches.length != 1) {
+      throw const FormatException(
+        'profile_session_identity_missing_or_repeated',
+      );
+    }
+    return matches.single.group(2)!;
   }
 
   List<ForumUserProfileMetric> _metrics(html_dom.Element root) => root
@@ -66,50 +120,146 @@ final class ForumUserProfileHtmlParser {
         final valueNode = item.querySelector('span');
         final value = _clean(valueNode?.text ?? '');
         final label = _clean(item.text.replaceFirst(value, ''));
-        if (label.isEmpty || value.isEmpty) {
-          throw const FormatException('profile_metric_invalid');
-        }
-        return ForumUserProfileMetric(label: label, value: value);
+        return label.isEmpty || value.isEmpty
+            ? null
+            : ForumUserProfileMetric(label: label, value: value);
       })
+      .whereType<ForumUserProfileMetric>()
       .toList(growable: false);
 
   List<ForumUserProfileDetail> _details(html_dom.Element root) {
     html_dom.Element? section;
+    var uidRows = 0;
     for (final candidate in root.querySelectorAll('.myinfo_list')) {
-      if (candidate.querySelectorAll('li').any((item) {
-        final valueNode = item.querySelector('span');
-        final label = _clean(
-          item.nodes
-              .takeWhile((node) => node != valueNode)
-              .map((node) => node.text)
-              .join(),
-        );
-        return label.toUpperCase() == 'UID';
-      })) {
-        section = candidate;
-        break;
+      for (final item in candidate.querySelectorAll('li')) {
+        if (_detailLabel(item).toUpperCase() == 'UID') {
+          uidRows++;
+          section = candidate;
+        }
       }
     }
-    if (section == null) {
-      throw const FormatException('profile_details_missing');
+    if (section == null || uidRows != 1) {
+      throw const FormatException('profile_uid_missing_or_repeated');
     }
     final output = <ForumUserProfileDetail>[];
     for (final item in section.querySelectorAll('li')) {
       if (item.querySelector('b') != null) continue;
       final valueNode = item.querySelector('span');
       final value = _clean(valueNode?.text ?? '');
-      final label = _clean(
-        item.nodes
-            .takeWhile((node) => node != valueNode)
-            .map((node) => node.text)
-            .join(),
-      );
+      final label = _detailLabel(item);
       if (label.isEmpty || value.isEmpty) {
-        throw const FormatException('profile_detail_invalid');
+        if (label.toUpperCase() == 'UID') {
+          throw const FormatException('profile_uid_invalid');
+        }
+        continue;
       }
       output.add(ForumUserProfileDetail(label: label, value: value));
     }
     return output;
+  }
+
+  String _detailLabel(html_dom.Element item) {
+    final valueNode = item.querySelector('span');
+    return _clean(
+      item.nodes
+          .takeWhile((node) => node != valueNode)
+          .map((node) => node.text)
+          .join(),
+    );
+  }
+
+  List<ForumUserProfileActionKind> _actions(
+    html_dom.Element root,
+    ForumUriResolver resolver,
+    String userId,
+  ) {
+    final actions = <ForumUserProfileActionKind>[];
+    for (final element in root.querySelectorAll(
+      '.user_box, .myinfo_list_ico a[href], .myinfo_list .mtxt a[href]',
+    )) {
+      final href = element.classes.contains('user_box')
+          ? _creditHistoryHref(element.attributes['onclick'])
+          : element.attributes['href'];
+      final action = _actionForHref(href, resolver, userId);
+      if (action != null && !actions.contains(action)) {
+        actions.add(action);
+      }
+    }
+    return actions;
+  }
+
+  String? _creditHistoryHref(String? onclick) => RegExp(
+    r'''^\s*window\.location\.href\s*=\s*(['"])([^'"]+)\1\s*;?\s*$''',
+  ).firstMatch(onclick ?? '')?.group(2);
+
+  ForumUserProfileActionKind? _actionForHref(
+    String? href,
+    ForumUriResolver resolver,
+    String userId,
+  ) {
+    if (href == null || href.trim().isEmpty) return null;
+    try {
+      final uri = resolver.resolve(href);
+      if (!_sameOrigin(uri) || uri.path != '/home.php' || uri.hasFragment) {
+        return null;
+      }
+      final selfSpace = <String, String>{
+        'mod': 'space',
+        'uid': userId,
+        'view': 'me',
+        'mobile': '2',
+      };
+      if (_matchesQuery(uri, {...selfSpace, 'do': 'thread'})) {
+        return ForumUserProfileActionKind.threads;
+      }
+      if (_matchesQuery(uri, {...selfSpace, 'do': 'blog'})) {
+        return ForumUserProfileActionKind.blogs;
+      }
+      if (_matchesQuery(uri, {
+        ...selfSpace,
+        'do': 'favorite',
+        'type': 'thread',
+      })) {
+        return ForumUserProfileActionKind.forumFavorites;
+      }
+      if (_matchesQuery(uri, {'mod': 'space', 'do': 'pm', 'mobile': '2'})) {
+        return ForumUserProfileActionKind.messages;
+      }
+      if (_matchesQuery(uri, {'mod': 'space', 'do': 'friend', 'mobile': '2'})) {
+        return ForumUserProfileActionKind.friends;
+      }
+      if (_matchesQuery(uri, {'mod': 'spacecp', 'mobile': '2'})) {
+        return ForumUserProfileActionKind.settings;
+      }
+      if (_matchesQuery(uri, {'mod': 'spacecp', 'ac': 'credit', 'op': 'log'}) ||
+          _matchesQuery(uri, {
+            'mod': 'spacecp',
+            'ac': 'credit',
+            'op': 'log',
+            'mobile': '2',
+          })) {
+        return ForumUserProfileActionKind.creditHistory;
+      }
+    } on FormatException {
+      return null;
+    }
+    return null;
+  }
+
+  bool _sameOrigin(Uri uri) =>
+      uri.scheme == siteOrigin.scheme &&
+      uri.host.toLowerCase() == siteOrigin.host.toLowerCase() &&
+      uri.port == siteOrigin.port &&
+      uri.userInfo.isEmpty;
+
+  bool _matchesQuery(Uri uri, Map<String, String> expected) {
+    final actual = uri.queryParametersAll;
+    return actual.length == expected.length &&
+        expected.entries.every(
+          (entry) =>
+              actual[entry.key]?.length == 1 &&
+              actual[entry.key]!.single == entry.value,
+        );
   }
 
   String? _cover(html_dom.Document document, ForumUriResolver resolver) {
