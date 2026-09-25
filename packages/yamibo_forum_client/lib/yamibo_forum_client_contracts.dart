@@ -12,6 +12,7 @@ export 'src/contracts/data_command_contract.dart';
 export 'src/contracts/favorite_directories.dart';
 export 'src/contracts/favorite_commands.dart';
 export 'src/contracts/forum_directory.dart';
+export 'src/contracts/forum_daily_sign_in.dart';
 export 'src/contracts/forum_home.dart';
 export 'src/contracts/forum_authentication.dart';
 export 'src/contracts/forum_display_models.dart';

@@ -90,6 +90,66 @@ void main() {
     },
   );
 
+  test('self profile preserves dynamic field and metric order', () async {
+    final network = _ScenarioNetwork(profileBody: _selfProfileHtml);
+    final repository = ForumClientAdapterFactory(
+      config: config,
+      network: network,
+    ).createForumUserProfile();
+
+    final result = await repository.load(
+      const ForumUserProfileQuery(
+        userId: '509957',
+        view: ForumUserProfileView.self,
+      ),
+    );
+
+    final data = result.dataOrNull!;
+    expect(data.details.map((item) => (item.label, item.value)).toList(), [
+      ('UID', '509957'),
+      ('Custom field B', 'Second'),
+      ('Custom field A', 'First'),
+    ]);
+    expect(data.metrics.map((item) => (item.label, item.value)).toList(), [
+      ('Posts', '12'),
+      ('Credits', '34'),
+    ]);
+    expect(network.requests.single.uri.queryParameters['mycenter'], '1');
+  });
+
+  test('self profile keeps privacy-omitted fields absent', () async {
+    final repository = ForumClientAdapterFactory(
+      config: config,
+      network: _ScenarioNetwork(profileBody: _profileHtml),
+    ).createForumUserProfile();
+
+    final result = await repository.load(
+      const ForumUserProfileQuery(
+        userId: '509957',
+        view: ForumUserProfileView.self,
+      ),
+    );
+
+    final success =
+        result
+            as DataReadSuccess<
+              ForumUserProfileData,
+              ForumUserProfileReadCapabilities
+            >;
+    expect(success.data.details.map((item) => item.label).toList(), ['UID']);
+    expect(success.data.metrics, isEmpty);
+    expect(success.data.coverUrl, isNull);
+    expect(success.data.signatureHtml, isNull);
+    expect(
+      success.capabilities.supports(ForumUserProfileCapability.coverReference),
+      isFalse,
+    );
+    expect(
+      success.capabilities.supports(ForumUserProfileCapability.signatureMarkup),
+      isFalse,
+    );
+  });
+
   test('search owns formhash, POST context and opaque continuation', () async {
     final network = _ScenarioNetwork();
     final repository = ForumClientAdapterFactory(
@@ -418,6 +478,20 @@ const _profileHtml = '''
   <h2 class="name">Fixture user</h2>
   <div class="myinfo_list"><ul>
     <li><b>Profile</b></li><li>UID<span>509957</span></li>
+  </ul></div>
+</div><a href="member.php?mod=logging&amp;action=logout">Logout</a></body></html>
+''';
+
+const _selfProfileHtml = '''
+<html><body><div class="userinfo">
+  <h2 class="name">Fixture user</h2>
+  <div class="user_box"><ul>
+    <li>Posts<span>12</span></li><li>Credits<span>34</span></li>
+  </ul></div>
+  <div class="myinfo_list"><ul>
+    <li><b>Profile</b></li><li>UID<span>509957</span></li>
+    <li>Custom field B<span>Second</span></li>
+    <li>Custom field A<span>First</span></li>
   </ul></div>
 </div><a href="member.php?mod=logging&amp;action=logout">Logout</a></body></html>
 ''';
