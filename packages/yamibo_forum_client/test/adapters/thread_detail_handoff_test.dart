@@ -83,6 +83,32 @@ void main() {
     expect(network.operations, ['thread.detail.html', 'thread.post.locate']);
   });
 
+  test('default reverse-order redirect can hand off its target page', () async {
+    final network = _RecordingNetwork(
+      config.siteOrigin,
+      defaultReverseOrder: true,
+    );
+    final factory = ForumClientAdapterFactory(
+      config: config,
+      network: network,
+      cookieStore: MemoryForumCookieStore(),
+      sessionStore: MemoryForumSessionStore(),
+    );
+    final located = (await factory.createThreadPostLocator().locate(
+      query,
+    )).dataOrNull!;
+    final detail =
+        factory.createHtmlThreadDetail() as ThreadDetailHandoffReader;
+    final reused = await detail.consumeHandoff(
+      located.detailHandoff!,
+      tid: '100',
+      pid: '200',
+      page: 3,
+    );
+    expect(reused?.dataOrNull?.posts.single.pid, '200');
+    expect(network.operations, ['thread.post.locate']);
+  });
+
   test(
     'mismatched target, view, and source cannot consume the handoff',
     () async {
@@ -259,10 +285,15 @@ void main() {
 }
 
 final class _RecordingNetwork implements ForumClientNetwork {
-  _RecordingNetwork(this.origin, {this.finalPage = 3});
+  _RecordingNetwork(
+    this.origin, {
+    this.finalPage = 3,
+    this.defaultReverseOrder = false,
+  });
 
   final Uri origin;
   final int finalPage;
+  final bool defaultReverseOrder;
   final List<String> operations = <String>[];
 
   @override
@@ -272,7 +303,11 @@ final class _RecordingNetwork implements ForumClientNetwork {
     operations.add(request.context.operation);
     return ForumTransportSuccess(
       ForumResponse<Object?>(
-        uri: origin.resolve('/thread-100-$finalPage-1.html'),
+        uri: defaultReverseOrder
+            ? origin.resolve(
+                '/forum.php?mod=viewthread&tid=100&page=$finalPage&ordertype=1',
+              )
+            : origin.resolve('/thread-100-$finalPage-1.html'),
         statusCode: 200,
         headers: const {},
         body: mobilePostLocationHtml,

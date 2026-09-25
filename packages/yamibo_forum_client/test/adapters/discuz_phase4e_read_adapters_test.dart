@@ -477,6 +477,7 @@ void main() {
   for (final path in [
     '/forum.php?mod=viewthread&tid=100&page=3&mobile=2',
     '/thread-100-3-1.html',
+    '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1',
   ]) {
     test('post locator accepts verified ordinary mobile view $path', () async {
       final network = _FixtureNetwork(
@@ -491,6 +492,65 @@ void main() {
       expect(result.dataOrNull?.pid, '200');
     });
   }
+
+  test(
+    'post locator follows the Discuz redirect with mobile profile',
+    () async {
+      final network = _PostRedirectNetwork(config.siteOrigin);
+      final result =
+          await ForumClientAdapterFactory(config: config, network: network)
+              .createThreadPostLocator()
+              .locate(const ThreadPostLocationQuery(tid: '100', pid: '200'));
+
+      expect(result.dataOrNull?.pid, '200');
+      expect(result.dataOrNull?.page, 3);
+      expect(network.requests, hasLength(2));
+      expect(
+        network.requests.every((request) => !request.followRedirects),
+        isTrue,
+      );
+      expect(network.requests.first.uri.queryParameters['mobile'], '2');
+      expect(network.requests.last.uri.queryParameters['mobile'], '2');
+      expect(network.requests.last.uri.queryParameters['ordertype'], '1');
+      expect(
+        network.requests.every(
+          (request) => request.headers['User-Agent'] == 'mobile-fixture',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'post locator refuses a cross-site redirect before sending it',
+    () async {
+      final network = _PostRedirectNetwork(
+        config.siteOrigin,
+        destination: Uri.parse('https://elsewhere.example/thread-100-3-1.html'),
+      );
+      final result =
+          await ForumClientAdapterFactory(config: config, network: network)
+              .createThreadPostLocator()
+              .locate(const ThreadPostLocationQuery(tid: '100', pid: '200'));
+
+      expect(result.isSuccess, isFalse);
+      expect(network.requests, hasLength(1));
+    },
+  );
+
+  test('post locator stops a redirect loop after five reads', () async {
+    final network = _PostRedirectNetwork(
+      config.siteOrigin,
+      alwaysRedirect: true,
+    );
+    final result =
+        await ForumClientAdapterFactory(config: config, network: network)
+            .createThreadPostLocator()
+            .locate(const ThreadPostLocationQuery(tid: '100', pid: '200'));
+
+    expect(result.failureOrNull?.code, 'thread_post_location_redirect_limit');
+    expect(network.requests, hasLength(5));
+  });
 
   final rejected = <String, (String, String)>{
     'wrong URL identity': (
@@ -522,8 +582,12 @@ void main() {
       '/forum.php?mod=viewthread&tid=100&page=3&authorid=10',
       mobilePostLocationHtml,
     ),
-    'sorted view': (
-      '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1',
+    'unsupported sort value': (
+      '/forum.php?mod=viewthread&tid=100&page=3&ordertype=2',
+      mobilePostLocationHtml,
+    ),
+    'filtered view parameter': (
+      '/forum.php?mod=viewthread&tid=100&page=3&filter=author',
       mobilePostLocationHtml,
     ),
     'cross site': (
@@ -704,6 +768,52 @@ final class _FixtureNetwork implements ForumClientNetwork {
         statusCode: statusCode,
         headers: const {},
         body: bodyFor(request),
+      ),
+    );
+  }
+}
+
+final class _PostRedirectNetwork implements ForumClientNetwork {
+  _PostRedirectNetwork(
+    this.origin, {
+    this.destination,
+    this.alwaysRedirect = false,
+  });
+
+  final Uri origin;
+  final Uri? destination;
+  final bool alwaysRedirect;
+  final List<ForumRequest> requests = <ForumRequest>[];
+
+  @override
+  Future<ForumTransportResult<ForumResponse<Object?>>> send(
+    ForumRequest request,
+  ) async {
+    requests.add(request);
+    if (requests.length == 1 || alwaysRedirect) {
+      return ForumTransportSuccess(
+        ForumResponse<Object?>(
+          uri: request.uri,
+          statusCode: 301,
+          headers: {
+            'location': [
+              (destination ??
+                      origin.resolve(
+                        '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1#pid200',
+                      ))
+                  .toString(),
+            ],
+          },
+          body: '',
+        ),
+      );
+    }
+    return ForumTransportSuccess(
+      ForumResponse<Object?>(
+        uri: request.uri,
+        statusCode: 200,
+        headers: const {},
+        body: mobilePostLocationHtml,
       ),
     );
   }

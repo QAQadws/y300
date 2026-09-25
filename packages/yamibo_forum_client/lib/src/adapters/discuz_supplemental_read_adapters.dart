@@ -775,46 +775,91 @@ final class DiscuzThreadPostLocatorRepository
         'mobile': '2',
       },
     );
-    final response = await network.send(
-      ForumRequest(
-        method: ForumRequestMethod.get,
-        uri: uri,
-        context: const ForumRequestContext(
-          operation: 'thread.post.locate',
-          pageKind: 'thread.detail',
+    ForumResponse<Object?>? value;
+    var requestUri = uri;
+    // Discuz's findpost redirect drops mobile=2. Read each same-site hop via
+    // the shared gateway so both the mobile request profile and Cookie state
+    // apply to the final viewthread request too.
+    for (var hop = 0; hop < 5; hop++) {
+      final response = await network.send(
+        ForumRequest(
+          method: ForumRequestMethod.get,
+          uri: requestUri,
+          context: const ForumRequestContext(
+            operation: 'thread.post.locate',
+            pageKind: 'thread.detail',
+          ),
+          headers: requestProfiles
+              .resolve(ForumRequestProfileKind.mobileHtml)
+              .headers,
+          followRedirects: false,
         ),
-        headers: requestProfiles
-            .resolve(ForumRequestProfileKind.mobileHtml)
-            .headers,
-      ),
-    );
-    if (response case ForumTransportError<ForumResponse<Object?>>(
-      :final failure,
-    )) {
-      return _failure(failure);
-    }
-    try {
-      final value =
+      );
+      if (response case ForumTransportError<ForumResponse<Object?>>(
+        :final failure,
+      )) {
+        return _failure(failure);
+      }
+      value =
           (response as ForumTransportSuccess<ForumResponse<Object?>>).response;
       if (!_sameSite(value.uri)) {
-        throw const FormatException('thread_post_location_cross_site');
+        return _parseFailure(
+          'thread_post_location_cross_site',
+          const FormatException('cross-site response'),
+        );
       }
-      if (value.statusCode == 401) {
+      if (!_isRedirect(value.statusCode)) break;
+      if (hop == 4) {
+        return _parseFailure(
+          'thread_post_location_redirect_limit',
+          const FormatException('redirect limit'),
+        );
+      }
+      final location = _redirectLocation(value.headers);
+      if (location == null) {
+        return _parseFailure(
+          'thread_post_location_response_unconfirmed',
+          const FormatException('redirect location missing'),
+        );
+      }
+      try {
+        final destination = value.uri.resolve(location);
+        if (!_sameSite(destination) || destination.userInfo.isNotEmpty) {
+          return _parseFailure(
+            'thread_post_location_cross_site',
+            const FormatException('cross-site redirect'),
+          );
+        }
+        requestUri = destination
+            .replace(
+              queryParameters: {...destination.queryParameters, 'mobile': '2'},
+            )
+            .removeFragment();
+      } on FormatException catch (error) {
+        return _parseFailure(
+          'thread_post_location_response_unconfirmed',
+          error,
+        );
+      }
+    }
+    try {
+      final resolved = value!;
+      if (resolved.statusCode == 401) {
         return const DataReadFailure(
           kind: DataReadFailureKind.unauthorized,
           code: 'thread_post_location_login_required',
           diagnosticMessage: 'thread_post_location_login_required',
         );
       }
-      if (value.statusCode == 403) {
+      if (resolved.statusCode == 403) {
         return _businessFailure('thread_post_location_permission_denied');
       }
-      final statusCode = value.statusCode;
+      final statusCode = resolved.statusCode;
       if (statusCode != null && statusCode >= 500) {
         return DataReadFailure(
           kind: DataReadFailureKind.server,
           code: 'thread_post_location_server_failed',
-          statusCode: value.statusCode,
+          statusCode: resolved.statusCode,
           diagnosticMessage: 'thread_post_location_server_failed',
         );
       }
@@ -824,10 +869,10 @@ final class DiscuzThreadPostLocatorRepository
           const FormatException('unsuccessful final response'),
         );
       }
-      if (value.body is! String) {
+      if (resolved.body is! String) {
         throw const FormatException('thread_post_location_text_expected');
       }
-      final document = html_parser.parse(value.body as String);
+      final document = html_parser.parse(resolved.body as String);
       if (document.querySelector('form[action*="mod=logging"]') != null &&
           document.querySelector('.viewthread .plc[id^="pid"]') == null) {
         return const DataReadFailure(
@@ -837,10 +882,10 @@ final class DiscuzThreadPostLocatorRepository
         );
       }
       final resolvedTid =
-          value.uri.queryParameters['tid'] ??
+          resolved.uri.queryParameters['tid'] ??
           RegExp(
             r'^/?thread-(\d+)-\d+-\d+\.html$',
-          ).firstMatch(value.uri.path)?.group(1);
+          ).firstMatch(resolved.uri.path)?.group(1);
       if (resolvedTid != query.tid) {
         return _parseFailure(
           'thread_post_location_identity_mismatch',
@@ -848,25 +893,27 @@ final class DiscuzThreadPostLocatorRepository
         );
       }
       // A mobile UA alone is not proof: Discuz's mobile=no cookie can select
-      // desktop pagination. Require the actual mobile thread structure.
+      // desktop pagination. Discuz may append ordertype=1 itself when the
+      // thread's default order is reversed, even though our request omits it.
+      final orderType = resolved.uri.queryParameters['ordertype'];
       if (document.body?.id != 'forum' ||
           document.querySelector('.viewthread .plc[id^="pid"]') == null ||
-          value.uri.queryParameters['mobile'] == 'no' ||
-          (value.uri.queryParameters['authorid']?.isNotEmpty == true &&
-              value.uri.queryParameters['authorid'] != '0') ||
-          value.uri.queryParameters.containsKey('ordertype') ||
-          value.uri.queryParameters.containsKey('filter') ||
-          value.uri.queryParameters.containsKey('viewpid') ||
-          value.uri.queryParameters.containsKey('ppp')) {
+          resolved.uri.queryParameters['mobile'] == 'no' ||
+          (resolved.uri.queryParameters['authorid']?.isNotEmpty == true &&
+              resolved.uri.queryParameters['authorid'] != '0') ||
+          (orderType != null && orderType != '1') ||
+          resolved.uri.queryParameters.containsKey('filter') ||
+          resolved.uri.queryParameters.containsKey('viewpid') ||
+          resolved.uri.queryParameters.containsKey('ppp')) {
         return _parseFailure(
           'thread_post_location_view_unconfirmed',
           const FormatException('unconfirmed mobile view'),
         );
       }
       final detail = _parser.parse(
-        value.body as String,
+        resolved.body as String,
         fallbackTid: query.tid,
-        fallbackPage: _pageFromUri(value.uri) ?? 1,
+        fallbackPage: _pageFromUri(resolved.uri) ?? 1,
       );
       if (detail.tid.trim() != query.tid ||
           !detail.posts.any((post) => post.pid.trim() == query.pid)) {
@@ -878,7 +925,7 @@ final class DiscuzThreadPostLocatorRepository
       final page = detail.currentPage <= 0 ? 1 : detail.currentPage;
       // The parser's page and the final ordinary mobile URL must agree before
       // its parsed document can stand in for a normal detail read.
-      final urlPage = _pageFromUri(value.uri) ?? 1;
+      final urlPage = _pageFromUri(resolved.uri) ?? 1;
       final handoff = page == urlPage
           ? await handoffCoordinator?.issue(
               boundary: handoffBoundary,
@@ -893,7 +940,7 @@ final class DiscuzThreadPostLocatorRepository
           tid: query.tid,
           pid: query.pid,
           page: page,
-          resolvedUri: value.uri,
+          resolvedUri: resolved.uri,
           detailHandoff: handoff,
         ),
         capabilities: capabilities.toReadCapabilities(),
@@ -908,6 +955,23 @@ final class DiscuzThreadPostLocatorRepository
       uri.scheme.toLowerCase() == _config.siteOrigin.scheme.toLowerCase() &&
       uri.host.toLowerCase() == _config.siteOrigin.host.toLowerCase() &&
       uri.port == _config.siteOrigin.port;
+
+  bool _isRedirect(int? statusCode) =>
+      statusCode == 301 ||
+      statusCode == 302 ||
+      statusCode == 303 ||
+      statusCode == 307 ||
+      statusCode == 308;
+
+  String? _redirectLocation(Map<String, List<String>> headers) {
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() != 'location') continue;
+      for (final value in entry.value) {
+        if (value.trim().isNotEmpty) return value.trim();
+      }
+    }
+    return null;
+  }
 
   int? _pageFromUri(Uri uri) {
     final queryPage = int.tryParse(uri.queryParameters['page'] ?? '');

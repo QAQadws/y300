@@ -677,7 +677,9 @@ class YamiboHttpGateway {
       );
       return ApiSuccess(
         YamiboHttpResponse<T>(
-          uri: response.requestOptions.uri,
+          // Dio keeps the original request in requestOptions after following
+          // redirects. Protocol readers need the final response address.
+          uri: response.realUri,
           statusCode: response.statusCode,
           headers: response.headers.map,
           body: body,

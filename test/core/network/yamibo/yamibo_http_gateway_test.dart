@@ -1,12 +1,17 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
+import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart'
+    as adapters;
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/waf/waf.dart';
+import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 
@@ -55,6 +60,102 @@ void main() {
       );
 
       expect(adapter.lastHeaders['User-Agent'], 'CustomAgent/1.0');
+    });
+
+    test(
+      'reports the final URI supplied by an auto-following transport',
+      () async {
+        final siteOrigin = Uri.parse('https://bbs.yamibo.com');
+        final requestUri = siteOrigin.resolve('/forum.php?mod=redirect');
+        final finalUri = siteOrigin.resolve('/thread-100-3-1.html');
+        final adapter = _GatewayTestAdapter.scripted([
+          _ScriptedResponse(
+            textBody: 'ok',
+            redirects: [RedirectRecord(301, 'GET', finalUri)],
+          ),
+        ]);
+
+        final result = await _buildGateway(adapter: adapter).getText(
+          requestUri,
+          context: const YamiboRequestContext(
+            kind: YamiboRequestKind.html,
+            operation: 'thread.post.locate',
+          ),
+        );
+
+        expect(adapter.requests.single.uri, requestUri);
+        expect(result.dataOrNull?.uri, finalUri);
+      },
+    );
+
+    test('real redirect keeps the mobile UA and exposes its final URI', () async {
+      // Flutter's test binding replaces HttpClient with a 400 response.
+      final previousOverrides = HttpOverrides.current;
+      HttpOverrides.global = null;
+      addTearDown(() => HttpOverrides.global = previousOverrides);
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final siteOrigin = Uri.parse('http://127.0.0.1:${server.port}');
+      final finalUri = siteOrigin.resolve(
+        '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1',
+      );
+      final userAgents = <String?>[];
+      server.listen((request) async {
+        userAgents.add(request.headers.value(HttpHeaders.userAgentHeader));
+        if (request.uri.queryParameters['goto'] == 'findpost') {
+          request.response.statusCode = HttpStatus.movedPermanently;
+          request.response.headers.set(HttpHeaders.locationHeader, finalUri);
+        } else {
+          request.response.headers.contentType = ContentType.html;
+          request.response.write(_mobileFloorHtml);
+        }
+        await request.response.close();
+      });
+      final gateway = YamiboHttpGateway(
+        cookieStore: CookieStore(),
+        logger: Logger(
+          printer: SimplePrinter(colors: false),
+          output: _MemoryLogOutput(),
+          filter: ProductionFilter(),
+          level: Level.trace,
+        ),
+        dio: Dio(
+          BaseOptions(
+            followRedirects: true,
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
+          ),
+        ),
+        siteUri: siteOrigin,
+      );
+      final network = Y300ForumClientNetworkAdapter(
+        gateway: gateway,
+        apiOrigin: siteOrigin.resolve('/api/mobile/index.php'),
+        siteOrigin: siteOrigin,
+        resourceUserAgent: BrowserUserAgents.mobile,
+      );
+      final locator = adapters.ForumClientAdapterFactory(
+        config: forum.ForumClientConfig(
+          siteOrigin: siteOrigin,
+          apiOrigin: siteOrigin.resolve('/api/mobile/index.php'),
+          userAgent: BrowserUserAgents.mobile,
+        ),
+        network: network,
+      ).createThreadPostLocator();
+
+      final result = await locator.locate(
+        const forum.ThreadPostLocationQuery(tid: '100', pid: '200'),
+      );
+
+      expect(
+        result.dataOrNull?.resolvedUri,
+        finalUri.replace(
+          queryParameters: {...finalUri.queryParameters, 'mobile': '2'},
+        ),
+        reason:
+            'failure=${result.failureOrNull?.code} requests=${userAgents.length}',
+      );
+      expect(userAgents, [BrowserUserAgents.mobile, BrowserUserAgents.mobile]);
     });
 
     test(
@@ -730,6 +831,7 @@ class _ScriptedResponse {
     this.setCookie = const <String>[],
     this.contentType,
     this.headers = const <String, List<String>>{},
+    this.redirects = const <RedirectRecord>[],
   });
 
   final int statusCode;
@@ -738,6 +840,7 @@ class _ScriptedResponse {
   final List<String> setCookie;
   final String? contentType;
   final Map<String, List<String>> headers;
+  final List<RedirectRecord> redirects;
 }
 
 class _GatewayTestAdapter implements HttpClientAdapter {
@@ -828,7 +931,7 @@ class _GatewayTestAdapter implements HttpClientAdapter {
       scripted.textBody,
       scripted.statusCode,
       headers: responseHeaders,
-    );
+    )..redirects = scripted.redirects;
   }
 
   Future<String?> _readRequestBody(Stream<Uint8List>? requestStream) async {
@@ -851,3 +954,10 @@ class _MemoryLogOutput extends LogOutput {
     lines.addAll(event.lines);
   }
 }
+
+const String _mobileFloorHtml = '''
+<html><head><link rel="canonical" href="/thread-100-3-1.html"></head>
+<body id="forum"><div class="viewthread"><div class="plc" id="pid200">
+<div class="display"><div class="message">Chapter ending.</div></div>
+</div></div><div class="pg"><strong>3</strong></div></body></html>
+''';
