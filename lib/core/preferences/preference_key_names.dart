@@ -28,6 +28,8 @@ abstract final class PreferenceKeyNames {
       'reader_pref_show_page_indicator';
 
   static const novelReaderSnapshotV1 = 'reader.novel.v1';
+  static const novelChapterInteractionsDockV1 =
+      'reader.novel.chapter_interactions_dock.v1';
   static const novelReaderMigrationVersion = 'reader.novel.migration_version';
   static const novelChapterOpenModeV1 = 'novel.chapter_open_mode.v1';
   static const novelChapterOpenModeMigrationVersion =

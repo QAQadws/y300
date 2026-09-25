@@ -1940,6 +1940,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelSafeContent => '安全显示正文';
 
   @override
+  String get novelChapterInteractionsDockSetting => '显示章末互动悬浮按钮';
+
+  @override
+  String get novelChapterInteractionsSettingSaveFailed => '按钮设置保存失败，已恢复之前的设置';
+
+  @override
   String get novelConversionOriginal => '原文';
 
   @override
@@ -6456,6 +6462,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelSafeContent => '安全顯示正文';
+
+  @override
+  String get novelChapterInteractionsDockSetting => '顯示章末互動懸浮按鈕';
+
+  @override
+  String get novelChapterInteractionsSettingSaveFailed => '按鈕設定儲存失敗，已還原先前設定';
 
   @override
   String get novelConversionOriginal => '原文';

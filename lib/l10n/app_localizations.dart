@@ -3140,6 +3140,18 @@ abstract class AppLocalizations {
   /// **'安全显示正文'**
   String get novelSafeContent;
 
+  /// No description provided for @novelChapterInteractionsDockSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示章末互动悬浮按钮'**
+  String get novelChapterInteractionsDockSetting;
+
+  /// No description provided for @novelChapterInteractionsSettingSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'按钮设置保存失败，已恢复之前的设置'**
+  String get novelChapterInteractionsSettingSaveFailed;
+
   /// No description provided for @novelConversionOriginal.
   ///
   /// In zh, this message translates to:

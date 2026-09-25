@@ -66,6 +66,9 @@ abstract final class PreferenceKeys {
   static const novelReaderSnapshotV1 = PreferenceKey<String>(
     PreferenceKeyNames.novelReaderSnapshotV1,
   );
+  static const novelChapterInteractionsDockV1 = PreferenceKey<String>(
+    PreferenceKeyNames.novelChapterInteractionsDockV1,
+  );
   static const novelReaderMigrationVersion = PreferenceKey<int>(
     PreferenceKeyNames.novelReaderMigrationVersion,
   );
