@@ -84,8 +84,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('登录'), findsOneWidget);
-    expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
-    expect(find.text('我的资料'), findsOneWidget);
+    expect(find.byKey(const Key('more-my-profile-entry')), findsNothing);
     expect(find.byKey(const Key('more-daily-sign-in-entry')), findsOneWidget);
     expect(find.text('每日签到'), findsOneWidget);
     expect(find.byKey(const Key('more-unused-images-entry')), findsOneWidget);
@@ -103,6 +102,7 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
     final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
+    expect(find.text(l10n.moreMyProfile), findsNothing);
     expect(find.text(l10n.moreMyProfileSignedOutSubtitle), findsNothing);
     expect(find.text(l10n.moreDailySignInSubtitle), findsNothing);
     expect(find.text(l10n.moreUnusedImagesSubtitle), findsNothing);
@@ -274,7 +274,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
+    expect(find.byKey(const Key('more-my-profile-entry')), findsNothing);
     expect(find.text(l10n.moreLogout), findsNothing);
     expect(find.byTooltip(l10n.moreLogout), findsOneWidget);
     expect(
@@ -466,7 +466,7 @@ void main() {
     );
   });
 
-  testWidgets('profile entry continues to the current account after login', (
+  testWidgets('account avatar opens the current account after login', (
     tester,
   ) async {
     final routeObserver = _RouteNameObserver();
@@ -499,7 +499,7 @@ void main() {
       tester.element(find.byType(MorePage)),
     );
 
-    await tester.tap(find.byKey(const Key('more-my-profile-entry')));
+    await tester.tap(find.byKey(const Key('more-login-entry')));
     expect(routeObserver.pushedNames.last, LoginWebViewPage.routeName);
 
     // LoginWebViewPage verifies the session before returning true. Simulate
@@ -512,12 +512,16 @@ void main() {
     tester.state<NavigatorState>(find.byType(Navigator).first).pop(true);
     await tester.pumpAndSettle();
 
+    expect(find.byType(MyProfilePage), findsNothing);
+    await tester.tap(find.byKey(const Key('more-account-avatar')));
+    await tester.pumpAndSettle();
+
     expect(find.byType(MyProfilePage), findsOneWidget);
     expect(profileRepository.queries.single.userId, '200');
     expect(profileRepository.queries.single.view, ForumUserProfileView.self);
   });
 
-  testWidgets('profile entry stays on More when login is cancelled', (
+  testWidgets('account avatar stays disabled when login is cancelled', (
     tester,
   ) async {
     final routeObserver = _RouteNameObserver();
@@ -540,7 +544,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('more-my-profile-entry')));
+    await tester.tap(find.byKey(const Key('more-login-entry')));
     expect(routeObserver.pushedNames.last, LoginWebViewPage.routeName);
     tester.state<NavigatorState>(find.byType(Navigator).first).pop(false);
     await tester.pumpAndSettle();
@@ -550,13 +554,13 @@ void main() {
     expect(routeObserver.pushedNames.length, 2);
     expect(
       tester
-          .widget<ListTile>(find.byKey(const Key('more-my-profile-entry')))
+          .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
           .onTap,
-      isNotNull,
+      isNull,
     );
   });
 
-  testWidgets('profile entry ignores duplicate taps while navigating', (
+  testWidgets('account avatar ignores duplicate taps while navigating', (
     tester,
   ) async {
     final routeObserver = _RouteNameObserver();
@@ -586,7 +590,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final tap = tester
-        .widget<ListTile>(find.byKey(const Key('more-my-profile-entry')))
+        .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
         .onTap!;
     tap();
     tap();

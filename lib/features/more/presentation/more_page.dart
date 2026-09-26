@@ -90,14 +90,6 @@ class _MorePageState extends ConsumerState<MorePage> {
               endIndent: 0,
             ),
             ListTile(
-              key: const Key('more-my-profile-entry'),
-              leading: const Icon(Icons.person_outline),
-              title: Text(l10n.moreMyProfile),
-              onTap: _openingMyProfile
-                  ? null
-                  : () => _openMyProfilePage(context),
-            ),
-            ListTile(
               key: const Key('more-daily-sign-in-entry'),
               leading: const Icon(Icons.event_available_outlined),
               title: Text(l10n.moreDailySignIn),
