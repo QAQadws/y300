@@ -16,6 +16,7 @@ class AuthSessionViewState {
     required this.username,
     required this.isLoggingOut,
     this.logoutFailure,
+    this.verificationInconclusive = false,
   });
 
   final bool isLoggedIn;
@@ -24,7 +25,10 @@ class AuthSessionViewState {
   final bool isLoggingOut;
   final Object? logoutFailure;
 
-  const AuthSessionViewState.signedOut()
+  /// Display caches may survive an offline probe without granting login.
+  final bool verificationInconclusive;
+
+  const AuthSessionViewState.signedOut({this.verificationInconclusive = false})
     : isLoggedIn = false,
       uid = '',
       username = '',
@@ -54,6 +58,7 @@ class AuthSessionViewState {
       username: username ?? this.username,
       isLoggingOut: isLoggingOut ?? this.isLoggingOut,
       logoutFailure: clearError ? null : (logoutFailure ?? this.logoutFailure),
+      verificationInconclusive: verificationInconclusive,
     );
   }
 }
@@ -123,7 +128,9 @@ class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
         AuthSessionViewState.fromIdentity(identity),
       ForumSessionAnonymous() => const AuthSessionViewState.signedOut(),
       ForumSessionInconclusive() when previous?.isLoggedIn == true => previous!,
-      ForumSessionInconclusive() => const AuthSessionViewState.signedOut(),
+      ForumSessionInconclusive() => const AuthSessionViewState.signedOut(
+        verificationInconclusive: true,
+      ),
     };
   }
 }

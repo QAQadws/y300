@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:y300/features/profile/presentation/account_display_controller.dart';
 
 import 'package:y300/features/library_shared/data/providers/library_cover_thumbnail_providers.dart';
 import 'package:flutter/material.dart';
@@ -177,6 +178,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(accountDisplayControllerProvider);
     return FutureBuilder<void>(
       future: _coverMigrationReady,
       builder: (context, snapshot) {

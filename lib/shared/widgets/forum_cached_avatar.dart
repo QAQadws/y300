@@ -20,6 +20,7 @@ class ForumCachedAvatar extends ConsumerWidget {
     required this.size,
     this.imageReferer,
     this.fallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
+    this.transitionDuration = fadeInDuration,
   });
 
   final String? imageUrl;
@@ -28,6 +29,7 @@ class ForumCachedAvatar extends ConsumerWidget {
   final double size;
   final String? imageReferer;
   final ForumAvatarFallbackPolicy fallbackPolicy;
+  final Duration transitionDuration;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -75,7 +77,7 @@ class ForumCachedAvatar extends ConsumerWidget {
             placeholder: fallback,
             errorPlaceholder: unavailableAvatar,
             referer: imageReferer,
-            fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+            fadeInDuration: transitionDuration,
           )
         : unavailableAvatar;
     return SizedBox(
@@ -99,7 +101,7 @@ class ForumCachedAvatar extends ConsumerWidget {
       height: size,
       placeholder: placeholder,
       errorPlaceholder: placeholder,
-      fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+      fadeInDuration: transitionDuration,
     );
   }
 

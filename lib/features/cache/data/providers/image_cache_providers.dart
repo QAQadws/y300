@@ -13,6 +13,7 @@ import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart'
 import 'package:y300/features/cache/data/providers/cache_mutation_provider.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
+import 'package:y300/features/cache/data/services/long_term_image_revalidator.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/services/image_cache_manager_factory.dart';
@@ -148,6 +149,15 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     mutationReporter: ref.watch(cacheMutationBusProvider),
     diagnosticRecorder: ref.watch(imageCacheDiagnosticRecorderProvider),
     accessRecorder: accessRecorder,
+    revalidator: LongTermImageRevalidator(
+      repository: repository,
+      fileService: Y300ForumResourceFileService(
+        client: ref.watch(yamiboForumResourceClientProvider),
+        siteOrigin: Uri.parse(AppConfig.siteBaseUrl),
+      ),
+      directories: ref.watch(imageCacheDirectoryResolverProvider),
+      mutations: ref.watch(cacheMutationBusProvider),
+    ),
   );
 });
 

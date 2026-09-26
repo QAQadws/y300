@@ -7,11 +7,125 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/profile/presentation/account_display_controller.dart';
+import 'package:y300/features/profile/presentation/current_account_avatar_controller.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 
 const _initialOwner = (uid: '42', revision: 0);
 final _ownerProvider = StateProvider<VerifiedProfileOwner?>((ref) => null);
+final _previewProvider = StateProvider<String?>((ref) => null);
 
 void main() {
+  test(
+    'avatar preview is local and each fresh summary revision revalidates once',
+    () async {
+      final pending = Completer<_ReadResult>();
+      final repository = _Repository(
+        (call) => call == 0 ? Future.value(_success('42')) : pending.future,
+      )..cached = Future.value(_success('42'));
+      final cache = _AvatarCache();
+      final harness = _Harness(
+        repository,
+        owner: null,
+        preview: '42',
+        avatarCache: cache,
+      );
+      harness.container.listen(
+        currentAccountAvatarControllerProvider,
+        (_, _) {},
+      );
+      await _flushAvatar(harness.container);
+      expect(
+        harness.container
+            .read(currentAccountAvatarControllerProvider)
+            .localPath,
+        'cached.png',
+      );
+      expect(cache.refreshes, 0);
+      harness.setOwner(_initialOwner);
+      await _flushAvatar(harness.container);
+      expect(cache.refreshes, 1);
+      harness.setOwner((uid: '42', revision: 1));
+      await _flushAvatar(harness.container);
+      expect(cache.refreshes, 1);
+      pending.complete(_success('42'));
+      await _flushAvatar(harness.container);
+      expect(cache.refreshes, 2);
+      expect(
+        harness.container.read(currentAccountAvatarControllerProvider).animate,
+        isFalse,
+      );
+    },
+  );
+  test(
+    'cached projection appears before network and survives a failed refresh',
+    () async {
+      final pending = Completer<_ReadResult>();
+      final repository = _Repository((_) => pending.future)
+        ..cached = Future.value(_success('42'));
+      final harness = _Harness(repository)..watch();
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.state.data?.creditTotal, 18);
+      expect(harness.state.isLoading, isTrue);
+      expect(repository.userIds, ['42']);
+      pending.complete(
+        const DataReadFailure(
+          kind: DataReadFailureKind.network,
+          diagnosticMessage: 'synthetic offline',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.state.data?.creditTotal, 18);
+      expect(harness.state.failure?.kind, DataReadFailureKind.network);
+      expect(repository.userIds, ['42']);
+    },
+  );
+
+  test(
+    'unverified preview is local-only, then verification starts one network read',
+    () async {
+      final repository = _Repository(
+        (_) async => _success('42', creditTotal: 99),
+      )..cached = Future.value(_success('42'));
+      final harness = _Harness(repository, owner: null, preview: '42')..watch();
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.state.data?.creditTotal, 18);
+      expect(harness.state.owner, isNull);
+      expect(repository.userIds, isEmpty);
+      await harness.controller.refresh();
+      expect(repository.userIds, isEmpty);
+      harness.setOwner(_initialOwner);
+      expect(harness.state.data?.creditTotal, 18);
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.state.data?.creditTotal, 99);
+      expect(repository.userIds, ['42']);
+    },
+  );
+
+  test('late disk restore cannot resurrect an unauthorized account', () async {
+    final pendingCache =
+        Completer<
+          DataReadSuccess<
+            CurrentUserProfileData,
+            CurrentUserProfileReadCapabilities
+          >?
+        >();
+    final repository = _Repository(
+      (_) async => const DataReadFailure(
+        kind: DataReadFailureKind.unauthorized,
+        diagnosticMessage: 'synthetic logout',
+      ),
+    )..cached = pendingCache.future;
+    final harness = _Harness(repository)..watch();
+    await Future<void>.delayed(Duration.zero);
+    await harness.controller.refresh();
+    pendingCache.complete(_success('42'));
+    await Future<void>.delayed(Duration.zero);
+    expect(harness.state.data, isNull);
+    expect(repository.userIds, ['42']);
+  });
   test(
     'first reader loads the verified account through networkFirst',
     () async {
@@ -24,7 +138,7 @@ void main() {
       );
 
       harness.watch();
-      expect(harness.state.isLoading, isTrue);
+      expect(harness.state.isLoading, isFalse);
       expect(harness.state.data, isNull);
       await Future<void>.delayed(Duration.zero);
 
@@ -80,7 +194,7 @@ void main() {
     (uid: '42', revision: 1),
   ]) {
     test(
-      'owner $nextOwner clears old data and ignores its late refresh',
+      'owner $nextOwner isolates data and ignores its late refresh',
       () async {
         final pending = Completer<_ReadResult>();
         final repository = _Repository((call) {
@@ -96,8 +210,14 @@ void main() {
 
         harness.setOwner(nextOwner);
         expect(harness.state.owner, nextOwner);
-        expect(harness.state.data, isNull);
-        expect(harness.state.capabilities, isNull);
+        expect(
+          harness.state.data?.identity.userId,
+          nextOwner.uid == '42' ? '42' : null,
+        );
+        expect(
+          harness.state.capabilities,
+          nextOwner.uid == '42' ? isNotNull : isNull,
+        );
         await Future<void>.delayed(Duration.zero);
         expect(harness.state.data?.identity.userId, nextOwner.uid);
         expect(harness.state.data?.creditTotal, 20);
@@ -140,34 +260,32 @@ void main() {
     DataReadFailureKind.unauthorized,
     DataReadFailureKind.parse,
   ]) {
-    test(
-      '$kind refresh retains data only for transient connection failures',
-      () async {
-        final repository = _Repository(
-          (call) async => call == 0
-              ? _success('42')
-              : DataReadFailure(
-                  kind: kind,
-                  diagnosticMessage: 'synthetic_summary_failure',
-                ),
-        );
-        final harness = _Harness(repository)..watch();
-        await Future<void>.delayed(Duration.zero);
-        final previous = harness.state;
-        await harness.controller.refresh();
+    test('$kind refresh retains data unless authentication fails', () async {
+      final repository = _Repository(
+        (call) async => call == 0
+            ? _success('42')
+            : DataReadFailure(
+                kind: kind,
+                diagnosticMessage: 'synthetic_summary_failure',
+              ),
+      );
+      final harness = _Harness(repository)..watch();
+      await Future<void>.delayed(Duration.zero);
+      final previous = harness.state;
+      await harness.controller.refresh();
 
-        final retain =
-            kind == DataReadFailureKind.network ||
-            kind == DataReadFailureKind.timeout;
-        expect(harness.state.failure?.kind, kind);
-        expect(harness.state.isLoading, isFalse);
-        expect(harness.state.data, retain ? same(previous.data) : isNull);
-        expect(
-          harness.state.capabilities,
-          retain ? same(previous.capabilities) : isNull,
-        );
-      },
-    );
+      final retain =
+          kind == DataReadFailureKind.network ||
+          kind == DataReadFailureKind.timeout ||
+          kind == DataReadFailureKind.parse;
+      expect(harness.state.failure?.kind, kind);
+      expect(harness.state.isLoading, isFalse);
+      expect(harness.state.data, retain ? same(previous.data) : isNull);
+      expect(
+        harness.state.capabilities,
+        retain ? same(previous.capabilities) : isNull,
+      );
+    });
   }
 
   for (final invalidResponse in <({String name, _ReadResult result})>[
@@ -260,13 +378,15 @@ final _capabilities = CurrentUserProfileReadCapabilities(
   values: DataCapabilitySet.supported(CurrentUserProfileCapability.values),
 );
 
-_ReadResult _success(
+DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+_success(
   String uid, {
   int creditTotal = 18,
   DataReadMetadata metadata = const DataReadMetadata.network(),
 }) => DataReadSuccess(
   data: CurrentUserProfileData(
     identity: ProfileUserIdentity(userId: uid, displayName: 'sample-member'),
+    avatarUrl: 'https://forum.example.test/avatar.png',
     creditTotal: creditTotal,
     groupId: '10',
     postCount: 24,
@@ -280,9 +400,15 @@ final class _Harness {
   _Harness(
     _Repository repository, {
     VerifiedProfileOwner? owner = _initialOwner,
+    String? preview,
+    ImageCacheService? avatarCache,
   }) {
     container = ProviderContainer(
       overrides: [
+        if (avatarCache != null)
+          imageCacheServiceProvider.overrideWithValue(avatarCache),
+        _previewProvider.overrideWith((_) => preview),
+        accountDisplayControllerProvider.overrideWith(_PreviewController.new),
         _ownerProvider.overrideWith((ref) => owner),
         verifiedProfileOwnerProvider.overrideWith(
           (ref) => ref.watch(_ownerProvider),
@@ -309,12 +435,31 @@ final class _Harness {
   }
 }
 
-final class _Repository implements CurrentAccountSummaryRepository {
+class _PreviewController extends AccountDisplayController {
+  @override
+  String? build() => ref.watch(_previewProvider);
+  @override
+  void clear() => state = null;
+}
+
+final class _Repository
+    implements
+        CurrentAccountSummaryRepository,
+        CurrentAccountSummaryCacheReader {
   _Repository(this.onLoad);
 
   final Future<_ReadResult> Function(int call) onLoad;
   final List<CacheLoadPolicy> policies = [];
   final List<String> userIds = [];
+  Future<
+    DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>?
+  >?
+  cached;
+  @override
+  Future<
+    DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>?
+  >
+  readCached(CurrentAccountSummaryQuery query) async => await cached;
 
   @override
   CurrentUserProfileSourceCapabilities get capabilities =>
@@ -329,5 +474,36 @@ final class _Repository implements CurrentAccountSummaryRepository {
     userIds.add(query.userId);
     policies.add(cachePolicy);
     return onLoad(call);
+  }
+}
+
+class _AvatarCache extends Fake
+    implements ImageCacheService, ImageCacheRevalidator {
+  int refreshes = 0;
+  @override
+  Future<CachedImageResult?> getCached(String key) async =>
+      const CachedImageResult(
+        success: true,
+        localPath: 'cached.png',
+        fromCache: true,
+      );
+  @override
+  Future<CachedImageResult> revalidate(
+    ImageCacheRequest request, {
+    bool Function()? isCurrent,
+  }) async {
+    refreshes++;
+    return const CachedImageResult(
+      success: true,
+      localPath: 'cached.png',
+      fromCache: true,
+    );
+  }
+}
+
+Future<void> _flushAvatar(ProviderContainer container) async {
+  for (var i = 0; i < 4; i++) {
+    await container.pump();
+    await Future<void>.delayed(Duration.zero);
   }
 }

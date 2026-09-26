@@ -527,6 +527,7 @@ final class Y300ForumSnapshotStoreAdapter implements forum.ForumSnapshotStore {
     policy: SnapshotCachePolicy(
       freshFor: policy.freshFor,
       keepStaleFor: policy.keepStaleFor,
+      retainLongTerm: policy.retainLongTerm,
     ),
   );
 

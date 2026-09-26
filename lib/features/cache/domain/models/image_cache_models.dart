@@ -114,6 +114,8 @@ class CachedImageRecord {
     this.localPath,
     required this.bytes,
     this.mimeType,
+    this.eTag,
+    this.contentHash,
     this.width,
     this.height,
     required this.protected,
@@ -133,6 +135,8 @@ class CachedImageRecord {
   final String? localPath;
   final int bytes;
   final String? mimeType;
+  final String? eTag;
+  final String? contentHash;
   final int? width;
   final int? height;
   final bool protected;
@@ -146,6 +150,8 @@ class CachedImageRecord {
     String? localPath,
     int? bytes,
     String? mimeType,
+    String? eTag,
+    String? contentHash,
     int? width,
     int? height,
     bool? protected,
@@ -164,6 +170,8 @@ class CachedImageRecord {
       localPath: localPath ?? this.localPath,
       bytes: bytes ?? this.bytes,
       mimeType: mimeType ?? this.mimeType,
+      eTag: eTag ?? this.eTag,
+      contentHash: contentHash ?? this.contentHash,
       width: width ?? this.width,
       height: height ?? this.height,
       protected: protected ?? this.protected,

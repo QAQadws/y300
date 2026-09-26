@@ -5,7 +5,7 @@ class ComicLocalDb {
   ComicLocalDb._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 40;
+  static const int dbVersion = 41;
 
   static const String comicsTable = 'comics';
   static const String episodesTable = 'episodes';
@@ -123,6 +123,22 @@ class ComicLocalDb {
     }
     if (oldVersion < 40 && newVersion >= 40) {
       await _upgradeFrom39To40(db);
+    }
+    if (oldVersion < 41 && newVersion >= 41) {
+      for (final column in ['etag', 'content_hash']) {
+        await _addColumnIfMissing(
+          db,
+          table: cachedImagesTable,
+          column: column,
+          definition: 'TEXT',
+        );
+      }
+      await _addColumnIfMissing(
+        db,
+        table: cachedSnapshotsTable,
+        column: 'retain_long_term',
+        definition: 'INTEGER NOT NULL DEFAULT 0',
+      );
     }
   }
 
@@ -1022,6 +1038,8 @@ class ComicLocalDb {
         height INTEGER,
         protected INTEGER NOT NULL DEFAULT 0,
         retention_class TEXT NOT NULL DEFAULT 'ephemeral',
+        etag TEXT,
+        content_hash TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         last_accessed_at INTEGER
@@ -1209,6 +1227,7 @@ class ComicLocalDb {
         owner_type TEXT NOT NULL,
         owner_id TEXT NOT NULL,
         snapshot_type TEXT NOT NULL,
+        retain_long_term INTEGER NOT NULL DEFAULT 0,
         codec_version INTEGER NOT NULL,
         parser_version INTEGER NOT NULL,
         source_document_key TEXT,

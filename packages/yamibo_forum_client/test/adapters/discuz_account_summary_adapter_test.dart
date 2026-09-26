@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:yamibo_forum_client/src/adapters/account_summary_snapshot_codec.dart';
 
 final _fixture = File(
   'test/fixtures/account_summary/desktop.html',
@@ -17,6 +18,96 @@ final _config = ForumClientConfig(
 const _query = CurrentAccountSummaryQuery(userId: '42');
 
 void main() {
+  test(
+    'validated projection survives reconstruction without a network read',
+    () async {
+      final store = MemoryForumSnapshotStore();
+      final network = _Network();
+      final client = YamiboForumClientBuilder(
+        config: _config,
+        network: network,
+        snapshotStore: store,
+      ).buildStandardClient();
+      expect(await client.readCachedCurrentAccountSummary(_query), isNull);
+      final fresh = await client.loadCurrentAccountSummary(_query) as _Success;
+      final nextNetwork = _Network(failure: ForumTransportFailureKind.network);
+      final restoredClient = YamiboForumClientBuilder(
+        config: _config,
+        network: nextNetwork,
+        snapshotStore: store,
+      ).buildStandardClient();
+      final cached = await restoredClient.readCachedCurrentAccountSummary(
+        _query,
+      );
+      expect(cached?.data.identity.userId, '42');
+      expect(cached?.data.creditTotal, fresh.data.creditTotal);
+      expect(cached?.metadata.freshness, DataReadFreshness.staleOrUnknown);
+      expect(cached?.metadata.origin, DataReadOrigin.freshSnapshot);
+      expect(nextNetwork.requests, isEmpty);
+      expect(
+        await restoredClient.readCachedCurrentAccountSummary(
+          const CurrentAccountSummaryQuery(userId: '43'),
+        ),
+        isNull,
+      );
+      final offline = await restoredClient.loadCurrentAccountSummary(_query);
+      expect(offline.failureOrNull?.kind, DataReadFailureKind.network);
+      expect(
+        (await restoredClient.readCachedCurrentAccountSummary(
+          _query,
+        ))?.data.creditTotal,
+        123,
+      );
+    },
+  );
+
+  test(
+    'summary codec preserves exact values and rejects malformed projections',
+    () async {
+      const codec = AccountSummarySnapshotCodec();
+      final fresh = await _load(_fixture) as _Success;
+      final encoded = codec.encode(fresh) as Map<String, Object?>;
+      final restored = codec.decode(encoded);
+      expect(restored.data.replyCount, 7);
+      expect(
+        restored.capabilities.values.values,
+        fresh.capabilities.values.values,
+      );
+      expect(encoded.keys, isNot(contains('html')));
+      expect(codec.decode({...encoded, 'credits': -7}).data.creditTotal, -7);
+      expect(codec.decode({...encoded, 'credits': 0}).data.creditTotal, 0);
+      expect(
+        () => codec.decode({...encoded, 'replies': -1}),
+        throwsFormatException,
+      );
+      expect(
+        () => codec.decode({...encoded, 'uid': '0'}),
+        throwsFormatException,
+      );
+      expect(
+        codec.canDecodeVersion(codecVersion: 99, parserVersion: 1),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'failed snapshot persistence does not discard the network result',
+    () async {
+      final client = YamiboForumClientBuilder(
+        config: _config,
+        network: _Network(),
+        snapshotStore: _FailingSnapshotStore(),
+      ).buildStandardClient();
+      expect(await client.readCachedCurrentAccountSummary(_query), isNull);
+      expect(
+        (await client.loadCurrentAccountSummary(
+          _query,
+        )).dataOrNull?.creditTotal,
+        123,
+      );
+    },
+  );
   test(
     'standard facade reads one desktop document and exposes distinct counts',
     () async {
@@ -269,6 +360,23 @@ void main() {
       expect(result.failureOrNull?.kind, toReadFailureKind(failure));
     });
   }
+}
+
+final class _FailingSnapshotStore implements ForumSnapshotStore {
+  @override
+  Future<ForumCachedSnapshot<T>?> get<T>(
+    ForumSnapshotDescriptor descriptor,
+    ForumSnapshotCodec<T> codec,
+  ) async => throw StateError('synthetic storage failure');
+  @override
+  Future<void> put<T>(
+    ForumSnapshotDescriptor descriptor,
+    T value,
+    ForumSnapshotCodec<T> codec, {
+    required ForumSnapshotPolicy policy,
+  }) async => throw StateError('synthetic storage failure');
+  @override
+  Future<void> touch(ForumSnapshotDescriptor descriptor, DateTime at) async {}
 }
 
 typedef _Success =

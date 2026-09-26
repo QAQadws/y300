@@ -7,6 +7,47 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
+    'v40 cache rows survive addition of long-term retention and image validators',
+    () async {
+      const name = 'account_cache_v41_migration_test.db';
+      await deleteDatabase(name);
+      final old = await openDatabase(
+        name,
+        version: 40,
+        onCreate: (db, _) async {
+          await db.execute(
+            'CREATE TABLE cached_snapshots (cache_key TEXT PRIMARY KEY, payload_json TEXT)',
+          );
+          await db.execute(
+            'CREATE TABLE cached_images (cache_key TEXT PRIMARY KEY, local_path TEXT)',
+          );
+          await db.insert('cached_snapshots', {
+            'cache_key': 'old',
+            'payload_json': 'preserved',
+          });
+          await db.insert('cached_images', {
+            'cache_key': 'old',
+            'local_path': 'preserved.png',
+          });
+        },
+      );
+      await old.close();
+      final db = await ComicLocalDb.open(databaseName: name);
+      addTearDown(() async {
+        await db.close();
+        await deleteDatabase(name);
+      });
+      final snapshot = (await db.query('cached_snapshots')).single;
+      final image = (await db.query('cached_images')).single;
+      expect(snapshot['payload_json'], 'preserved');
+      expect(snapshot['retain_long_term'], 0);
+      expect(image['local_path'], 'preserved.png');
+      expect(image.containsKey('etag'), isTrue);
+      expect(image.containsKey('content_hash'), isTrue);
+    },
+  );
+
+  test(
     'ComicLocalDb latest schema includes image cache table and local cover columns',
     () async {
       const dbName = 'comic_shelf_test_image_cache_phase4.db';

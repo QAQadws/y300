@@ -164,6 +164,15 @@ abstract interface class CurrentAccountSummaryRepository {
   });
 }
 
+/// Optional local projection for display only; never proves authentication.
+abstract interface class CurrentAccountSummaryCacheReader {
+  /// Reads the last validated summary without any network request.
+  Future<
+    DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>?
+  >
+  readCached(CurrentAccountSummaryQuery query);
+}
+
 /// Values describing forum user profile view.
 enum ForumUserProfileView {
   /// Public.

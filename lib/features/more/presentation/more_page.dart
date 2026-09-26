@@ -17,6 +17,7 @@ import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_sheet.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
+import 'package:y300/features/profile/presentation/current_account_avatar_controller.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -38,6 +39,9 @@ class _MorePageState extends ConsumerState<MorePage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(
+      currentAccountAvatarControllerProvider.select((state) => state.uid),
+    );
     // Retain the summary while More is mounted, including when its header is
     // scrolled offscreen and the ListView disposes that child.
     ref.watch(

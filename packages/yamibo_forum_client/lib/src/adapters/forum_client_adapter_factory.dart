@@ -340,6 +340,7 @@ final class ForumClientAdapterFactory {
         config: config,
         network: network,
         requestProfiles: requestProfiles,
+        snapshotStore: snapshotStore,
       );
 
   /// Creates network-only read and command ports for daily sign-in.

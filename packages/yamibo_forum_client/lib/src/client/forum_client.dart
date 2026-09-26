@@ -564,6 +564,17 @@ final class YamiboForumClient {
 
   /// Loads the verified account's presentation summary.
   Future<
+    DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>?
+  >
+  readCachedCurrentAccountSummary(CurrentAccountSummaryQuery query) async {
+    final repository = sourcePlan.currentAccountSummary;
+    return repository is CurrentAccountSummaryCacheReader
+        ? (repository as CurrentAccountSummaryCacheReader).readCached(query)
+        : null;
+  }
+
+  /// Loads the verified account's presentation summary from the network.
+  Future<
     DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
   >
   loadCurrentAccountSummary(

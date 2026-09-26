@@ -1,3 +1,4 @@
+import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -287,7 +288,9 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const Key('more-account-credits')),
-        matching: find.text('42'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is AnimatedFlipCounter && widget.value == 42,
+        ),
       ),
       findsOneWidget,
     );

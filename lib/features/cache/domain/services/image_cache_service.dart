@@ -2,6 +2,14 @@ import 'dart:ui';
 
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 
+/// Optional refresh that retains the previously validated file until replacement.
+abstract interface class ImageCacheRevalidator {
+  Future<CachedImageResult> revalidate(
+    ImageCacheRequest request, {
+    bool Function()? isCurrent,
+  });
+}
+
 abstract class ImageCacheService {
   Future<CachedImageResult> ensureCached(ImageCacheRequest request);
 

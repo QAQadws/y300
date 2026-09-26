@@ -1,3 +1,7 @@
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -8,13 +12,13 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/more/presentation/more_account_avatar.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
-import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 import '../../../test_support/localized_test_app.dart';
@@ -30,6 +34,57 @@ final _ownerSource = StateProvider<VerifiedProfileOwner?>((ref) => _owner);
 final _sessionSource = StateProvider<AuthSessionViewState>((ref) => _session);
 
 void main() {
+  testWidgets(
+    'numeric refresh keeps the counter state and uses the shared animation duration',
+    (tester) async {
+      final repository = _Repository(
+        (read) async => _success(credits: read == 1 ? 12 : 19),
+      );
+      await _pumpHeader(tester, repository: repository);
+      final counter = find.descendant(
+        of: find.byKey(const Key('more-account-credits')),
+        matching: find.byType(AnimatedFlipCounter),
+      );
+      final initialState = tester.element(counter);
+      expect(tester.widget<AnimatedFlipCounter>(counter).value, 12);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MoreAccountHeader)),
+      );
+      await container
+          .read(currentAccountSummaryControllerProvider.notifier)
+          .refresh();
+      await tester.pump();
+      expect(tester.element(counter), same(initialState));
+      expect(tester.widget<AnimatedFlipCounter>(counter).value, 19);
+      expect(
+        tester.widget<AnimatedFlipCounter>(counter).duration,
+        const Duration(milliseconds: 260),
+      );
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('reduced motion disables counter and identity transitions', (
+    tester,
+  ) async {
+    await _pumpHeader(
+      tester,
+      repository: _Repository((_) async => _success()),
+      disableAnimations: true,
+    );
+    for (final counter in tester.widgetList<AnimatedFlipCounter>(
+      find.byType(AnimatedFlipCounter),
+    )) {
+      expect(counter.duration, Duration.zero);
+      expect(counter.negativeSignDuration, Duration.zero);
+    }
+    for (final transition in tester.widgetList<AnimatedSwitcher>(
+      find.byType(AnimatedSwitcher),
+    )) {
+      expect(transition.duration, Duration.zero);
+    }
+  });
   testWidgets('signed account shows structured summary and separate actions', (
     tester,
   ) async {
@@ -76,11 +131,10 @@ void main() {
     expect(repository.reads, 1);
     expect(repository.policies, [CacheLoadPolicy.networkFirst]);
 
-    final avatar = tester.widget<ForumCachedAvatar>(
-      find.byType(ForumCachedAvatar),
+    final avatar = tester.widget<MoreAccountAvatar>(
+      find.byType(MoreAccountAvatar),
     );
-    expect(avatar.ownerId, _owner.uid);
-    expect(avatar.fallbackPolicy, ForumAvatarFallbackPolicy.localDefaultAvatar);
+    expect(avatar.uid, _owner.uid);
     _expectDefaultAvatar(tester);
 
     await tester.tap(find.byKey(const Key('more-account-avatar')));
@@ -144,14 +198,14 @@ void main() {
     await tester.pump();
 
     expect(find.text(_l10n(tester).moreAccountChecking), findsOneWidget);
-    expect(find.byKey(const Key('more-account-loading')), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.byKey(const Key('more-account-credits')), findsNothing);
     expect(_logoutButton(tester).onPressed, isNull);
     expect(repository.reads, 0);
   });
 
   testWidgets(
-    'summary loading preserves the session name without fake totals',
+    'summary loads silently while preserving the session name and unknown totals',
     (tester) async {
       final pending = Completer<_ReadResult>();
       final repository = _Repository((_) => pending.future);
@@ -160,7 +214,7 @@ void main() {
       final l10n = _l10n(tester);
 
       expect(find.text(_session.username), findsOneWidget);
-      expect(find.byKey(const Key('more-account-loading')), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.text(l10n.moreAccountUnavailable), findsNWidgets(3));
       expect(find.byKey(const Key('more-account-group')), findsNothing);
       expect(repository.reads, 1);
@@ -168,7 +222,7 @@ void main() {
       pending.complete(_success());
       await tester.pumpAndSettle();
       expect(find.text('Profile reader'), findsOneWidget);
-      expect(find.byKey(const Key('more-account-loading')), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
     },
   );
 
@@ -191,12 +245,6 @@ void main() {
 
       expect(find.byKey(const Key('more-account-group')), findsNothing);
       expect(find.text(l10n.moreAccountUnavailable), findsNWidgets(3));
-      expect(
-        tester
-            .widget<ForumCachedAvatar>(find.byType(ForumCachedAvatar))
-            .imageUrl,
-        isNull,
-      );
       _expectDefaultAvatar(tester);
     },
   );
@@ -373,10 +421,12 @@ Future<void> _pumpHeader(
   ThemeData? theme,
   Locale locale = const Locale('zh'),
   double textScale = 1,
+  bool disableAnimations = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        imageCacheServiceProvider.overrideWithValue(_NoAvatarCache()),
         _ownerSource.overrideWith((ref) => owner),
         _sessionSource.overrideWith((ref) => session),
         verifiedProfileOwnerProvider.overrideWith(
@@ -389,9 +439,10 @@ Future<void> _pumpHeader(
         locale: locale,
         theme: theme ?? AppTheme.light(),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            disableAnimations: disableAnimations,
+          ),
           child: child!,
         ),
         home: Scaffold(
@@ -425,10 +476,20 @@ AppLocalizations _l10n(WidgetTester tester) =>
 IconButton _logoutButton(WidgetTester tester) =>
     tester.widget<IconButton>(find.byKey(const Key('more-logout-entry')));
 
-Finder _statistic(String name, String value) => find.descendant(
-  of: find.byKey(Key('more-account-$name')),
-  matching: find.text(value),
-);
+Finder _statistic(String name, String value) {
+  final counters = find.descendant(
+    of: find.byKey(Key('more-account-$name')),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is AnimatedFlipCounter && widget.value.toString() == value,
+    ),
+  );
+  if (counters.evaluate().isNotEmpty) return counters;
+  return find.descendant(
+    of: find.byKey(Key('more-account-$name')),
+    matching: find.text(value),
+  );
+}
 
 void _expectAccountLayout(WidgetTester tester, {bool groupWraps = false}) {
   final avatar = tester.getRect(find.byKey(const Key('more-account-avatar')));
@@ -459,18 +520,13 @@ void _expectAccountLayout(WidgetTester tester, {bool groupWraps = false}) {
 }
 
 void _expectDefaultAvatar(WidgetTester tester) {
-  final image = tester.widget<CachedLibraryImage>(
-    find.byType(CachedLibraryImage),
+  final images = find.byWidgetPredicate(
+    (widget) =>
+        widget is Image &&
+        widget.image is AssetImage &&
+        (widget.image as AssetImage).assetName == forumDefaultAvatarAsset,
   );
-  expect(image.request, isNull);
-  expect(
-    image.imageProviderOverride,
-    isA<AssetImage>().having(
-      (provider) => provider.assetName,
-      'assetName',
-      forumDefaultAvatarAsset,
-    ),
-  );
+  expect(images, findsOneWidget);
 }
 
 class _TestAuthController extends AuthSessionController {
@@ -530,4 +586,9 @@ final class _Repository implements CurrentAccountSummaryRepository {
     policies.add(cachePolicy);
     return onRead(++reads);
   }
+}
+
+class _NoAvatarCache extends Fake implements ImageCacheService {
+  @override
+  Future<CachedImageResult?> getCached(String key) async => null;
 }

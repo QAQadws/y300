@@ -47,6 +47,7 @@ class CacheManagerImageFileDownloader implements ImageFileDownloader {
 class DefaultImageCacheService
     implements
         ImageCacheService,
+        ImageCacheRevalidator,
         ImageCacheOwnerDimensionLookup,
         ImageCacheMetadataLookup,
         ImageCacheDimensionRecorder,
@@ -62,6 +63,7 @@ class DefaultImageCacheService
     ImageCacheDiagnosticRecorder diagnosticRecorder =
         const NoopImageCacheDiagnosticRecorder(),
     ImageCacheAccessRecorder? accessRecorder,
+    ImageCacheRevalidator? revalidator,
   }) : _repository = repository,
        _cacheManagerFuture = cacheManagerFuture,
        _directoryResolver = directoryResolver,
@@ -69,7 +71,18 @@ class DefaultImageCacheService
        _downloader = downloader,
        _mutationReporter = mutationReporter,
        _diagnosticRecorder = diagnosticRecorder,
-       _accessRecorder = accessRecorder;
+       _accessRecorder = accessRecorder,
+       _revalidator = revalidator;
+
+  final ImageCacheRevalidator? _revalidator;
+
+  @override
+  Future<CachedImageResult> revalidate(
+    ImageCacheRequest request, {
+    bool Function()? isCurrent,
+  }) async =>
+      await _revalidator?.revalidate(request, isCurrent: isCurrent) ??
+      CachedImageResult.failed;
 
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;

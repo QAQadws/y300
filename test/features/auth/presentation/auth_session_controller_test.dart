@@ -5,6 +5,39 @@ import 'package:y300/features/auth/data/providers/auth_contract_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 
 void main() {
+  test(
+    'offline cold verification stays distinct from an explicit anonymous session',
+    () async {
+      final repository = _SequenceSessionRepository([
+        const ForumSessionInconclusive(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.network,
+            code: 'offline',
+            diagnosticMessage: 'offline',
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
+          ),
+        ),
+        const ForumSessionAnonymous(),
+      ]);
+      final container = ProviderContainer(
+        overrides: [
+          forumSessionRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(container.dispose);
+      final offline = await container.read(
+        authSessionControllerProvider.future,
+      );
+      expect(offline.isLoggedIn, isFalse);
+      expect(offline.verificationInconclusive, isTrue);
+      await container.read(authSessionControllerProvider.notifier).refresh();
+      final anonymous = await container.read(
+        authSessionControllerProvider.future,
+      );
+      expect(anonymous.isLoggedIn, isFalse);
+      expect(anonymous.verificationInconclusive, isFalse);
+    },
+  );
   test('inconclusive refresh preserves a previously proved identity', () async {
     final sessions = _SequenceSessionRepository(<ForumSessionResult>[
       const ForumSessionAuthenticated(

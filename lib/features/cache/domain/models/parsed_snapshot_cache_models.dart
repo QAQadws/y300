@@ -20,10 +20,14 @@ class SnapshotCachePolicy {
   const SnapshotCachePolicy({
     required this.freshFor,
     required this.keepStaleFor,
+    this.retainLongTerm = false,
   });
 
   final Duration freshFor;
   final Duration keepStaleFor;
+
+  /// Retained outside ordinary clearing and capacity eviction.
+  final bool retainLongTerm;
 }
 
 abstract class SnapshotCodec<T> {

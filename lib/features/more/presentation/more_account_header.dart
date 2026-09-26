@@ -1,7 +1,8 @@
+import 'package:animated_flip_counter/animated_flip_counter.dart';
+import 'package:y300/features/more/presentation/more_account_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
@@ -26,7 +27,15 @@ class MoreAccountHeader extends ConsumerWidget {
     final session = auth.asData?.value;
     final owner = ref.watch(verifiedProfileOwnerProvider);
     final summary = ref.watch(currentAccountSummaryControllerProvider);
-    final current = owner != null && summary.owner == owner;
+    final canPreview =
+        auth.isLoading ||
+        auth.hasError ||
+        session?.verificationInconclusive == true;
+    final current = owner != null
+        ? summary.owner == owner
+        : canPreview && summary.previewUid != null;
+    final displayUid = current ? summary.displayUid : owner?.uid;
+    final hasAccount = displayUid != null;
     final data = current ? summary.data : null;
     final capabilities = current ? summary.capabilities : null;
     final l10n = AppLocalizations.of(context);
@@ -39,18 +48,15 @@ class MoreAccountHeader extends ConsumerWidget {
         capabilities?.supports(CurrentUserProfileCapability.userName) == true
         ? data?.identity.displayName
         : null;
-    final name = owner == null
+    final name = !hasAccount
         ? verifying || loggingOut
               ? l10n.moreAccountChecking
               : l10n.moreAccountSignedOut
         : _nonEmpty(displayName) ??
               _nonEmpty(session?.username) ??
-              l10n.moreAccountSignedIn;
-    final avatarUrl =
-        capabilities?.supports(CurrentUserProfileCapability.avatarReference) ==
-            true
-        ? data?.avatarUrl
-        : null;
+              (owner == null
+                  ? l10n.moreAccountChecking
+                  : l10n.moreAccountSignedIn);
     final groupName =
         capabilities?.supports(CurrentUserProfileCapability.groupName) == true
         ? _nonEmpty(data?.groupName)
@@ -76,15 +82,25 @@ class MoreAccountHeader extends ConsumerWidget {
         key: const Key('more-account-avatar'),
         customBorder: const CircleBorder(),
         onTap: openProfile,
-        child: ForumCachedAvatar(
-          key: ValueKey('more-account-avatar-${owner?.uid}-${owner?.revision}'),
-          imageUrl: avatarUrl,
-          ownerId: owner?.uid ?? '',
-          ownerType: ImageCacheOwnerType.profile,
-          size: owner != null ? 72 : 56,
-          imageReferer: ref.watch(forumImageRefererProvider),
-          fallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
-        ),
+        child: hasAccount
+            ? MoreAccountAvatar(
+                key: ValueKey('account-avatar-$displayUid'),
+                uid: displayUid,
+                size: 72,
+              )
+            : ForumCachedAvatar(
+                imageUrl: null,
+                ownerId: '',
+                ownerType: ImageCacheOwnerType.profile,
+                size: 56,
+                transitionDuration: Duration.zero,
+                fallbackPolicy:
+                    verifying ||
+                        auth.hasError ||
+                        session?.verificationInconclusive == true
+                    ? ForumAvatarFallbackPolicy.neutralSurface
+                    : ForumAvatarFallbackPolicy.localDefaultAvatar,
+              ),
       ),
     );
     final identityChildren = <Widget>[
@@ -96,41 +112,57 @@ class MoreAccountHeader extends ConsumerWidget {
           borderRadius: BorderRadius.circular(4),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontSize: owner != null ? 20 : null,
-                fontWeight: FontWeight.w600,
+            child: AnimatedSwitcher(
+              key: ValueKey((displayUid, data != null)),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
+              child: Text(
+                name,
+                key: ValueKey(name),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontSize: hasAccount ? 20 : null,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
         ),
       ),
-      if (owner != null && groupName != null)
+      if (hasAccount && groupName != null)
         Semantics(
           label: l10n.moreAccountGroup(groupName),
           excludeSemantics: true,
-          child: Container(
-            key: const Key('more-account-group'),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              groupName,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSecondaryContainer,
+          child: AnimatedSwitcher(
+            key: ValueKey(displayUid),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            child: KeyedSubtree(
+              key: ValueKey(groupName),
+              child: Container(
+                key: const Key('more-account-group'),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  groupName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSecondaryContainer,
+                  ),
+                ),
               ),
             ),
           ),
         ),
     ];
-    final identity = owner != null
+    final identity = hasAccount
         ? Wrap(
             spacing: 8,
             runSpacing: 4,
@@ -155,51 +187,52 @@ class MoreAccountHeader extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
-              crossAxisAlignment: owner != null
+              crossAxisAlignment: hasAccount
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.center,
               children: [
                 avatar,
-                if (owner != null) ...[
+                if (hasAccount) ...[
                   const SizedBox(width: 16),
                   Expanded(
-                    child: IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: _AccountStatistic(
-                              key: const Key('more-account-threads'),
-                              label: l10n.moreAccountThreads,
-                              value: threads,
-                            ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: _AccountStatistic(
+                            key: const Key('more-account-threads'),
+                            label: l10n.moreAccountThreads,
+                            value: threads,
+                            accountUid: displayUid,
                           ),
-                          const VerticalDivider(
-                            width: 16,
-                            indent: 8,
-                            endIndent: 8,
+                        ),
+                        const SizedBox(
+                          height: 32,
+                          width: 16,
+                          child: VerticalDivider(indent: 5, endIndent: 5),
+                        ),
+                        Expanded(
+                          child: _AccountStatistic(
+                            key: const Key('more-account-replies'),
+                            label: l10n.moreAccountReplies,
+                            value: replies,
+                            accountUid: displayUid,
                           ),
-                          Expanded(
-                            child: _AccountStatistic(
-                              key: const Key('more-account-replies'),
-                              label: l10n.moreAccountReplies,
-                              value: replies,
-                            ),
+                        ),
+                        const SizedBox(
+                          height: 32,
+                          width: 16,
+                          child: VerticalDivider(indent: 5, endIndent: 5),
+                        ),
+                        Expanded(
+                          child: _AccountStatistic(
+                            key: const Key('more-account-credits'),
+                            label: l10n.moreAccountCreditLabel,
+                            value: credits,
+                            accountUid: displayUid,
                           ),
-                          const VerticalDivider(
-                            width: 16,
-                            indent: 8,
-                            endIndent: 8,
-                          ),
-                          Expanded(
-                            child: _AccountStatistic(
-                              key: const Key('more-account-credits'),
-                              label: l10n.moreAccountCreditLabel,
-                              value: credits,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ] else ...[
@@ -208,14 +241,7 @@ class MoreAccountHeader extends ConsumerWidget {
                 ],
               ],
             ),
-            if (owner != null) ...[const SizedBox(height: 8), identity],
-            if (verifying || (current && summary.isLoading)) ...[
-              const SizedBox(height: 12),
-              const LinearProgressIndicator(
-                key: Key('more-account-loading'),
-                minHeight: 2,
-              ),
-            ],
+            if (hasAccount) ...[const SizedBox(height: 8), identity],
             if (current && summary.failure != null)
               Wrap(
                 alignment: WrapAlignment.spaceBetween,
@@ -255,7 +281,14 @@ class MoreAccountHeader extends ConsumerWidget {
 }
 
 class _AccountStatistic extends StatelessWidget {
-  const _AccountStatistic({super.key, required this.label, this.value});
+  const _AccountStatistic({
+    super.key,
+    required this.label,
+    this.value,
+    this.accountUid,
+  });
+
+  final String? accountUid;
 
   final String label;
   final int? value;
@@ -271,10 +304,36 @@ class _AccountStatistic extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Text(
-            text,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final style = theme.textTheme.bodyMedium?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              );
+              final measurement = TextPainter(
+                text: TextSpan(text: text, style: style),
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              )..layout();
+              final fits = measurement.width + 2 <= constraints.maxWidth;
+              measurement.dispose();
+              // The counter converts through double; preserve large integers exactly.
+              if (value == null ||
+                  (value! < -9007199254740991 || value! > 9007199254740991) ||
+                  !fits) {
+                return Text(text, textAlign: TextAlign.center, style: style);
+              }
+              return AnimatedFlipCounter(
+                key: ValueKey(accountUid),
+                value: value!,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 260),
+                negativeSignDuration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 150),
+                textStyle: style,
+              );
+            },
           ),
           const SizedBox(height: 2),
           Text(
