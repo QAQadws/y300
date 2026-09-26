@@ -82,6 +82,84 @@ void main() {
     expect(repository.queries, hasLength(2));
   });
 
+  testWidgets(
+    'panel entry shares an in-flight read and refresh stays read-only',
+    (tester) async {
+      final pending = Completer<_ReadResult>();
+      final repository = _SignRepository(
+        (query, call) => call == 0
+            ? pending.future
+            : Future.value(
+                _success(query.userId, ForumDailySignInStatus.signed),
+              ),
+      );
+      final command = _SignCommand((_, _) async => _unknown);
+      await _pump(
+        tester,
+        repository: repository,
+        command: command,
+        settle: false,
+      );
+      await tester.pump();
+      await tester.pump();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DailySignInPage)),
+      );
+      final controller = container.read(dailySignInControllerProvider.notifier);
+      final firstRefresh = controller.refresh();
+      final secondRefresh = controller.refresh();
+      expect(repository.queries, hasLength(1));
+      expect(find.byKey(const Key('daily-sign-in-progress')), findsOneWidget);
+
+      pending.complete(_success('654321', ForumDailySignInStatus.unsigned));
+      await Future.wait([firstRefresh, secondRefresh]);
+      await tester.pumpAndSettle();
+      expect(find.text(_l10n(tester).dailySignInUnsigned), findsOneWidget);
+      expect(repository.queries, hasLength(1));
+      expect(command.requests, isEmpty);
+
+      await tester.tap(find.byKey(const Key('daily-sign-in-refresh')));
+      await tester.pumpAndSettle();
+      expect(find.text(_l10n(tester).dailySignInSigned), findsOneWidget);
+      expect(repository.queries, hasLength(2));
+      expect(command.requests, isEmpty);
+    },
+  );
+
+  testWidgets('mounted panel rereads after logout and same-account login', (
+    tester,
+  ) async {
+    final store = YamiboSessionStore()..saveExtracted(_session('654321'));
+    final repository = _SignRepository(
+      (query, call) async => _success(
+        query.userId,
+        call == 0
+            ? ForumDailySignInStatus.unsigned
+            : ForumDailySignInStatus.signed,
+      ),
+    );
+    final command = _SignCommand((_, _) async => _unknown);
+    await _pump(tester, repository: repository, command: command, store: store);
+    expect(repository.queries, hasLength(1));
+    expect(find.text(_l10n(tester).dailySignInUnsigned), findsOneWidget);
+
+    store.clear();
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n(tester).dailySignInLoginRequired), findsOneWidget);
+    expect(find.byKey(const Key('daily-sign-in-status')), findsNothing);
+    expect(repository.queries, hasLength(1));
+
+    store.saveExtracted(_session('654321'));
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n(tester).dailySignInSigned), findsOneWidget);
+    expect(find.byKey(const Key('daily-sign-in-progress')), findsNothing);
+    expect(repository.queries.map((query) => query.userId), [
+      '654321',
+      '654321',
+    ]);
+    expect(command.requests, isEmpty);
+  });
+
   testWidgets('concurrent manual triggers make one command and verify read', (
     tester,
   ) async {
@@ -267,6 +345,9 @@ void main() {
       settle: false,
     );
     await tester.pump();
+    await tester.pump();
+    expect(repository.queries, hasLength(1));
+    expect(repository.queries.single.userId, '654321');
     final container = ProviderScope.containerOf(
       tester.element(find.byType(DailySignInPage)),
     );
@@ -282,12 +363,14 @@ void main() {
         );
     await tester.pumpAndSettle();
     expect(repository.queries.last.userId, '777777');
+    expect(repository.queries, hasLength(2));
     expect(find.text(_l10n(tester).dailySignInSigned), findsOneWidget);
 
     oldRead.complete(_success('654321', ForumDailySignInStatus.unsigned));
     await tester.pumpAndSettle();
     expect(find.text(_l10n(tester).dailySignInSigned), findsOneWidget);
     expect(find.text(_l10n(tester).dailySignInUnsigned), findsNothing);
+    expect(repository.queries, hasLength(2));
   });
 
   testWidgets('session change discards a late old-account command', (

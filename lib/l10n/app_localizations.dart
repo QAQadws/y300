@@ -7575,7 +7575,7 @@ abstract class AppLocalizations {
   /// No description provided for @dailyAutoSignInDescription.
   ///
   /// In zh, this message translates to:
-  /// **'打开应用或回到前台时，核验论坛状态并在未签到时自动尝试一次。'**
+  /// **'每次启动应用后自动核验签到状态，符合条件时尝试签到；切回前台不会重复触发。'**
   String get dailyAutoSignInDescription;
 
   /// No description provided for @dailyAutoSignInSaving.

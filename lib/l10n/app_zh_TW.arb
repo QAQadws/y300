@@ -1499,7 +1499,7 @@
   "dailySignInRetryTitle": "確認再次提交？",
   "dailySignInRetryBody": "上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。",
   "dailyAutoSignInToggle": "每天自動簽到",
-  "dailyAutoSignInDescription": "開啟應用或回到前景時，核對論壇狀態並在尚未簽到時自動嘗試一次。",
+  "dailyAutoSignInDescription": "每次啟動應用後自動核對簽到狀態，符合條件時嘗試簽到；切回前景不會重複觸發。",
   "dailyAutoSignInSaving": "正在儲存自動簽到設定…",
   "dailyAutoSignInStorageUnavailable": "無法安全讀取或儲存簽到記錄，目前無法提交簽到。請稍後重試。",
   "dailyAutoSignInPausedPreviousDay": "前一論壇日的簽到結果仍未確認，今天暫停自動提交。你可以核對狀態，或確認後手動重試。",

@@ -1864,7 +1864,7 @@
   "dailySignInRetryTitle": "确认再次提交？",
   "dailySignInRetryBody": "上次请求可能已经生效，即使当前页面仍显示未签到。继续将重新读取页面并发送一次新的签到请求。",
   "dailyAutoSignInToggle": "每天自动签到",
-  "dailyAutoSignInDescription": "打开应用或回到前台时，核验论坛状态并在未签到时自动尝试一次。",
+  "dailyAutoSignInDescription": "每次启动应用后自动核验签到状态，符合条件时尝试签到；切回前台不会重复触发。",
   "dailyAutoSignInSaving": "正在保存自动签到设置…",
   "dailyAutoSignInStorageUnavailable": "无法安全读取或保存签到记录，当前不能提交签到。请稍后重试。",
   "dailyAutoSignInPausedPreviousDay": "前一论坛日的签到结果仍未确认，今天暂停自动提交。你可以核验状态，或确认后手动重试。",

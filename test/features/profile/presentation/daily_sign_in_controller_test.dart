@@ -18,6 +18,32 @@ final _ownerProvider = StateProvider<VerifiedProfileOwner?>(
 );
 
 void main() {
+  test('initialization and owner changes only load local settings', () async {
+    final harness = _Harness();
+    final container = harness.container();
+    addTearDown(container.dispose);
+    final controller = container.read(dailySignInControllerProvider.notifier);
+
+    await _until(
+      () => container.read(dailySignInControllerProvider).autoEnabled != null,
+    );
+    expect(harness.repository.reads, 0);
+    container.read(_ownerProvider.notifier).state = (uid: '43', revision: 1);
+    expect(container.read(dailySignInControllerProvider).owner?.uid, '43');
+    await _until(
+      () => container.read(dailySignInControllerProvider).autoEnabled != null,
+    );
+    expect(harness.repository.reads, 0);
+    expect(harness.command.requests, isEmpty);
+
+    await controller.refresh();
+    expect(harness.repository.reads, 1);
+    expect(
+      container.read(dailySignInControllerProvider).snapshot?.userId,
+      '43',
+    );
+  });
+
   test(
     'unknown automatic send is read-only today and pauses tomorrow',
     () async {
@@ -78,6 +104,7 @@ void main() {
     final controller = container.read(dailySignInControllerProvider.notifier);
 
     await controller.triggerAutomatic();
+    expect(harness.repository.reads, 1);
     expect(harness.command.sends, 0);
     expect(
       (await harness.ledger.readCheckpoint('42'))?.state,
@@ -86,7 +113,7 @@ void main() {
   });
 
   test(
-    'account toggle stops writes but still permits network checks',
+    'disabled automation skips all requests but permits manual actions',
     () async {
       final harness = _Harness();
       final container = harness.container();
@@ -95,11 +122,75 @@ void main() {
 
       await controller.setAutomaticEnabled(false);
       await controller.triggerAutomatic();
-      expect(harness.repository.reads, greaterThan(0));
+      expect(harness.repository.reads, 0);
       expect(harness.command.sends, 0);
-      await controller.setAutomaticEnabled(true);
-      await controller.triggerAutomatic();
+      await controller.refresh();
+      expect(harness.repository.reads, 1);
+      await controller.submit();
       expect(harness.command.sends, 1);
+
+      final readsAfterManual = harness.repository.reads;
+      await controller.setAutomaticEnabled(true);
+      expect(harness.repository.reads, readsAfterManual);
+      expect(harness.command.sends, 1);
+    },
+  );
+
+  test(
+    'unreadable automatic preference prevents all automatic requests',
+    () async {
+      final harness = _Harness();
+      harness.store.failReads = true;
+      final container = harness.container();
+      addTearDown(container.dispose);
+      final controller = container.read(dailySignInControllerProvider.notifier);
+
+      await controller.triggerAutomatic();
+      expect(harness.repository.reads, 0);
+      expect(harness.command.requests, isEmpty);
+      expect(
+        container.read(dailySignInControllerProvider).settingsUnavailable,
+        isTrue,
+      );
+    },
+  );
+
+  test('automatic startup shares an in-flight panel status read', () async {
+    final harness = _Harness();
+    final pending = Completer<void>();
+    harness.repository.beforeRead = () => pending.future;
+    harness.repository.status = ForumDailySignInStatus.signed;
+    final container = harness.container();
+    addTearDown(container.dispose);
+    final controller = container.read(dailySignInControllerProvider.notifier);
+
+    final panelRead = controller.refresh();
+    final automatic = controller.triggerAutomatic();
+    await Future<void>.delayed(Duration.zero);
+    expect(harness.repository.reads, 1);
+    pending.complete();
+    await Future.wait([panelRead, automatic]);
+    expect(harness.repository.reads, 1);
+    expect(harness.command.requests, isEmpty);
+  });
+
+  test(
+    'background cancellation during the first read prevents a send',
+    () async {
+      final harness = _Harness();
+      final pending = Completer<void>();
+      harness.repository.beforeRead = () => pending.future;
+      final container = harness.container();
+      addTearDown(container.dispose);
+      final controller = container.read(dailySignInControllerProvider.notifier);
+
+      final automatic = controller.triggerAutomatic();
+      await _until(() => harness.repository.reads == 1);
+      controller.cancelAutomaticPending();
+      pending.complete();
+      await automatic;
+      expect(harness.command.requests, isEmpty);
+      expect(await harness.ledger.readCheckpoint('42'), isNull);
     },
   );
 
@@ -223,6 +314,7 @@ final class _Repository implements ForumDailySignInRepository {
   ForumDailySignInStatus status = ForumDailySignInStatus.unsigned;
   String? signedUserId;
   int reads = 0;
+  Future<void> Function()? beforeRead;
 
   @override
   ForumDailySignInSourceCapabilities get capabilities =>
@@ -238,6 +330,7 @@ final class _Repository implements ForumDailySignInRepository {
   >
   load(ForumDailySignInQuery query) async {
     reads++;
+    await beforeRead?.call();
     return DataReadSuccess(
       data: ForumDailySignInSnapshot(
         userId: query.userId,
@@ -293,16 +386,20 @@ final class _Command implements ForumDailySignInCommand {
 final class _MemoryStore implements PreferencesStore {
   final values = <String, Object>{};
   bool failWrites = false;
+  bool failReads = false;
 
   @override
   Future<T?> read<T extends Object>(PreferenceKey<T> key) async {
+    if (failReads) throw StateError('synthetic storage failure');
     final value = values[key.name];
     return value is T ? value : null;
   }
 
   @override
-  Future<bool> contains<T extends Object>(PreferenceKey<T> key) async =>
-      values.containsKey(key.name);
+  Future<bool> contains<T extends Object>(PreferenceKey<T> key) async {
+    if (failReads) throw StateError('synthetic storage failure');
+    return values.containsKey(key.name);
+  }
 
   @override
   Future<void> write<T extends Object>(PreferenceKey<T> key, T value) async {

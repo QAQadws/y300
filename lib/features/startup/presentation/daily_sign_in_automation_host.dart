@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 
-/// Bridges app lifecycle events to the shared sign-in coordinator.
+/// Gives each verified account one automatic sign-in run per app launch.
 ///
 /// The coordinator owns network reads, storage checkpoints, and submission.
 /// Keeping this host at the app root lets those operations run independently
@@ -47,10 +47,7 @@ class _DailySignInAutomationHostState
   bool _isForeground = true;
   bool _queued = false;
   bool _running = false;
-  int _requestRevision = 0;
-  int _foregroundGeneration = 0;
-  int? _runningGeneration;
-  VerifiedProfileOwner? _runningOwner;
+  final Set<String> _handledUserIds = {};
   late final DailySignInAutomationOperations _operations;
 
   @override
@@ -60,10 +57,9 @@ class _DailySignInAutomationHostState
     WidgetsBinding.instance.addObserver(this);
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _isForeground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
-    // A restored account may already be verified before the first build. A
-    // login event in that first frame wins over this initial fallback.
+    // A restored account may already be verified before the first build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_requestRevision == 0) _requestTrigger();
+      _requestTrigger();
     });
   }
 
@@ -73,7 +69,6 @@ class _DailySignInAutomationHostState
     if (!resumed) {
       if (_isForeground) {
         _isForeground = false;
-        _foregroundGeneration += 1;
         _queued = false;
         _operations.cancelPending();
       }
@@ -81,6 +76,7 @@ class _DailySignInAutomationHostState
     }
     if (_isForeground) return;
     _isForeground = true;
+    // Only an account whose initial run has not started may resume here.
     _requestTrigger();
   }
 
@@ -111,15 +107,10 @@ class _DailySignInAutomationHostState
   void _requestTrigger() {
     if (!mounted || !_isForeground) return;
     final owner = ref.read(verifiedProfileOwnerProvider);
-    if (owner == null) return;
-    _requestRevision += 1;
+    if (owner == null || _handledUserIds.contains(owner.uid)) return;
     if (_running) {
-      // A different owner, or a resumed run after a background cancellation,
-      // needs its own fresh read once the old coordinator flight has settled.
-      if (owner != _runningOwner ||
-          _runningGeneration != _foregroundGeneration) {
-        _queued = true;
-      }
+      // A new account waits for the old coordinator flight to settle.
+      _queued = true;
       return;
     }
     if (_queued) return;
@@ -129,15 +120,18 @@ class _DailySignInAutomationHostState
       _queued = false;
       if (!_isForeground) return;
       final currentOwner = ref.read(verifiedProfileOwnerProvider);
-      if (currentOwner == null) return;
+      if (currentOwner == null || _handledUserIds.contains(currentOwner.uid)) {
+        return;
+      }
       unawaited(_trigger(currentOwner));
     });
   }
 
   Future<void> _trigger(VerifiedProfileOwner owner) async {
+    // Register before any asynchronous work: failure, cancellation, or a new
+    // session for this UID must not restart automatic work in this launch.
+    if (!_handledUserIds.add(owner.uid)) return;
     _running = true;
-    _runningOwner = owner;
-    _runningGeneration = _foregroundGeneration;
     try {
       await _operations.trigger();
     } catch (_) {
@@ -145,8 +139,6 @@ class _DailySignInAutomationHostState
       // storage and read failures on the sign-in page.
     } finally {
       _running = false;
-      _runningOwner = null;
-      _runningGeneration = null;
       if (mounted && _queued) {
         _queued = false;
         _requestTrigger();

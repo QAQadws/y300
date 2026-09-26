@@ -4631,7 +4631,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dailyAutoSignInToggle => '每天自动签到';
 
   @override
-  String get dailyAutoSignInDescription => '打开应用或回到前台时，核验论坛状态并在未签到时自动尝试一次。';
+  String get dailyAutoSignInDescription =>
+      '每次启动应用后自动核验签到状态，符合条件时尝试签到；切回前台不会重复触发。';
 
   @override
   String get dailyAutoSignInSaving => '正在保存自动签到设置…';
@@ -9280,7 +9281,8 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get dailyAutoSignInToggle => '每天自動簽到';
 
   @override
-  String get dailyAutoSignInDescription => '開啟應用或回到前景時，核對論壇狀態並在尚未簽到時自動嘗試一次。';
+  String get dailyAutoSignInDescription =>
+      '每次啟動應用後自動核對簽到狀態，符合條件時嘗試簽到；切回前景不會重複觸發。';
 
   @override
   String get dailyAutoSignInSaving => '正在儲存自動簽到設定…';

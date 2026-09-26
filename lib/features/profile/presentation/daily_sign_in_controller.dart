@@ -113,7 +113,7 @@ final dailySignInControllerProvider =
       DailySignInController.new,
     );
 
-/// Shared coordinator for the native panel and foreground automation.
+/// Shared coordinator for the native panel and startup automation.
 class DailySignInController extends Notifier<DailySignInViewState> {
   int _generation = 0;
   int _automaticEpoch = 0;
@@ -141,12 +141,11 @@ class DailySignInController extends Notifier<DailySignInViewState> {
       _submitCancellation?.cancel();
     });
     if (owner != null) {
+      final generation = _generation;
       unawaited(
         Future<void>.microtask(() async {
-          await Future.wait([
-            _loadAutoPreference(owner, _generation),
-            ensureLoaded(),
-          ]);
+          if (!_isCurrent(owner, generation)) return;
+          await _loadAutoPreference(owner, generation);
         }),
       );
     }
@@ -217,7 +216,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     await refresh();
   }
 
-  /// Every foreground trigger and panel entry performs a network-only read.
+  /// Explicit refreshes and startup checks share a network-only read.
   Future<void> refresh() {
     final owner = state.owner;
     if (owner == null) return Future<void>.value();
@@ -333,8 +332,8 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     );
   }
 
-  /// Repeated foreground events coalesce; a different owner gets a new run
-  /// once the old run finishes, without inheriting its command result.
+  /// Concurrent automatic requests coalesce. The startup host owns the
+  /// once-per-UID launch budget; this coordinator owns protocol safety.
   Future<void> triggerAutomatic() {
     final owner = state.owner;
     if (owner == null) return Future<void>.value();
@@ -370,17 +369,6 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     if (!_automaticIsCurrent(owner, generation, epoch)) return;
     if (_submitFlight case final flight?) await flight;
     if (!_automaticIsCurrent(owner, generation, epoch)) return;
-    await refresh();
-    if (!_automaticIsCurrent(owner, generation, epoch)) return;
-    final snapshot = state.snapshot;
-    if (snapshot == null ||
-        snapshot.userId != owner.uid ||
-        snapshot.status != ForumDailySignInStatus.unsigned ||
-        state.isLoading ||
-        state.readFailure != null ||
-        state.checkpointUnavailable) {
-      return;
-    }
     bool enabled;
     try {
       enabled = await ref
@@ -394,7 +382,16 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     }
     if (!_automaticIsCurrent(owner, generation, epoch)) return;
     state = state.copyWith(autoEnabled: enabled, settingsUnavailable: false);
-    if (!enabled ||
+    if (!enabled) return;
+    await refresh();
+    if (!_automaticIsCurrent(owner, generation, epoch)) return;
+    final snapshot = state.snapshot;
+    if (snapshot == null ||
+        snapshot.userId != owner.uid ||
+        snapshot.status != ForumDailySignInStatus.unsigned ||
+        state.isLoading ||
+        state.readFailure != null ||
+        state.checkpointUnavailable ||
         state.automaticPolicy != DailySignInAutomaticPolicy.eligible ||
         _submitFlight != null) {
       return;

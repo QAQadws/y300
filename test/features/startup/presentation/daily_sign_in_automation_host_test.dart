@@ -59,7 +59,7 @@ void main() {
     expect(operations.triggerCount, 1);
   });
 
-  testWidgets('foreground return checks once and background cancels pending', (
+  testWidgets('foreground returns do not restart a completed launch check', (
     tester,
   ) async {
     final operations = _FakeOperations();
@@ -73,7 +73,57 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
-    expect(operations.triggerCount, 2);
+    expect(operations.triggerCount, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(operations.triggerCount, 1);
+  });
+
+  testWidgets(
+    'a cancelled in-flight run does not restart on foreground return',
+    (tester) async {
+      final oldFlight = Completer<void>();
+      final operations = _FakeOperations(onTrigger: (_) => oldFlight.future);
+      await _pumpHost(
+        tester,
+        operations: operations,
+        initialOwner: _firstOwner,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      expect(operations.cancelCount, 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(operations.triggerCount, 1);
+
+      oldFlight.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(operations.triggerCount, 1);
+    },
+  );
+
+  testWidgets('a failed startup run remains non-blocking and is not retried', (
+    tester,
+  ) async {
+    final operations = _FakeOperations(
+      onTrigger: (_) => Future<void>.error(StateError('synthetic failure')),
+    );
+    await _pumpHost(tester, operations: operations, initialOwner: _firstOwner);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('main shell'), findsOneWidget);
+    expect(operations.triggerCount, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    _setOwner(tester, null);
+    await tester.pump();
+    _setOwner(tester, (uid: _firstOwner.uid, revision: 2));
+    await tester.pump();
+    expect(operations.triggerCount, 1);
   });
 
   testWidgets('owner change during an old flight schedules a new check', (
@@ -101,7 +151,7 @@ void main() {
     expect(operations.triggerCount, 2);
   });
 
-  testWidgets('logout and same UID relogin create separate checks', (
+  testWidgets('logout and same UID relogin keep the launch check consumed', (
     tester,
   ) async {
     final operations = _FakeOperations();
@@ -116,6 +166,88 @@ void main() {
     _setOwner(tester, (uid: _firstOwner.uid, revision: 2));
     await tester.pump();
     await tester.pump();
+    expect(operations.triggerCount, 1);
+  });
+
+  testWidgets('a new session revision cannot repeat the same UID run', (
+    tester,
+  ) async {
+    final operations = _FakeOperations();
+    await _pumpHost(tester, operations: operations, initialOwner: _firstOwner);
+
+    _setOwner(tester, (uid: _firstOwner.uid, revision: 2));
+    await tester.pump();
+    await tester.pump();
+    expect(operations.triggerCount, 1);
+  });
+
+  testWidgets('switching accounts grants one run to each UID in this launch', (
+    tester,
+  ) async {
+    final operations = _FakeOperations();
+    await _pumpHost(tester, operations: operations, initialOwner: _firstOwner);
+
+    _setOwner(tester, _secondOwner);
+    await tester.pump();
+    await tester.pump();
+    expect(operations.triggerCount, 2);
+
+    _setOwner(tester, (uid: _firstOwner.uid, revision: 3));
+    await tester.pump();
+    _setOwner(tester, (uid: _secondOwner.uid, revision: 4));
+    await tester.pump();
+    expect(operations.triggerCount, 2);
+  });
+
+  testWidgets(
+    'a new account in background waits after the old flight settles',
+    (tester) async {
+      final oldFlight = Completer<void>();
+      final operations = _FakeOperations(
+        onTrigger: (call) =>
+            call == 1 ? oldFlight.future : Future<void>.value(),
+      );
+      await _pumpHost(
+        tester,
+        operations: operations,
+        initialOwner: _firstOwner,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      _setOwner(tester, _secondOwner);
+      await tester.pump();
+      oldFlight.complete();
+      await tester.pump();
+      expect(operations.triggerCount, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+      expect(operations.triggerCount, 2);
+    },
+  );
+
+  testWidgets('ordinary host rebuilds keep the launch check consumed', (
+    tester,
+  ) async {
+    final operations = _FakeOperations();
+    await _pumpHost(tester, operations: operations, initialOwner: _firstOwner);
+    final state = tester.state(find.byType(DailySignInAutomationHost));
+
+    await _pumpHost(tester, operations: operations, initialOwner: _firstOwner);
+    expect(tester.state(find.byType(DailySignInAutomationHost)), same(state));
+    expect(operations.triggerCount, 1);
+  });
+
+  testWidgets('a new app launch grants the same UID a new initial run', (
+    tester,
+  ) async {
+    final operations = _FakeOperations();
+    await _pumpHost(tester, operations: operations, initialOwner: _firstOwner);
+    expect(operations.triggerCount, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpHost(tester, operations: operations, initialOwner: _firstOwner);
     expect(operations.triggerCount, 2);
   });
 }

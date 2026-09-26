@@ -34,16 +34,35 @@ class DailySignInPanel extends ConsumerStatefulWidget {
 }
 
 class _DailySignInPanelState extends ConsumerState<DailySignInPanel> {
+  late final ProviderSubscription<VerifiedProfileOwner?> _ownerSubscription;
+  int _ownerLoadRevision = 0;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        // A process-local snapshot may be from an earlier forum day. Opening
-        // either native surface always starts a fresh network-only read.
+    _ownerSubscription = ref.listenManual(verifiedProfileOwnerProvider, (
+      _,
+      owner,
+    ) {
+      final revision = ++_ownerLoadRevision;
+      if (owner == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            revision != _ownerLoadRevision ||
+            ref.read(verifiedProfileOwnerProvider) != owner) {
+          return;
+        }
+        // Both native surfaces read on entry and session changes. The shared
+        // coordinator merges any read already started by startup automation.
         unawaited(ref.read(dailySignInControllerProvider.notifier).refresh());
-      }
-    });
+      });
+    }, fireImmediately: true);
+  }
+
+  @override
+  void dispose() {
+    _ownerSubscription.close();
+    super.dispose();
   }
 
   @override
