@@ -163,6 +163,10 @@ final class YamiboForumClient {
   CurrentUserProfileRepository? get currentUserProfile =>
       sourcePlan.currentUserProfile;
 
+  /// Configured verified account-summary source, if installed.
+  CurrentAccountSummaryRepository? get currentAccountSummary =>
+      sourcePlan.currentAccountSummary;
+
   /// Configured network-only daily sign-in status source, if installed.
   ForumDailySignInRepository? get dailySignIn => sourcePlan.dailySignIn;
 
@@ -556,6 +560,17 @@ final class YamiboForumClient {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) =>
       sourcePlan.currentUserProfile?.load(query, cachePolicy: cachePolicy) ??
+      unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
+
+  /// Loads the verified account's presentation summary.
+  Future<
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+  >
+  loadCurrentAccountSummary(
+    CurrentAccountSummaryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) =>
+      sourcePlan.currentAccountSummary?.load(query, cachePolicy: cachePolicy) ??
       unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
 
   /// Loads a fresh sign-in page without any document-cache fallback.

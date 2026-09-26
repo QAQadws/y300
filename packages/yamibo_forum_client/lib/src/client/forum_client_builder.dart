@@ -164,6 +164,7 @@ final class YamiboForumClientBuilder {
         directory: favoriteThreadDirectory,
       ),
       currentUserProfile: factory.createCurrentUserProfile(),
+      currentAccountSummary: factory.createCurrentAccountSummary(),
       dailySignIn: dailySignIn.repository,
       dailySignInCommand: dailySignIn.command,
       notifications: factory.createNotifications(),

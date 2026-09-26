@@ -63,6 +63,7 @@ void main() {
         sources.favoriteForumCommand,
         sources.favoriteThreadCommand,
         sources.currentUserProfile,
+        sources.currentAccountSummary,
         sources.notifications,
         sources.privateMessages,
         sources.stickerCatalog,

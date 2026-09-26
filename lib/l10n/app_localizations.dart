@@ -3546,6 +3546,30 @@ abstract class AppLocalizations {
   /// **'总积分：{value}'**
   String moreAccountCredits(String value);
 
+  /// No description provided for @moreAccountThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题'**
+  String get moreAccountThreads;
+
+  /// No description provided for @moreAccountReplies.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复'**
+  String get moreAccountReplies;
+
+  /// No description provided for @moreAccountCreditLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'积分'**
+  String get moreAccountCreditLabel;
+
+  /// No description provided for @moreAccountStatistic.
+  ///
+  /// In zh, this message translates to:
+  /// **'{label}：{value}'**
+  String moreAccountStatistic(String label, String value);
+
   /// No description provided for @moreAccountUnavailable.
   ///
   /// In zh, this message translates to:

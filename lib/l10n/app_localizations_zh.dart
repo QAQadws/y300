@@ -2185,6 +2185,20 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get moreAccountThreads => '主题';
+
+  @override
+  String get moreAccountReplies => '回复';
+
+  @override
+  String get moreAccountCreditLabel => '积分';
+
+  @override
+  String moreAccountStatistic(String label, String value) {
+    return '$label：$value';
+  }
+
+  @override
   String get moreAccountUnavailable => '—';
 
   @override
@@ -6866,6 +6880,20 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String moreAccountCredits(String value) {
     return '總積分：$value';
+  }
+
+  @override
+  String get moreAccountThreads => '主題';
+
+  @override
+  String get moreAccountReplies => '回覆';
+
+  @override
+  String get moreAccountCreditLabel => '積分';
+
+  @override
+  String moreAccountStatistic(String label, String value) {
+    return '$label：$value';
   }
 
   @override

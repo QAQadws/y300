@@ -17,6 +17,7 @@ import 'package:y300/features/more/presentation/about_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_sheet.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
+import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
@@ -67,7 +68,16 @@ class _MorePageState extends ConsumerState<MorePage> {
         navigationState?.settings.visibleManagedDestinations.length ?? 5;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.moreTitle)),
+      appBar: AppBar(
+        title: Text(l10n.moreTitle),
+        actions: [
+          MoreAccountAction(
+            onLogin: () => _openLoginPage(context),
+            onLogout: () => _confirmAndLogout(context, ref),
+            isPending: _openingLogin || _confirmingLogout,
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () => ref
             .read(currentAccountSummaryControllerProvider.notifier)
@@ -77,12 +87,16 @@ class _MorePageState extends ConsumerState<MorePage> {
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             MoreAccountHeader(
-              onLogin: () => _openLoginPage(context),
-              onLogout: () => _confirmAndLogout(context, ref),
               onOpenProfile: _openingMyProfile
                   ? null
                   : () => _openMyProfilePage(context),
               isAccountActionPending: _openingLogin || _confirmingLogout,
+            ),
+            const Divider(
+              key: Key('more-account-divider'),
+              height: 1,
+              indent: 0,
+              endIndent: 0,
             ),
             ListTile(
               key: const Key('more-my-profile-entry'),
@@ -112,6 +126,12 @@ class _MorePageState extends ConsumerState<MorePage> {
               title: Text(l10n.moreUnusedImages),
               subtitle: Text(l10n.moreUnusedImagesSubtitle),
               onTap: () => _openUnusedImagesPage(context, authSession),
+            ),
+            const Divider(
+              key: Key('more-settings-divider'),
+              height: 1,
+              indent: 0,
+              endIndent: 0,
             ),
             ListTile(
               key: const Key('more-forum-mode-entry'),

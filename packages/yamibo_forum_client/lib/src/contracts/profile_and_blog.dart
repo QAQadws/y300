@@ -22,6 +22,15 @@ final class CurrentUserProfileQuery {
   const CurrentUserProfileQuery();
 }
 
+/// Query for a summary of the verified current account.
+final class CurrentAccountSummaryQuery {
+  /// Creates a query scoped to the caller's verified user identity.
+  const CurrentAccountSummaryQuery({required this.userId});
+
+  /// Expected authenticated user identifier.
+  final String userId;
+}
+
 /// Source-neutral current user profile data.
 final class CurrentUserProfileData {
   /// Creates a [CurrentUserProfileData].
@@ -33,6 +42,7 @@ final class CurrentUserProfileData {
     this.creditTotal,
     this.postCount,
     this.threadCount,
+    this.replyCount,
   });
 
   /// Identity.
@@ -50,11 +60,14 @@ final class CurrentUserProfileData {
   /// Credit total.
   final int? creditTotal;
 
-  /// Post count.
+  /// Total posts, including thread-opening posts when provided by the source.
   final int? postCount;
 
   /// Thread count.
   final int? threadCount;
+
+  /// Replies excluding thread-opening posts.
+  final int? replyCount;
 }
 
 /// Capabilities exposed by current user profile.
@@ -82,6 +95,9 @@ enum CurrentUserProfileCapability {
 
   /// User group display name.
   groupName,
+
+  /// Replies excluding thread-opening posts.
+  replyCount,
 }
 
 /// Capabilities declared by the current user profile source.
@@ -128,6 +144,22 @@ abstract interface class CurrentUserProfileRepository {
   >
   load(
     CurrentUserProfileQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  });
+}
+
+/// Reads a presentation summary without changing the authentication API source.
+abstract interface class CurrentAccountSummaryRepository {
+  /// Capabilities declared by this source.
+  CurrentUserProfileSourceCapabilities get capabilities;
+
+  /// Loads the expected account. The standard source is network-only for all
+  /// cache policies and validates both the viewer and the profile identity.
+  Future<
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+  >
+  load(
+    CurrentAccountSummaryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   });
 }

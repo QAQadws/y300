@@ -13,14 +13,10 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 class MoreAccountHeader extends ConsumerWidget {
   const MoreAccountHeader({
     super.key,
-    required this.onLogin,
-    required this.onLogout,
     required this.onOpenProfile,
     this.isAccountActionPending = false,
   });
 
-  final VoidCallback onLogin;
-  final VoidCallback onLogout;
   final VoidCallback? onOpenProfile;
   final bool isAccountActionPending;
 
@@ -63,159 +59,163 @@ class MoreAccountHeader extends ConsumerWidget {
         capabilities?.supports(CurrentUserProfileCapability.creditTotal) == true
         ? data?.creditTotal
         : null;
+    final threads =
+        capabilities?.supports(CurrentUserProfileCapability.threadCount) == true
+        ? data?.threadCount
+        : null;
+    final replies =
+        capabilities?.supports(CurrentUserProfileCapability.replyCount) == true
+        ? data?.replyCount
+        : null;
     final busy = verifying || loggingOut || isAccountActionPending;
-    final action = signedIn
-        ? IconButton(
-            key: const Key('more-logout-entry'),
-            onPressed: busy ? null : onLogout,
-            tooltip: l10n.moreLogout,
-            icon: loggingOut
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.logout, size: 20),
-          )
-        : TextButton.icon(
-            key: const Key('more-login-entry'),
-            onPressed: busy ? null : onLogin,
-            icon: const Icon(Icons.login, size: 20),
-            label: Text(l10n.moreLogin),
-          );
     final openProfile = owner != null && !busy ? onOpenProfile : null;
-    final identity = Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Semantics(
-          label: l10n.moreAccountAvatar(name),
-          image: true,
-          child: InkWell(
-            key: const Key('more-account-avatar'),
-            customBorder: const CircleBorder(),
-            onTap: openProfile,
-            child: ForumCachedAvatar(
-              key: ValueKey(
-                'more-account-avatar-${owner?.uid}-${owner?.revision}',
+    final avatar = Semantics(
+      label: l10n.moreAccountAvatar(name),
+      image: true,
+      child: InkWell(
+        key: const Key('more-account-avatar'),
+        customBorder: const CircleBorder(),
+        onTap: openProfile,
+        child: ForumCachedAvatar(
+          key: ValueKey('more-account-avatar-${owner?.uid}-${owner?.revision}'),
+          imageUrl: avatarUrl,
+          ownerId: owner?.uid ?? '',
+          ownerType: ImageCacheOwnerType.profile,
+          size: owner != null ? 72 : 56,
+          imageReferer: ref.watch(forumImageRefererProvider),
+          fallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
+        ),
+      ),
+    );
+    final identityChildren = <Widget>[
+      Semantics(
+        label: openProfile == null ? null : l10n.moreAccountOpenProfile(name),
+        child: InkWell(
+          key: const Key('more-account-name'),
+          onTap: openProfile,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(
+              name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontSize: owner != null ? 20 : null,
+                fontWeight: FontWeight.w600,
               ),
-              imageUrl: avatarUrl,
-              ownerId: owner?.uid ?? '',
-              ownerType: ImageCacheOwnerType.profile,
-              size: 56,
-              imageReferer: ref.watch(forumImageRefererProvider),
-              fallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Semantics(
-                label: openProfile == null
-                    ? null
-                    : l10n.moreAccountOpenProfile(name),
-                child: InkWell(
-                  key: const Key('more-account-name'),
-                  onTap: openProfile,
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
+      ),
+      if (owner != null && groupName != null)
+        Semantics(
+          label: l10n.moreAccountGroup(groupName),
+          excludeSemantics: true,
+          child: Container(
+            key: const Key('more-account-group'),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              groupName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSecondaryContainer,
               ),
-              if (owner != null) ...[
-                if (groupName != null) ...[
-                  const SizedBox(height: 4),
-                  Semantics(
-                    label: l10n.moreAccountGroup(groupName),
-                    excludeSemantics: true,
-                    child: Container(
-                      key: const Key('more-account-group'),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.secondaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        groupName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.onSecondaryContainer,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 6),
-                Text(
-                  l10n.moreAccountCredits(
-                    credits?.toString() ?? l10n.moreAccountUnavailable,
-                  ),
-                  key: const Key('more-account-credits'),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ] else if (!verifying && !loggingOut)
-                Text(
-                  l10n.moreLoginSubtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
+            ),
+          ),
+        )
+      else if (owner == null && !verifying && !loggingOut)
+        Text(
+          l10n.moreLoginSubtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-      ],
-    );
+    ];
+    final identity = owner != null
+        ? Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: identityChildren,
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: identityChildren,
+          );
 
     return Card(
       key: const Key('more-account-header'),
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      margin: const EdgeInsets.only(top: 12),
+      color: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final stacked =
-                    constraints.maxWidth < 320 ||
-                    MediaQuery.textScalerOf(context).scale(14) > 18;
-                if (stacked) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      identity,
-                      const SizedBox(height: 8),
-                      Align(alignment: Alignment.centerRight, child: action),
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: identity),
-                    const SizedBox(width: 12),
-                    action,
-                  ],
-                );
-              },
+            Row(
+              crossAxisAlignment: owner != null
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.center,
+              children: [
+                avatar,
+                if (owner != null) ...[
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: _AccountStatistic(
+                              key: const Key('more-account-threads'),
+                              label: l10n.moreAccountThreads,
+                              value: threads,
+                            ),
+                          ),
+                          const VerticalDivider(
+                            width: 16,
+                            indent: 8,
+                            endIndent: 8,
+                          ),
+                          Expanded(
+                            child: _AccountStatistic(
+                              key: const Key('more-account-replies'),
+                              label: l10n.moreAccountReplies,
+                              value: replies,
+                            ),
+                          ),
+                          const VerticalDivider(
+                            width: 16,
+                            indent: 8,
+                            endIndent: 8,
+                          ),
+                          Expanded(
+                            child: _AccountStatistic(
+                              key: const Key('more-account-credits'),
+                              label: l10n.moreAccountCreditLabel,
+                              value: credits,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: identity),
+                ],
+              ],
             ),
+            if (owner != null) ...[const SizedBox(height: 8), identity],
             if (verifying || (current && summary.isLoading)) ...[
               const SizedBox(height: 12),
               const LinearProgressIndicator(
@@ -258,5 +258,42 @@ class MoreAccountHeader extends ConsumerWidget {
   String? _nonEmpty(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+}
+
+class _AccountStatistic extends StatelessWidget {
+  const _AccountStatistic({super.key, required this.label, this.value});
+
+  final String label;
+  final int? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final text = value?.toString() ?? l10n.moreAccountUnavailable;
+    return Semantics(
+      label: l10n.moreAccountStatistic(label, text),
+      excludeSemantics: true,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

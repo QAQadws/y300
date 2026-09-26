@@ -37,6 +37,7 @@ final class ForumClientSourcePlan {
     this.favoriteForumCommand,
     this.favoriteThreadCommand,
     this.currentUserProfile,
+    this.currentAccountSummary,
     this.dailySignIn,
     this.dailySignInCommand,
     this.notifications,
@@ -96,6 +97,8 @@ final class ForumClientSourcePlan {
     favoriteThreadCommand:
         overrides.favoriteThreadCommand ?? favoriteThreadCommand,
     currentUserProfile: overrides.currentUserProfile ?? currentUserProfile,
+    currentAccountSummary:
+        overrides.currentAccountSummary ?? currentAccountSummary,
     dailySignIn: overrides.dailySignIn ?? dailySignIn,
     dailySignInCommand: overrides.dailySignInCommand ?? dailySignInCommand,
     notifications: overrides.notifications ?? notifications,
@@ -177,6 +180,9 @@ final class ForumClientSourcePlan {
 
   /// Source for the authenticated user's profile projection.
   final CurrentUserProfileRepository? currentUserProfile;
+
+  /// Network-only source for the verified current account's display summary.
+  final CurrentAccountSummaryRepository? currentAccountSummary;
 
   /// Network-only source for today's authenticated sign-in state.
   final ForumDailySignInRepository? dailySignIn;

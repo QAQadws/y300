@@ -75,6 +75,13 @@ void main() {
 
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const Key('more-login-entry')),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('登录'), findsOneWidget);
     expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
     expect(find.text('我的资料'), findsOneWidget);
@@ -255,6 +262,13 @@ void main() {
     final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
     expect(find.byKey(const Key('more-login-entry')), findsNothing);
     expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const Key('more-logout-entry')),
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
     expect(find.text(l10n.moreLogout), findsNothing);
     expect(find.byTooltip(l10n.moreLogout), findsOneWidget);
@@ -266,7 +280,13 @@ void main() {
     );
     expect(find.text('tester'), findsOneWidget);
     expect(find.text('普通会员'), findsOneWidget);
-    expect(find.text(l10n.moreAccountCredits('42')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('more-account-credits')),
+        matching: find.text('42'),
+      ),
+      findsOneWidget,
+    );
     expect(summaryRepository.reads, 1);
 
     final scrollable = tester.state<ScrollableState>(
@@ -1038,13 +1058,13 @@ Future<void> _scrollUntilVisibleIfNeeded(
 
 List<Override> _moreAuthOverrides(
   AuthRepository repository, {
-  CurrentUserProfileRepository? summaryRepository,
+  CurrentAccountSummaryRepository? summaryRepository,
 }) => [
   ...forumAuthOverrides(repository),
   if (summaryRepository != null)
-    currentUserProfileRepositoryProvider.overrideWithValue(summaryRepository)
+    currentAccountSummaryRepositoryProvider.overrideWithValue(summaryRepository)
   else
-    currentUserProfileRepositoryProvider.overrideWith((ref) {
+    currentAccountSummaryRepositoryProvider.overrideWith((ref) {
       return _AccountSummaryRepository(() {
         final session = ref.read(authSessionControllerProvider).asData!.value;
         return CurrentUserProfileData(
@@ -1059,7 +1079,7 @@ List<Override> _moreAuthOverrides(
     }),
 ];
 
-class _AccountSummaryRepository implements CurrentUserProfileRepository {
+class _AccountSummaryRepository implements CurrentAccountSummaryRepository {
   _AccountSummaryRepository(this.currentData);
 
   final CurrentUserProfileData Function() currentData;
@@ -1078,7 +1098,7 @@ class _AccountSummaryRepository implements CurrentUserProfileRepository {
     DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
   >
   load(
-    CurrentUserProfileQuery query, {
+    CurrentAccountSummaryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     reads++;

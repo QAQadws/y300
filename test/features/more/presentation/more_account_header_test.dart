@@ -10,6 +10,7 @@ import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
+import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -47,7 +48,25 @@ void main() {
 
     expect(find.text('Profile reader'), findsOneWidget);
     expect(find.text('Fixture readers'), findsOneWidget);
-    expect(find.text(l10n.moreAccountCredits('12')), findsOneWidget);
+    expect(_statistic('credits', '12'), findsOneWidget);
+    expect(_statistic('threads', '3'), findsOneWidget);
+    expect(_statistic('replies', '7'), findsOneWidget);
+    expect(find.text(l10n.moreAccountThreads), findsOneWidget);
+    expect(find.text(l10n.moreAccountReplies), findsOneWidget);
+    expect(find.text(l10n.moreAccountCreditLabel), findsOneWidget);
+    _expectAccountLayout(tester);
+    expect(
+      tester.getCenter(find.byKey(const Key('more-account-threads'))).dx,
+      lessThan(
+        tester.getCenter(find.byKey(const Key('more-account-replies'))).dx,
+      ),
+    );
+    expect(
+      tester.getCenter(find.byKey(const Key('more-account-replies'))).dx,
+      lessThan(
+        tester.getCenter(find.byKey(const Key('more-account-credits'))).dx,
+      ),
+    );
     expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
     expect(_logoutButton(tester).tooltip, l10n.moreLogout);
     expect(find.byTooltip(l10n.moreLogout), findsOneWidget);
@@ -142,10 +161,7 @@ void main() {
 
       expect(find.text(_session.username), findsOneWidget);
       expect(find.byKey(const Key('more-account-loading')), findsOneWidget);
-      expect(
-        find.text(l10n.moreAccountCredits(l10n.moreAccountUnavailable)),
-        findsOneWidget,
-      );
+      expect(find.text(l10n.moreAccountUnavailable), findsNWidgets(3));
       expect(find.byKey(const Key('more-account-group')), findsNothing);
       expect(repository.reads, 1);
 
@@ -174,10 +190,7 @@ void main() {
       final l10n = _l10n(tester);
 
       expect(find.byKey(const Key('more-account-group')), findsNothing);
-      expect(
-        find.text(l10n.moreAccountCredits(l10n.moreAccountUnavailable)),
-        findsOneWidget,
-      );
+      expect(find.text(l10n.moreAccountUnavailable), findsNWidgets(3));
       expect(
         tester
             .widget<ForumCachedAvatar>(find.byType(ForumCachedAvatar))
@@ -197,10 +210,7 @@ void main() {
         repository: _Repository((_) async => _success(credits: credits)),
       );
 
-      expect(
-        find.text(_l10n(tester).moreAccountCredits(credits.toString())),
-        findsOneWidget,
-      );
+      expect(_statistic('credits', credits.toString()), findsOneWidget);
     });
   }
 
@@ -284,35 +294,40 @@ void main() {
   );
 
   for (final family in AppThemeFamily.values) {
-    testWidgets('account header uses $family dark component colors', (
-      tester,
-    ) async {
-      final theme = AppTheme.build(family: family, brightness: Brightness.dark);
-      await _pumpHeader(
-        tester,
-        repository: _Repository((_) async => _success()),
-        theme: theme,
-      );
-      final material = tester.widget<Material>(
-        find
-            .descendant(
-              of: find.byKey(const Key('more-account-header')),
-              matching: find.byType(Material),
-            )
-            .first,
-      );
-      final group = tester.widget<Container>(
-        find.byKey(const Key('more-account-group')),
-      );
+    testWidgets(
+      'account header stays transparent with $family dark group colors',
+      (tester) async {
+        final theme = AppTheme.build(
+          family: family,
+          brightness: Brightness.dark,
+        );
+        await _pumpHeader(
+          tester,
+          repository: _Repository((_) async => _success()),
+          theme: theme,
+        );
+        final material = tester.widget<Material>(
+          find
+              .descendant(
+                of: find.byKey(const Key('more-account-header')),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        final group = tester.widget<Container>(
+          find.byKey(const Key('more-account-group')),
+        );
 
-      expect(material.color, theme.cardTheme.color);
-      expect(material.shape, theme.cardTheme.shape);
-      expect(
-        (group.decoration as BoxDecoration).color,
-        theme.colorScheme.secondaryContainer,
-      );
-      expect(tester.takeException(), isNull);
-    });
+        expect(material.color, Colors.transparent);
+        expect(material.surfaceTintColor, Colors.transparent);
+        expect(material.shape, theme.cardTheme.shape);
+        expect(
+          (group.decoration as BoxDecoration).color,
+          theme.colorScheme.secondaryContainer,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('300dp Traditional header fits 2x text and long account values', (
@@ -336,13 +351,11 @@ void main() {
 
     expect(find.text(name), findsOneWidget);
     expect(find.text(group), findsOneWidget);
-    expect(
-      find.text(_l10n(tester).moreAccountCredits('$credits')),
-      findsOneWidget,
-    );
+    expect(_statistic('credits', '$credits'), findsOneWidget);
     expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
     expect(_logoutButton(tester).tooltip, _l10n(tester).moreLogout);
     expect(find.text(_l10n(tester).moreLogout), findsNothing);
+    _expectAccountLayout(tester, groupWraps: true);
     expect(tester.takeException(), isNull);
   });
 }
@@ -370,7 +383,7 @@ Future<void> _pumpHeader(
           (ref) => ref.watch(_ownerSource),
         ),
         authSessionControllerProvider.overrideWith(_TestAuthController.new),
-        currentUserProfileRepositoryProvider.overrideWithValue(repository),
+        currentAccountSummaryRepositoryProvider.overrideWithValue(repository),
       ],
       child: LocalizedTestApp(
         locale: locale,
@@ -382,11 +395,18 @@ Future<void> _pumpHeader(
           child: child!,
         ),
         home: Scaffold(
+          appBar: AppBar(
+            actions: [
+              MoreAccountAction(
+                onLogin: onLogin ?? () {},
+                onLogout: onLogout ?? () {},
+                isPending: pendingAction,
+              ),
+            ],
+          ),
           body: ListView(
             children: [
               MoreAccountHeader(
-                onLogin: onLogin ?? () {},
-                onLogout: onLogout ?? () {},
                 onOpenProfile: onOpenProfile ?? () {},
                 isAccountActionPending: pendingAction,
               ),
@@ -404,6 +424,39 @@ AppLocalizations _l10n(WidgetTester tester) =>
 
 IconButton _logoutButton(WidgetTester tester) =>
     tester.widget<IconButton>(find.byKey(const Key('more-logout-entry')));
+
+Finder _statistic(String name, String value) => find.descendant(
+  of: find.byKey(Key('more-account-$name')),
+  matching: find.text(value),
+);
+
+void _expectAccountLayout(WidgetTester tester, {bool groupWraps = false}) {
+  final avatar = tester.getRect(find.byKey(const Key('more-account-avatar')));
+  final name = tester.getRect(find.byKey(const Key('more-account-name')));
+  final group = tester.getRect(find.byKey(const Key('more-account-group')));
+
+  expect(name.top, greaterThan(avatar.bottom));
+  expect(name.left, avatar.left);
+  if (groupWraps) {
+    expect(group.top, greaterThan(name.bottom));
+    expect(group.left, avatar.left);
+  } else {
+    expect(group.left, greaterThan(name.right));
+    expect(group.center.dy, closeTo(name.center.dy, 0.1));
+  }
+  for (final statistic in ['threads', 'replies', 'credits']) {
+    final rect = tester.getRect(find.byKey(Key('more-account-$statistic')));
+    expect(rect.left, greaterThan(avatar.right));
+    expect(rect.bottom, closeTo(avatar.bottom, 0.1));
+    final label = find
+        .descendant(
+          of: find.byKey(Key('more-account-$statistic')),
+          matching: find.byType(Text),
+        )
+        .last;
+    expect(tester.getRect(label).bottom, closeTo(avatar.bottom, 0.1));
+  }
+}
 
 void _expectDefaultAvatar(WidgetTester tester) {
   final image = tester.widget<CachedLibraryImage>(
@@ -441,6 +494,8 @@ _ReadResult _success({
     groupId: '10',
     groupName: group,
     creditTotal: credits,
+    threadCount: 3,
+    replyCount: 7,
   ),
   capabilities:
       capabilities ??
@@ -452,7 +507,7 @@ _ReadResult _success({
   metadata: const DataReadMetadata.network(),
 );
 
-final class _Repository implements CurrentUserProfileRepository {
+final class _Repository implements CurrentAccountSummaryRepository {
   _Repository(this.onRead);
 
   final Future<_ReadResult> Function(int read) onRead;
@@ -469,7 +524,7 @@ final class _Repository implements CurrentUserProfileRepository {
 
   @override
   Future<_ReadResult> load(
-    CurrentUserProfileQuery query, {
+    CurrentAccountSummaryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) {
     policies.add(cachePolicy);

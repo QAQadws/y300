@@ -84,9 +84,9 @@ final class CurrentAccountSummaryController
     result;
     try {
       result = await ref
-          .read(currentUserProfileRepositoryProvider)
+          .read(currentAccountSummaryRepositoryProvider)
           .load(
-            const CurrentUserProfileQuery(),
+            CurrentAccountSummaryQuery(userId: owner.uid),
             cachePolicy: CacheLoadPolicy.networkFirst,
           );
     } on Object {

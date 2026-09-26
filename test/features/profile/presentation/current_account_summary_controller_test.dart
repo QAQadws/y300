@@ -29,6 +29,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(repository.policies, [CacheLoadPolicy.networkFirst]);
+      expect(repository.userIds, ['42']);
       expect(harness.state.owner, _initialOwner);
       expect(harness.state.data?.identity.userId, '42');
       expect(harness.state.data?.creditTotal, 18);
@@ -286,7 +287,7 @@ final class _Harness {
         verifiedProfileOwnerProvider.overrideWith(
           (ref) => ref.watch(_ownerProvider),
         ),
-        currentUserProfileRepositoryProvider.overrideWithValue(repository),
+        currentAccountSummaryRepositoryProvider.overrideWithValue(repository),
       ],
     );
     addTearDown(container.dispose);
@@ -308,11 +309,12 @@ final class _Harness {
   }
 }
 
-final class _Repository implements CurrentUserProfileRepository {
+final class _Repository implements CurrentAccountSummaryRepository {
   _Repository(this.onLoad);
 
   final Future<_ReadResult> Function(int call) onLoad;
   final List<CacheLoadPolicy> policies = [];
+  final List<String> userIds = [];
 
   @override
   CurrentUserProfileSourceCapabilities get capabilities =>
@@ -320,10 +322,11 @@ final class _Repository implements CurrentUserProfileRepository {
 
   @override
   Future<_ReadResult> load(
-    CurrentUserProfileQuery query, {
+    CurrentAccountSummaryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) {
     final call = policies.length;
+    userIds.add(query.userId);
     policies.add(cachePolicy);
     return onLoad(call);
   }

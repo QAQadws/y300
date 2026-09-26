@@ -22,6 +22,11 @@ void main() {
       expect(success.data.groupId, '10');
       expect(success.data.groupName, 'Fixture readers');
       expect(success.data.creditTotal, 12);
+      expect(success.data.replyCount, isNull);
+      expect(
+        success.capabilities.supports(CurrentUserProfileCapability.replyCount),
+        isFalse,
+      );
       expect(
         success.capabilities.supports(CurrentUserProfileCapability.groupName),
         isTrue,

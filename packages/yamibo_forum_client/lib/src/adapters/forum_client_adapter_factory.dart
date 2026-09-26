@@ -42,6 +42,7 @@ import 'discuz_forum_home_html_repository.dart';
 import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
+import 'discuz_account_summary_adapter.dart';
 import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
 import 'discuz_thread_poll_vote_command.dart';
@@ -332,6 +333,14 @@ final class ForumClientAdapterFactory {
   /// Creates the current authenticated user profile source.
   CurrentUserProfileRepository createCurrentUserProfile() =>
       DiscuzCurrentUserProfileRepository(_api);
+
+  /// Creates the verified current account's desktop HTML summary source.
+  CurrentAccountSummaryRepository createCurrentAccountSummary() =>
+      DiscuzCurrentAccountSummaryRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
 
   /// Creates network-only read and command ports for daily sign-in.
   ({ForumDailySignInRepository repository, ForumDailySignInCommand command})

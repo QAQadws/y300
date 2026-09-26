@@ -522,5 +522,9 @@ final _favoriteThreadCapabilities = FavoriteThreadDirectorySourceCapabilities(
   paginationPrecision: PaginationPrecision.exact,
 );
 final _currentProfileCapabilities = CurrentUserProfileSourceCapabilities(
-  values: DataCapabilitySet.supported(CurrentUserProfileCapability.values),
+  values: DataCapabilitySet.supported(
+    CurrentUserProfileCapability.values.where(
+      (capability) => capability != CurrentUserProfileCapability.replyCount,
+    ),
+  ),
 );
