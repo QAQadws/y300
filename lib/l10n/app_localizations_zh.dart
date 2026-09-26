@@ -2171,6 +2171,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreLogin => '登录';
 
   @override
+  String get moreAccountSignedOut => '未登录';
+
+  @override
+  String get moreAccountSignedIn => '已登录';
+
+  @override
+  String get moreAccountChecking => '正在确认登录状态…';
+
+  @override
+  String moreAccountCredits(String value) {
+    return '总积分：$value';
+  }
+
+  @override
+  String get moreAccountUnavailable => '—';
+
+  @override
+  String moreAccountGroup(String name) {
+    return '用户组：$name';
+  }
+
+  @override
+  String moreAccountAvatar(String name) {
+    return '$name的头像';
+  }
+
+  @override
+  String moreAccountOpenProfile(String name) {
+    return '查看$name的资料';
+  }
+
+  @override
+  String get moreAccountLoadFailed => '资料暂时无法加载';
+
+  @override
   String get moreLoginSubtitle => '登录论坛账号并同步登录状态';
 
   @override
@@ -6818,6 +6853,41 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreLogin => '登入';
+
+  @override
+  String get moreAccountSignedOut => '未登入';
+
+  @override
+  String get moreAccountSignedIn => '已登入';
+
+  @override
+  String get moreAccountChecking => '正在確認登入狀態…';
+
+  @override
+  String moreAccountCredits(String value) {
+    return '總積分：$value';
+  }
+
+  @override
+  String get moreAccountUnavailable => '—';
+
+  @override
+  String moreAccountGroup(String name) {
+    return '使用者群組：$name';
+  }
+
+  @override
+  String moreAccountAvatar(String name) {
+    return '$name的頭像';
+  }
+
+  @override
+  String moreAccountOpenProfile(String name) {
+    return '查看$name的資料';
+  }
+
+  @override
+  String get moreAccountLoadFailed => '資料暫時無法載入';
 
   @override
   String get moreLoginSubtitle => '登入論壇帳號並同步登入狀態';

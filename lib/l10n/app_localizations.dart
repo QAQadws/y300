@@ -3522,6 +3522,60 @@ abstract class AppLocalizations {
   /// **'登录'**
   String get moreLogin;
 
+  /// No description provided for @moreAccountSignedOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'未登录'**
+  String get moreAccountSignedOut;
+
+  /// No description provided for @moreAccountSignedIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已登录'**
+  String get moreAccountSignedIn;
+
+  /// No description provided for @moreAccountChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在确认登录状态…'**
+  String get moreAccountChecking;
+
+  /// No description provided for @moreAccountCredits.
+  ///
+  /// In zh, this message translates to:
+  /// **'总积分：{value}'**
+  String moreAccountCredits(String value);
+
+  /// No description provided for @moreAccountUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'—'**
+  String get moreAccountUnavailable;
+
+  /// No description provided for @moreAccountGroup.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户组：{name}'**
+  String moreAccountGroup(String name);
+
+  /// No description provided for @moreAccountAvatar.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name}的头像'**
+  String moreAccountAvatar(String name);
+
+  /// No description provided for @moreAccountOpenProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看{name}的资料'**
+  String moreAccountOpenProfile(String name);
+
+  /// No description provided for @moreAccountLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'资料暂时无法加载'**
+  String get moreAccountLoadFailed;
+
   /// No description provided for @moreLoginSubtitle.
   ///
   /// In zh, this message translates to:

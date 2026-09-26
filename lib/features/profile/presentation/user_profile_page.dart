@@ -8,7 +8,6 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
 import 'package:y300/features/profile/presentation/my_profile_action_navigation.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
@@ -344,7 +343,6 @@ class MyProfilePage extends ConsumerWidget {
                 capabilities: pageState?.capabilities,
                 failure: pageState?.failure,
                 isRefreshing: pageState?.isRefreshing == true,
-                signInPanel: const DailySignInPanel(),
                 palette: palette,
                 imageReferer: imageReferer,
                 isMyProfile: true,
@@ -360,10 +358,6 @@ class MyProfilePage extends ConsumerWidget {
             )
           : ListView(
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: DailySignInPanel(),
-                ),
                 if (asyncProfile.isLoading ||
                     pageState?.ownerUid != owner.uid ||
                     pageState?.ownerRevision != owner.revision)
@@ -439,7 +433,6 @@ class _UserProfileContent extends StatelessWidget {
     required this.isMyProfile,
     this.isRefreshing = false,
     this.onOpenAction,
-    this.signInPanel,
   }) : assert(!isMyProfile || onOpenAction != null);
 
   final ForumUserProfileData profile;
@@ -450,7 +443,6 @@ class _UserProfileContent extends StatelessWidget {
   final bool isMyProfile;
   final bool isRefreshing;
   final ValueChanged<ForumUserProfileActionKind>? onOpenAction;
-  final Widget? signInPanel;
 
   @override
   Widget build(BuildContext context) {
@@ -484,11 +476,6 @@ class _UserProfileContent extends StatelessWidget {
       key: const Key('user-profile-page-list'),
       padding: EdgeInsets.zero,
       children: [
-        if (signInPanel != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: signInPanel!,
-          ),
         if (isRefreshing)
           const LinearProgressIndicator(
             key: Key('user-profile-refresh-progress'),

@@ -94,8 +94,13 @@ void main() {
       );
       await tester.tap(find.text(l10n.appNavigationMore).last);
       await _pumpShellTab(tester);
-      await tester.ensureVisible(
+      await tester.scrollUntilVisible(
         find.byKey(const Key('more-navigation-management-entry')),
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('more-page-list')),
+          matching: find.byType(Scrollable),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -27,6 +28,7 @@ import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dar
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 void main() {
@@ -36,7 +38,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -58,7 +60,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -152,7 +154,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -187,7 +189,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -215,10 +217,20 @@ void main() {
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
     final repository = _FakeAuthRepository(isLoggedIn: true);
     final profileRepository = _SignedProfileRepository();
+    final summaryRepository = _AccountSummaryRepository(
+      () => const CurrentUserProfileData(
+        identity: ProfileUserIdentity(userId: '100', displayName: 'tester'),
+        groupName: '普通会员',
+        creditTotal: 42,
+      ),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(repository),
+          ..._moreAuthOverrides(
+            repository,
+            summaryRepository: summaryRepository,
+          ),
           dailySignInRepositoryProvider.overrideWithValue(
             _SignedDailySignInRepository(),
           ),
@@ -238,13 +250,41 @@ void main() {
         child: const LocalizedTestApp(home: MorePage()),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
+    final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
     expect(find.byKey(const Key('more-login-entry')), findsNothing);
     expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
     expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
-    expect(find.text('退出登录'), findsOneWidget);
-    expect(find.text('当前账号：tester'), findsOneWidget);
+    expect(find.text(l10n.moreLogout), findsNothing);
+    expect(find.byTooltip(l10n.moreLogout), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('more-logout-entry')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(find.text('tester'), findsOneWidget);
+    expect(find.text('普通会员'), findsOneWidget);
+    expect(find.text(l10n.moreAccountCredits('42')), findsOneWidget);
+    expect(summaryRepository.reads, 1);
+
+    final scrollable = tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byKey(const Key('more-page-list')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    scrollable.position.jumpTo(0);
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(summaryRepository.reads, 1);
 
     await tester.tap(find.byKey(const Key('more-daily-sign-in-entry')));
     await tester.pumpAndSettle();
@@ -252,8 +292,9 @@ void main() {
     expect(find.text('今日已签到'), findsOneWidget);
     Navigator.of(tester.element(find.byType(DailySignInPage))).pop();
     await tester.pumpAndSettle();
+    expect(summaryRepository.reads, 2);
 
-    await tester.tap(find.byKey(const Key('more-my-profile-entry')));
+    await tester.tap(find.byKey(const Key('more-account-name')));
     await tester.pumpAndSettle();
 
     expect(find.byType(MyProfilePage), findsOneWidget);
@@ -264,6 +305,22 @@ void main() {
 
     Navigator.of(tester.element(find.byType(MyProfilePage))).pop();
     await tester.pumpAndSettle();
+    expect(summaryRepository.reads, 3);
+
+    await tester.drag(
+      find.byKey(const Key('more-page-list')),
+      const Offset(0, 400),
+    );
+    await tester.pumpAndSettle();
+    expect(summaryRepository.reads, 4);
+
+    // Cancelling the existing confirmation leaves the current account intact.
+    await tester.tap(find.byKey(const Key('more-logout-entry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.commonCancel));
+    await tester.pumpAndSettle();
+    expect(repository.logoutCount, 0);
+    expect(find.text('tester'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('more-logout-entry')));
     await tester.pumpAndSettle();
@@ -273,6 +330,8 @@ void main() {
     expect(repository.logoutCount, 1);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
     expect(find.text('已退出登录'), findsOneWidget);
+    expect(find.byKey(const Key('more-account-group')), findsNothing);
+    expect(find.byKey(const Key('more-account-credits')), findsNothing);
   });
 
   testWidgets('MorePage switches forum shell mode from bottom sheet', (
@@ -282,7 +341,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
@@ -323,7 +382,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(repository),
+          ..._moreAuthOverrides(repository),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -339,13 +398,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('more-login-entry')));
+    final login = tester
+        .widget<TextButton>(find.byKey(const Key('more-login-entry')))
+        .onPressed!;
+    login();
+    login();
     // 不 pump 目标页：Navigator.push 会同步通知 observer.didPush 记录路由名，
     // 而目标页（含真实 InAppWebView 平台视图）的 build 被推迟到下一帧。此处
     // 只断言“入栈了正确的登录路由”，避免在纯 widget 测试环境构建平台视图。
     // 登录检测/校验逻辑已由 resolver 单测覆盖。
 
     expect(routeObserver.pushedNames, contains(LoginWebViewPage.routeName));
+    expect(
+      routeObserver.pushedNames.where(
+        (name) => name == LoginWebViewPage.routeName,
+      ),
+      hasLength(1),
+    );
   });
 
   testWidgets('profile entry continues to the current account after login', (
@@ -356,7 +425,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -406,7 +475,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -445,7 +514,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -485,7 +554,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+            ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FakeForumModeSettingsRepository(),
             ),
@@ -526,7 +595,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -565,7 +634,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(failOnSave: true),
           ),
@@ -598,7 +667,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -836,7 +905,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -904,7 +973,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -965,6 +1034,60 @@ Future<void> _scrollUntilVisibleIfNeeded(
     return;
   }
   await tester.scrollUntilVisible(finder, 160);
+}
+
+List<Override> _moreAuthOverrides(
+  AuthRepository repository, {
+  CurrentUserProfileRepository? summaryRepository,
+}) => [
+  ...forumAuthOverrides(repository),
+  if (summaryRepository != null)
+    currentUserProfileRepositoryProvider.overrideWithValue(summaryRepository)
+  else
+    currentUserProfileRepositoryProvider.overrideWith((ref) {
+      return _AccountSummaryRepository(() {
+        final session = ref.read(authSessionControllerProvider).asData!.value;
+        return CurrentUserProfileData(
+          identity: ProfileUserIdentity(
+            userId: session.uid,
+            displayName: session.username,
+          ),
+          groupName: '普通会员',
+          creditTotal: 42,
+        );
+      });
+    }),
+];
+
+class _AccountSummaryRepository implements CurrentUserProfileRepository {
+  _AccountSummaryRepository(this.currentData);
+
+  final CurrentUserProfileData Function() currentData;
+  int reads = 0;
+
+  @override
+  CurrentUserProfileSourceCapabilities get capabilities =>
+      CurrentUserProfileSourceCapabilities(
+        values: DataCapabilitySet.supported(
+          CurrentUserProfileCapability.values,
+        ),
+      );
+
+  @override
+  Future<
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+  >
+  load(
+    CurrentUserProfileQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    reads++;
+    return DataReadSuccess(
+      data: currentData(),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
+  }
 }
 
 class _RouteNameObserver extends NavigatorObserver {

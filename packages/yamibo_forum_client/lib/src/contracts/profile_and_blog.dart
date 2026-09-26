@@ -29,6 +29,7 @@ final class CurrentUserProfileData {
     required this.identity,
     this.avatarUrl,
     this.groupId,
+    this.groupName,
     this.creditTotal,
     this.postCount,
     this.threadCount,
@@ -42,6 +43,9 @@ final class CurrentUserProfileData {
 
   /// Group id.
   final String? groupId;
+
+  /// User group display name as plain text, without server markup.
+  final String? groupName;
 
   /// Credit total.
   final int? creditTotal;
@@ -75,6 +79,9 @@ enum CurrentUserProfileCapability {
 
   /// Thread count.
   threadCount,
+
+  /// User group display name.
+  groupName,
 }
 
 /// Capabilities declared by the current user profile source.

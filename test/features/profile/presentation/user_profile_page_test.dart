@@ -15,9 +15,9 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/profile/data/models/my_message_models.dart';
-import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
+import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -144,9 +144,6 @@ void main() {
       ProviderScope(
         overrides: [
           ...forumAuthOverrides(const _FakeAuthRepository()),
-          dailySignInRepositoryProvider.overrideWithValue(
-            _FakeSignRepository(),
-          ),
           forumUserProfileRepositoryProvider.overrideWithValue(
             profileRepository,
           ),
@@ -168,7 +165,13 @@ void main() {
     expect(find.text('我的日志'), findsOneWidget);
     expect(find.text('消息提醒'), findsOneWidget);
     expect(find.text('论坛收藏'), findsNothing);
-    expect(find.text('每日签到'), findsOneWidget);
+    expect(find.byKey(const Key('daily-sign-in-panel')), findsNothing);
+    expect(
+      ProviderScope.containerOf(
+        tester.element(find.byType(MyProfilePage)),
+      ).exists(dailySignInControllerProvider),
+      isFalse,
+    );
 
     await tester.scrollUntilVisible(find.text('我的日志'), 200);
     await tester.pumpAndSettle();
@@ -188,9 +191,6 @@ void main() {
       ProviderScope(
         overrides: [
           ...forumAuthOverrides(const _FakeAuthRepository()),
-          dailySignInRepositoryProvider.overrideWithValue(
-            _FakeSignRepository(),
-          ),
           forumUserProfileRepositoryProvider.overrideWithValue(
             _FakeProfileRepository(data: _myProfile),
           ),
@@ -506,9 +506,6 @@ void main() {
       ProviderScope(
         overrides: [
           ...forumAuthOverrides(const _FakeAuthRepository()),
-          dailySignInRepositoryProvider.overrideWithValue(
-            _FakeSignRepository(),
-          ),
           forumUserProfileRepositoryProvider.overrideWithValue(
             _ScriptedProfileRepository(
               (query, call) async => const DataReadFailure(
@@ -542,14 +539,19 @@ void main() {
     });
     await _pumpMyProfile(tester, repository: repository);
     expect(find.text('sample-member'), findsNothing);
-    expect(find.byKey(const Key('daily-sign-in-panel')), findsOneWidget);
-    expect(find.text(_profileL10n(tester).dailySignInSigned), findsOneWidget);
+    expect(find.byKey(const Key('daily-sign-in-panel')), findsNothing);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MyProfilePage)),
+    );
+    expect(container.exists(dailySignInControllerProvider), isFalse);
 
     await tester.tap(find.text(_profileL10n(tester).commonRetry));
     await tester.pumpAndSettle();
 
     expect(find.text('sample-member'), findsOneWidget);
     expect(repository.queries.length, 2);
+    expect(find.byKey(const Key('daily-sign-in-panel')), findsNothing);
+    expect(container.exists(dailySignInControllerProvider), isFalse);
   });
 
   testWidgets('MyProfilePage shows an empty hint for UID-only details', (
@@ -675,9 +677,6 @@ void main() {
       ProviderScope(
         overrides: [
           ...forumAuthOverrides(const _FakeAuthRepository()),
-          dailySignInRepositoryProvider.overrideWithValue(
-            _FakeSignRepository(),
-          ),
           forumUserProfileRepositoryProvider.overrideWithValue(
             _FakeProfileRepository(data: _allActionsProfile),
           ),
@@ -804,7 +803,6 @@ Future<void> _pumpMyProfile(
     ProviderScope(
       overrides: [
         ...forumAuthOverrides(const _FakeAuthRepository()),
-        dailySignInRepositoryProvider.overrideWithValue(_FakeSignRepository()),
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
         if (store != null) yamiboSessionStoreProvider.overrideWithValue(store),
         if (routeFactory != null)
@@ -815,34 +813,6 @@ Future<void> _pumpMyProfile(
     ),
   );
   await tester.pumpAndSettle();
-}
-
-class _FakeSignRepository implements ForumDailySignInRepository {
-  @override
-  ForumDailySignInSourceCapabilities get capabilities =>
-      ForumDailySignInSourceCapabilities(
-        values: DataCapabilitySet.supported(
-          ForumDailySignInReadCapability.values,
-        ),
-      );
-
-  @override
-  Future<
-    DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
-  >
-  load(ForumDailySignInQuery query) async => DataReadSuccess(
-    data: ForumDailySignInSnapshot(
-      userId: query.userId,
-      forumDay: '20260925',
-      status: ForumDailySignInStatus.signed,
-    ),
-    capabilities: ForumDailySignInReadCapabilities(
-      values: DataCapabilitySet.supported(
-        ForumDailySignInReadCapability.values,
-      ),
-    ),
-    metadata: const DataReadMetadata.network(),
-  );
 }
 
 AppLocalizations _profileL10n(WidgetTester tester) =>

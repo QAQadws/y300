@@ -1,0 +1,478 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/theme/app_theme_family.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/more/presentation/more_account_header.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_default_avatar.dart';
+
+import '../../../test_support/localized_test_app.dart';
+
+const _owner = (uid: '42', revision: 1);
+const _session = AuthSessionViewState(
+  isLoggedIn: true,
+  uid: '42',
+  username: 'Session reader',
+  isLoggingOut: false,
+);
+final _ownerSource = StateProvider<VerifiedProfileOwner?>((ref) => _owner);
+final _sessionSource = StateProvider<AuthSessionViewState>((ref) => _session);
+
+void main() {
+  testWidgets('signed account shows structured summary and separate actions', (
+    tester,
+  ) async {
+    var loginCount = 0;
+    var logoutCount = 0;
+    var profileCount = 0;
+    final repository = _Repository((_) async => _success());
+    await _pumpHeader(
+      tester,
+      repository: repository,
+      onLogin: () => loginCount++,
+      onLogout: () => logoutCount++,
+      onOpenProfile: () => profileCount++,
+    );
+    final l10n = _l10n(tester);
+
+    expect(find.text('Profile reader'), findsOneWidget);
+    expect(find.text('Fixture readers'), findsOneWidget);
+    expect(find.text(l10n.moreAccountCredits('12')), findsOneWidget);
+    expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
+    expect(_logoutButton(tester).tooltip, l10n.moreLogout);
+    expect(find.byTooltip(l10n.moreLogout), findsOneWidget);
+    expect(find.text(l10n.moreLogout), findsNothing);
+    expect(find.byIcon(Icons.logout), findsOneWidget);
+    expect(find.byKey(const Key('more-login-entry')), findsNothing);
+    expect(repository.reads, 1);
+    expect(repository.policies, [CacheLoadPolicy.networkFirst]);
+
+    final avatar = tester.widget<ForumCachedAvatar>(
+      find.byType(ForumCachedAvatar),
+    );
+    expect(avatar.ownerId, _owner.uid);
+    expect(avatar.fallbackPolicy, ForumAvatarFallbackPolicy.localDefaultAvatar);
+    _expectDefaultAvatar(tester);
+
+    await tester.tap(find.byKey(const Key('more-account-avatar')));
+    await tester.tap(find.byKey(const Key('more-account-name')));
+    await tester.tap(find.byKey(const Key('more-logout-entry')));
+    expect(profileCount, 2);
+    expect(logoutCount, 1);
+    expect(loginCount, 0);
+    await tester.pump();
+    expect(repository.reads, 1);
+  });
+
+  testWidgets('guest has a login action and no account summary request', (
+    tester,
+  ) async {
+    var loginCount = 0;
+    var profileCount = 0;
+    final repository = _Repository((_) async => _success());
+    await _pumpHeader(
+      tester,
+      repository: repository,
+      owner: null,
+      session: const AuthSessionViewState.signedOut(),
+      onLogin: () => loginCount++,
+      onOpenProfile: () => profileCount++,
+    );
+
+    expect(find.text(_l10n(tester).moreAccountSignedOut), findsOneWidget);
+    expect(find.byKey(const Key('more-account-credits')), findsNothing);
+    expect(find.byKey(const Key('more-account-group')), findsNothing);
+    expect(find.byKey(const Key('more-logout-entry')), findsNothing);
+    expect(find.text(_l10n(tester).moreLogin), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.byKey(const Key('more-login-entry')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(repository.reads, 0);
+    _expectDefaultAvatar(tester);
+
+    await tester.tap(find.byKey(const Key('more-login-entry')));
+    expect(loginCount, 1);
+    expect(
+      tester.widget<InkWell>(find.byKey(const Key('more-account-name'))).onTap,
+      isNull,
+    );
+    expect(profileCount, 0);
+  });
+
+  testWidgets('unverified signed session shows checking and disables actions', (
+    tester,
+  ) async {
+    final repository = _Repository((_) async => _success());
+    await _pumpHeader(
+      tester,
+      repository: repository,
+      owner: null,
+      settle: false,
+    );
+    await tester.pump();
+
+    expect(find.text(_l10n(tester).moreAccountChecking), findsOneWidget);
+    expect(find.byKey(const Key('more-account-loading')), findsOneWidget);
+    expect(find.byKey(const Key('more-account-credits')), findsNothing);
+    expect(_logoutButton(tester).onPressed, isNull);
+    expect(repository.reads, 0);
+  });
+
+  testWidgets(
+    'summary loading preserves the session name without fake totals',
+    (tester) async {
+      final pending = Completer<_ReadResult>();
+      final repository = _Repository((_) => pending.future);
+      await _pumpHeader(tester, repository: repository, settle: false);
+      await tester.pump();
+      final l10n = _l10n(tester);
+
+      expect(find.text(_session.username), findsOneWidget);
+      expect(find.byKey(const Key('more-account-loading')), findsOneWidget);
+      expect(
+        find.text(l10n.moreAccountCredits(l10n.moreAccountUnavailable)),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('more-account-group')), findsNothing);
+      expect(repository.reads, 1);
+
+      pending.complete(_success());
+      await tester.pumpAndSettle();
+      expect(find.text('Profile reader'), findsOneWidget);
+      expect(find.byKey(const Key('more-account-loading')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'missing capabilities hide group and avatar and leave total unknown',
+    (tester) async {
+      final repository = _Repository(
+        (_) async => _success(
+          avatarUrl: 'https://example.test/private-avatar.png',
+          capabilities: CurrentUserProfileReadCapabilities(
+            values: DataCapabilitySet.supported([
+              CurrentUserProfileCapability.stableUserIdentity,
+              CurrentUserProfileCapability.userName,
+            ]),
+          ),
+        ),
+      );
+      await _pumpHeader(tester, repository: repository);
+      final l10n = _l10n(tester);
+
+      expect(find.byKey(const Key('more-account-group')), findsNothing);
+      expect(
+        find.text(l10n.moreAccountCredits(l10n.moreAccountUnavailable)),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ForumCachedAvatar>(find.byType(ForumCachedAvatar))
+            .imageUrl,
+        isNull,
+      );
+      _expectDefaultAvatar(tester);
+    },
+  );
+
+  for (final credits in [0, -7]) {
+    testWidgets('credit total $credits stays visible without fallback', (
+      tester,
+    ) async {
+      await _pumpHeader(
+        tester,
+        repository: _Repository((_) async => _success(credits: credits)),
+      );
+
+      expect(
+        find.text(_l10n(tester).moreAccountCredits(credits.toString())),
+        findsOneWidget,
+      );
+    });
+  }
+
+  testWidgets('failed summary offers a localized retry that recovers', (
+    tester,
+  ) async {
+    final repository = _Repository(
+      (read) async => read == 1
+          ? const DataReadFailure(
+              kind: DataReadFailureKind.network,
+              diagnosticMessage: 'private synthetic server payload',
+            )
+          : _success(),
+    );
+    await _pumpHeader(tester, repository: repository);
+
+    expect(find.text(_l10n(tester).moreAccountLoadFailed), findsOneWidget);
+    expect(find.text('private synthetic server payload'), findsNothing);
+    expect(find.text(_session.username), findsOneWidget);
+    await tester.tap(find.byKey(const Key('more-account-retry')));
+    await tester.pumpAndSettle();
+
+    expect(repository.reads, 2);
+    expect(find.text('Profile reader'), findsOneWidget);
+    expect(find.byKey(const Key('more-account-retry')), findsNothing);
+  });
+
+  testWidgets('logout immediately removes the old summary', (tester) async {
+    final repository = _Repository((_) async => _success());
+    await _pumpHeader(tester, repository: repository);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MoreAccountHeader)),
+    );
+
+    container.read(_ownerSource.notifier).state = null;
+    container.read(_sessionSource.notifier).state =
+        const AuthSessionViewState.signedOut();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile reader'), findsNothing);
+    expect(find.text('Fixture readers'), findsNothing);
+    expect(find.byKey(const Key('more-account-credits')), findsNothing);
+    expect(find.text(_l10n(tester).moreAccountSignedOut), findsOneWidget);
+    expect(repository.reads, 1);
+  });
+
+  testWidgets(
+    'pending account navigation disables both account and profile taps',
+    (tester) async {
+      await _pumpHeader(
+        tester,
+        repository: _Repository((_) async => _success()),
+        pendingAction: true,
+        settle: false,
+      );
+      await tester.pump();
+
+      expect(_logoutButton(tester).onPressed, isNull);
+      expect(_logoutButton(tester).tooltip, _l10n(tester).moreLogout);
+      expect(find.text(_l10n(tester).moreLogout), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('more-logout-entry')),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
+            .onTap,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<InkWell>(find.byKey(const Key('more-account-name')))
+            .onTap,
+        isNull,
+      );
+    },
+  );
+
+  for (final family in AppThemeFamily.values) {
+    testWidgets('account header uses $family dark component colors', (
+      tester,
+    ) async {
+      final theme = AppTheme.build(family: family, brightness: Brightness.dark);
+      await _pumpHeader(
+        tester,
+        repository: _Repository((_) async => _success()),
+        theme: theme,
+      );
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byKey(const Key('more-account-header')),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      final group = tester.widget<Container>(
+        find.byKey(const Key('more-account-group')),
+      );
+
+      expect(material.color, theme.cardTheme.color);
+      expect(material.shape, theme.cardTheme.shape);
+      expect(
+        (group.decoration as BoxDecoration).color,
+        theme.colorScheme.secondaryContainer,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('300dp Traditional header fits 2x text and long account values', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(300, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const name = 'Very long fixture nickname 百合讀者的很長暱稱';
+    const group = 'Very long fixture group 百合論壇的很長使用者群組';
+    const credits = 9223372036854775807;
+    await _pumpHeader(
+      tester,
+      repository: _Repository(
+        (_) async => _success(name: name, group: group, credits: credits),
+      ),
+      locale: const Locale('zh', 'TW'),
+      textScale: 2,
+    );
+
+    expect(find.text(name), findsOneWidget);
+    expect(find.text(group), findsOneWidget);
+    expect(
+      find.text(_l10n(tester).moreAccountCredits('$credits')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
+    expect(_logoutButton(tester).tooltip, _l10n(tester).moreLogout);
+    expect(find.text(_l10n(tester).moreLogout), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+Future<void> _pumpHeader(
+  WidgetTester tester, {
+  required _Repository repository,
+  VerifiedProfileOwner? owner = _owner,
+  AuthSessionViewState session = _session,
+  VoidCallback? onLogin,
+  VoidCallback? onLogout,
+  VoidCallback? onOpenProfile,
+  bool pendingAction = false,
+  bool settle = true,
+  ThemeData? theme,
+  Locale locale = const Locale('zh'),
+  double textScale = 1,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        _ownerSource.overrideWith((ref) => owner),
+        _sessionSource.overrideWith((ref) => session),
+        verifiedProfileOwnerProvider.overrideWith(
+          (ref) => ref.watch(_ownerSource),
+        ),
+        authSessionControllerProvider.overrideWith(_TestAuthController.new),
+        currentUserProfileRepositoryProvider.overrideWithValue(repository),
+      ],
+      child: LocalizedTestApp(
+        locale: locale,
+        theme: theme ?? AppTheme.light(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: ListView(
+            children: [
+              MoreAccountHeader(
+                onLogin: onLogin ?? () {},
+                onLogout: onLogout ?? () {},
+                onOpenProfile: onOpenProfile ?? () {},
+                isAccountActionPending: pendingAction,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  if (settle) await tester.pumpAndSettle();
+}
+
+AppLocalizations _l10n(WidgetTester tester) =>
+    AppLocalizations.of(tester.element(find.byType(MoreAccountHeader)));
+
+IconButton _logoutButton(WidgetTester tester) =>
+    tester.widget<IconButton>(find.byKey(const Key('more-logout-entry')));
+
+void _expectDefaultAvatar(WidgetTester tester) {
+  final image = tester.widget<CachedLibraryImage>(
+    find.byType(CachedLibraryImage),
+  );
+  expect(image.request, isNull);
+  expect(
+    image.imageProviderOverride,
+    isA<AssetImage>().having(
+      (provider) => provider.assetName,
+      'assetName',
+      forumDefaultAvatarAsset,
+    ),
+  );
+}
+
+class _TestAuthController extends AuthSessionController {
+  @override
+  Future<AuthSessionViewState> build() async => ref.watch(_sessionSource);
+}
+
+typedef _ReadResult =
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>;
+
+_ReadResult _success({
+  String name = 'Profile reader',
+  String group = 'Fixture readers',
+  int credits = 12,
+  String? avatarUrl,
+  CurrentUserProfileReadCapabilities? capabilities,
+}) => DataReadSuccess(
+  data: CurrentUserProfileData(
+    identity: ProfileUserIdentity(userId: _owner.uid, displayName: name),
+    avatarUrl: avatarUrl,
+    groupId: '10',
+    groupName: group,
+    creditTotal: credits,
+  ),
+  capabilities:
+      capabilities ??
+      CurrentUserProfileReadCapabilities(
+        values: DataCapabilitySet.supported(
+          CurrentUserProfileCapability.values,
+        ),
+      ),
+  metadata: const DataReadMetadata.network(),
+);
+
+final class _Repository implements CurrentUserProfileRepository {
+  _Repository(this.onRead);
+
+  final Future<_ReadResult> Function(int read) onRead;
+  int reads = 0;
+  final List<CacheLoadPolicy> policies = [];
+
+  @override
+  CurrentUserProfileSourceCapabilities get capabilities =>
+      CurrentUserProfileSourceCapabilities(
+        values: DataCapabilitySet.supported(
+          CurrentUserProfileCapability.values,
+        ),
+      );
+
+  @override
+  Future<_ReadResult> load(
+    CurrentUserProfileQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) {
+    policies.add(cachePolicy);
+    return onRead(++reads);
+  }
+}

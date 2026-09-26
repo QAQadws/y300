@@ -1,5 +1,7 @@
 // ignore_for_file: public_member_api_docs
 
+import 'package:html/parser.dart' as html_parser;
+
 import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
 import '../contracts/favorite_directories.dart';
@@ -220,6 +222,10 @@ final class DiscuzCurrentUserProfileRepository
             optional(data.groupId != null),
           )
           .withSupport(
+            CurrentUserProfileCapability.groupName,
+            optional(data.groupName != null),
+          )
+          .withSupport(
             CurrentUserProfileCapability.creditTotal,
             optional(data.creditTotal != null),
           )
@@ -435,10 +441,24 @@ CurrentUserProfileData _mapCurrentProfile(Map<String, Object?> variables) {
     identity: ProfileUserIdentity(userId: memberId, displayName: displayName),
     avatarUrl: _nullableText(variables['member_avatar']),
     groupId: _nullableText(variables['groupid']),
+    groupName: _optionalProfileGroupName(space['group']),
     creditTotal: _nullableSignedInt(space['credits']),
     postCount: _nullableNonNegativeInt(space['posts']),
     threadCount: _nullableNonNegativeInt(space['threads']),
   );
+}
+
+String? _optionalProfileGroupName(Object? value) {
+  if (value == null) return null;
+  final group = _map(value);
+  final rawName = group['grouptitle'];
+  if (rawName == null) return null;
+  if (rawName is! String) {
+    throw const FormatException('profile_group_name_invalid');
+  }
+  // Discuz may wrap the group title in a color tag. Expose decoded text only.
+  final name = (html_parser.parseFragment(rawName).text ?? '').trim();
+  return name.isEmpty ? null : name;
 }
 
 Map<String, Object?> _map(Object? value) {

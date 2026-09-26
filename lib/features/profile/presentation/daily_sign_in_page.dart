@@ -11,7 +11,7 @@ import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-/// The standalone sign-in entry shared with the native profile panel.
+/// The standalone sign-in page opened from More.
 class DailySignInPage extends StatelessWidget {
   const DailySignInPage({super.key});
 
@@ -52,8 +52,8 @@ class _DailySignInPanelState extends ConsumerState<DailySignInPanel> {
             ref.read(verifiedProfileOwnerProvider) != owner) {
           return;
         }
-        // Both native surfaces read on entry and session changes. The shared
-        // coordinator merges any read already started by startup automation.
+        // Page entry and session changes share any status read already started
+        // by startup automation.
         unawaited(ref.read(dailySignInControllerProvider.notifier).refresh());
       });
     }, fireImmediately: true);
