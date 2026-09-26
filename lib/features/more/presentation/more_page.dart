@@ -1,27 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
-import 'package:y300/app/settings/app_appearance_controller.dart';
-import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
-import 'package:y300/features/comic/data/providers/comic_download_queue_providers.dart';
-import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/presentation/comic_download_queue_page.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
-import 'package:y300/features/more/data/about_providers.dart';
 import 'package:y300/features/more/presentation/about_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_sheet.dart';
 import 'package:y300/features/more/presentation/more_debug_tools.dart';
 import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
-import 'package:y300/features/more/presentation/more_text_resolver.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
-import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
+import 'package:y300/features/profile/presentation/daily_sign_in_sheet.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
@@ -55,17 +49,10 @@ class _MorePageState extends ConsumerState<MorePage> {
     final forumMode =
         ref.watch(forumShellModeControllerProvider).asData?.value ??
         ForumShellMode.defaultMode;
-    final appearanceSettings =
-        ref.watch(appAppearanceControllerProvider).asData?.value ??
-        AppAppearanceSettings.defaults();
-    final downloadQueueSnapshot = ref.watch(comicDownloadQueueSnapshotProvider);
-    final appInfo = ref.watch(aboutAppInfoProvider).value;
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
     final l10n = AppLocalizations.of(context);
-    final visibleNavigationCount =
-        navigationState?.settings.visibleManagedDestinations.length ?? 5;
 
     return Scaffold(
       appBar: AppBar(
@@ -102,11 +89,6 @@ class _MorePageState extends ConsumerState<MorePage> {
               key: const Key('more-my-profile-entry'),
               leading: const Icon(Icons.person_outline),
               title: Text(l10n.moreMyProfile),
-              subtitle: Text(
-                authSession.isLoggedIn
-                    ? _myProfileSubtitle(l10n, authSession)
-                    : l10n.moreMyProfileSignedOutSubtitle,
-              ),
               onTap: _openingMyProfile
                   ? null
                   : () => _openMyProfilePage(context),
@@ -115,16 +97,14 @@ class _MorePageState extends ConsumerState<MorePage> {
               key: const Key('more-daily-sign-in-entry'),
               leading: const Icon(Icons.event_available_outlined),
               title: Text(l10n.moreDailySignIn),
-              subtitle: Text(l10n.moreDailySignInSubtitle),
               onTap: _openingDailySignIn
                   ? null
-                  : () => _openDailySignInPage(context),
+                  : () => _openDailySignInSheet(context),
             ),
             ListTile(
               key: const Key('more-unused-images-entry'),
               leading: const Icon(Icons.photo_library_outlined),
               title: Text(l10n.moreUnusedImages),
-              subtitle: Text(l10n.moreUnusedImagesSubtitle),
               onTap: () => _openUnusedImagesPage(context, authSession),
             ),
             const Divider(
@@ -137,35 +117,18 @@ class _MorePageState extends ConsumerState<MorePage> {
               key: const Key('more-forum-mode-entry'),
               leading: const Icon(Icons.public_outlined),
               title: Text(l10n.moreForumDisplayMode),
-              subtitle: Text(
-                l10n.moreForumCurrentMode(
-                  MoreTextResolver.forumModeLabel(l10n, forumMode),
-                ),
-              ),
               onTap: () => _showForumModeSheet(context, ref, forumMode),
             ),
             ListTile(
               key: const Key('more-appearance-entry'),
               leading: const Icon(Icons.palette_outlined),
               title: Text(l10n.moreAppearance),
-              subtitle: Text(
-                l10n.moreCurrentTheme(
-                  MoreTextResolver.appearanceSummary(
-                    l10n,
-                    appearanceSettings.themeFamily,
-                    appearanceSettings.brightnessPreference,
-                  ),
-                ),
-              ),
               onTap: () => _showAppearanceSettingsSheet(context),
             ),
             ListTile(
               key: const Key('more-navigation-management-entry'),
               leading: const Icon(Icons.view_week_outlined),
               title: Text(l10n.moreNavigationManagement),
-              subtitle: Text(
-                l10n.moreVisibleNavigationCount(visibleNavigationCount),
-              ),
               onTap: navigationState == null
                   ? null
                   : () {
@@ -180,24 +143,17 @@ class _MorePageState extends ConsumerState<MorePage> {
               key: const Key('more-data-storage-entry'),
               leading: const Icon(Icons.storage_outlined),
               title: Text(l10n.moreDataAndStorage),
-              subtitle: Text(l10n.moreDataAndStorageSubtitle),
               onTap: () => _showDataStorageSheet(context),
             ),
-            ValueListenableBuilder<ComicDownloadQueueSnapshot>(
-              valueListenable: downloadQueueSnapshot,
-              builder: (context, snapshot, _) {
-                return ListTile(
-                  key: const Key('more-download-queue-entry'),
-                  leading: const Icon(Icons.offline_pin_outlined),
-                  title: Text(l10n.moreDownloadQueue),
-                  subtitle: Text(_downloadQueueSummary(l10n, snapshot)),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const ComicDownloadQueuePage(),
-                      ),
-                    );
-                  },
+            ListTile(
+              key: const Key('more-download-queue-entry'),
+              leading: const Icon(Icons.offline_pin_outlined),
+              title: Text(l10n.moreDownloadQueue),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ComicDownloadQueuePage(),
+                  ),
                 );
               },
             ),
@@ -206,11 +162,6 @@ class _MorePageState extends ConsumerState<MorePage> {
               key: const Key('more-about-entry'),
               leading: const Icon(Icons.info_outline),
               title: Text(l10n.moreAbout),
-              subtitle: Text(
-                appInfo == null
-                    ? l10n.moreAboutSubtitle
-                    : MoreTextResolver.aboutVersion(l10n, appInfo),
-              ),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const AboutPage()),
@@ -221,33 +172,6 @@ class _MorePageState extends ConsumerState<MorePage> {
         ),
       ),
     );
-  }
-
-  String _downloadQueueSummary(
-    AppLocalizations l10n,
-    ComicDownloadQueueSnapshot snapshot,
-  ) {
-    final active = snapshot.activeEntry;
-    if (active != null) {
-      final total = active.totalImages;
-      final progress = total == null || total <= 0
-          ? l10n.moreDownloadParsingImages
-          : '${active.completedImages}/$total';
-      final waiting = snapshot.waitingCount;
-      return l10n.moreDownloadActiveProgress(
-        active.comicTitle,
-        active.episodeTitle,
-        progress,
-        waiting,
-      );
-    }
-    if (snapshot.waitingCount > 0) {
-      return l10n.moreDownloadWaiting(snapshot.waitingCount);
-    }
-    if (snapshot.failedCount > 0) {
-      return l10n.moreDownloadFailed(snapshot.failedCount);
-    }
-    return l10n.moreDownloadEmpty;
   }
 
   Future<void> _showAppearanceSettingsSheet(BuildContext context) {
@@ -354,7 +278,7 @@ class _MorePageState extends ConsumerState<MorePage> {
     }
   }
 
-  Future<void> _openDailySignInPage(BuildContext context) async {
+  Future<void> _openDailySignInSheet(BuildContext context) async {
     if (_openingDailySignIn || _openingLogin || _confirmingLogout) return;
     setState(() => _openingDailySignIn = true);
     try {
@@ -364,8 +288,11 @@ class _MorePageState extends ConsumerState<MorePage> {
         return;
       }
       final owner = ref.read(verifiedProfileOwnerProvider);
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(builder: (_) => const DailySignInPage()),
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => const DailySignInSheet(),
       );
       await _refreshAccountAfterVisit(owner);
     } finally {
@@ -426,17 +353,6 @@ class _MorePageState extends ConsumerState<MorePage> {
     } finally {
       if (mounted) setState(() => _openingMyProfile = false);
     }
-  }
-
-  String _myProfileSubtitle(
-    AppLocalizations l10n,
-    AuthSessionViewState session,
-  ) {
-    final username = session.username.trim();
-    if (username.isEmpty) {
-      return l10n.moreMyProfileSignedOutSubtitle;
-    }
-    return l10n.moreMyProfileSubtitle(username);
   }
 
   Future<void> _confirmAndLogout(BuildContext context, WidgetRef ref) async {

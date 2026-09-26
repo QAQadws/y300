@@ -11,7 +11,7 @@ import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-/// The standalone sign-in page opened from More.
+/// Standalone presentation of the shared sign-in panel.
 class DailySignInPage extends StatelessWidget {
   const DailySignInPage({super.key});
 
@@ -27,7 +27,9 @@ class DailySignInPage extends StatelessWidget {
 
 /// Source-neutral sign-in state and actions for a verified owner only.
 class DailySignInPanel extends ConsumerStatefulWidget {
-  const DailySignInPanel({super.key});
+  const DailySignInPanel({super.key, this.showCard = true});
+
+  final bool showCard;
 
   @override
   ConsumerState<DailySignInPanel> createState() => _DailySignInPanelState();
@@ -86,183 +88,175 @@ class _DailySignInPanelState extends ConsumerState<DailySignInPanel> {
         failure?.kind == DataReadFailureKind.parse ||
         failure?.kind == DataReadFailureKind.unsupported;
 
-    return Card(
-      key: const Key('daily-sign-in-panel'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.dailySignInTitle,
-              style: Theme.of(context).textTheme.titleLarge,
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l10n.dailySignInTitle,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        if (owner == null)
+          Text(l10n.dailySignInLoginRequired)
+        else if (current.isLoading ||
+            (snapshot == null && failure == null)) ...[
+          const LinearProgressIndicator(key: Key('daily-sign-in-progress')),
+          const SizedBox(height: 8),
+          Text(l10n.dailySignInChecking),
+        ] else if (snapshot != null)
+          Text(
+            snapshot.status == ForumDailySignInStatus.signed
+                ? l10n.dailySignInSigned
+                : l10n.dailySignInUnsigned,
+            key: const Key('daily-sign-in-status'),
+          )
+        else
+          Text(
+            failure?.kind == DataReadFailureKind.unauthorized
+                ? l10n.dailySignInLoginRequired
+                : failure?.kind == DataReadFailureKind.unsupported
+                ? l10n.dailySignInPluginUnavailable
+                : l10n.dailySignInFailed,
+            key: const Key('daily-sign-in-read-error'),
+          ),
+        if (current.isSubmitting) ...[
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(key: Key('daily-sign-in-submitting')),
+          const SizedBox(height: 8),
+          Text(l10n.dailySignInSubmitting),
+        ],
+        if (commandMessage != null) ...[
+          const SizedBox(height: 8),
+          Text(commandMessage, key: const Key('daily-sign-in-command-message')),
+        ],
+        if (owner != null) ...[
+          const SizedBox(height: 16),
+          SwitchListTile.adaptive(
+            key: const Key('daily-auto-sign-in-toggle'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.dailyAutoSignInToggle),
+            subtitle: Text(
+              current.isSavingAutoPreference
+                  ? l10n.dailyAutoSignInSaving
+                  : l10n.dailyAutoSignInDescription,
             ),
-            const SizedBox(height: 12),
-            if (owner == null)
-              Text(l10n.dailySignInLoginRequired)
-            else if (current.isLoading ||
-                (snapshot == null && failure == null)) ...[
-              const LinearProgressIndicator(key: Key('daily-sign-in-progress')),
-              const SizedBox(height: 8),
-              Text(l10n.dailySignInChecking),
-            ] else if (snapshot != null)
-              Text(
-                snapshot.status == ForumDailySignInStatus.signed
-                    ? l10n.dailySignInSigned
-                    : l10n.dailySignInUnsigned,
-                key: const Key('daily-sign-in-status'),
-              )
-            else
-              Text(
-                failure?.kind == DataReadFailureKind.unauthorized
-                    ? l10n.dailySignInLoginRequired
-                    : failure?.kind == DataReadFailureKind.unsupported
-                    ? l10n.dailySignInPluginUnavailable
-                    : l10n.dailySignInFailed,
-                key: const Key('daily-sign-in-read-error'),
-              ),
-            if (current.isSubmitting) ...[
-              const SizedBox(height: 8),
-              const LinearProgressIndicator(
-                key: Key('daily-sign-in-submitting'),
-              ),
-              const SizedBox(height: 8),
-              Text(l10n.dailySignInSubmitting),
-            ],
-            if (commandMessage != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                commandMessage,
-                key: const Key('daily-sign-in-command-message'),
-              ),
-            ],
-            if (owner != null) ...[
-              const SizedBox(height: 16),
-              SwitchListTile.adaptive(
-                key: const Key('daily-auto-sign-in-toggle'),
-                contentPadding: EdgeInsets.zero,
-                title: Text(l10n.dailyAutoSignInToggle),
-                subtitle: Text(
-                  current.isSavingAutoPreference
-                      ? l10n.dailyAutoSignInSaving
-                      : l10n.dailyAutoSignInDescription,
-                ),
-                value: current.autoEnabled ?? false,
-                onChanged:
-                    current.autoEnabled != null &&
-                        !current.isSavingAutoPreference &&
-                        !current.settingsUnavailable
-                    ? (enabled) => unawaited(
-                        ref
-                            .read(dailySignInControllerProvider.notifier)
-                            .setAutomaticEnabled(enabled),
-                      )
-                    : null,
-              ),
-              if (current.storageUnavailable)
-                Text(
-                  l10n.dailyAutoSignInStorageUnavailable,
-                  key: const Key('daily-sign-in-storage-error'),
-                )
-              else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
-                  current.automaticPolicy ==
-                      DailySignInAutomaticPolicy.pausedPreviousDay)
-                Text(
-                  l10n.dailyAutoSignInPausedPreviousDay,
-                  key: const Key('daily-auto-sign-in-paused'),
-                )
-              else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
-                  current.automaticPolicy ==
-                      DailySignInAutomaticPolicy.blockedToday &&
-                  current.commandResult == null)
-                Text(
-                  current.checkpointState == DailySignInAttemptState.pending ||
-                          current.checkpointState ==
-                              DailySignInAttemptState.unknown
-                      ? l10n.dailyAutoSignInPendingToday
-                      : l10n.dailyAutoSignInBlockedToday,
-                  key: const Key('daily-auto-sign-in-blocked'),
-                ),
-            ],
-            if (snapshot?.statistics case final statistics?
-                when statistics.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                l10n.dailySignInStatistics,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 6),
-              for (final statistic in statistics)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(statistic.label)),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(statistic.value, textAlign: TextAlign.end),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-            if (owner != null) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+            value: current.autoEnabled ?? false,
+            onChanged:
+                current.autoEnabled != null &&
+                    !current.isSavingAutoPreference &&
+                    !current.settingsUnavailable
+                ? (enabled) => unawaited(
+                    ref
+                        .read(dailySignInControllerProvider.notifier)
+                        .setAutomaticEnabled(enabled),
+                  )
+                : null,
+          ),
+          if (current.storageUnavailable)
+            Text(
+              l10n.dailyAutoSignInStorageUnavailable,
+              key: const Key('daily-sign-in-storage-error'),
+            )
+          else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
+              current.automaticPolicy ==
+                  DailySignInAutomaticPolicy.pausedPreviousDay)
+            Text(
+              l10n.dailyAutoSignInPausedPreviousDay,
+              key: const Key('daily-auto-sign-in-paused'),
+            )
+          else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
+              current.automaticPolicy ==
+                  DailySignInAutomaticPolicy.blockedToday &&
+              current.commandResult == null)
+            Text(
+              current.checkpointState == DailySignInAttemptState.pending ||
+                      current.checkpointState == DailySignInAttemptState.unknown
+                  ? l10n.dailyAutoSignInPendingToday
+                  : l10n.dailyAutoSignInBlockedToday,
+              key: const Key('daily-auto-sign-in-blocked'),
+            ),
+        ],
+        if (snapshot?.statistics case final statistics?
+            when statistics.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            l10n.dailySignInStatistics,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          for (final statistic in statistics)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
                 children: [
-                  if (canSign)
-                    FilledButton(
-                      key: const Key('daily-sign-in-submit'),
-                      onPressed: () {
-                        if (current.needsExplicitRetry) {
-                          unawaited(_confirmRetry(context, ref, owner));
-                        } else {
-                          unawaited(
-                            ref
-                                .read(dailySignInControllerProvider.notifier)
-                                .submit(),
-                          );
-                        }
-                      },
-                      child: Text(
-                        current.needsExplicitRetry
-                            ? l10n.dailySignInRetryUnknown
-                            : l10n.dailySignInSignNow,
-                      ),
-                    ),
-                  OutlinedButton(
-                    key: const Key('daily-sign-in-refresh'),
-                    onPressed: canAct
-                        ? () => unawaited(
-                            ref
-                                .read(dailySignInControllerProvider.notifier)
-                                .refresh(),
-                          )
-                        : null,
-                    child: Text(
-                      current.commandResult
-                              is DataCommandOutcomeUnknown<
-                                ForumDailySignInReceipt
-                              >
-                          ? l10n.dailySignInVerify
-                          : l10n.dailySignInRefresh,
-                    ),
+                  Expanded(child: Text(statistic.label)),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(statistic.value, textAlign: TextAlign.end),
                   ),
-                  if (offerWebFallback)
-                    TextButton(
-                      key: const Key('daily-sign-in-web-fallback'),
-                      onPressed: () => _openForumPage(context, ref),
-                      child: Text(l10n.dailySignInOpenForum),
-                    ),
                 ],
               ),
+            ),
+        ],
+        if (owner != null) ...[
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (canSign)
+                FilledButton(
+                  key: const Key('daily-sign-in-submit'),
+                  onPressed: () {
+                    if (current.needsExplicitRetry) {
+                      unawaited(_confirmRetry(context, ref, owner));
+                    } else {
+                      unawaited(
+                        ref
+                            .read(dailySignInControllerProvider.notifier)
+                            .submit(),
+                      );
+                    }
+                  },
+                  child: Text(
+                    current.needsExplicitRetry
+                        ? l10n.dailySignInRetryUnknown
+                        : l10n.dailySignInSignNow,
+                  ),
+                ),
+              OutlinedButton(
+                key: const Key('daily-sign-in-refresh'),
+                onPressed: canAct
+                    ? () => unawaited(
+                        ref
+                            .read(dailySignInControllerProvider.notifier)
+                            .refresh(),
+                      )
+                    : null,
+                child: Text(
+                  current.commandResult
+                          is DataCommandOutcomeUnknown<ForumDailySignInReceipt>
+                      ? l10n.dailySignInVerify
+                      : l10n.dailySignInRefresh,
+                ),
+              ),
+              if (offerWebFallback)
+                TextButton(
+                  key: const Key('daily-sign-in-web-fallback'),
+                  onPressed: () => _openForumPage(context, ref),
+                  child: Text(l10n.dailySignInOpenForum),
+                ),
             ],
-          ],
-        ),
-      ),
+          ),
+        ],
+      ],
     );
+    return widget.showCard
+        ? Card(
+            key: const Key('daily-sign-in-panel'),
+            child: Padding(padding: const EdgeInsets.all(16), child: content),
+          )
+        : KeyedSubtree(key: const Key('daily-sign-in-panel'), child: content);
   }
 }
 

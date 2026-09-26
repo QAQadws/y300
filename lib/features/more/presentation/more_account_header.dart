@@ -128,13 +128,6 @@ class MoreAccountHeader extends ConsumerWidget {
               ),
             ),
           ),
-        )
-      else if (owner == null && !verifying && !loggingOut)
-        Text(
-          l10n.moreLoginSubtitle,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
         ),
     ];
     final identity = owner != null

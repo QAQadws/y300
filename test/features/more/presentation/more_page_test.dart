@@ -26,7 +26,7 @@ import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
+import 'package:y300/features/profile/presentation/daily_sign_in_sheet.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
@@ -56,7 +56,7 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
   });
 
-  testWidgets('MorePage renders stage-1 entries', (tester) async {
+  testWidgets('MorePage renders entries without descriptions', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -91,27 +91,29 @@ void main() {
     expect(find.text('未使用图片管理'), findsOneWidget);
     expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
     expect(find.text('论坛显示模式'), findsOneWidget);
-    expect(find.text('当前：WebView 模式'), findsOneWidget);
     expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
     expect(find.text('外观与文字'), findsOneWidget);
-    expect(find.text('当前：暖纸 · 日间'), findsOneWidget);
     expect(
       find.byKey(const Key('more-navigation-management-entry')),
       findsOneWidget,
     );
     expect(find.text('导航栏管理'), findsOneWidget);
-    expect(find.text('已显示 5 项'), findsOneWidget);
     expect(find.byKey(const Key('more-cache-settings-entry')), findsNothing);
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
-    expect(find.text('管理缓存与离线内容'), findsOneWidget);
+    final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
+    expect(find.text(l10n.moreMyProfileSignedOutSubtitle), findsNothing);
+    expect(find.text(l10n.moreDailySignInSubtitle), findsNothing);
+    expect(find.text(l10n.moreUnusedImagesSubtitle), findsNothing);
+    expect(find.text(l10n.moreDataAndStorageSubtitle), findsNothing);
+    expect(find.text(l10n.moreVisibleNavigationCount(5)), findsNothing);
     await _scrollUntilVisibleIfNeeded(
       tester,
       find.byKey(const Key('more-download-queue-entry')),
     );
     expect(find.byKey(const Key('more-download-queue-entry')), findsOneWidget);
     expect(find.text('缓存队列'), findsOneWidget);
-    expect(find.text('暂无缓存任务'), findsOneWidget);
+    expect(find.text(l10n.moreDownloadEmpty), findsNothing);
     expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
     expect(find.byKey(const Key('about-check-update-entry')), findsNothing);
     expect(
@@ -148,6 +150,7 @@ void main() {
     );
     expect(find.byKey(const Key('more-about-entry')), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
+    expect(find.text(l10n.moreAboutSubtitle), findsNothing);
   });
 
   testWidgets('MorePage cache queue entry supports large Traditional text', (
@@ -185,7 +188,8 @@ void main() {
 
     await _scrollUntilVisibleIfNeeded(tester, find.text('快取佇列'));
     expect(find.text('快取佇列'), findsOneWidget);
-    expect(find.text('目前沒有快取工作'), findsOneWidget);
+    final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
+    expect(find.text(l10n.moreDownloadEmpty), findsNothing);
     expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -308,9 +312,16 @@ void main() {
 
     await tester.tap(find.byKey(const Key('more-daily-sign-in-entry')));
     await tester.pumpAndSettle();
-    expect(find.byType(DailySignInPage), findsOneWidget);
+    expect(find.byType(DailySignInSheet), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.byType(DailySignInSheet),
+        matching: find.byType(BottomSheet),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('今日已签到'), findsOneWidget);
-    Navigator.of(tester.element(find.byType(DailySignInPage))).pop();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(summaryRepository.reads, 2);
 
@@ -372,8 +383,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('当前：WebView 模式'), findsOneWidget);
-
     await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
     await tester.pumpAndSettle();
 
@@ -386,12 +395,29 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('解析模式'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const Key('more-forum-mode-option-webview')),
+          )
+          .trailing,
+      isA<Icon>(),
+    );
 
     await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
     await tester.pumpAndSettle();
 
     expect(modeRepository.mode, ForumShellMode.native);
-    expect(find.text('当前：解析模式'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const Key('more-forum-mode-option-native')),
+          )
+          .trailing,
+      isA<Icon>(),
+    );
   });
 
   testWidgets('MorePage login entry navigates to the WebView login page', (
@@ -673,7 +699,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('论坛显示模式切换失败'), findsOneWidget);
-    expect(find.text('当前：WebView 模式'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const Key('more-forum-mode-option-webview')),
+          )
+          .trailing,
+      isA<Icon>(),
+    );
     expect(
       find.byKey(const Key('more-forum-mode-option-native')),
       findsOneWidget,
@@ -780,7 +813,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance-settings-sheet')), findsNothing);
-    expect(find.text('当前：梅紫 · 夜间'), findsOneWidget);
   });
 
   testWidgets('Appearance theme swatches follow the active brightness', (

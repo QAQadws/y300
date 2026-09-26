@@ -19,12 +19,82 @@ import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dar
 import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
+import 'package:y300/features/profile/presentation/daily_sign_in_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../support/forum_auth_test_support.dart';
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('sign-in sheet wraps content and rereads when reopened', (
+    tester,
+  ) async {
+    final repository = _SignRepository(
+      (query, _) async => _success(query.userId, ForumDailySignInStatus.signed),
+    );
+    final command = _SignCommand((_, _) async => _unknown);
+    await _pump(
+      tester,
+      repository: repository,
+      command: command,
+      asSheet: true,
+    );
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text(_l10n(tester).dailySignInSigned), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(DailySignInSheet)).height,
+      lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio),
+    );
+    expect(repository.queries, hasLength(1));
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(DailySignInSheet), findsNothing);
+    await tester.tap(find.byKey(const Key('open-sign-in-sheet')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DailySignInSheet), findsOneWidget);
+    expect(repository.queries, hasLength(2));
+    expect(command.requests, isEmpty);
+  });
+
+  testWidgets('300dp sign-in sheet scrolls with large text and submits once', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(300, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final command = _SignCommand((_, _) async => _unknown);
+    await _pump(
+      tester,
+      repository: _SignRepository(
+        (query, _) async =>
+            _success(query.userId, ForumDailySignInStatus.unsigned),
+      ),
+      command: command,
+      textScaler: const TextScaler.linear(2),
+      asSheet: true,
+    );
+
+    final scrollable = find.descendant(
+      of: find.byType(DailySignInSheet),
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.state<ScrollableState>(scrollable).position.maxScrollExtent,
+      greaterThan(0),
+    );
+    final submit = find.byKey(const Key('daily-sign-in-submit'));
+    await tester.ensureVisible(submit);
+    await tester.pumpAndSettle();
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(command.requests, hasLength(1));
+    expect(find.byType(DailySignInSheet), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('signed state and ordered statistics never expose submit', (
     tester,
   ) async {
@@ -762,6 +832,7 @@ Future<void> _pump(
   TextScaler textScaler = TextScaler.noScaling,
   _MemoryPreferencesStore? preferences,
   bool settle = true,
+  bool asSheet = false,
 }) async {
   final storage = preferences ?? _MemoryPreferencesStore();
   await tester.pumpWidget(
@@ -776,18 +847,42 @@ Future<void> _pump(
           forumWebViewRouteFactoryProvider.overrideWithValue(routeFactory),
       ],
       child: LocalizedTestApp(
-        home: MediaQuery(
-          data: MediaQueryData(textScaler: textScaler),
-          child: const DailySignInPage(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+          child: child!,
         ),
+        home: asSheet
+            ? Builder(
+                builder: (context) => Scaffold(
+                  body: Center(
+                    child: TextButton(
+                      key: const Key('open-sign-in-sheet'),
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        useSafeArea: true,
+                        builder: (_) => const DailySignInSheet(),
+                      ),
+                      child: Text(
+                        AppLocalizations.of(context).dailySignInTitle,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            : const DailySignInPage(),
       ),
     ),
   );
+  if (asSheet) {
+    await tester.tap(find.byKey(const Key('open-sign-in-sheet')));
+    await tester.pump();
+  }
   if (settle) await tester.pumpAndSettle();
 }
 
 AppLocalizations _l10n(WidgetTester tester) =>
-    AppLocalizations.of(tester.element(find.byType(DailySignInPage)));
+    AppLocalizations.of(tester.element(find.byType(DailySignInPanel)));
 
 YamiboSessionSnapshot _session(String uid) => YamiboSessionSnapshot(
   isLoggedIn: true,
