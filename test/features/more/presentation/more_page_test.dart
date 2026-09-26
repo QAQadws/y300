@@ -229,6 +229,7 @@ void main() {
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
     final repository = _FakeAuthRepository(isLoggedIn: true);
     final profileRepository = _SignedProfileRepository();
+    final signInRepository = _SignedDailySignInRepository();
     final summaryRepository = _AccountSummaryRepository(
       () => const CurrentUserProfileData(
         identity: ProfileUserIdentity(userId: '100', displayName: 'tester'),
@@ -243,9 +244,7 @@ void main() {
             repository,
             summaryRepository: summaryRepository,
           ),
-          dailySignInRepositoryProvider.overrideWithValue(
-            _SignedDailySignInRepository(),
-          ),
+          dailySignInRepositoryProvider.overrideWithValue(signInRepository),
           forumUserProfileRepositoryProvider.overrideWithValue(
             profileRepository,
           ),
@@ -324,9 +323,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('今日已签到'), findsOneWidget);
+    expect(signInRepository.reads, 1);
+    expect(summaryRepository.reads, 1);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(summaryRepository.reads, 2);
+    expect(signInRepository.reads, 1);
+    expect(summaryRepository.reads, 1);
 
     await tester.tap(find.byKey(const Key('more-account-name')));
     await tester.pumpAndSettle();
@@ -339,14 +341,14 @@ void main() {
 
     Navigator.of(tester.element(find.byType(MyProfilePage))).pop();
     await tester.pumpAndSettle();
-    expect(summaryRepository.reads, 3);
+    expect(summaryRepository.reads, 2);
 
     await tester.drag(
       find.byKey(const Key('more-page-list')),
       const Offset(0, 400),
     );
     await tester.pumpAndSettle();
-    expect(summaryRepository.reads, 4);
+    expect(summaryRepository.reads, 3);
 
     // Cancelling the existing confirmation leaves the current account intact.
     await tester.tap(find.byKey(const Key('more-logout-entry')));
@@ -1381,6 +1383,8 @@ class _SignedProfileRepository implements ForumUserProfileRepository {
 }
 
 class _SignedDailySignInRepository implements ForumDailySignInRepository {
+  int reads = 0;
+
   @override
   ForumDailySignInSourceCapabilities get capabilities =>
       ForumDailySignInSourceCapabilities(
@@ -1393,17 +1397,20 @@ class _SignedDailySignInRepository implements ForumDailySignInRepository {
   Future<
     DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
   >
-  load(ForumDailySignInQuery query) async => DataReadSuccess(
-    data: ForumDailySignInSnapshot(
-      userId: query.userId,
-      forumDay: '20260925',
-      status: ForumDailySignInStatus.signed,
-    ),
-    capabilities: ForumDailySignInReadCapabilities(
-      values: DataCapabilitySet.supported(
-        ForumDailySignInReadCapability.values,
+  load(ForumDailySignInQuery query) async {
+    reads++;
+    return DataReadSuccess(
+      data: ForumDailySignInSnapshot(
+        userId: query.userId,
+        forumDay: '20260925',
+        status: ForumDailySignInStatus.signed,
       ),
-    ),
-    metadata: const DataReadMetadata.network(),
-  );
+      capabilities: ForumDailySignInReadCapabilities(
+        values: DataCapabilitySet.supported(
+          ForumDailySignInReadCapability.values,
+        ),
+      ),
+      metadata: const DataReadMetadata.network(),
+    );
+  }
 }

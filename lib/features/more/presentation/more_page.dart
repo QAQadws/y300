@@ -283,14 +283,12 @@ class _MorePageState extends ConsumerState<MorePage> {
         await _openLoginPage(context);
         return;
       }
-      final owner = ref.read(verifiedProfileOwnerProvider);
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
         builder: (_) => const DailySignInSheet(),
       );
-      await _refreshAccountAfterVisit(owner);
     } finally {
       if (mounted) setState(() => _openingDailySignIn = false);
     }
