@@ -116,6 +116,20 @@ void main() {
             const Key('blog-detail-comment-count'),
           );
           final author = find.byKey(const Key('blog-detail-author'));
+          final date = find.byKey(const Key('blog-detail-date'));
+          final category = find.byKey(
+            const ValueKey(
+              UserBlogDirectoryQuery.self(
+                ownerUserId: '101',
+                personalCategoryId: '3',
+              ),
+            ),
+          );
+          expect(find.byIcon(Icons.folder_outlined), findsNothing);
+          expect(
+            tester.getTopLeft(category).dy,
+            greaterThan(tester.getBottomRight(author).dy),
+          );
           final palette = ThreadDetailNativePalette.resolve(host.theme);
           for (final metric in [views, commentCount]) {
             final pill = tester.widget<ForumMetricPill>(metric);
@@ -125,10 +139,18 @@ void main() {
           }
           if (compact) {
             expect(
+              tester.getTopLeft(category).dy,
+              greaterThan(tester.getBottomRight(date).dy),
+            );
+            expect(
               tester.getTopLeft(views).dy,
               greaterThan(tester.getBottomRight(author).dy),
             );
           } else {
+            expect(
+              tester.getCenter(category).dy,
+              closeTo(tester.getCenter(date).dy, 1),
+            );
             expect(
               tester.getTopLeft(views).dy,
               closeTo(tester.getTopLeft(author).dy, 1),

@@ -54,11 +54,16 @@ void main() {
         );
         expect(host.directory.queries, isEmpty);
         final category = find.byKey(ValueKey(query));
-        expect(tester.getSize(category).height, greaterThanOrEqualTo(48));
-        expect(tester.getSize(category).width, greaterThanOrEqualTo(48));
-        final button = tester.widget<TextButton>(category);
-        button.onPressed!();
-        button.onPressed!();
+        expect(tester.getSize(category).height, greaterThanOrEqualTo(24));
+        final button = tester.widget<InkWell>(
+          find.descendant(
+            of: category,
+            matching: find.byType(InkWell),
+            matchRoot: true,
+          ),
+        );
+        button.onTap!();
+        button.onTap!();
         await tester.pumpAndSettle();
         expect(host.directory.queries.single, query);
         expect(host.webLaunches, isEmpty);
@@ -68,6 +73,114 @@ void main() {
         expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
         expect(category, findsOneWidget);
         expect(host.details.queries, hasLength(1));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('article category follows the date in the compact author row', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final host = _Host();
+    const query = UserBlogDirectoryQuery.self(
+      ownerUserId: '202',
+      personalCategoryId: '8',
+    );
+    host.details.publishedAtText = '2026-9-11 23:09';
+    host.details.categoryLinks = const [
+      UserBlogCategoryLink(name: '正能量', query: query),
+    ];
+    await host.pump(
+      tester,
+      const ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
+    );
+
+    final date = tester.getRect(find.byKey(const Key('blog-detail-date')));
+    final category = tester.getRect(find.byKey(const ValueKey(query)));
+    expect(category.left, greaterThan(date.right));
+    expect(category.top, lessThan(date.bottom));
+    expect(category.bottom, greaterThan(date.top));
+    expect(category.height, lessThan(48));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('blog-detail-card')),
+        matching: find.byIcon(Icons.folder_outlined),
+      ),
+      findsNothing,
+    );
+    expect(find.byTooltip('正能量'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final date in <String?>[null, '   ']) {
+    testWidgets('category without date $date has no orphan separator', (
+      tester,
+    ) async {
+      final host = _Host();
+      const query = UserBlogDirectoryQuery.self(
+        ownerUserId: '202',
+        personalCategoryId: '8',
+      );
+      host.details.publishedAtText = date;
+      host.details.categoryLinks = const [
+        UserBlogCategoryLink(name: '正能量', query: query),
+      ];
+      await host.pump(
+        tester,
+        const ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
+      );
+
+      expect(find.byKey(const Key('blog-detail-date')), findsNothing);
+      expect(find.byKey(const Key('blog-detail-categories')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('blog-detail-categories')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Text && widget.data?.trim() == '·',
+          ),
+        ),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const ValueKey(query)));
+      await tester.pumpAndSettle();
+      expect(host.directory.queries.single, query);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final date in <String?>[null, '2026-9-11 23:09']) {
+    testWidgets(
+      'article without categories keeps no category placeholder $date',
+      (tester) async {
+        final host = _Host();
+        host.details.publishedAtText = date;
+        await host.pump(
+          tester,
+          const ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
+        );
+
+        final card = find.byKey(const Key('blog-detail-card'));
+        expect(find.byKey(const Key('blog-detail-categories')), findsNothing);
+        expect(
+          find.byKey(const Key('blog-detail-date')),
+          date == null ? findsNothing : findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: card,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is Text && widget.data?.trim() == '·',
+            ),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: card, matching: find.byIcon(Icons.chevron_right)),
+          findsNothing,
+        );
         expect(tester.takeException(), isNull);
       },
     );
@@ -162,37 +275,47 @@ void main() {
     );
   }
 
-  testWidgets('long category names wrap on narrow screens with large text', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final host = _Host();
-    const query = UserBlogDirectoryQuery.public(categoryId: '7');
-    host.details.categoryLinks = [
-      UserBlogCategoryLink(name: 'Long category name ' * 6, query: query),
-    ];
-    await host.pump(
-      tester,
-      const MediaQuery(
-        data: MediaQueryData(textScaler: TextScaler.linear(2)),
-        child: ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
-      ),
-    );
-    final button = find.byKey(const ValueKey(query));
-    final content = tester.getRect(
-      find.byKey(const Key('blog-detail-categories')),
-    );
-    final bounds = tester.getRect(button);
-    expect(bounds.left, greaterThanOrEqualTo(content.left));
-    expect(bounds.right, lessThanOrEqualTo(content.right));
-    expect(bounds.right, lessThan(tester.view.physicalSize.width));
-    expect(tester.getSize(button).height, greaterThan(48));
-    expect(tester.takeException(), isNull);
-    expect(host.directory.queries, isEmpty);
-  });
+  testWidgets(
+    'long category moves below the date and truncates with large text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final host = _Host();
+      const query = UserBlogDirectoryQuery.public(categoryId: '7');
+      final name = 'Long category name ' * 6;
+      host.details.publishedAtText = '2026-9-11 23:09';
+      host.details.categoryLinks = [
+        UserBlogCategoryLink(name: name, query: query),
+      ];
+      await host.pump(
+        tester,
+        const ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
+        textScale: 2,
+      );
+      final button = find.byKey(const ValueKey(query));
+      final content = tester.getRect(
+        find.byKey(const Key('blog-detail-categories')),
+      );
+      final bounds = tester.getRect(button);
+      expect(bounds.left, greaterThanOrEqualTo(content.left));
+      expect(bounds.right, lessThanOrEqualTo(content.right));
+      expect(bounds.right, lessThan(tester.view.physicalSize.width));
+      final date = tester.getRect(find.byKey(const Key('blog-detail-date')));
+      expect(bounds.top, greaterThanOrEqualTo(date.bottom));
+      final label = tester.widget<Text>(find.text(name));
+      expect(label.maxLines, 1);
+      expect(label.overflow, TextOverflow.ellipsis);
+      expect(find.byTooltip(name), findsOneWidget);
+      expect(
+        find.descendant(of: button, matching: find.byIcon(Icons.chevron_right)),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      expect(host.directory.queries, isEmpty);
+    },
+  );
 
   for (final query in [
     const UserBlogDirectoryQuery.public(

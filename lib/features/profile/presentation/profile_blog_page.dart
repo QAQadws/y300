@@ -8,6 +8,7 @@ import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_actions.dart';
 import 'package:y300/features/profile/presentation/blog/blog_detail_header.dart';
+import 'package:y300/features/profile/presentation/blog/blog_detail_metadata.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/blog/blog_text_tabs.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
@@ -1107,6 +1108,10 @@ class _BlogDetailCard extends ConsumerWidget {
     final display = watchBlogDisplayText(ref, BlogContentSource.article(data));
     final accountOwner = ref.watch(blogMutationBusProvider);
     final theme = Theme.of(context);
+    final date =
+        capabilities?.supports(UserBlogDetailCapability.publishedAtText) == true
+        ? display.text(data.publishedAtText ?? '').trim()
+        : '';
     return BlogContentActions(
       article: data,
       capabilities: capabilities,
@@ -1137,42 +1142,7 @@ class _BlogDetailCard extends ConsumerWidget {
                 height: 1.24,
               ),
             ),
-            if (data.categoryLinks.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Wrap(
-                key: const Key('blog-detail-categories'),
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final category in data.categoryLinks)
-                    TextButton.icon(
-                      key: ValueKey(category.query),
-                      style: TextButton.styleFrom(
-                        foregroundColor: palette.accent,
-                        minimumSize: const Size(48, 48),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        textStyle: theme.textTheme.labelMedium,
-                      ),
-                      icon: const Icon(Icons.folder_outlined, size: 16),
-                      label: Text(display.text(category.name)),
-                      onPressed: () {
-                        if (!context.mounted ||
-                            ModalRoute.of(context)?.isCurrent == false) {
-                          return;
-                        }
-                        Navigator.of(context).push<void>(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ProfileBlogPage.fromQuery(category.query),
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-            ] else
-              const SizedBox(height: 11),
+            const SizedBox(height: 11),
             BlogDetailHeader(
               viewCount:
                   capabilities?.supports(UserBlogDetailCapability.viewCount) ==
@@ -1214,13 +1184,35 @@ class _BlogDetailCard extends ConsumerWidget {
                               true
                           ? data.authorName
                           : null,
-                      metadata:
-                          capabilities?.supports(
-                                UserBlogDetailCapability.publishedAtText,
-                              ) ==
-                              true
-                          ? display.text(data.publishedAtText ?? '')
-                          : '',
+                      metadata: date,
+                      metadataContent:
+                          date.isNotEmpty || data.categoryLinks.isNotEmpty
+                          ? BlogDetailMetadata(
+                              date: date,
+                              categories: [
+                                for (final category in data.categoryLinks)
+                                  BlogDetailCategoryLink(
+                                    key: ValueKey(category.query),
+                                    label: display.text(category.name),
+                                    onTap: () {
+                                      if (!context.mounted ||
+                                          ModalRoute.of(context)?.isCurrent ==
+                                              false) {
+                                        return;
+                                      }
+                                      Navigator.of(context).push<void>(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              ProfileBlogPage.fromQuery(
+                                                category.query,
+                                              ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                              ],
+                            )
+                          : null,
                     ),
                   ),
                 ],
@@ -1385,12 +1377,14 @@ class _BlogAuthorMetadata extends StatelessWidget {
     required this.userId,
     required this.name,
     required this.metadata,
+    this.metadataContent,
   });
 
   final Key authorKey;
   final String? userId;
   final String? name;
   final String metadata;
+  final Widget? metadataContent;
 
   @override
   Widget build(BuildContext context) {
@@ -1415,17 +1409,18 @@ class _BlogAuthorMetadata extends StatelessWidget {
               ),
             ),
           ),
-        if (metadata.isNotEmpty) ...[
+        if (metadata.isNotEmpty || metadataContent != null) ...[
           if (showAuthor) const SizedBox(height: 2),
-          Text(
-            metadata,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: native.soft,
-              height: 1.1,
-            ),
-          ),
+          metadataContent ??
+              Text(
+                metadata,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: native.soft,
+                  height: 1.1,
+                ),
+              ),
         ],
       ],
     );
