@@ -550,14 +550,17 @@ void main() {
       directoryRepository: directoryRepository,
       detailRepository: detailRepository,
     );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
 
     expect(find.byKey(const Key('profile-blog-list')), findsOneWidget);
     expect(find.byKey(const Key('profile-blog-view-tabs')), findsOneWidget);
     expect(find.text('随便看看'), findsOneWidget);
-    expect(find.text('最新发表的日志'), findsOneWidget);
+    expect(find.text(l10n.profileBlogLatestShort), findsOneWidget);
     expect(find.text('一种体验'), findsOneWidget);
 
-    await tester.tap(find.text('推荐阅读的日志'));
+    await tester.tap(find.text(l10n.profileBlogRecommendedShort));
     await tester.pumpAndSettle();
 
     expect(directoryRepository.queries.last.order, UserBlogOrder.recommended);
@@ -572,7 +575,7 @@ void main() {
 
     await tester.tap(find.text('随便看看'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('推荐阅读的日志'));
+    await tester.tap(find.text(l10n.profileBlogRecommendedShort));
     await tester.pumpAndSettle();
     await tester.tap(find.text('我们小区的公共交通极其不便利'));
     await tester.pumpAndSettle();
@@ -889,9 +892,12 @@ void main() {
       detailRepository: _FakeBlogDetailRepository(),
       locale: const Locale('zh', 'TW'),
     );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
 
     expect(find.text('隨便看看'), findsOneWidget);
-    expect(find.text('最新發表的日誌'), findsOneWidget);
+    expect(find.text(l10n.profileBlogLatestShort), findsOneWidget);
     expect(find.text('一种体验'), findsOneWidget);
   });
 

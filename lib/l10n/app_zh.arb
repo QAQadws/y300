@@ -1623,6 +1623,8 @@
   "profileBlogExplore": "随便看看",
   "profileBlogLatest": "最新发表的日志",
   "profileBlogRecommended": "推荐阅读的日志",
+  "profileBlogLatestShort": "最新",
+  "profileBlogRecommendedShort": "推荐",
   "profileBlogComments": "日志评论",
   "profileBlogCommentsEmpty": "暂无评论",
   "profileBlogAllCategories": "全部分类",

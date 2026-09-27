@@ -16,4 +16,11 @@ abstract final class ProfileTextResolver {
       UserBlogOrder.recommended => l10n.profileBlogRecommended,
     };
   }
+
+  static String blogOrderShort(AppLocalizations l10n, UserBlogOrder order) {
+    return switch (order) {
+      UserBlogOrder.latest => l10n.profileBlogLatestShort,
+      UserBlogOrder.recommended => l10n.profileBlogRecommendedShort,
+    };
+  }
 }

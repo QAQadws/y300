@@ -4052,6 +4052,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogRecommended => '推荐阅读的日志';
 
   @override
+  String get profileBlogLatestShort => '最新';
+
+  @override
+  String get profileBlogRecommendedShort => '推荐';
+
+  @override
   String get profileBlogComments => '日志评论';
 
   @override
@@ -8684,6 +8690,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogRecommended => '推薦閱讀的日誌';
+
+  @override
+  String get profileBlogLatestShort => '最新';
+
+  @override
+  String get profileBlogRecommendedShort => '推薦';
 
   @override
   String get profileBlogComments => '日誌留言';

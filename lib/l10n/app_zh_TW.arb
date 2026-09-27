@@ -1258,6 +1258,8 @@
   "profileBlogExplore": "隨便看看",
   "profileBlogLatest": "最新發表的日誌",
   "profileBlogRecommended": "推薦閱讀的日誌",
+  "profileBlogLatestShort": "最新",
+  "profileBlogRecommendedShort": "推薦",
   "profileBlogComments": "日誌留言",
   "profileBlogCommentsEmpty": "暫無留言",
   "profileBlogAllCategories": "全部分類",

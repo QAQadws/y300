@@ -657,24 +657,89 @@ class _OrderTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       key: const Key('profile-blog-order-tabs'),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       color: palette.background,
-      child: Wrap(
-        spacing: 8,
-        children: [
-          for (final order in UserBlogOrder.values)
-            ChoiceChip(
-              label: Text(
-                ProfileTextResolver.blogOrder(
-                  AppLocalizations.of(context),
-                  order,
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final order in UserBlogOrder.values) ...[
+              if (order != UserBlogOrder.values.first)
+                SizedBox(
+                  width: 1,
+                  height: 14,
+                  child: ColoredBox(
+                    color: palette.muted.withValues(alpha: 0.3),
+                  ),
+                ),
+              _OrderTabButton(
+                order: order,
+                selected: activeOrder == order,
+                palette: palette,
+                onTap: () => onSelect(order),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderTabButton extends StatelessWidget {
+  const _OrderTabButton({
+    required this.order,
+    required this.selected,
+    required this.palette,
+    required this.onTap,
+  });
+
+  final UserBlogOrder order;
+  final bool selected;
+  final Y300NativeContentColors palette;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final description = ProfileTextResolver.blogOrder(l10n, order);
+    return Semantics(
+      selected: selected,
+      button: true,
+      inMutuallyExclusiveGroup: true,
+      child: Tooltip(
+        message: description,
+        excludeFromSemantics: true,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            key: Key('profile-blog-order-${order.name}'),
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 64, minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Center(
+                  widthFactor: 1,
+                  heightFactor: 1,
+                  child: Text(
+                    ProfileTextResolver.blogOrderShort(l10n, order),
+                    semanticsLabel: description,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: selected ? palette.accent : palette.muted,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    ),
+                  ),
                 ),
               ),
-              selected: activeOrder == order,
-              onSelected: (_) => onSelect(order),
-              showCheckmark: false,
             ),
-        ],
+          ),
+        ),
       ),
     );
   }

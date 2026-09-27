@@ -6657,6 +6657,18 @@ abstract class AppLocalizations {
   /// **'推荐阅读的日志'**
   String get profileBlogRecommended;
 
+  /// No description provided for @profileBlogLatestShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'最新'**
+  String get profileBlogLatestShort;
+
+  /// No description provided for @profileBlogRecommendedShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'推荐'**
+  String get profileBlogRecommendedShort;
+
   /// No description provided for @profileBlogComments.
   ///
   /// In zh, this message translates to:
