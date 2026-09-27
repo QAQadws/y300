@@ -40,6 +40,7 @@ void main() {
     ForumConversationTarget destination = target,
     Brightness brightness = Brightness.light,
     double textScale = 1,
+    String title = 'Alice',
   }) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -57,7 +58,7 @@ void main() {
           ),
           home: PrivateConversationPage(
             target: destination,
-            title: 'Alice',
+            title: title,
             onOpenLink: (_, url) => links.add(url),
           ),
         ),
@@ -139,7 +140,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     var becameScrollable = false;
-    for (var count = 2; count <= 8; count++) {
+    for (var count = 2; count <= 18; count++) {
       await refreshMessages(tester, [
         for (var id = 1; id <= count; id++) messageTestItem('$id'),
       ]);
@@ -550,5 +551,165 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(l10n(tester).messageLoginRequired), findsOneWidget);
     expect(repository.reads, isEmpty);
+  });
+
+  testWidgets('title resolves the peer and details expose selectable HTML', (
+    tester,
+  ) async {
+    await pumpPage(tester, title: '');
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('1', html: '<p>可复制的正文</p>')]),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Alice')),
+      findsOneWidget,
+    );
+    await tester.longPress(find.byType(ForumHtmlContentView));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n(tester).messageDetails), findsOneWidget);
+    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'history loads once per user scroll and failures require manual retry',
+    (tester) async {
+      await pumpPage(tester);
+      repository.reads.single.result.complete(
+        messageTestPage(
+          [for (var id = 41; id <= 60; id++) messageTestItem('$id')],
+          page: 3,
+          count: 60,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.reads, hasLength(1));
+      final scroll = scrollController(tester);
+      scroll.jumpTo(scroll.position.maxScrollExtent - 210);
+      await tester.pumpAndSettle();
+      expect(repository.reads, hasLength(1));
+      await tester.drag(timeline(), const Offset(0, 120));
+      await tester.pump();
+      expect(repository.reads, hasLength(2));
+      expect(repository.reads.last.query.page, 2);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      repository.reads.last.result.complete(
+        const DataReadFailure(
+          kind: DataReadFailureKind.network,
+          code: 'message_read_failed',
+          diagnosticMessage: 'message_read_failed',
+        ),
+      );
+      await tester.pumpAndSettle();
+      scroll.jumpTo(scroll.position.maxScrollExtent - 100);
+      await tester.pumpAndSettle();
+      await tester.drag(timeline(), const Offset(0, 80));
+      await tester.pumpAndSettle();
+      expect(repository.reads, hasLength(2));
+      await tester.ensureVisible(find.text(l10n(tester).commonRetry));
+      await tester.tap(find.text(l10n(tester).commonRetry));
+      await tester.pump();
+      expect(repository.reads, hasLength(3));
+      expect(repository.reads.last.query.page, 2);
+      repository.reads.last.result.complete(
+        messageTestPage(
+          [for (var id = 21; id <= 40; id++) messageTestItem('$id')],
+          page: 2,
+          count: 60,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.reads, hasLength(3));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'short history and layout changes never trigger automatic pagination',
+    (tester) async {
+      await pumpPage(tester);
+      repository.reads.single.result.complete(
+        messageTestPage([messageTestItem('21')], page: 2, count: 21),
+      );
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 180);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.enterText(find.byKey(const Key('message-input')), '两行\n输入');
+      await tester.pumpAndSettle();
+      await container
+          .read(forumHtmlReaderPreferencesControllerProvider.notifier)
+          .setFontScale(1.4);
+      await tester.pumpAndSettle();
+      expect(repository.reads, hasLength(1));
+      expect(find.text(l10n(tester).messageOlder), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'prepending a group removes repeated headers without moving its visible body',
+    (tester) async {
+      const group = ForumConversationTarget.group('91');
+      await pumpPage(tester, destination: group);
+      repository.reads.single.result.complete(
+        messageTestPage(
+          [for (var id = 21; id <= 40; id++) messageTestItem('$id')],
+          page: 2,
+          count: 40,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final scroll = scrollController(tester);
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      Finder body() => find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumHtmlContentView &&
+            widget.sourceId == 'private:10:group:91:21',
+      );
+      final before = tester.getRect(body());
+      expect(find.byKey(const ValueKey('message-author:21')), findsOneWidget);
+      final older = container
+          .read(privateMessageFeedProvider(group))
+          .loadMore();
+      repository.reads.last.result.complete(
+        messageTestPage(
+          [for (var id = 1; id <= 20; id++) messageTestItem('$id')],
+          page: 1,
+          count: 40,
+        ),
+      );
+      await older;
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('message-author:21')), findsNothing);
+      expect(tester.getRect(body()).top, closeTo(before.top, 0.1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('account switch closes details and removes the old message', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('1', html: '<p>旧账号私信</p>')]),
+    );
+    await tester.pumpAndSettle();
+    await tester.longPress(find.byType(ForumHtmlContentView));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectionArea), findsOneWidget);
+    container.updateOverrides([
+      messageAccountIdProvider.overrideWithValue('11'),
+      messageRepositoryProvider.overrideWithValue(repository),
+      forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
+    ]);
+    await tester.pump();
+    await tester.pump();
+    repository.reads.last.result.complete(messageTestPage([], owner: '11'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectionArea), findsNothing);
+    expect(find.text('旧账号私信', findRichText: true), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

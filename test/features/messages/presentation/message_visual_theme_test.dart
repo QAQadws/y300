@@ -146,10 +146,11 @@ void main() {
                 senderAvatarUrl: MessageAvatarTestCache.meUrl,
                 html: '<p>刚看完第三章，<i>周末继续聊</i>。</p>',
               ),
+              messageTestItem('3', sender: '10', html: '<p>嗯</p>'),
+              messageTestItem('4', html: '<p>好呀，下次见！</p>'),
             ]),
           );
           await tester.pumpAndSettle();
-          _expectSurfaces(tester, theme);
           final bodies = tester
               .widgetList<ForumHtmlContentView>(
                 find.byType(ForumHtmlContentView),
@@ -170,12 +171,119 @@ void main() {
             ),
           );
           expect(outgoing.foregroundColor, palette.body);
+          expect(find.byType(MessageSurface), findsNothing);
+          for (final id in ['1', '2', '3', '4']) {
+            final bubble = tester.widget<Material>(
+              find.byKey(ValueKey('conversation-bubble-$id')),
+            );
+            expect(bubble.elevation, 0);
+            expect(bubble.borderRadius, BorderRadius.circular(16));
+          }
+          expect(
+            tester
+                .getSize(find.byKey(const ValueKey('conversation-bubble-3')))
+                .width,
+            lessThan(
+              tester
+                  .getSize(find.byKey(const ValueKey('conversation-bubble-2')))
+                  .width,
+            ),
+          );
           expect(
             _contrast(palette.body, outgoing.surfaceColor!),
             greaterThanOrEqualTo(4.5),
           );
           _expectInputTheme(tester, theme);
           await harness.capture('conversation');
+
+          await harness.show(
+            const PrivateConversationPage(
+              target: ForumConversationTarget.group('91'),
+              title: '周末读书小组',
+              onOpenLink: _ignoreLink,
+            ),
+          );
+          harness.repository.reads.single.result.complete(
+            messageTestPage([
+              _chatItem('1', html: '<p>大家周末想读哪本？</p>'),
+              _chatItem('2', minute: 1, html: '<p>这篇的设定很有趣。</p>'),
+              _chatItem(
+                '3',
+                sender: '30',
+                name: '小林',
+                minute: 2,
+                html: '<p>我投它一票！</p>',
+              ),
+              _chatItem('4', sender: '10', minute: 3, html: '<p>好呀</p>'),
+              _chatItem('5', minute: 10, html: '<p>那我们下周分享感想。</p>'),
+            ], anchor: '5'),
+          );
+          await tester.pumpAndSettle();
+          await harness.capture('group');
+
+          await harness.show(
+            const PrivateConversationPage(
+              target: ForumConversationTarget.direct('20'),
+              title: '一起读书的朋友',
+              onOpenLink: _ignoreLink,
+            ),
+          );
+          harness.repository.reads.single.result.complete(
+            messageTestPage([
+              for (var id = 1; id <= 24; id++)
+                _chatItem(
+                  '$id',
+                  sender: id.isEven ? '10' : '20',
+                  minute: id,
+                  html:
+                      '<p>${id.isEven ? '我也很喜欢她们重逢的那一段。' : '读到这里的时候，很想找你聊聊。'}</p>',
+                ),
+            ]),
+          );
+          await tester.pumpAndSettle();
+          await harness.capture('long-latest');
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+          await tester.enterText(
+            find.byKey(const Key('message-input')),
+            '刚读完这一章。\n想分享几句感想，\n周末一起聊！',
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('message-send')).hitTestable(),
+            findsOneWidget,
+          );
+          final sendStyle = tester
+              .widget<IconButton>(find.byKey(const Key('message-send')))
+              .style!;
+          expect(
+            _contrast(
+              sendStyle.foregroundColor!.resolve({})!,
+              sendStyle.backgroundColor!.resolve({})!,
+            ),
+            greaterThanOrEqualTo(4.5),
+          );
+          await harness.capture('multiline-keyboard');
+          tester.view.resetViewInsets();
+
+          await harness.show(
+            const PrivateConversationPage(
+              target: ForumConversationTarget.direct('20'),
+              title: '一起读书的朋友',
+              onOpenLink: _ignoreLink,
+            ),
+          );
+          harness.repository.reads.single.result.complete(
+            messageTestPage([
+              _chatItem(
+                '1',
+                html:
+                    '<p>整理了一点阅读计划：</p><blockquote>慢慢读，也是一种享受。</blockquote><table><tr><td>周六</td><td>前三章</td></tr><tr><td>周日</td><td>分享感想</td></tr></table><p><a href="forum.php?mod=viewthread&amp;tid=42">打开讨论帖</a></p>',
+              ),
+              _chatItem('2', sender: '10', html: '<p>收到！</p>'),
+            ]),
+          );
+          await tester.pumpAndSettle();
+          await harness.capture('rich-content');
 
           await harness.show(const NewPrivateMessagePage());
           await tester.pumpAndSettle();
@@ -265,6 +373,39 @@ void main() {
     await harness.export('narrow-large-text');
   });
 
+  testWidgets('wide conversation keeps the reading canvas centered', (
+    tester,
+  ) async {
+    final harness = _Harness(tester, AppTheme.light());
+    await harness.size(const Size(1280, 900));
+    await harness.show(
+      const PrivateConversationPage(
+        target: ForumConversationTarget.direct('20'),
+        title: '一起读书的朋友',
+        onOpenLink: _ignoreLink,
+      ),
+    );
+    harness.repository.reads.single.result.complete(
+      messageTestPage([
+        _chatItem('1', html: '<p>嗯</p>'),
+        _chatItem(
+          '2',
+          sender: '10',
+          html: '<p>${List.filled(12, '周末一起分享最近读到的故事。').join()}</p>',
+        ),
+      ]),
+    );
+    await tester.pumpAndSettle();
+    final canvas = tester.getRect(
+      find.byKey(const Key('private-conversation-list')),
+    );
+    expect(canvas.width, 840);
+    expect(canvas.center.dx, 640);
+    await harness.capture('wide-conversation');
+    await harness.export('wide');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'loading, failure, empty and logged-out states use native surfaces',
     (tester) async {
@@ -331,6 +472,29 @@ MessageCenterPage _center() => MessageCenterPage(
   onOpenUser: (_, _) {},
 );
 void _ignoreLink(BuildContext context, String url) {}
+
+ForumPrivateMessageItem _chatItem(
+  String id, {
+  required String html,
+  String sender = '20',
+  String name = '一起读书的朋友',
+  int minute = 0,
+}) => ForumPrivateMessageItem(
+  messageId: id,
+  conversationId: '91',
+  isNew: false,
+  subject: '',
+  fromUserId: sender,
+  fromUserName: sender == '10' ? '我' : name,
+  fromUserAvatarUrl: sender == '10'
+      ? MessageAvatarTestCache.meUrl
+      : MessageAvatarTestCache.aliceUrl,
+  toUserId: sender == '10' ? '20' : '10',
+  toUserName: sender == '10' ? name : '我',
+  message: html,
+  sentAt: DateTime(2026, 9, 27, 14, minute),
+  rawDateline: '',
+);
 
 const _directory = [
   ForumPrivateMessageItem(
@@ -522,8 +686,15 @@ class _Harness {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
       var x = 0.0;
+      await Directory(_output).create(recursive: true);
       for (var index = 0; index < images.length; index++) {
         final image = images[index];
+        final sceneBytes = await image.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+        await File(
+          '$_output/$name-${labels[index]}.png',
+        ).writeAsBytes(sceneBytes!.buffer.asUint8List());
         canvas.drawRect(
           Rect.fromLTWH(x, 0, image.width.toDouble(), 30),
           Paint()..color = const Color(0xFF303030),

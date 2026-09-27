@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
@@ -72,12 +73,43 @@ void main() {
       expect(lightHtml, isNot(darkHtml));
     },
   );
+
+  testWidgets(
+    'layout changes reuse the prepared document for the same source',
+    (tester) async {
+      final preparer = _CountingRenderPreparer();
+      final repository = _FixedPreferencesRepository(
+        ForumHtmlReaderPreferences.defaults(),
+      );
+      final theme = ThemeData.light(useMaterial3: true);
+      await tester.pumpWidget(
+        _host(theme: theme, repository: repository, preparer: preparer),
+      );
+      await tester.pumpAndSettle();
+      expect(preparer.callCount, 1);
+      await tester.pumpWidget(
+        _host(
+          theme: theme,
+          repository: repository,
+          preparer: preparer,
+          contentLayout: ForumHtmlContentLayout.compact,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(preparer.callCount, 1);
+      expect(
+        tester.widget<HtmlWidget>(find.byType(HtmlWidget)).rebuildTriggers,
+        contains(ForumHtmlContentLayout.compact),
+      );
+    },
+  );
 }
 
 Widget _host({
   required ThemeData theme,
   required ForumHtmlReaderPreferencesRepository repository,
   required ForumHtmlRenderPreparer preparer,
+  ForumHtmlContentLayout contentLayout = ForumHtmlContentLayout.document,
 }) {
   return ProviderScope(
     overrides: [
@@ -93,6 +125,7 @@ Widget _host({
           html: '<font id="body" color="black">共享正文</font>',
           sourceId: 'shared-content',
           renderPreparer: preparer,
+          contentLayout: contentLayout,
         ),
       ),
     ),

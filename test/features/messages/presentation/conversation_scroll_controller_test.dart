@@ -20,6 +20,7 @@ void main() {
     required int historyCount,
     required double Function(int index) historyHeight,
     int newerCount = 0,
+    double newerHeight = 100,
   }) async {
     await tester.pumpWidget(
       Directionality(
@@ -36,8 +37,10 @@ void main() {
               slivers: [
                 SliverList.builder(
                   itemCount: newerCount,
-                  itemBuilder: (_, index) =>
-                      SizedBox(key: ValueKey('newer-$index'), height: 100),
+                  itemBuilder: (_, index) => SizedBox(
+                    key: ValueKey('newer-$index'),
+                    height: newerHeight,
+                  ),
                 ),
                 SliverList.builder(
                   key: center,
@@ -89,6 +92,74 @@ void main() {
     expect(followingDuringDrag, isFalse);
     expect(tester.takeException(), isNull);
   });
+
+  for (final append in [true, false]) {
+    testWidgets(
+      '${append ? 'appending' : 'resizing'} newer content during a held short drag updates following',
+      (tester) async {
+        await pumpTimeline(
+          tester,
+          height: 400,
+          historyCount: 10,
+          historyHeight: (_) => 80,
+          newerCount: 1,
+        );
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(viewportKey)),
+        );
+        try {
+          await gesture.moveBy(
+            const Offset(0, 40),
+            timeStamp: const Duration(milliseconds: 40),
+          );
+          await tester.pump(const Duration(milliseconds: 40));
+          final heldOffset = controller.offset;
+          final heldDistance = heldOffset - controller.position.minScrollExtent;
+          expect(heldDistance, greaterThan(0));
+          expect(heldDistance, lessThan(80));
+          expect(controller.followingLatest.value, isTrue);
+
+          await pumpTimeline(
+            tester,
+            height: 400,
+            historyCount: 10,
+            historyHeight: (_) => 80,
+            newerCount: append ? 3 : 1,
+            newerHeight: append ? 100 : 300,
+          );
+          expect(controller.offset, closeTo(heldOffset, 0.001));
+          expect(
+            controller.offset - controller.position.minScrollExtent,
+            greaterThan(80),
+          );
+          expect(controller.followingLatest.value, isFalse);
+
+          // A stationary release must not rely on another pixel update to
+          // notice that new content has moved the latest edge away.
+          await gesture.moveBy(
+            Offset.zero,
+            timeStamp: const Duration(milliseconds: 1000),
+          );
+        } finally {
+          await gesture.up(timeStamp: const Duration(milliseconds: 1020));
+        }
+        await tester.pumpAndSettle();
+        expect(controller.followingLatest.value, isFalse);
+        expect(
+          controller.offset - controller.position.minScrollExtent,
+          greaterThan(80),
+        );
+        controller.showLatest();
+        await tester.pumpAndSettle();
+        expect(controller.followingLatest.value, isTrue);
+        expect(
+          controller.offset,
+          closeTo(controller.position.minScrollExtent, 0.001),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('fitting the full conversation restores following as it grows', (
     tester,

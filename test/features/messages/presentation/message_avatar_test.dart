@@ -15,7 +15,6 @@ import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
-import 'package:y300/features/messages/presentation/widgets/message_surface.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
@@ -232,7 +231,15 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(cache.pending, isNotEmpty);
-      expect(find.byType(MessageSurface), findsWidgets);
+      final bubbles = find.byWidgetPredicate(
+        (widget) =>
+            widget is Material &&
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith(
+              'conversation-bubble-',
+            ),
+      );
+      expect(bubbles, findsWidgets);
       for (final avatar in tester.widgetList<MessageAvatar>(
         find.byType(MessageAvatar),
       )) {
@@ -240,10 +247,7 @@ void main() {
         final row = find
             .ancestor(of: avatarFinder, matching: find.byType(Row))
             .first;
-        final bubble = find.descendant(
-          of: row,
-          matching: find.byType(MessageSurface),
-        );
+        final bubble = find.descendant(of: row, matching: bubbles);
         final avatarRect = tester.getRect(avatarFinder);
         final bubbleRect = tester.getRect(bubble);
         expect(avatarRect.size, const Size.square(36));
@@ -251,20 +255,16 @@ void main() {
           avatar.userId == '10'
               ? avatarRect.left - bubbleRect.right
               : bubbleRect.left - avatarRect.right,
-          8,
+          14, // 8px gap plus 6px inside the avatar's 48px touch target.
         );
       }
-      await tester.drag(
-        find.byKey(const Key('private-conversation-list')),
-        const Offset(0, 280),
-      );
-      await tester.pumpAndSettle();
       final list = tester.widget<CustomScrollView>(
         find.byKey(const Key('private-conversation-list')),
       );
+      list.controller!.jumpTo(150);
+      await tester.pumpAndSettle();
       final offset = list.controller!.offset;
-      final cards = find
-          .byType(MessageSurface)
+      final cards = bubbles
           .evaluate()
           .map((element) => element.widget)
           .toList();

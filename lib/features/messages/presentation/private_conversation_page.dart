@@ -6,13 +6,13 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/messages/presentation/conversation_scroll_controller.dart';
 import 'package:y300/features/messages/presentation/message_feed_controller.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
-import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
+import 'package:y300/features/messages/presentation/conversation_message_presentation.dart';
+import 'package:y300/features/messages/presentation/widgets/conversation_message_tile.dart';
+import 'package:y300/features/messages/presentation/widgets/conversation_history_loader.dart';
 import 'package:y300/features/messages/presentation/widgets/conversation_scroll_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/features/messages/presentation/widgets/private_message_editor.dart';
-import 'package:y300/features/messages/presentation/widgets/message_surface.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -49,7 +49,7 @@ class PrivateConversationPage extends ConsumerWidget {
       key: ValueKey((account, target)),
       accountId: account,
       target: target,
-      title: label,
+      title: title,
       onOpenLink: onOpenLink,
     );
   }
@@ -85,7 +85,18 @@ class _ConversationBodyState extends ConsumerState<_ConversationBody> {
       builder: (context, state) => Scaffold(
         backgroundColor: Theme.of(context).y300NativeContent.background,
         appBar: AppBar(
-          title: Text(widget.title),
+          title: Text(
+            resolveConversationTitle(
+                  state.data?.items ?? const [],
+                  widget.target,
+                  widget.title,
+                ) ??
+                (widget.target.kind == ForumConversationKind.group
+                    ? l10n.messageGroup
+                    : l10n.profilePrivateMessage),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             IconButton(
               tooltip: l10n.messageRefresh,
@@ -105,71 +116,83 @@ class _ConversationBodyState extends ConsumerState<_ConversationBody> {
             ),
           ],
         ),
-        body: LayoutBuilder(
-          builder: (context, constraints) => Column(
-            children: [
-              if (state.isBusy && state.data != null)
-                LinearProgressIndicator(
-                  color: Theme.of(context).y300NativeContent.accent,
-                  value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
-                ),
-              if (state.failure != null && state.data != null)
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight * 0.25,
-                  ),
-                  child: SingleChildScrollView(
-                    child: MessageReadStatus(
-                      failure: state.failure,
-                      onRetry: controller.refresh,
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 840),
+            child: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                children: [
+                  if (state.operation == MessageFeedOperation.refresh &&
+                      state.data != null)
+                    LinearProgressIndicator(
+                      color: Theme.of(context).y300NativeContent.accent,
+                      value: MediaQuery.disableAnimationsOf(context)
+                          ? 0.5
+                          : null,
                     ),
-                  ),
-                ),
-              Expanded(
-                child: state.data == null
-                    ? Center(
+                  if (state.failure != null &&
+                      state.failedOperation != MessageFeedOperation.more &&
+                      state.data != null)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: constraints.maxHeight * 0.25,
+                      ),
+                      child: SingleChildScrollView(
                         child: MessageReadStatus(
                           failure: state.failure,
                           onRetry: controller.refresh,
                         ),
-                      )
-                    : _ConversationTimeline(
-                        key: _timeline,
-                        page: state.data!,
-                        accountId: widget.accountId,
-                        target: widget.target,
-                        controller: controller,
-                        imageReferer: imageReferer,
-                        onOpenLink: widget.onOpenLink,
                       ),
-              ),
-              if (state.data != null)
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight * 0.55,
-                  ),
-                  child: PrivateMessageEditor(
-                    key: ValueKey(widget.accountId),
-                    accountId: widget.accountId,
-                    recipient:
-                        widget.target.kind == ForumConversationKind.direct
-                        ? ForumPrivateMessageRecipient.user(widget.target.id)
-                        : ForumPrivateMessageRecipient.group(
-                            conversationId: widget.target.id,
-                            replyMessageId: state.data!.replyMessageId,
+                    ),
+                  Expanded(
+                    child: state.data == null
+                        ? Center(
+                            child: MessageReadStatus(
+                              failure: state.failure,
+                              onRetry: controller.refresh,
+                            ),
+                          )
+                        : _ConversationTimeline(
+                            key: _timeline,
+                            page: state.data!,
+                            accountId: widget.accountId,
+                            target: widget.target,
+                            controller: controller,
+                            imageReferer: imageReferer,
+                            onOpenLink: widget.onOpenLink,
                           ),
-                    enabled:
-                        widget.target.kind == ForumConversationKind.direct ||
-                        state.data!.replyMessageId.isNotEmpty,
-                    onApplied: (_) {
-                      _timeline.currentState?.showLatest();
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(l10n.messageSent)));
-                    },
                   ),
-                ),
-            ],
+                  if (state.data != null)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: constraints.maxHeight * 0.55,
+                      ),
+                      child: PrivateMessageEditor(
+                        key: ValueKey((
+                          'conversation-editor',
+                          widget.accountId,
+                        )),
+                        accountId: widget.accountId,
+                        layout: PrivateMessageEditorLayout.conversation,
+                        recipient:
+                            widget.target.kind == ForumConversationKind.direct
+                            ? ForumPrivateMessageRecipient.user(
+                                widget.target.id,
+                              )
+                            : ForumPrivateMessageRecipient.group(
+                                conversationId: widget.target.id,
+                                replyMessageId: state.data!.replyMessageId,
+                              ),
+                        enabled:
+                            widget.target.kind ==
+                                ForumConversationKind.direct ||
+                            state.data!.replyMessageId.isNotEmpty,
+                        onApplied: (_) => _timeline.currentState?.showLatest(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -243,47 +266,47 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
         ),
       );
     }
+    final presentations = deriveConversationMessagePresentations(items);
     final split = items.indexWhere((item) => item.messageId == _anchor) + 1;
-    final history = items.take(split).toList().reversed.toList();
-    final newer = items.skip(split).toList();
-    Widget bubble(ForumPrivateMessageItem item) => _MessageBubble(
-      key: ValueKey(item.messageId),
-      item: item,
-      accountId: widget.accountId,
-      target: widget.target,
-      imageReferer: widget.imageReferer,
-      onOpenLink: widget.onOpenLink,
-    );
+    final history = presentations.take(split).toList().reversed.toList();
+    final newer = presentations.skip(split).toList();
+    Widget bubble(ConversationMessagePresentation presentation) =>
+        ConversationMessageTile(
+          key: ValueKey(presentation.item.messageId),
+          presentation: presentation,
+          accountId: widget.accountId,
+          target: widget.target,
+          imageReferer: widget.imageReferer,
+          onOpenLink: widget.onOpenLink,
+        );
     // A stable center separates older and newer messages. Both ends may grow
     // without moving the content the user is currently reading, even for HTML
     // rows of different heights. Avoid estimated scroll-offset corrections.
     return Stack(
       children: [
-        ConversationScrollView(
-          key: const Key('private-conversation-list'),
-          controller: _scroll,
-          center: _center,
-          slivers: [
-            SliverList.builder(
-              itemCount: newer.length,
-              itemBuilder: (_, index) => bubble(newer[index]),
-            ),
-            SliverList.builder(
-              key: _center,
-              itemCount: history.length + (widget.controller.hasMore ? 1 : 0),
-              itemBuilder: (context, index) => index < history.length
-                  ? bubble(history[index])
-                  : Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: TextButton(
-                        onPressed: widget.controller.value.isBusy
-                            ? null
-                            : widget.controller.loadMore,
-                        child: Text(AppLocalizations.of(context).messageOlder),
+        ConversationHistoryLoader(
+          controller: widget.controller,
+          child: ConversationScrollView(
+            key: const Key('private-conversation-list'),
+            controller: _scroll,
+            center: _center,
+            slivers: [
+              SliverList.builder(
+                itemCount: newer.length,
+                itemBuilder: (_, index) => bubble(newer[index]),
+              ),
+              SliverList.builder(
+                key: _center,
+                itemCount: history.length + (widget.controller.hasMore ? 1 : 0),
+                itemBuilder: (context, index) => index < history.length
+                    ? bubble(history[index])
+                    : ConversationHistoryEntry(
+                        key: const Key('conversation-history-entry'),
+                        controller: widget.controller,
                       ),
-                    ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
         Positioned.directional(
           textDirection: Directionality.of(context),
@@ -301,111 +324,6 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    super.key,
-    required this.item,
-    required this.accountId,
-    required this.target,
-    required this.imageReferer,
-    required this.onOpenLink,
-  });
-  final ForumPrivateMessageItem item;
-  final String accountId;
-  final ForumConversationTarget target;
-  final String imageReferer;
-  final MessageLinkOpener onOpenLink;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final palette = theme.y300NativeContent;
-    final outgoing = item.fromUserId == accountId;
-    final surface = outgoing
-        ? Color.alphaBlend(palette.accent.withValues(alpha: 0.10), palette.card)
-        : palette.card;
-    final foreground = palette.body;
-    final identity =
-        'private:$accountId:${target.kind.name}:${target.id}:${item.messageId}';
-    return Padding(
-      padding: EdgeInsetsDirectional.fromSTEB(
-        outgoing ? 32 : 12,
-        6,
-        outgoing ? 12 : 32,
-        6,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!outgoing) ...[
-            MessageAvatar(
-              userId: item.fromUserId,
-              imageUrl: item.fromUserAvatarUrl,
-              size: 36,
-            ),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: MessageSurface(
-              color: surface,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (item.fromUserName.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          item.fromUserName,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: palette.author,
-                          ),
-                        ),
-                      ),
-                    ForumHtmlContentView(
-                      html: item.message,
-                      sourceId: identity,
-                      imageCacheOwnerId: identity,
-                      imageReferer: imageReferer,
-                      surfaceColor: surface,
-                      foregroundColor: foreground,
-                      onOpenLink: (url) => onOpenLink(context, url),
-                    ),
-                    if (item.sentAt != null || item.rawDateline.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          messageTimeLabel(
-                            context,
-                            item.sentAt,
-                            item.rawDateline,
-                          ),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: palette.soft,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (outgoing) ...[
-            const SizedBox(width: 8),
-            MessageAvatar(
-              userId: item.fromUserId,
-              imageUrl: item.fromUserAvatarUrl,
-              size: 36,
-            ),
-          ],
-        ],
-      ),
     );
   }
 }

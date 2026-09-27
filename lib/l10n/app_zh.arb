@@ -43,6 +43,20 @@
   "messageRefresh": "刷新消息",
   "messageOlder": "加载更早的消息",
   "messageLatest": "查看最新消息",
+  "messageYesterdayTime": "昨天 {time}",
+  "@messageYesterdayTime": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "messageDetails": "消息详情与复制",
+  "messageTimeUnknown": "发送时间未知",
+  "messageOpenProfile": "查看{name}的资料",
+  "@messageOpenProfile": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
   "messageHistoryChanged": "对话历史发生变化，请刷新后继续查看。",
   "messageGroup": "群组对话",
   "messageLoginRequired": "登录后查看消息和提醒",

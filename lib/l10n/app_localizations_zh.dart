@@ -77,6 +77,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageLatest => '查看最新消息';
 
   @override
+  String messageYesterdayTime(String time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String get messageDetails => '消息详情与复制';
+
+  @override
+  String get messageTimeUnknown => '发送时间未知';
+
+  @override
+  String messageOpenProfile(String name) {
+    return '查看$name的资料';
+  }
+
+  @override
   String get messageHistoryChanged => '对话历史发生变化，请刷新后继续查看。';
 
   @override
@@ -4585,6 +4601,22 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageLatest => '查看最新訊息';
+
+  @override
+  String messageYesterdayTime(String time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String get messageDetails => '訊息詳情與複製';
+
+  @override
+  String get messageTimeUnknown => '傳送時間未知';
+
+  @override
+  String messageOpenProfile(String name) {
+    return '查看$name的資料';
+  }
 
   @override
   String get messageHistoryChanged => '對話歷史發生變化，請重新整理後繼續查看。';

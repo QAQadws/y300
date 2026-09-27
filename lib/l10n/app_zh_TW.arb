@@ -23,6 +23,20 @@
   "messageRefresh": "重新整理訊息",
   "messageOlder": "載入更早的訊息",
   "messageLatest": "查看最新訊息",
+  "messageYesterdayTime": "昨天 {time}",
+  "@messageYesterdayTime": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "messageDetails": "訊息詳情與複製",
+  "messageTimeUnknown": "傳送時間未知",
+  "messageOpenProfile": "查看{name}的資料",
+  "@messageOpenProfile": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
   "messageHistoryChanged": "對話歷史發生變化，請重新整理後繼續查看。",
   "messageGroup": "群組對話",
   "messageLoginRequired": "登入後查看訊息與提醒",

@@ -8,6 +8,8 @@ import 'package:y300/features/messages/presentation/message_feed_providers.dart'
 import 'package:y300/features/messages/presentation/message_command_text.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
+enum PrivateMessageEditorLayout { form, conversation }
+
 /// Ephemeral draft for one route and account. No private text is persisted.
 /// Mount with an account key so a session change also discards the old inputs.
 class PrivateMessageEditor extends ConsumerStatefulWidget {
@@ -17,12 +19,14 @@ class PrivateMessageEditor extends ConsumerStatefulWidget {
     required this.onApplied,
     this.recipient,
     this.enabled = true,
+    this.layout = PrivateMessageEditorLayout.form,
   });
 
   final String accountId;
   final ForumPrivateMessageRecipient? recipient;
   final ValueChanged<ForumPrivateMessageReceipt> onApplied;
   final bool enabled;
+  final PrivateMessageEditorLayout layout;
 
   @override
   ConsumerState<PrivateMessageEditor> createState() =>
@@ -56,6 +60,7 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
+            scrollable: true,
             title: Text(title),
             content: Text(body),
             actions: [
@@ -185,6 +190,34 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
     final error = privateMessageCommandText(l10n, _result);
     final theme = Theme.of(context);
     final palette = theme.y300NativeContent;
+    final conversation =
+        widget.layout == PrivateMessageEditorLayout.conversation;
+    final onSend = _busy || !widget.enabled || _text.text.trim().isEmpty
+        ? null
+        : _send;
+    final errorNotice = error == null
+        ? null
+        : Semantics(
+            liveRegion: true,
+            child: Text(
+              error,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          );
+    final input = TextField(
+      key: const Key('message-input'),
+      controller: _text,
+      style: theme.textTheme.bodyLarge?.copyWith(color: palette.body),
+      readOnly: _busy,
+      minLines: !conversation && widget.recipient == null ? 4 : 1,
+      maxLines: 5,
+      keyboardType: TextInputType.multiline,
+      textCapitalization: TextCapitalization.sentences,
+      decoration: conversation
+          ? InputDecoration(hintText: l10n.messageInput)
+          : InputDecoration(labelText: l10n.messageInput),
+      onChanged: (_) => setState(() {}),
+    );
     return PopScope(
       canPop: _allowPop || !_dirty,
       onPopInvokedWithResult: (didPop, _) {
@@ -194,78 +227,139 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
         color: palette.background,
         child: SafeArea(
           top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (widget.recipient == null) ...[
-                  TextField(
-                    key: const Key('message-recipient'),
-                    controller: _username,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: palette.body,
-                    ),
-                    readOnly: _busy,
-                    autocorrect: false,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: l10n.messageRecipient,
-                      hintText: l10n.messageRecipientHint,
-                      errorText: _invalidRecipient
-                          ? l10n.messageRecipientInvalid
-                          : null,
-                      errorMaxLines: 3,
-                    ),
-                    onChanged: (_) => setState(() => _invalidRecipient = false),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        error,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+          child: conversation
+              ? _ConversationInputBar(
+                  input: input,
+                  error: errorNotice,
+                  busy: _busy,
+                  onSend: onSend,
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (widget.recipient == null) ...[
+                        TextField(
+                          key: const Key('message-recipient'),
+                          controller: _username,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: palette.body,
+                          ),
+                          readOnly: _busy,
+                          autocorrect: false,
+                          textInputAction: TextInputAction.next,
+                          decoration: InputDecoration(
+                            labelText: l10n.messageRecipient,
+                            hintText: l10n.messageRecipientHint,
+                            errorText: _invalidRecipient
+                                ? l10n.messageRecipientInvalid
+                                : null,
+                            errorMaxLines: 3,
+                          ),
+                          onChanged: (_) =>
+                              setState(() => _invalidRecipient = false),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (errorNotice != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: errorNotice,
+                        ),
+                      input,
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: FilledButton.icon(
+                          key: const Key('message-send'),
+                          onPressed: onSend,
+                          icon: const Icon(Icons.send_outlined, size: 18),
+                          label: Text(
+                            _busy ? l10n.messageSending : l10n.messageSend,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                TextField(
-                  key: const Key('message-input'),
-                  controller: _text,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: palette.body,
-                  ),
-                  readOnly: _busy,
-                  minLines: widget.recipient == null ? 4 : 1,
-                  maxLines: 5,
-                  keyboardType: TextInputType.multiline,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(labelText: l10n.messageInput),
-                  onChanged: (_) => setState(() {}),
                 ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: FilledButton.icon(
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationInputBar extends StatelessWidget {
+  const _ConversationInputBar({
+    required this.input,
+    required this.error,
+    required this.busy,
+    required this.onSend,
+  });
+
+  final Widget input;
+  final Widget? error;
+  final bool busy;
+  final VoidCallback? onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final palette = Theme.of(context).y300NativeContent;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (error != null)
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: error,
+              ),
+            ),
+          // Bound the editable viewport instead of scrolling the send action
+          // away when the keyboard, text scale, or error reduces available room.
+          Flexible(
+            flex: 3,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: input),
+                const SizedBox(width: 8),
+                SizedBox.square(
+                  dimension: 48,
+                  child: IconButton.filled(
                     key: const Key('message-send'),
-                    onPressed:
-                        _busy || !widget.enabled || _text.text.trim().isEmpty
-                        ? null
-                        : _send,
-                    icon: const Icon(Icons.send_outlined, size: 18),
-                    label: Text(_busy ? l10n.messageSending : l10n.messageSend),
+                    tooltip: busy ? l10n.messageSending : l10n.messageSend,
+                    onPressed: onSend,
+                    // Plain icon-button colors are not paired with a filled
+                    // surface. Use the theme's contrasting accent foreground.
+                    style: IconButton.styleFrom(
+                      backgroundColor: palette.accent,
+                      foregroundColor: palette.onAccent,
+                      disabledBackgroundColor: busy
+                          ? palette.accent
+                          : palette.stateLayer,
+                      disabledForegroundColor: palette.disabled,
+                    ),
+                    icon: busy
+                        ? SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: palette.onAccent,
+                            ),
+                          )
+                        : const Icon(Icons.send_outlined, size: 20),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
@@ -13,6 +14,7 @@ class ForumHtmlStylePolicy {
     this.preferences, {
     required this.theme,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
+    this.contentLayout = ForumHtmlContentLayout.document,
     CssInlineStyleDeclarationCodec inlineStyleDeclarationCodec =
         const CssInlineStyleDeclarationCodec(),
   }) : _inlineStyleDeclarationCodec = inlineStyleDeclarationCodec;
@@ -20,6 +22,7 @@ class ForumHtmlStylePolicy {
   final ForumHtmlReaderPreferences preferences;
   final ForumHtmlThemeContext theme;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
+  final ForumHtmlContentLayout contentLayout;
   final CssInlineStyleDeclarationCodec _inlineStyleDeclarationCodec;
 
   TextStyle baseTextStyle(BuildContext context) {
@@ -33,6 +36,22 @@ class ForumHtmlStylePolicy {
   }
 
   StylesMap? customStylesFor(html_dom.Element element) {
+    final styles = _elementStyles(element);
+    if (contentLayout != ForumHtmlContentLayout.compact ||
+        isForumCollapseElement(element) ||
+        isForumCollapseGatherElement(element)) {
+      return styles;
+    }
+    final tag = element.localName?.toLowerCase();
+    if (tag == 'p' || tag == 'div' || tag == 'blockquote') {
+      // The HTML renderer otherwise gives every block an implicit 100% width.
+      // `auto` preserves block flow while allowing bounded, natural sizing.
+      return {...?styles, 'width': 'auto'};
+    }
+    return styles;
+  }
+
+  StylesMap? _elementStyles(html_dom.Element element) {
     if (isForumCollapseElement(element) ||
         isForumCollapseGatherElement(element)) {
       return {'display': 'none'};
@@ -44,7 +63,7 @@ class ForumHtmlStylePolicy {
         'border-left': '3px solid ${_toCssHex(theme.link)}',
         'border-radius': '6px',
         'padding': '8px 10px',
-        'margin': '0 0 ${preferences.typography.paragraphSpacing}px',
+        'margin': _paragraphMargin(element),
       };
     }
     if (_isQuoteBodyInsideSurface(element)) {
@@ -63,7 +82,7 @@ class ForumHtmlStylePolicy {
       return {
         'border-collapse': 'collapse',
         'border-spacing': '0',
-        'margin': '0 0 ${preferences.typography.paragraphSpacing}px',
+        'margin': _paragraphMargin(element),
         'max-width': '100%',
       };
     }
@@ -81,9 +100,39 @@ class ForumHtmlStylePolicy {
       return {'display': 'block'};
     }
     if (_isParagraphLike(element)) {
-      return {'margin': '0 0 ${preferences.typography.paragraphSpacing}px'};
+      return {'margin': _paragraphMargin(element)};
     }
     return null;
+  }
+
+  String _paragraphMargin(html_dom.Element element) {
+    final trimEnd =
+        contentLayout == ForumHtmlContentLayout.compact &&
+        _isAtContentEnd(element);
+    final spacing = trimEnd ? 0.0 : preferences.typography.paragraphSpacing;
+    if (contentLayout == ForumHtmlContentLayout.compact) {
+      // fwfh 0.17.2 supports one, two and four values, but skips three-value
+      // margin shorthand. Spell out all sides to retain interior paragraph gaps.
+      return '0 0 ${spacing}px 0';
+    }
+    return '0 0 ${spacing}px';
+  }
+
+  bool _isAtContentEnd(html_dom.Element element) {
+    // Follow nested wrappers to the fragment edge. Interior paragraph gaps and
+    // explicit author margins still use the renderer's normal CSS cascade.
+    html_dom.Node node = element;
+    while (node.parentNode != null) {
+      for (final sibling in node.parentNode!.nodes.reversed) {
+        if (identical(sibling, node)) break;
+        if (sibling is html_dom.Element ||
+            sibling is html_dom.Text && sibling.data.trim().isNotEmpty) {
+          return false;
+        }
+      }
+      node = node.parentNode!;
+    }
+    return true;
   }
 
   bool isDiscuzEditStatusElement(html_dom.Element element) {

@@ -38,18 +38,36 @@ void main() {
     ForumPrivateMessageRecipient? recipient =
         const ForumPrivateMessageRecipient.user('20'),
     bool pushed = false,
+    PrivateMessageEditorLayout layout = PrivateMessageEditorLayout.form,
+    double textScale = 1,
   }) async {
     final editor = Consumer(
       builder: (context, ref, _) {
         final account = ref.watch(messageAccountIdProvider)!;
+        final input = PrivateMessageEditor(
+          key: ValueKey(account),
+          accountId: account,
+          recipient: recipient,
+          layout: layout,
+          onApplied: receipts.add,
+        );
         return Scaffold(
           appBar: AppBar(),
-          body: PrivateMessageEditor(
-            key: ValueKey(account),
-            accountId: account,
-            recipient: recipient,
-            onApplied: receipts.add,
-          ),
+          body: layout == PrivateMessageEditorLayout.conversation
+              ? LayoutBuilder(
+                  builder: (_, constraints) => Column(
+                    children: [
+                      const Expanded(child: SizedBox.shrink()),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: constraints.maxHeight * 0.55,
+                        ),
+                        child: input,
+                      ),
+                    ],
+                  ),
+                )
+              : input,
         );
       },
     );
@@ -57,6 +75,12 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: LocalizedTestApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
           home: pushed
               ? Builder(
                   builder: (context) => Scaffold(
@@ -85,6 +109,119 @@ void main() {
     await tester.tap(find.byKey(const Key('message-send')));
     await tester.pump();
   }
+
+  testWidgets('default layout retains the separate recipient form', (
+    tester,
+  ) async {
+    await pumpEditor(tester, recipient: null);
+    final input = tester.widget<TextField>(
+      find.byKey(const Key('message-input')),
+    );
+    expect(input.minLines, 4);
+    expect(input.decoration!.labelText, l10n(tester).messageInput);
+    expect(find.byKey(const Key('message-recipient')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('message-send'))).dy,
+      greaterThan(
+        tester.getBottomLeft(find.byKey(const Key('message-input'))).dy,
+      ),
+    );
+  });
+
+  testWidgets('conversation keeps input and its busy send action on one row', (
+    tester,
+  ) async {
+    await pumpEditor(tester, layout: PrivateMessageEditorLayout.conversation);
+    final inputFinder = find.byKey(const Key('message-input'));
+    final sendFinder = find.byKey(const Key('message-send'));
+    final input = tester.widget<TextField>(inputFinder);
+    expect(input.minLines, 1);
+    expect(input.maxLines, 5);
+    expect(input.decoration!.labelText, isNull);
+    expect(input.decoration!.hintText, l10n(tester).messageInput);
+    expect(tester.widget<IconButton>(sendFinder).onPressed, isNull);
+    expect(find.byKey(const Key('message-recipient')), findsNothing);
+    await tester.enterText(inputFinder, 'first line\nsecond line');
+    await tester.pumpAndSettle();
+    final sendRect = tester.getRect(sendFinder);
+    final inputRect = tester.getRect(inputFinder);
+    expect(sendRect.size, const Size.square(48));
+    expect(sendRect.left, greaterThan(inputRect.right));
+    expect(sendRect.bottom, closeTo(inputRect.bottom, 0.1));
+
+    await tester.tap(sendFinder);
+    await tester.pump();
+    expect(tester.widget<TextField>(inputFinder).readOnly, isTrue);
+    expect(tester.widget<IconButton>(sendFinder).onPressed, isNull);
+    expect(tester.getRect(sendFinder), sendRect);
+    expect(find.byTooltip(l10n(tester).messageSending), findsOneWidget);
+    expect(
+      find.descendant(
+        of: sendFinder,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(sendFinder);
+    expect(repository.sends, hasLength(1));
+    expect(input.controller!.text, 'first line\nsecond line');
+    repository.sends.single.succeed();
+    await tester.pumpAndSettle();
+    expect(input.controller!.text, isEmpty);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byTooltip(l10n(tester).messageSend), findsOneWidget);
+    expect(events, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'conversation keeps send reachable with keyboard, long input, large text, and errors',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await pumpEditor(
+        tester,
+        layout: PrivateMessageEditorLayout.conversation,
+        textScale: 1.8,
+      );
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      addTearDown(tester.view.resetViewInsets);
+      final inputFinder = find.byKey(const Key('message-input'));
+      final sendFinder = find.byKey(const Key('message-send'));
+      const draft = 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight';
+      await tester.enterText(inputFinder, draft);
+      await tester.pumpAndSettle();
+      final inputScroll = tester.state<ScrollableState>(
+        find.descendant(of: inputFinder, matching: find.byType(Scrollable)),
+      );
+      expect(inputScroll.position.maxScrollExtent, greaterThan(0));
+      expect(sendFinder.hitTestable(), findsOneWidget);
+      expect(tester.getSize(sendFinder), const Size.square(48));
+      expect(
+        tester.getBottomLeft(sendFinder).dy,
+        closeTo(tester.getBottomLeft(inputFinder).dy, 0.1),
+      );
+      await tester.tap(sendFinder);
+      await tester.pump();
+      repository.sends.single.result.completeError(StateError('SECRET'));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n(tester).messageUnknownOutcome), findsOneWidget);
+      expect(find.textContaining('SECRET'), findsNothing);
+      expect(sendFinder.hitTestable(), findsOneWidget);
+      expect(tester.getSize(sendFinder), const Size.square(48));
+      expect(tester.widget<TextField>(inputFinder).controller!.text, draft);
+      await tester.tap(sendFinder);
+      await tester.pumpAndSettle();
+      expect(find.text(l10n(tester).messageSendAgain), findsOneWidget);
+      await tester.tap(find.text(l10n(tester).commonCancel));
+      await tester.pumpAndSettle();
+      expect(repository.sends, hasLength(1));
+      expect(events, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'one explicit send preserves source text and clears only after proof',

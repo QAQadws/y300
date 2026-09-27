@@ -229,6 +229,30 @@ abstract class AppLocalizations {
   /// **'查看最新消息'**
   String get messageLatest;
 
+  /// No description provided for @messageYesterdayTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天 {time}'**
+  String messageYesterdayTime(String time);
+
+  /// No description provided for @messageDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息详情与复制'**
+  String get messageDetails;
+
+  /// No description provided for @messageTimeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送时间未知'**
+  String get messageTimeUnknown;
+
+  /// No description provided for @messageOpenProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看{name}的资料'**
+  String messageOpenProfile(String name);
+
   /// No description provided for @messageHistoryChanged.
   ///
   /// In zh, this message translates to:

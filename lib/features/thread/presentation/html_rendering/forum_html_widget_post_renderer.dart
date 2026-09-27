@@ -10,6 +10,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -45,6 +46,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
+    this.contentLayout = ForumHtmlContentLayout.document,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -81,6 +83,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
+  final ForumHtmlContentLayout contentLayout;
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +93,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       resolvedPreferences,
       theme: theme,
       blockSpacingMode: blockSpacingMode,
+      contentLayout: contentLayout,
     );
     final document =
         preparedDocument ??
@@ -131,6 +135,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       factoryBuilder: _cachedImageFactoryBuilder(),
       enableCaching: enableCaching,
       renderMode: renderMode,
+      rebuildTriggers: [contentLayout],
       textStyle: stylePolicy.baseTextStyle(context),
       onTapUrl: callbacks.onTapUrl == null
           ? null
@@ -230,6 +235,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imagePrecacheService: imagePrecacheService,
           contentImageKind: contentImageKind,
           blockSpacingMode: blockSpacingMode,
+          contentLayout: contentLayout,
           preparedDocument: document.copyWith(preparedHtml: html),
         );
       },

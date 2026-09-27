@@ -24,6 +24,7 @@ class ConversationScrollController extends ScrollController {
         }
       }
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   @override
@@ -60,7 +61,7 @@ class _ConversationScrollPosition extends ScrollPositionWithSingleContext {
 
   final bool Function() followsLatest;
   final ValueChanged<bool> onFollowingChanged;
-  bool _fitCheckScheduled = false;
+  bool _followingCheckScheduled = false;
   bool _disposed = false;
 
   @override
@@ -98,15 +99,18 @@ class _ConversationScrollPosition extends ScrollPositionWithSingleContext {
   @override
   void applyNewDimensions() {
     super.applyNewDimensions();
-    if (followsLatest() || _fitCheckScheduled) return;
-    _fitCheckScheduled = true;
+    if (_followingCheckScheduled) return;
+    _followingCheckScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fitCheckScheduled = false;
+      _followingCheckScheduled = false;
       if (_disposed) return;
       // Read the final dimensions after the adaptive viewport has settled.
-      // Layout corrections do not emit didUpdateScrollPositionBy.
+      // Appending or resizing newer content during a held drag can move the
+      // latest edge without emitting didUpdateScrollPositionBy.
       if (maxScrollExtent - minScrollExtent <= 0.01) {
         onFollowingChanged(true);
+      } else if (pixels - minScrollExtent > 80) {
+        onFollowingChanged(false);
       }
     });
   }
