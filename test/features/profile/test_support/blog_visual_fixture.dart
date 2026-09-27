@@ -12,6 +12,9 @@ final class BlogVisualDirectory implements UserBlogDirectoryRepository {
   bool empty = false;
   Completer<void>? gate;
   DataReadFailureKind? failure;
+  List<UserBlogCategory> categories = const [
+    UserBlogCategory(id: '3', name: '日常与阅读'),
+  ];
 
   @override
   final capabilities = UserBlogDirectorySourceCapabilities(
@@ -39,7 +42,7 @@ final class BlogVisualDirectory implements UserBlogDirectoryRepository {
       data: UserBlogDirectoryData(
         scope: query.scope,
         order: query.order,
-        categories: const [UserBlogCategory(id: '3', name: '日常与阅读')],
+        categories: categories,
         items: empty
             ? const []
             : [

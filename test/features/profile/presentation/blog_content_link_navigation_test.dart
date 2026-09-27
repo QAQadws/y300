@@ -73,6 +73,95 @@ void main() {
     );
   }
 
+  for (final textScale in [1.0, 2.0]) {
+    testWidgets(
+      'author categories scroll at 300dp and ${textScale}x without losing the owner',
+      (tester) async {
+        tester.view.physicalSize = const Size(300, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final host = _Host();
+        const query = UserBlogDirectoryQuery.self(
+          ownerUserId: '202',
+          personalCategoryId: '8',
+          page: 3,
+        );
+        host.details.categoryLinks = const [
+          UserBlogCategoryLink(name: '其他', query: query),
+        ];
+        host.directory.categories = const [
+          UserBlogCategory(id: '1', name: '正能量'),
+          UserBlogCategory(id: '2', name: '倒黑泥'),
+          UserBlogCategory(id: '3', name: '日常生活'),
+          UserBlogCategory(id: '4', name: '阅读笔记'),
+          UserBlogCategory(id: '5', name: '从电影和书籍里得到的零碎灵感'),
+          UserBlogCategory(id: '6', name: '绘画练习'),
+          UserBlogCategory(id: '7', name: '游戏记录'),
+          UserBlogCategory(id: '8', name: '其他'),
+        ];
+        await host.pump(
+          tester,
+          const ProfileBlogDetailPage(ownerUserId: '202', blogId: '12'),
+          textScale: textScale,
+        );
+        await tester.tap(find.byKey(const ValueKey(query)));
+        await tester.pumpAndSettle();
+
+        expect(host.directory.queries.single, query);
+        final tabs = find.byKey(const Key('profile-blog-category-tabs'));
+        final last = find.byKey(const Key('profile-blog-category-8'));
+        final viewport = tester.getRect(tabs);
+        expect(tester.getRect(last).left, greaterThanOrEqualTo(viewport.left));
+        expect(tester.getRect(last).right, lessThanOrEqualTo(viewport.right));
+        expect(last.hitTestable(), findsOneWidget);
+        final scrolling = find.descendant(
+          of: tabs,
+          matching: find.byType(Scrollable),
+        );
+        final position = tester.state<ScrollableState>(scrolling).position;
+        expect(position.axis, Axis.horizontal);
+        final initialOffset = position.pixels;
+        expect(initialOffset, greaterThan(0));
+        await tester.drag(tabs, const Offset(160, 0));
+        await tester.pumpAndSettle();
+        expect(position.pixels, lessThan(initialOffset));
+
+        final other = find.byKey(const Key('profile-blog-category-3'));
+        await tester.scrollUntilVisible(other, -180, scrollable: scrolling);
+        await tester.pumpAndSettle();
+        final manualOffset = position.pixels;
+        expect(manualOffset, lessThan(initialOffset));
+        await tester
+            .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+            .onRefresh();
+        await tester.pumpAndSettle();
+        expect(position.pixels, closeTo(manualOffset, 1));
+        await tester.tap(other);
+        await tester.pumpAndSettle();
+        expect(
+          host.directory.queries.last,
+          const UserBlogDirectoryQuery.self(
+            ownerUserId: '202',
+            personalCategoryId: '3',
+          ),
+        );
+        expect(tester.getRect(other).left, greaterThanOrEqualTo(viewport.left));
+        expect(tester.getRect(other).right, lessThanOrEqualTo(viewport.right));
+
+        final all = find.byKey(const Key('profile-blog-category-all'));
+        await tester.scrollUntilVisible(all, -180, scrollable: scrolling);
+        await tester.pumpAndSettle();
+        await tester.tap(all);
+        await tester.pumpAndSettle();
+        expect(
+          host.directory.queries.last,
+          const UserBlogDirectoryQuery.self(ownerUserId: '202'),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('long category names wrap on narrow screens with large text', (
     tester,
   ) async {
@@ -593,12 +682,22 @@ class _Host {
     WidgetTester tester,
     Widget home, {
     bool settle = true,
+    double textScale = 1,
   }) async {
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: LocalizedTestApp(navigatorKey: navigator, home: home),
+        child: LocalizedTestApp(
+          navigatorKey: navigator,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+          home: home,
+        ),
       ),
     );
     if (settle) {

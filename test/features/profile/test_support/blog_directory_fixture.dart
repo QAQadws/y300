@@ -3,6 +3,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 /// Empty, immediate lists for navigation tests, without images or network.
 final class BlogDirectoryFixture implements UserBlogDirectoryRepository {
   final queries = <UserBlogDirectoryQuery>[];
+  List<UserBlogCategory> categories = const [];
 
   @override
   final capabilities = UserBlogDirectorySourceCapabilities(
@@ -26,6 +27,7 @@ final class BlogDirectoryFixture implements UserBlogDirectoryRepository {
       data: UserBlogDirectoryData(
         scope: query.scope,
         order: query.order,
+        categories: categories,
         items: const [],
         pagination: UserBlogPagination(currentPage: query.page),
       ),

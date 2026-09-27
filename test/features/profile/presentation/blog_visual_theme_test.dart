@@ -169,6 +169,38 @@ void main() {
           expect(tester.widget<TextField>(subject).decoration!.border, isNull);
           await _save(tester, '$name-editor');
           expect(tester.takeException(), isNull);
+
+          host.directory.categories = const [
+            UserBlogCategory(id: '1', name: '正能量'),
+            UserBlogCategory(id: '2', name: '倒黑泥'),
+            UserBlogCategory(id: '3', name: '日常与阅读'),
+            UserBlogCategory(id: '4', name: '旅行见闻'),
+            UserBlogCategory(id: '5', name: '从电影和书籍里得到的零碎灵感'),
+            UserBlogCategory(id: '6', name: '绘画练习'),
+            UserBlogCategory(id: '7', name: '游戏记录'),
+            UserBlogCategory(id: '8', name: '其他'),
+          ];
+          await host.pump(
+            tester,
+            const ProfileBlogPage(
+              initialScope: UserBlogFeedScope.self,
+              ownerUserId: '101',
+              initialPersonalCategoryId: '1',
+            ),
+          );
+          final categoryTabs = find.byKey(
+            const Key('profile-blog-category-tabs'),
+          );
+          expect(categoryTabs, findsOneWidget);
+          expect(
+            find.byKey(const Key('profile-blog-category-1')).hitTestable(),
+            findsOneWidget,
+          );
+          await _save(tester, '$name-categories');
+          await tester.drag(categoryTabs, const Offset(-180, 0));
+          await tester.pumpAndSettle();
+          await _save(tester, '$name-categories-scrolled');
+          expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());
         });
       }

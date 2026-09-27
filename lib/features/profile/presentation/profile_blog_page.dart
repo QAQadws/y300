@@ -7,6 +7,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
+import 'package:y300/features/profile/presentation/blog/blog_text_tabs.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_routes.dart';
@@ -132,7 +133,6 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
             if (state.query.scope == UserBlogFeedScope.public)
               _OrderTabs(
                 activeOrder: state.query.order ?? UserBlogOrder.latest,
-                palette: palette,
                 onSelect: controller.selectOrder,
               ),
             if (state.categories.isNotEmpty)
@@ -577,33 +577,24 @@ class _CategoryFilter extends ConsumerWidget {
       ),
     );
     final selected = query.categoryId ?? query.personalCategoryId;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(
-                AppLocalizations.of(context).profileBlogAllCategories,
-              ),
-              selected: selected == null,
-              onSelected: (_) => onSelect(null),
+    return BlogTextTabs<String?>(
+      key: const Key('profile-blog-category-tabs'),
+      selectedValue: selected == '0' ? null : selected,
+      onSelected: onSelect,
+      tabs: [
+        BlogTextTab(
+          key: const Key('profile-blog-category-all'),
+          value: null,
+          label: AppLocalizations.of(context).profileBlogAllCategories,
+        ),
+        for (final category in categories)
+          if (category.id != '0')
+            BlogTextTab(
+              key: Key('profile-blog-category-${category.id}'),
+              value: category.id,
+              label: display.text(category.name),
             ),
-          ),
-          for (final category in categories)
-            if (category.id != '0')
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text(display.text(category.name)),
-                  selected: selected == category.id,
-                  onSelected: (_) => onSelect(category.id),
-                ),
-              ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -645,104 +636,27 @@ class _ViewTabs extends StatelessWidget {
 }
 
 class _OrderTabs extends StatelessWidget {
-  const _OrderTabs({
-    required this.activeOrder,
-    required this.palette,
-    required this.onSelect,
-  });
+  const _OrderTabs({required this.activeOrder, required this.onSelect});
 
   final UserBlogOrder activeOrder;
-  final Y300NativeContentColors palette;
   final ValueChanged<UserBlogOrder> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: const Key('profile-blog-order-tabs'),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      color: palette.background,
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final order in UserBlogOrder.values) ...[
-              if (order != UserBlogOrder.values.first)
-                SizedBox(
-                  width: 1,
-                  height: 14,
-                  child: ColoredBox(
-                    color: palette.muted.withValues(alpha: 0.3),
-                  ),
-                ),
-              _OrderTabButton(
-                order: order,
-                selected: activeOrder == order,
-                palette: palette,
-                onTap: () => onSelect(order),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OrderTabButton extends StatelessWidget {
-  const _OrderTabButton({
-    required this.order,
-    required this.selected,
-    required this.palette,
-    required this.onTap,
-  });
-
-  final UserBlogOrder order;
-  final bool selected;
-  final Y300NativeContentColors palette;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final description = ProfileTextResolver.blogOrder(l10n, order);
-    return Semantics(
-      selected: selected,
-      button: true,
-      inMutuallyExclusiveGroup: true,
-      child: Tooltip(
-        message: description,
-        excludeFromSemantics: true,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
+    return BlogTextTabs<UserBlogOrder>(
+      key: const Key('profile-blog-order-tabs'),
+      selectedValue: activeOrder,
+      onSelected: onSelect,
+      tabs: [
+        for (final order in UserBlogOrder.values)
+          BlogTextTab(
             key: Key('profile-blog-order-${order.name}'),
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 64, minHeight: 48),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Center(
-                  widthFactor: 1,
-                  heightFactor: 1,
-                  child: Text(
-                    ProfileTextResolver.blogOrderShort(l10n, order),
-                    semanticsLabel: description,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: selected ? palette.accent : palette.muted,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            value: order,
+            label: ProfileTextResolver.blogOrderShort(l10n, order),
+            description: ProfileTextResolver.blogOrder(l10n, order),
           ),
-        ),
-      ),
+      ],
     );
   }
 }
