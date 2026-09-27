@@ -19,6 +19,7 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/my_message_center_page.dart';
+import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
@@ -33,6 +34,85 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  testWidgets(
+    'WebView profile action opens native once and returns to the web host',
+    (tester) async {
+      final repository = _FakeProfileRepository(data: _myProfile);
+      final store = YamiboSessionStore()..saveExtracted(_sessionFor('654321'));
+      await _pumpMyProfile(
+        tester,
+        repository: repository,
+        store: store,
+        home: Scaffold(
+          key: const Key('profile-web-host'),
+          appBar: AppBar(
+            actions: [
+              MyProfileWebViewAction(
+                currentUri: Uri.parse(
+                  'https://bbs.yamibo.com/home.php?mod=space&uid=654321&do=profile&mobile=2',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      final button = find.byKey(
+        const Key('forum-webview-native-profile-button'),
+      );
+      final l10n = AppLocalizations.of(tester.element(button));
+      expect(tester.widget<IconButton>(button).tooltip, l10n.profileOpenNative);
+      expect(repository.queries, isEmpty);
+      final open = tester.widget<IconButton>(button).onPressed!;
+      open();
+      open();
+      await tester.pumpAndSettle();
+      expect(find.byType(MyProfilePage), findsOneWidget);
+      expect(repository.queries, hasLength(1));
+      expect(repository.queries.single.userId, '654321');
+      expect(repository.queries.single.view, ForumUserProfileView.self);
+
+      Navigator.of(tester.element(find.byType(MyProfilePage))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('profile-web-host')), findsOneWidget);
+      expect(tester.widget<IconButton>(button).onPressed, isNotNull);
+      store.clear();
+      await tester.pumpAndSettle();
+      expect(button, findsNothing);
+      open();
+      await tester.pumpAndSettle();
+      expect(find.byType(MyProfilePage), findsNothing);
+      expect(repository.queries, hasLength(1));
+    },
+  );
+
+  for (final uri in [
+    'https://bbs.yamibo.com/home.php?mod=space&uid=777777&do=profile',
+    'https://example.test/home.php?mod=space&uid=654321&do=profile',
+    'https://bbs.yamibo.com/member.php?mod=logging&action=login',
+    'https://bbs.yamibo.com/home.php?mod=space&uid=654321&uid=777777&do=profile',
+    'about:blank',
+  ]) {
+    testWidgets('native self-profile action stays hidden for $uri', (
+      tester,
+    ) async {
+      final repository = _FakeProfileRepository(data: _myProfile);
+      await _pumpMyProfile(
+        tester,
+        repository: repository,
+        home: Scaffold(
+          appBar: AppBar(
+            actions: [MyProfileWebViewAction(currentUri: Uri.parse(uri))],
+          ),
+        ),
+      );
+      expect(
+        find.byKey(const Key('forum-webview-native-profile-button')),
+        findsNothing,
+      );
+      expect(repository.queries, isEmpty);
+    });
+  }
 
   testWidgets('UserProfilePage renders source-neutral profile data', (
     tester,
@@ -798,6 +878,7 @@ Future<void> _pumpMyProfile(
   required ForumUserProfileRepository repository,
   YamiboSessionStore? store,
   ForumWebViewRouteFactory? routeFactory,
+  Widget? home,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -809,7 +890,7 @@ Future<void> _pumpMyProfile(
           forumWebViewRouteFactoryProvider.overrideWithValue(routeFactory),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       ],
-      child: const LocalizedTestApp(home: MyProfilePage()),
+      child: LocalizedTestApp(home: home ?? const MyProfilePage()),
     ),
   );
   await tester.pumpAndSettle();

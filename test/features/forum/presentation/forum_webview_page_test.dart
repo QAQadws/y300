@@ -31,6 +31,7 @@ import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
@@ -56,6 +57,46 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  for (final purpose in [
+    ForumWebViewHostPurpose.browse,
+    ForumWebViewHostPurpose.selfProfile,
+  ]) {
+    testWidgets('profile WebView AppBar opts into native action with $purpose', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            verifiedProfileOwnerProvider.overrideWithValue((
+              uid: '654321',
+              revision: 0,
+            )),
+            forumWebViewInitialUriProvider.overrideWithValue(
+              Uri.parse(
+                'https://bbs.yamibo.com/home.php?mod=space&uid=654321&do=profile&mobile=2',
+              ),
+            ),
+            forumWebViewHostPurposeProvider.overrideWithValue(purpose),
+          ],
+          child: _buildTestApp(driver: driver),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(
+            const Key('forum-webview-native-profile-button'),
+          ),
+        ),
+        purpose == ForumWebViewHostPurpose.selfProfile
+            ? findsOneWidget
+            : findsNothing,
+      );
+    });
+  }
 
   testWidgets('standalone forum home has a working route back button', (
     tester,

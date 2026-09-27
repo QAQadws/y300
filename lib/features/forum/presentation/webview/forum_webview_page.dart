@@ -39,6 +39,7 @@ import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
+import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -618,6 +619,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             ),
       title: Text(title),
       actions: [
+        if (hostPurpose == ForumWebViewHostPurpose.selfProfile)
+          MyProfileWebViewAction(currentUri: state.currentUri),
         if (hostPurpose == ForumWebViewHostPurpose.postEditFallback)
           IconButton(
             key: const Key('forum-webview-post-edit-native-button'),

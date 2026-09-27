@@ -3492,6 +3492,12 @@ abstract class AppLocalizations {
   /// **'我的资料'**
   String get moreMyProfile;
 
+  /// No description provided for @profileOpenNative.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原生资料页'**
+  String get profileOpenNative;
+
   /// No description provided for @moreMyProfileSignedOutSubtitle.
   ///
   /// In zh, this message translates to:
@@ -7647,7 +7653,7 @@ abstract class AppLocalizations {
   /// No description provided for @dailyAutoSignInToggle.
   ///
   /// In zh, this message translates to:
-  /// **'每天自动签到'**
+  /// **'自动签到'**
   String get dailyAutoSignInToggle;
 
   /// No description provided for @dailyAutoSignInDescription.

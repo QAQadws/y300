@@ -2154,6 +2154,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreMyProfile => '我的资料';
 
   @override
+  String get profileOpenNative => '打开原生资料页';
+
+  @override
   String get moreMyProfileSignedOutSubtitle => '登录后查看个人资料、消息提醒';
 
   @override
@@ -4677,7 +4680,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '上次请求可能已经生效，即使当前页面仍显示未签到。继续将重新读取页面并发送一次新的签到请求。';
 
   @override
-  String get dailyAutoSignInToggle => '每天自动签到';
+  String get dailyAutoSignInToggle => '自动签到';
 
   @override
   String get dailyAutoSignInDescription =>
@@ -6850,6 +6853,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreMyProfile => '我的資料';
+
+  @override
+  String get profileOpenNative => '開啟原生資料頁';
 
   @override
   String get moreMyProfileSignedOutSubtitle => '登入後查看個人資料、訊息提醒';
@@ -9376,7 +9382,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。';
 
   @override
-  String get dailyAutoSignInToggle => '每天自動簽到';
+  String get dailyAutoSignInToggle => '自動簽到';
 
   @override
   String get dailyAutoSignInDescription =>

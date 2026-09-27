@@ -18,6 +18,7 @@ import 'package:y300/features/profile/data/daily_sign_in_storage.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
+import 'package:y300/features/profile/presentation/daily_auto_sign_in_toggle.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_page.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -41,6 +42,7 @@ void main() {
     );
 
     expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byKey(const Key('daily-auto-sign-in-toggle')), findsNothing);
     expect(find.text(_l10n(tester).dailySignInSigned), findsOneWidget);
     expect(
       tester.getSize(find.byType(DailySignInSheet)).height,
@@ -58,42 +60,43 @@ void main() {
     expect(command.requests, isEmpty);
   });
 
-  testWidgets('300dp sign-in sheet scrolls with large text and submits once', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(300, 600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final command = _SignCommand((_, _) async => _unknown);
-    await _pump(
-      tester,
-      repository: _SignRepository(
-        (query, _) async =>
-            _success(query.userId, ForumDailySignInStatus.unsigned),
-      ),
-      command: command,
-      textScaler: const TextScaler.linear(2),
-      asSheet: true,
-    );
+  testWidgets(
+    'short 300dp sign-in sheet scrolls with large text and submits once',
+    (tester) async {
+      tester.view.physicalSize = const Size(300, 360);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final command = _SignCommand((_, _) async => _unknown);
+      await _pump(
+        tester,
+        repository: _SignRepository(
+          (query, _) async =>
+              _success(query.userId, ForumDailySignInStatus.unsigned),
+        ),
+        command: command,
+        textScaler: const TextScaler.linear(2),
+        asSheet: true,
+      );
 
-    final scrollable = find.descendant(
-      of: find.byType(DailySignInSheet),
-      matching: find.byType(Scrollable),
-    );
-    expect(
-      tester.state<ScrollableState>(scrollable).position.maxScrollExtent,
-      greaterThan(0),
-    );
-    final submit = find.byKey(const Key('daily-sign-in-submit'));
-    await tester.ensureVisible(submit);
-    await tester.pumpAndSettle();
-    await tester.tap(submit);
-    await tester.pumpAndSettle();
-    expect(command.requests, hasLength(1));
-    expect(find.byType(DailySignInSheet), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      final scrollable = find.descendant(
+        of: find.byType(DailySignInSheet),
+        matching: find.byType(Scrollable),
+      );
+      expect(
+        tester.state<ScrollableState>(scrollable).position.maxScrollExtent,
+        greaterThan(0),
+      );
+      final submit = find.byKey(const Key('daily-sign-in-submit'));
+      await tester.ensureVisible(submit);
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(command.requests, hasLength(1));
+      expect(find.byType(DailySignInSheet), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('signed state and ordered statistics never expose submit', (
     tester,
@@ -572,7 +575,7 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('daily-sign-in-submit')), findsOneWidget);
-    expect(find.byKey(const Key('daily-auto-sign-in-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('daily-auto-sign-in-toggle')), findsNothing);
   });
 
   testWidgets('automatic sign-in toggle defaults on and persists per account', (
@@ -584,19 +587,22 @@ void main() {
       (query, _) async =>
           _success(query.userId, ForumDailySignInStatus.unsigned),
     );
+    final command = _SignCommand((_, _) async => _unknown);
     await _pump(
       tester,
       repository: repository,
-      command: _SignCommand((_, _) async => _unknown),
+      command: command,
       preferences: preferences,
       store: session,
+      home: const Scaffold(body: DailyAutoSignInToggle()),
     );
 
     final toggle = find.byKey(const Key('daily-auto-sign-in-toggle'));
-    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(tester.widget<Switch>(toggle).value, isTrue);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
-    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    final previousAccountToggle = tester.widget<Switch>(toggle).onChanged!;
     expect(
       await SharedPreferencesDailyAutoSignInSettings(
         preferences,
@@ -610,7 +616,7 @@ void main() {
       isTrue,
     );
     final container = ProviderScope.containerOf(
-      tester.element(find.byType(DailySignInPage)),
+      tester.element(find.byType(DailyAutoSignInToggle)),
     );
     session.saveExtracted(_session('777777'));
     container
@@ -622,7 +628,47 @@ void main() {
           ),
         );
     await tester.pumpAndSettle();
-    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    previousAccountToggle(false);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(repository.queries, isEmpty);
+    expect(command.requests, isEmpty);
+  });
+
+  testWidgets('automatic toggle rolls back and explains a failed save', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferencesStore()..failWrites = true;
+    final repository = _SignRepository(
+      (query, _) async =>
+          _success(query.userId, ForumDailySignInStatus.unsigned),
+    );
+    final command = _SignCommand((_, _) async => _unknown);
+    await _pump(
+      tester,
+      repository: repository,
+      command: command,
+      preferences: preferences,
+      home: const Scaffold(body: DailyAutoSignInToggle()),
+    );
+    final toggle = find.byKey(const Key('daily-auto-sign-in-toggle'));
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(DailyAutoSignInToggle)),
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<Switch>(toggle).onChanged, isNull);
+    expect(find.text(l10n.dailyAutoSignInStorageUnavailable), findsOneWidget);
+    expect(repository.queries, isEmpty);
+    expect(command.requests, isEmpty);
   });
 
   testWidgets('pending checkpoint after restart explains same-day pause', (
@@ -705,14 +751,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('daily-sign-in-submit')), findsNothing);
-      expect(
-        tester
-            .widget<SwitchListTile>(
-              find.byKey(const Key('daily-auto-sign-in-toggle')),
-            )
-            .onChanged,
-        isNull,
-      );
+      expect(find.byKey(const Key('daily-auto-sign-in-toggle')), findsNothing);
       await tester.tap(find.byKey(const Key('daily-sign-in-refresh')));
       await tester.pumpAndSettle();
       expect(repository.queries, hasLength(2));
@@ -833,6 +872,7 @@ Future<void> _pump(
   _MemoryPreferencesStore? preferences,
   bool settle = true,
   bool asSheet = false,
+  Widget? home,
 }) async {
   final storage = preferences ?? _MemoryPreferencesStore();
   await tester.pumpWidget(
@@ -851,26 +891,28 @@ Future<void> _pump(
           data: MediaQuery.of(context).copyWith(textScaler: textScaler),
           child: child!,
         ),
-        home: asSheet
-            ? Builder(
-                builder: (context) => Scaffold(
-                  body: Center(
-                    child: TextButton(
-                      key: const Key('open-sign-in-sheet'),
-                      onPressed: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        useSafeArea: true,
-                        builder: (_) => const DailySignInSheet(),
-                      ),
-                      child: Text(
-                        AppLocalizations.of(context).dailySignInTitle,
+        home:
+            home ??
+            (asSheet
+                ? Builder(
+                    builder: (context) => Scaffold(
+                      body: Center(
+                        child: TextButton(
+                          key: const Key('open-sign-in-sheet'),
+                          onPressed: () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            useSafeArea: true,
+                            builder: (_) => const DailySignInSheet(),
+                          ),
+                          child: Text(
+                            AppLocalizations.of(context).dailySignInTitle,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              )
-            : const DailySignInPage(),
+                  )
+                : const DailySignInPage()),
       ),
     ),
   );
@@ -934,6 +976,7 @@ List<Override> _storageOverrides(_MemoryPreferencesStore store) => [
 final class _MemoryPreferencesStore implements PreferencesStore {
   final Map<String, Object> values = {};
   bool failReads = false;
+  bool failWrites = false;
 
   @override
   Future<T?> read<T extends Object>(PreferenceKey<T> key) async {
@@ -950,6 +993,7 @@ final class _MemoryPreferencesStore implements PreferencesStore {
 
   @override
   Future<void> write<T extends Object>(PreferenceKey<T> key, T value) async {
+    if (failWrites) throw StateError('synthetic write failure');
     values[key.name] = value;
   }
 

@@ -403,6 +403,7 @@
 
   "moreTitle": "更多",
   "moreMyProfile": "我的資料",
+  "profileOpenNative": "開啟原生資料頁",
   "moreMyProfileSignedOutSubtitle": "登入後查看個人資料、訊息提醒",
   "moreMyProfileSubtitle": "{username} 的資料與訊息提醒",
   "moreUnusedImages": "未使用圖片管理",
@@ -1516,7 +1517,7 @@
   "dailySignInRetryUnknown": "再次嘗試簽到",
   "dailySignInRetryTitle": "確認再次提交？",
   "dailySignInRetryBody": "上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。",
-  "dailyAutoSignInToggle": "每天自動簽到",
+  "dailyAutoSignInToggle": "自動簽到",
   "dailyAutoSignInDescription": "每次啟動應用後自動核對簽到狀態，符合條件時嘗試簽到；切回前景不會重複觸發。",
   "dailyAutoSignInSaving": "正在儲存自動簽到設定…",
   "dailyAutoSignInStorageUnavailable": "無法安全讀取或儲存簽到記錄，目前無法提交簽到。請稍後重試。",

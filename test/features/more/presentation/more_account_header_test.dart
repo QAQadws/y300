@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
@@ -17,6 +18,7 @@ import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/profile/presentation/daily_auto_sign_in_toggle.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
@@ -34,6 +36,8 @@ final _ownerSource = StateProvider<VerifiedProfileOwner?>((ref) => _owner);
 final _sessionSource = StateProvider<AuthSessionViewState>((ref) => _session);
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
   testWidgets(
     'numeric refresh keeps the counter state and uses the shared animation duration',
     (tester) async {
@@ -166,6 +170,7 @@ void main() {
     expect(find.byKey(const Key('more-account-credits')), findsNothing);
     expect(find.byKey(const Key('more-account-group')), findsNothing);
     expect(find.byKey(const Key('more-logout-entry')), findsNothing);
+    expect(find.byType(DailyAutoSignInToggle), findsNothing);
     expect(find.text(_l10n(tester).moreLogin), findsOneWidget);
     expect(
       tester
@@ -200,6 +205,7 @@ void main() {
     expect(find.text(_l10n(tester).moreAccountChecking), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.byKey(const Key('more-account-credits')), findsNothing);
+    expect(find.byType(DailyAutoSignInToggle), findsNothing);
     expect(_logoutButton(tester).onPressed, isNull);
     expect(repository.reads, 0);
   });
@@ -495,6 +501,12 @@ void _expectAccountLayout(WidgetTester tester, {bool groupWraps = false}) {
   final avatar = tester.getRect(find.byKey(const Key('more-account-avatar')));
   final name = tester.getRect(find.byKey(const Key('more-account-name')));
   final group = tester.getRect(find.byKey(const Key('more-account-group')));
+  final toggle = tester.getRect(find.byType(DailyAutoSignInToggle));
+  final header = tester.getRect(find.byKey(const Key('more-account-header')));
+
+  expect(toggle.right, closeTo(header.right - 16, 0.1));
+  expect(toggle.bottom, greaterThanOrEqualTo(group.bottom));
+  expect(toggle.bottom, greaterThanOrEqualTo(name.bottom));
 
   expect(name.top, greaterThan(avatar.bottom));
   expect(name.left, avatar.left);

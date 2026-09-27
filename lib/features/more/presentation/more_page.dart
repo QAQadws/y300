@@ -15,11 +15,10 @@ import 'package:y300/features/more/presentation/more_debug_tools.dart';
 import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
-import 'package:y300/features/profile/presentation/daily_sign_in_sheet.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/features/profile/presentation/current_account_avatar_controller.dart';
+import 'package:y300/features/profile/presentation/my_profile_action_navigation.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
-import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 
@@ -34,7 +33,6 @@ class _MorePageState extends ConsumerState<MorePage> {
   final MoreDebugTools _debugTools = const MoreDebugTools();
   bool _openingMyProfile = false;
   bool _openingLogin = false;
-  bool _openingDailySignIn = false;
   bool _confirmingLogout = false;
 
   @override
@@ -88,14 +86,6 @@ class _MorePageState extends ConsumerState<MorePage> {
               height: 1,
               indent: 0,
               endIndent: 0,
-            ),
-            ListTile(
-              key: const Key('more-daily-sign-in-entry'),
-              leading: const Icon(Icons.event_available_outlined),
-              title: Text(l10n.moreDailySignIn),
-              onTap: _openingDailySignIn
-                  ? null
-                  : () => _openDailySignInSheet(context),
             ),
             ListTile(
               key: const Key('more-unused-images-entry'),
@@ -274,26 +264,6 @@ class _MorePageState extends ConsumerState<MorePage> {
     }
   }
 
-  Future<void> _openDailySignInSheet(BuildContext context) async {
-    if (_openingDailySignIn || _openingLogin || _confirmingLogout) return;
-    setState(() => _openingDailySignIn = true);
-    try {
-      if (ref.read(authSessionControllerProvider).asData?.value.isLoggedIn !=
-          true) {
-        await _openLoginPage(context);
-        return;
-      }
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (_) => const DailySignInSheet(),
-      );
-    } finally {
-      if (mounted) setState(() => _openingDailySignIn = false);
-    }
-  }
-
   Future<void> _refreshAccountAfterVisit(VerifiedProfileOwner? owner) async {
     // A different session already starts its own initial read. Do not refresh
     // that new account on behalf of the route opened by the previous owner.
@@ -340,8 +310,11 @@ class _MorePageState extends ConsumerState<MorePage> {
       }
       if (!context.mounted) return;
       final owner = ref.read(verifiedProfileOwnerProvider);
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(builder: (_) => const MyProfilePage()),
+      if (owner == null) return;
+      await openMyProfileForumPage(
+        context: context,
+        ref: ref,
+        userId: owner.uid,
       );
       await _refreshAccountAfterVisit(owner);
     } finally {

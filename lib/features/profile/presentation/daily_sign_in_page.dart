@@ -130,44 +130,25 @@ class _DailySignInPanelState extends ConsumerState<DailySignInPanel> {
           Text(commandMessage, key: const Key('daily-sign-in-command-message')),
         ],
         if (owner != null) ...[
-          const SizedBox(height: 16),
-          SwitchListTile.adaptive(
-            key: const Key('daily-auto-sign-in-toggle'),
-            contentPadding: EdgeInsets.zero,
-            title: Text(l10n.dailyAutoSignInToggle),
-            subtitle: Text(
-              current.isSavingAutoPreference
-                  ? l10n.dailyAutoSignInSaving
-                  : l10n.dailyAutoSignInDescription,
-            ),
-            value: current.autoEnabled ?? false,
-            onChanged:
-                current.autoEnabled != null &&
-                    !current.isSavingAutoPreference &&
-                    !current.settingsUnavailable
-                ? (enabled) => unawaited(
-                    ref
-                        .read(dailySignInControllerProvider.notifier)
-                        .setAutomaticEnabled(enabled),
-                  )
-                : null,
-          ),
-          if (current.storageUnavailable)
+          if (current.storageUnavailable) ...[
+            const SizedBox(height: 16),
             Text(
               l10n.dailyAutoSignInStorageUnavailable,
               key: const Key('daily-sign-in-storage-error'),
-            )
-          else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
+            ),
+          ] else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
               current.automaticPolicy ==
-                  DailySignInAutomaticPolicy.pausedPreviousDay)
+                  DailySignInAutomaticPolicy.pausedPreviousDay) ...[
+            const SizedBox(height: 16),
             Text(
               l10n.dailyAutoSignInPausedPreviousDay,
               key: const Key('daily-auto-sign-in-paused'),
-            )
-          else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
+            ),
+          ] else if (snapshot?.status == ForumDailySignInStatus.unsigned &&
               current.automaticPolicy ==
                   DailySignInAutomaticPolicy.blockedToday &&
-              current.commandResult == null)
+              current.commandResult == null) ...[
+            const SizedBox(height: 16),
             Text(
               current.checkpointState == DailySignInAttemptState.pending ||
                       current.checkpointState == DailySignInAttemptState.unknown
@@ -175,6 +156,7 @@ class _DailySignInPanelState extends ConsumerState<DailySignInPanel> {
                   : l10n.dailyAutoSignInBlockedToday,
               key: const Key('daily-auto-sign-in-blocked'),
             ),
+          ],
         ],
         if (snapshot?.statistics case final statistics?
             when statistics.isNotEmpty) ...[

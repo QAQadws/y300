@@ -6,6 +6,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
+import 'package:y300/features/profile/presentation/daily_auto_sign_in_toggle.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
@@ -241,7 +242,40 @@ class MoreAccountHeader extends ConsumerWidget {
                 ],
               ],
             ),
-            if (hasAccount) ...[const SizedBox(height: 8), identity],
+            if (hasAccount) ...[
+              const SizedBox(height: 8),
+              if (owner == null)
+                identity
+              else
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final toggle = DailyAutoSignInToggle(enabled: !busy);
+                    // Preserve space for names and groups when accessibility
+                    // text or a narrow viewport needs a separate control row.
+                    if (constraints.maxWidth < 340 ||
+                        MediaQuery.textScalerOf(context).scale(14) > 18) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          identity,
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: toggle,
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(child: identity),
+                        const SizedBox(width: 12),
+                        toggle,
+                      ],
+                    );
+                  },
+                ),
+            ],
             if (current && summary.failure != null)
               Wrap(
                 alignment: WrapAlignment.spaceBetween,

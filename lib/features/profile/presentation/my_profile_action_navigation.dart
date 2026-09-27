@@ -50,7 +50,7 @@ void openMyProfileAction({
 
 /// Opens the fixed forum profile page only after the caller verifies the
 /// current session owner. No URL from a failed response is reused here.
-void openMyProfileForumPage({
+Future<Object?> openMyProfileForumPage({
   required BuildContext context,
   required WidgetRef ref,
   required String userId,
@@ -65,9 +65,13 @@ void openMyProfileForumPage({
       'mobile': '2',
     },
   );
-  Navigator.of(context).push(
+  return Navigator.of(context).push<Object?>(
     ref.read(forumWebViewRouteFactoryProvider)(
-      ForumWebViewLaunchConfig(initialUri: uri, popOnRootBack: true),
+      ForumWebViewLaunchConfig(
+        initialUri: uri,
+        popOnRootBack: true,
+        purpose: ForumWebViewHostPurpose.selfProfile,
+      ),
     ),
   );
 }
