@@ -587,21 +587,211 @@ void main() {
     expect(_richTextContaining('探险的感觉'), findsOneWidget);
   });
 
-  testWidgets('next page constructs a page-only domain query', (tester) async {
-    final repository = _FakeBlogDirectoryRepository();
+  testWidgets(
+    'pagination replaces each page and can return from the last page',
+    (tester) async {
+      final repository = _FakeBlogDirectoryRepository();
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: repository,
+        detailRepository: _FakeBlogDetailRepository(),
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileBlogPage)),
+      );
+      expect(find.byKey(const Key('profile-blog-pagination')), findsOneWidget);
+      expect(find.text(l10n.commonPage(1)), findsOneWidget);
+      expect(find.text(l10n.commonPreviousPage), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+
+      await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
+      await tester.pumpAndSettle();
+
+      expect(repository.queries.last.page, 2);
+      expect(repository.queries.last.scope, UserBlogFeedScope.public);
+      expect(repository.queries.last.order, UserBlogOrder.latest);
+      expect(find.text('第二页日志'), findsOneWidget);
+      expect(find.text('一种体验'), findsNothing);
+      expect(find.text(l10n.commonPage(2)), findsOneWidget);
+      expect(find.text(l10n.forumDisplayNoMore), findsOneWidget);
+      expect(_paginationButton(tester, 'next-page').onPressed, isNull);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNotNull);
+
+      await tester.tap(
+        find.byKey(const Key('profile-blog-previous-page-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.queries.map((query) => query.page), [1, 2, 1]);
+      expect(find.text('一种体验'), findsOneWidget);
+      expect(find.text('第二页日志'), findsNothing);
+      expect(find.text(l10n.commonPage(1)), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final unknownTotalPages in [false, true]) {
+    testWidgets(
+      'page picker navigates with ${unknownTotalPages ? 'unknown' : 'exact'} page counts',
+      (tester) async {
+        final repository = _FakeBlogDirectoryRepository(
+          unknownTotalPages: unknownTotalPages,
+        );
+        await _pumpBlogPage(
+          tester,
+          directoryRepository: repository,
+          detailRepository: _FakeBlogDetailRepository(),
+        );
+
+        await tester.tap(
+          find.byKey(const Key('profile-blog-current-page-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('profile-blog-page-list')), findsOneWidget);
+        expect(
+          find.byKey(const Key('profile-blog-page-option-1')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('profile-blog-page-option-2')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('profile-blog-page-option-3')),
+          findsNothing,
+        );
+        await tester.tap(find.byKey(const Key('profile-blog-page-option-2')));
+        await tester.pumpAndSettle();
+        expect(repository.queries.map((query) => query.page), [1, 2]);
+        expect(find.text('第二页日志'), findsOneWidget);
+        expect(find.text('一种体验'), findsNothing);
+
+        await tester.tap(
+          find.byKey(const Key('profile-blog-current-page-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('profile-blog-page-option-3')),
+          findsNothing,
+        );
+        await tester.tap(find.byKey(const Key('profile-blog-page-option-1')));
+        await tester.pumpAndSettle();
+        expect(repository.queries.map((query) => query.page), [1, 2, 1]);
+        expect(find.text('一种体验'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'pending page navigation keeps the displayed page and disables controls',
+    (tester) async {
+      final nextPageGate = Completer<void>();
+      final repository = _FakeBlogDirectoryRepository(
+        nextPageGate: nextPageGate,
+      );
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: repository,
+        detailRepository: _FakeBlogDetailRepository(),
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileBlogPage)),
+      );
+
+      await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
+      await tester.pump();
+      expect(repository.queries.last.page, 2);
+      expect(find.text('一种体验'), findsOneWidget);
+      expect(find.text(l10n.commonPage(1)), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+      expect(_paginationButton(tester, 'current-page').onPressed, isNull);
+      expect(
+        find.byKey(const Key('profile-blog-next-page-button')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('profile-blog-pagination')),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      nextPageGate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('第二页日志'), findsOneWidget);
+      expect(find.text(l10n.commonPage(2)), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNotNull);
+      expect(_paginationButton(tester, 'current-page').onPressed, isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('page navigation failure retains its page and can be retried', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository()..failedPages.add(2);
     await _pumpBlogPage(
       tester,
       directoryRepository: repository,
       detailRepository: _FakeBlogDetailRepository(),
     );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
 
     await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
     await tester.pumpAndSettle();
+    expect(find.text('一种体验'), findsOneWidget);
+    expect(find.text('第二页日志'), findsNothing);
+    expect(find.text(l10n.commonPage(1)), findsOneWidget);
+    expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+    expect(_paginationButton(tester, 'next-page').onPressed, isNotNull);
 
-    expect(repository.queries.last.page, 2);
-    expect(repository.queries.last.scope, UserBlogFeedScope.public);
-    expect(repository.queries.last.order, UserBlogOrder.latest);
+    repository.failedPages.clear();
+    await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
+    await tester.pumpAndSettle();
+    expect(repository.queries.map((query) => query.page), [1, 2, 2]);
     expect(find.text('第二页日志'), findsOneWidget);
+    expect(find.text(l10n.commonPage(2)), findsOneWidget);
+    expect(find.text('一种体验'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('successful page navigation starts the new list at the top', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository(longList: true);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+    );
+    final list = find.byKey(const Key('profile-blog-list'));
+    final scrollable = find.descendant(
+      of: list,
+      matching: find.byType(Scrollable),
+    );
+    final next = find.byKey(const Key('profile-blog-next-page-button'));
+    await tester.scrollUntilVisible(next, 500, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(
+      tester.state<ScrollableState>(scrollable).position.pixels,
+      greaterThan(400),
+    );
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    expect(find.text('第二页日志'), findsOneWidget);
+    expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
+
+    await tester.tap(
+      find.byKey(const Key('profile-blog-previous-page-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Entry 0'), findsOneWidget);
+    expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('capabilities hide optional list and detail fields', (
@@ -765,6 +955,14 @@ Future<void> _pumpBlogPage(
   }
 }
 
+TextButton _paginationButton(WidgetTester tester, String action) =>
+    tester.widget<TextButton>(
+      find.descendant(
+        of: find.byKey(Key('profile-blog-$action-button')),
+        matching: find.byType(TextButton),
+      ),
+    );
+
 UserBlogDirectoryReadCapabilities _directoryCapabilities({
   Iterable<UserBlogDirectoryCapability> supported =
       UserBlogDirectoryCapability.values,
@@ -803,14 +1001,27 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     this.failAfterSuccess = false,
     this.failFirst = false,
     this.gate,
+    this.nextPageGate,
+    this.unknownTotalPages = false,
     this.longList = false,
     this.blogActions = const {},
-  }) : readCapabilities = capabilities ?? _directoryCapabilities();
+  }) : readCapabilities =
+           capabilities ??
+           _directoryCapabilities(
+             supported: UserBlogDirectoryCapability.values.where(
+               (capability) =>
+                   !unknownTotalPages ||
+                   capability != UserBlogDirectoryCapability.totalPageCount,
+             ),
+           );
 
   final UserBlogDirectoryReadCapabilities readCapabilities;
   final bool failAfterSuccess;
   final bool failFirst;
   final Completer<void>? gate;
+  final Completer<void>? nextPageGate;
+  final bool unknownTotalPages;
+  final failedPages = <int>{};
   final bool longList;
   final Set<UserBlogAction> blogActions;
   bool removed = false;
@@ -838,8 +1049,10 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     policies.add(cachePolicy);
     cancellations.add(cancellation);
     await gate?.future;
+    if (query.page > 1) await nextPageGate?.future;
     if ((failFirst && queries.length == 1) ||
-        (failAfterSuccess && queries.length > 1)) {
+        (failAfterSuccess && queries.length > 1) ||
+        failedPages.contains(query.page)) {
       return const DataReadFailure(
         kind: DataReadFailureKind.network,
         diagnosticMessage: 'network failure',
@@ -861,7 +1074,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
         pagination: UserBlogPagination(currentPage: query.page),
       );
     }
-    if (longList) {
+    if (longList && query.page == 1) {
       return UserBlogDirectoryData(
         scope: query.scope,
         order: query.order,
@@ -875,14 +1088,18 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
                   'A longer journal excerpt for checking retained scroll position.',
             ),
         ],
-        pagination: const UserBlogPagination(currentPage: 1, hasNext: false),
+        pagination: const UserBlogPagination(
+          currentPage: 1,
+          totalPages: 2,
+          hasNext: true,
+        ),
       );
     }
     if (query.page == 2) {
-      return const UserBlogDirectoryData(
+      return UserBlogDirectoryData(
         scope: UserBlogFeedScope.public,
         order: UserBlogOrder.latest,
-        items: <UserBlogSummary>[
+        items: const <UserBlogSummary>[
           UserBlogSummary(
             blogId: '117600',
             ownerUserId: '257582',
@@ -891,7 +1108,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
         ],
         pagination: UserBlogPagination(
           currentPage: 2,
-          totalPages: 2,
+          totalPages: unknownTotalPages ? null : 2,
           hasPrevious: true,
           hasNext: false,
         ),
@@ -913,9 +1130,9 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
             actions: blogActions,
           ),
       ],
-      pagination: const UserBlogPagination(
+      pagination: UserBlogPagination(
         currentPage: 1,
-        totalPages: 2,
+        totalPages: unknownTotalPages ? null : 2,
         hasPrevious: false,
         hasNext: true,
       ),

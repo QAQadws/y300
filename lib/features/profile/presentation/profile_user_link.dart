@@ -9,11 +9,14 @@ class ProfileUserLink extends StatelessWidget {
     required this.userId,
     required this.child,
     this.alignment = Alignment.centerLeft,
+    this.compact = false,
   });
 
   final String? userId;
   final Widget child;
   final Alignment alignment;
+  // Inline metadata must not inherit a standalone link's minimum height.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -29,8 +32,15 @@ class ProfileUserLink extends StatelessWidget {
             MaterialPageRoute(builder: (_) => UserProfilePage(uid: id)),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-            child: Align(alignment: alignment, widthFactor: 1, child: child),
+            constraints: compact
+                ? const BoxConstraints()
+                : const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Align(
+              alignment: alignment,
+              widthFactor: 1,
+              heightFactor: compact ? 1 : null,
+              child: child,
+            ),
           ),
         ),
       ),

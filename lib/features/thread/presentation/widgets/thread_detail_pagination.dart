@@ -13,7 +13,6 @@ class ThreadLoadMoreSection extends StatelessWidget {
     required this.onLoadPreviousPage,
     required this.onLoadNextPage,
     required this.onLoadPageNumber,
-    required this.palette,
   });
 
   final bool hasMore;
@@ -24,7 +23,6 @@ class ThreadLoadMoreSection extends StatelessWidget {
   final VoidCallback onLoadPreviousPage;
   final VoidCallback onLoadNextPage;
   final ValueChanged<int> onLoadPageNumber;
-  final ThreadDetailNativePalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -36,84 +34,24 @@ class ThreadLoadMoreSection extends StatelessWidget {
       );
     }
 
-    return Padding(
+    return NativePaginationBar(
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _ThreadPageButton(
-            key: const Key('thread-detail-previous-page-button'),
-            onPressed: canLoadPrevious ? onLoadPreviousPage : null,
-            label: l10n.threadDetailPreviousPage,
-            palette: palette,
-          ),
-          const SizedBox(width: 6),
-          NativePageDropdownButton(
-            buttonKey: const Key('thread-detail-current-page-button'),
-            menuKeyPrefix: 'thread-detail',
-            currentPage: currentPage,
-            lastPage: lastPage,
-            hasMore: hasMore,
-            enabled: true,
-            label: l10n.threadDetailPage(currentPage),
-            style: _threadPageButtonStyle(context, palette),
-            onSelected: onLoadPageNumber,
-          ),
-          const SizedBox(width: 6),
-          _ThreadPageButton(
-            key: const Key('thread-detail-load-more-button'),
-            onPressed: hasMore ? onLoadNextPage : null,
-            label: hasMore
-                ? l10n.threadDetailNextPage
-                : l10n.threadDetailNoMore,
-            palette: palette,
-          ),
-        ],
-      ),
+      spacing: 6,
+      currentPage: currentPage,
+      lastPage: lastPage,
+      hasMore: hasMore,
+      canLoadPrevious: canLoadPrevious,
+      isLoading: isLoadingMore,
+      onLoadPrevious: onLoadPreviousPage,
+      onLoadNext: onLoadNextPage,
+      onSelectPage: onLoadPageNumber,
+      previousLabel: l10n.threadDetailPreviousPage,
+      currentLabel: l10n.threadDetailPage(currentPage),
+      nextLabel: hasMore ? l10n.threadDetailNextPage : l10n.threadDetailNoMore,
+      previousButtonKey: const Key('thread-detail-previous-page-button'),
+      currentPageButtonKey: const Key('thread-detail-current-page-button'),
+      nextButtonKey: const Key('thread-detail-load-more-button'),
+      menuKeyPrefix: 'thread-detail',
     );
   }
-}
-
-class _ThreadPageButton extends StatelessWidget {
-  const _ThreadPageButton({
-    super.key,
-    required this.onPressed,
-    required this.label,
-    required this.palette,
-  });
-
-  final VoidCallback? onPressed;
-  final String label;
-  final ThreadDetailNativePalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
-      child: TextButton(
-        onPressed: onPressed,
-        style: _threadPageButtonStyle(context, palette),
-        child: Text(label),
-      ),
-    );
-  }
-}
-
-ButtonStyle _threadPageButtonStyle(
-  BuildContext context,
-  ThreadDetailNativePalette palette,
-) {
-  return TextButton.styleFrom(
-    backgroundColor: palette.chipBackground,
-    disabledBackgroundColor: palette.chipBackground,
-    foregroundColor: palette.muted,
-    disabledForegroundColor: palette.softText,
-    padding: const EdgeInsets.symmetric(horizontal: 14),
-    minimumSize: const Size(0, 34),
-    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    textStyle: Theme.of(
-      context,
-    ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800),
-  );
 }

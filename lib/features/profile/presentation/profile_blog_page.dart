@@ -27,6 +27,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_cont
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/native_pagination_bar.dart';
 
 export 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
 export 'package:y300/features/profile/presentation/blog/blog_detail_controller.dart';
@@ -143,6 +144,14 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
                   ? RefreshIndicator(
                       onRefresh: controller.refresh,
                       child: _ProfileBlogListContent(
+                        key: ValueKey((
+                          controller.accountId,
+                          state.query.scope,
+                          state.query.order,
+                          state.query.ownerUserId,
+                          state.query.categoryId,
+                          state.query.personalCategoryId,
+                        )),
                         state: state,
                         accountId: controller.accountId,
                         palette: palette,
@@ -156,9 +165,19 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
                             ),
                           ),
                         ),
-                        onLoadNextPage: state.canLoadNext
-                            ? controller.loadNextPage
-                            : null,
+                        onLoadPreviousPage: controller.loadPreviousPage,
+                        onLoadNextPage: controller.loadNextPage,
+                        onSelectPage: (page) async {
+                          // Closing the picker must restore BlogReadView's
+                          // active route before the controller accepts a read.
+                          await WidgetsBinding.instance.endOfFrame;
+                          if (!mounted ||
+                              !context.mounted ||
+                              controller.value.query != state.query) {
+                            return;
+                          }
+                          await controller.loadPageNumber(page);
+                        },
                         onAction: (item, action) =>
                             action == UserBlogAction.edit
                             ? openBlogEditorPage(
@@ -412,14 +431,17 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
   }
 }
 
-class _ProfileBlogListContent extends StatelessWidget {
+class _ProfileBlogListContent extends StatefulWidget {
   const _ProfileBlogListContent({
+    super.key,
     required this.state,
     required this.accountId,
     required this.palette,
     required this.imageReferer,
     required this.onOpenBlog,
+    required this.onLoadPreviousPage,
     required this.onLoadNextPage,
+    required this.onSelectPage,
     required this.onAction,
   });
 
@@ -428,24 +450,60 @@ class _ProfileBlogListContent extends StatelessWidget {
   final Y300NativeContentColors palette;
   final String imageReferer;
   final ValueChanged<UserBlogSummary> onOpenBlog;
-  final VoidCallback? onLoadNextPage;
+  final VoidCallback onLoadPreviousPage;
+  final VoidCallback onLoadNextPage;
+  final ValueChanged<int> onSelectPage;
   final void Function(UserBlogSummary item, UserBlogAction action) onAction;
 
   @override
+  State<_ProfileBlogListContent> createState() =>
+      _ProfileBlogListContentState();
+}
+
+class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
+  final _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant _ProfileBlogListContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.currentPage == widget.state.currentPage) return;
+    final page = widget.state.currentPage;
+    // Only a successful page change resets the current feed's scroll position.
+    // PageStorage continues to restore the last position when switching tabs.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          widget.state.currentPage == page &&
+          !widget.state.isLoading &&
+          _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final palette = widget.palette;
     final data = state.data!;
     final l10n = AppLocalizations.of(context);
     return KeyedSubtree(
       key: const Key('profile-blog-list'),
       child: ListView.builder(
         key: PageStorageKey((
-          accountId,
+          widget.accountId,
           state.query.scope,
           state.query.order,
           state.query.ownerUserId,
           state.query.categoryId,
           state.query.personalCategoryId,
         )),
+        controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         itemCount: data.items.length + 2,
@@ -471,17 +529,12 @@ class _ProfileBlogListContent extends StatelessWidget {
                     message: l10n.profileBlogEmpty,
                     palette: palette,
                   ),
-                if (state.isLoading)
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: LinearProgressIndicator(),
-                  )
-                else if (state.canLoadNext)
-                  _PaginationBar(
-                    pagination: data.pagination,
-                    palette: palette,
-                    onLoadNextPage: onLoadNextPage,
-                  ),
+                _PaginationBar(
+                  state: state,
+                  onLoadPreviousPage: widget.onLoadPreviousPage,
+                  onLoadNextPage: widget.onLoadNextPage,
+                  onSelectPage: widget.onSelectPage,
+                ),
               ],
             );
           }
@@ -493,9 +546,9 @@ class _ProfileBlogListContent extends StatelessWidget {
               item: item,
               capabilities: state.capabilities,
               palette: palette,
-              imageReferer: imageReferer,
-              onTap: () => onOpenBlog(item),
-              onAction: (action) => onAction(item, action),
+              imageReferer: widget.imageReferer,
+              onTap: () => widget.onOpenBlog(item),
+              onAction: (action) => widget.onAction(item, action),
             ),
           );
         },
@@ -698,12 +751,22 @@ class _ProfileBlogListCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final display = watchBlogDisplayText(ref, BlogContentSource.summary(item));
+    final textTheme = Theme.of(context).textTheme;
+    final showAuthor =
+        capabilities?.supports(UserBlogDirectoryCapability.author) == true &&
+        item.authorName?.isNotEmpty == true;
+    final showPublishedAt =
+        capabilities?.supports(UserBlogDirectoryCapability.publishedAtText) ==
+            true &&
+        item.publishedAtText?.trim().isNotEmpty == true;
     return BlogSurface(
       onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (capabilities?.supports(
                     UserBlogDirectoryCapability.avatarReference,
@@ -713,8 +776,9 @@ class _ProfileBlogListCard extends ConsumerWidget {
                   imageUrl: item.avatarUrl,
                   ownerId: item.ownerUserId,
                   userId: item.ownerUserId,
-                  radius: 17,
+                  radius: 18,
                   imageReferer: imageReferer,
+                  compact: true,
                 ),
               if (capabilities?.supports(
                     UserBlogDirectoryCapability.avatarReference,
@@ -725,38 +789,35 @@ class _ProfileBlogListCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (capabilities?.supports(
-                              UserBlogDirectoryCapability.author,
-                            ) ==
-                            true &&
-                        item.authorName != null)
+                    if (showAuthor)
                       ProfileUserLink(
                         key: Key('blog-list-author-${item.blogId}'),
                         userId: item.ownerUserId,
+                        compact: true,
                         child: Text(
                           item.authorName!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: palette.author,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: palette.author,
+                            fontWeight: FontWeight.w700,
+                            height: 1.08,
+                          ),
                         ),
                       ),
-                    if (capabilities?.supports(
-                              UserBlogDirectoryCapability.publishedAtText,
-                            ) ==
-                            true &&
-                        item.publishedAtText != null)
+                    if (showPublishedAt) ...[
+                      if (showAuthor) const SizedBox(height: 3),
                       Text(
                         display.text(item.publishedAtText!),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelMedium?.copyWith(color: palette.muted),
+                        style: textTheme.labelSmall?.copyWith(
+                          color: palette.muted,
+                          fontWeight: FontWeight.w600,
+                          height: 1.08,
+                        ),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -767,16 +828,19 @@ class _ProfileBlogListCard extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 7),
           Text(
             display.text(item.title),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.titleSmall?.copyWith(
               color: palette.itemTitle,
               fontWeight: FontWeight.w700,
+              height: 1.28,
             ),
           ),
           if (item.categoryNames.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               item.categoryNames.map(display.text).join(' · '),
               style: Theme.of(
@@ -787,14 +851,14 @@ class _ProfileBlogListCard extends ConsumerWidget {
           if (capabilities?.supports(UserBlogDirectoryCapability.excerpt) ==
                   true &&
               item.excerpt != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               display.text(item.excerpt!),
-              maxLines: 3,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              style: textTheme.bodyMedium?.copyWith(
                 color: palette.body,
-                height: 1.45,
+                height: 1.35,
               ),
             ),
           ],
@@ -806,43 +870,38 @@ class _ProfileBlogListCard extends ConsumerWidget {
 
 class _PaginationBar extends StatelessWidget {
   const _PaginationBar({
-    required this.pagination,
-    required this.palette,
+    required this.state,
+    required this.onLoadPreviousPage,
     required this.onLoadNextPage,
+    required this.onSelectPage,
   });
 
-  final UserBlogPagination pagination;
-  final Y300NativeContentColors palette;
-  final VoidCallback? onLoadNextPage;
+  final UserBlogDirectoryPageState state;
+  final VoidCallback onLoadPreviousPage;
+  final VoidCallback onLoadNextPage;
+  final ValueChanged<int> onSelectPage;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 8,
-        children: [
-          Text(
-            pagination.totalPages == null
-                ? AppLocalizations.of(
-                    context,
-                  ).commonPage(pagination.currentPage)
-                : AppLocalizations.of(context).commonPageOf(
-                    pagination.currentPage,
-                    pagination.totalPages!,
-                  ),
-            style: TextStyle(color: palette.muted),
-          ),
-          FilledButton.tonal(
-            key: const Key('profile-blog-next-page-button'),
-            onPressed: onLoadNextPage,
-            child: Text(AppLocalizations.of(context).commonNextPage),
-          ),
-        ],
-      ),
+    final l10n = AppLocalizations.of(context);
+    return NativePaginationBar(
+      key: const Key('profile-blog-pagination'),
+      previousButtonKey: const Key('profile-blog-previous-page-button'),
+      currentPageButtonKey: const Key('profile-blog-current-page-button'),
+      nextButtonKey: const Key('profile-blog-next-page-button'),
+      menuKeyPrefix: 'profile-blog',
+      currentPage: state.currentPage,
+      lastPage: state.lastPage,
+      hasMore: state.hasMore,
+      canLoadPrevious: state.canLoadPrevious,
+      isLoading: state.isLoading,
+      onLoadPrevious: onLoadPreviousPage,
+      onLoadNext: onLoadNextPage,
+      onSelectPage: onSelectPage,
+      previousLabel: l10n.commonPreviousPage,
+      currentLabel: l10n.commonPage(state.currentPage),
+      nextLabel: state.hasMore ? l10n.commonNextPage : l10n.forumDisplayNoMore,
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 24),
     );
   }
 }
@@ -1363,6 +1422,7 @@ class _ProfileBlogAvatar extends StatelessWidget {
     required this.userId,
     required this.radius,
     required this.imageReferer,
+    this.compact = false,
   });
 
   final String? imageUrl;
@@ -1370,6 +1430,7 @@ class _ProfileBlogAvatar extends StatelessWidget {
   final String? userId;
   final double radius;
   final String imageReferer;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1378,6 +1439,7 @@ class _ProfileBlogAvatar extends StatelessWidget {
     return ProfileUserLink(
       userId: userId,
       alignment: Alignment.center,
+      compact: compact,
       child: ForumCachedAvatar(
         imageUrl: url,
         ownerId: ownerId.trim().isEmpty ? (url ?? 'unknown') : ownerId,

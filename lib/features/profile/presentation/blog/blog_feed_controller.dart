@@ -68,19 +68,32 @@ final class UserBlogDirectoryPageState {
   final bool isLoading;
   final List<UserBlogCategory> categories;
 
-  bool get canLoadNext =>
-      !isLoading &&
+  int get currentPage => data?.pagination.currentPage ?? query.page;
+
+  int? get lastPage {
+    if (capabilities?.supports(UserBlogDirectoryCapability.totalPageCount) !=
+        true) {
+      return null;
+    }
+    final totalPages = data?.pagination.totalPages;
+    return totalPages != null && totalPages > 0 ? totalPages : null;
+  }
+
+  bool get hasMore =>
       data != null &&
+      (lastPage == null || currentPage < lastPage!) &&
       ((capabilities?.supports(
                     UserBlogDirectoryCapability.directionalPagination,
                   ) ==
                   true &&
               data!.pagination.hasNext == true) ||
-          (capabilities?.supports(UserBlogDirectoryCapability.totalPageCount) ==
-                  true &&
-              data!.pagination.hasNext != false &&
-              data!.pagination.totalPages != null &&
-              data!.pagination.currentPage < data!.pagination.totalPages!));
+          (data!.pagination.hasNext != false &&
+              lastPage != null &&
+              currentPage < lastPage!));
+
+  bool get canLoadNext => !isLoading && hasMore;
+
+  bool get canLoadPrevious => !isLoading && data != null && currentPage > 1;
 
   UserBlogDirectoryPageState waiting({bool loading = true}) =>
       UserBlogDirectoryPageState(
@@ -214,18 +227,27 @@ final class ProfileBlogPageController
     return setActive(_active);
   }
 
-  Future<void> loadNextPage() => !_active || _disposed || !value.canLoadNext
+  Future<void> loadNextPage() => !value.canLoadNext
       ? Future.value()
-      : _load(
-          _page(value.query, value.data!.pagination.currentPage + 1),
-          append: true,
-        );
+      : loadPageNumber(value.currentPage + 1);
 
-  Future<void> _load(
-    UserBlogDirectoryQuery query, {
-    bool refresh = false,
-    bool append = false,
-  }) {
+  Future<void> loadPreviousPage() => !value.canLoadPrevious
+      ? Future.value()
+      : loadPageNumber(value.currentPage - 1);
+
+  Future<void> loadPageNumber(int page) {
+    if (_disposed || !_active || value.isLoading || value.data == null) {
+      return Future.value();
+    }
+    final lastPage = value.lastPage;
+    final maximumPage = lastPage ?? value.currentPage + (value.hasMore ? 1 : 0);
+    if (page < 1 || page == value.currentPage || page > maximumPage) {
+      return Future.value();
+    }
+    return _load(_page(value.query, page));
+  }
+
+  Future<void> _load(UserBlogDirectoryQuery query, {bool refresh = false}) {
     final previous = value;
     final generation = ++_generation;
     final cancellation = ForumRequestCancellation();
@@ -243,10 +265,8 @@ final class ProfileBlogPageController
       if (result case DataReadSuccess(:final data, :final capabilities)) {
         _staleScopes.remove(query.scope);
         value = UserBlogDirectoryPageState(
-          query: query,
-          data: append && previous.data != null
-              ? _append(previous.data!, data)
-              : data,
+          query: _page(query, data.pagination.currentPage),
+          data: data,
           capabilities: capabilities,
           categories: data.categories,
         );
@@ -344,19 +364,3 @@ UserBlogDirectoryQuery _page(UserBlogDirectoryQuery query, int page) =>
       categoryId: query.categoryId,
       personalCategoryId: query.personalCategoryId,
     );
-
-UserBlogDirectoryData _append(
-  UserBlogDirectoryData previous,
-  UserBlogDirectoryData next,
-) => UserBlogDirectoryData(
-  scope: next.scope,
-  order: next.order,
-  items: List.unmodifiable(
-    {
-      for (final item in [...previous.items, ...next.items])
-        (item.ownerUserId, item.blogId): item,
-    }.values,
-  ),
-  pagination: next.pagination,
-  categories: next.categories,
-);

@@ -4,16 +4,22 @@ import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 /// Shared reading surface for summaries, articles, comments and draft previews.
 class BlogSurface extends StatelessWidget {
-  const BlogSurface({super.key, required this.child, this.onTap});
+  const BlogSurface({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.padding = const EdgeInsets.all(12),
+  });
 
   final Widget child;
   final VoidCallback? onTap;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     final native = Theme.of(context).y300NativeContent;
     final radius = BorderRadius.circular(12);
-    final content = Padding(padding: const EdgeInsets.all(12), child: child);
+    final content = Padding(padding: padding, child: child);
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,

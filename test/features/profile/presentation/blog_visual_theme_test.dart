@@ -80,7 +80,29 @@ void main() {
           expect(find.text(l10n.profileBlogTitle), findsOneWidget);
           await _save(tester, '$name-list');
 
-          await tester.tap(find.byKey(const Key('profile-blog-item-11')));
+          final listScrollable = find.descendant(
+            of: find.byKey(const Key('profile-blog-list')),
+            matching: find.byType(Scrollable),
+          );
+          final pagination = find.byKey(const Key('profile-blog-pagination'));
+          await tester.scrollUntilVisible(
+            pagination,
+            200,
+            scrollable: listScrollable,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text(l10n.commonPage(1)), findsOneWidget);
+          expect(find.text(l10n.forumDisplayNoMore), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await _save(tester, '$name-pagination');
+          await tester.scrollUntilVisible(
+            find.text(blogVisualTitle),
+            -200,
+            scrollable: listScrollable,
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text(blogVisualTitle));
           await tester.pumpAndSettle();
           expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
           _checkSurfaces(tester, host.theme);

@@ -444,7 +444,7 @@ void main() {
   );
 
   test(
-    'next pages preserve filter identities, append and deduplicate entries',
+    'next pages preserve filter identities and replace the displayed entries',
     () async {
       final repository = _Directory();
       final controller = feed(repository);
@@ -455,6 +455,8 @@ void main() {
       repository.succeed(1, ids: ['11', '12']);
       await pending;
       pending = controller.loadNextPage();
+      expect(controller.value.hasMore, isTrue);
+      expect(controller.value.canLoadNext, isFalse);
       await controller.loadNextPage();
       expect(repository.requests, hasLength(3));
       expect(
@@ -463,13 +465,157 @@ void main() {
       );
       repository.succeed(2, ids: ['12', '13'], next: false);
       await pending;
-      expect(controller.value.data!.items.map((e) => e.blogId), [
-        '11',
-        '12',
-        '13',
-      ]);
+      expect(controller.value.data!.items.map((e) => e.blogId), ['12', '13']);
       await controller.loadNextPage();
       expect(repository.requests, hasLength(3));
+    },
+  );
+
+  test(
+    'page selection and previous preserve filters and follow server page numbers',
+    () async {
+      final repository = _Directory();
+      final controller = feed(
+        repository,
+        args: const ProfileBlogPageArgs(
+          initialOrder: UserBlogOrder.recommended,
+          initialCategoryId: '8',
+        ),
+      );
+      var pending = controller.setActive(true);
+      repository.succeed(0, totalPages: 4);
+      await pending;
+      expect(controller.value.currentPage, 1);
+      expect(controller.value.lastPage, 4);
+      expect(controller.value.canLoadPrevious, isFalse);
+      await controller.loadPreviousPage();
+      await controller.loadPageNumber(0);
+      await controller.loadPageNumber(1);
+      await controller.loadPageNumber(5);
+      expect(repository.requests, hasLength(1));
+
+      pending = controller.loadPageNumber(4);
+      expect(controller.value.currentPage, 1);
+      expect(controller.value.data!.items.single.blogId, '11');
+      await controller.loadPageNumber(2);
+      await controller.loadPreviousPage();
+      expect(repository.requests, hasLength(2));
+      expect(
+        repository.requests.last.query,
+        const UserBlogDirectoryQuery.public(
+          order: UserBlogOrder.recommended,
+          categoryId: '8',
+          page: 4,
+        ),
+      );
+      // The exact last page bounds navigation even if a stale next link exists.
+      repository.succeed(1, page: 3, totalPages: 3, ids: ['30'], next: true);
+      await pending;
+      expect(controller.value.currentPage, 3);
+      expect(controller.value.query.page, 3);
+      expect(controller.value.lastPage, 3);
+      expect(controller.value.canLoadNext, isFalse);
+      expect(controller.value.canLoadPrevious, isTrue);
+      expect(controller.value.data!.items.single.blogId, '30');
+      await controller.loadNextPage();
+      expect(repository.requests, hasLength(2));
+
+      pending = controller.loadPreviousPage();
+      expect(
+        repository.requests.last.query,
+        const UserBlogDirectoryQuery.public(
+          order: UserBlogOrder.recommended,
+          categoryId: '8',
+          page: 2,
+        ),
+      );
+      expect(controller.value.canLoadPrevious, isFalse);
+      repository.succeed(2, totalPages: 3, ids: ['20']);
+      await pending;
+      expect(controller.value.currentPage, 2);
+      expect(controller.value.data!.items.single.blogId, '20');
+    },
+  );
+
+  test(
+    'unknown totals allow earlier pages and only one advertised forward page',
+    () async {
+      final repository = _Directory(
+        unsupportedCapabilities: {UserBlogDirectoryCapability.totalPageCount},
+      );
+      final controller = feed(
+        repository,
+        args: const ProfileBlogPageArgs(initialPage: 3),
+      );
+      await controller.loadPageNumber(2);
+      expect(repository.requests, isEmpty);
+      var pending = controller.setActive(true);
+      repository.succeed(0, totalPages: 100, ids: ['30']);
+      await pending;
+      expect(controller.value.lastPage, isNull);
+      await controller.loadPageNumber(5);
+      expect(repository.requests, hasLength(1));
+
+      pending = controller.loadPageNumber(4);
+      repository.succeed(1, totalPages: 100, ids: ['40'], next: false);
+      await pending;
+      expect(controller.value.currentPage, 4);
+      expect(controller.value.hasMore, isFalse);
+      await controller.loadPageNumber(5);
+      expect(repository.requests, hasLength(2));
+
+      pending = controller.loadPageNumber(1);
+      repository.succeed(2, ids: ['11']);
+      await pending;
+      expect(controller.value.currentPage, 1);
+      expect(controller.value.data!.items.single.blogId, '11');
+      await controller.setActive(false);
+      await controller.loadPageNumber(2);
+      expect(repository.requests, hasLength(3));
+    },
+  );
+
+  test(
+    'page totals must be positive and can supply missing directional metadata',
+    () async {
+      final repository = _Directory();
+      final controller = feed(repository);
+      var pending = controller.setActive(true);
+      repository.succeed(0, totalPages: 0, next: null);
+      await pending;
+      expect(controller.value.lastPage, isNull);
+      expect(controller.value.hasMore, isFalse);
+      pending = controller.refresh();
+      repository.succeed(1, totalPages: 3, next: null);
+      await pending;
+      expect(controller.value.lastPage, 3);
+      expect(controller.value.hasMore, isTrue);
+      pending = controller.loadNextPage();
+      repository.succeed(2, totalPages: 3, next: false);
+      await pending;
+      expect(controller.value.hasMore, isFalse);
+    },
+  );
+
+  test(
+    'a new sort cancels pending paging and ignores its late replacement',
+    () async {
+      final repository = _Directory();
+      final controller = feed(repository);
+      var pending = controller.setActive(true);
+      repository.succeed(0);
+      await pending;
+      final next = controller.loadNextPage();
+      pending = controller.selectOrder(UserBlogOrder.recommended);
+      expect(repository.requests[1].cancellation.isCancelled, isTrue);
+      expect(repository.requests.last.query.page, 1);
+      repository.succeed(2, ids: ['20']);
+      await pending;
+      repository.succeed(1, ids: ['12']);
+      await next;
+      expect(controller.value.currentPage, 1);
+      expect(controller.value.query.order, UserBlogOrder.recommended);
+      expect(controller.value.data!.items.single.blogId, '20');
     },
   );
 
@@ -549,8 +695,42 @@ void main() {
     repository.succeed(2, ids: ['12'], next: false);
     await pending;
     expect(controller.value.failure, isNull);
-    expect(controller.value.data!.items.map((e) => e.blogId), ['11', '12']);
+    expect(controller.value.data!.items.single.blogId, '12');
+    expect(controller.value.currentPage, 2);
   });
+
+  test(
+    'failed previous paging preserves the selected page for retry',
+    () async {
+      final repository = _Directory();
+      final controller = feed(
+        repository,
+        args: const ProfileBlogPageArgs(initialPage: 3),
+      );
+      var pending = controller.setActive(true);
+      repository.succeed(0, ids: ['30'], totalPages: 4);
+      await pending;
+      pending = controller.loadPreviousPage();
+      repository.requests[1].result.complete(
+        const DataReadFailure(
+          diagnosticMessage: 'fixture_failure',
+          kind: DataReadFailureKind.network,
+        ),
+      );
+      await pending;
+      expect(controller.value.currentPage, 3);
+      expect(controller.value.query.page, 3);
+      expect(controller.value.lastPage, 4);
+      expect(controller.value.data!.items.single.blogId, '30');
+      pending = controller.loadPreviousPage();
+      expect(repository.requests[2].query.page, 2);
+      repository.succeed(2, ids: ['20'], totalPages: 4);
+      await pending;
+      expect(controller.value.failure, isNull);
+      expect(controller.value.currentPage, 2);
+      expect(controller.value.data!.items.single.blogId, '20');
+    },
+  );
 
   test(
     'refresh starts from page one and keeps content during a network failure',
@@ -573,12 +753,13 @@ void main() {
         ),
       );
       await pending;
-      expect(controller.value.data!.items, hasLength(2));
+      expect(controller.value.data!.items.single.blogId, '12');
+      expect(controller.value.currentPage, 2);
     },
   );
 
   test(
-    'refresh supersedes a pending next page without accepting its late append',
+    'refresh supersedes a pending next page without accepting its late replacement',
     () async {
       final repository = _Directory();
       final controller = feed(repository);
@@ -893,11 +1074,18 @@ class _Pending<Q, R> {
 }
 
 class _Directory implements UserBlogDirectoryRepository {
+  _Directory({this.unsupportedCapabilities = const {}});
+
+  final Set<UserBlogDirectoryCapability> unsupportedCapabilities;
   final requests = <_Pending<UserBlogDirectoryQuery, BlogDirectoryRead>>[];
   @override
   UserBlogDirectorySourceCapabilities get capabilities =>
       UserBlogDirectorySourceCapabilities(
-        values: DataCapabilitySet.supported(UserBlogDirectoryCapability.values),
+        values: DataCapabilitySet.supported(
+          UserBlogDirectoryCapability.values.where(
+            (capability) => !unsupportedCapabilities.contains(capability),
+          ),
+        ),
         paginationPrecision: PaginationPrecision.exact,
       );
   @override
@@ -915,7 +1103,13 @@ class _Directory implements UserBlogDirectoryRepository {
     return request.result.future;
   }
 
-  void succeed(int index, {List<String> ids = const ['11'], bool next = true}) {
+  void succeed(
+    int index, {
+    List<String> ids = const ['11'],
+    bool? next = true,
+    int? page,
+    int? totalPages,
+  }) {
     final request = requests[index];
     request.result.complete(
       DataReadSuccess(
@@ -932,7 +1126,8 @@ class _Directory implements UserBlogDirectoryRepository {
           ],
           categories: const [UserBlogCategory(id: '8', name: 'Stories')],
           pagination: UserBlogPagination(
-            currentPage: request.query.page,
+            currentPage: page ?? request.query.page,
+            totalPages: totalPages,
             hasNext: next,
           ),
         ),

@@ -17,7 +17,7 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
-import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
+import 'package:y300/shared/widgets/native_pagination_bar.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumDisplayContent extends StatefulWidget {
@@ -164,7 +164,6 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
               onLoadPrevious: widget.onLoadPrevious,
               onLoadMore: widget.onLoadMore,
               onSelectPage: widget.onSelectPage,
-              palette: palette,
             ),
           ),
         ],
@@ -1908,7 +1907,6 @@ class _LoadMoreSection extends StatelessWidget {
     required this.onLoadPrevious,
     required this.onLoadMore,
     required this.onSelectPage,
-    required this.palette,
   });
 
   final int currentPage;
@@ -1919,151 +1917,30 @@ class _LoadMoreSection extends StatelessWidget {
   final VoidCallback onLoadPrevious;
   final VoidCallback onLoadMore;
   final ValueChanged<int> onSelectPage;
-  final ForumDisplayThemePalette palette;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final l10n = AppLocalizations.of(context);
+    final page = currentPage > 0 ? currentPage : 1;
+    return NativePaginationBar(
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _PageButton(
-            key: const Key('forum-display-prev-page-button'),
-            label: AppLocalizations.of(context).forumDisplayPreviousPage,
-            enabled: canLoadPrevious && !isLoadingMore,
-            emphasized: false,
-            onPressed: onLoadPrevious,
-            palette: palette,
-          ),
-          const SizedBox(width: 8),
-          _CurrentPageButton(
-            currentPage: currentPage > 0 ? currentPage : 1,
-            lastPage: lastPage,
-            hasMore: hasMore,
-            enabled: !isLoadingMore,
-            onSelected: onSelectPage,
-            palette: palette,
-          ),
-          const SizedBox(width: 8),
-          if (isLoadingMore)
-            const SizedBox(
-              width: 72,
-              height: 34,
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            _PageButton(
-              key: const Key('forum-display-load-more-button'),
-              label: hasMore
-                  ? AppLocalizations.of(context).forumDisplayNextPage
-                  : AppLocalizations.of(context).forumDisplayNoMore,
-              enabled: hasMore,
-              emphasized: false,
-              onPressed: onLoadMore,
-              palette: palette,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CurrentPageButton extends StatelessWidget {
-  const _CurrentPageButton({
-    required this.currentPage,
-    required this.lastPage,
-    required this.hasMore,
-    required this.enabled,
-    required this.onSelected,
-    required this.palette,
-  });
-
-  final int currentPage;
-  final int? lastPage;
-  final bool hasMore;
-  final bool enabled;
-  final ValueChanged<int> onSelected;
-  final ForumDisplayThemePalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    return NativePageDropdownButton(
-      buttonKey: const Key('forum-display-current-page-button'),
-      menuKeyPrefix: 'forum-display',
-      currentPage: currentPage,
+      currentPage: page,
       lastPage: lastPage,
       hasMore: hasMore,
-      enabled: enabled,
-      label: AppLocalizations.of(context).forumDisplayPage(currentPage),
-      style: _pageButtonStyle(context, enabled, palette, emphasized: true),
-      onSelected: onSelected,
+      canLoadPrevious: canLoadPrevious,
+      isLoading: isLoadingMore,
+      onLoadPrevious: onLoadPrevious,
+      onLoadNext: onLoadMore,
+      onSelectPage: onSelectPage,
+      previousLabel: l10n.forumDisplayPreviousPage,
+      currentLabel: l10n.forumDisplayPage(page),
+      nextLabel: hasMore ? l10n.forumDisplayNextPage : l10n.forumDisplayNoMore,
+      previousButtonKey: const Key('forum-display-prev-page-button'),
+      currentPageButtonKey: const Key('forum-display-current-page-button'),
+      nextButtonKey: const Key('forum-display-load-more-button'),
+      menuKeyPrefix: 'forum-display',
     );
   }
-}
-
-class _PageButton extends StatelessWidget {
-  const _PageButton({
-    super.key,
-    required this.label,
-    required this.enabled,
-    required this.emphasized,
-    required this.onPressed,
-    required this.palette,
-  });
-
-  final String label;
-  final bool enabled;
-  final bool emphasized;
-  final VoidCallback onPressed;
-  final ForumDisplayThemePalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
-      child: TextButton(
-        onPressed: enabled ? onPressed : null,
-        style: _pageButtonStyle(
-          context,
-          enabled,
-          palette,
-          emphasized: emphasized,
-        ),
-        child: Text(label),
-      ),
-    );
-  }
-}
-
-ButtonStyle _pageButtonStyle(
-  BuildContext context,
-  bool enabled,
-  ForumDisplayThemePalette palette, {
-  required bool emphasized,
-}) {
-  return TextButton.styleFrom(
-    backgroundColor: palette.surfaceContainerHigh.withValues(alpha: 0.42),
-    disabledBackgroundColor: palette.surfaceContainerHigh.withValues(
-      alpha: 0.42,
-    ),
-    disabledForegroundColor: palette.disabledText,
-    foregroundColor: enabled ? palette.accent : palette.disabledText,
-    padding: const EdgeInsets.symmetric(horizontal: 14),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(10),
-      side: BorderSide.none,
-    ),
-    textStyle: Theme.of(
-      context,
-    ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
-  );
 }
 
 class _EmptyThreadList extends StatelessWidget {
