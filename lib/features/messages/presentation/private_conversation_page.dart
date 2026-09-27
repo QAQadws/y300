@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/features/messages/presentation/conversation_scroll_controller.dart';
 import 'package:y300/features/messages/presentation/message_feed_controller.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
+import 'package:y300/features/messages/presentation/widgets/conversation_scroll_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/features/messages/presentation/widgets/private_message_editor.dart';
@@ -197,22 +199,14 @@ class _ConversationTimeline extends StatefulWidget {
 }
 
 class _ConversationTimelineState extends State<_ConversationTimeline> {
-  final _scroll = ScrollController();
+  final _scroll = ConversationScrollController();
   final _center = GlobalKey();
   String? _anchor;
-  bool _awayFromLatest = false;
 
   @override
   void initState() {
     super.initState();
     _anchor = widget.page.items.lastOrNull?.messageId;
-    _scroll.addListener(_onScroll);
-  }
-
-  void _onScroll() {
-    final away =
-        _scroll.position.pixels - _scroll.position.minScrollExtent > 80;
-    if (away != _awayFromLatest) setState(() => _awayFromLatest = away);
   }
 
   @override
@@ -220,23 +214,11 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
     super.didUpdateWidget(oldWidget);
     if (!widget.page.items.any((item) => item.messageId == _anchor)) {
       _anchor = widget.page.items.lastOrNull?.messageId;
-      _awayFromLatest = false;
-      showLatest();
-    }
-    if (!_awayFromLatest &&
-        oldWidget.page.items.lastOrNull?.messageId !=
-            widget.page.items.lastOrNull?.messageId) {
       showLatest();
     }
   }
 
-  void showLatest() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scroll.hasClients) {
-        _scroll.jumpTo(_scroll.position.minScrollExtent);
-      }
-    });
-  }
+  void showLatest() => _scroll.showLatest();
 
   @override
   void dispose() {
@@ -277,12 +259,10 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
     // rows of different heights. Avoid estimated scroll-offset corrections.
     return Stack(
       children: [
-        CustomScrollView(
+        ConversationScrollView(
           key: const Key('private-conversation-list'),
           controller: _scroll,
-          reverse: true,
           center: _center,
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           slivers: [
             SliverList.builder(
               itemCount: newer.length,
@@ -290,36 +270,36 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
             ),
             SliverList.builder(
               key: _center,
-              itemCount: history.length + 1,
+              itemCount: history.length + (widget.controller.hasMore ? 1 : 0),
               itemBuilder: (context, index) => index < history.length
                   ? bubble(history[index])
                   : Padding(
                       padding: const EdgeInsets.all(12),
-                      child: widget.controller.hasMore
-                          ? TextButton(
-                              onPressed: widget.controller.value.isBusy
-                                  ? null
-                                  : widget.controller.loadMore,
-                              child: Text(
-                                AppLocalizations.of(context).messageOlder,
-                              ),
-                            )
-                          : const SizedBox.shrink(),
+                      child: TextButton(
+                        onPressed: widget.controller.value.isBusy
+                            ? null
+                            : widget.controller.loadMore,
+                        child: Text(AppLocalizations.of(context).messageOlder),
+                      ),
                     ),
             ),
           ],
         ),
-        if (_awayFromLatest)
-          Positioned.directional(
-            textDirection: Directionality.of(context),
-            end: 12,
-            bottom: 8,
-            child: FilledButton.tonalIcon(
-              onPressed: showLatest,
-              icon: const Icon(Icons.arrow_downward, size: 18),
-              label: Text(AppLocalizations.of(context).messageLatest),
-            ),
+        Positioned.directional(
+          textDirection: Directionality.of(context),
+          end: 12,
+          bottom: 8,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _scroll.followingLatest,
+            builder: (context, following, _) => following
+                ? const SizedBox.shrink()
+                : FilledButton.tonalIcon(
+                    onPressed: showLatest,
+                    icon: const Icon(Icons.arrow_downward, size: 18),
+                    label: Text(AppLocalizations.of(context).messageLatest),
+                  ),
           ),
+        ),
       ],
     );
   }

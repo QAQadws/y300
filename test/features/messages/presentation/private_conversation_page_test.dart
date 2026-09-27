@@ -69,6 +69,148 @@ void main() {
   AppLocalizations l10n(WidgetTester tester) =>
       AppLocalizations.of(tester.element(find.byType(PrivateConversationPage)));
 
+  Finder timeline() => find.byKey(const Key('private-conversation-list'));
+
+  ScrollController scrollController(WidgetTester tester) =>
+      tester.widget<CustomScrollView>(timeline()).controller!;
+
+  void expectLatest(WidgetTester tester, String messageId) {
+    final scroll = scrollController(tester);
+    expect(scroll.offset, closeTo(scroll.position.minScrollExtent, 0.1));
+    expect(
+      tester.getBottomLeft(find.byKey(ValueKey(messageId))).dy,
+      closeTo(tester.getBottomLeft(timeline()).dy, 0.1),
+    );
+    expect(find.text(l10n(tester).messageLatest), findsNothing);
+  }
+
+  Future<void> refreshMessages(
+    WidgetTester tester,
+    List<ForumPrivateMessageItem> items, {
+    ForumConversationTarget destination = target,
+  }) async {
+    final refresh = container
+        .read(privateMessageFeedProvider(destination))
+        .refresh();
+    repository.reads.last.result.complete(messageTestPage(items));
+    await refresh;
+    await tester.pumpAndSettle();
+  }
+
+  for (final destination in [
+    target,
+    const ForumConversationTarget.group('91'),
+  ]) {
+    testWidgets(
+      '${destination.kind.name} short conversation starts at top and grows downward',
+      (tester) async {
+        await pumpPage(tester, destination: destination);
+        repository.reads.single.result.complete(
+          messageTestPage([messageTestItem('1')], anchor: '1'),
+        );
+        await tester.pumpAndSettle();
+        final top = tester.getTopLeft(timeline()).dy;
+        expect(
+          tester.getTopLeft(find.byKey(const ValueKey('1'))).dy,
+          closeTo(top, 0.1),
+        );
+
+        await refreshMessages(tester, [
+          messageTestItem('1'),
+          messageTestItem('2', sender: '10'),
+        ], destination: destination);
+        final first = tester.getRect(find.byKey(const ValueKey('1')));
+        final second = tester.getRect(find.byKey(const ValueKey('2')));
+        expect(first.top, closeTo(top, 0.1));
+        expect(second.top, closeTo(first.bottom, 0.1));
+        expect(second.bottom, lessThan(tester.getBottomLeft(timeline()).dy));
+        expect(find.text(l10n(tester).messageOlder), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('appending messages crosses a screen without losing latest', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('1')]),
+    );
+    await tester.pumpAndSettle();
+    var becameScrollable = false;
+    for (var count = 2; count <= 8; count++) {
+      await refreshMessages(tester, [
+        for (var id = 1; id <= count; id++) messageTestItem('$id'),
+      ]);
+      final bounds = tester.getRect(timeline());
+      final scroll = scrollController(tester);
+      final last = tester.getRect(find.byKey(ValueKey('$count')));
+      expect(scroll.offset, closeTo(scroll.position.minScrollExtent, 0.1));
+      expect(last.bottom, lessThanOrEqualTo(bounds.bottom + 0.1));
+      if (scroll.position.maxScrollExtent - scroll.position.minScrollExtent >
+          0.1) {
+        becameScrollable = true;
+        expectLatest(tester, '$count');
+      } else {
+        expect(
+          tester.getTopLeft(find.byKey(const ValueKey('1'))).dy,
+          closeTo(bounds.top, 0.1),
+        );
+      }
+      await tester.pump();
+      expect(
+        tester.getBottomLeft(find.byKey(ValueKey('$count'))).dy,
+        closeTo(last.bottom, 0.1),
+      );
+    }
+    expect(becameScrollable, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'long conversation follows latest through keyboard, input, font, and HTML changes',
+    (tester) async {
+      await pumpPage(tester);
+      repository.reads.single.result.complete(
+        messageTestPage([
+          for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      expectLatest(tester, '20');
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 180);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.enterText(
+        find.byKey(const Key('message-input')),
+        'multiple\nlines\nof\ninput',
+      );
+      await tester.pumpAndSettle();
+      expectLatest(tester, '20');
+
+      await container
+          .read(forumHtmlReaderPreferencesControllerProvider.notifier)
+          .setFontScale(1.6);
+      await tester.pumpAndSettle();
+      expectLatest(tester, '20');
+      await refreshMessages(tester, [
+        for (var id = 1; id < 20; id++) messageTestItem('$id'),
+        messageTestItem(
+          '20',
+          html: '<p>Expanded body</p><p>Another paragraph</p>',
+        ),
+      ]);
+      expectLatest(tester, '20');
+
+      tester.view.resetViewInsets();
+      await tester.enterText(find.byKey(const Key('message-input')), '');
+      await tester.pumpAndSettle();
+      expectLatest(tester, '20');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'opens latest page, shares thread typography, and dispatches links',
     (tester) async {
@@ -107,6 +249,57 @@ void main() {
         1.6,
       );
       expect(repository.reads, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'dragging into history suspends latest following until explicitly resumed',
+    (tester) async {
+      await pumpPage(tester);
+      repository.reads.single.result.complete(
+        messageTestPage([
+          for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      expectLatest(tester, '20');
+
+      await tester.drag(timeline(), const Offset(0, 300));
+      await tester.pumpAndSettle();
+      final scroll = scrollController(tester);
+      expect(scroll.offset - scroll.position.minScrollExtent, greaterThan(80));
+      expect(find.text(l10n(tester).messageLatest), findsOneWidget);
+      final bounds = tester.getRect(timeline());
+      final visible = tester
+          .widgetList<ForumHtmlContentView>(find.byType(ForumHtmlContentView))
+          .firstWhere((widget) {
+            final rect = tester.getRect(find.byWidget(widget));
+            return rect.top > bounds.top && rect.bottom < bounds.bottom;
+          });
+      Finder anchor() => find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumHtmlContentView &&
+            widget.sourceId == visible.sourceId,
+      );
+      final before = tester.getTopLeft(anchor()).dy;
+
+      final refresh = container
+          .read(privateMessageFeedProvider(target))
+          .refresh();
+      repository.reads.last.result.complete(
+        messageTestPage([
+          for (var id = 1; id <= 21; id++) messageTestItem('$id'),
+        ], page: 2),
+      );
+      await refresh;
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(anchor()).dy, closeTo(before, 0.1));
+      expect(find.text(l10n(tester).messageLatest), findsOneWidget);
+
+      await tester.tap(find.text(l10n(tester).messageLatest));
+      await tester.pumpAndSettle();
+      expectLatest(tester, '21');
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -180,33 +373,135 @@ void main() {
     },
   );
 
-  testWidgets(
-    'group send uses response anchor and refreshes only after applied',
-    (tester) async {
-      await pumpPage(
-        tester,
-        destination: const ForumConversationTarget.group('91'),
-      );
+  testWidgets('group send returns from history to latest only after applied', (
+    tester,
+  ) async {
+    await pumpPage(
+      tester,
+      destination: const ForumConversationTarget.group('91'),
+    );
+    repository.reads.single.result.complete(
+      messageTestPage([
+        for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+      ], anchor: '77'),
+    );
+    await tester.pumpAndSettle();
+    final scroll = scrollController(tester);
+    scroll.jumpTo(350);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('message-input')), 'reply');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('message-send')));
+    await tester.pump();
+    expect(repository.sends.single.submission.recipient.replyMessageId, '77');
+    expect(repository.reads, hasLength(1));
+    expect(scroll.offset - scroll.position.minScrollExtent, greaterThan(80));
+    repository.sends.single.succeed();
+    await tester.pump();
+    expect(repository.reads, hasLength(2));
+    repository.reads.last.result.complete(
+      messageTestPage(
+        [
+          for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+          messageTestItem('100', sender: '10'),
+        ],
+        page: 2,
+        anchor: '100',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('message-input')))
+          .controller!
+          .text,
+      isEmpty,
+    );
+    expectLatest(tester, '100');
+    expect(tester.takeException(), isNull);
+  });
+
+  const sendFailure = DataCommandFailure(
+    kind: DataCommandFailureKind.network,
+    retryPolicy: DataCommandRetryPolicy.explicitOnly,
+    diagnosticMessage: 'message_send_failed',
+  );
+  for (final result in <DataCommandResult<ForumPrivateMessageReceipt>>[
+    const DataCommandNotSent(sendFailure),
+    const DataCommandOutcomeUnknown(sendFailure),
+  ]) {
+    testWidgets('${result.runtimeType} keeps the reader in history', (
+      tester,
+    ) async {
+      await pumpPage(tester);
       repository.reads.single.result.complete(
-        messageTestPage([messageTestItem('1')], anchor: '77'),
+        messageTestPage([
+          for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+        ]),
       );
+      await tester.pumpAndSettle();
+      final scroll = scrollController(tester);
+      scroll.jumpTo(350);
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('message-input')), 'reply');
       await tester.pump();
       await tester.tap(find.byKey(const Key('message-send')));
       await tester.pump();
-      expect(repository.sends.single.submission.recipient.replyMessageId, '77');
+      repository.sends.single.result.complete(result);
+      await tester.pumpAndSettle();
       expect(repository.reads, hasLength(1));
-      repository.sends.single.succeed();
-      await tester.pump();
-      expect(repository.reads, hasLength(2));
-      repository.reads.last.result.complete(
+      expect(scroll.offset - scroll.position.minScrollExtent, greaterThan(80));
+      expect(find.text(l10n(tester).messageLatest), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('message-input')))
+            .controller!
+            .text,
+        'reply',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'account switch resets history position and ignores late refresh',
+    (tester) async {
+      await pumpPage(tester);
+      repository.reads.single.result.complete(
         messageTestPage([
-          messageTestItem('1'),
-          messageTestItem('100', sender: '10'),
-        ], anchor: '100'),
+          for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+        ]),
       );
       await tester.pumpAndSettle();
+      scrollController(tester).jumpTo(350);
+      await tester.enterText(
+        find.byKey(const Key('message-input')),
+        'old draft',
+      );
+      final oldRefresh = container
+          .read(privateMessageFeedProvider(target))
+          .refresh();
+      final oldRead = repository.reads.last;
+      container.updateOverrides([
+        messageAccountIdProvider.overrideWithValue('11'),
+        messageRepositoryProvider.overrideWithValue(repository),
+        forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
+      ]);
+      await tester.pump();
+      await tester.pump();
+      expect(oldRead.query.cancellation?.isCancelled, isTrue);
+      repository.reads.last.result.complete(
+        messageTestPage([messageTestItem('200')], owner: '11'),
+      );
+      oldRead.result.complete(messageTestPage([messageTestItem('100')]));
+      await oldRefresh;
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('100')), findsNothing);
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('200'))).dy,
+        closeTo(tester.getTopLeft(timeline()).dy, 0.1),
+      );
+      expect(find.text(l10n(tester).messageLatest), findsNothing);
       expect(
         tester
             .widget<TextField>(find.byKey(const Key('message-input')))
