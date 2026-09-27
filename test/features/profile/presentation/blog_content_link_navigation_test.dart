@@ -451,6 +451,64 @@ void main() {
     expect(host.details.queries, hasLength(1));
   });
 
+  for (final comment in [false, true]) {
+    testWidgets(
+      '${comment ? 'comment' : 'article'} selection copy keeps native link navigation and reading position',
+      (tester) async {
+        final host = _Host();
+        const html =
+            '<p><a href="home.php?mod=space&amp;uid=202&amp;do=profile">copy page author</a></p>';
+        if (comment) {
+          host.details.commentHtml = html;
+        } else {
+          host.details.bodyHtml = html;
+        }
+        await host.pump(
+          tester,
+          ProfileBlogDetailPage(
+            ownerUserId: '101',
+            blogId: '11',
+            focusComments: comment,
+          ),
+        );
+        final before = _detailScroll(tester).position.pixels;
+        final card = find.byKey(
+          Key(comment ? 'profile-blog-comment-31' : 'blog-detail-card'),
+        );
+        await tester.longPressAt(
+          tester.getTopRight(card) + const Offset(-8, 8),
+        );
+        await tester.pumpAndSettle();
+        final selectCopy = find.byKey(
+          const Key('blog-content-action-select-copy'),
+        );
+        await tester.ensureVisible(selectCopy);
+        await tester.tap(selectCopy);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('blog-selection-copy-page')),
+          findsOneWidget,
+        );
+        await _tapHtmlLink(tester, 'copy page author');
+        await tester.pumpAndSettle();
+        expect(find.byType(UserProfilePage), findsOneWidget);
+        expect(host.profiles.queries.single.userId, '202');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('blog-selection-copy-page')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(_detailScroll(tester).position.pixels, before);
+        expect(host.details.queries, hasLength(1));
+        expect(host.webLaunches, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'comment entry stays stable when content above it changes height',
     (tester) async {

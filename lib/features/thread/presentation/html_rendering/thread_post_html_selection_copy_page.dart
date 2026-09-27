@@ -5,7 +5,7 @@ import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
-import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
@@ -34,51 +34,25 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
-    return Scaffold(
+    return ForumContentSelectionCopyPage(
       key: const Key('thread-post-html-selection-copy-page'),
-      backgroundColor: palette.background,
-      appBar: AppBar(
-        centerTitle: false,
-        title: Text(AppLocalizations.of(context).threadSelectionCopyTitle),
+      title: AppLocalizations.of(context).threadSelectionCopyTitle,
+      bodyKey: Key(
+        'thread-post-html-selection-copy-body-${(sourcePost ?? post).pid}',
       ),
-      body: SelectionArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-          children: [
-            Container(
-              key: Key(
-                'thread-post-html-selection-copy-body-'
-                '${(sourcePost ?? post).pid}',
-              ),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: palette.card,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
-              ),
-              child: DefaultTextStyle.merge(
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: palette.bodyText,
-                  height: 1.5,
-                ),
-                child: ThreadPostHtmlBody(
-                  post: post,
-                  sourcePost: sourcePost,
-                  threadId: threadId,
-                  imageReferer: imageReferer,
-                  plan: plan,
-                  onOpenPostLink: onOpenPostLink,
-                  onOpenPostImage: onOpenPostImage,
-                  theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
-                    palette: palette,
-                    brightness: Theme.of(context).brightness,
-                  ),
-                  onImageFallback: onImageFallback,
-                ),
-              ),
-            ),
-          ],
+      child: ThreadPostHtmlBody(
+        post: post,
+        sourcePost: sourcePost,
+        threadId: threadId,
+        imageReferer: imageReferer,
+        plan: plan,
+        onOpenPostLink: onOpenPostLink,
+        onOpenPostImage: onOpenPostImage,
+        theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+          palette: palette,
+          brightness: Theme.of(context).brightness,
         ),
+        onImageFallback: onImageFallback,
       ),
     );
   }

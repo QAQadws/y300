@@ -10,6 +10,10 @@ final class BlogDetailFixture implements UserBlogDetailRepository {
   String? publishedAtText;
   List<UserBlogCategoryLink> categoryLinks = const [];
   bool emptyComments = false;
+  bool? commentsOpen = true;
+  Set<UserBlogAction> actions = const {};
+  Set<UserBlogCommentAction> commentActions = const {};
+  UserBlogDetailReadCapabilities? readCapabilities;
   @override
   final capabilities = UserBlogDetailSourceCapabilities(
     values: DataCapabilitySet.from(supported: UserBlogDetailCapability.values),
@@ -33,7 +37,8 @@ final class BlogDetailFixture implements UserBlogDetailRepository {
         authorName: authorName,
         publishedAtText: publishedAtText,
         categoryLinks: categoryLinks,
-        commentsOpen: true,
+        commentsOpen: commentsOpen,
+        actions: actions,
         commentPagination: UserBlogPagination(
           currentPage: page,
           totalPages: 9,
@@ -47,10 +52,11 @@ final class BlogDetailFixture implements UserBlogDetailRepository {
                   commentId: query.commentId ?? '31',
                   authorName: 'comment author',
                   bodyHtml: commentHtml,
+                  actions: commentActions,
                 ),
               ],
       ),
-      capabilities: capabilities.toReadCapabilities(),
+      capabilities: readCapabilities ?? capabilities.toReadCapabilities(),
       metadata: const DataReadMetadata.network(),
     );
   }

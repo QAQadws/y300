@@ -1649,6 +1649,7 @@
   "profileBlogLeaveCommentBody": "尚未提交的修改会丢失，不会保存为草稿。",
   "profileBlogLeavePendingCommentBody": "操作可能已送达服务器，离开不会撤回。请返回日志核对后再操作，避免重复提交。",
   "profileBlogComment": "评论",
+  "profileBlogReply": "回复日志",
   "profileBlogViews": "浏览 {count}",
   "@profileBlogViews": {"placeholders": {"count": {"type": "int"}}},
   "profileBlogCommentCount": "评论 {count}",

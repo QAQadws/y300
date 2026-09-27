@@ -16,6 +16,7 @@ import 'package:y300/features/profile/presentation/blog/blog_editor_preview.dart
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_capability.dart';
+import 'package:y300/features/profile/presentation/blog/blog_selection_copy_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -37,12 +38,43 @@ void main() {
     }),
   );
 
-  for (final source in ['article', 'comment', 'preview']) {
+  for (final source in [
+    'article',
+    'comment',
+    'preview',
+    'article-selection',
+    'comment-selection',
+  ]) {
     testWidgets(
       '$source opens the tapped image without a second article read and restores position',
       (tester) async {
         final host = _Host();
         await host.pump(tester, source);
+        final isSelection = source.endsWith('-selection');
+        final sourceCard = find.byKey(
+          Key(
+            source.startsWith('article')
+                ? 'blog-detail-card'
+                : 'profile-blog-comment-31',
+          ),
+        );
+        Offset? beforeSelection;
+        if (isSelection) {
+          await tester.ensureVisible(sourceCard);
+          await tester.pump();
+          beforeSelection = tester.getTopLeft(sourceCard);
+          final cardBounds = tester.getRect(sourceCard);
+          await tester.longPressAt(
+            Offset(cardBounds.right - 12, cardBounds.top + 12),
+          );
+          await _frames(tester);
+          await tester.tap(
+            find.byKey(const Key('blog-content-action-select-copy')),
+          );
+          await _frames(tester);
+          expect(find.byType(BlogSelectionCopyPage), findsOneWidget);
+          expect(host.details.queries, hasLength(1));
+        }
         final sourceId = _sourceId(source);
         final target = find.byKey(
           Key('thread-post-html-first-readable-image-$sourceId-1'),
@@ -64,15 +96,24 @@ void main() {
                 as BlogImageReaderCapability;
         expect(capability.request.initialIndex, 1);
         expect(capability.content.items, hasLength(2));
+        expect(capability.imageReferer, 'https://example.test/');
+        expect(
+          capability.request.requests.map((request) => request.referer),
+          everyElement('https://example.test/'),
+        );
+        expect(
+          capability.content.items.map((item) => item.referer),
+          everyElement(Uri.parse('https://example.test/')),
+        );
         expect(
           capability.request.requests.first.cacheKey,
           ImageCacheKeys.blogInline(_url),
         );
         expect(
           capability.request.requests.first.ownerId,
-          source == 'article'
+          source.startsWith('article')
               ? '11'
-              : source == 'comment'
+              : source.startsWith('comment')
               ? '31'
               : 'preview',
         );
@@ -94,6 +135,14 @@ void main() {
         expect(find.byType(BlogImageReaderPage), findsNothing);
         expect(tester.getTopLeft(target), before);
         expect(host.details.queries, hasLength(source == 'preview' ? 0 : 1));
+        if (isSelection) {
+          expect(find.byType(BlogSelectionCopyPage), findsOneWidget);
+          host.navigator.currentState!.pop();
+          await _frames(tester);
+          expect(find.byType(BlogSelectionCopyPage), findsNothing);
+          expect(tester.getTopLeft(sourceCard), beforeSelection);
+          expect(host.details.queries, hasLength(1));
+        }
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -157,8 +206,8 @@ void main() {
 }
 
 String _sourceId(String source) => switch (source) {
-  'article' => 'profile-blog-11',
-  'comment' => 'profile-blog-comment-31',
+  'article' || 'article-selection' => 'profile-blog-11',
+  'comment' || 'comment-selection' => 'profile-blog-comment-31',
   _ => 'blog-editor-preview-preview',
 };
 
@@ -206,8 +255,8 @@ final class _Host {
 
   Future<void> pump(WidgetTester tester, String source) async {
     addTearDown(container.dispose);
-    if (source == 'article') details.bodyHtml = _html;
-    if (source == 'comment') details.commentHtml = _html;
+    if (source.startsWith('article')) details.bodyHtml = _html;
+    if (source.startsWith('comment')) details.commentHtml = _html;
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,

@@ -6,6 +6,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_content_actions.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/blog/blog_text_tabs.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
@@ -287,35 +288,14 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
             initialTitle: _allowInitialTitle ? widget.initialTitle : null,
           ),
           actions: [
-            if (state.data != null)
-              BlogActionMenu(
-                key: const Key('blog-detail-actions'),
-                actions: state.data!.actions,
-                onSelected: (action) async {
-                  if (action == UserBlogAction.edit) {
-                    await openBlogEditorPage(
-                      context,
-                      ref,
-                      ownerUserId: widget.ownerUserId,
-                      blogId: widget.blogId,
-                    );
-                    return;
-                  }
-                  final receipt = await openBlogActionPage(
-                    context,
-                    ref,
-                    ownerUserId: widget.ownerUserId,
-                    blogId: widget.blogId,
-                    action: action,
-                  );
-                  if (mounted &&
-                      receipt?.target.action == UserBlogAction.delete &&
-                      ref.read(blogAccountIdProvider) ==
-                          receipt?.target.actorUserId &&
-                      context.mounted) {
-                    Navigator.of(context).pop();
-                  }
-                },
+            if (state.data != null &&
+                blogCanReplyToArticle(state.data!, state.capabilities))
+              IconButton(
+                key: const Key('blog-detail-reply'),
+                tooltip: l10n.profileBlogReply,
+                icon: const Icon(Icons.reply),
+                onPressed: () =>
+                    _openComment(controller, UserBlogCommentAction.add, null),
               ),
             if (state.data != null)
               IconButton(
@@ -342,6 +322,7 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                   imageReferer: referer,
                   onComment: (action, comment) =>
                       _openComment(controller, action, comment),
+                  onArticleAction: _openArticleAction,
                   onLoadNextComments: state.canLoadNext
                       ? controller.loadNextComments
                       : null,
@@ -386,6 +367,30 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
               ),
       ),
     );
+  }
+
+  Future<void> _openArticleAction(UserBlogAction action) async {
+    if (action == UserBlogAction.edit) {
+      await openBlogEditorPage(
+        context,
+        ref,
+        ownerUserId: widget.ownerUserId,
+        blogId: widget.blogId,
+      );
+      return;
+    }
+    final receipt = await openBlogActionPage(
+      context,
+      ref,
+      ownerUserId: widget.ownerUserId,
+      blogId: widget.blogId,
+      action: action,
+    );
+    if (mounted &&
+        receipt?.target.action == UserBlogAction.delete &&
+        ref.read(blogAccountIdProvider) == receipt?.target.actorUserId) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _openComment(
@@ -919,6 +924,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
     required this.palette,
     required this.imageReferer,
     required this.onComment,
+    required this.onArticleAction,
     required this.onLoadNextComments,
     required this.onPreviousComments,
     required this.onShowAllComments,
@@ -934,6 +940,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   final Y300NativeContentColors palette;
   final String imageReferer;
   final void Function(UserBlogCommentAction, UserBlogComment?) onComment;
+  final ValueChanged<UserBlogAction> onArticleAction;
   final VoidCallback? onLoadNextComments;
   final VoidCallback? onPreviousComments;
   final VoidCallback? onShowAllComments;
@@ -982,6 +989,8 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                 imageReferer: imageReferer,
                 linkBaseUri: linkBaseUri,
                 onOpenLink: onOpenLink,
+                onComment: onComment,
+                onArticleAction: onArticleAction,
               ),
             ],
           ),
@@ -1017,6 +1026,7 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                 for (final comment in data.comments) ...[
                   _CommentCard(
                     key: Key('profile-blog-comment-${comment.commentId}'),
+                    article: data,
                     comment: comment,
                     capabilities: capabilities,
                     palette: palette,
@@ -1058,19 +1068,6 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                       ),
                   ],
                 ),
-              if (capabilities?.supports(
-                        UserBlogDetailCapability.commentingAvailability,
-                      ) ==
-                      true &&
-                  data.commentsOpen == true) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  key: const Key('profile-blog-comment-button'),
-                  onPressed: () => onComment(UserBlogCommentAction.add, null),
-                  icon: const Icon(Icons.comment_outlined),
-                  label: Text(AppLocalizations.of(context).profileBlogComment),
-                ),
-              ],
             ],
           ),
         ),
@@ -1107,6 +1104,8 @@ class _BlogDetailCard extends ConsumerWidget {
     required this.imageReferer,
     required this.linkBaseUri,
     required this.onOpenLink,
+    required this.onComment,
+    required this.onArticleAction,
   });
 
   final UserBlogDetailData data;
@@ -1115,127 +1114,143 @@ class _BlogDetailCard extends ConsumerWidget {
   final String imageReferer;
   final Uri? linkBaseUri;
   final ValueChanged<String> onOpenLink;
+  final void Function(UserBlogCommentAction, UserBlogComment?) onComment;
+  final ValueChanged<UserBlogAction> onArticleAction;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final display = watchBlogDisplayText(ref, BlogContentSource.article(data));
     final accountOwner = ref.watch(blogMutationBusProvider);
     final theme = Theme.of(context);
-    return BlogSurface(
-      padding: const EdgeInsets.fromLTRB(
-        ForumContentSpacing.postBodyHorizontal,
-        ForumContentSpacing.postCardHeaderTop,
-        ForumContentSpacing.postBodyHorizontal,
-        ForumContentSpacing.postCardSingleBottom,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            display.text(data.title),
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.brightness == Brightness.dark
-                  ? palette.itemTitle
-                  : palette.title,
-              fontWeight: FontWeight.w800,
-              height: 1.24,
+    return BlogContentActions(
+      article: data,
+      capabilities: capabilities,
+      displayHtml: display.html(data.bodyHtml),
+      imageReferer: imageReferer,
+      linkBaseUri: linkBaseUri,
+      onComment: onComment,
+      onArticleAction: onArticleAction,
+      builder: (onOpenActions) => BlogSurface(
+        key: const Key('blog-detail-card'),
+        onLongPress: onOpenActions,
+        padding: const EdgeInsets.fromLTRB(
+          ForumContentSpacing.postBodyHorizontal,
+          ForumContentSpacing.postCardHeaderTop,
+          ForumContentSpacing.postBodyHorizontal,
+          ForumContentSpacing.postCardSingleBottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              display.text(data.title),
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.brightness == Brightness.dark
+                    ? palette.itemTitle
+                    : palette.title,
+                fontWeight: FontWeight.w800,
+                height: 1.24,
+              ),
             ),
-          ),
-          if (data.categoryLinks.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              key: const Key('blog-detail-categories'),
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final category in data.categoryLinks)
-                  TextButton.icon(
-                    key: ValueKey(category.query),
-                    style: TextButton.styleFrom(
-                      foregroundColor: palette.accent,
-                      minimumSize: const Size(48, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      textStyle: theme.textTheme.labelMedium,
+            if (data.categoryLinks.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Wrap(
+                key: const Key('blog-detail-categories'),
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final category in data.categoryLinks)
+                    TextButton.icon(
+                      key: ValueKey(category.query),
+                      style: TextButton.styleFrom(
+                        foregroundColor: palette.accent,
+                        minimumSize: const Size(48, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        textStyle: theme.textTheme.labelMedium,
+                      ),
+                      icon: const Icon(Icons.folder_outlined, size: 16),
+                      label: Text(display.text(category.name)),
+                      onPressed: () {
+                        if (!context.mounted ||
+                            ModalRoute.of(context)?.isCurrent == false) {
+                          return;
+                        }
+                        Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProfileBlogPage.fromQuery(category.query),
+                          ),
+                        );
+                      },
                     ),
-                    icon: const Icon(Icons.folder_outlined, size: 16),
-                    label: Text(display.text(category.name)),
-                    onPressed: () {
-                      if (!context.mounted ||
-                          ModalRoute.of(context)?.isCurrent == false) {
-                        return;
-                      }
-                      Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              ProfileBlogPage.fromQuery(category.query),
-                        ),
-                      );
-                    },
+                ],
+              ),
+              const SizedBox(height: 4),
+            ] else
+              const SizedBox(height: 11),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (capabilities?.supports(
+                      UserBlogDetailCapability.avatarReference,
+                    ) ==
+                    true) ...[
+                  _ProfileBlogAvatar(
+                    imageUrl: data.avatarUrl,
+                    ownerId: data.ownerUserId,
+                    userId: data.ownerUserId,
+                    radius: 17,
+                    imageReferer: imageReferer,
+                    compact: true,
                   ),
+                  const SizedBox(width: 9),
+                ],
+                Expanded(
+                  child: _BlogAuthorMetadata(
+                    authorKey: const Key('blog-detail-author'),
+                    userId: data.ownerUserId,
+                    name:
+                        capabilities?.supports(
+                              UserBlogDetailCapability.author,
+                            ) ==
+                            true
+                        ? data.authorName
+                        : null,
+                    metadata: _detailMeta(context, data, display),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 4),
-          ] else
-            const SizedBox(height: 11),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (capabilities?.supports(
-                    UserBlogDetailCapability.avatarReference,
-                  ) ==
-                  true) ...[
-                _ProfileBlogAvatar(
-                  imageUrl: data.avatarUrl,
-                  ownerId: data.ownerUserId,
-                  userId: data.ownerUserId,
-                  radius: 17,
-                  imageReferer: imageReferer,
-                  compact: true,
+            const SizedBox(height: ForumContentSpacing.postCardBodyTop),
+            DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: palette.body,
+                height: 1.5,
+              ),
+              child: ForumHtmlContentView(
+                html: display.html(data.bodyHtml),
+                sourceId: 'profile-blog-${data.blogId}',
+                theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
+                  theme: theme,
                 ),
-                const SizedBox(width: 9),
-              ],
-              Expanded(
-                child: _BlogAuthorMetadata(
-                  authorKey: const Key('blog-detail-author'),
-                  userId: data.ownerUserId,
-                  name:
-                      capabilities?.supports(UserBlogDetailCapability.author) ==
-                          true
-                      ? data.authorName
-                      : null,
-                  metadata: _detailMeta(context, data, display),
+                onOpenImage: (sequence, image) => openBlogImageReader(
+                  context,
+                  ref,
+                  accountOwner: accountOwner,
+                  sequence: sequence,
+                  image: image,
+                  cacheOwnerId: data.blogId,
+                  referer: imageReferer,
                 ),
+                imageReferer: imageReferer,
+                imageCacheOwnerId: data.blogId,
+                contentImageKind: ForumImageKind.blogInline,
+                onOpenLink: onOpenLink,
+                linkBaseUri: linkBaseUri,
               ),
-            ],
-          ),
-          const SizedBox(height: ForumContentSpacing.postCardBodyTop),
-          DefaultTextStyle.merge(
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.5),
-            child: ForumHtmlContentView(
-              html: display.html(data.bodyHtml),
-              sourceId: 'profile-blog-${data.blogId}',
-              theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
-                theme: theme,
-              ),
-              onOpenImage: (sequence, image) => openBlogImageReader(
-                context,
-                ref,
-                accountOwner: accountOwner,
-                sequence: sequence,
-                image: image,
-                cacheOwnerId: data.blogId,
-                referer: imageReferer,
-              ),
-              imageReferer: imageReferer,
-              imageCacheOwnerId: data.blogId,
-              contentImageKind: ForumImageKind.blogInline,
-              onOpenLink: onOpenLink,
-              linkBaseUri: linkBaseUri,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1266,6 +1281,7 @@ class _BlogDetailCard extends ConsumerWidget {
 class _CommentCard extends ConsumerWidget {
   const _CommentCard({
     super.key,
+    required this.article,
     required this.comment,
     required this.capabilities,
     required this.palette,
@@ -1275,6 +1291,7 @@ class _CommentCard extends ConsumerWidget {
     required this.onOpenLink,
   });
 
+  final UserBlogDetailData article;
   final UserBlogComment comment;
   final UserBlogDetailReadCapabilities? capabilities;
   final Y300NativeContentColors palette;
@@ -1290,100 +1307,90 @@ class _CommentCard extends ConsumerWidget {
       BlogContentSource.comment(comment),
     );
     final accountOwner = ref.watch(blogMutationBusProvider);
-    return BlogSurface(
-      padding: const EdgeInsets.fromLTRB(
-        ForumContentSpacing.postBodyHorizontal,
-        ForumContentSpacing.postCardHeaderTop,
-        ForumContentSpacing.postBodyHorizontal,
-        ForumContentSpacing.postCardSingleBottom,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (capabilities?.supports(
-                    UserBlogDetailCapability.commentAvatarReference,
-                  ) ==
-                  true) ...[
-                _ProfileBlogAvatar(
-                  imageUrl: comment.avatarUrl,
-                  ownerId: comment.authorUserId ?? comment.authorName,
-                  userId: comment.authorUserId,
-                  radius: 17,
-                  imageReferer: imageReferer,
-                  compact: true,
+    return BlogContentActions(
+      article: article,
+      comment: comment,
+      capabilities: capabilities,
+      displayHtml: display.html(comment.bodyHtml),
+      imageReferer: imageReferer,
+      linkBaseUri: linkBaseUri,
+      onComment: (action, _) => onAction(action),
+      builder: (onOpenActions) => BlogSurface(
+        onLongPress: onOpenActions,
+        padding: const EdgeInsets.fromLTRB(
+          ForumContentSpacing.postBodyHorizontal,
+          ForumContentSpacing.postCardHeaderTop,
+          ForumContentSpacing.postBodyHorizontal,
+          ForumContentSpacing.postCardSingleBottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (capabilities?.supports(
+                      UserBlogDetailCapability.commentAvatarReference,
+                    ) ==
+                    true) ...[
+                  _ProfileBlogAvatar(
+                    imageUrl: comment.avatarUrl,
+                    ownerId: comment.authorUserId ?? comment.authorName,
+                    userId: comment.authorUserId,
+                    radius: 17,
+                    imageReferer: imageReferer,
+                    compact: true,
+                  ),
+                  const SizedBox(width: 9),
+                ],
+                Expanded(
+                  child: _BlogAuthorMetadata(
+                    authorKey: Key('blog-comment-author-${comment.commentId}'),
+                    userId: comment.authorUserId,
+                    name: comment.authorName,
+                    metadata:
+                        capabilities?.supports(
+                                  UserBlogDetailCapability
+                                      .commentPublishedAtText,
+                                ) ==
+                                true &&
+                            comment.publishedAtText != null
+                        ? display.text(comment.publishedAtText!)
+                        : '',
+                  ),
                 ),
-                const SizedBox(width: 9),
               ],
-              Expanded(
-                child: _BlogAuthorMetadata(
-                  authorKey: Key('blog-comment-author-${comment.commentId}'),
-                  userId: comment.authorUserId,
-                  name: comment.authorName,
-                  metadata:
-                      capabilities?.supports(
-                                UserBlogDetailCapability.commentPublishedAtText,
-                              ) ==
-                              true &&
-                          comment.publishedAtText != null
-                      ? display.text(comment.publishedAtText!)
-                      : '',
-                ),
-              ),
-              if (comment.actions.any(
-                (action) => action != UserBlogCommentAction.add,
-              ))
-                PopupMenuButton<UserBlogCommentAction>(
-                  key: Key('blog-comment-actions-${comment.commentId}'),
-                  tooltip: AppLocalizations.of(context).threadDetailMore,
-                  onSelected: onAction,
-                  itemBuilder: (context) => [
-                    for (final action in UserBlogCommentAction.values)
-                      if (action != UserBlogCommentAction.add &&
-                          comment.actions.contains(action))
-                        PopupMenuItem(
-                          value: action,
-                          child: Text(
-                            blogCommentActionLabel(
-                              AppLocalizations.of(context),
-                              action,
-                            ),
-                          ),
-                        ),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: ForumContentSpacing.postCardBodyTop),
-          DefaultTextStyle.merge(
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.5),
-            child: ForumHtmlContentView(
-              html: display.html(comment.bodyHtml),
-              sourceId: 'profile-blog-comment-${comment.commentId}',
-              theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
-                theme: Theme.of(context),
-              ),
-              onOpenImage: (sequence, image) => openBlogImageReader(
-                context,
-                ref,
-                accountOwner: accountOwner,
-                sequence: sequence,
-                image: image,
-                cacheOwnerId: comment.commentId,
-                referer: imageReferer,
-              ),
-              imageReferer: imageReferer,
-              imageCacheOwnerId: comment.commentId,
-              contentImageKind: ForumImageKind.blogInline,
-              onOpenLink: onOpenLink,
-              linkBaseUri: linkBaseUri,
             ),
-          ),
-        ],
+            const SizedBox(height: ForumContentSpacing.postCardBodyTop),
+            DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: palette.body,
+                height: 1.5,
+              ),
+              child: ForumHtmlContentView(
+                html: display.html(comment.bodyHtml),
+                sourceId: 'profile-blog-comment-${comment.commentId}',
+                theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
+                  theme: Theme.of(context),
+                ),
+                onOpenImage: (sequence, image) => openBlogImageReader(
+                  context,
+                  ref,
+                  accountOwner: accountOwner,
+                  sequence: sequence,
+                  image: image,
+                  cacheOwnerId: comment.commentId,
+                  referer: imageReferer,
+                ),
+                imageReferer: imageReferer,
+                imageCacheOwnerId: comment.commentId,
+                contentImageKind: ForumImageKind.blogInline,
+                onOpenLink: onOpenLink,
+                linkBaseUri: linkBaseUri,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

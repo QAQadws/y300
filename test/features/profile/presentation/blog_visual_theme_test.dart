@@ -110,6 +110,23 @@ void main() {
           _checkSurfaces(tester, host.theme);
           _checkHtmlTheme(tester, host.theme, sourceId: 'profile-blog-11');
           await _save(tester, '$name-article');
+          expect(find.byKey(const Key('blog-detail-actions')), findsNothing);
+          expect(find.byKey(const Key('blog-detail-reply')), findsOneWidget);
+          final article = find.byKey(const Key('blog-detail-card'));
+          await tester.longPressAt(
+            tester.getTopLeft(article) + const Offset(20, 20),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('blog-content-action-sheet')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await _save(tester, '$name-article-actions');
+          Navigator.of(
+            tester.element(find.byKey(const Key('blog-content-action-sheet'))),
+          ).pop();
+          await tester.pumpAndSettle();
           final heading = find.byKey(
             const Key('profile-blog-comments-heading'),
           );
@@ -137,6 +154,28 @@ void main() {
             host.theme,
             sourceId: 'profile-blog-comment-31',
           );
+          expect(
+            find.byKey(const Key('blog-comment-actions-31')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const Key('profile-blog-comment-button')),
+            findsNothing,
+          );
+          final comment = find.byKey(const Key('profile-blog-comment-31'));
+          await tester.longPressAt(
+            tester.getTopLeft(comment) + const Offset(20, 3),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('blog-content-action-sheet')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const Key('blog-content-action-reply')),
+            findsOneWidget,
+          );
+          await _save(tester, '$name-comment-actions');
           expect(tester.takeException(), isNull);
 
           await host.pump(

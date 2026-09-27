@@ -8,11 +8,13 @@ class BlogSurface extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
+    this.onLongPress,
     this.padding = const EdgeInsets.all(12),
   });
 
   final Widget child;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -30,9 +32,13 @@ class BlogSurface extends StatelessWidget {
         elevation: 0,
         borderRadius: radius,
         clipBehavior: Clip.antiAlias,
-        child: onTap == null
-            ? content
-            : InkWell(onTap: onTap, borderRadius: radius, child: content),
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onLongPress: onLongPress,
+          child: onTap == null
+              ? content
+              : InkWell(onTap: onTap, borderRadius: radius, child: content),
+        ),
       ),
     );
   }

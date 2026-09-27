@@ -4132,6 +4132,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogComment => '评论';
 
   @override
+  String get profileBlogReply => '回复日志';
+
+  @override
   String profileBlogViews(int count) {
     return '浏览 $count';
   }
@@ -8770,6 +8773,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogComment => '留言';
+
+  @override
+  String get profileBlogReply => '回覆日誌';
 
   @override
   String profileBlogViews(int count) {

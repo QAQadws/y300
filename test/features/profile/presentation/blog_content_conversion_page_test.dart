@@ -264,10 +264,7 @@ void main() {
     );
     expect(find.text('标题'), findsNWidgets(2));
     expect(_html(tester), contains('<p>正文</p>'));
-    expect(
-      find.byKey(const Key('profile-blog-comment-button')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('blog-detail-reply')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -176,13 +176,11 @@ void main() {
           await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
           await tester.pumpAndSettle();
         }
-        await tester.tap(
-          find.byKey(
-            Key(
-              fromDetail ? 'blog-detail-actions' : 'blog-list-actions-117558',
-            ),
-          ),
-        );
+        if (fromDetail) {
+          await tester.longPress(find.byKey(const Key('blog-detail-card')));
+        } else {
+          await tester.tap(find.byKey(const Key('blog-list-actions-117558')));
+        }
         await tester.pumpAndSettle();
         await tester.tap(find.text(l10n.profileBlogEdit));
         await tester.pumpAndSettle();
@@ -252,15 +250,13 @@ void main() {
               );
               await tester.pumpAndSettle();
             }
-            await tester.tap(
-              find.byKey(
-                Key(
-                  fromDetail
-                      ? 'blog-detail-actions'
-                      : 'blog-list-actions-117558',
-                ),
-              ),
-            );
+            if (fromDetail) {
+              await tester.longPress(find.byKey(const Key('blog-detail-card')));
+            } else {
+              await tester.tap(
+                find.byKey(const Key('blog-list-actions-117558')),
+              );
+            }
             await tester.pumpAndSettle();
             for (final other in blogManagementActions.where(
               (other) => other != action,
@@ -343,21 +339,15 @@ void main() {
           tester.element(find.byType(ProfileBlogDetailPage)),
         );
         if (action == UserBlogCommentAction.add) {
-          final add = find.byKey(const Key('profile-blog-comment-button'));
-          await tester.scrollUntilVisible(
-            add,
-            150,
-            scrollable: find.byType(Scrollable).first,
-          );
-          await tester.tap(add);
+          await tester.tap(find.byKey(const Key('blog-detail-reply')));
         } else {
-          final menu = find.byKey(const Key('blog-comment-actions-646846'));
+          final menu = find.byKey(const Key('profile-blog-comment-646846'));
           await tester.scrollUntilVisible(
             menu,
             150,
             scrollable: find.byType(Scrollable).first,
           );
-          await tester.tap(menu);
+          await tester.longPress(menu);
           await tester.pumpAndSettle();
           for (final other in UserBlogCommentAction.values) {
             if (other != action && other != UserBlogCommentAction.add) {
@@ -837,6 +827,7 @@ void main() {
 
     expect(find.textContaining('浏览 39'), findsNothing);
     expect(find.text('日志评论'), findsNothing);
+    expect(find.byKey(const Key('blog-detail-reply')), findsNothing);
     expect(find.byKey(const Key('profile-blog-comment-button')), findsNothing);
   });
 

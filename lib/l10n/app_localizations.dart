@@ -6813,6 +6813,12 @@ abstract class AppLocalizations {
   /// **'评论'**
   String get profileBlogComment;
 
+  /// No description provided for @profileBlogReply.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复日志'**
+  String get profileBlogReply;
+
   /// No description provided for @profileBlogViews.
   ///
   /// In zh, this message translates to:
