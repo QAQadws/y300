@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_preview.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -59,11 +59,11 @@ void main() {
       );
       expect(renderer.preferences, preferences);
       expect(renderer.html, '<h2>Title &lt;literal&gt;</h2>${draft.bodyHtml}');
-      final view = tester.widget<ForumHtmlContentView>(
-        find.byType(ForumHtmlContentView),
+      final postTheme = const ForumHtmlRenderThemeFactory().fromThreadPalette(
+        palette: ThreadDetailNativePalette.resolve(theme),
+        brightness: theme.brightness,
       );
-      expect(view.foregroundColor, theme.y300NativeContent.body);
-      expect(view.surfaceColor, theme.y300NativeContent.card);
+      expect(renderer.theme.signature, postTheme.signature);
       expect(repository.saves, 0);
       expect(tester.takeException(), isNull);
     },

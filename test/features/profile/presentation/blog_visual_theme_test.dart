@@ -23,8 +23,10 @@ import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -106,28 +108,35 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
           _checkSurfaces(tester, host.theme);
-          for (final view in tester.widgetList<ForumHtmlContentView>(
-            find.byType(ForumHtmlContentView),
-          )) {
-            expect(view.surfaceColor, host.theme.y300NativeContent.card);
-            expect(view.foregroundColor, host.theme.y300NativeContent.body);
-          }
+          _checkHtmlTheme(tester, host.theme, sourceId: 'profile-blog-11');
           await _save(tester, '$name-article');
           final heading = find.byKey(
             const Key('profile-blog-comments-heading'),
           );
+          final detailScrollable = find
+              .descendant(
+                of: find.byKey(const Key('profile-blog-detail')),
+                matching: find.byType(Scrollable),
+              )
+              .first;
           await tester.scrollUntilVisible(
             heading,
             200,
-            scrollable: find
-                .descendant(
-                  of: find.byKey(const Key('profile-blog-detail')),
-                  matching: find.byType(Scrollable),
-                )
-                .first,
+            scrollable: detailScrollable,
           );
           await tester.pumpAndSettle();
           await _save(tester, '$name-comments');
+          await tester.scrollUntilVisible(
+            find.byKey(const Key('profile-blog-comment-31')),
+            200,
+            scrollable: detailScrollable,
+          );
+          await tester.pumpAndSettle();
+          _checkHtmlTheme(
+            tester,
+            host.theme,
+            sourceId: 'profile-blog-comment-31',
+          );
           expect(tester.takeException(), isNull);
 
           await host.pump(
@@ -279,6 +288,24 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+}
+
+void _checkHtmlTheme(
+  WidgetTester tester,
+  ThemeData theme, {
+  required String sourceId,
+}) {
+  final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
+    find.byWidgetPredicate(
+      (widget) =>
+          widget is ForumHtmlWidgetPostRenderer && widget.sourceId == sourceId,
+    ),
+  );
+  final postTheme = const ForumHtmlRenderThemeFactory().fromThreadPalette(
+    palette: ThreadDetailNativePalette.resolve(theme),
+    brightness: theme.brightness,
+  );
+  expect(renderer.theme.signature, postTheme.signature);
 }
 
 void _checkSurfaces(WidgetTester tester, ThemeData theme) {

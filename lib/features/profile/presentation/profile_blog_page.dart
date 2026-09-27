@@ -24,9 +24,11 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
 import 'package:y300/features/profile/presentation/profile_user_link.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/native_pagination_bar.dart';
 
 export 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
@@ -1037,7 +1039,12 @@ class _ProfileBlogDetailContent extends StatelessWidget {
       center: focusComments ? commentsStart : null,
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+          padding: const EdgeInsets.fromLTRB(
+            ForumContentSpacing.pageHorizontal,
+            ForumContentSpacing.listTop,
+            ForumContentSpacing.pageHorizontal,
+            0,
+          ),
           sliver: SliverList.list(
             children: [
               if (failure != null)
@@ -1067,7 +1074,12 @@ class _ProfileBlogDetailContent extends StatelessWidget {
         ),
         SliverPadding(
           key: commentsStart,
-          padding: const EdgeInsets.fromLTRB(10, 12, 10, 24),
+          padding: const EdgeInsets.fromLTRB(
+            ForumContentSpacing.pageHorizontal,
+            12,
+            ForumContentSpacing.pageHorizontal,
+            24,
+          ),
           sliver: SliverList.list(
             children: [
               if (capabilities?.supports(
@@ -1194,19 +1206,29 @@ class _BlogDetailCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final display = watchBlogDisplayText(ref, BlogContentSource.article(data));
     final accountOwner = ref.watch(blogMutationBusProvider);
+    final theme = Theme.of(context);
     return BlogSurface(
+      padding: const EdgeInsets.fromLTRB(
+        ForumContentSpacing.postBodyHorizontal,
+        ForumContentSpacing.postCardHeaderTop,
+        ForumContentSpacing.postBodyHorizontal,
+        ForumContentSpacing.postCardSingleBottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             display.text(data.title),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: palette.itemTitle,
-              fontWeight: FontWeight.w700,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.brightness == Brightness.dark
+                  ? palette.itemTitle
+                  : palette.title,
+              fontWeight: FontWeight.w800,
+              height: 1.24,
             ),
           ),
           if (data.categoryLinks.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Wrap(
               key: const Key('blog-detail-categories'),
               spacing: 8,
@@ -1218,8 +1240,10 @@ class _BlogDetailCard extends ConsumerWidget {
                     style: TextButton.styleFrom(
                       foregroundColor: palette.accent,
                       minimumSize: const Size(48, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      textStyle: theme.textTheme.labelMedium,
                     ),
-                    icon: const Icon(Icons.folder_outlined, size: 18),
+                    icon: const Icon(Icons.folder_outlined, size: 16),
                     label: Text(display.text(category.name)),
                     onPressed: () {
                       if (!context.mounted ||
@@ -1236,9 +1260,11 @@ class _BlogDetailCard extends ConsumerWidget {
                   ),
               ],
             ),
-          ],
-          const SizedBox(height: 12),
+            const SizedBox(height: 4),
+          ] else
+            const SizedBox(height: 11),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (capabilities?.supports(
                     UserBlogDetailCapability.avatarReference,
@@ -1250,8 +1276,9 @@ class _BlogDetailCard extends ConsumerWidget {
                   userId: data.ownerUserId,
                   radius: 17,
                   imageReferer: imageReferer,
+                  compact: true,
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 9),
               ],
               Expanded(
                 child: _BlogAuthorMetadata(
@@ -1267,14 +1294,17 @@ class _BlogDetailCard extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: ForumContentSpacing.postCardBodyTop),
           DefaultTextStyle.merge(
             style: Theme.of(
               context,
-            ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.55),
+            ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.5),
             child: ForumHtmlContentView(
               html: display.html(data.bodyHtml),
               sourceId: 'profile-blog-${data.blogId}',
+              theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
+                theme: theme,
+              ),
               onOpenImage: (sequence, image) => openBlogImageReader(
                 context,
                 ref,
@@ -1287,8 +1317,6 @@ class _BlogDetailCard extends ConsumerWidget {
               imageReferer: imageReferer,
               imageCacheOwnerId: data.blogId,
               contentImageKind: ForumImageKind.blogInline,
-              surfaceColor: palette.card,
-              foregroundColor: palette.body,
               onOpenLink: onOpenLink,
               linkBaseUri: linkBaseUri,
             ),
@@ -1349,10 +1377,17 @@ class _CommentCard extends ConsumerWidget {
     );
     final accountOwner = ref.watch(blogMutationBusProvider);
     return BlogSurface(
+      padding: const EdgeInsets.fromLTRB(
+        ForumContentSpacing.postBodyHorizontal,
+        ForumContentSpacing.postCardHeaderTop,
+        ForumContentSpacing.postBodyHorizontal,
+        ForumContentSpacing.postCardSingleBottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (capabilities?.supports(
                     UserBlogDetailCapability.commentAvatarReference,
@@ -1362,8 +1397,9 @@ class _CommentCard extends ConsumerWidget {
                   imageUrl: comment.avatarUrl,
                   ownerId: comment.authorUserId ?? comment.authorName,
                   userId: comment.authorUserId,
-                  radius: 15,
+                  radius: 17,
                   imageReferer: imageReferer,
+                  compact: true,
                 ),
                 const SizedBox(width: 9),
               ],
@@ -1406,14 +1442,17 @@ class _CommentCard extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: ForumContentSpacing.postCardBodyTop),
           DefaultTextStyle.merge(
             style: Theme.of(
               context,
-            ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.45),
+            ).textTheme.bodyMedium?.copyWith(color: palette.body, height: 1.5),
             child: ForumHtmlContentView(
               html: display.html(comment.bodyHtml),
               sourceId: 'profile-blog-comment-${comment.commentId}',
+              theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
+                theme: Theme.of(context),
+              ),
               onOpenImage: (sequence, image) => openBlogImageReader(
                 context,
                 ref,
@@ -1426,8 +1465,6 @@ class _CommentCard extends ConsumerWidget {
               imageReferer: imageReferer,
               imageCacheOwnerId: comment.commentId,
               contentImageKind: ForumImageKind.blogInline,
-              surfaceColor: palette.card,
-              foregroundColor: palette.body,
               onOpenLink: onOpenLink,
               linkBaseUri: linkBaseUri,
             ),
@@ -1455,26 +1492,35 @@ class _BlogAuthorMetadata extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final native = theme.y300NativeContent;
+    final showAuthor = name?.trim().isNotEmpty == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (name != null)
+        if (showAuthor)
           ProfileUserLink(
             key: authorKey,
             userId: userId,
+            compact: true,
             child: Text(
               name!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelLarge?.copyWith(
                 color: native.author,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
-        if (metadata.isNotEmpty)
+        if (metadata.isNotEmpty) ...[
+          if (showAuthor) const SizedBox(height: 2),
           Text(
             metadata,
-            style: theme.textTheme.labelMedium?.copyWith(color: native.muted),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: native.soft,
+              height: 1.1,
+            ),
           ),
+        ],
       ],
     );
   }

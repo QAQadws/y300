@@ -87,6 +87,15 @@ final class BlogVisualDetail implements UserBlogDetailRepository {
       publishedAtText: '2026-09-12 10:30',
       viewCount: 128,
       commentCount: 2,
+      categoryLinks: [
+        UserBlogCategoryLink(
+          name: '日常与阅读',
+          query: UserBlogDirectoryQuery.self(
+            ownerUserId: query.ownerUserId,
+            personalCategoryId: '3',
+          ),
+        ),
+      ],
       bodyHtml:
           '<p>雨后的空气很清新。<strong>记录生活</strong>，也给自己留一点安静的时间。</p>'
           '<blockquote>慢慢走，看看路边的树。</blockquote>'

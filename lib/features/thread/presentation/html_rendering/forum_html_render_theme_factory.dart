@@ -11,6 +11,14 @@ final class ForumHtmlRenderThemeFactory {
 
   final RichTextToneResolver _toneResolver;
 
+  /// Native reading surfaces share the post card's quote, code and link colors.
+  ForumHtmlThemeContext fromNativeTheme({required ThemeData theme}) {
+    return fromThreadPalette(
+      palette: ThreadDetailNativePalette.resolve(theme),
+      brightness: theme.brightness,
+    );
+  }
+
   ForumHtmlThemeContext fromThreadPalette({
     required ThreadDetailNativePalette palette,
     required Brightness brightness,
