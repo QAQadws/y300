@@ -118,6 +118,36 @@ abstract interface class ForumDailySignInRepository {
   load(ForumDailySignInQuery query);
 }
 
+/// Opaque, single-use proof from a fresh sign-in page. Never serialize it.
+abstract interface class ForumDailySignInPreparationToken {}
+
+/// A network snapshot and its short-lived, source-owned submission proof.
+final class ForumDailySignInPreparation {
+  /// Creates a preparation without exposing the page's private action URL.
+  const ForumDailySignInPreparation({
+    required this.snapshot,
+    required this.token,
+  });
+
+  /// Verified page state, safe to display independently of the token.
+  final ForumDailySignInSnapshot snapshot;
+
+  /// Consume only in the current operation, never from retained UI state.
+  final ForumDailySignInPreparationToken token;
+}
+
+/// Optional extension for sharing one fresh read with a subsequent command.
+abstract interface class ForumDailySignInPreparationRepository {
+  /// Reads and validates the page without sending a sign-in command.
+  Future<
+    DataReadResult<
+      ForumDailySignInPreparation,
+      ForumDailySignInReadCapabilities
+    >
+  >
+  prepare(ForumDailySignInQuery query);
+}
+
 /// Validated identity and forum day available immediately before submission.
 /// The one-use sign-in link is deliberately excluded from this public value.
 final class ForumDailySignInPreparedAttempt {
@@ -160,6 +190,7 @@ final class ForumDailySignInRequest {
     this.expectedForumDay,
     this.cancellation,
     this.beforeSend,
+    this.preparationToken,
   });
 
   /// Expected forum user ID, checked against the current session.
@@ -176,6 +207,11 @@ final class ForumDailySignInRequest {
   /// Returning [ForumDailySignInSendAuthorization.allow] must mean that the
   /// caller's checkpoint is durable. The callback receives no sign-in link.
   final ForumDailySignInBeforeSend? beforeSend;
+
+  /// Optional proof from this operation's fresh preparation. Invalid, expired
+  /// or consumed proofs fail without fetching another page or submitting.
+  /// Omission preserves the command's internal preparation behavior.
+  final ForumDailySignInPreparationToken? preparationToken;
 }
 
 /// Proof returned only after the server effect and state are confirmed.

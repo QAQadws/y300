@@ -19,6 +19,7 @@ final class DiscuzDailySignInAdapter {
     required this.network,
     required this.requestProfiles,
     this.parser = const DiscuzDailySignInPageParser(),
+    this.createPreparationTimer = Stopwatch.new,
   }) : _pageUri = config.siteOrigin.replace(
          path: '/plugin.php',
          queryParameters: const {'id': 'zqlj_sign', 'mobile': '2'},
@@ -34,6 +35,9 @@ final class DiscuzDailySignInAdapter {
 
   /// Read-only parser for the current page.
   final DiscuzDailySignInPageParser parser;
+
+  /// Monotonic expiry timer factory, replaceable for deterministic tests.
+  final Stopwatch Function() createPreparationTimer;
 
   /// Source-declared status and optional statistics support.
   ForumDailySignInSourceCapabilities get capabilities =>
@@ -81,26 +85,78 @@ final class DiscuzDailySignInAdapter {
     );
   }
 
-  /// Prepares a fresh opaque link and submits it at most once.
-  Future<DataCommandResult<ForumDailySignInReceipt>> execute(
-    ForumDailySignInRequest request,
-  ) async {
-    final prepared = await _readPage(request.userId, request.cancellation);
+  /// Reads the page once and retains its action only inside an opaque proof.
+  Future<
+    DataReadResult<
+      ForumDailySignInPreparation,
+      ForumDailySignInReadCapabilities
+    >
+  >
+  prepare(ForumDailySignInQuery query) async {
+    final prepared = await _readPage(query.userId, query.cancellation);
     if (prepared
         case DataReadFailure<
               DiscuzDailySignInPage,
               ForumDailySignInReadCapabilities
             >
             failure) {
-      return DataCommandNotSent(_notSentFailure(failure));
+      return failure.retype();
     }
-    final page =
+    final success =
         (prepared
-                as DataReadSuccess<
-                  DiscuzDailySignInPage,
-                  ForumDailySignInReadCapabilities
-                >)
-            .data;
+            as DataReadSuccess<
+              DiscuzDailySignInPage,
+              ForumDailySignInReadCapabilities
+            >);
+    return DataReadSuccess(
+      data: ForumDailySignInPreparation(
+        snapshot: success.data.snapshot,
+        token: _DiscuzDailySignInToken(
+          owner: this,
+          page: success.data,
+          cancellation: query.cancellation,
+          timer: createPreparationTimer()..start(),
+        ),
+      ),
+      capabilities: success.capabilities,
+      metadata: success.metadata,
+    );
+  }
+
+  /// Consumes a proof or prepares a fresh page, then submits at most once.
+  /// The caller owns any subsequent state readback.
+  Future<DataCommandResult<ForumDailySignInReceipt>> execute(
+    ForumDailySignInRequest request,
+  ) async {
+    var proof = request.preparationToken;
+    if (proof == null) {
+      final prepared = await prepare(
+        ForumDailySignInQuery(
+          userId: request.userId,
+          cancellation: request.cancellation,
+        ),
+      );
+      if (prepared
+          case DataReadFailure<
+                ForumDailySignInPreparation,
+                ForumDailySignInReadCapabilities
+              >
+              failure) {
+        return DataCommandNotSent(_notSentFailure(failure));
+      }
+      proof = prepared.dataOrNull!.token;
+    }
+    if (proof is! _DiscuzDailySignInToken ||
+        !identical(proof.owner, this) ||
+        proof.page.snapshot.userId != request.userId ||
+        proof.consumed) {
+      return _invalidPreparation();
+    }
+    final page = proof.page;
+    // Claim before awaiting the send gate so concurrent consumers cannot send
+    // the same action twice, including after a failed authorization.
+    proof.consumed = true;
+    if (!proof.isValid) return _invalidPreparation();
     if (request.expectedForumDay != null &&
         request.expectedForumDay != page.snapshot.forumDay) {
       return const DataCommandNotSent(
@@ -190,6 +246,7 @@ final class DiscuzDailySignInAdapter {
         ),
       );
     }
+    if (!proof.isValid) return _invalidPreparation();
     ForumTransportResult<ForumResponse<Object?>> sent;
     try {
       sent = await network.send(
@@ -222,14 +279,18 @@ final class DiscuzDailySignInAdapter {
     }
 
     final observation = _textObservation(sent);
-    final unknown = unconfirmedDailySignInPostSend(observation);
-    if (!(request.cancellation?.isCancelled ?? false)) {
-      // A positive read proves today's state, but cannot attribute the effect
-      // to this command until a real response has calibrated submit evidence.
-      await _readPage(request.userId, request.cancellation);
-    }
-    return unknown;
+    return unconfirmedDailySignInPostSend(observation);
   }
+
+  DataCommandNotSent<ForumDailySignInReceipt> _invalidPreparation() =>
+      const DataCommandNotSent(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.validation,
+          retryPolicy: DataCommandRetryPolicy.explicitOnly,
+          code: 'daily_sign_in_preparation_invalid',
+          diagnosticMessage: 'daily_sign_in_preparation_invalid',
+        ),
+      );
 
   Future<
     DataReadResult<DiscuzDailySignInPage, ForumDailySignInReadCapabilities>
@@ -342,7 +403,10 @@ final class DiscuzDailySignInAdapter {
   }
 
   DataCommandFailure _notSentFailure(
-    DataReadFailure<DiscuzDailySignInPage, ForumDailySignInReadCapabilities>
+    DataReadFailure<
+      ForumDailySignInPreparation,
+      ForumDailySignInReadCapabilities
+    >
     read,
   ) {
     final kind = switch (read.kind) {
@@ -386,7 +450,10 @@ final class DiscuzDailySignInAdapter {
 }
 
 /// Read contract backed by a shared sign-in adapter.
-final class DiscuzDailySignInRepository implements ForumDailySignInRepository {
+final class DiscuzDailySignInRepository
+    implements
+        ForumDailySignInRepository,
+        ForumDailySignInPreparationRepository {
   /// Creates the read port.
   const DiscuzDailySignInRepository(this._adapter);
 
@@ -400,6 +467,38 @@ final class DiscuzDailySignInRepository implements ForumDailySignInRepository {
     DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
   >
   load(ForumDailySignInQuery query) => _adapter.load(query);
+
+  @override
+  Future<
+    DataReadResult<
+      ForumDailySignInPreparation,
+      ForumDailySignInReadCapabilities
+    >
+  >
+  prepare(ForumDailySignInQuery query) => _adapter.prepare(query);
+}
+
+final class _DiscuzDailySignInToken
+    implements ForumDailySignInPreparationToken {
+  _DiscuzDailySignInToken({
+    required this.owner,
+    required this.page,
+    required this.cancellation,
+    required this.timer,
+  });
+
+  final DiscuzDailySignInAdapter owner;
+  final DiscuzDailySignInPage page;
+  final ForumRequestCancellation? cancellation;
+  final Stopwatch timer;
+  bool consumed = false;
+
+  bool get isValid =>
+      !(cancellation?.isCancelled ?? false) &&
+      timer.elapsed < const Duration(seconds: 30);
+
+  @override
+  String toString() => 'ForumDailySignInPreparationToken(redacted)';
 }
 
 /// Command contract backed by a shared sign-in adapter.

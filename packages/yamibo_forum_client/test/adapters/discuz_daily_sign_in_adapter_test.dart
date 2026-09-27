@@ -69,40 +69,43 @@ void main() {
     expect(network.requests.single.uri, pageUri);
   });
 
-  test('unsigned preparation sends one guarded GET and a readback', () async {
-    final network = _QueueNetwork([
-      _page(pageUri, unsigned),
-      _page(pageUri, '<html>synthetic response, not calibrated</html>'),
-      _page(pageUri, signed),
-    ]);
+  test(
+    'unsigned preparation sends one guarded GET without a readback',
+    () async {
+      final network = _QueueNetwork([
+        _page(pageUri, unsigned),
+        _page(pageUri, '<html>synthetic response, not calibrated</html>'),
+      ]);
 
-    final result = await client(network).signInToday(
-      const ForumDailySignInRequest(userId: '42', expectedForumDay: '20300412'),
-    );
+      final result = await client(network).signInToday(
+        const ForumDailySignInRequest(
+          userId: '42',
+          expectedForumDay: '20300412',
+        ),
+      );
 
-    expect(result, isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>());
-    expect(result.receiptOrNull, isNull);
-    expect(
-      result.failureOrNull?.retryPolicy,
-      DataCommandRetryPolicy.explicitOnly,
-    );
-    expect(network.requests, hasLength(3));
-    expect(network.requests[0].uri, pageUri);
-    expect(network.requests[2].uri, pageUri);
-    expect(network.requests[0].followRedirects, isFalse);
-    expect(network.requests[2].followRedirects, isFalse);
-    final submission = network.requests[1];
-    expect(submission.uri.queryParameters.keys.toSet(), {'id', 'sign'});
-    expect(submission.uri.queryParameters['sign'], 'fixtureToken0001');
-    expect(submission.followRedirects, isFalse);
-    expect(submission.allowWafReplay, isFalse);
-    expect(submission.context.silent, isTrue);
-    expect(submission.headers['Referer'], pageUri.toString());
-    expect(
-      result.failureOrNull?.diagnosticMessage,
-      isNot(contains('fixtureToken')),
-    );
-  });
+      expect(result, isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>());
+      expect(result.receiptOrNull, isNull);
+      expect(
+        result.failureOrNull?.retryPolicy,
+        DataCommandRetryPolicy.explicitOnly,
+      );
+      expect(network.requests, hasLength(2));
+      expect(network.requests[0].uri, pageUri);
+      expect(network.requests[0].followRedirects, isFalse);
+      final submission = network.requests[1];
+      expect(submission.uri.queryParameters.keys.toSet(), {'id', 'sign'});
+      expect(submission.uri.queryParameters['sign'], 'fixtureToken0001');
+      expect(submission.followRedirects, isFalse);
+      expect(submission.allowWafReplay, isFalse);
+      expect(submission.context.silent, isTrue);
+      expect(submission.headers['Referer'], pageUri.toString());
+      expect(
+        result.failureOrNull?.diagnosticMessage,
+        isNot(contains('fixtureToken')),
+      );
+    },
+  );
 
   test(
     'send gate receives only verified identity and day before GET',
@@ -110,7 +113,6 @@ void main() {
       final network = _QueueNetwork([
         _page(pageUri, unsigned),
         _page(pageUri, '<html>synthetic response, not calibrated</html>'),
-        _page(pageUri, signed),
       ]);
       ForumDailySignInPreparedAttempt? prepared;
 
@@ -130,7 +132,7 @@ void main() {
       expect(prepared?.userId, '42');
       expect(prepared?.forumDay, '20300412');
       expect(result, isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>());
-      expect(network.requests, hasLength(3));
+      expect(network.requests, hasLength(2));
       expect(
         network.requests.where(
           (request) => request.uri.queryParameters.containsKey('sign'),
@@ -380,15 +382,12 @@ void main() {
         ),
       ),
     ]) {
-      final network = _QueueNetwork([
-        _page(pageUri, unsigned),
-        observation,
-        _page(pageUri, unsigned),
-      ]);
+      final network = _QueueNetwork([_page(pageUri, unsigned), observation]);
       final result = await client(
         network,
       ).signInToday(const ForumDailySignInRequest(userId: '42'));
       expect(result, isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>());
+      expect(network.requests, hasLength(2));
       expect(
         result.failureOrNull?.retryPolicy,
         DataCommandRetryPolicy.explicitOnly,

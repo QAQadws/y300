@@ -592,6 +592,23 @@ final class YamiboForumClient {
       sourcePlan.dailySignIn?.load(query) ??
       unsupported<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>();
 
+  /// Prepares one network read for display and a short-lived submission.
+  Future<
+    DataReadResult<
+      ForumDailySignInPreparation,
+      ForumDailySignInReadCapabilities
+    >
+  >
+  prepareDailySignIn(ForumDailySignInQuery query) {
+    final repository = sourcePlan.dailySignIn;
+    return repository is ForumDailySignInPreparationRepository
+        ? (repository as ForumDailySignInPreparationRepository).prepare(query)
+        : unsupported<
+            ForumDailySignInPreparation,
+            ForumDailySignInReadCapabilities
+          >();
+  }
+
   /// Attempts one ordinary sign-in using a fresh page-local action.
   Future<DataCommandResult<ForumDailySignInReceipt>> signInToday(
     ForumDailySignInRequest request,

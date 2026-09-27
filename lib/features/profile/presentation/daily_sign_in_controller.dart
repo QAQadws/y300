@@ -117,9 +117,9 @@ final dailySignInControllerProvider =
 class DailySignInController extends Notifier<DailySignInViewState> {
   int _generation = 0;
   int _automaticEpoch = 0;
-  Future<void>? _readFlight;
+  Future<ForumDailySignInPreparationToken?>? _readFlight;
   Future<void>? _submitFlight;
-  String? _submitFlightUid;
+  VerifiedProfileOwner? _submitFlightOwner;
   Future<void>? _automaticFlight;
   VerifiedProfileOwner? _automaticFlightOwner;
   bool _submittingAutomatically = false;
@@ -154,7 +154,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
       isSubmitting:
           owner != null &&
           _submitFlight != null &&
-          _submitFlightUid == owner.uid,
+          _submitFlightOwner?.uid == owner.uid,
     );
   }
 
@@ -221,6 +221,12 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     final owner = state.owner;
     if (owner == null) return Future<void>.value();
     if (state.isSubmitting) return _submitFlight ?? Future<void>.value();
+    return _refreshPreparation(owner).then<void>((_) {});
+  }
+
+  Future<ForumDailySignInPreparationToken?> _refreshPreparation(
+    VerifiedProfileOwner owner,
+  ) {
     if (_readFlight != null) return _readFlight!;
     final future = _load(owner, _generation);
     _readFlight = future;
@@ -229,9 +235,14 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     });
   }
 
-  Future<void> _load(VerifiedProfileOwner owner, int generation) async {
+  Future<ForumDailySignInPreparationToken?> _load(
+    VerifiedProfileOwner owner,
+    int generation, {
+    ForumRequestCancellation? cancellation,
+    bool prepare = true,
+  }) async {
     final previous = state;
-    final cancellation = ForumRequestCancellation();
+    cancellation ??= ForumRequestCancellation();
     _readCancellation = cancellation;
     state = state.copyWith(snapshot: null, readFailure: null, isLoading: true);
     late final DataReadResult<
@@ -239,22 +250,50 @@ class DailySignInController extends Notifier<DailySignInViewState> {
       ForumDailySignInReadCapabilities
     >
     result;
+    ForumDailySignInPreparationToken? token;
     try {
-      result = await ref
-          .read(dailySignInRepositoryProvider)
-          .load(
-            ForumDailySignInQuery(
-              userId: owner.uid,
-              cancellation: cancellation,
+      final repository = ref.read(dailySignInRepositoryProvider);
+      final query = ForumDailySignInQuery(
+        userId: owner.uid,
+        cancellation: cancellation,
+      );
+      if (prepare && repository is ForumDailySignInPreparationRepository) {
+        final prepared =
+            await (repository as ForumDailySignInPreparationRepository).prepare(
+              query,
+            );
+        result = switch (prepared) {
+          DataReadSuccess<
+            ForumDailySignInPreparation,
+            ForumDailySignInReadCapabilities
+          >(
+            :final data,
+            :final capabilities,
+            :final metadata,
+          ) =>
+            DataReadSuccess(
+              data: data.snapshot,
+              capabilities: capabilities,
+              metadata: metadata,
             ),
-          );
+          DataReadFailure<
+            ForumDailySignInPreparation,
+            ForumDailySignInReadCapabilities
+          >
+          failure =>
+            failure.retype(),
+        };
+        token = prepared.dataOrNull?.token;
+      } else {
+        result = await repository.load(query);
+      }
     } on Object {
       result = const DataReadFailure(
         kind: DataReadFailureKind.unknown,
         diagnosticMessage: 'daily_sign_in_read_failed',
       );
     }
-    if (!_isCurrent(owner, generation)) return;
+    if (!_isCurrent(owner, generation)) return null;
     if (result
         case DataReadSuccess<
           ForumDailySignInSnapshot,
@@ -288,7 +327,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
       } on Object {
         checkpointUnavailable = true;
       }
-      if (!_isCurrent(owner, generation)) return;
+      if (!_isCurrent(owner, generation)) return null;
       final sameAttemptDay = previous.attemptForumDay == data.forumDay;
       final keepPreviousUnknown =
           policy == DailySignInAutomaticPolicy.pausedPreviousDay &&
@@ -316,7 +355,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
             policy != null && policy != DailySignInAutomaticPolicy.eligible,
         isLoading: false,
       );
-      return;
+      return token;
     }
     state = state.copyWith(
       snapshot: null,
@@ -330,6 +369,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
       checkpointState: null,
       isLoading: false,
     );
+    return null;
   }
 
   /// Concurrent automatic requests coalesce. The startup host owns the
@@ -367,7 +407,11 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     int epoch,
   ) async {
     if (!_automaticIsCurrent(owner, generation, epoch)) return;
-    if (_submitFlight case final flight?) await flight;
+    if (_submitFlight case final flight?) {
+      final sameOwner = _submitFlightOwner == owner;
+      await flight;
+      if (sameOwner) return;
+    }
     if (!_automaticIsCurrent(owner, generation, epoch)) return;
     bool enabled;
     try {
@@ -383,7 +427,11 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     if (!_automaticIsCurrent(owner, generation, epoch)) return;
     state = state.copyWith(autoEnabled: enabled, settingsUnavailable: false);
     if (!enabled) return;
-    await refresh();
+    if (_submitFlight case final flight?) {
+      await flight;
+      return;
+    }
+    final preparationToken = await _refreshPreparation(owner);
     if (!_automaticIsCurrent(owner, generation, epoch)) return;
     final snapshot = state.snapshot;
     if (snapshot == null ||
@@ -402,6 +450,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
       generation,
       automatic: true,
       automaticEpoch: epoch,
+      preparationToken: preparationToken,
     );
   }
 
@@ -437,6 +486,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     required bool automatic,
     bool manualOverride = false,
     int? automaticEpoch,
+    ForumDailySignInPreparationToken? preparationToken,
   }) {
     if (_submitFlight != null) return _submitFlight!;
     final future = _executeSubmit(
@@ -446,13 +496,19 @@ class DailySignInController extends Notifier<DailySignInViewState> {
       automatic: automatic,
       manualOverride: manualOverride,
       automaticEpoch: automaticEpoch,
+      preparationToken: preparationToken,
     );
     _submitFlight = future;
-    _submitFlightUid = owner.uid;
+    _submitFlightOwner = owner;
     return future.whenComplete(() {
       if (!identical(_submitFlight, future)) return;
       _submitFlight = null;
-      _submitFlightUid = null;
+      _submitFlightOwner = null;
+      _submittingAutomatically = false;
+      _submitCancellation = null;
+      if (_isCurrent(owner, generation)) {
+        state = state.copyWith(isSubmitting: false);
+      }
       if (ref.mounted &&
           state.owner?.uid == owner.uid &&
           state.owner != owner &&
@@ -470,6 +526,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     required bool automatic,
     required bool manualOverride,
     int? automaticEpoch,
+    ForumDailySignInPreparationToken? preparationToken,
   }) async {
     final previousResult = state.commandResult;
     final previousAttemptDay = state.attemptForumDay;
@@ -482,51 +539,92 @@ class DailySignInController extends Notifier<DailySignInViewState> {
     var gateStorageFailure = false;
     late final DataCommandResult<ForumDailySignInReceipt> result;
     try {
-      result = await ref
-          .read(dailySignInCommandProvider)
-          .execute(
-            ForumDailySignInRequest(
-              userId: owner.uid,
-              expectedForumDay: forumDay,
-              cancellation: cancellation,
-              beforeSend: (attempt) async {
-                if (attempt.userId != owner.uid ||
-                    attempt.forumDay != forumDay ||
-                    cancellation.isCancelled ||
-                    !_isCurrent(owner, generation) ||
-                    (automatic && automaticEpoch != _automaticEpoch)) {
-                  return ForumDailySignInSendAuthorization.suppress;
-                }
-                if (automatic) {
-                  try {
-                    if (!await ref
-                        .read(dailyAutoSignInSettingsProvider)
-                        .isEnabled(owner.uid)) {
-                      return ForumDailySignInSendAuthorization.suppress;
+      // Manual actions must prepare again after the user's click. Automatic
+      // actions consume only the preparation shared with their initial read.
+      if (!automatic &&
+          ref.read(dailySignInRepositoryProvider)
+              is ForumDailySignInPreparationRepository) {
+        preparationToken = await _load(
+          owner,
+          generation,
+          cancellation: cancellation,
+        );
+      }
+      if (!_isCurrent(owner, generation) || cancellation.isCancelled) {
+        result = const DataCommandNotSent(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.cancelled,
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
+            code: 'daily_sign_in_cancelled_before_send',
+            diagnosticMessage: 'daily_sign_in_cancelled_before_send',
+          ),
+        );
+      } else if (state.readFailure != null) {
+        result = const DataCommandNotSent(
+          DataCommandFailure(
+            kind: DataCommandFailureKind.parse,
+            retryPolicy: DataCommandRetryPolicy.explicitOnly,
+            code: 'daily_sign_in_preparation_failed',
+            diagnosticMessage: 'daily_sign_in_preparation_failed',
+          ),
+        );
+      } else {
+        result = await ref
+            .read(dailySignInCommandProvider)
+            .execute(
+              ForumDailySignInRequest(
+                userId: owner.uid,
+                expectedForumDay: forumDay,
+                cancellation: cancellation,
+                preparationToken: preparationToken,
+                beforeSend: (attempt) async {
+                  if (attempt.userId != owner.uid ||
+                      attempt.forumDay != forumDay ||
+                      cancellation.isCancelled ||
+                      !_isCurrent(owner, generation) ||
+                      (automatic && automaticEpoch != _automaticEpoch)) {
+                    return ForumDailySignInSendAuthorization.suppress;
+                  }
+                  if (state.checkpointUnavailable) {
+                    gateStorageFailure = true;
+                    return ForumDailySignInSendAuthorization.unavailable;
+                  }
+                  if (automatic) {
+                    try {
+                      if (!await ref
+                          .read(dailyAutoSignInSettingsProvider)
+                          .isEnabled(owner.uid)) {
+                        return ForumDailySignInSendAuthorization.suppress;
+                      }
+                    } on Object {
+                      gateStorageFailure = true;
+                      return ForumDailySignInSendAuthorization.unavailable;
                     }
+                  }
+                  try {
+                    reservation = await ref
+                        .read(dailySignInAttemptLedgerProvider)
+                        .reserve(
+                          userId: owner.uid,
+                          forumDay: forumDay,
+                          manualOverride: manualOverride,
+                        );
                   } on Object {
                     gateStorageFailure = true;
                     return ForumDailySignInSendAuthorization.unavailable;
                   }
-                }
-                try {
-                  reservation = await ref
-                      .read(dailySignInAttemptLedgerProvider)
-                      .reserve(
-                        userId: owner.uid,
-                        forumDay: forumDay,
-                        manualOverride: manualOverride,
-                      );
-                } on Object {
-                  gateStorageFailure = true;
-                  return ForumDailySignInSendAuthorization.unavailable;
-                }
-                return reservation == null
-                    ? ForumDailySignInSendAuthorization.suppress
-                    : ForumDailySignInSendAuthorization.allow;
-              },
-            ),
-          );
+                  if (!_isCurrent(owner, generation) ||
+                      cancellation.isCancelled ||
+                      (automatic && automaticEpoch != _automaticEpoch)) {
+                    return ForumDailySignInSendAuthorization.suppress;
+                  }
+                  return reservation == null
+                      ? ForumDailySignInSendAuthorization.suppress
+                      : ForumDailySignInSendAuthorization.allow;
+                },
+              ),
+            );
+      }
     } on Object {
       // An exception after the gate may mean that the GET reached the server.
       result = const DataCommandOutcomeUnknown(
@@ -537,11 +635,10 @@ class DailySignInController extends Notifier<DailySignInViewState> {
           diagnosticMessage: 'daily_sign_in_command_unconfirmed',
         ),
       );
-    } finally {
-      _submittingAutomatically = false;
     }
 
-    var checkpointUnavailable = gateStorageFailure;
+    var checkpointUnavailable =
+        state.checkpointUnavailable || gateStorageFailure;
     if (reservation case final reserved?) {
       try {
         final ledger = ref.read(dailySignInAttemptLedgerProvider);
@@ -572,11 +669,21 @@ class DailySignInController extends Notifier<DailySignInViewState> {
           result is! DataCommandNotSent<ForumDailySignInReceipt> ||
           previousRetryGuard,
       checkpointUnavailable: checkpointUnavailable,
-      isSubmitting: false,
     );
     // A positive read updates today's display only; it never upgrades an
     // uncalibrated command response to applied.
-    await refresh();
+    if (result is! DataCommandNotSent<ForumDailySignInReceipt> &&
+        result is! DataCommandUnsupported<ForumDailySignInReceipt> &&
+        !cancellation.isCancelled) {
+      // Bypass the public refresh join: this read belongs to the submission
+      // flight itself, which stays locked until the read has completed.
+      await _load(
+        owner,
+        generation,
+        cancellation: cancellation,
+        prepare: false,
+      );
+    }
   }
 
   bool _automaticIsCurrent(
