@@ -155,6 +155,7 @@ void main() {
     final avatar = tester.widget<ForumCachedAvatar>(
       find.byType(ForumCachedAvatar),
     );
+    await settleMessageAvatarImages(tester);
     expect(avatar.ownerId, '20');
     expect(avatar.imageUrl, MessageAvatarTestCache.aliceUrl);
     await tester.tap(find.byType(MessageAvatar));
@@ -181,7 +182,7 @@ void main() {
       await settleMessageAvatarImages(tester);
       expect(tester.getRect(find.byType(MessageAvatar)), before);
       expect(cache.writes, hasLength(1));
-      expect(cache.network.reads, 1);
+      expect(cache.network.reads, 0);
       expect(
         tester
             .widgetList<Image>(find.byType(Image))
@@ -343,6 +344,7 @@ void main() {
         ]),
       );
       await tester.pumpAndSettle();
+      await settleMessageAvatarImages(tester);
       final avatar = find.byKey(const ValueKey('notification-avatar:1'));
       expect(tester.getSize(avatar), const Size.square(48));
       await tester.tap(avatar);

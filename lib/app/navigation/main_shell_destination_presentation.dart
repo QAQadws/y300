@@ -22,7 +22,7 @@ extension MainShellDestinationPresentation on MainShellDestination {
       MainShellDestination.comic => Icons.collections_bookmark_outlined,
       MainShellDestination.novel => Icons.local_library_outlined,
       MainShellDestination.history => Icons.history_outlined,
-      MainShellDestination.messages => Icons.mark_email_unread_outlined,
+      MainShellDestination.messages => Icons.mail_outline,
       MainShellDestination.more => Icons.more_horiz_outlined,
     };
   }
@@ -34,7 +34,7 @@ extension MainShellDestinationPresentation on MainShellDestination {
       MainShellDestination.comic => Icons.collections_bookmark,
       MainShellDestination.novel => Icons.local_library,
       MainShellDestination.history => Icons.history,
-      MainShellDestination.messages => Icons.mark_email_unread,
+      MainShellDestination.messages => Icons.mail,
       MainShellDestination.more => Icons.more_horiz,
     };
   }
