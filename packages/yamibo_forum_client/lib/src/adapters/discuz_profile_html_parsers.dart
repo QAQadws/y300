@@ -186,7 +186,7 @@ final class UserBlogDirectoryHtmlParser {
       document.querySelector('.dhnv a.mon, .dhnv .mon a')?.attributes['href'],
     );
     if (query.ownerUserId != null &&
-        activeScope?.queryParameters['uid'] != query.ownerUserId) {
+        _activeOwner(document, activeScope) != query.ownerUserId) {
       throw const FormatException('blog_directory_owner_mismatch');
     }
     final selectedFilters = document
@@ -238,6 +238,30 @@ final class UserBlogDirectoryHtmlParser {
       'all' => UserBlogFeedScope.public,
       _ => throw const FormatException('blog_scope_missing'),
     };
+  }
+
+  String? _activeOwner(html_dom.Document document, Uri? scopeUri) {
+    if (scopeUri == null) return null;
+    if (scopeUri.queryParameters.containsKey('uid')) {
+      return scopeUri.queryParameters['uid'];
+    }
+    if (scopeUri.queryParameters['view'] != 'me') return null;
+
+    // The touch template omits uid only on the current user's own tab.
+    // Verify that owner against the header, never against article content.
+    final pattern = RegExp(
+      r'''(?:^|[,;])\s*(?:var\s+)?discuz_uid\s*=\s*['"]([^'"]*)['"]''',
+      multiLine: true,
+    );
+    final owners = document
+        .querySelectorAll('head script')
+        .expand((script) => pattern.allMatches(script.text))
+        .map((match) => match.group(1)!)
+        .toSet();
+    if (owners.length != 1 || !RegExp(r'^[1-9]\d*$').hasMatch(owners.single)) {
+      return null;
+    }
+    return owners.single;
   }
 
   UserBlogOrder _activeOrder(html_dom.Document document) {
