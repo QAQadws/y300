@@ -13,7 +13,6 @@ import 'package:y300/features/messages/presentation/widgets/message_preview_text
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/features/messages/presentation/widgets/message_surface.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 enum MessageCenterTab { messages, notifications }
@@ -78,7 +77,6 @@ class _MessageCenterBody extends ConsumerStatefulWidget {
 class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  final _visited = <int>{};
 
   @override
   void initState() {
@@ -88,11 +86,10 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
       initialIndex: widget.config.initialTab.index,
       vsync: this,
     );
-    _visited.add(_tabs.index);
     _tabs.addListener(_selectTab);
   }
 
-  void _selectTab() => setState(() => _visited.add(_tabs.index));
+  void _selectTab() => setState(() {});
 
   @override
   void dispose() {
@@ -122,23 +119,6 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
               ),
             ),
           ),
-          IconButton(
-            tooltip: l10n.messageRefresh,
-            icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                _tabs.index == 0 ? messages.refresh() : notifications.refresh(),
-          ),
-          IconButton(
-            tooltip: l10n.threadHtmlConversionSettings,
-            icon: const Icon(Icons.text_fields),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              builder: (_) => const ForumHtmlReaderSettingsSheet(
-                showConversionControls: true,
-              ),
-            ),
-          ),
         ],
         bottom: TabBar(
           controller: _tabs,
@@ -153,11 +133,12 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
           ],
         ),
       ),
-      body: IndexedStack(
-        index: _tabs.index,
+      body: TabBarView(
+        controller: _tabs,
         children: [
-          if (_visited.contains(0))
-            MessageFeedList<ForumPrivateMessagePage>(
+          _MessageCenterTabPage(
+            key: const ValueKey(MessageCenterTab.messages),
+            child: MessageFeedList<ForumPrivateMessagePage>(
               controller: messages,
               isActive: widget.config.isActive && _tabs.index == 0,
               listKey: PageStorageKey(
@@ -174,11 +155,11 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
                 accountId: widget.accountId,
                 onOpen: widget.config.onOpenConversation,
               ),
-            )
-          else
-            const SizedBox.shrink(),
-          if (_visited.contains(1))
-            MessageFeedList<ForumNotificationPage>(
+            ),
+          ),
+          _MessageCenterTabPage(
+            key: const ValueKey(MessageCenterTab.notifications),
+            child: MessageFeedList<ForumNotificationPage>(
               controller: notifications,
               isActive: widget.config.isActive && _tabs.index == 1,
               listKey: PageStorageKey('notification-list:${widget.accountId}'),
@@ -192,12 +173,34 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
                 onOpenLink: widget.config.onOpenLink,
                 onOpenUser: widget.config.onOpenUser,
               ),
-            )
-          else
-            const SizedBox.shrink(),
+            ),
+          ),
         ],
       ),
     );
+  }
+}
+
+class _MessageCenterTabPage extends StatefulWidget {
+  const _MessageCenterTabPage({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_MessageCenterTabPage> createState() => _MessageCenterTabPageState();
+}
+
+class _MessageCenterTabPageState extends State<_MessageCenterTabPage>
+    with AutomaticKeepAliveClientMixin {
+  // Keep refresh and HTML state as well as each list's scroll position. Feed
+  // activity remains controlled by the selected tab, not by being mounted.
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 

@@ -8,10 +8,25 @@ class ConversationScrollView extends CustomScrollView {
     required super.controller,
     required super.center,
     required super.slivers,
+    super.physics = const AlwaysScrollableScrollPhysics(
+      parent: ClampingScrollPhysics(),
+    ),
   }) : super(
          reverse: true,
          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
        );
+
+  @override
+  Widget build(BuildContext context) =>
+      NotificationListener<OverscrollIndicatorNotification>(
+        onNotification: (notification) {
+          // The reversed list's physical top is its trailing edge. Suppress
+          // stretch/glow there as well so pulling never scales message rows.
+          if (notification.depth == 0) notification.disallowIndicator();
+          return false;
+        },
+        child: super.build(context),
+      );
 
   @override
   Widget buildViewport(

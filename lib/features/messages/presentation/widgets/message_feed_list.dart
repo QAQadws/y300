@@ -33,31 +33,24 @@ class MessageFeedList<P> extends StatelessWidget {
       isActive: isActive,
       builder: (context, state) {
         final data = state.data;
-        if (data == null) {
-          return Center(
-            child: SingleChildScrollView(
-              child: MessageReadStatus(
-                failure: state.failure,
-                onRetry: controller.refresh,
-              ),
-            ),
-          );
-        }
-        final count = itemCount(data);
+        final count = data == null ? 0 : itemCount(data);
         return RefreshIndicator(
           onRefresh: controller.refresh,
           child: CustomScrollView(
             key: listKey,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              if (state.operation == MessageFeedOperation.refresh)
-                SliverToBoxAdapter(
-                  child: LinearProgressIndicator(
-                    color: Theme.of(context).y300NativeContent.accent,
-                    value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
+              if (data == null)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: MessageReadStatus(
+                      failure: state.failure,
+                      onRetry: controller.refresh,
+                    ),
                   ),
-                ),
-              if (count == 0)
+                )
+              else if (count == 0)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -97,37 +90,39 @@ class MessageFeedList<P> extends StatelessWidget {
                         itemBuilder(context, data, index),
                   ),
                 ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: state.failure != null
-                      ? MessageReadStatus(
-                          failure: state.failure,
-                          onRetry:
-                              state.failedOperation == MessageFeedOperation.more
-                              ? controller.loadMore
-                              : controller.refresh,
-                        )
-                      : state.operation == MessageFeedOperation.more
-                      ? Center(
-                          child: CircularProgressIndicator(
-                            color: Theme.of(context).y300NativeContent.accent,
-                          ),
-                        )
-                      : controller.hasMore
-                      ? Center(
-                          child: TextButton(
-                            onPressed: state.isBusy
-                                ? null
-                                : controller.loadMore,
-                            child: Text(
-                              AppLocalizations.of(context).messageLoadMore,
+              if (data != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: state.failure != null
+                        ? MessageReadStatus(
+                            failure: state.failure,
+                            onRetry:
+                                state.failedOperation ==
+                                    MessageFeedOperation.more
+                                ? controller.loadMore
+                                : controller.refresh,
+                          )
+                        : state.operation == MessageFeedOperation.more
+                        ? Center(
+                            child: CircularProgressIndicator(
+                              color: Theme.of(context).y300NativeContent.accent,
                             ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                          )
+                        : controller.hasMore
+                        ? Center(
+                            child: TextButton(
+                              onPressed: state.isBusy
+                                  ? null
+                                  : controller.loadMore,
+                              child: Text(
+                                AppLocalizations.of(context).messageLoadMore,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                 ),
-              ),
             ],
           ),
         );

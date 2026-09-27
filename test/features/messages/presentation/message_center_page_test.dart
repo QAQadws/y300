@@ -53,6 +53,49 @@ void main() {
     await tester.pump();
   }
 
+  Finder feedList(MessageCenterTab tab, {String account = '10'}) => find.byKey(
+    PageStorageKey(
+      tab == MessageCenterTab.messages
+          ? 'private-message-list:$account'
+          : 'notification-list:$account',
+    ),
+  );
+
+  ScrollPosition feedPosition(
+    WidgetTester tester,
+    MessageCenterTab tab, {
+    String account = '10',
+  }) => tester
+      .state<ScrollableState>(
+        find
+            .descendant(
+              of: feedList(tab, account: account),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      )
+      .position;
+
+  Future<void> finishSwipe(WidgetTester tester) async {
+    await tester.pump();
+    // The destination may still be loading, so settle only the page motion.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+  }
+
+  Future<void> swipeToTab(WidgetTester tester, MessageCenterTab tab) async {
+    final pages = find.byType(TabBarView);
+    final distance = tester.getSize(pages).width * 0.8;
+    await tester.drag(
+      pages,
+      Offset(tab == MessageCenterTab.notifications ? -distance : distance, 0),
+    );
+    await finishSwipe(tester);
+    final controller = tester.widget<TabBar>(find.byType(TabBar)).controller!;
+    expect(controller.index, tab.index);
+    expect(controller.animation!.value, closeTo(tab.index.toDouble(), 0.001));
+  }
+
   AppLocalizations l10n(WidgetTester tester) =>
       AppLocalizations.of(tester.element(find.byType(MessageCenterPage).first));
   Future<void> selectTab(WidgetTester tester, MessageCenterTab tab) async {
@@ -64,6 +107,207 @@ void main() {
       ),
     );
     await tester.pump();
+    // The page animation starts from the tab controller's first animation tick.
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(kTabScrollDuration);
+    await tester.pump();
+  }
+
+  testWidgets(
+    'swipes and tab taps agree across loading, empty, and error pages',
+    (tester) async {
+      await pumpCenter(tester);
+      await swipeToTab(tester, MessageCenterTab.notifications);
+      expect(repository.reads, hasLength(1));
+      expect(repository.notificationReads, hasLength(1));
+      repository.notificationReads.single.result.complete(
+        notificationTestPage([]),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(l10n(tester).profileNoNotifications), findsOneWidget);
+
+      await swipeToTab(tester, MessageCenterTab.messages);
+      expect(
+        find
+            .descendant(
+              of: feedList(MessageCenterTab.messages),
+              matching: find.byType(CircularProgressIndicator),
+            )
+            .hitTestable(),
+        findsOneWidget,
+      );
+      await selectTab(tester, MessageCenterTab.notifications);
+      expect(
+        find.text(l10n(tester).profileNoNotifications).hitTestable(),
+        findsOneWidget,
+      );
+      repository.reads.single.result.complete(
+        const DataReadFailure(
+          kind: DataReadFailureKind.timeout,
+          code: 'fixture',
+          diagnosticMessage: 'fixture',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await selectTab(tester, MessageCenterTab.messages);
+      expect(
+        find.text(l10n(tester).commonTimeoutError).hitTestable(),
+        findsOneWidget,
+      );
+      await swipeToTab(tester, MessageCenterTab.notifications);
+      expect(
+        find.text(l10n(tester).profileNoNotifications).hitTestable(),
+        findsOneWidget,
+      );
+      expect(repository.reads, hasLength(1));
+      expect(repository.notificationReads, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'a short cancelled horizontal swipe does not visit the other feed',
+    (tester) async {
+      await pumpCenter(tester);
+      repository.reads.single.result.complete(messageTestPage([]));
+      await tester.pumpAndSettle();
+      final pages = find.byType(TabBarView);
+      final gesture = await tester.startGesture(tester.getCenter(pages));
+      await gesture.moveBy(Offset(-tester.getSize(pages).width * 0.15, 0));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(repository.notificationReads, isEmpty);
+      await gesture.up();
+      await finishSwipe(tester);
+      final controller = tester.widget<TabBar>(find.byType(TabBar)).controller!;
+      expect(controller.index, MessageCenterTab.messages.index);
+      expect(controller.animation!.value, closeTo(0, 0.001));
+      expect(repository.reads, hasLength(1));
+      expect(repository.notificationReads, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'horizontal navigation never refreshes and pulls target only the current feed',
+    (tester) async {
+      await pumpCenter(tester);
+      repository.reads.single.result.complete(messageTestPage([]));
+      await tester.pumpAndSettle();
+      await swipeToTab(tester, MessageCenterTab.notifications);
+      repository.notificationReads.single.result.complete(
+        notificationTestPage([]),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.reads, hasLength(1));
+      expect(repository.notificationReads, hasLength(1));
+
+      await tester.drag(
+        feedList(MessageCenterTab.notifications),
+        const Offset(0, 360),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(repository.notificationReads, hasLength(2));
+      expect(repository.reads, hasLength(1));
+      await swipeToTab(tester, MessageCenterTab.messages);
+      repository.notificationReads.last.result.complete(
+        notificationTestPage([
+          notificationTestItem('2', markup: '<p>Hidden refresh result</p>'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(
+        feedList(MessageCenterTab.messages),
+        const Offset(0, 360),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(repository.reads, hasLength(2));
+      expect(repository.notificationReads, hasLength(2));
+      repository.reads.last.result.complete(messageTestPage([]));
+      await tester.pumpAndSettle();
+      await swipeToTab(tester, MessageCenterTab.notifications);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Hidden refresh result', findRichText: true).hitTestable(),
+        findsOneWidget,
+      );
+      expect(repository.reads, hasLength(2));
+      expect(repository.notificationReads, hasLength(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final tab in MessageCenterTab.values) {
+    for (final empty in [true, false]) {
+      testWidgets(
+        '${tab.name} ${empty ? 'empty' : 'short'} list supports pull refresh without shifting content',
+        (tester) async {
+          await pumpCenter(tester, tab: tab);
+          void completeRead() {
+            if (tab == MessageCenterTab.messages) {
+              repository.reads.last.result.complete(
+                messageTestPage([
+                  if (!empty) messageTestItem('1', sender: '10'),
+                ]),
+              );
+            } else {
+              repository.notificationReads.last.result.complete(
+                notificationTestPage([if (!empty) notificationTestItem('1')]),
+              );
+            }
+          }
+
+          int readCount() => tab == MessageCenterTab.messages
+              ? repository.reads.length
+              : repository.notificationReads.length;
+          completeRead();
+          await tester.pumpAndSettle();
+          final list = find.byKey(
+            PageStorageKey(
+              tab == MessageCenterTab.messages
+                  ? 'private-message-list:10'
+                  : 'notification-list:10',
+            ),
+          );
+          expect(find.byTooltip(l10n(tester).messageRefresh), findsNothing);
+          await tester.drag(list, const Offset(0, 360));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(readCount(), 2);
+          expect(find.byType(LinearProgressIndicator), findsNothing);
+          if (tab == MessageCenterTab.messages) {
+            expect(repository.reads.last.query.page, 1);
+            expect(repository.notificationReads, isEmpty);
+          } else {
+            expect(repository.notificationReads.last.query.page, 1);
+            expect(repository.reads, isEmpty);
+          }
+          completeRead();
+          await tester.pumpAndSettle();
+
+          if (!empty) {
+            final viewportBefore = tester.getRect(list);
+            final messageBefore = tester.getRect(find.text('Alice'));
+            final refresh = tab == MessageCenterTab.messages
+                ? container.read(privateMessageFeedProvider(null)).refresh()
+                : container.read(notificationFeedProvider).refresh();
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 200));
+            expect(readCount(), 3);
+            expect(find.byType(LinearProgressIndicator), findsNothing);
+            expect(tester.getRect(list), viewportBefore);
+            expect(tester.getRect(find.text('Alice')), messageBefore);
+            completeRead();
+            await refresh;
+            await tester.pumpAndSettle();
+            expect(tester.getRect(list), viewportBefore);
+            expect(tester.getRect(find.text('Alice')), messageBefore);
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   }
 
   testWidgets(
@@ -257,7 +501,9 @@ void main() {
     },
   );
 
-  testWidgets('scroll position survives a tab round trip', (tester) async {
+  testWidgets('both feed scroll positions survive swipes and tab taps', (
+    tester,
+  ) async {
     await pumpCenter(tester);
     repository.reads.single.result.complete(
       messageTestPage([
@@ -266,22 +512,175 @@ void main() {
       ]),
     );
     await tester.pumpAndSettle();
-    final list = find.byKey(const PageStorageKey('private-message-list:10'));
-    await tester.drag(list, const Offset(0, -650));
-    await tester.pumpAndSettle();
-    final state = tester.state<ScrollableState>(
-      find.descendant(of: list, matching: find.byType(Scrollable)).first,
+    await tester.drag(
+      feedList(MessageCenterTab.messages),
+      const Offset(0, -650),
     );
-    final before = state.position.pixels;
+    await tester.pumpAndSettle();
+    final messageOffset = feedPosition(
+      tester,
+      MessageCenterTab.messages,
+    ).pixels;
+    expect(messageOffset, greaterThan(0));
     await selectTab(tester, MessageCenterTab.notifications);
     repository.notificationReads.single.result.complete(
-      notificationTestPage([]),
+      notificationTestPage([
+        for (var i = 0; i < 20; i++) notificationTestItem('$i'),
+      ]),
     );
     await tester.pumpAndSettle();
-    await selectTab(tester, MessageCenterTab.messages);
+    await tester.drag(
+      feedList(MessageCenterTab.notifications),
+      const Offset(0, -430),
+    );
     await tester.pumpAndSettle();
-    expect(state.position.pixels, before);
+    final notificationOffset = feedPosition(
+      tester,
+      MessageCenterTab.notifications,
+    ).pixels;
+    expect(notificationOffset, greaterThan(0));
+
+    await swipeToTab(tester, MessageCenterTab.messages);
+    expect(
+      feedPosition(tester, MessageCenterTab.messages).pixels,
+      closeTo(messageOffset, 0.1),
+    );
+    await selectTab(tester, MessageCenterTab.notifications);
+    expect(
+      feedPosition(tester, MessageCenterTab.notifications).pixels,
+      closeTo(notificationOffset, 0.1),
+    );
+    await swipeToTab(tester, MessageCenterTab.messages);
+    expect(
+      feedPosition(tester, MessageCenterTab.messages).pixels,
+      closeTo(messageOffset, 0.1),
+    );
+    expect(repository.reads, hasLength(1));
+    expect(repository.notificationReads, hasLength(1));
+    expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'account replacement removes both retained feeds and their scroll positions',
+    (tester) async {
+      await pumpCenter(tester);
+      repository.reads.single.result.complete(
+        messageTestPage([
+          for (var i = 0; i < 20; i++)
+            messageTestItem(
+              '$i',
+              sender: '10',
+              recipient: '${i + 20}',
+              html: '<p>Old private $i</p>',
+            ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(
+        feedList(MessageCenterTab.messages),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        feedPosition(tester, MessageCenterTab.messages).pixels,
+        greaterThan(0),
+      );
+      await swipeToTab(tester, MessageCenterTab.notifications);
+      repository.notificationReads.single.result.complete(
+        notificationTestPage([
+          for (var i = 0; i < 20; i++)
+            notificationTestItem('$i', markup: '<p>Old reminder $i</p>'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(
+        feedList(MessageCenterTab.notifications),
+        const Offset(0, -350),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        feedPosition(tester, MessageCenterTab.notifications).pixels,
+        greaterThan(0),
+      );
+
+      container.updateOverrides([
+        messageAccountIdProvider.overrideWithValue('11'),
+        messageRepositoryProvider.overrideWithValue(repository),
+      ]);
+      await tester.pump();
+      await tester.pump();
+      expect(repository.reads, hasLength(2));
+      expect(repository.notificationReads, hasLength(1));
+      repository.reads.last.result.complete(
+        messageTestPage([
+          messageTestItem(
+            '201',
+            sender: '10',
+            html: '<p>New private message</p>',
+          ),
+        ], owner: '11'),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        feedPosition(tester, MessageCenterTab.messages, account: '11').pixels,
+        0,
+      );
+      expect(
+        find.byKey(
+          const PageStorageKey('private-message-list:10'),
+          skipOffstage: false,
+        ),
+        findsNothing,
+      );
+      expect(
+        find.byKey(
+          const PageStorageKey('notification-list:10'),
+          skipOffstage: false,
+        ),
+        findsNothing,
+      );
+      expect(
+        find.textContaining(
+          'Old private',
+          findRichText: true,
+          skipOffstage: false,
+        ),
+        findsNothing,
+      );
+      expect(
+        find.textContaining(
+          'Old reminder',
+          findRichText: true,
+          skipOffstage: false,
+        ),
+        findsNothing,
+      );
+      expect(find.text('New private message').hitTestable(), findsOneWidget);
+
+      await swipeToTab(tester, MessageCenterTab.notifications);
+      expect(repository.notificationReads, hasLength(2));
+      repository.notificationReads.last.result.complete(
+        notificationTestPage([
+          notificationTestItem('201', markup: '<p>New reminder</p>'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        feedPosition(
+          tester,
+          MessageCenterTab.notifications,
+          account: '11',
+        ).pixels,
+        0,
+      );
+      expect(
+        find.text('New reminder', findRichText: true).hitTestable(),
+        findsOneWidget,
+      );
+      expect(repository.reads, hasLength(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('narrow traditional dark mailbox supports larger system text', (
     tester,

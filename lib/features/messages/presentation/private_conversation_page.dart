@@ -13,7 +13,6 @@ import 'package:y300/features/messages/presentation/widgets/conversation_scroll_
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/features/messages/presentation/widgets/private_message_editor.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 typedef MessageLinkOpener = void Function(BuildContext context, String url);
@@ -97,24 +96,6 @@ class _ConversationBodyState extends ConsumerState<_ConversationBody> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          actions: [
-            IconButton(
-              tooltip: l10n.messageRefresh,
-              onPressed: state.isBusy ? null : controller.refresh,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              tooltip: l10n.threadHtmlConversionSettings,
-              onPressed: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => const ForumHtmlReaderSettingsSheet(
-                  showConversionControls: true,
-                ),
-              ),
-              icon: const Icon(Icons.text_fields),
-            ),
-          ],
         ),
         body: Center(
           child: ConstrainedBox(
@@ -122,14 +103,6 @@ class _ConversationBodyState extends ConsumerState<_ConversationBody> {
             child: LayoutBuilder(
               builder: (context, constraints) => Column(
                 children: [
-                  if (state.operation == MessageFeedOperation.refresh &&
-                      state.data != null)
-                    LinearProgressIndicator(
-                      color: Theme.of(context).y300NativeContent.accent,
-                      value: MediaQuery.disableAnimationsOf(context)
-                          ? 0.5
-                          : null,
-                    ),
                   if (state.failure != null &&
                       state.failedOperation != MessageFeedOperation.more &&
                       state.data != null)
@@ -146,10 +119,21 @@ class _ConversationBodyState extends ConsumerState<_ConversationBody> {
                     ),
                   Expanded(
                     child: state.data == null
-                        ? Center(
-                            child: MessageReadStatus(
-                              failure: state.failure,
-                              onRetry: controller.refresh,
+                        ? RefreshIndicator(
+                            onRefresh: controller.refresh,
+                            child: CustomScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(
+                                    child: MessageReadStatus(
+                                      failure: state.failure,
+                                      onRetry: controller.refresh,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           )
                         : _ConversationTimeline(
@@ -253,16 +237,30 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
   Widget build(BuildContext context) {
     final items = widget.page.items;
     if (items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            AppLocalizations.of(context).profileNoMessages,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).y300NativeContent.supportingText,
+      return RefreshIndicator(
+        onRefresh: widget.controller.refresh,
+        child: ConversationScrollView(
+          key: const Key('private-conversation-list'),
+          controller: _scroll,
+          center: _center,
+          slivers: [
+            SliverFillRemaining(
+              key: _center,
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    AppLocalizations.of(context).profileNoMessages,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).y300NativeContent.supportingText,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       );
     }
@@ -284,28 +282,32 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
     // rows of different heights. Avoid estimated scroll-offset corrections.
     return Stack(
       children: [
-        ConversationHistoryLoader(
-          controller: widget.controller,
-          child: ConversationScrollView(
-            key: const Key('private-conversation-list'),
-            controller: _scroll,
-            center: _center,
-            slivers: [
-              SliverList.builder(
-                itemCount: newer.length,
-                itemBuilder: (_, index) => bubble(newer[index]),
-              ),
-              SliverList.builder(
-                key: _center,
-                itemCount: history.length + (widget.controller.hasMore ? 1 : 0),
-                itemBuilder: (context, index) => index < history.length
-                    ? bubble(history[index])
-                    : ConversationHistoryEntry(
-                        key: const Key('conversation-history-entry'),
-                        controller: widget.controller,
-                      ),
-              ),
-            ],
+        RefreshIndicator(
+          onRefresh: widget.controller.refresh,
+          child: ConversationHistoryLoader(
+            controller: widget.controller,
+            child: ConversationScrollView(
+              key: const Key('private-conversation-list'),
+              controller: _scroll,
+              center: _center,
+              slivers: [
+                SliverList.builder(
+                  itemCount: newer.length,
+                  itemBuilder: (_, index) => bubble(newer[index]),
+                ),
+                SliverList.builder(
+                  key: _center,
+                  itemCount:
+                      history.length + (widget.controller.hasMore ? 1 : 0),
+                  itemBuilder: (context, index) => index < history.length
+                      ? bubble(history[index])
+                      : ConversationHistoryEntry(
+                          key: const Key('conversation-history-entry'),
+                          controller: widget.controller,
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
         Positioned.directional(

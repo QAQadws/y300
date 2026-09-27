@@ -98,6 +98,83 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  for (final entry in {0: 'empty', 2: 'short', 30: 'long'}.entries) {
+    testWidgets(
+      '${entry.value} conversation refreshes only when pulling down at the physical top',
+      (tester) async {
+        await pumpPage(tester);
+        final items = [
+          for (var id = 1; id <= entry.key; id++) messageTestItem('$id'),
+        ];
+        repository.reads.single.result.complete(messageTestPage(items));
+        await tester.pumpAndSettle();
+        expect(find.byTooltip(l10n(tester).messageRefresh), findsNothing);
+
+        // The reversed timeline initially shows its newest/bottom edge. An
+        // upward pull there must not become a bottom-positioned refresh action.
+        await tester.drag(timeline(), const Offset(0, -300));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(repository.reads, hasLength(1));
+
+        final scroll = scrollController(tester);
+        for (var attempt = 0; attempt < 3; attempt++) {
+          scroll.jumpTo(scroll.position.maxScrollExtent);
+          await tester.pumpAndSettle();
+        }
+        await tester.drag(timeline(), const Offset(0, 360));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(repository.reads, hasLength(2));
+        expect(repository.reads.last.query.page, 0);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        repository.reads.last.result.complete(messageTestPage(items));
+        await tester.pumpAndSettle();
+        expect(repository.reads, hasLength(2));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('refresh pending does not move the viewport or reading anchor', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    final items = [for (var id = 1; id <= 30; id++) messageTestItem('$id')];
+    repository.reads.single.result.complete(messageTestPage(items));
+    await tester.pumpAndSettle();
+    scrollController(tester).jumpTo(350);
+    await tester.pumpAndSettle();
+    final viewportBefore = tester.getRect(timeline());
+    final visible = tester
+        .widgetList<ForumHtmlContentView>(find.byType(ForumHtmlContentView))
+        .firstWhere((widget) {
+          final rect = tester.getRect(find.byWidget(widget));
+          return rect.top > viewportBefore.top &&
+              rect.bottom < viewportBefore.bottom;
+        });
+    Finder anchor() => find.byWidgetPredicate(
+      (widget) =>
+          widget is ForumHtmlContentView && widget.sourceId == visible.sourceId,
+    );
+    final messageBefore = tester.getRect(anchor());
+    final refresh = container
+        .read(privateMessageFeedProvider(target))
+        .refresh();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(repository.reads, hasLength(2));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(tester.getRect(timeline()), viewportBefore);
+    expect(tester.getRect(anchor()), messageBefore);
+    repository.reads.last.result.complete(messageTestPage(items));
+    await refresh;
+    await tester.pumpAndSettle();
+    expect(tester.getRect(timeline()), viewportBefore);
+    expect(tester.getRect(anchor()), messageBefore);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final destination in [
     target,
     const ForumConversationTarget.group('91'),

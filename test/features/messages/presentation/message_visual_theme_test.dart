@@ -91,6 +91,9 @@ void main() {
 
           await tester.tap(find.text(harness.l10n.messageNotificationsTab));
           await tester.pump();
+          await tester.pump(const Duration(milliseconds: 16));
+          await tester.pump(kTabScrollDuration);
+          await tester.pump();
           harness.repository.notificationReads.single.result.complete(
             notificationTestPage([
               notificationTestItem(
@@ -325,6 +328,9 @@ void main() {
     expect(tester.takeException(), isNull);
     await harness.capture('narrow-list');
     await tester.tap(find.text(harness.l10n.messageNotificationsTab));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(kTabScrollDuration);
     await tester.pump();
     harness.repository.notificationReads.single.result.complete(
       notificationTestPage([

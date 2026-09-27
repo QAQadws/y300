@@ -22,8 +22,13 @@ class _MessageFeedViewState<P> extends State<MessageFeedView<P>> {
   final _owner = Object();
 
   void _syncActivity() {
+    // TabBarView can retain old child properties during a page animation. The
+    // shell's effective ticker mode still changes when that animation is hidden.
+    final tickersEnabled = TickerMode.valuesOf(context).enabled;
     widget.controller.setActive(
-      widget.isActive && (ModalRoute.isCurrentOf(context) ?? true),
+      widget.isActive &&
+          tickersEnabled &&
+          (ModalRoute.isCurrentOf(context) ?? true),
       owner: _owner,
     );
   }
