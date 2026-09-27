@@ -613,6 +613,24 @@ abstract class AppLocalizations {
   /// **'删除记录失败'**
   String get historyDeleteFailed;
 
+  /// No description provided for @historyDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已删除记录'**
+  String get historyDeleted;
+
+  /// No description provided for @historyUndoDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销'**
+  String get historyUndoDelete;
+
+  /// No description provided for @historyRestoreFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复记录失败'**
+  String get historyRestoreFailed;
+
   /// No description provided for @historyClearAllFailed.
   ///
   /// In zh, this message translates to:
@@ -672,6 +690,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'小说'**
   String get historyTypeNovel;
+
+  /// No description provided for @historyTypeBlog.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志'**
+  String get historyTypeBlog;
+
+  /// No description provided for @historyBlogAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志 · {author}'**
+  String historyBlogAuthor(String author);
 
   /// No description provided for @historySourceThread.
   ///

@@ -1,9 +1,36 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/presentation/widgets/history_thumbnail.dart';
 
+import '../test_support/history_test_support.dart';
+
 void main() {
   const resolver = HistoryThumbnailResolver();
+
+  testWidgets('uses a journal icon when a blog has no body image', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HistoryThumbnail(
+          entry: historyEntry(
+            type: HistoryTargetType.blog,
+            id: '101:23',
+            title: '日志',
+            visitedAt: DateTime.utc(2026, 9, 27),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.article_outlined), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('history-thumbnail-fallback-blog')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   test(
     'prefers an existing local cover and keeps remote fallback metadata',

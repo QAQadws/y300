@@ -11,7 +11,26 @@ final class HistoryTextResolver {
       HistoryTargetType.thread => l10n.historyTypeThread,
       HistoryTargetType.comic => l10n.historyTypeComic,
       HistoryTargetType.novel => l10n.historyTypeNovel,
+      HistoryTargetType.blog => l10n.historyTypeBlog,
     };
+  }
+
+  static String entryTitle(AppLocalizations l10n, HistoryEntry entry) {
+    if (entry.target.type == HistoryTargetType.blog &&
+        entry.title.trim().isEmpty) {
+      return l10n.historyTypeBlog;
+    }
+    return entry.title;
+  }
+
+  static String entryContext(AppLocalizations l10n, HistoryEntry entry) {
+    if (entry.target.type != HistoryTargetType.blog) {
+      return entry.contextLabel;
+    }
+    final author = entry.contextLabel.trim();
+    return author.isEmpty
+        ? l10n.historyTypeBlog
+        : l10n.historyBlogAuthor(author);
   }
 
   static String dateGroupLabel(AppLocalizations l10n, HistoryDateGroup group) {

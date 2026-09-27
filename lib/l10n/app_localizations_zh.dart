@@ -289,6 +289,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyDeleteFailed => '删除记录失败';
 
   @override
+  String get historyDeleted => '已删除记录';
+
+  @override
+  String get historyUndoDelete => '撤销';
+
+  @override
+  String get historyRestoreFailed => '恢复记录失败';
+
+  @override
   String get historyClearAllFailed => '清空记录失败';
 
   @override
@@ -317,6 +326,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historyTypeNovel => '小说';
+
+  @override
+  String get historyTypeBlog => '日志';
+
+  @override
+  String historyBlogAuthor(String author) {
+    return '日志 · $author';
+  }
 
   @override
   String get historySourceThread => '来源原帖';
@@ -4931,6 +4948,15 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get historyDeleteFailed => '刪除記錄失敗';
 
   @override
+  String get historyDeleted => '已刪除記錄';
+
+  @override
+  String get historyUndoDelete => '復原';
+
+  @override
+  String get historyRestoreFailed => '還原記錄失敗';
+
+  @override
   String get historyClearAllFailed => '清空記錄失敗';
 
   @override
@@ -4959,6 +4985,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get historyTypeNovel => '小說';
+
+  @override
+  String get historyTypeBlog => '日誌';
+
+  @override
+  String historyBlogAuthor(String author) {
+    return '日誌 · $author';
+  }
 
   @override
   String get historySourceThread => '來源原帖';

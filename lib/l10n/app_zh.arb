@@ -159,6 +159,9 @@
     "placeholders": {"error": {"type": "String"}}
   },
   "historyDeleteFailed": "删除记录失败",
+  "historyDeleted": "已删除记录",
+  "historyUndoDelete": "撤销",
+  "historyRestoreFailed": "恢复记录失败",
   "historyClearAllFailed": "清空记录失败",
   "historyClearAllTitle": "清空全部记录",
   "historyClearAllBody": "浏览记录将被清空，但不会删除收藏、书架作品或离线内容。",
@@ -169,6 +172,15 @@
   "historyTypeThread": "帖子",
   "historyTypeComic": "漫画",
   "historyTypeNovel": "小说",
+  "historyTypeBlog": "日志",
+  "historyBlogAuthor": "日志 · {author}",
+  "@historyBlogAuthor": {
+    "placeholders": {
+      "author": {
+        "type": "String"
+      }
+    }
+  },
   "historySourceThread": "来源原帖",
   "historyToday": "今天",
   "historyDaysAgo": "{days, plural, =1 {1 天前} other {{days} 天前}}",

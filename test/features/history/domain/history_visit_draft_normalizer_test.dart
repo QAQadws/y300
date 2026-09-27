@@ -6,6 +6,64 @@ import 'package:y300/features/history/domain/services/history_visit_draft_normal
 void main() {
   const normalizer = HistoryVisitDraftNormalizer();
 
+  test('normalizes blog identities without storing presentation fallbacks', () {
+    final normalized = normalizer.normalize(
+      HistoryVisitDraft(
+        target: const HistoryTargetKey(
+          type: HistoryTargetType.blog,
+          id: ' 00101:00023 ',
+        ),
+        surface: HistoryVisitSurface.blogDetail,
+        title: ' ',
+        contextLabel: ' ',
+        canonicalUri: Uri.parse(
+          'https://bbs.yamibo.com/home.php?mod=space&uid=101&do=blog&id=23&formhash=secret#comment_7',
+        ),
+        page: 2,
+      ),
+    );
+
+    expect(normalized.target.id, '101:23');
+    expect(normalized.title, isEmpty);
+    expect(normalized.contextLabel, isEmpty);
+    expect(normalized.page, 2);
+    expect(
+      normalized.canonicalUri.toString(),
+      'https://bbs.yamibo.com/home.php?mod=space&uid=101&do=blog&id=23',
+    );
+    expect(normalized.sourceTid, isNull);
+  });
+
+  test('retains blog source text and validates its target and surface', () {
+    final normalized = normalizer.normalize(
+      const HistoryVisitDraft(
+        target: HistoryTargetKey(type: HistoryTargetType.blog, id: '101:23'),
+        surface: HistoryVisitSurface.blogDetail,
+        title: '繁體日誌',
+        contextLabel: '原作者名稱',
+      ),
+    );
+    expect(normalized.title, '繁體日誌');
+    expect(normalized.contextLabel, '原作者名稱');
+
+    for (final draft in [
+      const HistoryVisitDraft(
+        target: HistoryTargetKey(type: HistoryTargetType.blog, id: '23'),
+        surface: HistoryVisitSurface.blogDetail,
+      ),
+      const HistoryVisitDraft(
+        target: HistoryTargetKey(type: HistoryTargetType.blog, id: '101:23'),
+        surface: HistoryVisitSurface.threadNative,
+      ),
+      const HistoryVisitDraft(
+        target: HistoryTargetKey(type: HistoryTargetType.thread, id: '23'),
+        surface: HistoryVisitSurface.blogDetail,
+      ),
+    ]) {
+      expect(() => normalizer.normalize(draft), throwsFormatException);
+    }
+  });
+
   test('normalizes thread identity, text, route and thumbnail snapshot', () {
     final normalized = normalizer.normalize(
       HistoryVisitDraft(

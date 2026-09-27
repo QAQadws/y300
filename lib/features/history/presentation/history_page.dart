@@ -49,6 +49,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   final FocusNode _searchFocusNode = FocusNode();
   bool _searchActive = false;
   double _timelineOffset = 0;
+  int _deleteUndoGeneration = 0;
 
   @override
   void initState() {
@@ -65,6 +66,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     final HistoryController nextController =
         widget.controller ?? ref.read(historyControllerProvider);
     if (!identical(nextController, _controller)) {
+      _deleteUndoGeneration += 1;
       _controller.removeListener(_handleControllerChanged);
       _bindController(nextController);
       unawaited(_controller.initialize());
@@ -76,6 +78,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
   @override
   void dispose() {
+    _deleteUndoGeneration += 1;
     _controller.removeListener(_handleControllerChanged);
     _scrollController
       ..removeListener(_handleScroll)
@@ -388,17 +391,63 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   }
 
   Future<void> _deleteEntry(HistoryEntry entry) async {
+    final controller = _controller;
+    final canUndo = entry.target.type == HistoryTargetType.blog;
+    final generation = canUndo
+        ? ++_deleteUndoGeneration
+        : _deleteUndoGeneration;
     try {
-      await _controller.deleteEntry(entry);
+      await controller.deleteEntry(entry);
     } catch (_) {
-      if (mounted) {
+      if (mounted && _isCurrentDeleteUndo(controller, generation)) {
         _showMessage(AppLocalizations.of(context).historyDeleteFailed);
       }
       return;
     }
+    if (!mounted || !canUndo || !_isCurrentDeleteUndo(controller, generation)) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(l10n.historyDeleted),
+          action: SnackBarAction(
+            label: l10n.historyUndoDelete,
+            onPressed: () =>
+                _restoreDeletedEntry(entry, controller, generation),
+          ),
+        ),
+      );
+  }
+
+  Future<void> _restoreDeletedEntry(
+    HistoryEntry entry,
+    HistoryController controller,
+    int generation,
+  ) async {
+    if (!_isCurrentDeleteUndo(controller, generation)) {
+      return;
+    }
+    final restoreGeneration = ++_deleteUndoGeneration;
+    try {
+      await controller.restoreEntry(entry);
+    } catch (_) {
+      if (mounted && _isCurrentDeleteUndo(controller, restoreGeneration)) {
+        _showMessage(AppLocalizations.of(context).historyRestoreFailed);
+      }
+    }
+  }
+
+  bool _isCurrentDeleteUndo(HistoryController controller, int generation) {
+    return mounted &&
+        identical(controller, _controller) &&
+        generation == _deleteUndoGeneration;
   }
 
   Future<void> _confirmClearAll() async {
+    final controller = _controller;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -418,13 +467,16 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
         );
       },
     );
-    if (confirmed != true || !mounted) {
+    if (confirmed != true || !mounted || !identical(controller, _controller)) {
       return;
     }
+    // Clearing is a new intent: an earlier deletion must not be undoable after it.
+    final generation = ++_deleteUndoGeneration;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     try {
-      await _controller.clearAll();
+      await controller.clearAll();
     } catch (_) {
-      if (mounted) {
+      if (mounted && _isCurrentDeleteUndo(controller, generation)) {
         _showMessage(AppLocalizations.of(context).historyClearAllFailed);
       }
     }

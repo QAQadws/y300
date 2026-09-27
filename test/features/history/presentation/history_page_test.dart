@@ -21,6 +21,223 @@ void main() {
 
   setUpAll(date_symbol_data.initializeDateFormatting);
 
+  testWidgets('can undo a deleted blog record with traditional labels', (
+    tester,
+  ) async {
+    final entry = _blogFixture(now);
+    final repository = MemoryHistoryRepository([entry]);
+    final controller = buildHistoryController(repository);
+    final zhTw = AppLocalizationsZhTw();
+    addTearDown(controller.dispose);
+    addTearDown(repository.dispose);
+    await tester.pumpWidget(
+      _testApp(
+        controller: controller,
+        now: now,
+        locale: const Locale('zh', 'TW'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('history-entry-delete-blog:101:23')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(entry.title), findsNothing);
+    expect(find.text(zhTw.historyDeleted), findsOneWidget);
+    expect(find.text(zhTw.historyUndoDelete), findsOneWidget);
+    await tester.tap(find.byType(SnackBarAction));
+    await tester.pumpAndSettle();
+
+    expect(find.text(entry.title), findsOneWidget);
+    expect((await repository.query(const HistoryQuery())).items.single, entry);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a failed blog deletion keeps its row without offering undo', (
+    tester,
+  ) async {
+    final entry = _blogFixture(now);
+    final repository = MemoryHistoryRepository([entry])..failDelete = true;
+    final controller = buildHistoryController(repository);
+    addTearDown(controller.dispose);
+    addTearDown(repository.dispose);
+    await tester.pumpWidget(_testApp(controller: controller, now: now));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('history-entry-delete-blog:101:23')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(entry.title), findsOneWidget);
+    expect(find.text(zh.historyDeleteFailed), findsOneWidget);
+    expect(find.byType(SnackBarAction), findsNothing);
+    expect((await repository.query(const HistoryQuery())).items.single, entry);
+  });
+
+  testWidgets(
+    'a failed blog restoration stays deleted and reports a safe error',
+    (tester) async {
+      final entry = _blogFixture(now);
+      final repository = MemoryHistoryRepository([entry])..failRestore = true;
+      final controller = buildHistoryController(repository);
+      addTearDown(controller.dispose);
+      addTearDown(repository.dispose);
+      await tester.pumpWidget(_testApp(controller: controller, now: now));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('history-entry-delete-blog:101:23')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(SnackBarAction));
+      await tester.pumpAndSettle();
+
+      expect(find.text(entry.title), findsNothing);
+      expect(find.text(zh.historyRestoreFailed), findsOneWidget);
+      expect(find.textContaining('Bad state'), findsNothing);
+      expect((await repository.query(const HistoryQuery())).items, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('clearing all records invalidates an earlier blog undo action', (
+    tester,
+  ) async {
+    final entry = _blogFixture(now);
+    final repository = MemoryHistoryRepository([entry, ..._fixtures(now)]);
+    final controller = buildHistoryController(repository);
+    addTearDown(controller.dispose);
+    addTearDown(repository.dispose);
+    await tester.pumpWidget(_testApp(controller: controller, now: now));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('history-entry-delete-blog:101:23')),
+    );
+    await tester.pumpAndSettle();
+    final oldUndo = tester.widget<SnackBarAction>(find.byType(SnackBarAction));
+
+    await tester.tap(find.byKey(const Key('history-clear-all-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(zh.commonClear));
+    await tester.pumpAndSettle();
+    oldUndo.onPressed();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBarAction), findsNothing);
+    expect(find.byKey(const Key('history-empty')), findsOneWidget);
+    expect((await repository.query(const HistoryQuery())).items, isEmpty);
+  });
+
+  testWidgets(
+    'blog undo callbacks expire when the controller changes or closes',
+    (tester) async {
+      final entry = _blogFixture(now);
+      final firstRepository = MemoryHistoryRepository([entry]);
+      final firstController = buildHistoryController(firstRepository);
+      final nextRepository = MemoryHistoryRepository([entry]);
+      final nextController = buildHistoryController(nextRepository);
+      addTearDown(firstController.dispose);
+      addTearDown(nextController.dispose);
+      addTearDown(firstRepository.dispose);
+      addTearDown(nextRepository.dispose);
+      await tester.pumpWidget(_testApp(controller: firstController, now: now));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('history-entry-delete-blog:101:23')),
+      );
+      await tester.pumpAndSettle();
+      final oldUndo = tester.widget<SnackBarAction>(
+        find.byType(SnackBarAction),
+      );
+
+      await tester.pumpWidget(_testApp(controller: nextController, now: now));
+      await tester.pumpAndSettle();
+      oldUndo.onPressed();
+      await tester.pumpAndSettle();
+      expect(
+        (await firstRepository.query(const HistoryQuery())).items,
+        isEmpty,
+      );
+      expect(
+        (await nextRepository.query(const HistoryQuery())).items.single,
+        entry,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('history-entry-delete-blog:101:23')),
+      );
+      await tester.pumpAndSettle();
+      final closingUndo = tester.widget<SnackBarAction>(
+        find.byType(SnackBarAction),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      closingUndo.onPressed();
+      await tester.pumpAndSettle();
+
+      expect((await nextRepository.query(const HistoryQuery())).items, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'opens and searches blog records using localized author context',
+    (tester) async {
+      final entry = historyEntry(
+        type: HistoryTargetType.blog,
+        id: '101:23',
+        title: '日志原文',
+        contextLabel: '作者原名',
+        visitedAt: now,
+      );
+      final repository = MemoryHistoryRepository([entry]);
+      final controller = buildHistoryController(repository);
+      final opened = <HistoryTargetKey>[];
+      final zhTw = AppLocalizationsZhTw();
+      addTearDown(controller.dispose);
+      addTearDown(repository.dispose);
+      await tester.binding.setSurfaceSize(const Size(320, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        _testApp(
+          controller: controller,
+          now: now,
+          locale: const Locale('zh', 'TW'),
+          textScale: 2,
+          onOpenEntry: (context, entry) async {
+            opened.add(entry.target);
+            return const HistoryOpenSuccess();
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(entry.title), findsOneWidget);
+      expect(
+        find.textContaining(zhTw.historyBlogAuthor(entry.contextLabel)),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('history-entry-open-blog:101:23')),
+      );
+      await tester.pump();
+      expect(opened, [entry.target]);
+
+      await tester.tap(find.byKey(const Key('history-search-button')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('history-search-input')),
+        entry.contextLabel,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(entry.title), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('renders fixture rows across responsive themes and text scales', (
     tester,
   ) async {
@@ -476,6 +693,16 @@ List<HistoryEntry> _fixtures(DateTime now) {
       visitedAt: now.subtract(const Duration(minutes: 2)),
     ),
   ];
+}
+
+HistoryEntry _blogFixture(DateTime now) {
+  return historyEntry(
+    type: HistoryTargetType.blog,
+    id: '101:23',
+    title: '日志原文',
+    contextLabel: '作者原名',
+    visitedAt: now,
+  );
 }
 
 class _FixedHistoryClock implements HistoryClock {
