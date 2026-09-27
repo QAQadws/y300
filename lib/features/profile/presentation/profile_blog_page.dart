@@ -7,6 +7,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_actions.dart';
+import 'package:y300/features/profile/presentation/blog/blog_detail_header.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/blog/blog_text_tabs.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
@@ -296,18 +297,6 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                 icon: const Icon(Icons.reply),
                 onPressed: () =>
                     _openComment(controller, UserBlogCommentAction.add, null),
-              ),
-            if (state.data != null)
-              IconButton(
-                key: const Key('blog-detail-open-web'),
-                tooltip: l10n.profileBlogOpenWeb,
-                icon: const Icon(Icons.open_in_browser),
-                onPressed: () => openBlogWebPage(
-                  context,
-                  ref,
-                  expectedActor: ref.read(blogAccountIdProvider),
-                  destination: (navigation) => navigation.detail(state.query),
-                ),
               ),
           ],
         ),
@@ -952,12 +941,16 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const commentsStart = ValueKey('profile-blog-comments-start');
+    final hasComments =
+        capabilities?.supports(UserBlogDetailCapability.orderedComments) ==
+            true &&
+        data.comments.isNotEmpty;
     return CustomScrollView(
       key: const Key('profile-blog-detail'),
       physics: const AlwaysScrollableScrollPhysics(),
       // Content above this origin grows upward. Late article image sizes do
       // not move an initial comment target or require a delayed scroll jump.
-      center: focusComments ? commentsStart : null,
+      center: focusComments && hasComments ? commentsStart : null,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
@@ -997,18 +990,15 @@ class _ProfileBlogDetailContent extends StatelessWidget {
         ),
         SliverPadding(
           key: commentsStart,
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             ForumContentSpacing.pageHorizontal,
-            12,
+            hasComments ? 12 : 0,
             ForumContentSpacing.pageHorizontal,
             24,
           ),
           sliver: SliverList.list(
             children: [
-              if (capabilities?.supports(
-                    UserBlogDetailCapability.orderedComments,
-                  ) ==
-                  true) ...[
+              if (hasComments) ...[
                 Text(
                   key: const Key('profile-blog-comments-heading'),
                   AppLocalizations.of(context).profileBlogComments,
@@ -1018,11 +1008,6 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (data.comments.isEmpty)
-                  Text(
-                    AppLocalizations.of(context).profileBlogCommentsEmpty,
-                    style: TextStyle(color: palette.muted),
-                  ),
                 for (final comment in data.comments) ...[
                   _CommentCard(
                     key: Key('profile-blog-comment-${comment.commentId}'),
@@ -1188,38 +1173,58 @@ class _BlogDetailCard extends ConsumerWidget {
               const SizedBox(height: 4),
             ] else
               const SizedBox(height: 11),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (capabilities?.supports(
-                      UserBlogDetailCapability.avatarReference,
-                    ) ==
-                    true) ...[
-                  _ProfileBlogAvatar(
-                    imageUrl: data.avatarUrl,
-                    ownerId: data.ownerUserId,
-                    userId: data.ownerUserId,
-                    radius: 17,
-                    imageReferer: imageReferer,
-                    compact: true,
+            BlogDetailHeader(
+              viewCount:
+                  capabilities?.supports(UserBlogDetailCapability.viewCount) ==
+                      true
+                  ? data.viewCount
+                  : null,
+              commentCount:
+                  capabilities?.supports(
+                        UserBlogDetailCapability.commentCount,
+                      ) ==
+                      true
+                  ? data.commentCount
+                  : null,
+              author: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (capabilities?.supports(
+                        UserBlogDetailCapability.avatarReference,
+                      ) ==
+                      true) ...[
+                    _ProfileBlogAvatar(
+                      imageUrl: data.avatarUrl,
+                      ownerId: data.ownerUserId,
+                      userId: data.ownerUserId,
+                      radius: 17,
+                      imageReferer: imageReferer,
+                      compact: true,
+                    ),
+                    const SizedBox(width: 9),
+                  ],
+                  Expanded(
+                    child: _BlogAuthorMetadata(
+                      authorKey: const Key('blog-detail-author'),
+                      userId: data.ownerUserId,
+                      name:
+                          capabilities?.supports(
+                                UserBlogDetailCapability.author,
+                              ) ==
+                              true
+                          ? data.authorName
+                          : null,
+                      metadata:
+                          capabilities?.supports(
+                                UserBlogDetailCapability.publishedAtText,
+                              ) ==
+                              true
+                          ? display.text(data.publishedAtText ?? '')
+                          : '',
+                    ),
                   ),
-                  const SizedBox(width: 9),
                 ],
-                Expanded(
-                  child: _BlogAuthorMetadata(
-                    authorKey: const Key('blog-detail-author'),
-                    userId: data.ownerUserId,
-                    name:
-                        capabilities?.supports(
-                              UserBlogDetailCapability.author,
-                            ) ==
-                            true
-                        ? data.authorName
-                        : null,
-                    metadata: _detailMeta(context, data, display),
-                  ),
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: ForumContentSpacing.postCardBodyTop),
             DefaultTextStyle.merge(
@@ -1253,28 +1258,6 @@ class _BlogDetailCard extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  String _detailMeta(
-    BuildContext context,
-    UserBlogDetailData data,
-    BlogDisplayText display,
-  ) {
-    final l10n = AppLocalizations.of(context);
-    final parts = <String>[
-      if (capabilities?.supports(UserBlogDetailCapability.publishedAtText) ==
-              true &&
-          data.publishedAtText != null)
-        display.text(data.publishedAtText!),
-      if (capabilities?.supports(UserBlogDetailCapability.viewCount) == true &&
-          data.viewCount != null)
-        l10n.profileBlogViews(data.viewCount!),
-      if (capabilities?.supports(UserBlogDetailCapability.commentCount) ==
-              true &&
-          data.commentCount != null)
-        l10n.profileBlogCommentCount(data.commentCount!),
-    ];
-    return parts.join(' · ');
   }
 }
 
@@ -1436,6 +1419,8 @@ class _BlogAuthorMetadata extends StatelessWidget {
           if (showAuthor) const SizedBox(height: 2),
           Text(
             metadata,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(
               color: native.soft,
               height: 1.1,

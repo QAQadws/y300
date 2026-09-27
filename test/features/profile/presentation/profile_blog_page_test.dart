@@ -573,12 +573,142 @@ void main() {
     expect(detailRepository.queries.single.ownerUserId, '257582');
     expect(detailRepository.queries.single.blogId, '117548');
     expect(find.byKey(const Key('profile-blog-detail')), findsOneWidget);
-    expect(find.text('2026-6-18 00:25 · 浏览 39 · 评论 1'), findsOneWidget);
+    expect(find.text('2026-6-18 00:25'), findsOneWidget);
+    final views = find.byKey(const Key('blog-detail-views'));
+    final comments = find.byKey(const Key('blog-detail-comment-count'));
+    expect(
+      find.descendant(
+        of: views,
+        matching: find.byIcon(Icons.visibility_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: views, matching: find.text('39')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: comments,
+        matching: find.byIcon(Icons.forum_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: comments, matching: find.text('1')),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.profileBlogViews(39)), findsNothing);
+    expect(find.text(l10n.profileBlogCommentCount(1)), findsNothing);
     expect(find.text('hsyhlj'), findsOneWidget);
     expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
-    expect(find.text('日志评论'), findsOneWidget);
+    expect(find.text(l10n.profileBlogComments), findsOneWidget);
     expect(_richTextContaining('探险的感觉'), findsOneWidget);
   });
+
+  testWidgets(
+    'an empty article keeps zero-count badges and AppBar reply without comment placeholders or web action',
+    (tester) async {
+      final details = _FakeBlogDetailRepository(
+        emptyComments: true,
+        viewCount: 0,
+        commentCount: 0,
+      );
+      final comments = BlogCommentFixture(autoPrepare: true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            blogAccountIdProvider.overrideWithValue('101'),
+            userBlogDetailRepositoryProvider.overrideWithValue(details),
+            userBlogCommentServiceProvider.overrideWithValue(comments),
+            forumImageRefererProvider.overrideWithValue(
+              'https://bbs.yamibo.com/',
+            ),
+          ],
+          child: const LocalizedTestApp(
+            home: ProfileBlogDetailPage(ownerUserId: '202', blogId: '11'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileBlogDetailPage)),
+      );
+      expect(find.text(l10n.profileBlogComments), findsNothing);
+      expect(find.text(l10n.profileBlogCommentsEmpty), findsNothing);
+      expect(
+        find.byKey(const Key('profile-blog-comments-heading')),
+        findsNothing,
+      );
+      for (final key in ['blog-detail-views', 'blog-detail-comment-count']) {
+        expect(
+          find.descendant(of: find.byKey(Key(key)), matching: find.text('0')),
+          findsOneWidget,
+        );
+      }
+      expect(find.byKey(const Key('blog-detail-open-web')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.open_in_browser),
+        ),
+        findsNothing,
+      );
+      expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('blog-detail-reply')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BlogCommentPage), findsOneWidget);
+      expect(
+        comments.preparations.single.target,
+        const UserBlogCommentTarget(
+          actorUserId: '101',
+          ownerUserId: '202',
+          blogId: '11',
+          action: UserBlogCommentAction.add,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final missing in [
+    'values',
+    'unknown capabilities',
+    'unsupported capabilities',
+  ]) {
+    testWidgets('detail hides statistics with $missing', (tester) async {
+      final supported = UserBlogDetailCapability.values.where(
+        (capability) =>
+            capability != UserBlogDetailCapability.viewCount &&
+            capability != UserBlogDetailCapability.commentCount,
+      );
+      final capabilities = switch (missing) {
+        'unknown capabilities' => UserBlogDetailReadCapabilities(
+          values: DataCapabilitySet<UserBlogDetailCapability>.from(
+            supported: supported,
+          ),
+        ),
+        'unsupported capabilities' => _detailCapabilities(supported: supported),
+        _ => _detailCapabilities(),
+      };
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: _FakeBlogDirectoryRepository(),
+        detailRepository: _FakeBlogDetailRepository(
+          capabilities: capabilities,
+          viewCount: missing == 'values' ? null : 39,
+          commentCount: missing == 'values' ? null : 1,
+        ),
+      );
+      await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('blog-detail-views')), findsNothing);
+      expect(find.byKey(const Key('blog-detail-comment-count')), findsNothing);
+      expect(find.text('2026-6-18 00:25'), findsOneWidget);
+      expect(find.byKey(const Key('blog-detail-reply')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets(
     'pagination replaces each page and can return from the last page',
@@ -825,8 +955,12 @@ void main() {
     await tester.tap(find.text('一种体验'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('浏览 39'), findsNothing);
-    expect(find.text('日志评论'), findsNothing);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogDetailPage)),
+    );
+    expect(find.byKey(const Key('blog-detail-views')), findsNothing);
+    expect(find.byKey(const Key('blog-detail-comment-count')), findsNothing);
+    expect(find.text(l10n.profileBlogComments), findsNothing);
     expect(find.byKey(const Key('blog-detail-reply')), findsNothing);
     expect(find.byKey(const Key('profile-blog-comment-button')), findsNothing);
   });
@@ -1145,6 +1279,9 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     this.blogActions = const {},
     this.title = '我们小区的公共交通极其不便利',
     this.commentAuthorId,
+    this.emptyComments = false,
+    this.viewCount = 39,
+    this.commentCount = 1,
   }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
@@ -1152,6 +1289,9 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
   final Set<UserBlogAction> blogActions;
   String title;
   final String? commentAuthorId;
+  final bool emptyComments;
+  final int? viewCount;
+  final int? commentCount;
   final policies = <CacheLoadPolicy>[];
   final Completer<void>? gate;
   final cancellations = <ForumRequestCancellation?>[];
@@ -1180,19 +1320,20 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
         bodyHtml: '<p>一直对着电脑屏幕</p>',
         authorName: 'hsyhlj',
         publishedAtText: '2026-6-18 00:25',
-        viewCount: 39,
-        commentCount: 1,
+        viewCount: viewCount,
+        commentCount: commentCount,
         commentsOpen: true,
         actions: blogActions,
         comments: <UserBlogComment>[
-          UserBlogComment(
-            commentId: '646846',
-            authorName: 'thessky',
-            authorUserId: commentAuthorId,
-            bodyHtml: '<p>探险的感觉</p>',
-            publishedAtText: '2026-6-18 01:00',
-            actions: commentActions,
-          ),
+          if (!emptyComments)
+            UserBlogComment(
+              commentId: '646846',
+              authorName: 'thessky',
+              authorUserId: commentAuthorId,
+              bodyHtml: '<p>探险的感觉</p>',
+              publishedAtText: '2026-6-18 01:00',
+              actions: commentActions,
+            ),
         ],
       ),
       capabilities: readCapabilities,

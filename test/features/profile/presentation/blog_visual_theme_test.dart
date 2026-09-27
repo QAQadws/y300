@@ -29,6 +29,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_widg
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
+import 'package:y300/shared/widgets/forum_metric_pill.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
@@ -109,6 +110,35 @@ void main() {
           expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
           _checkSurfaces(tester, host.theme);
           _checkHtmlTheme(tester, host.theme, sourceId: 'profile-blog-11');
+          expect(find.byKey(const Key('blog-detail-open-web')), findsNothing);
+          final views = find.byKey(const Key('blog-detail-views'));
+          final commentCount = find.byKey(
+            const Key('blog-detail-comment-count'),
+          );
+          final author = find.byKey(const Key('blog-detail-author'));
+          final palette = ThreadDetailNativePalette.resolve(host.theme);
+          for (final metric in [views, commentCount]) {
+            final pill = tester.widget<ForumMetricPill>(metric);
+            expect(pill.backgroundColor, palette.chipBackground);
+            expect(pill.iconColor, palette.softText);
+            expect(pill.textColor, palette.muted);
+          }
+          if (compact) {
+            expect(
+              tester.getTopLeft(views).dy,
+              greaterThan(tester.getBottomRight(author).dy),
+            );
+          } else {
+            expect(
+              tester.getTopLeft(views).dy,
+              closeTo(tester.getTopLeft(author).dy, 1),
+            );
+            expect(
+              tester.getTopLeft(views).dx,
+              greaterThan(tester.getBottomRight(author).dx),
+            );
+          }
+          expect(tester.takeException(), isNull);
           await _save(tester, '$name-article');
           expect(find.byKey(const Key('blog-detail-actions')), findsNothing);
           expect(find.byKey(const Key('blog-detail-reply')), findsOneWidget);

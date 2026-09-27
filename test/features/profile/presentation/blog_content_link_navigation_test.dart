@@ -537,7 +537,7 @@ void main() {
   );
 
   testWidgets(
-    'empty targeted comments provide an explicit state and all-comments action',
+    'empty targeted comments keep the article visible and all-comments action without placeholders',
     (tester) async {
       final host = _Host();
       host.details.emptyComments = true;
@@ -553,11 +553,28 @@ void main() {
       final l10n = AppLocalizations.of(
         tester.element(find.byType(ProfileBlogDetailPage)),
       );
-      expect(find.text(l10n.profileBlogCommentsEmpty), findsOneWidget);
+      expect(find.text(l10n.profileBlogComments), findsNothing);
+      expect(find.text(l10n.profileBlogCommentsEmpty), findsNothing);
+      expect(
+        find.byKey(const Key('profile-blog-comments-heading')),
+        findsNothing,
+      );
+      expect(
+        find.text('article fixture', findRichText: true).hitTestable(),
+        findsOneWidget,
+      );
+      expect(_detailScroll(tester).position.pixels, 0);
       await tester.tap(find.text(l10n.profileBlogAllComments));
       await tester.pumpAndSettle();
       expect(host.details.queries.last.commentId, isNull);
       expect(host.details.queries.last.page, 1);
+      expect(find.text(l10n.profileBlogComments), findsNothing);
+      expect(find.text(l10n.profileBlogCommentsEmpty), findsNothing);
+      expect(
+        find.text('article fixture', findRichText: true).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 
