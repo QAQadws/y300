@@ -291,6 +291,47 @@ void main() {
           await tester.pumpAndSettle();
           await _save(tester, '$name-editor-settings-options');
           expect(tester.takeException(), isNull);
+          for (final (label, key, value, snapshot) in [
+            (
+              l10n.profileBlogVisibilityPassword,
+              'blog-editor-password',
+              'private-reading-2026',
+              'password',
+            ),
+            (
+              l10n.profileBlogVisibilitySelected,
+              'blog-editor-target-names',
+              'Alice Bob\n一起读书的朋友 长用户名的朋友',
+              'selected-friends',
+            ),
+          ]) {
+            final visibility = find.byKey(const Key('blog-editor-visibility'));
+            await tester.ensureVisible(visibility);
+            await tester.tap(visibility);
+            await tester.pumpAndSettle();
+            final choice = find.text(label).last;
+            await tester.ensureVisible(choice);
+            await tester.tap(choice);
+            await tester.pumpAndSettle();
+            final accessInput = find.byKey(Key(key));
+            await tester.ensureVisible(accessInput);
+            await tester.enterText(accessInput, value);
+            FocusManager.instance.primaryFocus?.unfocus();
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(accessInput);
+            await tester.pumpAndSettle();
+            expect(accessInput.hitTestable(), findsOneWidget);
+            final accessField = tester.widget<TextField>(accessInput);
+            expect(accessField.controller!.text, value);
+            expect(accessField.readOnly, isFalse);
+            expect(accessField.obscureText, snapshot == 'password');
+            final bounds = tester.getRect(accessInput);
+            expect(bounds.left, greaterThanOrEqualTo(0));
+            expect(bounds.right, lessThanOrEqualTo(compact ? 300 : 390));
+            expect(bounds.bottom, lessThanOrEqualTo(compact ? 844 - 260 : 844));
+            expect(tester.takeException(), isNull);
+            await _save(tester, '$name-editor-settings-$snapshot');
+          }
           final settingsDone = find.byKey(
             const Key('blog-editor-settings-done'),
           );

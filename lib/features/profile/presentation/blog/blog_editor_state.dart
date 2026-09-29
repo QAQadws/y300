@@ -20,6 +20,10 @@ enum BlogEditorIssue {
   newCategoryUnavailable,
   categoryConflict,
   feedUnavailable,
+  visibilityUnavailable,
+  commentsUnavailable,
+  passwordRequired,
+  targetNamesRequired,
   serverChanged,
 }
 
@@ -35,6 +39,10 @@ final class BlogEditorDraft {
     this.personalCategoryId = '0',
     this.newPersonalCategory = '',
     this.publishFeed = false,
+    this.visibility = UserBlogVisibility.public,
+    this.commentsEnabled = true,
+    this.targetNames = '',
+    this.password = '',
   });
 
   factory BlogEditorDraft.from(UserBlogEditorPreparation form) =>
@@ -45,6 +53,9 @@ final class BlogEditorDraft {
         siteCategoryId: form.siteCategoryId,
         personalCategoryId: form.personalCategoryId,
         publishFeed: form.publishFeed,
+        visibility: form.visibility,
+        commentsEnabled: form.commentsEnabled,
+        targetNames: form.targetNames,
       );
 
   final String subject;
@@ -54,6 +65,11 @@ final class BlogEditorDraft {
   final String personalCategoryId;
   final String newPersonalCategory;
   final bool publishFeed;
+  final UserBlogVisibility visibility;
+  final bool commentsEnabled;
+  final String targetNames;
+  // Only a newly entered password is held here. The saved password stays opaque.
+  final String password;
 
   BlogEditorDraft copyWith({
     String? subject,
@@ -63,6 +79,10 @@ final class BlogEditorDraft {
     String? personalCategoryId,
     String? newPersonalCategory,
     bool? publishFeed,
+    UserBlogVisibility? visibility,
+    bool? commentsEnabled,
+    String? targetNames,
+    String? password,
   }) => BlogEditorDraft(
     subject: subject ?? this.subject,
     bodyHtml: bodyHtml ?? this.bodyHtml,
@@ -71,6 +91,10 @@ final class BlogEditorDraft {
     personalCategoryId: personalCategoryId ?? this.personalCategoryId,
     newPersonalCategory: newPersonalCategory ?? this.newPersonalCategory,
     publishFeed: publishFeed ?? this.publishFeed,
+    visibility: visibility ?? this.visibility,
+    commentsEnabled: commentsEnabled ?? this.commentsEnabled,
+    targetNames: targetNames ?? this.targetNames,
+    password: password ?? this.password,
   );
 
   Object get _identity => (
@@ -81,6 +105,10 @@ final class BlogEditorDraft {
     personalCategoryId,
     newPersonalCategory,
     publishFeed,
+    visibility,
+    commentsEnabled,
+    targetNames,
+    password,
   );
   @override
   bool operator ==(Object other) =>
@@ -99,7 +127,11 @@ final class BlogEditorOptions {
       canCreateCategory = form.canCreateCategory,
       canPublishFeed = form.canPublishFeed,
       visibility = form.visibility,
-      commentsEnabled = form.commentsEnabled;
+      commentsEnabled = form.commentsEnabled,
+      availableVisibilities = List.unmodifiable(form.availableVisibilities),
+      canEditComments = form.canEditComments,
+      hasPassword = form.hasPassword,
+      _targetNames = form.targetNames;
 
   final List<UserBlogCategory> siteCategories;
   final List<UserBlogCategory> personalCategories;
@@ -108,6 +140,18 @@ final class BlogEditorOptions {
   final bool canPublishFeed;
   final UserBlogVisibility visibility;
   final bool commentsEnabled;
+  final List<UserBlogVisibility> availableVisibilities;
+  final bool canEditComments;
+  final bool hasPassword;
+  final String _targetNames;
+
+  bool hasSameAccessCapabilities(BlogEditorOptions other) =>
+      setEquals(
+        availableVisibilities.toSet(),
+        other.availableVisibilities.toSet(),
+      ) &&
+      canEditComments == other.canEditComments &&
+      hasPassword == other.hasPassword;
 
   BlogEditorIssue? validate(BlogEditorDraft draft) {
     if (draft.subject.trim().isEmpty) return BlogEditorIssue.subjectRequired;
@@ -127,6 +171,27 @@ final class BlogEditorOptions {
     }
     if (draft.publishFeed && !canPublishFeed) {
       return BlogEditorIssue.feedUnavailable;
+    }
+    final changesAccess =
+        draft.visibility != visibility ||
+        (draft.visibility == UserBlogVisibility.passwordProtected &&
+            draft.password.trim().isNotEmpty) ||
+        (draft.visibility == UserBlogVisibility.selectedFriends &&
+            draft.targetNames != _targetNames);
+    if (changesAccess && !availableVisibilities.contains(draft.visibility)) {
+      return BlogEditorIssue.visibilityUnavailable;
+    }
+    if (draft.commentsEnabled != commentsEnabled && !canEditComments) {
+      return BlogEditorIssue.commentsUnavailable;
+    }
+    if (draft.visibility == UserBlogVisibility.passwordProtected &&
+        !(visibility == UserBlogVisibility.passwordProtected && hasPassword) &&
+        draft.password.trim().isEmpty) {
+      return BlogEditorIssue.passwordRequired;
+    }
+    if (draft.visibility == UserBlogVisibility.selectedFriends &&
+        draft.targetNames.trim().isEmpty) {
+      return BlogEditorIssue.targetNamesRequired;
     }
     return null;
   }

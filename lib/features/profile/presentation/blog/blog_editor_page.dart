@@ -31,6 +31,8 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
   final _subject = TextEditingController();
   final _tags = TextEditingController();
   final _categoryName = TextEditingController();
+  final _password = TextEditingController();
+  final _targetNames = TextEditingController();
   bool _preview = false;
   bool _creatingCategory = false;
   bool _categoryNameRequired = false;
@@ -72,6 +74,8 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
       (_subject, draft.subject),
       (_tags, draft.tags),
       (_categoryName, draft.newPersonalCategory),
+      (_password, draft.password),
+      (_targetNames, draft.targetNames),
     ]) {
       if (controller.text != text) {
         controller.value = TextEditingValue(
@@ -89,6 +93,8 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     _subject.dispose();
     _tags.dispose();
     _categoryName.dispose();
+    _password.dispose();
+    _targetNames.dispose();
     super.dispose();
   }
 
@@ -115,6 +121,10 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
           BlogEditorIssue.newCategoryUnavailable,
           BlogEditorIssue.categoryConflict,
           BlogEditorIssue.feedUnavailable,
+          BlogEditorIssue.passwordRequired,
+          BlogEditorIssue.targetNamesRequired,
+          BlogEditorIssue.visibilityUnavailable,
+          BlogEditorIssue.commentsUnavailable,
         }.contains(issue)) {
           await _openSettings();
         }
@@ -276,6 +286,8 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                   state: state,
                   tags: _tags,
                   categoryName: _categoryName,
+                  password: _password,
+                  targetNames: _targetNames,
                   creatingCategory: _creatingCategory,
                   categoryNameRequired: _categoryNameRequired,
                   onCreateCategory: (value) => setState(() {
@@ -546,5 +558,10 @@ String _issueText(
     l10n.profileBlogNewCategoryUnavailable,
   BlogEditorIssue.categoryConflict => l10n.profileBlogCategoryConflict,
   BlogEditorIssue.feedUnavailable => l10n.profileBlogFeedUnavailable,
+  BlogEditorIssue.passwordRequired => l10n.profileBlogPasswordRequired,
+  BlogEditorIssue.targetNamesRequired => l10n.profileBlogTargetNamesRequired,
+  BlogEditorIssue.visibilityUnavailable =>
+    l10n.profileBlogVisibilityUnavailable,
+  BlogEditorIssue.commentsUnavailable => l10n.profileBlogCommentsUnavailable,
   BlogEditorIssue.serverChanged => l10n.profileBlogServerChanged,
 };

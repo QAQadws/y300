@@ -236,6 +236,229 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final visibility in UserBlogVisibility.values) {
+    testWidgets(
+      'native access settings submit $visibility and updated comment policy',
+      (tester) async {
+        final service = BlogOperationFixture(autoPrepare: true);
+        service.editorForm = (target) => blogEditorPreparation(
+          target,
+          visibility: visibility == UserBlogVisibility.public
+              ? UserBlogVisibility.friends
+              : UserBlogVisibility.public,
+          availableVisibilities: UserBlogVisibility.values,
+          canEditComments: true,
+          hasPassword: false,
+        );
+        await _open(tester, service);
+        final l10n = _l10n(tester);
+        await _choose(
+          tester,
+          'blog-editor-visibility',
+          _visibilityLabel(l10n, visibility),
+        );
+        const names = 'Alice  Bob\n名字甲';
+        const password = 'a new p@ssword';
+        if (visibility == UserBlogVisibility.selectedFriends) {
+          final field = find.byKey(const Key('blog-editor-target-names'));
+          await tester.ensureVisible(field);
+          await tester.enterText(field, names);
+        }
+        if (visibility == UserBlogVisibility.passwordProtected) {
+          final field = find.byKey(const Key('blog-editor-password'));
+          await tester.ensureVisible(field);
+          expect(tester.widget<TextField>(field).obscureText, isTrue);
+          await tester.enterText(field, password);
+        }
+        final comments = find.byKey(const Key('blog-editor-comments-enabled'));
+        await tester.ensureVisible(comments);
+        await tester.tap(comments);
+        await tester.pump();
+        await _closeSettings(tester);
+        final summary = find.byKey(const Key('blog-editor-settings-summary'));
+        expect(
+          find.descendant(
+            of: summary,
+            matching: find.textContaining(_visibilityLabel(l10n, visibility)),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: summary,
+            matching: find.textContaining(l10n.profileBlogCommentsClosed),
+          ),
+          findsOneWidget,
+        );
+        await _save(tester);
+        final input = service.editorSubmissions.single.input;
+        expect(input.visibility, visibility);
+        expect(input.commentsEnabled, isFalse);
+        expect(
+          input.password,
+          visibility == UserBlogVisibility.passwordProtected ? password : null,
+        );
+        if (visibility == UserBlogVisibility.selectedFriends) {
+          expect(input.targetNames, names);
+        }
+        service.saved();
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
+  for (final visibility in [
+    UserBlogVisibility.passwordProtected,
+    UserBlogVisibility.selectedFriends,
+  ]) {
+    testWidgets(
+      'empty private access input for $visibility reopens settings before submit',
+      (tester) async {
+        final service = BlogOperationFixture(autoPrepare: true);
+        service.editorForm = (target) => blogEditorPreparation(
+          target,
+          availableVisibilities: UserBlogVisibility.values,
+          hasPassword: false,
+          targetNames: '',
+        );
+        await _open(tester, service);
+        await _choose(
+          tester,
+          'blog-editor-visibility',
+          _visibilityLabel(_l10n(tester), visibility),
+        );
+        final passwordMode = visibility == UserBlogVisibility.passwordProtected;
+        final field = find.byKey(
+          Key(
+            passwordMode ? 'blog-editor-password' : 'blog-editor-target-names',
+          ),
+        );
+        await tester.ensureVisible(field);
+        await tester.enterText(field, passwordMode ? '   ' : ' \n ');
+        await _save(tester);
+        await tester.pumpAndSettle();
+        expect(service.editorSubmissions, isEmpty);
+        expect(
+          find.byKey(const Key('blog-editor-settings-sheet')),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(field);
+        await tester.enterText(
+          field,
+          passwordMode ? 'new password' : 'Alice Bob',
+        );
+        await _save(tester);
+        expect(service.editorSubmissions, hasLength(1));
+        service.saved();
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
+  testWidgets(
+    'existing password is not filled and leaving it blank preserves it',
+    (tester) async {
+      final service = BlogOperationFixture(autoPrepare: true);
+      service.editorForm = (target) => blogEditorPreparation(
+        target,
+        visibility: UserBlogVisibility.passwordProtected,
+        availableVisibilities: UserBlogVisibility.values,
+        hasPassword: true,
+      );
+      await _open(tester, service);
+      await _openSettings(tester);
+      final field = find.byKey(const Key('blog-editor-password'));
+      await tester.ensureVisible(field);
+      final password = tester.widget<TextField>(field);
+      expect(password.obscureText, isTrue);
+      expect(password.controller!.text, isEmpty);
+      await _save(tester);
+      final input = service.editorSubmissions.single.input;
+      expect(input.visibility, UserBlogVisibility.passwordProtected);
+      expect(input.password, isNull);
+      service.saved();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('account switch clears a password entered in the open sheet', (
+    tester,
+  ) async {
+    final service = BlogOperationFixture(autoPrepare: true);
+    service.editorForm = (target) => blogEditorPreparation(
+      target,
+      availableVisibilities: UserBlogVisibility.values,
+      hasPassword: false,
+    );
+    final host = await _open(tester, service);
+    await _choose(
+      tester,
+      'blog-editor-visibility',
+      _l10n(tester).profileBlogVisibilityPassword,
+    );
+    final field = find.byKey(const Key('blog-editor-password'));
+    await tester.ensureVisible(field);
+    await tester.enterText(field, 'old-account-private-secret');
+    final input = tester.widget<TextField>(field).controller!;
+    host.changeActor('202');
+    await tester.pumpAndSettle();
+    expect(input.text, isEmpty);
+    expect(find.byType(TextField, skipOffstage: false), findsNothing);
+    expect(service.editorSubmissions, isEmpty);
+    host.changeActor('101');
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField, skipOffstage: false), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'unknown submission keeps access settings readable but immutable',
+    (tester) async {
+      final service = BlogOperationFixture(autoPrepare: true);
+      service.editorForm = (target) => blogEditorPreparation(
+        target,
+        visibility: UserBlogVisibility.passwordProtected,
+        availableVisibilities: UserBlogVisibility.values,
+        canEditComments: true,
+        hasPassword: true,
+      );
+      await _open(tester, service);
+      await _save(tester);
+      service.editorSubmissions.single.result.complete(
+        const DataCommandOutcomeUnknown(blogActionWriteFailure),
+      );
+      await tester.pumpAndSettle();
+      await _openSettings(tester);
+      final visibility = find.byKey(const Key('blog-editor-visibility'));
+      final dropdown = find.descendant(
+        of: visibility,
+        matching: find.byType(DropdownButton<UserBlogVisibility>),
+      );
+      expect(
+        tester.widget<DropdownButton<UserBlogVisibility>>(dropdown).onChanged,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const Key('blog-editor-comments-enabled')),
+            )
+            .onChanged,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('blog-editor-password')))
+            .readOnly,
+        isTrue,
+      );
+      expect(find.byKey(const Key('blog-editor-open-web')), findsNothing);
+      await _closeSettings(tester);
+      expect(_submitButton(tester).onPressed, isNull);
+      expect(service.editorSubmissions, hasLength(1));
+    },
+  );
+
   for (final useServer in [false, true]) {
     testWidgets(
       'known failure retains input and server review useServer=$useServer',
@@ -502,6 +725,15 @@ TextField _body(WidgetTester tester) =>
     tester.widget(find.byKey(const Key('blog-editor-body')));
 AppLocalizations _l10n(WidgetTester tester) =>
     AppLocalizations.of(tester.element(find.byType(BlogEditorPage)));
+String _visibilityLabel(AppLocalizations l10n, UserBlogVisibility visibility) =>
+    switch (visibility) {
+      UserBlogVisibility.public => l10n.profileBlogVisibilityPublic,
+      UserBlogVisibility.friends => l10n.profileBlogVisibilityFriends,
+      UserBlogVisibility.selectedFriends => l10n.profileBlogVisibilitySelected,
+      UserBlogVisibility.private => l10n.profileBlogVisibilityPrivate,
+      UserBlogVisibility.passwordProtected =>
+        l10n.profileBlogVisibilityPassword,
+    };
 Future<void> _save(WidgetTester tester) async {
   if (find
       .byKey(const Key('blog-editor-settings-sheet'))

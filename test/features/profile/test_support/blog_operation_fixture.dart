@@ -191,6 +191,10 @@ UserBlogEditorPreparation blogEditorPreparation(
   bool canPublishFeed = true,
   UserBlogVisibility visibility = UserBlogVisibility.public,
   bool commentsEnabled = true,
+  List<UserBlogVisibility> availableVisibilities = UserBlogVisibility.values,
+  bool canEditComments = true,
+  bool? hasPassword,
+  String? targetNames,
 }) => UserBlogEditorPreparation(
   target: target,
   token: _Token(),
@@ -213,6 +217,15 @@ UserBlogEditorPreparation blogEditorPreparation(
   publishFeed: false,
   visibility: visibility,
   commentsEnabled: commentsEnabled,
+  availableVisibilities: availableVisibilities,
+  canEditComments: canEditComments,
+  hasPassword:
+      hasPassword ?? visibility == UserBlogVisibility.passwordProtected,
+  targetNames:
+      targetNames ??
+      (visibility == UserBlogVisibility.selectedFriends
+          ? 'Selected Friend'
+          : ''),
 );
 
 final class _Token implements UserBlogOperationToken {}

@@ -119,6 +119,12 @@ final class DiscuzBlogOperations implements UserBlogOperations {
         (submission.publishFeed && !form.canPublishFeed)) {
       return _notSent('blog_editor_input_invalid');
     }
+    final Map<String, String> accessFields;
+    try {
+      accessFields = form.accessFields(submission);
+    } on FormatException {
+      return _notSent('blog_editor_access_input_invalid');
+    }
     token.used = true;
     final result = await _boundary.submit(
       form.actionUri.replace(
@@ -133,6 +139,7 @@ final class DiscuzBlogOperations implements UserBlogOperations {
       cancellation: submission.cancellation,
       fields: {
         ...form.fields,
+        ...accessFields,
         'subject': submission.subject,
         'message': submission.bodyHtml,
         'tag': submission.tags,

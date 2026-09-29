@@ -105,6 +105,10 @@ UserBlogEditorSubmission blogEditorSubmission(
   String personalCategory = '0',
   String? newCategory,
   bool? feed,
+  UserBlogVisibility? visibility,
+  bool? commentsEnabled,
+  String? password,
+  String? targetNames,
   ForumRequestCancellation? cancellation,
 }) => UserBlogEditorSubmission(
   preparation: ready,
@@ -116,6 +120,10 @@ UserBlogEditorSubmission blogEditorSubmission(
   personalCategoryId: personalCategory,
   newPersonalCategory: newCategory,
   publishFeed: feed ?? ready.publishFeed,
+  visibility: visibility,
+  commentsEnabled: commentsEnabled,
+  password: password,
+  targetNames: targetNames,
   cancellation: cancellation,
 );
 

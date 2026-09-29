@@ -79,6 +79,8 @@ void main() {
       );
       expect(editor.value.options!.commentsEnabled, isFalse);
       expect(editor.value.draft.bodyHtml, html);
+      expect(editor.value.draft.password, isEmpty);
+      expect(editor.value.dirty, isFalse);
       editor.update(editor.value.draft.copyWith(subject: 'Changed title'));
       final submit = editor.submit();
       final input = service.editorSubmissions.single.input;
@@ -89,8 +91,216 @@ void main() {
         UserBlogVisibility.passwordProtected,
       );
       expect(input.preparation.commentsEnabled, isFalse);
+      expect(input.visibility, UserBlogVisibility.passwordProtected);
+      expect(input.commentsEnabled, isFalse);
+      expect(input.password, isNull);
+      expect(input.targetNames, isNull);
       service.saved();
       expect((await submit)?.blogId, '11');
+    },
+  );
+
+  for (final visibility in UserBlogVisibility.values) {
+    test('submits $visibility and only its applicable access fields', () async {
+      final editor = await ready();
+      editor.update(
+        editor.value.draft.copyWith(
+          visibility: visibility,
+          commentsEnabled: false,
+          password: '  newly-entered-password  ',
+          targetNames: '甲 乙,丙',
+        ),
+      );
+      expect(editor.value.dirty, isTrue);
+      final submit = editor.submit();
+      final input = service.editorSubmissions.single.input;
+      expect(input.visibility, visibility);
+      expect(input.commentsEnabled, isFalse);
+      expect(
+        input.password,
+        visibility == UserBlogVisibility.passwordProtected
+            ? 'newly-entered-password'
+            : isNull,
+      );
+      expect(
+        input.targetNames,
+        visibility == UserBlogVisibility.selectedFriends ? '甲 乙,丙' : isNull,
+      );
+      service.saved();
+      expect(await submit, isNotNull);
+    });
+  }
+
+  test(
+    'selected-friend preparation retains exact names without becoming dirty',
+    () async {
+      service.editorForm = (target) => blogEditorPreparation(
+        target,
+        visibility: UserBlogVisibility.selectedFriends,
+        commentsEnabled: false,
+        targetNames: '甲  乙,丙',
+      );
+      final editor = await ready();
+      expect(editor.value.draft.visibility, UserBlogVisibility.selectedFriends);
+      expect(editor.value.draft.commentsEnabled, isFalse);
+      expect(editor.value.draft.targetNames, '甲  乙,丙');
+      expect(editor.value.draft.password, isEmpty);
+      expect(editor.value.dirty, isFalse);
+      final submit = editor.submit();
+      expect(service.editorSubmissions.single.input.targetNames, '甲  乙,丙');
+      service.saved();
+      await submit;
+    },
+  );
+
+  for (final scenario in [
+    'password-required',
+    'target-names-required',
+    'visibility-forbidden',
+    'comments-forbidden',
+    'existing-password-missing',
+    'unadvertised-password-change',
+    'unadvertised-friends-change',
+  ]) {
+    test('$scenario validates before consuming the prepared form', () async {
+      final originalVisibility = switch (scenario) {
+        'existing-password-missing' ||
+        'unadvertised-password-change' => UserBlogVisibility.passwordProtected,
+        'unadvertised-friends-change' => UserBlogVisibility.selectedFriends,
+        _ => UserBlogVisibility.public,
+      };
+      service.editorForm = (target) => blogEditorPreparation(
+        target,
+        visibility: originalVisibility,
+        hasPassword: scenario != 'existing-password-missing',
+        availableVisibilities: scenario.startsWith('unadvertised-')
+            ? const []
+            : scenario == 'visibility-forbidden'
+            ? const [UserBlogVisibility.public]
+            : UserBlogVisibility.values,
+        canEditComments: scenario != 'comments-forbidden',
+      );
+      final editor = await ready();
+      final original = editor.value.draft;
+      final changed = switch (scenario) {
+        'password-required' => original.copyWith(
+          visibility: UserBlogVisibility.passwordProtected,
+          password: '   ',
+        ),
+        'target-names-required' => original.copyWith(
+          visibility: UserBlogVisibility.selectedFriends,
+          targetNames: '   ',
+        ),
+        'visibility-forbidden' => original.copyWith(
+          visibility: UserBlogVisibility.friends,
+        ),
+        'comments-forbidden' => original.copyWith(commentsEnabled: false),
+        'unadvertised-password-change' => original.copyWith(
+          password: 'changed',
+        ),
+        'unadvertised-friends-change' => original.copyWith(
+          targetNames: 'other',
+        ),
+        _ => original,
+      };
+      editor.update(changed);
+      await editor.submit();
+      expect(editor.value.issue, switch (scenario) {
+        'password-required' ||
+        'existing-password-missing' => BlogEditorIssue.passwordRequired,
+        'target-names-required' => BlogEditorIssue.targetNamesRequired,
+        'comments-forbidden' => BlogEditorIssue.commentsUnavailable,
+        _ => BlogEditorIssue.visibilityUnavailable,
+      });
+      expect(service.editorSubmissions, isEmpty);
+      editor.update(
+        scenario == 'existing-password-missing'
+            ? original.copyWith(password: 'new password')
+            : original,
+      );
+      final submit = editor.submit();
+      service.saved();
+      expect(await submit, isNotNull);
+      expect(service.editorPreparations, hasLength(1));
+    });
+  }
+
+  for (final changedAccess in [
+    'visibility',
+    'comments',
+    'choices',
+    'comment-capability',
+    'password-state',
+  ]) {
+    test(
+      'server $changedAccess changes require review before another submission',
+      () async {
+        final originalVisibility = changedAccess == 'password-state'
+            ? UserBlogVisibility.passwordProtected
+            : UserBlogVisibility.public;
+        service.editorForm = (target) =>
+            blogEditorPreparation(target, visibility: originalVisibility);
+        final editor = await ready();
+        editor.update(editor.value.draft.copyWith(subject: 'My changed title'));
+        final first = editor.submit();
+        service.editorSubmissions.last.result.complete(
+          const DataCommandRejected(blogActionWriteFailure),
+        );
+        await first;
+        service.editorForm = (target) => blogEditorPreparation(
+          target,
+          visibility: changedAccess == 'visibility'
+              ? UserBlogVisibility.private
+              : originalVisibility,
+          commentsEnabled: changedAccess != 'comments',
+          availableVisibilities: changedAccess == 'choices'
+              ? const [UserBlogVisibility.public]
+              : UserBlogVisibility.values,
+          canEditComments: changedAccess != 'comment-capability',
+          hasPassword: changedAccess == 'password-state' ? false : null,
+        );
+        final reload = editor.prepare();
+        service.preparedEditor();
+        await reload;
+        expect(editor.value.needsReview, isTrue);
+        expect(editor.value.draft.subject, 'My changed title');
+        await editor.submit();
+        expect(editor.value.issue, BlogEditorIssue.serverChanged);
+        expect(service.editorSubmissions, hasLength(1));
+        editor.reviewServerVersion(keepLocal: false);
+        expect(editor.value.dirty, isFalse);
+        expect(editor.value.draft.visibility, editor.value.options!.visibility);
+        expect(
+          editor.value.draft.commentsEnabled,
+          editor.value.options!.commentsEnabled,
+        );
+        expect(editor.value.draft.password, isEmpty);
+        expect(editor.value.needsReview, isFalse);
+      },
+    );
+  }
+
+  test(
+    'account expiry clears newly entered passwords and selected names',
+    () async {
+      final editor = await ready();
+      editor.update(
+        editor.value.draft.copyWith(
+          visibility: UserBlogVisibility.passwordProtected,
+          password: 'unsent secret',
+          targetNames: 'unsent names',
+        ),
+      );
+      expect(editor.value.dirty, isTrue);
+      actor = '202';
+      await editor.submit();
+      expect(editor.value.phase, BlogEditorPhase.expired);
+      expect(editor.value.draft.password, isEmpty);
+      expect(editor.value.draft.targetNames, isEmpty);
+      expect(editor.value.original.password, isEmpty);
+      expect(editor.value.serverVersion, isNull);
+      expect(editor.value.options, isNull);
+      expect(service.editorSubmissions, isEmpty);
     },
   );
 
@@ -167,6 +377,10 @@ void main() {
         siteCategoryId: '8',
         newPersonalCategory: 'New group',
         publishFeed: true,
+        visibility: UserBlogVisibility.passwordProtected,
+        commentsEnabled: false,
+        password: 'new password',
+        targetNames: 'names kept while switching modes',
       );
       editor.update(edited);
       final submit = editor.submit();
@@ -187,6 +401,13 @@ void main() {
         'New group',
       );
       expect(service.editorSubmissions.last.input.publishFeed, isTrue);
+      expect(
+        service.editorSubmissions.last.input.visibility,
+        UserBlogVisibility.passwordProtected,
+      );
+      expect(service.editorSubmissions.last.input.commentsEnabled, isFalse);
+      expect(service.editorSubmissions.last.input.password, 'new password');
+      expect(service.editorSubmissions.last.input.targetNames, isNull);
       service.saved();
       await retry;
     },

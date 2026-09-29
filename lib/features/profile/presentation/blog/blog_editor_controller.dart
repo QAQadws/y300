@@ -46,8 +46,12 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
         :final capabilities,
       ) when data.target == target && capabilities.supports(target.action)) {
         final server = BlogEditorDraft.from(data);
+        final options = BlogEditorOptions.from(data);
         final first = _lastServerVersion == null;
-        final changed = !first && server != _lastServerVersion;
+        final changed =
+            !first &&
+            (server != _lastServerVersion ||
+                !options.hasSameAccessCapabilities(value.options!));
         _lastServerVersion = server;
         _preparation = data;
         value = BlogEditorState(
@@ -55,7 +59,7 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
           draft: first ? server : value.draft,
           original: first ? server : value.original,
           serverVersion: server,
-          options: BlogEditorOptions.from(data),
+          options: options,
           needsReview: value.needsReview || changed,
         );
       } else {
@@ -143,6 +147,16 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
               ? null
               : input.newPersonalCategory,
           publishFeed: input.publishFeed,
+          visibility: input.visibility,
+          commentsEnabled: input.commentsEnabled,
+          password:
+              input.visibility == UserBlogVisibility.passwordProtected &&
+                  input.password.trim().isNotEmpty
+              ? input.password.trim()
+              : null,
+          targetNames: input.visibility == UserBlogVisibility.selectedFriends
+              ? input.targetNames
+              : null,
           cancellation: cancellation,
         ),
       );

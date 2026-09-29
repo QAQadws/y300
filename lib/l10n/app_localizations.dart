@@ -6624,7 +6624,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogPasswordRequired.
   ///
   /// In zh, this message translates to:
-  /// **'这篇日志需要密码，可在网页中输入后阅读。'**
+  /// **'请设置访问密码。'**
   String get profileBlogPasswordRequired;
 
   /// No description provided for @profileBlogPrivate.
@@ -7482,11 +7482,53 @@ abstract class AppLocalizations {
   /// **'不允许评论'**
   String get profileBlogCommentsClosed;
 
-  /// No description provided for @profileBlogPolicyNotice.
+  /// No description provided for @profileBlogAccessScope.
   ///
   /// In zh, this message translates to:
-  /// **'保存时保留这些访问设置。需要调整时，可在网页中编辑。'**
-  String get profileBlogPolicyNotice;
+  /// **'访问范围'**
+  String get profileBlogAccessScope;
+
+  /// No description provided for @profileBlogPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'访问密码'**
+  String get profileBlogPassword;
+
+  /// No description provided for @profileBlogKeepPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'留空保留原密码'**
+  String get profileBlogKeepPassword;
+
+  /// No description provided for @profileBlogTargetNames.
+  ///
+  /// In zh, this message translates to:
+  /// **'指定好友'**
+  String get profileBlogTargetNames;
+
+  /// No description provided for @profileBlogTargetNamesHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写用户名，用空格或换行分隔。'**
+  String get profileBlogTargetNamesHint;
+
+  /// No description provided for @profileBlogTargetNamesRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写至少一个用户名。'**
+  String get profileBlogTargetNamesRequired;
+
+  /// No description provided for @profileBlogVisibilityUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前访问范围不可用，请重新选择。'**
+  String get profileBlogVisibilityUnavailable;
+
+  /// No description provided for @profileBlogCommentsUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法更改评论设置，请重新进入编辑。'**
+  String get profileBlogCommentsUnavailable;
 
   /// No description provided for @profileBlogNoCategory.
   ///

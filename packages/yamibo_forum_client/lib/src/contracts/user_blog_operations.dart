@@ -38,7 +38,7 @@ final class UserBlogTarget {
   int get hashCode => Object.hash(actorUserId, ownerUserId, action, blogId);
 }
 
-/// Non-secret description of the access policy retained while editing.
+/// Non-secret description of the journal access policy.
 enum UserBlogVisibility {
   /// Visible to everyone.
   public,
@@ -52,7 +52,7 @@ enum UserBlogVisibility {
   /// Visible only to the author.
   private,
 
-  /// Protected by the existing password.
+  /// Protected by a password.
   passwordProtected,
 }
 
@@ -78,6 +78,10 @@ final class UserBlogEditorPreparation {
     required this.publishFeed,
     required this.visibility,
     required this.commentsEnabled,
+    this.availableVisibilities = const [],
+    this.canEditComments = false,
+    this.hasPassword = false,
+    this.targetNames = '',
   });
 
   /// Proven operation target.
@@ -122,11 +126,23 @@ final class UserBlogEditorPreparation {
   /// Existing access policy; editing does not change it implicitly.
   final UserBlogVisibility visibility;
 
-  /// Whether the preserved policy allows comments.
+  /// Whether the current policy allows comments.
   final bool commentsEnabled;
+
+  /// Access choices enabled in the current form; absent choices are read-only.
+  final List<UserBlogVisibility> availableVisibilities;
+
+  /// Whether the current form advertises an editable comment checkbox.
+  final bool canEditComments;
+
+  /// Whether the current password policy has a password retained in the ticket.
+  final bool hasPassword;
+
+  /// Existing specified usernames, as source text rather than resolved IDs.
+  final String targetNames;
 }
 
-/// Edited content. Access fields are deliberately kept in the opaque ticket.
+/// Edited content and optional access changes against a transient form ticket.
 final class UserBlogEditorSubmission {
   /// Creates a submission against one prepared form.
   const UserBlogEditorSubmission({
@@ -139,6 +155,10 @@ final class UserBlogEditorSubmission {
     required this.personalCategoryId,
     required this.publishFeed,
     this.newPersonalCategory,
+    this.visibility,
+    this.commentsEnabled,
+    this.password,
+    this.targetNames,
     this.cancellation,
   });
 
@@ -168,6 +188,19 @@ final class UserBlogEditorSubmission {
 
   /// Whether to publish a feed entry when supported.
   final bool publishFeed;
+
+  /// New access policy; null retains the prepared value.
+  final UserBlogVisibility? visibility;
+
+  /// New comment preference; null retains the prepared value.
+  final bool? commentsEnabled;
+
+  /// New password; null retains the old password only for an existing password
+  /// policy. This value is transient and must never be cached or logged.
+  final String? password;
+
+  /// Specified usernames; null retains the prepared value.
+  final String? targetNames;
 
   /// Caller-owned cancellation.
   final ForumRequestCancellation? cancellation;
@@ -199,7 +232,7 @@ final class UserBlogReceipt {
 
 /// Journal publishing, editing, and management on the shared session.
 abstract interface class UserBlogOperations {
-  /// Reads the complete editor and preserves access settings.
+  /// Reads the complete editor, access settings and their editable capabilities.
   Future<
     DataReadResult<UserBlogEditorPreparation, DataCapabilitySet<UserBlogAction>>
   >

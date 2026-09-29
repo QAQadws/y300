@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
+import 'package:y300/features/profile/presentation/blog/blog_editor_access_fields.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
@@ -10,6 +11,8 @@ class BlogEditorSettingsFields extends StatelessWidget {
     required this.state,
     required this.tags,
     required this.categoryName,
+    required this.password,
+    required this.targetNames,
     required this.creatingCategory,
     required this.onCreateCategory,
     required this.onChanged,
@@ -19,6 +22,8 @@ class BlogEditorSettingsFields extends StatelessWidget {
   final BlogEditorState state;
   final TextEditingController tags;
   final TextEditingController categoryName;
+  final TextEditingController password;
+  final TextEditingController targetNames;
   final bool creatingCategory;
   final bool categoryNameRequired;
   final ValueChanged<bool> onCreateCategory;
@@ -130,28 +135,11 @@ class BlogEditorSettingsFields extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Divider(height: 1, color: native.subtleStateLayer),
         ),
-        _PolicyRow(
-          icon: _visibilityIcon(options.visibility),
-          text: l10n.profileBlogAccessPolicy(
-            _visibility(l10n, options.visibility),
-          ),
-        ),
-        const SizedBox(height: 8),
-        _PolicyRow(
-          icon: options.commentsEnabled
-              ? Icons.chat_bubble_outline
-              : Icons.comments_disabled_outlined,
-          text: options.commentsEnabled
-              ? l10n.profileBlogCommentsAllowed
-              : l10n.profileBlogCommentsClosed,
-        ),
-        const SizedBox(height: 10),
-        Text(
-          l10n.profileBlogPolicyNotice,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: native.supportingText,
-            height: 1.4,
-          ),
+        BlogEditorAccessFields(
+          state: state,
+          password: password,
+          targetNames: targetNames,
+          onChanged: onChanged,
         ),
       ],
     );
@@ -184,8 +172,8 @@ class BlogEditorSettingsSummary extends StatelessWidget {
               : newCategory
         : _category(l10n, options.personalCategories, draft.personalCategoryId);
     final details = [
-      _visibility(l10n, options.visibility),
-      options.commentsEnabled
+      blogVisibilityLabel(l10n, draft.visibility),
+      draft.commentsEnabled
           ? l10n.profileBlogCommentsAllowed
           : l10n.profileBlogCommentsClosed,
       if (options.siteCategoryRequired && draft.siteCategoryId == '0')
@@ -336,38 +324,6 @@ class _CategoryField extends StatelessWidget {
   }
 }
 
-class _PolicyRow extends StatelessWidget {
-  const _PolicyRow({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final native = theme.y300NativeContent;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, size: 18, color: native.supportingText),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: native.supportingText,
-              height: 1.3,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class BlogEditorServerMetadata extends StatelessWidget {
   const BlogEditorServerMetadata({
     super.key,
@@ -399,6 +355,18 @@ class BlogEditorServerMetadata extends StatelessWidget {
             ),
           ),
           Text(l10n.profileBlogServerTags(draft.tags)),
+          Text(
+            l10n.profileBlogAccessPolicy(
+              blogVisibilityLabel(l10n, draft.visibility),
+            ),
+          ),
+          Text(
+            draft.commentsEnabled
+                ? l10n.profileBlogCommentsAllowed
+                : l10n.profileBlogCommentsClosed,
+          ),
+          if (draft.visibility == UserBlogVisibility.selectedFriends)
+            Text('${l10n.profileBlogTargetNames}：${draft.targetNames}'),
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(l10n.profileBlogPublishFeed),
@@ -433,21 +401,3 @@ String _category(
 ) => id == '0'
     ? l10n.profileBlogNoCategory
     : choices.where((choice) => choice.id == id).firstOrNull?.name ?? id;
-
-String _visibility(AppLocalizations l10n, UserBlogVisibility value) =>
-    switch (value) {
-      UserBlogVisibility.public => l10n.profileBlogVisibilityPublic,
-      UserBlogVisibility.friends => l10n.profileBlogVisibilityFriends,
-      UserBlogVisibility.selectedFriends => l10n.profileBlogVisibilitySelected,
-      UserBlogVisibility.private => l10n.profileBlogVisibilityPrivate,
-      UserBlogVisibility.passwordProtected =>
-        l10n.profileBlogVisibilityPassword,
-    };
-
-IconData _visibilityIcon(UserBlogVisibility value) => switch (value) {
-  UserBlogVisibility.public => Icons.public,
-  UserBlogVisibility.friends ||
-  UserBlogVisibility.selectedFriends => Icons.people_outline,
-  UserBlogVisibility.private ||
-  UserBlogVisibility.passwordProtected => Icons.lock_outline,
-};

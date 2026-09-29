@@ -4036,7 +4036,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogWebInputNotice => '当前输入不会自动带入网页。你可以取消并先复制内容，再打开网页继续操作。';
 
   @override
-  String get profileBlogPasswordRequired => '这篇日志需要密码，可在网页中输入后阅读。';
+  String get profileBlogPasswordRequired => '请设置访问密码。';
 
   @override
   String get profileBlogPrivate => '作者限制了这篇日志的访问范围。';
@@ -4575,7 +4575,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogCommentsClosed => '不允许评论';
 
   @override
-  String get profileBlogPolicyNotice => '保存时保留这些访问设置。需要调整时，可在网页中编辑。';
+  String get profileBlogAccessScope => '访问范围';
+
+  @override
+  String get profileBlogPassword => '访问密码';
+
+  @override
+  String get profileBlogKeepPassword => '留空保留原密码';
+
+  @override
+  String get profileBlogTargetNames => '指定好友';
+
+  @override
+  String get profileBlogTargetNamesHint => '填写用户名，用空格或换行分隔。';
+
+  @override
+  String get profileBlogTargetNamesRequired => '请填写至少一个用户名。';
+
+  @override
+  String get profileBlogVisibilityUnavailable => '当前访问范围不可用，请重新选择。';
+
+  @override
+  String get profileBlogCommentsUnavailable => '当前无法更改评论设置，请重新进入编辑。';
 
   @override
   String get profileBlogNoCategory => '未分类';
@@ -8702,7 +8723,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogWebInputNotice => '目前輸入不會自動帶入網頁。你可以取消並先複製內容，再開啟網頁繼續操作。';
 
   @override
-  String get profileBlogPasswordRequired => '這篇日誌需要密碼，可在網頁中輸入後閱讀。';
+  String get profileBlogPasswordRequired => '請設定存取密碼。';
 
   @override
   String get profileBlogPrivate => '作者限制了這篇日誌的存取範圍。';
@@ -9242,7 +9263,28 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogCommentsClosed => '不允許評論';
 
   @override
-  String get profileBlogPolicyNotice => '儲存時保留這些存取設定。需要調整時，可在網頁中編輯。';
+  String get profileBlogAccessScope => '存取範圍';
+
+  @override
+  String get profileBlogPassword => '存取密碼';
+
+  @override
+  String get profileBlogKeepPassword => '留空保留原密碼';
+
+  @override
+  String get profileBlogTargetNames => '指定好友';
+
+  @override
+  String get profileBlogTargetNamesHint => '填寫使用者名稱，以空格或換行分隔。';
+
+  @override
+  String get profileBlogTargetNamesRequired => '請填寫至少一個使用者名稱。';
+
+  @override
+  String get profileBlogVisibilityUnavailable => '目前存取範圍無法使用，請重新選擇。';
+
+  @override
+  String get profileBlogCommentsUnavailable => '目前無法更改評論設定，請重新進入編輯。';
 
   @override
   String get profileBlogNoCategory => '未分類';

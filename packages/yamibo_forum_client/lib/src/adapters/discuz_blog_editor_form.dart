@@ -15,6 +15,8 @@ final class DiscuzBlogEditorForm {
     required this.siteCategoryRequired,
     required this.canCreateCategory,
     required this.canPublishFeed,
+    required this.availableVisibilities,
+    required this.canEditComments,
   });
 
   /// Verified endpoint matching the requested edit or publishing operation.
@@ -38,7 +40,13 @@ final class DiscuzBlogEditorForm {
   /// Whether the form exposes a feed-publication control.
   final bool canPublishFeed;
 
-  /// Exposes editable content and a privacy summary while retaining access fields.
+  /// Verified access choices from enabled source options, not caller metadata.
+  final List<UserBlogVisibility> availableVisibilities;
+
+  /// Whether the source exposes a real comment preference checkbox.
+  final bool canEditComments;
+
+  /// Exposes editable settings without revealing the retained password.
   UserBlogEditorPreparation preparation(
     UserBlogTarget target,
     UserBlogOperationToken token,
@@ -58,7 +66,67 @@ final class DiscuzBlogEditorForm {
     publishFeed: fields['makefeed'] == '1',
     visibility: UserBlogVisibility.values[int.parse(fields['friend']!)],
     commentsEnabled: fields['noreply'] != '1',
+    availableVisibilities: availableVisibilities,
+    canEditComments: canEditComments,
+    hasPassword:
+        fields['friend'] == '4' && fields['password']!.trim().isNotEmpty,
+    targetNames: fields['target_names']!,
   );
+
+  /// Resolves optional edits against the source proof, never public metadata.
+  Map<String, String> accessFields(UserBlogEditorSubmission submission) {
+    final original = UserBlogVisibility.values[int.parse(fields['friend']!)];
+    final visibility = submission.visibility ?? original;
+    final changedVisibility = visibility != original;
+    final originalComments = fields['noreply'] != '1';
+    final changedComments =
+        submission.commentsEnabled != null &&
+        submission.commentsEnabled != originalComments;
+    final password = submission.password?.trim();
+    final names = submission.targetNames ?? fields['target_names']!;
+    final changedPassword =
+        password != null && password != fields['password']!.trim();
+    final changedNames = names != fields['target_names'];
+    if ((changedVisibility || changedPassword || changedNames) &&
+        !availableVisibilities.contains(visibility)) {
+      throw const FormatException('blog_editor_access_not_editable');
+    }
+    if ((changedComments && !canEditComments) ||
+        (password != null &&
+            (password.isEmpty ||
+                visibility != UserBlogVisibility.passwordProtected)) ||
+        (changedNames && visibility != UserBlogVisibility.selectedFriends)) {
+      throw const FormatException('blog_editor_access_input_invalid');
+    }
+    // Discuz silently makes a password-protected journal public for an empty
+    // password. A newly selected password policy must receive an explicit one,
+    // even if an unrelated hidden source field happened to contain a value.
+    if (visibility == UserBlogVisibility.passwordProtected &&
+        ((original != visibility && password == null) ||
+            (password ?? fields['password']!).trim().isEmpty)) {
+      throw const FormatException('blog_editor_password_required');
+    }
+    if (visibility == UserBlogVisibility.selectedFriends &&
+        names.trim().isEmpty) {
+      throw const FormatException('blog_editor_target_names_required');
+    }
+    return {
+      if (changedVisibility) ...{
+        'friend': '${visibility.index}',
+        'password': visibility == UserBlogVisibility.passwordProtected
+            ? password!
+            : '',
+        'target_names': visibility == UserBlogVisibility.selectedFriends
+            ? names
+            : '',
+      } else ...{
+        'password': ?password,
+        if (submission.targetNames != null) 'target_names': names,
+      },
+      if (submission.commentsEnabled != null)
+        'noreply': submission.commentsEnabled! ? '0' : '1',
+    };
+  }
 
   /// Validates the complete editor instead of defaulting missing privacy inputs.
   static DiscuzBlogEditorForm parse(
@@ -201,8 +269,32 @@ final class DiscuzBlogEditorForm {
       siteCategoryRequired: requiredCategory,
       canCreateCategory: createCategory,
       canPublishFeed: fields.containsKey('makefeed'),
+      availableVisibilities: _visibilityOptions(
+        form.querySelector('select[name="friend"]'),
+      ),
+      canEditComments:
+          form.querySelector('input[type="checkbox"][name="noreply"]') != null,
     );
   }
+}
+
+List<UserBlogVisibility> _visibilityOptions(Element? select) {
+  if (select == null) return const [];
+  final values = <UserBlogVisibility>{};
+  for (final option in select.querySelectorAll('option')) {
+    final raw = option.attributes['value'] ?? '';
+    if (!RegExp(r'^[0-4]$').hasMatch(raw)) {
+      throw const FormatException('blog_visibility_options_invalid');
+    }
+    if (option.attributes.containsKey('disabled') ||
+        option.parent?.attributes.containsKey('disabled') == true) {
+      continue;
+    }
+    if (!values.add(UserBlogVisibility.values[int.parse(raw)])) {
+      throw const FormatException('blog_visibility_options_ambiguous');
+    }
+  }
+  return List.unmodifiable(values);
 }
 
 /// Resolves the form endpoint and verifies its operation and article identity.
