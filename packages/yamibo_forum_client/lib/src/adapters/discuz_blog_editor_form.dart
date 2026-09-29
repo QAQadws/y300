@@ -3,6 +3,7 @@ import 'package:html/parser.dart' as html;
 
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_media.dart';
 
 /// Parses the complete editor, because the touch editor omits access fields.
 final class DiscuzBlogEditorForm {
@@ -49,8 +50,10 @@ final class DiscuzBlogEditorForm {
   /// Exposes editable settings without revealing the retained password.
   UserBlogEditorPreparation preparation(
     UserBlogTarget target,
-    UserBlogOperationToken token,
-  ) => UserBlogEditorPreparation(
+    UserBlogOperationToken token, {
+    UserBlogImageUploadLimits? imageUploadLimits,
+    List<UserBlogSmiley> blogSmilies = const [],
+  }) => UserBlogEditorPreparation(
     target: target,
     token: token,
     subject: fields['subject']!,
@@ -71,6 +74,8 @@ final class DiscuzBlogEditorForm {
     hasPassword:
         fields['friend'] == '4' && fields['password']!.trim().isNotEmpty,
     targetNames: fields['target_names']!,
+    imageUploadLimits: imageUploadLimits,
+    blogSmilies: blogSmilies,
   );
 
   /// Resolves optional edits against the source proof, never public metadata.
@@ -173,8 +178,8 @@ final class DiscuzBlogEditorForm {
       'hot',
       'makefeed',
     };
-    // Unused controls from the standard desktop image menu. No picture IDs or
-    // uploaded files are accepted here, so these controls have no server effect.
+    // Album choice remains at the server's default; new picture IDs come from
+    // upload receipts and existing source-proved picture IDs stay untouched.
     const auxiliary = {
       'selectgroup',
       'savealbumid',
@@ -187,6 +192,16 @@ final class DiscuzBlogEditorForm {
     )) {
       final name = control.attributes['name']!;
       if (auxiliary.contains(name)) continue;
+      final picture = RegExp(r'^picids\[([1-9]\d*)\]$').firstMatch(name);
+      if (picture != null &&
+          control.localName == 'input' &&
+          control.attributes['type'] == 'hidden' &&
+          control.attributes['value'] == picture.group(1) &&
+          !control.attributes.containsKey('disabled') &&
+          !fields.containsKey(name)) {
+        fields[name] = picture.group(1)!;
+        continue;
+      }
       if (!contentNames.contains(name) ||
           fields.containsKey(name) ||
           control.attributes.containsKey('disabled')) {

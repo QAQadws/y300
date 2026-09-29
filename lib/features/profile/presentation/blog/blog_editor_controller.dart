@@ -21,6 +21,8 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
   int _generation = 0;
   bool _disposed = false;
 
+  UserBlogEditorPreparation? get preparation => _preparation;
+
   Future<void> prepare() async {
     if (_disposed ||
         !{BlogEditorPhase.idle, BlogEditorPhase.failed}.contains(value.phase)) {
@@ -113,7 +115,9 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
     );
   }
 
-  Future<UserBlogReceipt?> submit() async {
+  Future<UserBlogReceipt?> submit({
+    List<UserBlogUploadedImage> uploadedImages = const [],
+  }) async {
     if (_disposed ||
         value.phase != BlogEditorPhase.ready ||
         _preparation == null) {
@@ -140,6 +144,7 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
           actorUserId: target.actorUserId,
           subject: input.subject,
           bodyHtml: input.bodyHtml,
+          uploadedImages: uploadedImages,
           tags: input.tags,
           siteCategoryId: input.siteCategoryId,
           personalCategoryId: input.personalCategoryId,

@@ -4525,16 +4525,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogActionOutcomeUnknown => '暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。';
 
   @override
-  String get profileBlogPlainText => '普通文字';
-
-  @override
-  String get profileBlogHtmlSource => 'HTML 源码';
-
-  @override
-  String get profileBlogHtmlHint => '已有富文本以 HTML 保留。可预览效果，或在网页中使用完整编辑器。';
-
-  @override
   String get profileBlogBody => '正文';
+
+  @override
+  String get profileBlogImageUploadUnknown => '无法确认图片是否上传成功，已停止本次上传。请在网页相册中核实。';
 
   @override
   String get profileBlogStartWriting => '写下想记录的事…';
@@ -9213,16 +9207,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '暫時無法確認操作結果。請返回並重新整理日誌核對，避免重複提交。';
 
   @override
-  String get profileBlogPlainText => '普通文字';
-
-  @override
-  String get profileBlogHtmlSource => 'HTML 原始碼';
-
-  @override
-  String get profileBlogHtmlHint => '既有豐富文字以 HTML 保留。可預覽效果，或在網頁中使用完整編輯器。';
-
-  @override
   String get profileBlogBody => '內文';
+
+  @override
+  String get profileBlogImageUploadUnknown => '無法確認圖片是否上傳成功，已停止本次上傳。請在網頁相簿中確認。';
 
   @override
   String get profileBlogStartWriting => '寫下想記錄的事…';

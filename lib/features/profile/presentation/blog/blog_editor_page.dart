@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/profile/presentation/blog/blog_editor_media_controller.dart';
+import 'package:y300/features/profile/presentation/blog/blog_rich_text_controller.dart';
+import 'package:y300/features/profile/presentation/blog/blog_rich_text_toolbar.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
@@ -28,6 +32,8 @@ class BlogEditorPage extends ConsumerStatefulWidget {
 
 class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
   late final BlogEditorController _controller;
+  late final BlogRichTextController _body;
+  BlogEditorMediaController? _media;
   final _subject = TextEditingController();
   final _tags = TextEditingController();
   final _categoryName = TextEditingController();
@@ -51,10 +57,33 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
       service: ref.read(userBlogOperationsProvider),
       currentActor: () => ref.read(blogAccountIdProvider),
     );
+    _body = BlogRichTextController(
+      onChanged: (html) =>
+          _controller.update(_controller.value.draft.copyWith(bodyHtml: html)),
+    );
+    final mediaService = ref.read(userBlogMediaOperationsProvider);
+    if (mediaService != null) {
+      _media = BlogEditorMediaController(
+        picker: ref.read(composerImagePickerProvider),
+        service: mediaService,
+        preparation: () => _controller.preparation,
+        currentActor: () => ref.read(blogAccountIdProvider),
+        isSessionCurrent: () =>
+            mounted &&
+            !_leaving &&
+            {
+              BlogEditorPhase.ready,
+              BlogEditorPhase.failed,
+            }.contains(_controller.value.phase),
+        onUploaded: (image, _) => _body.insertImage(image.imageUri.toString()),
+      )..addListener(_mediaChanged);
+    }
     _controller.addListener(_syncInputs);
     ref.listenManual(blogAccountIdProvider, (_, actor) {
       if (actor != widget.target.actorUserId) {
         _receipt = null;
+        _body.expire();
+        _media?.expire();
         _controller.expire();
       }
     });
@@ -70,6 +99,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
 
   void _syncInputs() {
     final draft = _controller.value.draft;
+    _body.load(draft.bodyHtml);
     for (final (controller, text) in [
       (_subject, draft.subject),
       (_tags, draft.tags),
@@ -88,6 +118,9 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
 
   @override
   void dispose() {
+    _media?.removeListener(_mediaChanged);
+    _media?.dispose();
+    _body.dispose();
     _controller.removeListener(_syncInputs);
     _controller.dispose();
     _subject.dispose();
@@ -99,13 +132,16 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
   }
 
   Future<void> _submit() async {
+    if (_media?.value.busy == true) return;
     FocusScope.of(context).unfocus();
     if (_creatingCategory && _categoryName.text.trim().isEmpty) {
       setState(() => _categoryNameRequired = true);
       await _openSettings();
       return;
     }
-    final receipt = await _controller.submit();
+    final receipt = await _controller.submit(
+      uploadedImages: _media?.uploadedImages ?? const [],
+    );
     if (!mounted || _leaving) return;
     if (receipt == null) {
       final issue = _controller.value.issue;
@@ -135,6 +171,33 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     _receipt = receipt;
     ref.read(blogMutationBusProvider).publish(receipt);
     _scheduleFinish();
+  }
+
+  void _mediaChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _pickImages() async {
+    _body.focusNode.unfocus();
+    await _media?.pickImages();
+    if (!mounted ||
+        _leaving ||
+        _controller.value.phase == BlogEditorPhase.expired) {
+      return;
+    }
+    final failure = _media?.value.failure;
+    if (failure != null) {
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _media!.value.outcomeUnknown
+                ? l10n.profileBlogImageUploadUnknown
+                : LocalizedErrorSummary.resolve(l10n, failure),
+          ),
+        ),
+      );
+    }
   }
 
   void _scheduleFinish() {
@@ -267,7 +330,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      showDragHandle: true,
+      showDragHandle: false,
       backgroundColor: Theme.of(context).y300NativeContent.card,
       builder: (sheetContext) => ValueListenableBuilder<BlogEditorState>(
         valueListenable: _controller,
@@ -275,48 +338,43 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
           final l10n = AppLocalizations.of(context);
           // The sheet observes the same session as the page: expiring the editor
           // removes every old input here too, even while this route covers it.
-          return ComposerSettingsSheet(
-            key: const Key('blog-editor-settings-sheet'),
-            title: l10n.profileBlogPublishSettings,
-            children: [
-              if (state.options == null)
-                Text(l10n.forumWebViewAccountChanged)
-              else
-                BlogEditorSettingsFields(
-                  state: state,
-                  tags: _tags,
-                  categoryName: _categoryName,
-                  password: _password,
-                  targetNames: _targetNames,
-                  creatingCategory: _creatingCategory,
-                  categoryNameRequired: _categoryNameRequired,
-                  onCreateCategory: (value) => setState(() {
-                    _creatingCategory = value;
-                    _categoryNameRequired = false;
-                  }),
-                  onChanged: _changeDraft,
-                ),
-              if ({
-                BlogEditorPhase.ready,
-                BlogEditorPhase.failed,
-              }.contains(state.phase)) ...[
-                const Divider(height: 24),
-                ComposerSettingsActionTile(
-                  tileKey: const Key('blog-editor-open-web'),
-                  icon: Icons.open_in_browser_outlined,
-                  title: l10n.profileBlogOpenWeb,
-                  onPressed: () => Navigator.of(sheetContext).pop(true),
-                ),
+          return Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: ComposerSettingsSheet(
+              key: const Key('blog-editor-settings-sheet'),
+              title: l10n.profileBlogPublishSettings,
+              children: [
+                if (state.options == null)
+                  Text(l10n.forumWebViewAccountChanged)
+                else
+                  BlogEditorSettingsFields(
+                    state: state,
+                    tags: _tags,
+                    categoryName: _categoryName,
+                    password: _password,
+                    targetNames: _targetNames,
+                    creatingCategory: _creatingCategory,
+                    categoryNameRequired: _categoryNameRequired,
+                    onCreateCategory: (value) => setState(() {
+                      _creatingCategory = value;
+                      _categoryNameRequired = false;
+                    }),
+                    onChanged: _changeDraft,
+                  ),
+                if ({
+                  BlogEditorPhase.ready,
+                  BlogEditorPhase.failed,
+                }.contains(state.phase)) ...[
+                  const Divider(height: 24),
+                  ComposerSettingsActionTile(
+                    tileKey: const Key('blog-editor-open-web'),
+                    icon: Icons.open_in_browser_outlined,
+                    title: l10n.profileBlogOpenWeb,
+                    onPressed: () => Navigator.of(sheetContext).pop(true),
+                  ),
+                ],
               ],
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: TextButton(
-                  key: const Key('blog-editor-settings-done'),
-                  onPressed: () => Navigator.of(sheetContext).pop(false),
-                  child: Text(l10n.commonConfirm),
-                ),
-              ),
-            ],
+            ),
           );
         },
       ),
@@ -339,6 +397,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
       builder: (context, state, _) => PopScope<BlogEditorResult>(
         canPop:
             !state.dirty &&
+            _media?.value.busy != true &&
             state.phase != BlogEditorPhase.submitting &&
             state.phase != BlogEditorPhase.unknown,
         onPopInvokedWithResult: (didPop, _) {
@@ -384,17 +443,52 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                 key: const Key('blog-editor-submit'),
                 style: composerAppBarActionStyle(context),
                 tooltip: creating ? l10n.profileBlogPublish : l10n.commonSave,
-                onPressed: state.canSubmit ? _submit : null,
+                onPressed: state.canSubmit && _media?.value.busy != true
+                    ? _submit
+                    : null,
                 icon: Icon(creating ? Icons.send : Icons.check),
               ),
             ],
           ),
+          bottomNavigationBar: state.options != null && !_preview
+              ? Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom,
+                  ),
+                  child: BlogRichTextToolbar(
+                    controller: _body,
+                    enabled:
+                        !state.busy &&
+                        _media?.value.busy != true &&
+                        {
+                          BlogEditorPhase.ready,
+                          BlogEditorPhase.failed,
+                        }.contains(state.phase),
+                    smilies: _controller.preparation?.blogSmilies ?? const [],
+                    onImagePressed:
+                        _media != null &&
+                            _controller.preparation?.imageUploadLimits != null
+                        ? _pickImages
+                        : null,
+                  ),
+                )
+              : null,
           body: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) => ListView(
                 key: const Key('blog-editor-scroll'),
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
+                  if (_media?.value.busy == true) ...[
+                    LinearProgressIndicator(
+                      value: _media!.value.total == 0
+                          ? null
+                          : ((_media!.value.current - 1) +
+                                    _media!.value.progress) /
+                                _media!.value.total,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   if (state.busy) ...[
                     Semantics(
                       liveRegion: true,
@@ -500,7 +594,9 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                         state: state,
                         subject: _subject,
                         creatingCategory: _creatingCategory,
-                        onOpenSettings: state.busy ? null : _openSettings,
+                        bodyController: _body,
+                        mediaBusy: _media?.value.busy == true,
+                        imagePreviews: _media?.previewPaths ?? const {},
                         bodyMinLines:
                             ((constraints.maxHeight - 240) /
                                     (MediaQuery.textScalerOf(

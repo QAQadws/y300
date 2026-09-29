@@ -151,12 +151,10 @@ class BlogEditorSettingsSummary extends StatelessWidget {
     super.key,
     required this.state,
     required this.creatingCategory,
-    required this.onPressed,
   });
 
   final BlogEditorState state;
   final bool creatingCategory;
-  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -183,68 +181,16 @@ class BlogEditorSettingsSummary extends StatelessWidget {
       if (draft.tags.trim().isNotEmpty)
         l10n.profileBlogServerTags(draft.tags.trim()),
     ].join(' · ');
-    return Semantics(
-      label: l10n.profileBlogPublishSettings,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          key: const Key('blog-editor-settings-summary'),
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Icon(
-                    Icons.folder_outlined,
-                    size: 20,
-                    color: native.supportingText,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        category,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: native.body,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        details,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: native.supportingText,
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Icon(
-                    Icons.tune,
-                    size: 20,
-                    color: onPressed == null
-                        ? native.disabled
-                        : native.supportingText,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Padding(
+      key: const Key('blog-editor-settings-summary'),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Text(
+        '$category · $details',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: native.supportingText,
+          height: 1.4,
         ),
       ),
     );

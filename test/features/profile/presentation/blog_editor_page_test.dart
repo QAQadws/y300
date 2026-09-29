@@ -1,13 +1,24 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/blog/blog_body_text_codec.dart';
+import 'package:y300/features/profile/presentation/blog/blog_quill_html_codec.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
@@ -18,6 +29,241 @@ import '../test_support/blog_navigation_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
 
 void main() {
+  testWidgets('settings have one AppBar entry and a noninteractive summary', (
+    tester,
+  ) async {
+    final service = BlogOperationFixture(autoPrepare: true);
+    await _open(tester, service);
+    final summary = find.byKey(const Key('blog-editor-settings-summary'));
+    expect(summary, findsOneWidget);
+    expect(find.byKey(const Key('blog-editor-settings')), findsOneWidget);
+    expect(
+      find.ancestor(of: summary, matching: find.byType(InkWell)),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('blog-body-mode-menu')), findsNothing);
+    expect(find.byKey(const Key('blog-insert-image')), findsNothing);
+    await tester.tap(summary);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('blog-editor-settings-sheet')), findsNothing);
+    await _openSettings(tester);
+  });
+
+  testWidgets(
+    'bold italic underline and font size edit the selected visual text',
+    (tester) async {
+      final service = BlogOperationFixture(autoPrepare: true);
+      await _open(tester, service);
+      await _replaceBody(tester, 'formatted text');
+      final body = _body(tester).controller;
+      body.updateSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 9),
+        ChangeSource.local,
+      );
+      await tester.pump();
+      for (final key in [
+        'blog-format-bold',
+        'blog-format-italic',
+        'blog-format-underline',
+      ]) {
+        await tester.tap(find.byKey(Key(key)));
+        await tester.pump();
+      }
+      await tester.tap(find.byKey(const Key('blog-format-size')));
+      await tester.pumpAndSettle();
+      _expectNoSheetHandle(tester);
+      await tester.tap(find.byKey(const Key('blog-font-size-4')));
+      await tester.pumpAndSettle();
+      await _save(tester);
+      final html = service.editorSubmissions.single.input.bodyHtml;
+      expect(html, contains('<b>'));
+      expect(html, contains('<i>'));
+      expect(html, contains('<u>'));
+      expect(html, contains('<font size="4">'));
+      expect(html, isNot(contains('style=')));
+      expect(_plainText(html), 'formatted text');
+      service.saved();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'the dedicated thirty-smiley picker inserts a journal HTML image',
+    (tester) async {
+      final service = BlogOperationFixture(autoPrepare: true);
+      final smilies = List.generate(
+        30,
+        (index) => UserBlogSmiley(
+          index: index + 1,
+          imageUri: Uri.parse(
+            'https://example.test/static/image/smiley/comcom/${index + 1}.gif',
+          ),
+        ),
+      );
+      service.editorForm = (target) =>
+          blogEditorPreparation(target, bodyHtml: '', blogSmilies: smilies);
+      await _open(tester, service);
+      await tester.tap(find.byKey(const Key('blog-insert-smiley')));
+      await tester.pumpAndSettle();
+      final picker = find.byKey(const Key('blog-smiley-picker'));
+      expect(picker, findsOneWidget);
+      _expectNoSheetHandle(tester);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('blog-smiley-30')),
+        200,
+        scrollable: find
+            .descendant(of: picker, matching: find.byType(Scrollable))
+            .first,
+      );
+      await tester.tap(find.byKey(const Key('blog-smiley-30')));
+      await tester.pumpAndSettle();
+      expect(picker, findsNothing);
+      await _save(tester);
+      final html = service.editorSubmissions.single.input.bodyHtml;
+      expect(html, contains('<img src="${smilies.last.imageUri}">'));
+      expect(html, isNot(contains('[attach')));
+      service.saved();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  for (final outcomeUnknown in [false, true]) {
+    testWidgets(
+      outcomeUnknown
+          ? 'unknown image uploads stay uninserted and are not automatically replayed'
+          : 'image selection uploads once then inserts its confirmed album receipt',
+      (tester) async {
+        final directory = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('blog-upload-ui-'),
+        ))!;
+        addTearDown(() => directory.delete(recursive: true));
+        final path = '${directory.path}/picked.png';
+        await tester.runAsync(
+          () => File(path).writeAsBytes(
+            base64Decode(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+            ),
+          ),
+        );
+        final service = BlogOperationFixture(autoPrepare: true);
+        service.editorForm = (target) => blogEditorPreparation(
+          target,
+          bodyHtml: '',
+          imageUploadLimits: const UserBlogImageUploadLimits(
+            extensionRules: [
+              ForumImageAttachmentExtensionRule(extension: 'png'),
+            ],
+          ),
+        );
+        final picker = _PageImagePicker(path);
+        final media = _PageMediaService();
+        await _open(tester, service, imagePicker: picker, media: media);
+        await tester.runAsync(() async {
+          await tester.tap(find.byKey(const Key('blog-insert-image')));
+          for (var i = 0; i < 100 && media.request == null; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+        });
+        await tester.pump();
+        expect(picker.calls, 1);
+        expect(media.request, isNotNull);
+        expect(_submitButton(tester).onPressed, isNull);
+        expect(_body(tester).controller.readOnly, isTrue);
+        final image = UserBlogUploadedImage(
+          picId: '41',
+          imageUri: Uri.parse('https://example.test/album/41.png.thumb.jpg'),
+          originalImageUri: Uri.parse('https://example.test/album/41.png'),
+          token: _PageImageToken(),
+        );
+        media.result.complete(
+          outcomeUnknown
+              ? const DataCommandOutcomeUnknown(
+                  DataCommandFailure(
+                    kind: DataCommandFailureKind.network,
+                    retryPolicy: DataCommandRetryPolicy.never,
+                    code: 'blog_image_upload_outcome_unknown',
+                    diagnosticMessage: 'blog_image_upload_outcome_unknown',
+                  ),
+                )
+              : DataCommandApplied(image),
+        );
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pumpAndSettle();
+        expect(_body(tester).controller.readOnly, isFalse);
+        if (outcomeUnknown) {
+          expect(
+            find.text(_l10n(tester).profileBlogImageUploadUnknown),
+            findsOneWidget,
+          );
+          expect(media.calls, 1);
+          expect(picker.calls, 1);
+          expect(_body(tester).controller.document.toPlainText(), '\n');
+          expect(service.editorSubmissions, isEmpty);
+          return;
+        }
+        expect(
+          const BlogQuillHtmlCodec().encodeDocument(
+            _body(tester).controller.document,
+          ),
+          contains(image.imageUri.toString()),
+        );
+        await _save(tester);
+        final submission = service.editorSubmissions.single.input;
+        expect(submission.uploadedImages, [image]);
+        expect(submission.bodyHtml, contains(image.imageUri.toString()));
+        expect(submission.bodyHtml, isNot(contains(path)));
+        expect(submission.bodyHtml, isNot(contains('[attach')));
+        service.saved();
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
+  for (final smileySheet in [false, true]) {
+    testWidgets(
+      'an empty editor rejects old ${smileySheet ? 'smiley' : 'size'} actions after account change',
+      (tester) async {
+        final service = BlogOperationFixture(autoPrepare: true);
+        service.editorForm = (target) => blogEditorPreparation(
+          target,
+          bodyHtml: '',
+          blogSmilies: [
+            UserBlogSmiley(
+              index: 1,
+              imageUri: Uri.parse(
+                'https://example.test/static/image/smiley/comcom/1.gif',
+              ),
+            ),
+          ],
+        );
+        final host = await _open(tester, service);
+        final original = _body(tester).controller;
+        await tester.tap(
+          find.byKey(
+            Key(smileySheet ? 'blog-insert-smiley' : 'blog-format-size'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        host.changeActor('202');
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(Key(smileySheet ? 'blog-smiley-1' : 'blog-font-size-4')),
+        );
+        await tester.pumpAndSettle();
+        expect(original.document.toPlainText(), '\n');
+        expect(
+          original.getSelectionStyle().attributes[Attribute.size.key],
+          isNull,
+        );
+        expect(find.byType(QuillEditor), findsNothing);
+        expect(service.editorSubmissions, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'create prepares before input and saves exact plain content once',
     (tester) async {
@@ -27,7 +273,9 @@ void main() {
       expect(_submitButton(tester).onPressed, isNull);
       service.preparedEditor();
       await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNWidgets(2));
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(QuillEditor), findsOneWidget);
+      expect(find.byKey(const Key('blog-body-mode-menu')), findsNothing);
       expect(find.byKey(const Key('blog-editor-save')), findsNothing);
       expect(find.byKey(const Key('blog-editor-tags')), findsNothing);
       expect(
@@ -38,16 +286,11 @@ void main() {
         find.byKey(const Key('blog-editor-subject')),
         'A new journal',
       );
-      await tester.enterText(
-        find.byKey(const Key('blog-editor-body')),
-        '  第一行 <b>文字</b>\n\n第二行',
-      );
+      await _replaceBody(tester, '  第一行 <b>文字</b>\n\n第二行');
       await _save(tester);
       expect(service.editorSubmissions, hasLength(1));
       expect(
-        BlogBodyTextCodec.decode(
-          service.editorSubmissions.single.input.bodyHtml,
-        ),
+        _plainText(service.editorSubmissions.single.input.bodyHtml),
         '  第一行 <b>文字</b>\n\n第二行',
       );
       expect(_submitButton(tester).onPressed, isNull);
@@ -86,7 +329,7 @@ void main() {
       expect(service.editorSubmissions, isEmpty);
       await tester.tap(find.byKey(const Key('blog-editor-preview-toggle')));
       await tester.pumpAndSettle();
-      expect(_body(tester).controller!.text, html);
+      expect(find.byType(QuillEditor), findsOneWidget);
       await _save(tester);
       expect(service.editorSubmissions.single.input.bodyHtml, html);
       expect(
@@ -165,7 +408,7 @@ void main() {
     (tester) async {
       final service = BlogOperationFixture(autoPrepare: true);
       await _open(tester, service);
-      await _openSettings(tester, fromSummary: true);
+      await _openSettings(tester);
       await tester.ensureVisible(find.byKey(const Key('blog-editor-tags')));
       await tester.enterText(
         find.byKey(const Key('blog-editor-tags')),
@@ -176,7 +419,7 @@ void main() {
         find.byKey(const Key('blog-editor-publish-feed')),
       );
       await tester.tap(find.byKey(const Key('blog-editor-publish-feed')));
-      await _closeSettings(tester);
+      await _closeSettings(tester, tapBarrier: true);
       expect(service.editorSubmissions, isEmpty);
       await _openSettings(tester);
       expect(
@@ -465,16 +708,13 @@ void main() {
       (tester) async {
         final service = BlogOperationFixture(autoPrepare: true);
         await _open(tester, service);
-        await tester.enterText(
-          find.byKey(const Key('blog-editor-body')),
-          '<p>My version</p>',
-        );
+        await _replaceBody(tester, 'My version');
         await _save(tester);
         service.editorSubmissions.last.result.complete(
           const DataCommandRejected(blogActionWriteFailure),
         );
         await tester.pumpAndSettle();
-        expect(_body(tester).controller!.text, '<p>My version</p>');
+        expect(_body(tester).controller.document.toPlainText(), 'My version\n');
         service.editorForm = (target) =>
             blogEditorPreparation(target, bodyHtml: '<p>Server version</p>');
         await _reveal(tester, find.byKey(const Key('blog-editor-retry')));
@@ -496,13 +736,13 @@ void main() {
         await tester.tap(choice);
         await tester.pumpAndSettle();
         expect(
-          _body(tester).controller!.text,
-          useServer ? '<p>Server version</p>' : '<p>My version</p>',
+          _body(tester).controller.document.toPlainText(),
+          useServer ? 'Server version\n' : 'My version\n',
         );
         await _save(tester);
         expect(
-          service.editorSubmissions.last.input.bodyHtml,
-          useServer ? '<p>Server version</p>' : '<p>My version</p>',
+          _plainText(service.editorSubmissions.last.input.bodyHtml),
+          useServer ? 'Server version' : 'My version',
         );
         service.saved();
         await tester.pumpAndSettle();
@@ -515,17 +755,17 @@ void main() {
     (tester) async {
       final service = BlogOperationFixture(autoPrepare: true);
       final host = await _open(tester, service);
-      await tester.enterText(
-        find.byKey(const Key('blog-editor-body')),
-        '<p>Uncertain input</p>',
-      );
+      await _replaceBody(tester, 'Uncertain input');
       await _save(tester);
       service.editorSubmissions.last.result.complete(
         const DataCommandOutcomeUnknown(blogActionWriteFailure),
       );
       await tester.pumpAndSettle();
-      expect(_body(tester).readOnly, isTrue);
-      expect(_body(tester).controller!.text, '<p>Uncertain input</p>');
+      expect(_body(tester).controller.readOnly, isTrue);
+      expect(
+        _body(tester).controller.document.toPlainText(),
+        'Uncertain input\n',
+      );
       expect(find.byKey(const Key('blog-editor-retry')), findsNothing);
       expect(find.byKey(const Key('blog-editor-open-web')), findsNothing);
       expect(_submitButton(tester).onPressed, isNull);
@@ -692,10 +932,7 @@ void main() {
             '长标题 ' * 12,
           );
           await tester.ensureVisible(find.byKey(const Key('blog-editor-body')));
-          await tester.enterText(
-            find.byKey(const Key('blog-editor-body')),
-            '正文\n空行与换行\n\n' * 6,
-          );
+          await _replaceBody(tester, '正文\n空行与换行\n\n' * 6);
           await _openSettings(tester);
           await _reveal(tester, find.byKey(const Key('blog-editor-open-web')));
           expect(
@@ -721,8 +958,24 @@ void main() {
 
 IconButton _submitButton(WidgetTester tester) =>
     tester.widget(find.byKey(const Key('blog-editor-submit')));
-TextField _body(WidgetTester tester) =>
+QuillEditor _body(WidgetTester tester) =>
     tester.widget(find.byKey(const Key('blog-editor-body')));
+Future<void> _replaceBody(WidgetTester tester, String text) async {
+  final controller = _body(tester).controller;
+  controller.replaceText(
+    0,
+    controller.document.length - 1,
+    text,
+    TextSelection.collapsed(offset: text.length),
+  );
+  await tester.pump();
+}
+
+String _plainText(String html) {
+  final text = const BlogQuillHtmlCodec().decodeDocument(html).toPlainText();
+  return text.endsWith('\n') ? text.substring(0, text.length - 1) : text;
+}
+
 AppLocalizations _l10n(WidgetTester tester) =>
     AppLocalizations.of(tester.element(find.byType(BlogEditorPage)));
 String _visibilityLabel(AppLocalizations l10n, UserBlogVisibility visibility) =>
@@ -758,23 +1011,35 @@ Future<void> _choose(WidgetTester tester, String key, String label) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _openSettings(
-  WidgetTester tester, {
-  bool fromSummary = false,
-}) async {
-  final entry = find.byKey(
-    Key(fromSummary ? 'blog-editor-settings-summary' : 'blog-editor-settings'),
-  );
+Future<void> _openSettings(WidgetTester tester) async {
+  final entry = find.byKey(const Key('blog-editor-settings'));
   await tester.ensureVisible(entry);
   await tester.tap(entry);
   await tester.pumpAndSettle();
   expect(find.byKey(const Key('blog-editor-settings-sheet')), findsOneWidget);
+  expect(find.byKey(const Key('blog-editor-settings-done')), findsNothing);
+  _expectNoSheetHandle(tester);
 }
 
-Future<void> _closeSettings(WidgetTester tester) async {
-  final done = find.byKey(const Key('blog-editor-settings-done'));
-  await tester.ensureVisible(done);
-  await tester.tap(done);
+void _expectNoSheetHandle(WidgetTester tester) {
+  expect(
+    tester.widget<BottomSheet>(find.byType(BottomSheet)).showDragHandle,
+    isFalse,
+  );
+}
+
+Future<void> _closeSettings(
+  WidgetTester tester, {
+  bool tapBarrier = false,
+}) async {
+  expect(find.byKey(const Key('blog-editor-settings-done')), findsNothing);
+  if (tapBarrier) {
+    final sheetTop = tester.getTopLeft(find.byType(BottomSheet)).dy;
+    expect(sheetTop, greaterThan(0));
+    await tester.tapAt(Offset(8, sheetTop / 2));
+  } else {
+    await tester.binding.handlePopRoute();
+  }
   await tester.pumpAndSettle();
   expect(find.byKey(const Key('blog-editor-settings-sheet')), findsNothing);
 }
@@ -812,8 +1077,10 @@ Future<_Host> _open(
   bool create = false,
   ThemeData? theme,
   bool largeKeyboard = false,
+  ComposerImagePicker? imagePicker,
+  UserBlogMediaOperations? media,
 }) async {
-  final host = _Host(service);
+  final host = _Host(service, imagePicker: imagePicker, media: media);
   addTearDown(host.container.dispose);
   final target = UserBlogTarget(
     actorUserId: '101',
@@ -864,11 +1131,17 @@ Future<_Host> _open(
 }
 
 final class _Host {
-  _Host(this.service) {
+  _Host(this.service, {this.imagePicker, this.media}) {
     container = ProviderContainer(
       overrides: [
         blogAccountIdProvider.overrideWithValue('101'),
         userBlogOperationsProvider.overrideWithValue(service),
+        userBlogMediaOperationsProvider.overrideWithValue(media),
+        if (imagePicker != null)
+          composerImagePickerProvider.overrideWithValue(imagePicker!),
+        composerStickerImageCacheLoaderProvider.overrideWithValue(
+          stickerLoader,
+        ),
         userBlogNavigationProvider.overrideWithValue(navigation),
         forumImageRefererProvider.overrideWithValue('https://example.test/'),
         forumWebViewRouteFactoryProvider.overrideWithValue(_webRoute),
@@ -876,6 +1149,12 @@ final class _Host {
     );
   }
   final BlogOperationFixture service;
+  final ComposerImagePicker? imagePicker;
+  final UserBlogMediaOperations? media;
+  final stickerLoader = ComposerStickerImageCacheLoader(
+    imageCacheService: _NoImages(),
+    networkGap: Duration.zero,
+  );
   late final ProviderContainer container;
   final navigator = GlobalKey<NavigatorState>();
   final navigation = BlogNavigationFixture();
@@ -884,6 +1163,10 @@ final class _Host {
   void changeActor(String? actor) => container.updateOverrides([
     blogAccountIdProvider.overrideWithValue(actor),
     userBlogOperationsProvider.overrideWithValue(service),
+    userBlogMediaOperationsProvider.overrideWithValue(media),
+    if (imagePicker != null)
+      composerImagePickerProvider.overrideWithValue(imagePicker!),
+    composerStickerImageCacheLoaderProvider.overrideWithValue(stickerLoader),
     userBlogNavigationProvider.overrideWithValue(navigation),
     forumImageRefererProvider.overrideWithValue('https://example.test/'),
     forumWebViewRouteFactoryProvider.overrideWithValue(_webRoute),
@@ -896,3 +1179,47 @@ final class _Host {
     );
   }
 }
+
+final class _NoImages implements ImageCacheService {
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async =>
+      CachedImageResult.failed;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _PageImagePicker implements ComposerImagePicker {
+  _PageImagePicker(this.path);
+  final String path;
+  int calls = 0;
+  @override
+  Future<List<ComposerPickedImage>> pickImagesInOrder() async {
+    calls++;
+    return [
+      ComposerPickedImage(
+        path: path,
+        fileName: 'picked.png',
+        mimeType: 'image/png',
+        originalIndex: 0,
+      ),
+    ];
+  }
+}
+
+final class _PageMediaService implements UserBlogMediaOperations {
+  UserBlogImageUploadSubmission? request;
+  int calls = 0;
+  final result = Completer<DataCommandResult<UserBlogUploadedImage>>();
+  @override
+  Future<DataCommandResult<UserBlogUploadedImage>> uploadImage(
+    UserBlogImageUploadSubmission submission,
+  ) {
+    calls++;
+    request = submission;
+    return result.future;
+  }
+}
+
+final class _PageImageToken implements UserBlogUploadedImageToken {}

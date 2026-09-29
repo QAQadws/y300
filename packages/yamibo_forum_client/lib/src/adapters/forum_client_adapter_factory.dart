@@ -12,6 +12,7 @@ import '../contracts/forum_search.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_media.dart';
 import '../contracts/user_blog_favorites.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
@@ -337,12 +338,21 @@ final class ForumClientAdapterFactory {
       );
 
   /// Creates journal publishing and management operations.
-  UserBlogOperations createUserBlogOperations() => DiscuzBlogOperations(
-    config: config,
-    network: network,
-    profiles: requestProfiles,
-    sessions: sessionStore,
-  );
+  UserBlogOperations createUserBlogOperations() =>
+      createUserBlogEditor().operations;
+
+  /// Shares form tickets and image ownership between journal capabilities.
+  ({UserBlogOperations operations, UserBlogMediaOperations media})
+  createUserBlogEditor({ForumMultipartClient? multipart}) {
+    final adapter = DiscuzBlogOperations(
+      config: config,
+      network: network,
+      profiles: requestProfiles,
+      sessions: sessionStore,
+      multipart: multipart,
+    );
+    return (operations: adapter, media: adapter);
+  }
 
   /// Personal journal bookmarks, reusing the current account and transport.
   UserBlogFavoriteService createUserBlogFavorites() =>

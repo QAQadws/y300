@@ -5,23 +5,29 @@ import '../contracts/data_command_contract.dart';
 import '../contracts/data_read_contract.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_media.dart';
+import '../network/forum_multipart.dart';
 import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_blog_command_response.dart';
 import 'discuz_blog_editor_form.dart';
+import 'discuz_blog_editor_media.dart';
+import 'discuz_blog_image_upload.dart';
 import 'discuz_blog_mutation_session.dart';
 import 'discuz_profile_html_parsers.dart';
 
 /// Complete journal forms and verified publishing/management commands.
-final class DiscuzBlogOperations implements UserBlogOperations {
+final class DiscuzBlogOperations
+    implements UserBlogOperations, UserBlogMediaOperations {
   /// Creates the adapter with the existing Host session and transport.
   DiscuzBlogOperations({
     required this.config,
     required ForumClientNetwork network,
     required ForumRequestProfileResolver profiles,
     required ForumSessionStore? sessions,
+    this.multipart,
   }) : _boundary = DiscuzBlogMutationSession(
          config: config,
          network: network,
@@ -32,6 +38,10 @@ final class DiscuzBlogOperations implements UserBlogOperations {
   /// Managed site configuration.
   final ForumClientConfig config;
   final DiscuzBlogMutationSession _boundary;
+
+  /// Shared Host upload transport, absent when image upload is unsupported.
+  final ForumMultipartClient? multipart;
+  late final _images = DiscuzBlogImageUpload(_boundary, multipart);
 
   @override
   Future<
@@ -60,9 +70,29 @@ final class DiscuzBlogOperations implements UserBlogOperations {
         siteOrigin: config.siteOrigin,
         target: target,
       );
-      final token = _EditorToken(owner: this, target: target, form: form);
+      final media = multipart == null
+          ? null
+          : DiscuzBlogEditorMedia.parse(
+              source.dataOrNull!,
+              siteOrigin: config.siteOrigin,
+              actor: target.actorUserId,
+            );
+      final token = _EditorToken(
+        owner: this,
+        target: target,
+        form: form,
+        media: media,
+      );
       return DataReadSuccess(
-        data: form.preparation(target, token),
+        data: form.preparation(
+          target,
+          token,
+          imageUploadLimits: media?.limits,
+          blogSmilies: DiscuzBlogEditorMedia.smileys(
+            source.dataOrNull!,
+            config.siteOrigin,
+          ),
+        ),
         capabilities: DataCapabilitySet.supported([target.action]),
         metadata: const DataReadMetadata.network(),
       );
@@ -72,6 +102,22 @@ final class DiscuzBlogOperations implements UserBlogOperations {
         DataReadFailureKind.unsupported,
       );
     }
+  }
+
+  @override
+  Future<DataCommandResult<UserBlogUploadedImage>> uploadImage(
+    UserBlogImageUploadSubmission submission,
+  ) {
+    final token = submission.preparation.token;
+    if (token is! _EditorToken ||
+        token.owner != this ||
+        token.used ||
+        token.target != submission.preparation.target) {
+      return Future.value(_notSent('blog_image_ticket_invalid'));
+    }
+    final media = token.media;
+    if (media == null) return Future.value(const DataCommandUnsupported());
+    return _images.upload(submission, media, token.target);
   }
 
   @override
@@ -120,8 +166,10 @@ final class DiscuzBlogOperations implements UserBlogOperations {
       return _notSent('blog_editor_input_invalid');
     }
     final Map<String, String> accessFields;
+    final Map<String, String> imageFields;
     try {
       accessFields = form.accessFields(submission);
+      imageFields = _images.bindingFields(submission);
     } on FormatException {
       return _notSent('blog_editor_access_input_invalid');
     }
@@ -140,6 +188,7 @@ final class DiscuzBlogOperations implements UserBlogOperations {
       fields: {
         ...form.fields,
         ...accessFields,
+        ...imageFields,
         'subject': submission.subject,
         'message': submission.bodyHtml,
         'tag': submission.tags,
@@ -397,8 +446,10 @@ final class _EditorToken extends _OperationToken {
     required super.owner,
     required super.target,
     required this.form,
+    required this.media,
   });
   final DiscuzBlogEditorForm form;
+  final DiscuzBlogEditorMedia? media;
 }
 
 final class _ActionToken extends _OperationToken {

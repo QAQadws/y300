@@ -7386,29 +7386,17 @@ abstract class AppLocalizations {
   /// **'暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。'**
   String get profileBlogActionOutcomeUnknown;
 
-  /// No description provided for @profileBlogPlainText.
-  ///
-  /// In zh, this message translates to:
-  /// **'普通文字'**
-  String get profileBlogPlainText;
-
-  /// No description provided for @profileBlogHtmlSource.
-  ///
-  /// In zh, this message translates to:
-  /// **'HTML 源码'**
-  String get profileBlogHtmlSource;
-
-  /// No description provided for @profileBlogHtmlHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'已有富文本以 HTML 保留。可预览效果，或在网页中使用完整编辑器。'**
-  String get profileBlogHtmlHint;
-
   /// No description provided for @profileBlogBody.
   ///
   /// In zh, this message translates to:
   /// **'正文'**
   String get profileBlogBody;
+
+  /// No description provided for @profileBlogImageUploadUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认图片是否上传成功，已停止本次上传。请在网页相册中核实。'**
+  String get profileBlogImageUploadUnknown;
 
   /// No description provided for @profileBlogStartWriting.
   ///

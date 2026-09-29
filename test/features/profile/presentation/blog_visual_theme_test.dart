@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,8 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_sticker_image_cache_loader.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
@@ -40,6 +43,7 @@ import '../test_support/blog_visual_fixture.dart';
 
 const _output = String.fromEnvironment('BLOG_VISUAL_OUTPUT');
 const _font = String.fromEnvironment('BLOG_VISUAL_FONT');
+const _smileyRoot = String.fromEnvironment('BLOG_VISUAL_SMILIES');
 const _capture = Key('blog-visual-capture');
 
 void main() {
@@ -267,14 +271,111 @@ void main() {
             tester.widget<TextField>(subject).decoration!.border,
             isA<UnderlineInputBorder>(),
           );
-          await tester.enterText(
-            find.byKey(const Key('blog-editor-body')),
-            '记下今天想分享的事情。\n\n读完一本喜欢的书，也遇见了一些温柔的小事。',
+          final body = tester
+              .widget<QuillEditor>(find.byKey(const Key('blog-editor-body')))
+              .controller;
+          const bodyText = '记下今天想分享的事情。\n\n读完一本喜欢的书，也遇见了一些温柔的小事。';
+          body.replaceText(
+            0,
+            body.document.length - 1,
+            bodyText,
+            const TextSelection.collapsed(offset: bodyText.length),
           );
+          body.formatText(0, 4, Attribute.bold);
+          body.formatText(4, 4, Attribute.italic);
+          body.formatText(8, 4, Attribute.underline);
+          body.formatText(0, 4, Attribute.clone(Attribute.size, '18'));
           FocusManager.instance.primaryFocus?.unfocus();
           await tester.pumpAndSettle();
+          final toolbar = find.byKey(const Key('blog-editor-toolbar'));
+          expect(toolbar, findsOneWidget);
+          expect(
+            find.descendant(of: toolbar, matching: find.byType(IconButton)),
+            findsNWidgets(6),
+          );
+          expect(
+            tester.getBottomRight(toolbar).dy,
+            lessThanOrEqualTo(compact ? 844 - 260 : 844),
+          );
           await _save(tester, '$name-editor');
           expect(tester.takeException(), isNull);
+          body.updateSelection(
+            const TextSelection(baseOffset: 0, extentOffset: 4),
+            ChangeSource.local,
+          );
+          body.formatSelection(Attribute.italic);
+          body.formatSelection(Attribute.underline);
+          await tester.pumpAndSettle();
+          await _save(tester, '$name-editor-format-selected');
+          body.formatSelection(Attribute.clone(Attribute.italic, null));
+          body.formatSelection(Attribute.clone(Attribute.underline, null));
+          body.updateSelection(
+            const TextSelection.collapsed(offset: bodyText.length),
+            ChangeSource.local,
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('blog-format-size')));
+          await tester.pumpAndSettle();
+          await _save(tester, '$name-editor-size');
+          Navigator.of(
+            tester.element(find.byKey(const Key('blog-font-size-1'))),
+          ).pop();
+          await tester.pumpAndSettle();
+          if (family == AppThemeFamily.warmPaper &&
+              brightness == Brightness.light &&
+              !compact) {
+            if (_smileyRoot.isNotEmpty) {
+              final imageContext = tester.element(toolbar);
+              var ready = false;
+              await tester.runAsync(() async {
+                unawaited(
+                  Future.wait([
+                    for (var i = 1; i <= 30; i++)
+                      precacheImage(
+                        FileImage(File('$_smileyRoot/$i.gif')),
+                        imageContext,
+                      ),
+                  ]).then((_) => ready = true),
+                );
+              });
+              for (var i = 0; i < 100 && !ready; i++) {
+                await tester.runAsync(
+                  () => Future<void>.delayed(const Duration(milliseconds: 10)),
+                );
+                await tester.pump(const Duration(milliseconds: 16));
+              }
+              expect(
+                ready,
+                isTrue,
+                reason: 'Local smiley first frames must decode before capture',
+              );
+            }
+            await tester.tap(find.byKey(const Key('blog-insert-smiley')));
+            await tester.pump(const Duration(milliseconds: 500));
+            if (_smileyRoot.isNotEmpty) {
+              await tester.runAsync(
+                () => Future<void>.delayed(const Duration(milliseconds: 200)),
+              );
+              await tester.pump(const Duration(milliseconds: 100));
+            }
+            expect(find.byKey(const Key('blog-smiley-picker')), findsOneWidget);
+            if (_smileyRoot.isNotEmpty) {
+              expect(
+                find.descendant(
+                  of: find.byKey(const Key('blog-smiley-picker')),
+                  matching: find.byWidgetPredicate(
+                    (widget) => widget is RawImage && widget.image != null,
+                  ),
+                ),
+                findsWidgets,
+              );
+            }
+            await _save(tester, '$name-editor-smilies');
+            Navigator.of(
+              tester.element(find.byKey(const Key('blog-smiley-picker'))),
+            ).pop();
+            await tester.pumpAndSettle();
+          }
           await tester.tap(find.byKey(const Key('blog-editor-settings')));
           await tester.pumpAndSettle();
           final settings = find.byKey(const Key('blog-editor-settings-sheet'));
@@ -332,11 +433,7 @@ void main() {
             expect(tester.takeException(), isNull);
             await _save(tester, '$name-editor-settings-$snapshot');
           }
-          final settingsDone = find.byKey(
-            const Key('blog-editor-settings-done'),
-          );
-          await tester.ensureVisible(settingsDone);
-          await tester.tap(settingsDone);
+          await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
 
           host.directory.categories = const [
@@ -606,7 +703,31 @@ final class _Host {
           userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
           userBlogDetailRepositoryProvider.overrideWithValue(details),
           userBlogOperationsProvider.overrideWithValue(
-            BlogOperationFixture(autoPrepare: true),
+            BlogOperationFixture(autoPrepare: true)
+              ..editorForm = (target) => blogEditorPreparation(
+                target,
+                imageUploadLimits: const UserBlogImageUploadLimits(
+                  extensionRules: [
+                    ForumImageAttachmentExtensionRule(extension: 'png'),
+                  ],
+                ),
+                blogSmilies: List.generate(
+                  30,
+                  (index) => UserBlogSmiley(
+                    index: index + 1,
+                    imageUri: Uri.parse(
+                      'https://example.test/static/image/smiley/comcom/${index + 1}.gif',
+                    ),
+                  ),
+                ),
+              ),
+          ),
+          userBlogMediaOperationsProvider.overrideWithValue(_VisualMedia()),
+          composerStickerImageCacheLoaderProvider.overrideWithValue(
+            ComposerStickerImageCacheLoader(
+              imageCacheService: _SmileyImages(),
+              networkGap: Duration.zero,
+            ),
           ),
           userBlogCommentServiceProvider.overrideWithValue(
             BlogCommentFixture(autoPrepare: true),
@@ -674,6 +795,36 @@ final class _Images implements ImageCacheService {
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) =>
       throw StateError('Visual fixtures must never download an image');
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _VisualMedia implements UserBlogMediaOperations {
+  @override
+  Future<DataCommandResult<UserBlogUploadedImage>> uploadImage(
+    UserBlogImageUploadSubmission submission,
+  ) => throw StateError('Visual fixtures must never upload an image');
+}
+
+final class _SmileyImages implements ImageCacheService {
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    if (_smileyRoot.isEmpty) return CachedImageResult.failed;
+    final name = Uri.parse(request.sourceUrl).pathSegments.last;
+    if (!RegExp(r'^(?:[1-9]|[12]\d|30)\.gif$').hasMatch(name)) {
+      return CachedImageResult.failed;
+    }
+    final file = File('$_smileyRoot/$name');
+    if (!file.existsSync()) return CachedImageResult.failed;
+    return CachedImageResult(
+      success: true,
+      cacheKey: request.cacheKey,
+      localPath: file.path,
+    );
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -11,6 +11,7 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_media.dart';
 import '../contracts/user_blog_favorites.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
@@ -48,6 +49,7 @@ final class ForumClientSourcePlan {
     this.userBlogDetail,
     this.blogComments,
     this.blogOperations,
+    this.blogMedia,
     this.blogFavorites,
     this.blogNavigation,
     this.forumSearch,
@@ -108,6 +110,15 @@ final class ForumClientSourcePlan {
     userBlogDetail: overrides.userBlogDetail ?? userBlogDetail,
     blogComments: overrides.blogComments ?? blogComments,
     blogOperations: overrides.blogOperations ?? blogOperations,
+    // Upload tickets belong to the editor adapter. Replacing the editor must
+    // not leave the old adapter accepting a different source's preparations.
+    blogMedia:
+        overrides.blogMedia ??
+        (overrides.blogOperations == null
+            ? blogMedia
+            : overrides.blogOperations is UserBlogMediaOperations
+            ? overrides.blogOperations as UserBlogMediaOperations
+            : null),
     blogFavorites: overrides.blogFavorites ?? blogFavorites,
     blogNavigation: overrides.blogNavigation ?? blogNavigation,
     forumSearch: overrides.forumSearch ?? forumSearch,
@@ -206,6 +217,9 @@ final class ForumClientSourcePlan {
 
   /// Journal publishing, editing, and management.
   final UserBlogOperations? blogOperations;
+
+  /// Optional album upload capability sharing the journal editor's tickets.
+  final UserBlogMediaOperations? blogMedia;
 
   /// Account-bound personal blog bookmarks.
   final UserBlogFavoriteService? blogFavorites;

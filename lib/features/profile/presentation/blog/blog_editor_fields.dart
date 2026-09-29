@@ -4,6 +4,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_titl
 import 'package:y300/features/profile/presentation/blog/blog_body_input.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_settings.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
+import 'package:y300/features/profile/presentation/blog/blog_rich_text_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class BlogEditorFields extends StatelessWidget {
@@ -12,7 +13,9 @@ class BlogEditorFields extends StatelessWidget {
     required this.state,
     required this.subject,
     required this.creatingCategory,
-    required this.onOpenSettings,
+    required this.bodyController,
+    this.mediaBusy = false,
+    this.imagePreviews = const {},
     required this.onChanged,
     this.bodyMinLines = 12,
   });
@@ -20,7 +23,9 @@ class BlogEditorFields extends StatelessWidget {
   final BlogEditorState state;
   final TextEditingController subject;
   final bool creatingCategory;
-  final VoidCallback? onOpenSettings;
+  final BlogRichTextController bodyController;
+  final bool mediaBusy;
+  final Map<String, String> imagePreviews;
   final int bodyMinLines;
   // Resolve edits against the latest draft, including before the next frame.
   final ValueChanged<BlogEditorDraft Function(BlogEditorDraft)> onChanged;
@@ -60,16 +65,14 @@ class BlogEditorFields extends StatelessWidget {
         BlogEditorSettingsSummary(
           state: state,
           creatingCategory: creatingCategory,
-          onPressed: onOpenSettings,
         ),
         const SizedBox(height: 8),
         BlogBodyInput(
-          html: state.draft.bodyHtml,
-          enabled: !state.busy,
+          controller: bodyController,
+          enabled: !state.busy && !mediaBusy,
+          imagePreviews: imagePreviews,
           readOnly: readOnly,
           minLines: bodyMinLines,
-          onChanged: (html) =>
-              onChanged((draft) => draft.copyWith(bodyHtml: html)),
         ),
       ],
     );

@@ -35,3 +35,9 @@ final userBlogNavigationProvider = Provider<UserBlogNavigation?>((ref) {
 final userBlogOperationsProvider = Provider<UserBlogOperations>((ref) {
   return ref.watch(yamiboForumClientProvider).blogOperations!;
 });
+
+final userBlogMediaOperationsProvider = Provider<UserBlogMediaOperations?>((
+  ref,
+) {
+  return ref.watch(yamiboForumClientProvider).blogMedia;
+});

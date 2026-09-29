@@ -195,6 +195,8 @@ UserBlogEditorPreparation blogEditorPreparation(
   bool canEditComments = true,
   bool? hasPassword,
   String? targetNames,
+  UserBlogImageUploadLimits? imageUploadLimits,
+  List<UserBlogSmiley> blogSmilies = const [],
 }) => UserBlogEditorPreparation(
   target: target,
   token: _Token(),
@@ -226,6 +228,8 @@ UserBlogEditorPreparation blogEditorPreparation(
       (visibility == UserBlogVisibility.selectedFriends
           ? 'Selected Friend'
           : ''),
+  imageUploadLimits: imageUploadLimits,
+  blogSmilies: blogSmilies,
 );
 
 final class _Token implements UserBlogOperationToken {}

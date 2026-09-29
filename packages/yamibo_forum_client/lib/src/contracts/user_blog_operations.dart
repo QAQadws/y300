@@ -5,6 +5,7 @@ import '../network/forum_request.dart' show ForumRequestCancellation;
 import 'data_command_contract.dart';
 import 'data_read_contract.dart';
 import 'profile_and_blog.dart';
+import 'user_blog_media.dart';
 
 /// Transient operation identity, including the expected signed-in actor.
 final class UserBlogTarget {
@@ -82,6 +83,8 @@ final class UserBlogEditorPreparation {
     this.canEditComments = false,
     this.hasPassword = false,
     this.targetNames = '',
+    this.imageUploadLimits,
+    this.blogSmilies = const [],
   });
 
   /// Proven operation target.
@@ -140,6 +143,12 @@ final class UserBlogEditorPreparation {
 
   /// Existing specified usernames, as source text rather than resolved IDs.
   final String targetNames;
+
+  /// Image upload capability advertised by this editor, when supported.
+  final UserBlogImageUploadLimits? imageUploadLimits;
+
+  /// Dedicated journal editor smileys, distinct from forum BBCode stickers.
+  final List<UserBlogSmiley> blogSmilies;
 }
 
 /// Edited content and optional access changes against a transient form ticket.
@@ -159,6 +168,7 @@ final class UserBlogEditorSubmission {
     this.commentsEnabled,
     this.password,
     this.targetNames,
+    this.uploadedImages = const [],
     this.cancellation,
   });
 
@@ -201,6 +211,9 @@ final class UserBlogEditorSubmission {
 
   /// Specified usernames; null retains the prepared value.
   final String? targetNames;
+
+  /// Confirmed uploads from this editing session; unused images are not bound.
+  final List<UserBlogUploadedImage> uploadedImages;
 
   /// Caller-owned cancellation.
   final ForumRequestCancellation? cancellation;
