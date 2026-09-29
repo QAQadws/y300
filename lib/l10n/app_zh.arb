@@ -1784,6 +1784,8 @@
   "profileBlogHtmlSource": "HTML 源码",
   "profileBlogHtmlHint": "已有富文本以 HTML 保留。可预览效果，或在网页中使用完整编辑器。",
   "profileBlogBody": "正文",
+  "profileBlogStartWriting": "写下想记录的事…",
+  "profileBlogPublishSettings": "发布设置",
   "profileBlogSubject": "标题",
   "profileBlogSiteCategory": "站点分类",
   "profileBlogPersonalCategory": "个人分类",

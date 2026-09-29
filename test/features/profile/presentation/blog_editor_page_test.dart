@@ -27,6 +27,13 @@ void main() {
       expect(_submitButton(tester).onPressed, isNull);
       service.preparedEditor();
       await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNWidgets(2));
+      expect(find.byKey(const Key('blog-editor-save')), findsNothing);
+      expect(find.byKey(const Key('blog-editor-tags')), findsNothing);
+      expect(
+        find.byKey(const Key('blog-editor-settings-summary')),
+        findsOneWidget,
+      );
       await tester.enterText(
         find.byKey(const Key('blog-editor-subject')),
         'A new journal',
@@ -109,7 +116,21 @@ void main() {
         l10n.profileBlogNewCategory,
       );
       await _save(tester);
+      await tester.pumpAndSettle();
       expect(service.editorSubmissions, isEmpty);
+      expect(
+        find.byKey(const Key('blog-editor-settings-sheet')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const Key('blog-editor-category-name')),
+            )
+            .decoration!
+            .errorText,
+        l10n.profileBlogNewCategoryNameRequired,
+      );
       await tester.ensureVisible(
         find.byKey(const Key('blog-editor-category-name')),
       );
@@ -138,6 +159,82 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  testWidgets(
+    'settings update the draft immediately and survive closing and reopening',
+    (tester) async {
+      final service = BlogOperationFixture(autoPrepare: true);
+      await _open(tester, service);
+      await _openSettings(tester, fromSummary: true);
+      await tester.ensureVisible(find.byKey(const Key('blog-editor-tags')));
+      await tester.enterText(
+        find.byKey(const Key('blog-editor-tags')),
+        '新的标签, reading',
+      );
+      await _choose(tester, 'blog-editor-personal-category', 'Travel');
+      await tester.ensureVisible(
+        find.byKey(const Key('blog-editor-publish-feed')),
+      );
+      await tester.tap(find.byKey(const Key('blog-editor-publish-feed')));
+      await _closeSettings(tester);
+      expect(service.editorSubmissions, isEmpty);
+      await _openSettings(tester);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('blog-editor-tags')))
+            .controller!
+            .text,
+        '新的标签, reading',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('blog-editor-personal-category')),
+          matching: find.text('Travel'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const Key('blog-editor-publish-feed')),
+            )
+            .value,
+        isTrue,
+      );
+      await _save(tester);
+      final input = service.editorSubmissions.single.input;
+      expect(input.tags, '新的标签, reading');
+      expect(input.personalCategoryId, '9');
+      expect(input.publishFeed, isTrue);
+      service.saved();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('account change clears an open settings sheet and its input', (
+    tester,
+  ) async {
+    final service = BlogOperationFixture(autoPrepare: true);
+    final host = await _open(tester, service);
+    final l10n = _l10n(tester);
+    await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('blog-editor-tags')));
+    await tester.enterText(
+      find.byKey(const Key('blog-editor-tags')),
+      'old account draft',
+    );
+    host.changeActor('202');
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField, skipOffstage: false), findsNothing);
+    expect(find.text('old account draft', skipOffstage: false), findsNothing);
+    expect(find.text(l10n.forumWebViewAccountChanged), findsWidgets);
+    expect(service.editorSubmissions, isEmpty);
+    host.changeActor('101');
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField, skipOffstage: false), findsNothing);
+    expect(host.container.read(blogMutationBusProvider).last, isNull);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final useServer in [false, true]) {
     testWidgets(
@@ -228,12 +325,14 @@ void main() {
         'My changes',
       );
       final web = find.byKey(const Key('blog-editor-open-web'));
+      await _openSettings(tester);
       await _reveal(tester, web);
       await tester.tap(web);
       await tester.pumpAndSettle();
       expect(host.webLaunches, isEmpty);
       await tester.tap(find.text(_l10n(tester).commonCancel));
       await tester.pumpAndSettle();
+      await _openSettings(tester);
       await _reveal(tester, web);
       await tester.tap(web);
       await tester.pumpAndSettle();
@@ -353,7 +452,7 @@ void main() {
   for (final family in AppThemeFamily.values) {
     for (final brightness in Brightness.values) {
       testWidgets(
-        'editor and preview fit $family $brightness with large text and keyboard',
+        'editor settings and preview fit $family $brightness with large text and keyboard',
         (tester) async {
           await tester.binding.setSurfaceSize(const Size(320, 740));
           addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -374,6 +473,14 @@ void main() {
             find.byKey(const Key('blog-editor-body')),
             '正文\n空行与换行\n\n' * 6,
           );
+          await _openSettings(tester);
+          await _reveal(tester, find.byKey(const Key('blog-editor-open-web')));
+          expect(
+            find.byKey(const Key('blog-editor-open-web')).hitTestable(),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await _closeSettings(tester);
           await tester.tap(find.byKey(const Key('blog-editor-preview-toggle')));
           await tester.pumpAndSettle();
           expect(find.byType(ForumHtmlContentView), findsOneWidget);
@@ -396,18 +503,48 @@ TextField _body(WidgetTester tester) =>
 AppLocalizations _l10n(WidgetTester tester) =>
     AppLocalizations.of(tester.element(find.byType(BlogEditorPage)));
 Future<void> _save(WidgetTester tester) async {
+  if (find
+      .byKey(const Key('blog-editor-settings-sheet'))
+      .evaluate()
+      .isNotEmpty) {
+    await _closeSettings(tester);
+  }
   await tester.pump();
   await tester.tap(find.byKey(const Key('blog-editor-submit')));
   await tester.pump();
 }
 
 Future<void> _choose(WidgetTester tester, String key, String label) async {
+  if (find.byKey(const Key('blog-editor-settings-sheet')).evaluate().isEmpty) {
+    await _openSettings(tester);
+  }
   final field = find.byKey(Key(key));
   await tester.ensureVisible(field);
   await tester.tap(field);
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
+}
+
+Future<void> _openSettings(
+  WidgetTester tester, {
+  bool fromSummary = false,
+}) async {
+  final entry = find.byKey(
+    Key(fromSummary ? 'blog-editor-settings-summary' : 'blog-editor-settings'),
+  );
+  await tester.ensureVisible(entry);
+  await tester.tap(entry);
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('blog-editor-settings-sheet')), findsOneWidget);
+}
+
+Future<void> _closeSettings(WidgetTester tester) async {
+  final done = find.byKey(const Key('blog-editor-settings-done'));
+  await tester.ensureVisible(done);
+  await tester.tap(done);
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('blog-editor-settings-sheet')), findsNothing);
 }
 
 Future<void> _reveal(
@@ -420,7 +557,16 @@ Future<void> _reveal(
     delta,
     scrollable: find
         .descendant(
-          of: find.byKey(const Key('blog-editor-scroll')),
+          of: find.byKey(
+            Key(
+              find
+                      .byKey(const Key('blog-editor-settings-sheet'))
+                      .evaluate()
+                      .isEmpty
+                  ? 'blog-editor-scroll'
+                  : 'blog-editor-settings-sheet',
+            ),
+          ),
           matching: find.byType(Scrollable),
         )
         .first,

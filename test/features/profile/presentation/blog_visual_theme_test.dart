@@ -252,14 +252,51 @@ void main() {
 
           await host.pump(
             tester,
-            BlogEditorPage(target: blogActionTarget(UserBlogAction.edit)),
-            keyboard: true,
+            const BlogEditorPage(
+              target: UserBlogTarget(
+                actorUserId: '101',
+                ownerUserId: '101',
+                action: UserBlogAction.create,
+              ),
+            ),
+            keyboard: compact,
           );
           final subject = find.byKey(const Key('blog-editor-subject'));
           await tester.enterText(subject, blogVisualTitle);
-          expect(tester.widget<TextField>(subject).decoration!.border, isNull);
+          expect(
+            tester.widget<TextField>(subject).decoration!.border,
+            isA<UnderlineInputBorder>(),
+          );
+          await tester.enterText(
+            find.byKey(const Key('blog-editor-body')),
+            '记下今天想分享的事情。\n\n读完一本喜欢的书，也遇见了一些温柔的小事。',
+          );
+          FocusManager.instance.primaryFocus?.unfocus();
+          await tester.pumpAndSettle();
           await _save(tester, '$name-editor');
           expect(tester.takeException(), isNull);
+          await tester.tap(find.byKey(const Key('blog-editor-settings')));
+          await tester.pumpAndSettle();
+          final settings = find.byKey(const Key('blog-editor-settings-sheet'));
+          expect(settings, findsOneWidget);
+          await _save(tester, '$name-editor-settings');
+          final settingsScroll = find
+              .descendant(of: settings, matching: find.byType(Scrollable))
+              .first;
+          await tester.scrollUntilVisible(
+            find.byKey(const Key('blog-editor-open-web')),
+            200,
+            scrollable: settingsScroll,
+          );
+          await tester.pumpAndSettle();
+          await _save(tester, '$name-editor-settings-options');
+          expect(tester.takeException(), isNull);
+          final settingsDone = find.byKey(
+            const Key('blog-editor-settings-done'),
+          );
+          await tester.ensureVisible(settingsDone);
+          await tester.tap(settingsDone);
+          await tester.pumpAndSettle();
 
           host.directory.categories = const [
             UserBlogCategory(id: '1', name: '正能量'),

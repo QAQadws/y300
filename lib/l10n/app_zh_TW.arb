@@ -1419,6 +1419,8 @@
   "profileBlogHtmlSource": "HTML 原始碼",
   "profileBlogHtmlHint": "既有豐富文字以 HTML 保留。可預覽效果，或在網頁中使用完整編輯器。",
   "profileBlogBody": "內文",
+  "profileBlogStartWriting": "寫下想記錄的事…",
+  "profileBlogPublishSettings": "發佈設定",
   "profileBlogSubject": "標題",
   "profileBlogSiteCategory": "網站分類",
   "profileBlogPersonalCategory": "個人分類",

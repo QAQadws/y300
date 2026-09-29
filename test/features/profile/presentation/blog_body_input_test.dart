@@ -26,14 +26,12 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       'a & b\n第二行',
     );
-    await tester.tap(find.byKey(const Key('blog-body-html-mode')));
-    await tester.pump();
+    await _chooseMode(tester, html: true);
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       source,
     );
-    await tester.tap(find.byKey(const Key('blog-body-text-mode')));
-    await tester.pump();
+    await _chooseMode(tester, html: false);
     expect(changed, isEmpty);
   });
 
@@ -58,12 +56,18 @@ void main() {
           ),
         ),
       );
+      await tester.tap(find.byKey(const Key('blog-body-mode-menu')));
+      await tester.pumpAndSettle();
       expect(
         tester
-            .widget<ChoiceChip>(find.byKey(const Key('blog-body-text-mode')))
-            .onSelected,
-        isNull,
+            .widget<PopupMenuItem<bool>>(
+              find.byKey(const Key('blog-body-text-mode')),
+            )
+            .enabled,
+        isFalse,
       );
+      await tester.tap(find.byKey(const Key('blog-body-html-mode')));
+      await tester.pumpAndSettle();
       source.value = '<p>Server version</p>';
       await tester.pump();
       expect(
@@ -97,4 +101,13 @@ void main() {
     expect(BlogBodyTextCodec.decode(saved), '  <b>literal</b> &\n\nsecond');
     expect(saved, contains('&lt;b&gt;'));
   });
+}
+
+Future<void> _chooseMode(WidgetTester tester, {required bool html}) async {
+  await tester.tap(find.byKey(const Key('blog-body-mode-menu')));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(Key(html ? 'blog-body-html-mode' : 'blog-body-text-mode')),
+  );
+  await tester.pumpAndSettle();
 }

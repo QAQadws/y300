@@ -7410,6 +7410,18 @@ abstract class AppLocalizations {
   /// **'正文'**
   String get profileBlogBody;
 
+  /// No description provided for @profileBlogStartWriting.
+  ///
+  /// In zh, this message translates to:
+  /// **'写下想记录的事…'**
+  String get profileBlogStartWriting;
+
+  /// No description provided for @profileBlogPublishSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布设置'**
+  String get profileBlogPublishSettings;
+
   /// No description provided for @profileBlogSubject.
   ///
   /// In zh, this message translates to:

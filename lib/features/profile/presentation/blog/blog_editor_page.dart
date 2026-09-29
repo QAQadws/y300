@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_controller.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_fields.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_preview.dart';
+import 'package:y300/features/profile/presentation/blog/blog_editor_settings.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
@@ -93,13 +96,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     FocusScope.of(context).unfocus();
     if (_creatingCategory && _categoryName.text.trim().isEmpty) {
       setState(() => _categoryNameRequired = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context).profileBlogNewCategoryNameRequired,
-          ),
-        ),
-      );
+      await _openSettings();
       return;
     }
     final receipt = await _controller.submit();
@@ -112,6 +109,15 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
             content: Text(_issueText(AppLocalizations.of(context), issue)),
           ),
         );
+        if ({
+          BlogEditorIssue.siteCategoryRequired,
+          BlogEditorIssue.categoryUnavailable,
+          BlogEditorIssue.newCategoryUnavailable,
+          BlogEditorIssue.categoryConflict,
+          BlogEditorIssue.feedUnavailable,
+        }.contains(issue)) {
+          await _openSettings();
+        }
       }
       return;
     }
@@ -231,6 +237,84 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     );
   }
 
+  void _changeDraft(BlogEditorDraft Function(BlogEditorDraft) change) {
+    final draft = change(_controller.value.draft);
+    if (_categoryNameRequired && draft.newPersonalCategory.trim().isNotEmpty) {
+      setState(() => _categoryNameRequired = false);
+    }
+    _controller.update(draft);
+  }
+
+  Future<void> _openSettings() async {
+    if (_dialogOpen ||
+        _controller.value.options == null ||
+        _controller.value.busy) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    _dialogOpen = true;
+    final openWeb = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).y300NativeContent.card,
+      builder: (sheetContext) => ValueListenableBuilder<BlogEditorState>(
+        valueListenable: _controller,
+        builder: (context, state, _) {
+          final l10n = AppLocalizations.of(context);
+          // The sheet observes the same session as the page: expiring the editor
+          // removes every old input here too, even while this route covers it.
+          return ComposerSettingsSheet(
+            key: const Key('blog-editor-settings-sheet'),
+            title: l10n.profileBlogPublishSettings,
+            children: [
+              if (state.options == null)
+                Text(l10n.forumWebViewAccountChanged)
+              else
+                BlogEditorSettingsFields(
+                  state: state,
+                  tags: _tags,
+                  categoryName: _categoryName,
+                  creatingCategory: _creatingCategory,
+                  categoryNameRequired: _categoryNameRequired,
+                  onCreateCategory: (value) => setState(() {
+                    _creatingCategory = value;
+                    _categoryNameRequired = false;
+                  }),
+                  onChanged: _changeDraft,
+                ),
+              if ({
+                BlogEditorPhase.ready,
+                BlogEditorPhase.failed,
+              }.contains(state.phase)) ...[
+                const Divider(height: 24),
+                ComposerSettingsActionTile(
+                  tileKey: const Key('blog-editor-open-web'),
+                  icon: Icons.open_in_browser_outlined,
+                  title: l10n.profileBlogOpenWeb,
+                  onPressed: () => Navigator.of(sheetContext).pop(true),
+                ),
+              ],
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  key: const Key('blog-editor-settings-done'),
+                  onPressed: () => Navigator.of(sheetContext).pop(false),
+                  child: Text(l10n.commonConfirm),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    _dialogOpen = false;
+    if (!mounted) return;
+    _scheduleFinish();
+    if (openWeb == true) await _openWeb();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -253,15 +337,26 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
           }
         },
         child: Scaffold(
-          backgroundColor: native.background,
+          backgroundColor: native.card,
           appBar: AppBar(
             title: Text(
               creating ? l10n.profileBlogWrite : l10n.profileBlogEdit,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             actions: [
               if (state.options != null)
                 IconButton(
+                  key: const Key('blog-editor-settings'),
+                  tooltip: l10n.profileBlogPublishSettings,
+                  style: composerAppBarActionStyle(context),
+                  onPressed: state.busy ? null : _openSettings,
+                  icon: const Icon(Icons.tune),
+                ),
+              if (state.options != null)
+                IconButton(
                   key: const Key('blog-editor-preview-toggle'),
+                  style: composerAppBarActionStyle(context),
                   tooltip: _preview
                       ? l10n.profileBlogBackToEditor
                       : l10n.composerPreview,
@@ -275,172 +370,162 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                 ),
               IconButton(
                 key: const Key('blog-editor-submit'),
+                style: composerAppBarActionStyle(context),
                 tooltip: creating ? l10n.profileBlogPublish : l10n.commonSave,
                 onPressed: state.canSubmit ? _submit : null,
-                icon: const Icon(Icons.check),
+                icon: Icon(creating ? Icons.send : Icons.check),
               ),
             ],
           ),
           body: SafeArea(
-            child: ListView(
-              key: const Key('blog-editor-scroll'),
-              padding: const EdgeInsets.all(12),
-              children: [
-                if (state.busy) ...[
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      state.phase == BlogEditorPhase.preparing
-                          ? l10n.profileBlogPreparingEditor
-                          : l10n.profileBlogSubmittingEditor,
-                      style: TextStyle(color: native.supportingText),
+            child: LayoutBuilder(
+              builder: (context, constraints) => ListView(
+                key: const Key('blog-editor-scroll'),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                children: [
+                  if (state.busy) ...[
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        state.phase == BlogEditorPhase.preparing
+                            ? l10n.profileBlogPreparingEditor
+                            : l10n.profileBlogSubmittingEditor,
+                        style: TextStyle(color: native.supportingText),
+                      ),
                     ),
-                  ),
-                  if (!MediaQuery.disableAnimationsOf(context)) ...[
-                    const SizedBox(height: 8),
-                    const LinearProgressIndicator(),
+                    if (!MediaQuery.disableAnimationsOf(context)) ...[
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(),
+                    ],
+                    const SizedBox(height: 12),
                   ],
-                  const SizedBox(height: 12),
-                ],
-                if (state.phase == BlogEditorPhase.expired)
-                  Text(
-                    l10n.forumWebViewAccountChanged,
-                    style: TextStyle(color: native.body),
-                  ),
-                if (state.phase == BlogEditorPhase.unknown ||
-                    state.failure != null ||
-                    state.issue != null) ...[
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      state.phase == BlogEditorPhase.unknown
-                          ? l10n.profileBlogEditorOutcomeUnknown
-                          : state.issue != null
-                          ? _issueText(l10n, state.issue!)
-                          : LocalizedErrorSummary.resolve(l10n, state.failure),
+                  if (state.phase == BlogEditorPhase.expired)
+                    Text(
+                      l10n.forumWebViewAccountChanged,
                       style: TextStyle(color: native.body),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (state.needsReview) ...[
-                  Text(
-                    l10n.profileBlogServerChanged,
-                    style: TextStyle(color: native.body),
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      TextButton(
-                        key: const Key('blog-editor-show-server'),
-                        onPressed: () => setState(
-                          () => _showServerVersion = !_showServerVersion,
-                        ),
-                        child: Text(l10n.postEditServerVersion),
+                  if (state.phase == BlogEditorPhase.unknown ||
+                      state.failure != null ||
+                      state.issue != null) ...[
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        state.phase == BlogEditorPhase.unknown
+                            ? l10n.profileBlogEditorOutcomeUnknown
+                            : state.issue != null
+                            ? _issueText(l10n, state.issue!)
+                            : LocalizedErrorSummary.resolve(
+                                l10n,
+                                state.failure,
+                              ),
+                        style: TextStyle(color: native.body),
                       ),
-                      TextButton(
-                        key: const Key('blog-editor-use-server'),
-                        onPressed: state.busy
-                            ? null
-                            : () {
-                                setState(() {
-                                  _creatingCategory = false;
-                                  _categoryNameRequired = false;
-                                  _showServerVersion = false;
-                                });
-                                _controller.reviewServerVersion(
-                                  keepLocal: false,
-                                );
-                              },
-                        child: Text(l10n.profileBlogUseServer),
-                      ),
-                      TextButton(
-                        key: const Key('blog-editor-keep-local'),
-                        onPressed: state.busy
-                            ? null
-                            : () {
-                                setState(() => _showServerVersion = false);
-                                _controller.reviewServerVersion(
-                                  keepLocal: true,
-                                );
-                              },
-                        child: Text(l10n.profileBlogKeepLocal),
-                      ),
-                    ],
-                  ),
-                  if (_showServerVersion && state.serverVersion != null) ...[
-                    BlogEditorServerMetadata(
-                      draft: state.serverVersion!,
-                      options: state.options!,
-                    ),
-                    BlogEditorPreview(
-                      draft: state.serverVersion!,
-                      ownerId: owner,
                     ),
                     const SizedBox(height: 12),
                   ],
-                ],
-                if (state.options != null) ...[
-                  Offstage(
-                    offstage: _preview,
-                    child: BlogEditorFields(
-                      state: state,
-                      subject: _subject,
-                      tags: _tags,
-                      categoryName: _categoryName,
-                      creatingCategory: _creatingCategory,
-                      categoryNameRequired: _categoryNameRequired,
-                      onCreateCategory: (value) => setState(() {
-                        _creatingCategory = value;
-                        _categoryNameRequired = false;
-                      }),
-                      onChanged: (change) {
-                        final draft = change(_controller.value.draft);
-                        if (_categoryNameRequired &&
-                            draft.newPersonalCategory.trim().isNotEmpty) {
-                          setState(() => _categoryNameRequired = false);
-                        }
-                        _controller.update(draft);
-                      },
+                  if (state.needsReview) ...[
+                    Text(
+                      l10n.profileBlogServerChanged,
+                      style: TextStyle(color: native.body),
                     ),
-                  ),
-                  if (_preview)
-                    BlogEditorPreview(draft: state.draft, ownerId: owner),
-                  const SizedBox(height: 16),
-                ],
-                Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if ({
-                      BlogEditorPhase.ready,
-                      BlogEditorPhase.failed,
-                    }.contains(state.phase))
-                      TextButton(
-                        key: const Key('blog-editor-open-web'),
-                        onPressed: _openWeb,
-                        child: Text(l10n.profileBlogOpenWeb),
-                      ),
-                    if (state.phase == BlogEditorPhase.failed)
-                      FilledButton(
-                        key: const Key('blog-editor-retry'),
-                        onPressed: _controller.prepare,
-                        child: Text(l10n.commonRetry),
-                      )
-                    else if (state.options != null &&
-                        state.phase != BlogEditorPhase.unknown)
-                      FilledButton(
-                        key: const Key('blog-editor-save'),
-                        onPressed: state.canSubmit ? _submit : null,
-                        child: Text(
-                          creating ? l10n.profileBlogPublish : l10n.commonSave,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        TextButton(
+                          key: const Key('blog-editor-show-server'),
+                          onPressed: () => setState(
+                            () => _showServerVersion = !_showServerVersion,
+                          ),
+                          child: Text(l10n.postEditServerVersion),
                         ),
+                        TextButton(
+                          key: const Key('blog-editor-use-server'),
+                          onPressed: state.busy
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _creatingCategory = false;
+                                    _categoryNameRequired = false;
+                                    _showServerVersion = false;
+                                  });
+                                  _controller.reviewServerVersion(
+                                    keepLocal: false,
+                                  );
+                                },
+                          child: Text(l10n.profileBlogUseServer),
+                        ),
+                        TextButton(
+                          key: const Key('blog-editor-keep-local'),
+                          onPressed: state.busy
+                              ? null
+                              : () {
+                                  setState(() => _showServerVersion = false);
+                                  _controller.reviewServerVersion(
+                                    keepLocal: true,
+                                  );
+                                },
+                          child: Text(l10n.profileBlogKeepLocal),
+                        ),
+                      ],
+                    ),
+                    if (_showServerVersion && state.serverVersion != null) ...[
+                      BlogEditorServerMetadata(
+                        draft: state.serverVersion!,
+                        options: state.options!,
                       ),
+                      BlogEditorPreview(
+                        draft: state.serverVersion!,
+                        ownerId: owner,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                   ],
-                ),
-              ],
+                  if (state.options != null) ...[
+                    Offstage(
+                      offstage: _preview,
+                      child: BlogEditorFields(
+                        state: state,
+                        subject: _subject,
+                        creatingCategory: _creatingCategory,
+                        onOpenSettings: state.busy ? null : _openSettings,
+                        bodyMinLines:
+                            ((constraints.maxHeight - 240) /
+                                    (MediaQuery.textScalerOf(
+                                          context,
+                                        ).scale(16) *
+                                        1.6))
+                                .floor()
+                                .clamp(4, 24),
+                        onChanged: _changeDraft,
+                      ),
+                    ),
+                    if (_preview)
+                      BlogEditorPreview(draft: state.draft, ownerId: owner),
+                    const SizedBox(height: 16),
+                  ],
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (state.phase == BlogEditorPhase.failed &&
+                          state.options == null)
+                        TextButton(
+                          key: const Key('blog-editor-open-web'),
+                          onPressed: _openWeb,
+                          child: Text(l10n.profileBlogOpenWeb),
+                        ),
+                      if (state.phase == BlogEditorPhase.failed)
+                        FilledButton(
+                          key: const Key('blog-editor-retry'),
+                          onPressed: _controller.prepare,
+                          child: Text(l10n.commonRetry),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

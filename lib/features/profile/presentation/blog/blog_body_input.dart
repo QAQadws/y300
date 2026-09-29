@@ -10,11 +10,13 @@ class BlogBodyInput extends StatefulWidget {
     required this.enabled,
     required this.readOnly,
     required this.onChanged,
+    this.minLines = 8,
   });
   final String html;
   final bool enabled;
   final bool readOnly;
   final ValueChanged<String> onChanged;
+  final int minLines;
   @override
   State<BlogBodyInput> createState() => _BlogBodyInputState();
 }
@@ -73,27 +75,6 @@ class _BlogBodyInputState extends State<BlogBodyInput> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            ChoiceChip(
-              key: const Key('blog-body-text-mode'),
-              label: Text(l10n.profileBlogPlainText),
-              selected: !_htmlMode,
-              onSelected: widget.enabled && canUseText
-                  ? (_) => _changeMode(false)
-                  : null,
-            ),
-            ChoiceChip(
-              key: const Key('blog-body-html-mode'),
-              label: Text(l10n.profileBlogHtmlSource),
-              selected: _htmlMode,
-              onSelected: widget.enabled ? (_) => _changeMode(true) : null,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
         if (_htmlMode)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -107,7 +88,7 @@ class _BlogBodyInputState extends State<BlogBodyInput> {
           controller: _text,
           enabled: widget.enabled,
           readOnly: widget.readOnly,
-          minLines: 8,
+          minLines: widget.minLines,
           maxLines: null,
           keyboardType: TextInputType.multiline,
           textInputAction: TextInputAction.newline,
@@ -115,16 +96,84 @@ class _BlogBodyInputState extends State<BlogBodyInput> {
           enableSuggestions: !_htmlMode,
           smartDashesType: SmartDashesType.disabled,
           smartQuotesType: SmartQuotesType.disabled,
-          style: TextStyle(color: native.body),
+          style: TextStyle(
+            color: native.body,
+            fontSize: 16,
+            height: 1.6,
+            fontFamily: _htmlMode ? 'monospace' : null,
+          ),
           decoration: InputDecoration(
-            labelText: l10n.profileBlogBody,
-            alignLabelWithHint: true,
+            hintText: _htmlMode
+                ? l10n.profileBlogHtmlSource
+                : l10n.profileBlogStartWriting,
+            hintStyle: TextStyle(color: native.supportingText),
+            filled: false,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
           ),
           onChanged: (text) {
             if (!widget.enabled || widget.readOnly) return;
             _source = _htmlMode ? text : BlogBodyTextCodec.encode(text);
             widget.onChanged(_source);
           },
+        ),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: PopupMenuButton<bool>(
+            key: const Key('blog-body-mode-menu'),
+            enabled: widget.enabled,
+            tooltip: l10n.composerSourceMode,
+            initialValue: _htmlMode,
+            onSelected: _changeMode,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                key: const Key('blog-body-text-mode'),
+                value: false,
+                enabled: canUseText,
+                child: Text(l10n.profileBlogPlainText),
+              ),
+              PopupMenuItem(
+                key: const Key('blog-body-html-mode'),
+                value: true,
+                child: Text(l10n.profileBlogHtmlSource),
+              ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _htmlMode ? Icons.code : Icons.notes,
+                    size: 18,
+                    color: native.supportingText,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      _htmlMode
+                          ? l10n.profileBlogHtmlSource
+                          : l10n.profileBlogPlainText,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: native.supportingText,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.expand_more,
+                    size: 18,
+                    color: native.supportingText,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );

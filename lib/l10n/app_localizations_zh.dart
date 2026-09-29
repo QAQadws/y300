@@ -4537,6 +4537,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogBody => '正文';
 
   @override
+  String get profileBlogStartWriting => '写下想记录的事…';
+
+  @override
+  String get profileBlogPublishSettings => '发布设置';
+
+  @override
   String get profileBlogSubject => '标题';
 
   @override
@@ -9196,6 +9202,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogBody => '內文';
+
+  @override
+  String get profileBlogStartWriting => '寫下想記錄的事…';
+
+  @override
+  String get profileBlogPublishSettings => '發佈設定';
 
   @override
   String get profileBlogSubject => '標題';
