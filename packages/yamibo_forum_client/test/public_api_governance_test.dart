@@ -101,6 +101,9 @@ void main() {
             ..sort();
 
       expect(ignored, <String>[
+        'lib/src/adapters/account_summary_snapshot_codec.dart',
+        'lib/src/adapters/discuz_account_summary_adapter.dart',
+        'lib/src/adapters/discuz_account_summary_parser.dart',
         'lib/src/adapters/discuz_api_client.dart',
         'lib/src/adapters/discuz_comic_read_adapters.dart',
         'lib/src/adapters/discuz_directory_adapters.dart',
