@@ -24,6 +24,10 @@ abstract final class PreferenceKeys {
   static const forumShellMode = PreferenceKey<String>(
     PreferenceKeyNames.forumShellMode,
   );
+  static PreferenceKey<bool> dailyAutoSignInEnabledForUid(String userId) =>
+      PreferenceKey<bool>(
+        '${PreferenceKeyNames.dailyAutoSignInEnabledV1Prefix}$userId',
+      );
   static const threadQuickScrollDockSide = PreferenceKey<String>(
     PreferenceKeyNames.threadQuickScrollDockSide,
   );

@@ -119,6 +119,7 @@ final class ForumSnapshotPolicy {
   const ForumSnapshotPolicy({
     required this.freshFor,
     required this.keepStaleFor,
+    this.retainLongTerm = false,
   });
 
   /// Fresh for.
@@ -126,6 +127,9 @@ final class ForumSnapshotPolicy {
 
   /// Keep stale for.
   final Duration keepStaleFor;
+
+  /// Retained outside ordinary clearing and capacity eviction.
+  final bool retainLongTerm;
 }
 
 /// Versioned codec for source-neutral parsed snapshots.
@@ -290,7 +294,7 @@ final class MemoryForumSnapshotStore implements ForumSnapshotStore {
       createdAt: now,
       updatedAt: now,
       staleAt: now.add(policy.freshFor),
-      expiresAt: now.add(policy.keepStaleFor),
+      expiresAt: policy.retainLongTerm ? null : now.add(policy.keepStaleFor),
     );
   }
 

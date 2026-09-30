@@ -62,6 +62,7 @@ class YamiboHttpGateway {
     CancelToken? cancelToken,
     bool? followRedirects,
     ValidateStatus? validateStatus,
+    bool allowWafReplay = true,
   }) async {
     return _request<String>(
       method: 'GET',
@@ -72,6 +73,7 @@ class YamiboHttpGateway {
       cancelToken: cancelToken,
       followRedirects: followRedirects,
       validateStatus: validateStatus,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (data) => data?.toString() ?? '',
     );
   }
@@ -81,6 +83,8 @@ class YamiboHttpGateway {
     required YamiboRequestContext context,
     Map<String, String>? headers,
     CancelToken? cancelToken,
+    bool? followRedirects,
+    bool allowWafReplay = true,
   }) async {
     return _request<Object?>(
       method: 'GET',
@@ -89,6 +93,8 @@ class YamiboHttpGateway {
       headers: headers,
       responseType: ResponseType.json,
       cancelToken: cancelToken,
+      followRedirects: followRedirects,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (data) => data,
     );
   }
@@ -98,6 +104,8 @@ class YamiboHttpGateway {
     required YamiboRequestContext context,
     Map<String, String>? headers,
     CancelToken? cancelToken,
+    bool? followRedirects,
+    bool allowWafReplay = true,
   }) async {
     return _request<List<int>>(
       method: 'GET',
@@ -106,6 +114,8 @@ class YamiboHttpGateway {
       headers: headers,
       responseType: ResponseType.bytes,
       cancelToken: cancelToken,
+      followRedirects: followRedirects,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (data) {
         if (data is List<int>) {
           return data;
@@ -444,6 +454,7 @@ class YamiboHttpGateway {
     Options? options,
     bool? followRedirects,
     ValidateStatus? validateStatus,
+    bool allowWafReplay = true,
   }) async {
     return _request<String>(
       uri,
@@ -456,6 +467,7 @@ class YamiboHttpGateway {
       contentType: options?.contentType ?? Headers.formUrlEncodedContentType,
       followRedirects: followRedirects ?? options?.followRedirects,
       validateStatus: validateStatus ?? options?.validateStatus,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (responseData) => responseData?.toString() ?? '',
     );
   }
@@ -469,6 +481,7 @@ class YamiboHttpGateway {
     Options? options,
     bool? followRedirects,
     ValidateStatus? validateStatus,
+    bool allowWafReplay = true,
   }) async {
     return _request<String>(
       uri,
@@ -481,6 +494,7 @@ class YamiboHttpGateway {
       contentType: options?.contentType ?? Headers.formUrlEncodedContentType,
       followRedirects: followRedirects ?? options?.followRedirects,
       validateStatus: validateStatus ?? options?.validateStatus,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (responseData) => responseData?.toString() ?? '',
     );
   }
@@ -494,6 +508,7 @@ class YamiboHttpGateway {
     Options? options,
     bool? followRedirects,
     ValidateStatus? validateStatus,
+    bool allowWafReplay = true,
   }) async {
     return _request<Object?>(
       uri,
@@ -506,6 +521,7 @@ class YamiboHttpGateway {
       contentType: options?.contentType ?? Headers.formUrlEncodedContentType,
       followRedirects: followRedirects ?? options?.followRedirects,
       validateStatus: validateStatus ?? options?.validateStatus,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (responseData) => responseData,
     );
   }
@@ -518,6 +534,7 @@ class YamiboHttpGateway {
     CancelToken? cancelToken,
     Options? options,
     ProgressCallback? onSendProgress,
+    bool allowWafReplay = true,
   }) async {
     return _request<Object?>(
       uri,
@@ -531,6 +548,7 @@ class YamiboHttpGateway {
       followRedirects: options?.followRedirects,
       validateStatus: options?.validateStatus,
       onSendProgress: onSendProgress,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (responseData) => responseData,
     );
   }
@@ -547,6 +565,7 @@ class YamiboHttpGateway {
     CancelToken? cancelToken,
     Options? options,
     ProgressCallback? onSendProgress,
+    bool allowWafReplay = true,
   }) async {
     return _request<Object?>(
       uri,
@@ -560,6 +579,7 @@ class YamiboHttpGateway {
       followRedirects: options?.followRedirects,
       validateStatus: options?.validateStatus,
       onSendProgress: onSendProgress,
+      allowWafReplay: allowWafReplay,
       normalizeBody: (responseData) => responseData,
     );
   }
@@ -578,6 +598,7 @@ class YamiboHttpGateway {
     bool? followRedirects,
     ValidateStatus? validateStatus,
     ProgressCallback? onSendProgress,
+    bool allowWafReplay = true,
     int attempt = 0,
   }) async {
     final startedAt = DateTime.now();
@@ -618,7 +639,7 @@ class YamiboHttpGateway {
         statusCode: response.statusCode,
       );
       if (challengeEvidence != null) {
-        final recovery = attempt == 0
+        final recovery = allowWafReplay && attempt == 0
             ? await _recoverSecurityChallenge(
                 uri: response.requestOptions.uri,
                 method: response.requestOptions.method,
@@ -635,7 +656,9 @@ class YamiboHttpGateway {
           statusCode: response.statusCode,
           evidence: challengeEvidence.name,
           willRetry: recovered,
-          recovery: recovery?.name ?? 'retryLimitReached',
+          recovery:
+              recovery?.name ??
+              (allowWafReplay ? 'retryLimitReached' : 'replayDisabled'),
         );
         if (recovered) {
           return _request<T>(
@@ -652,6 +675,7 @@ class YamiboHttpGateway {
             followRedirects: followRedirects,
             validateStatus: validateStatus,
             onSendProgress: onSendProgress,
+            allowWafReplay: allowWafReplay,
             attempt: attempt + 1,
           );
         }
@@ -693,7 +717,7 @@ class YamiboHttpGateway {
         statusCode: response?.statusCode,
       );
       if (challengeEvidence != null) {
-        final recovery = attempt == 0
+        final recovery = allowWafReplay && attempt == 0
             ? await _recoverSecurityChallenge(
                 uri: error.requestOptions.uri,
                 method: error.requestOptions.method,
@@ -710,7 +734,9 @@ class YamiboHttpGateway {
           statusCode: response?.statusCode,
           evidence: challengeEvidence.name,
           willRetry: recovered,
-          recovery: recovery?.name ?? 'retryLimitReached',
+          recovery:
+              recovery?.name ??
+              (allowWafReplay ? 'retryLimitReached' : 'replayDisabled'),
         );
         if (recovered) {
           return _request<T>(
@@ -727,6 +753,7 @@ class YamiboHttpGateway {
             followRedirects: followRedirects,
             validateStatus: validateStatus,
             onSendProgress: onSendProgress,
+            allowWafReplay: allowWafReplay,
             attempt: attempt + 1,
           );
         }
@@ -750,12 +777,12 @@ class YamiboHttpGateway {
         error: error,
       );
       return ApiFailure(_mapDioError(error));
-    } catch (error) {
-      return ApiFailure(
+    } catch (_) {
+      return const ApiFailure(
         ApiError(
           type: ApiErrorType.unknown,
-          message: '未知错误: $error',
-          raw: error,
+          message: 'network.unknown',
+          code: 'network_unknown',
         ),
       );
     }
@@ -829,7 +856,12 @@ class YamiboHttpGateway {
   ApiError _mapDioError(DioException error) {
     final statusCode = error.response?.statusCode;
     final responseData = error.response?.data;
-    final rawError = responseData ?? error.error;
+    // Dio exceptions can embed the original URI, including a one-use sign
+    // value. Keep this command's diagnostics stable and free of raw payloads.
+    final containsSign = error.requestOptions.uri.queryParameters.keys.any(
+      (name) => name.toLowerCase() == 'sign',
+    );
+    final rawError = containsSign ? null : responseData ?? error.error;
 
     if (error.type == DioExceptionType.cancel) {
       return ApiError(
@@ -881,7 +913,9 @@ class YamiboHttpGateway {
 
     return ApiError(
       type: ApiErrorType.network,
-      message: '网络异常: ${error.message ?? 'unknown'}',
+      message: containsSign
+          ? 'network.failure'
+          : '网络异常: ${error.message ?? 'unknown'}',
       statusCode: statusCode,
       raw: rawError,
     );

@@ -22,6 +22,15 @@ final class CurrentUserProfileQuery {
   const CurrentUserProfileQuery();
 }
 
+/// Query for a summary of the verified current account.
+final class CurrentAccountSummaryQuery {
+  /// Creates a query scoped to the caller's verified user identity.
+  const CurrentAccountSummaryQuery({required this.userId});
+
+  /// Expected authenticated user identifier.
+  final String userId;
+}
+
 /// Source-neutral current user profile data.
 final class CurrentUserProfileData {
   /// Creates a [CurrentUserProfileData].
@@ -29,9 +38,11 @@ final class CurrentUserProfileData {
     required this.identity,
     this.avatarUrl,
     this.groupId,
+    this.groupName,
     this.creditTotal,
     this.postCount,
     this.threadCount,
+    this.replyCount,
   });
 
   /// Identity.
@@ -43,14 +54,20 @@ final class CurrentUserProfileData {
   /// Group id.
   final String? groupId;
 
+  /// User group display name as plain text, without server markup.
+  final String? groupName;
+
   /// Credit total.
   final int? creditTotal;
 
-  /// Post count.
+  /// Total posts, including thread-opening posts when provided by the source.
   final int? postCount;
 
   /// Thread count.
   final int? threadCount;
+
+  /// Replies excluding thread-opening posts.
+  final int? replyCount;
 }
 
 /// Capabilities exposed by current user profile.
@@ -75,6 +92,12 @@ enum CurrentUserProfileCapability {
 
   /// Thread count.
   threadCount,
+
+  /// User group display name.
+  groupName,
+
+  /// Replies excluding thread-opening posts.
+  replyCount,
 }
 
 /// Capabilities declared by the current user profile source.
@@ -125,6 +148,31 @@ abstract interface class CurrentUserProfileRepository {
   });
 }
 
+/// Reads a presentation summary without changing the authentication API source.
+abstract interface class CurrentAccountSummaryRepository {
+  /// Capabilities declared by this source.
+  CurrentUserProfileSourceCapabilities get capabilities;
+
+  /// Loads the expected account. The standard source is network-only for all
+  /// cache policies and validates both the viewer and the profile identity.
+  Future<
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+  >
+  load(
+    CurrentAccountSummaryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  });
+}
+
+/// Optional local projection for display only; never proves authentication.
+abstract interface class CurrentAccountSummaryCacheReader {
+  /// Reads the last validated summary without any network request.
+  Future<
+    DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>?
+  >
+  readCached(CurrentAccountSummaryQuery query);
+}
+
 /// Values describing forum user profile view.
 enum ForumUserProfileView {
   /// Public.
@@ -132,6 +180,30 @@ enum ForumUserProfileView {
 
   /// Self.
   self,
+}
+
+/// Available actions on a verified user's own forum profile.
+enum ForumUserProfileActionKind {
+  /// Topics created by the user.
+  threads,
+
+  /// Blog entries created by the user.
+  blogs,
+
+  /// Forum favorites, distinct from local app favorites.
+  forumFavorites,
+
+  /// Private messages.
+  messages,
+
+  /// Friends.
+  friends,
+
+  /// Forum account settings.
+  settings,
+
+  /// Credit transaction history.
+  creditHistory,
 }
 
 /// Query parameters for forum user profile.
@@ -163,6 +235,7 @@ final class ForumUserProfileData {
     required this.identity,
     required this.metrics,
     required this.details,
+    this.actions = const [],
     this.avatarUrl,
     this.coverUrl,
     this.signatureHtml,
@@ -185,6 +258,9 @@ final class ForumUserProfileData {
 
   /// Details.
   final List<ForumUserProfileDetail> details;
+
+  /// Actions advertised by the verified self-profile, in server order.
+  final List<ForumUserProfileActionKind> actions;
 }
 
 /// Source-neutral forum user profile metric.
@@ -233,6 +309,9 @@ enum ForumUserProfileCapability {
 
   /// Ordered details.
   orderedDetails,
+
+  /// Ordered, validated self-profile actions.
+  orderedActions,
 }
 
 /// Capabilities declared by the forum user profile source.

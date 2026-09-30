@@ -5,6 +5,7 @@ import '../contracts/forum_authentication.dart';
 import '../contracts/forum_image_attachments.dart';
 import '../contracts/comic_contracts.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_daily_sign_in.dart';
 import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_tag_directory.dart';
@@ -33,6 +34,7 @@ import 'discuz_image_attachment_adapters.dart';
 import 'discuz_api_client.dart';
 import 'discuz_comic_read_adapters.dart';
 import 'discuz_directory_adapters.dart';
+import 'discuz_daily_sign_in_adapter.dart';
 import 'discuz_favorite_commands.dart';
 import 'discuz_forum_tag_directory_repository.dart';
 import 'discuz_forum_directory_html_repository.dart';
@@ -40,6 +42,7 @@ import 'discuz_forum_home_html_repository.dart';
 import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
+import 'discuz_account_summary_adapter.dart';
 import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
 import 'discuz_thread_poll_vote_command.dart';
@@ -330,6 +333,29 @@ final class ForumClientAdapterFactory {
   /// Creates the current authenticated user profile source.
   CurrentUserProfileRepository createCurrentUserProfile() =>
       DiscuzCurrentUserProfileRepository(_api);
+
+  /// Creates the verified current account's desktop HTML summary source.
+  CurrentAccountSummaryRepository createCurrentAccountSummary() =>
+      DiscuzCurrentAccountSummaryRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+        snapshotStore: snapshotStore,
+      );
+
+  /// Creates network-only read and command ports for daily sign-in.
+  ({ForumDailySignInRepository repository, ForumDailySignInCommand command})
+  createDailySignIn() {
+    final adapter = DiscuzDailySignInAdapter(
+      config: config,
+      network: network,
+      requestProfiles: requestProfiles,
+    );
+    return (
+      repository: DiscuzDailySignInRepository(adapter),
+      command: DiscuzDailySignInCommandAdapter(adapter),
+    );
+  }
 
   /// Creates the public user-profile HTML source.
   ForumUserProfileRepository createForumUserProfile() =>

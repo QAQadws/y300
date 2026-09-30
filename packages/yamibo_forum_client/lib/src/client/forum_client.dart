@@ -5,6 +5,7 @@ import '../contracts/data_command_contract.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_daily_sign_in.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_image_attachments.dart';
 import '../contracts/forum_authentication.dart';
@@ -161,6 +162,17 @@ final class YamiboForumClient {
   /// Configured current-user profile source, if installed.
   CurrentUserProfileRepository? get currentUserProfile =>
       sourcePlan.currentUserProfile;
+
+  /// Configured verified account-summary source, if installed.
+  CurrentAccountSummaryRepository? get currentAccountSummary =>
+      sourcePlan.currentAccountSummary;
+
+  /// Configured network-only daily sign-in status source, if installed.
+  ForumDailySignInRepository? get dailySignIn => sourcePlan.dailySignIn;
+
+  /// Configured ordinary daily sign-in command, if installed.
+  ForumDailySignInCommand? get dailySignInCommand =>
+      sourcePlan.dailySignInCommand;
 
   /// Configured public-profile source, if installed.
   ForumUserProfileRepository? get forumUserProfile =>
@@ -549,6 +561,60 @@ final class YamiboForumClient {
   }) =>
       sourcePlan.currentUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
+
+  /// Loads the verified account's presentation summary.
+  Future<
+    DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>?
+  >
+  readCachedCurrentAccountSummary(CurrentAccountSummaryQuery query) async {
+    final repository = sourcePlan.currentAccountSummary;
+    return repository is CurrentAccountSummaryCacheReader
+        ? (repository as CurrentAccountSummaryCacheReader).readCached(query)
+        : null;
+  }
+
+  /// Loads the verified account's presentation summary from the network.
+  Future<
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+  >
+  loadCurrentAccountSummary(
+    CurrentAccountSummaryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) =>
+      sourcePlan.currentAccountSummary?.load(query, cachePolicy: cachePolicy) ??
+      unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
+
+  /// Loads a fresh sign-in page without any document-cache fallback.
+  Future<
+    DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
+  >
+  loadDailySignIn(ForumDailySignInQuery query) =>
+      sourcePlan.dailySignIn?.load(query) ??
+      unsupported<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>();
+
+  /// Prepares one network read for display and a short-lived submission.
+  Future<
+    DataReadResult<
+      ForumDailySignInPreparation,
+      ForumDailySignInReadCapabilities
+    >
+  >
+  prepareDailySignIn(ForumDailySignInQuery query) {
+    final repository = sourcePlan.dailySignIn;
+    return repository is ForumDailySignInPreparationRepository
+        ? (repository as ForumDailySignInPreparationRepository).prepare(query)
+        : unsupported<
+            ForumDailySignInPreparation,
+            ForumDailySignInReadCapabilities
+          >();
+  }
+
+  /// Attempts one ordinary sign-in using a fresh page-local action.
+  Future<DataCommandResult<ForumDailySignInReceipt>> signInToday(
+    ForumDailySignInRequest request,
+  ) =>
+      sourcePlan.dailySignInCommand?.execute(request) ??
+      Future.value(const DataCommandUnsupported<ForumDailySignInReceipt>());
 
   /// Loads forum user profile and returns a structured result.
   Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>
