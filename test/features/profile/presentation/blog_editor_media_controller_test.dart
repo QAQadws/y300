@@ -39,6 +39,106 @@ void main() {
   });
 
   test(
+    'draft images get fresh receipts without insertion or local files',
+    () async {
+      final media = make();
+      addTearDown(media.dispose);
+      final uri = Uri.parse('https://example.test/album/1.png');
+      final restoring = media.restoreDraftImages([
+        UserBlogDraftImageReference(picId: '1', originalUri: uri),
+      ]);
+      expect(media.value.verifyingDraft, isTrue);
+      expect(media.canPublish('<img src="$uri">'), isFalse);
+      service.restoration!.complete(
+        DataReadSuccess(
+          data: UserBlogDraftImageRestoration(
+            images: [_image('1')],
+            missingPicIds: const {},
+          ),
+          capabilities: null,
+          metadata: const DataReadMetadata.network(),
+        ),
+      );
+      await restoring;
+      expect(media.canPublish('<img src="$uri">'), isTrue);
+      expect(media.uploadedImages, hasLength(1));
+      expect(inserted, isEmpty);
+      expect(media.previewPaths, isEmpty);
+      expect(service.requests, isEmpty);
+    },
+  );
+
+  test(
+    'missing restored image keeps reference blocked until removal or retry',
+    () async {
+      final media = make();
+      addTearDown(media.dispose);
+      final uri = Uri.parse('https://example.test/album/1.png');
+      final restoring = media.restoreDraftImages([
+        UserBlogDraftImageReference(picId: '1', originalUri: uri),
+      ]);
+      service.restoration!.complete(
+        const DataReadSuccess(
+          data: UserBlogDraftImageRestoration(images: [], missingPicIds: {'1'}),
+          capabilities: null,
+          metadata: DataReadMetadata.network(),
+        ),
+      );
+      await restoring;
+      expect(media.canPublish('<img src="$uri">'), isFalse);
+      expect(media.canPublish('<p>removed</p>'), isTrue);
+      final retry = media.retryDraftImages();
+      service.restoration!.complete(
+        DataReadSuccess(
+          data: UserBlogDraftImageRestoration(
+            images: [_image('1')],
+            missingPicIds: const {},
+          ),
+          capabilities: null,
+          metadata: const DataReadMetadata.network(),
+        ),
+      );
+      await retry;
+      expect(media.canPublish('<img src="$uri">'), isTrue);
+    },
+  );
+
+  for (final invalidate in ['reset', 'expire', 'replace', 'dispose']) {
+    test('late restoration cannot survive $invalidate', () async {
+      final media = make();
+      final uri = Uri.parse('https://example.test/album/1.png');
+      final restoring = media.restoreDraftImages([
+        UserBlogDraftImageReference(picId: '1', originalUri: uri),
+      ]);
+      switch (invalidate) {
+        case 'reset':
+          media.reset();
+        case 'expire':
+          actor = '202';
+          media.expire();
+        case 'replace':
+          prepared = _preparation();
+        case 'dispose':
+          media.dispose();
+      }
+      service.restoration!.complete(
+        DataReadSuccess(
+          data: UserBlogDraftImageRestoration(
+            images: [_image('1')],
+            missingPicIds: const {},
+          ),
+          capabilities: null,
+          metadata: const DataReadMetadata.network(),
+        ),
+      );
+      await restoring;
+      expect(media.uploadedImages, isEmpty);
+      expect(inserted, isEmpty);
+      if (invalidate != 'dispose') media.dispose();
+    });
+  }
+
+  test(
     'serial uploads preserve picker order and borrow local preview files',
     () async {
       final media = make();
@@ -339,7 +439,21 @@ final class _Picker implements ComposerImagePicker {
   }
 }
 
-final class _MediaService implements UserBlogMediaOperations {
+final class _MediaService
+    implements UserBlogMediaOperations, UserBlogDraftImageRestorer {
+  Completer<DataReadResult<UserBlogDraftImageRestoration, Object?>>?
+  restoration;
+  @override
+  Future<DataReadResult<UserBlogDraftImageRestoration, Object?>>
+  restoreDraftImages(
+    UserBlogEditorPreparation preparation, {
+    required List<UserBlogDraftImageReference> images,
+    ForumRequestCancellation? cancellation,
+  }) {
+    restoration = Completer();
+    return restoration!.future;
+  }
+
   final requests =
       <
         ({

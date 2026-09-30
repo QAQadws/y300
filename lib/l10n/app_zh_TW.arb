@@ -1468,5 +1468,17 @@
   "profileBlogCategoryUnavailable": "所選分類已無法使用，請重新選擇。",
   "profileBlogNewCategoryUnavailable": "目前無法新增個人分類，請選擇既有分類。",
   "profileBlogCategoryConflict": "請選擇既有分類或新增分類，不能同時使用。",
-  "profileBlogFeedUnavailable": "目前無法發佈動態，請關閉此選項後重試。"
+  "profileBlogFeedUnavailable": "目前無法發佈動態，請關閉此選項後重試。",
+  "profileBlogDraftLoadFailed": "草稿載入失敗，已有內容未被覆蓋。請重試或重設草稿。",
+  "profileBlogDraftSaveFailed": "草稿儲存失敗，請重試後再離開。",
+  "profileBlogDraftPasswordRestored": "已恢復日誌草稿，請重新輸入存取密碼。",
+  "profileBlogDraftPending": "上次發佈結果尚未確認。請先檢查我的日誌，避免重複發佈。",
+  "profileBlogDraftResume": "確認未發佈，繼續編輯",
+  "profileBlogDraftResumeConfirm": "請確認已檢查我的日誌，且上次內容尚未發佈。繼續後可再次提交。",
+  "profileBlogDraftImagesChecking": "正在驗證草稿圖片…",
+  "profileBlogDraftImagesUnavailable": "部分草稿圖片未能確認可用。請重試驗證，或移除並替換這些圖片後發佈。",
+  "moreStorageBlogDraft": "日誌草稿（{count}）",
+  "@moreStorageBlogDraft": {"placeholders": {"count": {"type": "int"}}},
+  "profileBlogDraftSettingsChanged": "分類或發佈權限已變化，請調整發佈設定。已保留你的內容和原有選擇。",
+  "profileBlogDraftCleanupFailed": "日誌已發佈，但本機草稿清理失敗。再次開啟時請先檢查「我的日誌」，避免重複發佈。"
 }

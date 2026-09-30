@@ -15,6 +15,7 @@ class BlogEditorFields extends StatelessWidget {
     required this.creatingCategory,
     required this.bodyController,
     this.mediaBusy = false,
+    this.locked = false,
     this.imagePreviews = const {},
     required this.onChanged,
     this.bodyMinLines = 12,
@@ -25,6 +26,7 @@ class BlogEditorFields extends StatelessWidget {
   final bool creatingCategory;
   final BlogRichTextController bodyController;
   final bool mediaBusy;
+  final bool locked;
   final Map<String, String> imagePreviews;
   final int bodyMinLines;
   // Resolve edits against the latest draft, including before the next frame.
@@ -36,6 +38,7 @@ class BlogEditorFields extends StatelessWidget {
     final native = theme.y300NativeContent;
     final l10n = AppLocalizations.of(context);
     final readOnly =
+        locked ||
         state.phase == BlogEditorPhase.unknown ||
         state.phase == BlogEditorPhase.applied;
     return Column(

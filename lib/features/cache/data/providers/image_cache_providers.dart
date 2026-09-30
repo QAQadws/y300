@@ -1,3 +1,4 @@
+import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -223,6 +224,7 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
       ),
       ComposerDraftStorageAccountingAdapter(
         databaseProvider: ref.watch(composerDraftDatabaseManagerProvider).open,
+        blogDraftRepository: ref.watch(blogDraftRepositoryProvider),
       ),
       DownloadStorageAccountingAdapter(
         storageService: ref.watch(downloadStorageServiceProvider),

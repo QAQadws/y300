@@ -6,6 +6,12 @@ import 'package:y300/features/composer_shared/data/providers/composer_providers.
 import 'package:y300/features/profile/presentation/blog/blog_editor_media_controller.dart';
 import 'package:y300/features/profile/presentation/blog/blog_rich_text_controller.dart';
 import 'package:y300/features/profile/presentation/blog/blog_rich_text_toolbar.dart';
+import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
+import 'package:y300/features/profile/domain/models/blog_draft_snapshot.dart';
+import 'package:y300/features/profile/presentation/blog/blog_draft_coordinator.dart';
+import 'package:y300/features/profile/presentation/blog/blog_draft_mapper.dart';
+import 'package:y300/features/profile/presentation/blog/blog_draft_status.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
@@ -15,7 +21,6 @@ import 'package:y300/features/profile/presentation/blog/blog_editor_fields.dart'
 import 'package:y300/features/profile/presentation/blog/blog_editor_preview.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_settings.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
-import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
@@ -30,10 +35,18 @@ class BlogEditorPage extends ConsumerStatefulWidget {
   ConsumerState<BlogEditorPage> createState() => _BlogEditorPageState();
 }
 
-class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
+class _BlogEditorPageState extends ConsumerState<BlogEditorPage>
+    with WidgetsBindingObserver {
   late final BlogEditorController _controller;
   late final BlogRichTextController _body;
   BlogEditorMediaController? _media;
+  BlogDraftCoordinator? _drafts;
+  bool _restoringDraft = false;
+  bool _didRestoreDraft = false;
+  bool _preparingEditor = false;
+  bool _closing = false;
+  bool _resettingDraft = false;
+  bool _allowPop = false;
   final _subject = TextEditingController();
   final _tags = TextEditingController();
   final _categoryName = TextEditingController();
@@ -52,10 +65,28 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (widget.target.action == UserBlogAction.create) {
+      _drafts = BlogDraftCoordinator(
+        accountId: widget.target.actorUserId,
+        repository: ref.read(blogDraftRepositoryProvider),
+      )..addListener(_draftChanged);
+    }
     _controller = BlogEditorController(
       target: widget.target,
       service: ref.read(userBlogOperationsProvider),
       currentActor: () => ref.read(blogAccountIdProvider),
+      persistBeforeSubmit: _drafts == null
+          ? null
+          : (draft) async {
+              _drafts!.update(
+                draft,
+                changed: true,
+                creatingCategory: _creatingCategory,
+                images: _imageHints(),
+              );
+              return _drafts!.setPending(true);
+            },
     );
     _body = BlogRichTextController(
       onChanged: (html) =>
@@ -81,13 +112,117 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     _controller.addListener(_syncInputs);
     ref.listenManual(blogAccountIdProvider, (_, actor) {
       if (actor != widget.target.actorUserId) {
+        _drafts?.expire();
         _receipt = null;
         _body.expire();
         _media?.expire();
         _controller.expire();
       }
     });
-    unawaited(_controller.prepare());
+    unawaited(_prepareEditor());
+  }
+
+  Future<void> _prepareEditor() async {
+    if (_preparingEditor ||
+        _leaving ||
+        _controller.value.phase == BlogEditorPhase.expired) {
+      return;
+    }
+    _preparingEditor = true;
+    _restoringDraft = true;
+    try {
+      if (_drafts != null && !_drafts!.loaded && !await _drafts!.load()) return;
+      if (!mounted || _leaving) return;
+      await _controller.prepare();
+      if (!mounted || _controller.value.phase != BlogEditorPhase.ready) return;
+      if (!_didRestoreDraft) {
+        _didRestoreDraft = true;
+        final saved = _drafts?.snapshot;
+        if (saved != null) {
+          _creatingCategory = saved.creatingCategory;
+          _controller.restoreDraft(restoreBlogDraft(saved));
+          unawaited(
+            _media?.restoreDraftImages([
+                  for (final image in saved.images)
+                    UserBlogDraftImageReference(
+                      picId: image.picId,
+                      originalUri: image.originalUri,
+                    ),
+                ]) ??
+                Future.value(),
+          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted ||
+                _controller.value.phase == BlogEditorPhase.expired) {
+              return;
+            }
+            final l10n = AppLocalizations.of(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  saved.visibility == UserBlogVisibility.passwordProtected
+                      ? l10n.profileBlogDraftPasswordRestored
+                      : l10n.composerRestoredDraft,
+                ),
+              ),
+            );
+          });
+        }
+      }
+    } finally {
+      _restoringDraft = false;
+      _preparingEditor = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _draftChanged() {
+    if (mounted) setState(() {});
+  }
+
+  List<BlogDraftImage> _imageHints() => [
+    for (final image in _media?.uploadedImages ?? <UserBlogUploadedImage>[])
+      BlogDraftImage(picId: image.picId, originalUri: image.originalImageUri),
+  ];
+
+  void _saveDraftInput() {
+    if (_resettingDraft ||
+        _restoringDraft ||
+        !{
+          BlogEditorPhase.ready,
+          BlogEditorPhase.failed,
+        }.contains(_controller.value.phase)) {
+      return;
+    }
+    _drafts?.update(
+      _controller.value.draft,
+      changed: _controller.value.dirty,
+      creatingCategory: _creatingCategory,
+      images: _imageHints(),
+    );
+  }
+
+  bool get _imagesReady =>
+      _media?.canPublish(_controller.value.draft.bodyHtml) ??
+      (_drafts?.snapshot?.images.isEmpty ?? true);
+
+  bool get _draftSettingsChanged {
+    final options = _controller.value.options;
+    if (_drafts?.snapshot == null || options == null) return false;
+    final draft = _controller.value.draft;
+    // Validate settings independently of an incomplete title or body.
+    if (_creatingCategory && !options.canCreateCategory) return true;
+    final issue = options.validateSettings(draft);
+    return issue != null &&
+        issue != BlogEditorIssue.passwordRequired &&
+        issue != BlogEditorIssue.targetNamesRequired;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && _drafts?.loaded == true) {
+      unawaited(_drafts!.flush());
+    }
   }
 
   @override
@@ -114,10 +249,14 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
         );
       }
     }
+    _saveDraftInput();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _drafts?.removeListener(_draftChanged);
+    _drafts?.dispose();
     _media?.removeListener(_mediaChanged);
     _media?.dispose();
     _body.dispose();
@@ -132,7 +271,12 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
   }
 
   Future<void> _submit() async {
-    if (_media?.value.busy == true) return;
+    if (_resettingDraft ||
+        _media?.value.busy == true ||
+        !_imagesReady ||
+        _drafts?.pending == true) {
+      return;
+    }
     FocusScope.of(context).unfocus();
     if (_creatingCategory && _categoryName.text.trim().isEmpty) {
       setState(() => _categoryNameRequired = true);
@@ -142,6 +286,23 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     final receipt = await _controller.submit(
       uploadedImages: _media?.uploadedImages ?? const [],
     );
+    if (receipt != null) {
+      final cleared = await _drafts?.complete();
+      if (mounted && cleared == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).profileBlogDraftCleanupFailed,
+            ),
+          ),
+        );
+      }
+    } else if (_drafts?.pending == true &&
+        _controller.value.phase != BlogEditorPhase.unknown &&
+        _controller.value.phase != BlogEditorPhase.expired &&
+        _controller.value.phase != BlogEditorPhase.submitting) {
+      await _drafts!.setPending(false);
+    }
     if (!mounted || _leaving) return;
     if (receipt == null) {
       final issue = _controller.value.issue;
@@ -174,6 +335,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
   }
 
   void _mediaChanged() {
+    _saveDraftInput();
     if (mounted) setState(() {});
   }
 
@@ -261,6 +423,32 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
   }
 
   Future<void> _confirmLeave() async {
+    if (_drafts != null) {
+      if (_closing || _dialogOpen) return;
+      _closing = true;
+      _media?.cancel();
+      FocusScope.of(context).unfocus();
+      final saved = !_drafts!.loaded || await _drafts!.flush();
+      _closing = false;
+      if (!mounted) return;
+      if (!saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).profileBlogDraftSaveFailed,
+            ),
+          ),
+        );
+        return;
+      }
+      if (_receipt != null) {
+        _scheduleFinish();
+        return;
+      }
+      setState(() => _allowPop = true);
+      Navigator.of(context).pop();
+      return;
+    }
     if (_dialogOpen) return;
     final l10n = AppLocalizations.of(context);
     final uncertain =
@@ -301,6 +489,8 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
         }.contains(_controller.value.phase)) {
       return;
     }
+    if (_drafts != null && !await _drafts!.flush()) return;
+    if (!mounted) return;
     await openBlogWebPage(
       context,
       ref,
@@ -316,6 +506,58 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
       setState(() => _categoryNameRequired = false);
     }
     _controller.update(draft);
+    _saveDraftInput();
+  }
+
+  Future<void> _resetDraft() async {
+    if (_resettingDraft) return;
+    final l10n = AppLocalizations.of(context);
+    if (!await _confirm(
+      title: l10n.composerResetDraftTitle,
+      message: l10n.composerResetDraftBody,
+      confirmKey: const Key('blog-draft-reset-confirm'),
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _resettingDraft = true);
+    final reset = await _drafts!.reset();
+    if (!mounted) return;
+    setState(() => _resettingDraft = false);
+    if (!reset) return;
+    _media?.reset();
+    _creatingCategory = false;
+    _categoryNameRequired = false;
+    _controller.resetDraft();
+    if (!_drafts!.loadFailed && _controller.value.options == null) {
+      await _prepareEditor();
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _resumeDraft() async {
+    if (_controller.value.busy || _drafts?.pending != true) return;
+    final l10n = AppLocalizations.of(context);
+    if (!await _confirm(
+      title: l10n.profileBlogDraftResume,
+      message: l10n.profileBlogDraftResumeConfirm,
+      confirmKey: const Key('blog-draft-resume-confirm'),
+    )) {
+      return;
+    }
+    if (!mounted || !await _drafts!.setPending(false) || !mounted) {
+      return;
+    }
+    await _controller.resumeAfterUnknown();
+  }
+
+  void _checkPublishedLogs() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            const ProfileBlogPage(initialScope: UserBlogFeedScope.self),
+      ),
+    );
   }
 
   Future<void> _openSettings() async {
@@ -326,7 +568,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     }
     FocusScope.of(context).unfocus();
     _dialogOpen = true;
-    final openWeb = await showModalBottomSheet<bool>(
+    final action = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -349,6 +591,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                 else
                   BlogEditorSettingsFields(
                     state: state,
+                    locked: _resettingDraft || _drafts?.pending == true,
                     tags: _tags,
                     categoryName: _categoryName,
                     password: _password,
@@ -370,8 +613,15 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                     tileKey: const Key('blog-editor-open-web'),
                     icon: Icons.open_in_browser_outlined,
                     title: l10n.profileBlogOpenWeb,
-                    onPressed: () => Navigator.of(sheetContext).pop(true),
+                    onPressed: () => Navigator.of(sheetContext).pop('web'),
                   ),
+                  if (_drafts != null)
+                    ComposerSettingsActionTile(
+                      tileKey: const Key('blog-draft-reset'),
+                      icon: Icons.restart_alt,
+                      title: l10n.composerResetDraft,
+                      onPressed: () => Navigator.of(sheetContext).pop('reset'),
+                    ),
                 ],
               ],
             ),
@@ -382,7 +632,8 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
     _dialogOpen = false;
     if (!mounted) return;
     _scheduleFinish();
-    if (openWeb == true) await _openWeb();
+    if (action == 'web') await _openWeb();
+    if (action == 'reset') await _resetDraft();
   }
 
   @override
@@ -396,10 +647,13 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
       valueListenable: _controller,
       builder: (context, state, _) => PopScope<BlogEditorResult>(
         canPop:
-            !state.dirty &&
-            _media?.value.busy != true &&
-            state.phase != BlogEditorPhase.submitting &&
-            state.phase != BlogEditorPhase.unknown,
+            _allowPop ||
+            ((_drafts == null
+                    ? !state.dirty
+                    : state.phase == BlogEditorPhase.expired) &&
+                _media?.value.busy != true &&
+                state.phase != BlogEditorPhase.submitting &&
+                state.phase != BlogEditorPhase.unknown),
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) {
             _leaving = true;
@@ -443,7 +697,12 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                 key: const Key('blog-editor-submit'),
                 style: composerAppBarActionStyle(context),
                 tooltip: creating ? l10n.profileBlogPublish : l10n.commonSave,
-                onPressed: state.canSubmit && _media?.value.busy != true
+                onPressed:
+                    state.canSubmit &&
+                        !_resettingDraft &&
+                        _media?.value.busy != true &&
+                        _imagesReady &&
+                        _drafts?.pending != true
                     ? _submit
                     : null,
                 icon: Icon(creating ? Icons.send : Icons.check),
@@ -459,6 +718,8 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                     controller: _body,
                     enabled:
                         !state.busy &&
+                        !_resettingDraft &&
+                        _drafts?.pending != true &&
                         _media?.value.busy != true &&
                         {
                           BlogEditorPhase.ready,
@@ -479,6 +740,33 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                 key: const Key('blog-editor-scroll'),
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
+                  if (_drafts != null && state.phase != BlogEditorPhase.expired)
+                    BlogDraftStatus(
+                      loadFailed: _drafts!.loadFailed,
+                      saveFailed: _drafts!.saveFailed,
+                      pending: _drafts!.pending && !state.busy,
+                      imagesBlocked: !_imagesReady,
+                      verifyingImages: _media?.value.verifyingDraft == true,
+                      onLoadRetry: _prepareEditor,
+                      onSaveRetry: () => unawaited(_drafts!.flush()),
+                      onImageRetry: _media?.retryDraftImages,
+                      onCheck: _checkPublishedLogs,
+                      onResume: _resumeDraft,
+                    ),
+                  if (_drafts?.loadFailed == true)
+                    TextButton(
+                      key: const Key('blog-draft-reset-load-error'),
+                      onPressed: _resetDraft,
+                      child: Text(l10n.composerResetDraft),
+                    ),
+                  if (_draftSettingsChanged) ...[
+                    Text(
+                      l10n.profileBlogDraftSettingsChanged,
+                      key: const Key('blog-draft-settings-changed'),
+                      style: TextStyle(color: native.supportingText),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   if (_media?.value.busy == true) ...[
                     LinearProgressIndicator(
                       value: _media!.value.total == 0
@@ -592,6 +880,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                       offstage: _preview,
                       child: BlogEditorFields(
                         state: state,
+                        locked: _resettingDraft || _drafts?.pending == true,
                         subject: _subject,
                         creatingCategory: _creatingCategory,
                         bodyController: _body,
@@ -627,7 +916,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage> {
                       if (state.phase == BlogEditorPhase.failed)
                         FilledButton(
                           key: const Key('blog-editor-retry'),
-                          onPressed: _controller.prepare,
+                          onPressed: _prepareEditor,
                           child: Text(l10n.commonRetry),
                         ),
                     ],

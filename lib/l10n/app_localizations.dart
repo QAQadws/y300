@@ -7685,6 +7685,72 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前无法发布动态，请关闭此选项后重试。'**
   String get profileBlogFeedUnavailable;
+
+  /// No description provided for @profileBlogDraftLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'草稿加载失败，已有内容未被覆盖。请重试或重置草稿。'**
+  String get profileBlogDraftLoadFailed;
+
+  /// No description provided for @profileBlogDraftSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'草稿保存失败，请重试后再离开。'**
+  String get profileBlogDraftSaveFailed;
+
+  /// No description provided for @profileBlogDraftPasswordRestored.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复日志草稿，请重新输入访问密码。'**
+  String get profileBlogDraftPasswordRestored;
+
+  /// No description provided for @profileBlogDraftPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次发布结果尚未确认。请先检查我的日志，避免重复发布。'**
+  String get profileBlogDraftPending;
+
+  /// No description provided for @profileBlogDraftResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认未发布，继续编辑'**
+  String get profileBlogDraftResume;
+
+  /// No description provided for @profileBlogDraftResumeConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'请确认已检查我的日志，且上次内容尚未发布。继续后可再次提交。'**
+  String get profileBlogDraftResumeConfirm;
+
+  /// No description provided for @profileBlogDraftImagesChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在校验草稿图片…'**
+  String get profileBlogDraftImagesChecking;
+
+  /// No description provided for @profileBlogDraftImagesUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分草稿图片未能确认可用。请重试校验，或移除并替换这些图片后发布。'**
+  String get profileBlogDraftImagesUnavailable;
+
+  /// No description provided for @moreStorageBlogDraft.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志草稿（{count}）'**
+  String moreStorageBlogDraft(int count);
+
+  /// No description provided for @profileBlogDraftSettingsChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'分类或发布权限已变化，请调整发布设置。已保留你的内容和原有选择。'**
+  String get profileBlogDraftSettingsChanged;
+
+  /// No description provided for @profileBlogDraftCleanupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志已发布，但本地草稿清理失败。再次打开时请先检查“我的日志”，避免重复发布。'**
+  String get profileBlogDraftCleanupFailed;
 }
 
 class _AppLocalizationsDelegate

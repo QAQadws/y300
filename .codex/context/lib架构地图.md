@@ -42,7 +42,7 @@
 - `more`：更多页、关于页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/手动导出和 Debug 原型工具。
 - `novel`：小说数据、书架、详情和阅读器。作者帖正文经 forum client `threadAuthorPosts` 契约以 `version=1` 读取；负责来源元数据与章节同步/恢复、帖子章节网关、正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
 - `posting`：新主题发布流程。发帖准备与提交经 forum client preparation/command 契约；负责版块/类型/标签/特殊主题与投票建模、提交结果映射，并在 `composer_shared` 之上提供发帖 controller/page。
-- `profile`：当前用户与指定用户资料、消息中心、日志列表/详情。当前用户资料、公开资料/日志、提醒/私信读取经 forum client 契约；原生日志详情在成功内容可见后经 history 的 recorder 保存浏览记录，同时承接需要认证资料的页面入口。资料修改、私信发送等写能力尚未实现，不得凭空补造请求。
+- `profile`：当前用户与指定用户资料、消息中心、日志列表/详情及原生 HTML 日志编辑器。当前用户资料、公开资料/日志、提醒/私信读取经 forum client 契约；原生日志详情在成功内容可见后经 history 的 recorder 保存浏览记录。新建日志由独立领域快照/repository 和保存协调组件接入账号草稿，SQLite `blog_drafts.db` v1 每账号一份、不自动过期；编辑已有日志和评论不保存草稿。资料修改、私信发送等写能力尚未实现，不得凭空补造请求。
 - `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。
 - `reply`：帖子回复与楼层回复。回复准备与提交经 forum client preparation/command 契约（楼层回复动态字段封装在包内 opaque token）；负责草稿校验，并在 `composer_shared` 之上提供回复 controller/page。
 - `search`：搜索读取经 forum client `forumSearch` 契约（formhash、POST、redirect 校验与结果页解析在包内）；负责搜索调度器、限流、查询 generation 隔离、自动分页搜索页和漫画 fallback 编排。
@@ -63,6 +63,7 @@
 - 漫画与帖子图片阅读通过 capability/adapter 接入 `reader_shared` 的 `ImageReaderEngine`；图片缓存与预加载通过 `cache` 服务完成。owner/session generation 是章节或帖子切换的异步边界，旧回调不得污染新内容。
 - 小说纵向正文复用 HTML-first 渲染准备，分页模式由 `novel` 自己的文档模型、分类器和混合分页器负责；复杂 HTML 测量属于 presentation 布局能力。小说作者帖读取固定经 forum client `threadAuthorPosts` 契约使用 `version=1`，不得改成 `version=4`。
 - `posting` 与 `reply` 只保留各自表单建模与提交结果映射，preparation/command 协议在 forum client 内；编辑器、草稿、附件上传、表情与 BBCode 由 `composer_shared` 统一维护。`thread` 的帖子编辑复用该 surface，编辑表单准备、提交与图片附件删除契约已在包内，但每次进入必须重新 GET 编辑表单且不保存/恢复编辑草稿。帖子编辑只对 capability allowlist 内的普通表单开放原生提交，未知、复杂或结果无法确认的状态必须 fail closed 到 WebView 或停留当前页保留内容，提交后由 app 回读编辑表单证明最终状态。
+- 日志草稿由 `profile` 独立保存原始 HTML 和发布设置，复用公开 SQLite 生命周期管理及选图契约，不进入 BBCode 草稿库。账号切换使旧 UI/异步任务失效；提交前保存待确认标记，applied 才删除，未知结果必须经用户核对后解锁。图片只存 ID/原地址，经 forum client `blogMedia` 的相册回读能力校验后重新生成凭据；`cache` 存储统计通过 `BlogDraftRepository.usage` 汇入草稿，不清理服务器图片或持久草稿。
 - `collapse=0` 的语法、递归解析与序列化归 `composer_shared`，视觉 chrome 归 `shared/widgets`；collapse 在 Quill 中是不可被外层格式包裹的原子块，内部仍可包含已支持的 BBCode、表情、附件和嵌套折叠。非法、行内、交叉或超深结构必须保留原始源码，不得猜测修复或丢失内容。
 - 页面访问由 `history` 的 mapper/recorder 统一落库，`app/navigation` 的 `HistoryEntryRouter` 再按记录类型打开帖子、漫画、小说或日志目标。日志重开始终进入原生详情正文开头，使用 `BlogHistoryTarget` 恢复作者与日志身份，不沿用评论定位；日志 route 内去重并校验 controller 与账号会话，后台读取和内置网页日志不记录。
 - 图片、HTML 文档和解析快照写入后通过 `CacheMutationBus` 通知统一预算调度器；“更多/数据与存储”只通过缓存维护与容量契约统计或清理，不扫描并误删下载和用户数据。

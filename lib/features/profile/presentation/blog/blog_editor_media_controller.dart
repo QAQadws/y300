@@ -1,6 +1,7 @@
 import 'package:file/file.dart';
 import 'package:file/local.dart';
 import 'package:flutter/foundation.dart';
+import 'package:html/parser.dart' as html;
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
@@ -13,6 +14,8 @@ final class BlogEditorMediaState {
     this.progress = 0,
     this.failure,
     this.outcomeUnknown = false,
+    this.verifyingDraft = false,
+    this.draftImageFailure = false,
   });
 
   final bool busy;
@@ -21,6 +24,8 @@ final class BlogEditorMediaState {
   final double progress;
   final DataCommandFailure? failure;
   final bool outcomeUnknown;
+  final bool verifyingDraft;
+  final bool draftImageFailure;
 }
 
 /// Reuses local image picking without treating album pictures as forum aids.
@@ -55,6 +60,8 @@ final class BlogEditorMediaController
   final FileSystem _fileSystem;
   final List<UserBlogUploadedImage> _uploadedImages = [];
   final Map<String, String> _previewPaths = {};
+  List<UserBlogDraftImageReference> _draftImages = const [];
+  Set<String> _unverified = {};
   ForumRequestCancellation? _cancellation;
   int _generation = 0;
   bool _disposed = false;
@@ -64,8 +71,72 @@ final class BlogEditorMediaController
       List.unmodifiable(_uploadedImages);
   Map<String, String> get previewPaths => Map.unmodifiable(_previewPaths);
 
+  bool canPublish(String bodyHtml) {
+    final sources = html
+        .parseFragment(bodyHtml)
+        .querySelectorAll('img[src]')
+        .map((node) => node.attributes['src'])
+        .toSet();
+    return !_draftImages.any(
+      (image) =>
+          _unverified.contains(image.picId) &&
+          sources.contains(image.originalUri.toString()),
+    );
+  }
+
+  Future<void> restoreDraftImages(
+    List<UserBlogDraftImageReference> images,
+  ) async {
+    if (_disposed || _expired || value.busy || value.verifyingDraft) return;
+    _draftImages = List.unmodifiable(images);
+    _unverified = images.map((image) => image.picId).toSet();
+    if (images.isEmpty) return;
+    final prepared = _preparation();
+    if (prepared == null || !_checkSession(prepared)) return;
+    final generation = ++_generation;
+    final cancellation = _cancellation = ForumRequestCancellation();
+    value = const BlogEditorMediaState(verifyingDraft: true);
+    try {
+      final result = await _service.restoreDraftImages(
+        prepared,
+        images: images,
+        cancellation: cancellation,
+      );
+      if (!_accept(generation, cancellation, prepared)) return;
+      if (result case DataReadSuccess(:final data)) {
+        for (final image in data.images) {
+          _uploadedImages.removeWhere((old) => old.picId == image.picId);
+          _uploadedImages.add(image);
+          _unverified.remove(image.picId);
+        }
+        value = BlogEditorMediaState(draftImageFailure: _unverified.isNotEmpty);
+      } else {
+        value = const BlogEditorMediaState(draftImageFailure: true);
+      }
+    } catch (_) {
+      if (_accept(generation, cancellation, prepared)) {
+        value = const BlogEditorMediaState(draftImageFailure: true);
+      }
+    } finally {
+      if (!_disposed && generation == _generation) {
+        _cancellation = null;
+        value = BlogEditorMediaState(draftImageFailure: _unverified.isNotEmpty);
+      }
+    }
+  }
+
+  Future<void> retryDraftImages() => restoreDraftImages(_draftImages);
+
+  void reset() {
+    cancel();
+    _uploadedImages.clear();
+    _previewPaths.clear();
+    _draftImages = const [];
+    _unverified.clear();
+  }
+
   Future<void> pickImages() async {
-    if (_disposed || _expired || value.busy) return;
+    if (_disposed || _expired || value.busy || value.verifyingDraft) return;
     final prepared = _preparation();
     if (prepared == null || prepared.imageUploadLimits == null) return;
     if (!_checkSession(prepared)) return;

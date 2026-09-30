@@ -11,8 +11,10 @@ class BlogEditorAccessFields extends StatelessWidget {
     required this.password,
     required this.targetNames,
     required this.onChanged,
+    this.locked = false,
   });
   final BlogEditorState state;
+  final bool locked;
   final TextEditingController password;
   final TextEditingController targetNames;
   final ValueChanged<BlogEditorDraft Function(BlogEditorDraft)> onChanged;
@@ -25,11 +27,13 @@ class BlogEditorAccessFields extends StatelessWidget {
     final draft = state.draft;
     final options = state.options!;
     final enabled = !state.busy;
-    final readOnly = {
-      BlogEditorPhase.unknown,
-      BlogEditorPhase.applied,
-      BlogEditorPhase.expired,
-    }.contains(state.phase);
+    final readOnly =
+        locked ||
+        {
+          BlogEditorPhase.unknown,
+          BlogEditorPhase.applied,
+          BlogEditorPhase.expired,
+        }.contains(state.phase);
     final canEditAccess = options.availableVisibilities.contains(
       draft.visibility,
     );

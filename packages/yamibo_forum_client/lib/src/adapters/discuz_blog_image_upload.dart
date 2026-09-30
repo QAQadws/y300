@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:html/parser.dart' as html;
 
 import '../contracts/data_command_contract.dart';
+import '../contracts/data_read_contract.dart';
 import '../contracts/user_blog_media.dart';
 import '../contracts/user_blog_operations.dart';
 import '../network/forum_multipart.dart';
@@ -177,6 +178,127 @@ final class DiscuzBlogImageUpload {
     return resolved;
   }
 
+  /// The default album is where this uploader stores pictures. Read all needed
+  /// pages before declaring a hint missing; a draft URL never proves ownership.
+  Future<DataReadResult<UserBlogDraftImageRestoration, Object?>> restore(
+    UserBlogEditorPreparation preparation,
+    List<UserBlogDraftImageReference> images,
+    ForumRequestCancellation? cancellation,
+  ) async {
+    final expected = <String, Uri>{};
+    for (final image in images) {
+      if (!RegExp(r'^[1-9]\d*$').hasMatch(image.picId) ||
+          _imageUri(image.originalUri.toString()) != image.originalUri ||
+          expected.containsKey(image.picId)) {
+        return _restoreFailure('blog_draft_image_hint_invalid');
+      }
+      expected[image.picId] = image.originalUri;
+    }
+    final restored = <String, UserBlogUploadedImage>{};
+    final seen = <String, Uri>{};
+    var lastPage = 1;
+    for (
+      var page = 1;
+      page <= lastPage && restored.length < expected.length;
+      page++
+    ) {
+      final uri = boundary.config.siteOrigin
+          .resolve('home.php')
+          .replace(
+            queryParameters: {
+              'mod': 'misc',
+              'ac': 'ajax',
+              'op': 'album',
+              'id': '0',
+              'page': '$page',
+              'mobile': 'no',
+            },
+          );
+      final source = await boundary.read(
+        uri,
+        actor: preparation.target.actorUserId,
+        referer: boundary.config.siteOrigin.resolve(
+          'home.php?mod=spacecp&ac=blog&mobile=no',
+        ),
+        operation: 'blog.draft.images',
+        profile: ForumRequestProfileKind.desktopHtml,
+        cancellation: cancellation,
+        requireExactUri: true,
+      );
+      if (source.failureOrNull case final failure?) return failure.retype();
+      try {
+        final document = html.parse(source.dataOrNull!);
+        final tables = document.querySelectorAll('table.imgl');
+        if (tables.length != 1) {
+          throw const FormatException('album_table_missing');
+        }
+        for (final cell in tables.single.querySelectorAll('td[id]')) {
+          final match = RegExp(r'^image_td_([1-9]\d*)$').firstMatch(cell.id);
+          final nodes = cell.querySelectorAll('img');
+          if (match == null || nodes.length != 1) {
+            throw const FormatException('album_image_invalid');
+          }
+          final handler = nodes.single.attributes['onclick'] ?? '';
+          final call = RegExp(
+            r'''^\s*insertImage\(['"]([^'"]+)['"]\);?\s*$''',
+          ).firstMatch(handler);
+          final original = call == null ? null : _imageUri(call.group(1));
+          if (original == null) {
+            throw const FormatException('album_image_invalid');
+          }
+          final id = match.group(1)!;
+          if (seen.containsKey(id)) {
+            throw const FormatException('album_image_conflict');
+          }
+          seen[id] = original;
+          if (expected[id] == original) {
+            restored[id] = UserBlogUploadedImage(
+              picId: id,
+              imageUri: original,
+              originalImageUri: original,
+              token: _UploadedImageProof(
+                this,
+                preparation.target,
+                id,
+                original,
+                original,
+              ),
+            );
+          }
+        }
+        for (final link in document.querySelectorAll('.pgs a[href]')) {
+          final target = uri.resolve(link.attributes['href']!);
+          final query = target.queryParameters;
+          if (!boundary.sameSite(target) ||
+              target.path != uri.path ||
+              query['mod'] != 'misc' ||
+              query['ac'] != 'ajax' ||
+              query['op'] != 'album' ||
+              query['id'] != '0') {
+            throw const FormatException('album_pagination_invalid');
+          }
+          final number = int.tryParse(query['page'] ?? '1');
+          if (number == null || number < 1 || number > 10000) {
+            throw const FormatException('album_pagination_invalid');
+          }
+          if (number > lastPage) lastPage = number;
+        }
+      } on FormatException {
+        return _restoreFailure('blog_draft_album_invalid');
+      }
+    }
+    return DataReadSuccess(
+      data: UserBlogDraftImageRestoration(
+        images: List.unmodifiable(restored.values),
+        missingPicIds: Set.unmodifiable(
+          expected.keys.toSet().difference(restored.keys.toSet()),
+        ),
+      ),
+      capabilities: null,
+      metadata: const DataReadMetadata.network(),
+    );
+  }
+
   /// Retains proof across fresh preparation, but never across target or actor.
   Map<String, String> bindingFields(UserBlogEditorSubmission submission) {
     final sources = html
@@ -208,6 +330,14 @@ final class DiscuzBlogImageUpload {
     return fields;
   }
 }
+
+DataReadFailure<UserBlogDraftImageRestoration, Object?> _restoreFailure(
+  String code,
+) => DataReadFailure(
+  kind: DataReadFailureKind.parse,
+  code: code,
+  diagnosticMessage: code,
+);
 
 final class _UploadedImageProof implements UserBlogUploadedImageToken {
   const _UploadedImageProof(

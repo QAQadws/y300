@@ -16,10 +16,12 @@ class BlogEditorSettingsFields extends StatelessWidget {
     required this.creatingCategory,
     required this.onCreateCategory,
     required this.onChanged,
+    this.locked = false,
     this.categoryNameRequired = false,
   });
 
   final BlogEditorState state;
+  final bool locked;
   final TextEditingController tags;
   final TextEditingController categoryName;
   final TextEditingController password;
@@ -38,11 +40,13 @@ class BlogEditorSettingsFields extends StatelessWidget {
     final draft = state.draft;
     final options = state.options!;
     final enabled = !state.busy;
-    final readOnly = {
-      BlogEditorPhase.unknown,
-      BlogEditorPhase.applied,
-      BlogEditorPhase.expired,
-    }.contains(state.phase);
+    final readOnly =
+        locked ||
+        {
+          BlogEditorPhase.unknown,
+          BlogEditorPhase.applied,
+          BlogEditorPhase.expired,
+        }.contains(state.phase);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -137,6 +141,7 @@ class BlogEditorSettingsFields extends StatelessWidget {
         ),
         BlogEditorAccessFields(
           state: state,
+          locked: locked,
           password: password,
           targetNames: targetNames,
           onChanged: onChanged,

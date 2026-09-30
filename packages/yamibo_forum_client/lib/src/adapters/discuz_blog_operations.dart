@@ -20,7 +20,10 @@ import 'discuz_profile_html_parsers.dart';
 
 /// Complete journal forms and verified publishing/management commands.
 final class DiscuzBlogOperations
-    implements UserBlogOperations, UserBlogMediaOperations {
+    implements
+        UserBlogOperations,
+        UserBlogMediaOperations,
+        UserBlogDraftImageRestorer {
   /// Creates the adapter with the existing Host session and transport.
   DiscuzBlogOperations({
     required this.config,
@@ -118,6 +121,24 @@ final class DiscuzBlogOperations
     final media = token.media;
     if (media == null) return Future.value(const DataCommandUnsupported());
     return _images.upload(submission, media, token.target);
+  }
+
+  @override
+  Future<DataReadResult<UserBlogDraftImageRestoration, Object?>>
+  restoreDraftImages(
+    UserBlogEditorPreparation preparation, {
+    required List<UserBlogDraftImageReference> images,
+    ForumRequestCancellation? cancellation,
+  }) {
+    final token = preparation.token;
+    if (token is! _EditorToken ||
+        token.owner != this ||
+        token.used ||
+        token.target != preparation.target ||
+        !_boundary.currentActor(token.target.actorUserId)) {
+      return Future.value(_readFailure('blog_image_ticket_invalid'));
+    }
+    return _images.restore(preparation, images, cancellation);
   }
 
   @override

@@ -3,6 +3,7 @@ library;
 
 import '../network/forum_request.dart';
 import 'data_command_contract.dart';
+import 'data_read_contract.dart';
 import 'forum_image_attachments.dart';
 import 'user_blog_operations.dart';
 
@@ -92,4 +93,72 @@ abstract interface class UserBlogMediaOperations {
   Future<DataCommandResult<UserBlogUploadedImage>> uploadImage(
     UserBlogImageUploadSubmission submission,
   );
+}
+
+/// Persistable lookup hints; only a fresh actor-verified read creates proof.
+final class UserBlogDraftImageReference {
+  /// Creates an untrusted local reference to verify against the actor's album.
+  const UserBlogDraftImageReference({
+    required this.picId,
+    required this.originalUri,
+  });
+
+  /// Positive album picture identity.
+  final String picId;
+
+  /// Original image address saved in the draft's HTML.
+  final Uri originalUri;
+}
+
+/// Fresh binding proofs and references absent from a completely read album.
+final class UserBlogDraftImageRestoration {
+  /// Creates a verified restoration result.
+  const UserBlogDraftImageRestoration({
+    required this.images,
+    required this.missingPicIds,
+  });
+
+  /// Verified images with current-session binding proofs.
+  final List<UserBlogUploadedImage> images;
+
+  /// Picture identities not found with their original addresses.
+  final Set<String> missingPicIds;
+}
+
+/// Optional capability keeps existing media implementations source compatible.
+abstract interface class UserBlogDraftImageRestorer {
+  /// Reads the current actor's album without uploading or modifying images.
+  Future<DataReadResult<UserBlogDraftImageRestoration, Object?>>
+  restoreDraftImages(
+    UserBlogEditorPreparation preparation, {
+    required List<UserBlogDraftImageReference> images,
+    ForumRequestCancellation? cancellation,
+  });
+}
+
+/// Backward-compatible access to optional draft image verification.
+extension UserBlogDraftImageRecovery on UserBlogMediaOperations {
+  /// Verifies references, or reports that this adapter lacks the capability.
+  Future<DataReadResult<UserBlogDraftImageRestoration, Object?>>
+  restoreDraftImages(
+    UserBlogEditorPreparation preparation, {
+    required List<UserBlogDraftImageReference> images,
+    ForumRequestCancellation? cancellation,
+  }) {
+    final service = this;
+    if (service is UserBlogDraftImageRestorer) {
+      return (service as UserBlogDraftImageRestorer).restoreDraftImages(
+        preparation,
+        images: images,
+        cancellation: cancellation,
+      );
+    }
+    return Future.value(
+      const DataReadFailure(
+        kind: DataReadFailureKind.unsupported,
+        code: 'blog_draft_images_unsupported',
+        diagnosticMessage: 'blog_draft_images_unsupported',
+      ),
+    );
+  }
 }

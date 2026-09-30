@@ -9,6 +9,7 @@ import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.d
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
+import 'package:y300/features/profile/domain/repositories/blog_draft_repository.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
@@ -195,9 +196,12 @@ class ComposerDraftStorageAccountingAdapter
     implements StorageAccountingAdapter {
   const ComposerDraftStorageAccountingAdapter({
     required Future<Database> Function() databaseProvider,
-  }) : _databaseProvider = databaseProvider;
+    BlogDraftRepository? blogDraftRepository,
+  }) : _databaseProvider = databaseProvider,
+       _blogDraftRepository = blogDraftRepository;
 
   final Future<Database> Function() _databaseProvider;
+  final BlogDraftRepository? _blogDraftRepository;
 
   @override
   StorageBucket get bucket => StorageBucket.composerDraft;
@@ -213,15 +217,27 @@ class ComposerDraftStorageAccountingAdapter
     ''');
     final count = (rows.single['draft_count'] as num?)?.toInt() ?? 0;
     final bytes = (rows.single['payload_bytes'] as num?)?.toInt() ?? 0;
+    final blogs = await _blogDraftRepository?.usage();
     return StorageUsageSection(
       bucket: bucket,
       labelRef: StorageUsageLabelRef(
         kind: StorageUsageLabelKind.bucket,
         code: bucket.id,
       ),
-      bytes: bytes,
+      bytes: bytes + (blogs?.bytes ?? 0),
       clearable: count > 0,
       slices: [
+        if ((blogs?.bytes ?? 0) > 0)
+          StorageUsageSlice(
+            id: 'composer_draft:blog',
+            labelRef: StorageUsageLabelRef(
+              kind: StorageUsageLabelKind.composerDraft,
+              code: 'blog_draft',
+              count: blogs!.count,
+            ),
+            bytes: blogs.bytes,
+            protected: true,
+          ),
         if (bytes > 0)
           StorageUsageSlice(
             id: 'composer_draft:sqlite',

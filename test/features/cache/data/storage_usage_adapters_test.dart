@@ -17,12 +17,14 @@ import 'package:y300/features/composer_shared/data/local/composer_draft_local_db
 import 'package:y300/features/composer_shared/data/repositories/sqflite_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
+import 'package:y300/features/profile/domain/models/blog_draft_snapshot.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 
 import '../../storage/test_support/ready_storage_root_access_gate.dart';
+import '../../profile/test_support/blog_draft_fixture.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -244,6 +246,21 @@ void main() {
         StorageUsageLabelKind.composerDraft,
       );
       expect(section.slices.single.labelRef?.count, 1);
+      final blogs = MemoryBlogDraftRepository();
+      blogs.values['101'] = BlogDraftSnapshot(
+        accountId: '101',
+        updatedAt: DateTime(2000),
+      );
+      final mixed = await ComposerDraftStorageAccountingAdapter(
+        databaseProvider: () async => db,
+        blogDraftRepository: blogs,
+      ).calculateUsage();
+      expect(mixed.bytes, section.bytes + 100);
+      final blogSlice = mixed.slices.singleWhere(
+        (slice) => slice.labelRef?.code == 'blog_draft',
+      );
+      expect(blogSlice.protected, isTrue);
+      expect(blogSlice.labelRef?.count, 1);
     },
   );
 

@@ -8,6 +8,7 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
     required this.target,
     required UserBlogOperations service,
     required String? Function() currentActor,
+    this.persistBeforeSubmit,
   }) : _service = service,
        _currentActor = currentActor,
        super(const BlogEditorState());
@@ -15,6 +16,7 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
   final UserBlogTarget target;
   final UserBlogOperations _service;
   final String? Function() _currentActor;
+  final Future<bool> Function(BlogEditorDraft)? persistBeforeSubmit;
   UserBlogEditorPreparation? _preparation;
   BlogEditorDraft? _lastServerVersion;
   ForumRequestCancellation? _cancellation;
@@ -97,6 +99,27 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
     );
   }
 
+  void restoreDraft(BlogEditorDraft draft) {
+    if (target.action == UserBlogAction.create &&
+        value.phase == BlogEditorPhase.ready) {
+      update(draft);
+    }
+  }
+
+  void resetDraft() {
+    if (!value.busy && _checkActor()) update(value.original);
+  }
+
+  Future<void> resumeAfterUnknown() async {
+    if (_disposed || value.phase != BlogEditorPhase.unknown || !_checkActor()) {
+      return;
+    }
+    ++_generation;
+    _cancellation?.cancel();
+    _setPhase(BlogEditorPhase.failed);
+    await prepare();
+  }
+
   /// A retried form can describe edits made elsewhere. The user must review it
   /// before overwriting, or explicitly replace their draft with the new version.
   void reviewServerVersion({required bool keepLocal}) {
@@ -138,6 +161,14 @@ final class BlogEditorController extends ValueNotifier<BlogEditorState> {
     final cancellation = _cancellation = ForumRequestCancellation();
     _setPhase(BlogEditorPhase.submitting);
     try {
+      if (persistBeforeSubmit != null && !await persistBeforeSubmit!(input)) {
+        if (_accept(generation, cancellation)) {
+          _preparation = prepared;
+          _setPhase(BlogEditorPhase.ready);
+        }
+        return null;
+      }
+      if (!_accept(generation, cancellation)) return null;
       final result = await _service.save(
         UserBlogEditorSubmission(
           preparation: prepared,

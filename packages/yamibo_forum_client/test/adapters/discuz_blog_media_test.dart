@@ -43,6 +43,142 @@ void main() {
   );
 
   test(
+    'draft restoration reads album pages and binds fresh proofs without upload',
+    () async {
+      final ready = await prepare();
+      final original = blogConfig.siteOrigin.resolve(
+        'data/attachment/album/test.jpg',
+      );
+      network.onRequest = (request) {
+        if (request.uri.queryParameters['op'] == 'album') {
+          network.editor = request.uri.queryParameters['page'] == '1'
+              ? _albumPage('2', 'data/attachment/album/other.jpg', last: 2)
+              : _albumPage('77', original.toString());
+        }
+      };
+      final result = await client.blogMedia!.restoreDraftImages(
+        ready,
+        images: [
+          UserBlogDraftImageReference(picId: '77', originalUri: original),
+        ],
+      );
+      final restored = result.dataOrNull!;
+      expect(restored.missingPicIds, isEmpty);
+      expect(restored.images.single.originalImageUri, original);
+      expect(multipart.requests, isEmpty);
+      final reads = network.requests
+          .where((r) => r.uri.queryParameters['op'] == 'album')
+          .toList();
+      expect(reads.map((r) => r.uri.queryParameters['page']), ['1', '2']);
+      expect(reads.every((r) => r.method == ForumRequestMethod.get), isTrue);
+      final saved = await client.blogOperations!.save(
+        UserBlogEditorSubmission(
+          preparation: ready,
+          actorUserId: '101',
+          subject: ready.subject,
+          bodyHtml: '<img src="$original">',
+          tags: ready.tags,
+          siteCategoryId: ready.siteCategoryId,
+          personalCategoryId: ready.personalCategoryId,
+          publishFeed: ready.publishFeed,
+          uploadedImages: restored.images,
+        ),
+      );
+      expect(saved, isA<DataCommandApplied<UserBlogReceipt>>());
+      expect(
+        Map.fromEntries(
+          (network.posts.single.body! as ForumMultipartFields).entries,
+        ),
+        containsPair('picids[77]', '77'),
+      );
+    },
+  );
+
+  test('missing and changed image addresses remain unverified', () async {
+    final ready = await prepare();
+    network.editor = _albumPage('77', 'data/attachment/album/replaced.jpg');
+    final result = await client.blogMedia!.restoreDraftImages(
+      ready,
+      images: [
+        UserBlogDraftImageReference(
+          picId: '77',
+          originalUri: blogConfig.siteOrigin.resolve('old.jpg'),
+        ),
+        UserBlogDraftImageReference(
+          picId: '78',
+          originalUri: blogConfig.siteOrigin.resolve('missing.jpg'),
+        ),
+      ],
+    );
+    expect(result.dataOrNull!.images, isEmpty);
+    expect(result.dataOrNull!.missingPicIds, {'77', '78'});
+    expect(multipart.requests, isEmpty);
+  });
+
+  for (final altered in ['actor', 'pagination', 'table', 'identity']) {
+    test('draft album $altered cannot create binding proof', () async {
+      final ready = await prepare();
+      var album = _albumPage('77', 'data/attachment/album/test.jpg', last: 2);
+      album = switch (altered) {
+        'actor' => album.replaceAll("discuz_uid = '101'", "discuz_uid = '202'"),
+        'pagination' => album.replaceAll(
+          'home.php?mod=misc',
+          'https://evil.test/home.php?mod=misc',
+        ),
+        'table' => album.replaceAll('class="imgl"', 'class="other"'),
+        _ => album.replaceAll('image_td_77', 'image_td_invalid'),
+      };
+      network.editor = album;
+      final result = await client.blogMedia!.restoreDraftImages(
+        ready,
+        images: [
+          UserBlogDraftImageReference(
+            picId: '77',
+            originalUri: blogConfig.siteOrigin.resolve(
+              'data/attachment/album/test.jpg',
+            ),
+          ),
+        ],
+      );
+      expect(
+        result,
+        isA<DataReadFailure<UserBlogDraftImageRestoration, Object?>>(),
+      );
+      expect(multipart.requests, isEmpty);
+    });
+  }
+
+  test('actor change and cancellation invalidate late album reads', () async {
+    final ready = await prepare();
+    network.editor = _albumPage('77', 'data/attachment/album/test.jpg');
+    network.onRequest = (_) => loginBlogActor(sessions, '202');
+    final result = await client.blogMedia!.restoreDraftImages(
+      ready,
+      images: [
+        UserBlogDraftImageReference(
+          picId: '77',
+          originalUri: blogConfig.siteOrigin.resolve(
+            'data/attachment/album/test.jpg',
+          ),
+        ),
+      ],
+    );
+    expect(
+      result,
+      isA<DataReadFailure<UserBlogDraftImageRestoration, Object?>>(),
+    );
+    final cancellation = ForumRequestCancellation()..cancel();
+    expect(
+      await client.blogMedia!.restoreDraftImages(
+        ready,
+        images: const [],
+        cancellation: cancellation,
+      ),
+      isA<DataReadFailure<UserBlogDraftImageRestoration, Object?>>(),
+    );
+  });
+
+  test(
     'facade shares editor proof and exposes thirty dedicated image smileys',
     () async {
       final ready = await prepare();
@@ -376,6 +512,14 @@ void main() {
     expect(fields['picids[31]'], '31');
   });
 }
+
+String _albumPage(String id, String original, {int last = 1}) =>
+    '''
+$blogOperationHeader
+<table class="imgl"><tr><td id="image_td_$id">
+<img src="thumb.jpg" onclick="insertImage('$original');"></td></tr></table>
+<div class="pgs">${last > 1 ? '<a href="home.php?mod=misc&amp;ac=ajax&amp;op=album&amp;id=0&amp;page=$last">$last</a>' : ''}</div>
+''';
 
 UserBlogEditorSubmission _submission(
   UserBlogEditorPreparation ready,

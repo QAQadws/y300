@@ -4682,6 +4682,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogFeedUnavailable => '当前无法发布动态，请关闭此选项后重试。';
+
+  @override
+  String get profileBlogDraftLoadFailed => '草稿加载失败，已有内容未被覆盖。请重试或重置草稿。';
+
+  @override
+  String get profileBlogDraftSaveFailed => '草稿保存失败，请重试后再离开。';
+
+  @override
+  String get profileBlogDraftPasswordRestored => '已恢复日志草稿，请重新输入访问密码。';
+
+  @override
+  String get profileBlogDraftPending => '上次发布结果尚未确认。请先检查我的日志，避免重复发布。';
+
+  @override
+  String get profileBlogDraftResume => '确认未发布，继续编辑';
+
+  @override
+  String get profileBlogDraftResumeConfirm => '请确认已检查我的日志，且上次内容尚未发布。继续后可再次提交。';
+
+  @override
+  String get profileBlogDraftImagesChecking => '正在校验草稿图片…';
+
+  @override
+  String get profileBlogDraftImagesUnavailable =>
+      '部分草稿图片未能确认可用。请重试校验，或移除并替换这些图片后发布。';
+
+  @override
+  String moreStorageBlogDraft(int count) {
+    return '日志草稿（$count）';
+  }
+
+  @override
+  String get profileBlogDraftSettingsChanged =>
+      '分类或发布权限已变化，请调整发布设置。已保留你的内容和原有选择。';
+
+  @override
+  String get profileBlogDraftCleanupFailed =>
+      '日志已发布，但本地草稿清理失败。再次打开时请先检查“我的日志”，避免重复发布。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -9364,4 +9402,42 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogFeedUnavailable => '目前無法發佈動態，請關閉此選項後重試。';
+
+  @override
+  String get profileBlogDraftLoadFailed => '草稿載入失敗，已有內容未被覆蓋。請重試或重設草稿。';
+
+  @override
+  String get profileBlogDraftSaveFailed => '草稿儲存失敗，請重試後再離開。';
+
+  @override
+  String get profileBlogDraftPasswordRestored => '已恢復日誌草稿，請重新輸入存取密碼。';
+
+  @override
+  String get profileBlogDraftPending => '上次發佈結果尚未確認。請先檢查我的日誌，避免重複發佈。';
+
+  @override
+  String get profileBlogDraftResume => '確認未發佈，繼續編輯';
+
+  @override
+  String get profileBlogDraftResumeConfirm => '請確認已檢查我的日誌，且上次內容尚未發佈。繼續後可再次提交。';
+
+  @override
+  String get profileBlogDraftImagesChecking => '正在驗證草稿圖片…';
+
+  @override
+  String get profileBlogDraftImagesUnavailable =>
+      '部分草稿圖片未能確認可用。請重試驗證，或移除並替換這些圖片後發佈。';
+
+  @override
+  String moreStorageBlogDraft(int count) {
+    return '日誌草稿（$count）';
+  }
+
+  @override
+  String get profileBlogDraftSettingsChanged =>
+      '分類或發佈權限已變化，請調整發佈設定。已保留你的內容和原有選擇。';
+
+  @override
+  String get profileBlogDraftCleanupFailed =>
+      '日誌已發佈，但本機草稿清理失敗。再次開啟時請先檢查「我的日誌」，避免重複發佈。';
 }

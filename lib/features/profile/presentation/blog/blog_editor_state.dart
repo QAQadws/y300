@@ -156,6 +156,10 @@ final class BlogEditorOptions {
   BlogEditorIssue? validate(BlogEditorDraft draft) {
     if (draft.subject.trim().isEmpty) return BlogEditorIssue.subjectRequired;
     if (draft.bodyHtml.trim().isEmpty) return BlogEditorIssue.bodyRequired;
+    return validateSettings(draft);
+  }
+
+  BlogEditorIssue? validateSettings(BlogEditorDraft draft) {
     if (siteCategoryRequired && draft.siteCategoryId == '0') {
       return BlogEditorIssue.siteCategoryRequired;
     }
