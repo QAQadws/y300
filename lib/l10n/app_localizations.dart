@@ -6621,11 +6621,11 @@ abstract class AppLocalizations {
   /// **'当前输入不会自动带入网页。你可以取消并先复制内容，再打开网页继续操作。'**
   String get profileBlogWebInputNotice;
 
-  /// No description provided for @profileBlogPasswordRequired.
+  /// No description provided for @profileBlogReadPasswordRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请设置访问密码。'**
-  String get profileBlogPasswordRequired;
+  /// **'这篇日志需要密码，可在网页中输入后阅读。'**
+  String get profileBlogReadPasswordRequired;
 
   /// No description provided for @profileBlogPrivate.
   ///
@@ -7487,6 +7487,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'留空保留原密码'**
   String get profileBlogKeepPassword;
+
+  /// No description provided for @profileBlogPasswordRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请设置访问密码。'**
+  String get profileBlogPasswordRequired;
 
   /// No description provided for @profileBlogTargetNames.
   ///

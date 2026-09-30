@@ -4036,7 +4036,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogWebInputNotice => '当前输入不会自动带入网页。你可以取消并先复制内容，再打开网页继续操作。';
 
   @override
-  String get profileBlogPasswordRequired => '请设置访问密码。';
+  String get profileBlogReadPasswordRequired => '这篇日志需要密码，可在网页中输入后阅读。';
 
   @override
   String get profileBlogPrivate => '作者限制了这篇日志的访问范围。';
@@ -4576,6 +4576,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogKeepPassword => '留空保留原密码';
+
+  @override
+  String get profileBlogPasswordRequired => '请设置访问密码。';
 
   @override
   String get profileBlogTargetNames => '指定好友';
@@ -8755,7 +8758,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogWebInputNotice => '目前輸入不會自動帶入網頁。你可以取消並先複製內容，再開啟網頁繼續操作。';
 
   @override
-  String get profileBlogPasswordRequired => '請設定存取密碼。';
+  String get profileBlogReadPasswordRequired => '這篇日誌需要密碼，可在網頁中輸入後閱讀。';
 
   @override
   String get profileBlogPrivate => '作者限制了這篇日誌的存取範圍。';
@@ -9296,6 +9299,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogKeepPassword => '留空保留原密碼';
+
+  @override
+  String get profileBlogPasswordRequired => '請設定存取密碼。';
 
   @override
   String get profileBlogTargetNames => '指定好友';

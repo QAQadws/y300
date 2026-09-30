@@ -57,11 +57,13 @@ void main() {
           tester.element(find.byType(ProfileBlogDetailPage)),
         );
         final message = switch (code) {
-          'user_blog_password_required' => l10n.profileBlogPasswordRequired,
+          'user_blog_password_required' => l10n.profileBlogReadPasswordRequired,
           'user_blog_private' => l10n.profileBlogPrivate,
           _ => l10n.profileBlogUnavailable,
         };
-        expect(find.text(message), findsOneWidget);
+        expect(find.widgetWithText(SnackBar, message), findsOneWidget);
+        expect(find.byIcon(Icons.error_outline), findsNothing);
+        expect(find.byType(FilledButton), findsNothing);
         expect(find.textContaining('server fixture payload'), findsNothing);
         await tester.tap(find.byKey(const Key('blog-read-open-web')));
         await tester.pumpAndSettle();
@@ -79,13 +81,14 @@ void main() {
         await tester.tap(find.byType(BackButton));
         await tester.pumpAndSettle();
         expect(repository.requests, hasLength(1));
-        expect(find.text(message), findsOneWidget);
+        expect(find.text(message), findsNothing);
+        expect(find.byIcon(Icons.error_outline), findsNothing);
       },
     );
   }
 
   testWidgets(
-    'login boundaries offer the existing login flow without displaying payloads',
+    'login boundaries use snackbar feedback and the browser without a full-page error',
     (tester) async {
       final repository = _Details();
       await tester.pumpWidget(
@@ -93,6 +96,9 @@ void main() {
           overrides: [
             blogAccountIdProvider.overrideWithValue(null),
             userBlogDetailRepositoryProvider.overrideWithValue(repository),
+            userBlogNavigationProvider.overrideWithValue(
+              BlogNavigationFixture(),
+            ),
           ],
           child: const LocalizedTestApp(
             home: ProfileBlogDetailPage(ownerUserId: '202', blogId: '11'),
@@ -110,11 +116,19 @@ void main() {
       final l10n = AppLocalizations.of(
         tester.element(find.byType(ProfileBlogDetailPage)),
       );
-      expect(find.text(l10n.threadLoginRequired), findsOneWidget);
       expect(
-        find.widgetWithText(FilledButton, l10n.authLoginTitle),
+        find.widgetWithText(SnackBar, l10n.threadLoginRequired),
         findsOneWidget,
       );
+      expect(
+        find.widgetWithText(FilledButton, l10n.authLoginTitle),
+        findsNothing,
+      );
+      expect(
+        find.widgetWithText(SnackBarAction, l10n.profileBlogOpenWeb),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.error_outline), findsNothing);
       expect(find.textContaining('server fixture payload'), findsNothing);
     },
   );

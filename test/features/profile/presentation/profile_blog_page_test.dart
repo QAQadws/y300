@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
@@ -17,6 +19,7 @@ import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_comment_fixture.dart';
+import '../test_support/blog_draft_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
 import '../test_support/profile_repository_fixture.dart';
 
@@ -96,6 +99,9 @@ void main() {
         ProviderScope(
           overrides: [
             blogAccountIdProvider.overrideWithValue('101'),
+            blogDraftRepositoryProvider.overrideWithValue(
+              MemoryBlogDraftRepository(),
+            ),
             userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
             userBlogDetailRepositoryProvider.overrideWithValue(details),
             userBlogOperationsProvider.overrideWithValue(operations),
@@ -118,10 +124,15 @@ void main() {
         find.byKey(const Key('blog-editor-subject')),
         'Newly published',
       );
-      await tester.enterText(
-        find.byKey(const Key('blog-editor-body')),
-        'New body',
-      );
+      tester
+          .widget<QuillEditor>(find.byType(QuillEditor))
+          .controller
+          .replaceText(
+            0,
+            0,
+            'New body',
+            const TextSelection.collapsed(offset: 8),
+          );
       await tester.pump();
       await tester.tap(find.byKey(const Key('blog-editor-submit')));
       await tester.pump();

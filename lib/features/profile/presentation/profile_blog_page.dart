@@ -7,6 +7,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_actions.dart';
+import 'package:y300/features/profile/presentation/blog/blog_detail_failure_feedback.dart';
 import 'package:y300/features/profile/presentation/blog/blog_detail_header.dart';
 import 'package:y300/features/profile/presentation/blog/blog_detail_metadata.dart';
 import 'package:y300/features/profile/presentation/blog/blog_history_visit_observer.dart';
@@ -279,85 +280,78 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
     final palette = Theme.of(context).y300NativeContent;
     final referer = ref.watch(forumImageRefererProvider);
     final l10n = AppLocalizations.of(context);
-    return BlogHistoryVisitObserver(
+    return BlogDetailFailureFeedback(
       controller: controller,
-      child: BlogReadView<UserBlogDetailPageState>(
-        key: ObjectKey(controller),
-        listenable: controller,
-        setActive: controller.setActive,
-        builder: (context, state, _) => Scaffold(
-          backgroundColor: palette.background,
-          appBar: AppBar(
-            title: _BlogDetailTitle(
-              data: state.data,
-              initialTitle: _allowInitialTitle ? widget.initialTitle : null,
-            ),
-            actions: [
-              if (state.data != null &&
-                  blogCanReplyToArticle(state.data!, state.capabilities))
-                IconButton(
-                  key: const Key('blog-detail-reply'),
-                  tooltip: l10n.profileBlogReply,
-                  icon: const Icon(Icons.reply),
-                  onPressed: () =>
-                      _openComment(controller, UserBlogCommentAction.add, null),
-                ),
-            ],
-          ),
-          body: state.data != null
-              ? RefreshIndicator(
-                  onRefresh: controller.refresh,
-                  child: _ProfileBlogDetailContent(
-                    data: state.data!,
-                    capabilities: state.capabilities,
-                    failure: state.failure,
-                    palette: palette,
-                    imageReferer: referer,
-                    onComment: (action, comment) =>
-                        _openComment(controller, action, comment),
-                    onArticleAction: _openArticleAction,
-                    onLoadNextComments: state.canLoadNext
-                        ? controller.loadNextComments
-                        : null,
-                    onPreviousComments: state.firstCommentPage > 1
-                        ? () => controller.selectCommentPage(
-                            state.firstCommentPage - 1,
-                          )
-                        : null,
-                    onShowAllComments: state.query.commentId != null
-                        ? () => controller.selectCommentPage(1)
-                        : null,
-                    isLoading: state.isLoading,
-                    focusComments: widget.focusComments,
-                    linkBaseUri: ref
-                        .read(userBlogNavigationProvider)
-                        ?.detail(state.query),
-                    onOpenLink: (url) => openBlogContentLink(
-                      context,
-                      ref,
-                      url,
-                      baseUri: ref
-                          .read(userBlogNavigationProvider)
-                          ?.detail(state.query),
+      child: BlogHistoryVisitObserver(
+        controller: controller,
+        child: BlogReadView<UserBlogDetailPageState>(
+          key: ObjectKey(controller),
+          listenable: controller,
+          setActive: controller.setActive,
+          builder: (context, state, _) => Scaffold(
+            backgroundColor: palette.background,
+            appBar: AppBar(
+              title: _BlogDetailTitle(
+                data: state.data,
+                initialTitle: _allowInitialTitle ? widget.initialTitle : null,
+              ),
+              actions: [
+                if (state.data != null &&
+                    blogCanReplyToArticle(state.data!, state.capabilities))
+                  IconButton(
+                    key: const Key('blog-detail-reply'),
+                    tooltip: l10n.profileBlogReply,
+                    icon: const Icon(Icons.reply),
+                    onPressed: () => _openComment(
+                      controller,
+                      UserBlogCommentAction.add,
+                      null,
                     ),
                   ),
-                )
-              : state.isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _ProfileBlogError(
-                  error: state.failure,
-                  palette: palette,
-                  onRetry: controller.refresh,
-                  onLogin: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                  ),
-                  onOpenWeb: () => openBlogWebPage(
-                    context,
-                    ref,
-                    expectedActor: ref.read(blogAccountIdProvider),
-                    destination: (navigation) => navigation.detail(query),
-                  ),
-                ),
+              ],
+            ),
+            body: state.data != null
+                ? RefreshIndicator(
+                    onRefresh: controller.refresh,
+                    child: _ProfileBlogDetailContent(
+                      data: state.data!,
+                      capabilities: state.capabilities,
+                      failure: state.failure,
+                      palette: palette,
+                      imageReferer: referer,
+                      onComment: (action, comment) =>
+                          _openComment(controller, action, comment),
+                      onArticleAction: _openArticleAction,
+                      onLoadNextComments: state.canLoadNext
+                          ? controller.loadNextComments
+                          : null,
+                      onPreviousComments: state.firstCommentPage > 1
+                          ? () => controller.selectCommentPage(
+                              state.firstCommentPage - 1,
+                            )
+                          : null,
+                      onShowAllComments: state.query.commentId != null
+                          ? () => controller.selectCommentPage(1)
+                          : null,
+                      isLoading: state.isLoading,
+                      focusComments: widget.focusComments,
+                      linkBaseUri: ref
+                          .read(userBlogNavigationProvider)
+                          ?.detail(state.query),
+                      onOpenLink: (url) => openBlogContentLink(
+                        context,
+                        ref,
+                        url,
+                        baseUri: ref
+                            .read(userBlogNavigationProvider)
+                            ?.detail(state.query),
+                      ),
+                    ),
+                  )
+                : state.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : const SizedBox.expand(),
+          ),
         ),
       ),
     );
@@ -1493,7 +1487,10 @@ class _ProfileBlogError extends StatelessWidget {
             Icon(Icons.error_outline, color: palette.accent, size: 34),
             const SizedBox(height: 12),
             Text(
-              _blogReadErrorText(AppLocalizations.of(context), error),
+              ProfileTextResolver.blogReadError(
+                AppLocalizations.of(context),
+                error,
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.body),
             ),
@@ -1527,16 +1524,3 @@ class _ProfileBlogError extends StatelessWidget {
     );
   }
 }
-
-String _blogReadErrorText(
-  AppLocalizations l10n,
-  Object? error,
-) => switch (error) {
-  DataReadFailure(code: 'user_blog_password_required') =>
-    l10n.profileBlogPasswordRequired,
-  DataReadFailure(code: 'user_blog_private') => l10n.profileBlogPrivate,
-  DataReadFailure(code: 'user_blog_unavailable') => l10n.profileBlogUnavailable,
-  DataReadFailure(kind: DataReadFailureKind.unauthorized) =>
-    l10n.threadLoginRequired,
-  _ => l10n.profileBlogLoadFailed(LocalizedErrorSummary.resolve(l10n, error)),
-};

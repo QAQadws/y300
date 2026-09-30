@@ -6,6 +6,7 @@ void showTransientSnackBar(
   String message, {
   SnackBarAction? action,
   Key? snackBarKey,
+  double actionOverflowThreshold = 0.25,
 }) {
   final trimmed = message.trim();
   if (trimmed.isEmpty) {
@@ -18,6 +19,11 @@ void showTransientSnackBar(
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
-      SnackBar(key: snackBarKey, content: Text(trimmed), action: action),
+      SnackBar(
+        key: snackBarKey,
+        content: Text(trimmed),
+        action: action,
+        actionOverflowThreshold: actionOverflowThreshold,
+      ),
     );
 }
