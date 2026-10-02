@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -11,6 +10,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -19,6 +19,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_styl
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatelessWidget {
@@ -47,6 +48,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
+    this.contentLayout = ForumHtmlContentLayout.document,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -84,6 +86,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
+  final ForumHtmlContentLayout contentLayout;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +96,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       resolvedPreferences,
       theme: theme,
       blockSpacingMode: blockSpacingMode,
+      contentLayout: contentLayout,
     );
     final document =
         preparedDocument ??
@@ -142,6 +146,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       factoryBuilder: _cachedImageFactoryBuilder(onReady),
       enableCaching: enableCaching,
       renderMode: renderMode,
+      rebuildTriggers: [contentLayout],
       textStyle: baseStyle,
       onTapUrl: callbacks.onTapUrl == null
           ? null
@@ -162,6 +167,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       MediaQuery.textScalerOf(context),
       resolvedPreferences,
       theme.signature,
+      contentLayout,
     );
     return ThreadPostBodyLayout(
       key: ValueKey((presentation, revision)),
@@ -260,6 +266,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imagePrecacheService: imagePrecacheService,
           contentImageKind: contentImageKind,
           blockSpacingMode: blockSpacingMode,
+          contentLayout: contentLayout,
           preparedDocument: document.copyWith(preparedHtml: html),
         );
       },

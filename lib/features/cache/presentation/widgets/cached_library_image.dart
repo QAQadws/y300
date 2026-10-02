@@ -23,6 +23,8 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.width,
     this.height,
     this.preferredLocalPath,
+    this.localFileFallbackPredicate,
+    this.localFileFallback,
     this.decodeDisplaySize,
     required this.placeholder,
     this.errorPlaceholder,
@@ -46,6 +48,13 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final double? width;
   final double? height;
   final String? preferredLocalPath;
+
+  /// Selects [localFileFallback] before a cached or preferred file is decoded.
+  /// Pair with [CachedImageRemoteDisplayPolicy.afterCacheWrite] when remote
+  /// content must also wait for this check. Inspection failures keep the usual
+  /// image path, including its decode-failure diagnostics.
+  final Future<bool> Function(String localPath)? localFileFallbackPredicate;
+  final Widget? localFileFallback;
   final Size? decodeDisplaySize;
   final Widget placeholder;
   final Widget? errorPlaceholder;
@@ -84,6 +93,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   bool _displayedRemoteImage = false;
   bool _remoteProviderStarted = false;
   bool _cacheWriteFailed = false;
+  bool _useLocalFileFallback = false;
   bool _displaySettled = false;
   bool _firstFrameRendered = false;
   bool _settledRebuildScheduled = false;
@@ -113,6 +123,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (oldWidget.request?.cacheKey != widget.request?.cacheKey ||
         oldWidget.request?.sourceUrl != widget.request?.sourceUrl ||
         oldWidget.preferredLocalPath != widget.preferredLocalPath ||
+        oldWidget.localFileFallbackPredicate !=
+            widget.localFileFallbackPredicate ||
         oldWidget.remoteDisplayPolicy != widget.remoteDisplayPolicy ||
         oldWidget.retryToken != widget.retryToken) {
       _restartCacheFlow();
@@ -138,7 +150,11 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       color: widget.loadingIndicatorColor,
       isLoadActive: (loadIdentity) =>
           mounted && loadIdentity == _generation && !_displaySettled,
-      child: _cacheWriteFailed
+      child: _useLocalFileFallback
+          ? widget.localFileFallback ??
+                widget.errorPlaceholder ??
+                widget.placeholder
+          : _cacheWriteFailed
           ? widget.errorPlaceholder ?? widget.placeholder
           : LibraryCachedImage(
               localPath: _localPath,
@@ -174,7 +190,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     LibraryImageFrameSource source,
     int generation,
   ) {
-    if (generation != _generation) {
+    if (generation != _generation || _useLocalFileFallback) {
       return;
     }
     _firstFrameRendered = true;
@@ -187,7 +203,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   }
 
   void _handleImageFailed(int generation) {
-    if (generation != _generation) {
+    if (generation != _generation || _useLocalFileFallback) {
       return;
     }
     final cacheReadyLocalPath = _cacheReadyLocalPath?.trim();
@@ -265,6 +281,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     _displayedRemoteImage = false;
     _remoteProviderStarted = false;
     _cacheWriteFailed = false;
+    _useLocalFileFallback = false;
     _displaySettled = !_hasDisplaySource;
     _firstFrameRendered = false;
     _settledRebuildScheduled = false;
@@ -274,10 +291,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     _cacheReadyLocalPath = null;
     _scheduledDimensionIdentity = null;
     final preferredLocalPath = widget.preferredLocalPath?.trim();
-    if (preferredLocalPath != null && preferredLocalPath.isNotEmpty) {
-      _dimensionLocalPath = preferredLocalPath;
-    }
     if (widget.imageProviderOverride != null) {
+      _dimensionLocalPath = preferredLocalPath;
       return;
     }
     final request = widget.request;
@@ -285,8 +300,13 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
     if (preferredLocalPath != null && preferredLocalPath.isNotEmpty) {
-      _localPath = preferredLocalPath;
-      _allowRemoteFallback = true;
+      if (widget.localFileFallbackPredicate == null) {
+        _dimensionLocalPath = preferredLocalPath;
+        _localPath = preferredLocalPath;
+        _allowRemoteFallback = true;
+      } else {
+        unawaited(_resolvePreferredLocalImage(preferredLocalPath, _generation));
+      }
       return;
     }
     if (request.cacheKey.trim().isEmpty) {
@@ -298,6 +318,47 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       return;
     }
     unawaited(_resolveCachedImage(request, _generation));
+  }
+
+  Future<void> _resolvePreferredLocalImage(
+    String localPath,
+    int generation,
+  ) async {
+    final useFallback = await _resolveLocalFileFallback(localPath, generation);
+    if (!_isActive(generation) || useFallback) return;
+    setState(() {
+      _dimensionLocalPath = localPath;
+      _localPath = localPath;
+      _allowRemoteFallback = true;
+    });
+  }
+
+  Future<bool> _resolveLocalFileFallback(
+    String localPath,
+    int generation,
+  ) async {
+    final predicate = widget.localFileFallbackPredicate;
+    if (predicate == null) return false;
+    var useFallback = false;
+    try {
+      useFallback = await predicate(localPath);
+    } catch (_) {
+      // An optional content check must not hide a real image-loading failure.
+    }
+    if (!_isActive(generation) || !useFallback) return false;
+    setState(() {
+      _useLocalFileFallback = true;
+      _displaySettled = true;
+      _localPath = null;
+      _allowRemoteFallback = false;
+      _remoteProviderStarted = false;
+      _cacheReadyLocalPath = null;
+      _dimensionLocalPath = null;
+      _knownImageWidth = null;
+      _knownImageHeight = null;
+      _scheduledDimensionIdentity = null;
+    });
+    return true;
   }
 
   Future<void> _resolveCachedImage(
@@ -313,6 +374,13 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
       final cachedLocalPath = cached?.localPath?.trim();
       if (cachedLocalPath == null || cachedLocalPath.isEmpty) {
         return;
+      }
+      if (widget.localFileFallbackPredicate != null) {
+        final useFallback = await _resolveLocalFileFallback(
+          cachedLocalPath,
+          generation,
+        );
+        if (!_isActive(generation) || useFallback) return;
       }
       widget.onLocalPathResolved?.call(cachedLocalPath);
       _dimensionLocalPath = cachedLocalPath;
@@ -346,6 +414,13 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
         _handleImageFailed(generation);
       }
       return;
+    }
+    if (widget.localFileFallbackPredicate != null) {
+      final useFallback = await _resolveLocalFileFallback(
+        result.localPath!.trim(),
+        generation,
+      );
+      if (!_isActive(generation) || useFallback) return;
     }
     widget.onLocalPathResolved?.call(result.localPath!.trim());
     _dimensionLocalPath = result.localPath!.trim();
@@ -396,7 +471,8 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     final callback = widget.onImageResolved;
     final localPath = _dimensionLocalPath?.trim();
     final cacheKey = request?.cacheKey.trim();
-    if (callback == null ||
+    if (_useLocalFileFallback ||
+        callback == null ||
         localPath == null ||
         localPath.isEmpty ||
         cacheKey == null ||

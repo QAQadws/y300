@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
@@ -14,11 +15,11 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/profile/data/models/my_message_models.dart';
+import 'package:y300/features/messages/data/message_repository_provider.dart';
+import 'package:y300/features/messages/domain/message_repository.dart';
+import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
-import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -27,6 +28,7 @@ import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../support/forum_auth_test_support.dart';
 import '../../../test_support/localized_test_app.dart';
+import '../../messages/support/message_test_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -131,6 +133,32 @@ void main() {
     expect(find.byKey(const Key('user-profile-details')), findsOneWidget);
     expect(find.text('用户组'), findsOneWidget);
     expect(find.text('普通会员'), findsOneWidget);
+  });
+
+  testWidgets('public profile opens a direct conversation by UID', (
+    tester,
+  ) async {
+    ForumConversationTarget? opened;
+    String? openedTitle;
+    await _pumpPublicProfile(
+      tester,
+      repository: _FakeProfileRepository(),
+      conversationRoute: (target, {title = ''}) {
+        opened = target;
+        openedTitle = title;
+        return MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('conversation fixture')),
+        );
+      },
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(UserProfilePage)),
+    );
+    await tester.tap(find.byTooltip(l10n.messageNew));
+    await tester.pumpAndSettle();
+    expect(opened, const ForumConversationTarget.direct('123456'));
+    expect(openedTitle, 'alice');
+    expect(find.text('conversation fixture'), findsOneWidget);
   });
 
   testWidgets('UserProfilePage gates optional sections by capability', (
@@ -274,8 +302,8 @@ void main() {
           forumUserProfileRepositoryProvider.overrideWithValue(
             _FakeProfileRepository(data: _myProfile),
           ),
-          myMessageRepositoryProvider.overrideWithValue(
-            const _EmptyMyMessageRepository(),
+          messageRepositoryProvider.overrideWithValue(
+            _EmptyMessageRepository(),
           ),
           forumImageRefererProvider.overrideWithValue(
             'https://bbs.yamibo.com/',
@@ -291,7 +319,7 @@ void main() {
     await tester.tap(find.text('消息提醒'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MyMessageCenterPage), findsOneWidget);
+    expect(find.byType(MessageCenterPage), findsOneWidget);
   });
 
   testWidgets('MyProfilePage hides data as soon as the session is cleared', (
@@ -812,42 +840,11 @@ void main() {
   });
 }
 
-class _EmptyMyMessageRepository implements MyMessageRepository {
-  const _EmptyMyMessageRepository();
-
+class _EmptyMessageRepository extends MessageTestRepository {
   @override
-  Future<ApiResult<MyMessageCenterData>> getMessageCenter() async {
-    return ApiSuccess<MyMessageCenterData>(
-      MyMessageCenterData(
-        notifications: (await getNotifications()).dataOrNull!,
-        privateMessages: (await getPrivateMessages()).dataOrNull!,
-      ),
-    );
-  }
-
-  @override
-  Future<ApiResult<MyNotificationPage>> getNotifications() async {
-    return const ApiSuccess<MyNotificationPage>(
-      MyNotificationPage(
-        count: 0,
-        page: 1,
-        perPage: 30,
-        items: <MyNotificationItem>[],
-      ),
-    );
-  }
-
-  @override
-  Future<ApiResult<MyPrivateMessagePage>> getPrivateMessages() async {
-    return const ApiSuccess<MyPrivateMessagePage>(
-      MyPrivateMessagePage(
-        count: 0,
-        page: 1,
-        perPage: 30,
-        items: <MyPrivateMessageItem>[],
-      ),
-    );
-  }
+  Future<PrivateMessageRead> loadMessages(
+    ForumPrivateMessageQuery query,
+  ) async => messageTestPage([], owner: '654321');
 }
 
 Future<void> _pumpPublicProfile(
@@ -855,11 +852,16 @@ Future<void> _pumpPublicProfile(
   required ForumUserProfileRepository repository,
   Locale locale = const Locale('zh'),
   ImageCacheService? imageCacheService,
+  PrivateConversationRouteFactory? conversationRoute,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
+        if (conversationRoute != null)
+          privateConversationRouteFactoryProvider.overrideWithValue(
+            conversationRoute,
+          ),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
         if (imageCacheService != null)
           imageCacheServiceProvider.overrideWithValue(imageCacheService),

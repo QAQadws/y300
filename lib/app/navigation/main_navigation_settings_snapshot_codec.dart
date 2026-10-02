@@ -27,9 +27,15 @@ abstract final class MainNavigationSettingsSnapshotCodec {
       if (decoded is! Map || decoded['schemaVersion'] != schemaVersion) {
         return MainNavigationSettings.defaults();
       }
+      final order = _decodeDestinations(decoded['order']).toList();
       return MainNavigationSettings(
-        managedOrder: _decodeDestinations(decoded['order']),
-        hiddenDestinations: _decodeDestinations(decoded['hidden']),
+        managedOrder: order,
+        hiddenDestinations: [
+          ..._decodeDestinations(decoded['hidden']),
+          // Upgrading must not silently add a seventh bottom-bar destination.
+          if (!order.contains(MainShellDestination.messages))
+            MainShellDestination.messages,
+        ],
       );
     } on Object {
       return MainNavigationSettings.defaults();

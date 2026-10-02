@@ -157,6 +157,396 @@ abstract class AppLocalizations {
   /// **'语言设置保存失败：{error}'**
   String appLanguageSaveFailed(String error);
 
+  /// No description provided for @messageNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'发私信'**
+  String get messageNew;
+
+  /// No description provided for @messageSend.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送'**
+  String get messageSend;
+
+  /// No description provided for @messageSending.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在发送…'**
+  String get messageSending;
+
+  /// No description provided for @messageSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息已发送'**
+  String get messageSent;
+
+  /// No description provided for @messageRecipient.
+  ///
+  /// In zh, this message translates to:
+  /// **'收件人用户名'**
+  String get messageRecipient;
+
+  /// No description provided for @messageRecipientHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入一位用户的完整用户名'**
+  String get messageRecipientHint;
+
+  /// No description provided for @messageRecipientInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写一位用户的完整用户名，不支持逗号分隔的多个收件人。'**
+  String get messageRecipientInvalid;
+
+  /// No description provided for @messageRecipientAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加收件人'**
+  String get messageRecipientAdd;
+
+  /// No description provided for @messageRecipientChooseFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'从好友中选择'**
+  String get messageRecipientChooseFriends;
+
+  /// No description provided for @messageRecipientSelectedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count}/20 人'**
+  String messageRecipientSelectedCount(int count);
+
+  /// No description provided for @messageRecipientAlreadySelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'该收件人已添加。'**
+  String get messageRecipientAlreadySelected;
+
+  /// No description provided for @messageRecipientLimitReached.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多选择 20 位收件人。'**
+  String get messageRecipientLimitReached;
+
+  /// No description provided for @messageFriendSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索好友用户名'**
+  String get messageFriendSearch;
+
+  /// No description provided for @messageFriendEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可选择的好友'**
+  String get messageFriendEmpty;
+
+  /// No description provided for @messageFriendNoMatches.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的好友'**
+  String get messageFriendNoMatches;
+
+  /// No description provided for @messageFriendLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法加载好友，可重试或手动添加用户名。'**
+  String get messageFriendLoadFailed;
+
+  /// No description provided for @messageBatchResultTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送结果'**
+  String get messageBatchResultTitle;
+
+  /// No description provided for @messageBatchOnlyFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号只能向好友群发私信，请从好友中选择收件人。'**
+  String get messageBatchOnlyFriends;
+
+  /// No description provided for @messageBatchReportedAccepted.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛报告已受理 {count} 位收件人。'**
+  String messageBatchReportedAccepted(int count);
+
+  /// No description provided for @messageBatchExcluded.
+  ///
+  /// In zh, this message translates to:
+  /// **'明确未提交的收件人'**
+  String get messageBatchExcluded;
+
+  /// No description provided for @messageBatchUnproven.
+  ///
+  /// In zh, this message translates to:
+  /// **'送达未逐一证实的收件人'**
+  String get messageBatchUnproven;
+
+  /// No description provided for @messageBatchSubmittedMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'已提交的消息'**
+  String get messageBatchSubmittedMessage;
+
+  /// No description provided for @messageBatchResultCaution.
+  ///
+  /// In zh, this message translates to:
+  /// **'群发回执不能证明每位收件人都已收到。请到对应对话核实。'**
+  String get messageBatchResultCaution;
+
+  /// No description provided for @messageBatchSendAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'再次发送给这组收件人'**
+  String get messageBatchSendAgain;
+
+  /// No description provided for @messageBatchRepeatTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认再次发送？'**
+  String get messageBatchRepeatTitle;
+
+  /// No description provided for @messageBatchRepeatBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'这组收件人可能已收到消息，再次发送可能造成重复。请先到对应对话核实。'**
+  String get messageBatchRepeatBody;
+
+  /// No description provided for @messageBatchDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get messageBatchDone;
+
+  /// No description provided for @messageInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入消息'**
+  String get messageInput;
+
+  /// No description provided for @messageUnknownOutcome.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认消息是否送达。请先查看对话，确认未送达后再发送，避免重复。'**
+  String get messageUnknownOutcome;
+
+  /// No description provided for @messageSendAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍要再次发送？'**
+  String get messageSendAgain;
+
+  /// No description provided for @messageLeaveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开当前消息？'**
+  String get messageLeaveTitle;
+
+  /// No description provided for @messageLeaveBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'未发送的输入不会保存。'**
+  String get messageLeaveBody;
+
+  /// No description provided for @messageLeavePending.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息正在发送，离开后仍可能送达。未发送的输入不会保存。'**
+  String get messageLeavePending;
+
+  /// No description provided for @messageLeave.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开'**
+  String get messageLeave;
+
+  /// No description provided for @messageRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新消息'**
+  String get messageRefresh;
+
+  /// No description provided for @messageOlder.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更早的消息'**
+  String get messageOlder;
+
+  /// No description provided for @messageLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看最新消息'**
+  String get messageLatest;
+
+  /// No description provided for @messageYesterdayTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天 {time}'**
+  String messageYesterdayTime(String time);
+
+  /// No description provided for @messageDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息详情与复制'**
+  String get messageDetails;
+
+  /// No description provided for @messageTimeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送时间未知'**
+  String get messageTimeUnknown;
+
+  /// No description provided for @messageOpenProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看{name}的资料'**
+  String messageOpenProfile(String name);
+
+  /// No description provided for @messageHistoryChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话历史发生变化，请刷新后继续查看。'**
+  String get messageHistoryChanged;
+
+  /// No description provided for @messageGroup.
+  ///
+  /// In zh, this message translates to:
+  /// **'群组对话'**
+  String get messageGroup;
+
+  /// No description provided for @messageLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录后查看消息和提醒'**
+  String get messageLoginRequired;
+
+  /// No description provided for @messageLinkFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法打开此链接'**
+  String get messageLinkFailed;
+
+  /// No description provided for @messageOnlyFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方只接收好友发送的私信。'**
+  String get messageOnlyFriends;
+
+  /// No description provided for @messageRecipientUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'收件人不存在或暂时不可用，请检查收件人信息。'**
+  String get messageRecipientUnavailable;
+
+  /// No description provided for @messageCannotSendToSelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'不能给自己发送私信。'**
+  String get messageCannotSendToSelf;
+
+  /// No description provided for @messageSendDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号或对方的隐私设置不允许发送这条私信。'**
+  String get messageSendDenied;
+
+  /// No description provided for @messageSendTooFast.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送过于频繁，请稍后再试。'**
+  String get messageSendTooFast;
+
+  /// No description provided for @messageDailyLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'已达到论坛 24 小时内的消息或会话上限，请稍后再试。'**
+  String get messageDailyLimit;
+
+  /// No description provided for @messageConversationUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这段对话已不可用，请刷新消息列表后重试。'**
+  String get messageConversationUnavailable;
+
+  /// No description provided for @appNavigationMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息'**
+  String get appNavigationMessages;
+
+  /// No description provided for @messageMessagesTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的消息'**
+  String get messageMessagesTab;
+
+  /// No description provided for @messageNotificationsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的提醒'**
+  String get messageNotificationsTab;
+
+  /// No description provided for @messageLoadMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更多'**
+  String get messageLoadMore;
+
+  /// No description provided for @messageIgnore.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏蔽此类提醒'**
+  String get messageIgnore;
+
+  /// No description provided for @messageIgnoreExplanation.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅影响今后同类提醒，不删除现有提醒，也不屏蔽私信。'**
+  String get messageIgnoreExplanation;
+
+  /// No description provided for @messageIgnoreAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅这位用户'**
+  String get messageIgnoreAuthor;
+
+  /// No description provided for @messageIgnoreEveryone.
+  ///
+  /// In zh, this message translates to:
+  /// **'所有用户'**
+  String get messageIgnoreEveryone;
+
+  /// No description provided for @messageIgnoreApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已屏蔽今后的此类提醒'**
+  String get messageIgnoreApplied;
+
+  /// No description provided for @messageIgnoreUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认屏蔽设置是否已生效，未自动重试。'**
+  String get messageIgnoreUnknown;
+
+  /// No description provided for @messageIgnoreSaving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存…'**
+  String get messageIgnoreSaving;
+
+  /// No description provided for @messageNoPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开对话查看消息'**
+  String get messageNoPreview;
+
+  /// No description provided for @messageRepeatedNotifications.
+  ///
+  /// In zh, this message translates to:
+  /// **'另有 {count} 条相同提醒未重复展示'**
+  String messageRepeatedNotifications(int count);
+
   /// No description provided for @commonCancel.
   ///
   /// In zh, this message translates to:

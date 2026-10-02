@@ -19,6 +19,7 @@ import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
 import '../parsing/loose_json.dart';
 import 'discuz_api_client.dart';
+import 'discuz_ucenter_avatar_resolver.dart';
 import 'thread_detail_api_mapper.dart';
 import 'thread_detail_html_parser.dart';
 import 'thread_detail_handoff_coordinator.dart';
@@ -40,11 +41,22 @@ final class DiscuzForumNotificationRepository
     ForumNotificationQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    final response = await _api.get(module: 'mynotelist');
+    if (query.page < 1) return _businessFailure('notification_page_invalid');
+    if (query.cancellation?.isCancelled ?? false) {
+      return _messageReadCancelled();
+    }
+    final response = await _api.get(
+      module: 'mynotelist',
+      queryParameters: {'version': '3', 'page': query.page},
+      cancellation: query.cancellation,
+    );
+    if (query.cancellation?.isCancelled ?? false) {
+      return _messageReadCancelled();
+    }
     if (response case ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(
       :final failure,
     )) {
-      return _failure(failure);
+      return _messageReadFailure(failure);
     }
     try {
       final variables =
@@ -52,13 +64,12 @@ final class DiscuzForumNotificationRepository
               .response
               .body
               .variables;
-      final items = LooseJson.list(variables['list'])
-          .map(LooseJson.map)
-          .where((item) => item.isNotEmpty)
-          .map(_notification)
-          .toList(growable: false);
+      final avatars = _messageAvatars(_api.config, variables);
+      final items = _messageRows(
+        variables['list'],
+      ).map((item) => _notification(item, avatars)).toList(growable: false);
       _unique(items.map((item) => item.id), 'notification_identity_invalid');
-      final page = _page(variables, items.length);
+      final page = _messagePage(variables, items.length, query.page);
       return DataReadSuccess(
         data: ForumNotificationPage(
           items: List.unmodifiable(items),
@@ -74,7 +85,10 @@ final class DiscuzForumNotificationRepository
     }
   }
 
-  ForumNotificationItem _notification(Map<String, Object?> item) {
+  ForumNotificationItem _notification(
+    Map<String, Object?> item,
+    DiscuzUCenterAvatarResolver avatars,
+  ) {
     final id = LooseJson.string(item['id']).trim();
     if (id.isEmpty) throw const FormatException('notification_id_missing');
     final rawDateline = LooseJson.string(item['dateline']).trim();
@@ -85,7 +99,11 @@ final class DiscuzForumNotificationRepository
       isNew: LooseJson.boolean(item['new']),
       authorId: LooseJson.string(item['authorid']).trim(),
       authorName: LooseJson.string(item['author']).trim(),
+      authorAvatarUrl: avatars.resolve(LooseJson.string(item['authorid'])),
       noteMarkup: LooseJson.string(item['note']),
+      // space_notice has already subtracted the visible notification from
+      // from_num. Preserve that additional count without subtracting again.
+      duplicateCount: LooseJson.integer(item['from_num']).clamp(0, 0x7fffffff),
       occurredAt: seconds != null && seconds > 0
           ? DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true)
           : null,
@@ -111,11 +129,41 @@ final class DiscuzForumPrivateMessageRepository
     ForumPrivateMessageQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    final response = await _api.get(module: 'mypm');
+    final target = query.target;
+    if (query.page < (target == null ? 1 : 0) ||
+        (target != null && !_positive(target.id))) {
+      return _businessFailure('private_message_query_invalid');
+    }
+    if (query.cancellation?.isCancelled ?? false) {
+      return _messageReadCancelled();
+    }
+    // v4 drops group type, participant count and exact timestamps. v1 exposes
+    // the same space_pm.php data used by the mobile page without those losses.
+    final response = await _api.get(
+      module: 'mypm',
+      queryParameters: {
+        'version': '1',
+        if (query.page > 0) 'page': query.page,
+        if (target == null) 'filter': 'privatepm',
+        if (target != null) ...{
+          'subop': 'view',
+          if (target.kind == ForumConversationKind.direct)
+            'touid': target.id
+          else ...{
+            'plid': target.id,
+            'type': '1',
+          },
+        },
+      },
+      cancellation: query.cancellation,
+    );
+    if (query.cancellation?.isCancelled ?? false) {
+      return _messageReadCancelled();
+    }
     if (response case ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(
       :final failure,
     )) {
-      return _failure(failure);
+      return _messageReadFailure(failure);
     }
     try {
       final variables =
@@ -123,22 +171,23 @@ final class DiscuzForumPrivateMessageRepository
               .response
               .body
               .variables;
-      final items = LooseJson.list(variables['list'])
-          .map(LooseJson.map)
-          .where((item) => item.isNotEmpty)
-          .map(_message)
-          .toList(growable: false);
+      final avatars = _messageAvatars(_api.config, variables);
+      final items = _messageRows(
+        variables['list'],
+      ).map((item) => _message(item, avatars)).toList(growable: false);
       _unique(
         items.map((item) => item.messageId),
         'private_message_identity_invalid',
       );
-      final page = _page(variables, items.length);
+      final page = _messagePage(variables, items.length, query.page);
       return DataReadSuccess(
         data: ForumPrivateMessagePage(
           items: List.unmodifiable(items),
           count: page.$1,
           page: page.$2,
           perPage: page.$3,
+          currentUserId: LooseJson.string(variables['member_uid']).trim(),
+          replyMessageId: LooseJson.string(variables['pmid']).trim(),
         ),
         capabilities: capabilities.toReadCapabilities(),
         metadata: const DataReadMetadata.network(),
@@ -148,25 +197,120 @@ final class DiscuzForumPrivateMessageRepository
     }
   }
 
-  ForumPrivateMessageItem _message(Map<String, Object?> item) {
+  ForumPrivateMessageItem _message(
+    Map<String, Object?> item,
+    DiscuzUCenterAvatarResolver avatars,
+  ) {
     final id = LooseJson.string(item['pmid']).trim();
     if (id.isEmpty) throw const FormatException('private_message_id_missing');
     final conversation = LooseJson.string(item['plid']).trim();
-    final rawDateline = LooseJson.string(item['vdateline']).trim();
+    final fromUserId = _firstMessageValue(item, [
+      'msgfromid',
+      'lastauthorid',
+      'authorid',
+    ]);
+    final toUserId = LooseJson.string(item['touid']).trim();
+    final rawDateline = _firstMessageValue(item, [
+      'dateline',
+      'lastdateline',
+      'vdateline',
+    ]);
     return ForumPrivateMessageItem(
       messageId: id,
       conversationId: conversation.isEmpty ? null : conversation,
       isNew: LooseJson.boolean(item['isnew']),
       subject: LooseJson.string(item['subject']),
-      fromUserId: LooseJson.string(item['msgfromid']).trim(),
-      fromUserName: LooseJson.string(item['msgfrom']).trim(),
-      toUserId: LooseJson.string(item['touid']).trim(),
+      fromUserId: fromUserId,
+      fromUserAvatarUrl: avatars.resolve(fromUserId),
+      fromUserName: _firstMessageValue(item, [
+        'msgfrom',
+        'lastauthor',
+        'author',
+      ]),
+      toUserId: toUserId,
+      toUserAvatarUrl: avatars.resolve(toUserId),
       toUserName: LooseJson.string(item['tousername']).trim(),
       message: LooseJson.string(item['message']),
       sentAt: _parseDiscuzDateTime(rawDateline),
       rawDateline: rawDateline,
+      isGroupConversation: LooseJson.integer(item['pmtype']) == 2,
+      participantCount: LooseJson.integer(item['members']),
     );
   }
+}
+
+DiscuzUCenterAvatarResolver _messageAvatars(
+  ForumClientConfig config,
+  Map<String, Object?> variables,
+) => DiscuzUCenterAvatarResolver(
+  siteOrigin: config.siteOrigin,
+  currentUserId: LooseJson.string(variables['member_uid']),
+  currentUserAvatar: LooseJson.string(variables['member_avatar']),
+);
+
+// Message reads are intentionally uncached: the source marks rows as read and
+// their contents must never survive an account change in a shared disk cache.
+DataReadFailure<T, C> _messageReadCancelled<T, C>() => const DataReadFailure(
+  kind: DataReadFailureKind.cancelled,
+  code: 'request_cancelled',
+  diagnosticMessage: 'request_cancelled',
+);
+
+DataReadFailure<T, C> _messageReadFailure<T, C>(ForumTransportFailure failure) {
+  final code = failure.code.split('//').first;
+  if (code == 'login_before_enter_home' || code == 'to_login') {
+    return const DataReadFailure(
+      kind: DataReadFailureKind.unauthorized,
+      code: 'message_login_required',
+      diagnosticMessage: 'message_login_required',
+    );
+  }
+  return _failure(failure);
+}
+
+Iterable<Map<String, Object?>> _messageRows(Object? source) sync* {
+  final Iterable<Object?> rows;
+  if (source is List) {
+    rows = source;
+  } else if (source is Map &&
+      source.keys.every((key) => RegExp(r'^\d+$').hasMatch(key.toString()))) {
+    rows = source.values;
+  } else {
+    throw const FormatException('message_list_invalid');
+  }
+  for (final row in rows) {
+    if (row is! Map || row.isEmpty) {
+      throw const FormatException('message_row_invalid');
+    }
+    yield LooseJson.map(row);
+  }
+}
+
+(int, int, int) _messagePage(
+  Map<String, Object?> variables,
+  int itemCount,
+  int requestedPage,
+) {
+  final count = LooseJson.integer(variables['count'], fallback: -1);
+  final rawPage = LooseJson.integer(variables['page'], fallback: -1);
+  final perPage = LooseJson.integer(variables['perpage'], fallback: -1);
+  // Discuz returns ceil(0 / perpage) == 0 for a new, empty conversation.
+  final page = rawPage == 0 && count == 0 && requestedPage == 0 ? 1 : rawPage;
+  if (count < itemCount ||
+      perPage < 1 ||
+      page < 1 ||
+      (requestedPage > 0 && page != requestedPage)) {
+    throw const FormatException('message_pagination_invalid');
+  }
+  return (count, page, perPage);
+}
+
+String _firstMessageValue(Map<String, Object?> item, List<String> keys) {
+  for (final key in keys) {
+    final value = LooseJson.string(item[key]).trim();
+    if (value.isNotEmpty && value != '0') return value;
+  }
+  return '';
 }
 
 DateTime? _parseDiscuzDateTime(String source) {
@@ -1061,16 +1205,6 @@ final class DiscuzThreadAuthorPostRepository
       return _parseFailure('thread_author_post_parse_failed', error);
     }
   }
-}
-
-(int, int, int) _page(Map<String, Object?> variables, int itemCount) {
-  final count = LooseJson.integer(variables['count'], fallback: itemCount);
-  final page = LooseJson.integer(variables['page'], fallback: 1);
-  final perPage = LooseJson.integer(variables['perpage']);
-  if (count < 0 || page < 1 || perPage < 0 || count < itemCount) {
-    throw const FormatException('directory_pagination_invalid');
-  }
-  return (count, page, perPage);
 }
 
 void _unique(Iterable<String> ids, String code) {

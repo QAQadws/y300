@@ -17,6 +17,7 @@ import 'package:y300/features/composer_shared/presentation/quill/composer_quill_
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_format_sanitizer.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_insertion_service.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_sticker_embed_builder.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_size_mapping.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_typing_style_snapshot.dart';
@@ -28,7 +29,6 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_coll
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_collapse_chrome.dart';
 
@@ -424,7 +424,7 @@ class _ComposerQuillEditorSurfaceState
             onTapDown: (_, _) => _handleEditorTapDown(),
             onTapUp: (_, _) => _handleEditorTapUp(controller: _controller),
             embedBuilders: [
-              _StickerEmbedBuilder(stickers: _stickerLookupItems()),
+              ComposerQuillStickerEmbedBuilder(stickers: _stickerLookupItems()),
               _AttachEmbedBuilder(
                 attachmentResolver: _attachmentResolver(),
                 attachImageBuilder:
@@ -2067,49 +2067,6 @@ class _ColorSwatchButton extends StatelessWidget {
                       : Colors.black,
                 )
               : null,
-        ),
-      ),
-    );
-  }
-}
-
-class _StickerEmbedBuilder extends EmbedBuilder {
-  const _StickerEmbedBuilder({required this.stickers});
-
-  final List<StickerItem> stickers;
-
-  @override
-  String get key => composerQuillStickerEmbedType;
-
-  @override
-  bool get expanded => false;
-
-  @override
-  String toPlainText(Embed node) {
-    return node.value.data.toString();
-  }
-
-  @override
-  Widget build(BuildContext context, EmbedContext embedContext) {
-    final code = embedContext.node.value.data.toString();
-    final sticker = stickers.cast<StickerItem?>().firstWhere(
-      (item) => item?.code == code,
-      orElse: () => null,
-    );
-    if (sticker == null) {
-      return Text(code);
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: ConstrainedBox(
-        key: Key('composer-quill-sticker-frame-$code'),
-        constraints: const BoxConstraints(maxWidth: 96, maxHeight: 96),
-        child: ComposerStickerImage(
-          key: Key('composer-quill-sticker-$code'),
-          sticker: sticker,
-          fit: BoxFit.contain,
-          placeholder: const SizedBox.shrink(),
-          errorPlaceholder: const Icon(Icons.broken_image_outlined, size: 20),
         ),
       ),
     );

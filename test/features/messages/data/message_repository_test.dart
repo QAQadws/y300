@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
-import 'package:y300/features/profile/data/repositories/my_message_repository.dart';
+import 'package:y300/features/messages/data/message_repository_provider.dart';
 
 void main() {
   test('package-backed repository loads notifications and messages', () async {
@@ -12,17 +12,22 @@ void main() {
       ),
       network: network,
     ).buildStandardClient();
-    final repository = PackageMyMessageRepository(client);
+    final repository = ClientMessageRepository(client);
 
-    final result = await repository.getMessageCenter();
+    final notifications = await repository.loadNotifications(
+      const forum.ForumNotificationQuery(),
+    );
+    final messages = await repository.loadMessages(
+      const forum.ForumPrivateMessageQuery(),
+    );
 
-    expect(result.isSuccess, isTrue);
+    expect(notifications.failureOrNull, isNull);
+    expect(messages.failureOrNull, isNull);
     expect(network.modules, ['mynotelist', 'mypm']);
-    final data = result.dataOrNull!;
-    expect(data.notifications.items.single.id, 'notice-1');
-    expect(data.notifications.items.single.author, 'Alice');
-    expect(data.privateMessages.items.single.pmid, 'pm-1');
-    expect(data.privateMessages.items.single.fromName, 'Bob');
+    expect(notifications.dataOrNull!.items.single.id, 'notice-1');
+    expect(notifications.dataOrNull!.items.single.authorName, 'Alice');
+    expect(messages.dataOrNull!.items.single.messageId, 'pm-1');
+    expect(messages.dataOrNull!.items.single.fromUserName, 'Bob');
   });
 }
 

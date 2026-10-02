@@ -107,6 +107,8 @@ flutter:
     - assets/tag.json
     - assets/readperm.json
     - assets/noavatar.png
+    - assets/messages/grouppm.png
+    - assets/messages/systempm.png
     - assets/prototypes/forum_html/
 
   # To add assets to your application, add an assets section, like this:

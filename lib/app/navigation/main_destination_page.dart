@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
+import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/comic/presentation/comic_tab_page.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
@@ -69,6 +70,9 @@ class MainDestinationPage extends ConsumerWidget {
       MainShellDestination.history => HistoryPage(
         onOpenEntry: ref.read(historyEntryRouterProvider).open,
         imageReferer: ref.watch(forumImageRefererProvider),
+      ),
+      MainShellDestination.messages => MessageCenterDestination(
+        isActive: isActive,
       ),
       MainShellDestination.more => throw ArgumentError.value(
         destination,

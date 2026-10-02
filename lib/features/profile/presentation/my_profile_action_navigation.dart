@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
-import 'package:y300/features/profile/presentation/my_message_center_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 
 /// Routes only protocol-approved action kinds. No page-provided href reaches
@@ -28,7 +28,9 @@ void openMyProfileAction({
       return;
     case ForumUserProfileActionKind.messages:
       Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const MyMessageCenterPage()),
+        MaterialPageRoute<void>(
+          builder: (_) => const MessageCenterDestination(),
+        ),
       );
       return;
     case ForumUserProfileActionKind.threads:
