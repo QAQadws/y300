@@ -6,11 +6,25 @@ enum MainShellDestination {
   comic,
   novel,
   history,
+  blogs,
   messages,
   more;
 
   static const List<MainShellDestination> defaultManagedOrder =
-      <MainShellDestination>[forum, favorites, comic, novel, history, messages];
+      <MainShellDestination>[
+        forum,
+        favorites,
+        comic,
+        novel,
+        history,
+        blogs,
+        messages,
+      ];
+
+  static const defaultHiddenDestinations = <MainShellDestination>{
+    blogs,
+    messages,
+  };
 
   bool get isManaged => this != MainShellDestination.more;
 }
@@ -37,9 +51,7 @@ final class MainNavigationSettings {
   factory MainNavigationSettings.defaults() {
     return MainNavigationSettings(
       managedOrder: MainShellDestination.defaultManagedOrder,
-      hiddenDestinations: const <MainShellDestination>{
-        MainShellDestination.messages,
-      },
+      hiddenDestinations: MainShellDestination.defaultHiddenDestinations,
     );
   }
 

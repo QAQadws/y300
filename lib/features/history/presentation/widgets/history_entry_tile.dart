@@ -31,8 +31,9 @@ class HistoryEntryTile extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final timeText = DateFormat.Hm(l10n.localeName).format(localTime);
     final typeLabel = HistoryTextResolver.typeLabel(l10n, entry.target.type);
-    final semanticsLabel =
-        '$typeLabel，${entry.title}，${entry.contextLabel}，$timeText';
+    final title = HistoryTextResolver.entryTitle(l10n, entry);
+    final contextLabel = HistoryTextResolver.entryContext(l10n, entry);
+    final semanticsLabel = '$typeLabel，$title，$contextLabel，$timeText';
 
     const borderRadius = BorderRadius.all(Radius.circular(8));
     return Padding(
@@ -70,7 +71,7 @@ class HistoryEntryTile extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          entry.title,
+                          title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(
@@ -79,7 +80,7 @@ class HistoryEntryTile extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${entry.contextLabel} · $timeText',
+                          '$contextLabel · $timeText',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(

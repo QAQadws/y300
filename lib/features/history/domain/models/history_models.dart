@@ -1,10 +1,11 @@
-enum HistoryTargetType { thread, comic, novel }
+enum HistoryTargetType { thread, comic, novel, blog }
 
 enum HistoryVisitSurface {
   threadNative,
   threadWebView,
   comicDetail,
   novelDetail,
+  blogDetail,
 }
 
 class HistoryTargetKey {

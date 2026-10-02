@@ -1,13 +1,13 @@
-import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
-    show ThreadReadInvalidation;
-import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    show ThreadReadInvalidation;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/media/encoded_image_dimension_probe.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/data/providers/cache_mutation_provider.dart';
@@ -43,6 +43,7 @@ import 'package:y300/features/cache/presentation/services/default_forum_image_pr
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 
 export 'cache_mutation_provider.dart';
 
@@ -239,6 +240,7 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
       ),
       ComposerDraftStorageAccountingAdapter(
         databaseProvider: ref.watch(composerDraftDatabaseManagerProvider).open,
+        blogDraftRepository: ref.watch(blogDraftRepositoryProvider),
       ),
       DownloadStorageAccountingAdapter(
         storageService: ref.watch(downloadStorageServiceProvider),

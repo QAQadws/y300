@@ -30,12 +30,14 @@ abstract final class MainNavigationSettingsSnapshotCodec {
       final order = _decodeDestinations(decoded['order']).toList();
       return MainNavigationSettings(
         managedOrder: order,
-        hiddenDestinations: [
+        hiddenDestinations: {
           ..._decodeDestinations(decoded['hidden']),
-          // Upgrading must not silently add a seventh bottom-bar destination.
-          if (!order.contains(MainShellDestination.messages))
-            MainShellDestination.messages,
-        ],
+          // A newly introduced optional feature must not appear on upgrade.
+          // Once its ID is saved in the order, retain the user's visibility.
+          ...MainShellDestination.defaultHiddenDestinations.where(
+            (destination) => !order.contains(destination),
+          ),
+        },
       );
     } on Object {
       return MainNavigationSettings.defaults();

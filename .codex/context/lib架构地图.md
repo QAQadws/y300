@@ -36,18 +36,18 @@
 - `composer_shared`：发帖、回复与帖子编辑共用编辑器基础设施。负责 source/Quill surface、BBCode 转换与预览、`collapse=0` grammar/原子 embed/编辑流程、附件语义与预览解析、编辑偏好、通用 controller 基类和错误呈现；表情目录、图片上传权限/上传、未使用附件目录与删除经 forum client 契约执行。草稿能力由调用方决定，帖子编辑明确关闭持久化草稿。
 - `favorites`：论坛收藏同步与收藏书架。收藏目录读取与收藏/取消收藏命令经 forum client 契约（提交后目录回读确认在包内）；负责同步限流、本地持久化、详情上下文加载、内容 ingest 注册表，以及把收藏帖子导入漫画或小说。
 - `forum`：论坛壳、解析模式首页/版块列表和 WebView 模式。首页/版块列表读取经 forum client HTML-first 契约（document/snapshot fallback 在包内）；负责模式偏好、SWR 与轮播聚合、WebView driver/runtime、Cookie bootstrap、网络/视觉策略、链接路由、论坛收藏入口，以及应用前台内不可见的普通 WebView WAF 挑战宿主。
-- `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、Debug 日志和记录页；记录类型覆盖论坛、帖子、漫画与小说。
+- `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、Debug 日志和记录页；记录类型覆盖帖子、漫画、小说与日志；日志以作者 ID 和日志 ID 的复合身份保存，继续使用现有 v1 数据库。
 - `image_loading`：通用应用图片 source/provider/cache manager、预取接口和 `AppImage` 展示封装；不要与业务化的 `cache` 所有权/retention 规则混为一层。
 - `library_shared`：漫画、小说、收藏共用的书架/详情/选择模式抽象。包含模块 adapter、统一 controller/page、排序筛选、视图偏好、书架状态、刷新总线、任务进度/通知、批量阅读状态、封面预热和作品清理契约。
 - `messages`：原生消息目录、单人及已有群组对话、用户名发送、提醒列表与按类型/作者屏蔽。读取和命令经 forum client 契约；负责账号隔离、取消、分页合并、延迟失效刷新、输入生命周期和正文展示。跨 feature 链接由 `app/navigation/message_routes.dart` 装配，不自建协议或持久化私信缓存。
 - `more`：更多页、关于页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/手动导出和 Debug 原型工具。
 - `novel`：小说数据、书架、详情和阅读器。作者帖正文经 forum client `threadAuthorPosts` 契约以 `version=1` 读取；负责来源元数据与章节同步/恢复、帖子章节网关、正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
 - `posting`：新主题发布流程。发帖准备与提交经 forum client preparation/command 契约；负责版块/类型/标签/特殊主题与投票建模、提交结果映射，并在 `composer_shared` 之上提供发帖 controller/page。
-- `profile`：当前用户与指定用户资料、日志列表/详情。当前用户资料、公开资料/日志经 forum client 契约；只提供消息中心与单人对话入口，完整消息工作流归 `messages`。资料修改尚未实现，不得凭空补造请求。
+- `profile`：当前用户与指定用户资料、账号摘要、每日签到、日志列表/详情及原生 HTML 日志编辑器。当前用户资料、账号摘要、公开资料/日志和签到经 forum client 契约；只提供消息中心与单人对话入口，完整消息工作流归 `messages`。原生日志详情在成功内容可见后经 history 的 recorder 保存浏览记录。新建日志由独立领域快照/repository 和保存协调组件接入账号草稿，SQLite `blog_drafts.db` v1 每账号一份、不自动过期；编辑已有日志和评论不保存草稿。资料修改尚未实现，不得凭空补造请求。
 - `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。
 - `reply`：帖子回复与楼层回复。回复准备与提交经 forum client preparation/command 契约（楼层回复动态字段封装在包内 opaque token）；负责草稿校验，并在 `composer_shared` 之上提供回复 controller/page。
 - `search`：搜索读取经 forum client `forumSearch` 契约（formhash、POST、redirect 校验与结果页解析在包内）；负责搜索调度器、限流、查询 generation 隔离、自动分页搜索页和漫画 fallback 编排。
-- `startup`：可配置导航的懒加载主壳（消息默认隐藏）、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热（经 client 当前用户资料契约）。
+- `startup`：可配置导航的懒加载主壳（日志与消息默认隐藏）、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热（经 client 当前用户资料契约）。
 - `storage`：下载根目录选择、目录/文件名规范化、原子 JSON 写入、漫画 CBZ 定位和下载存储模型；不负责具体业务下载队列。
 - `tags`：论坛标签索引与查询、标签主题页；标签主题列表读取经 forum client 桌面 HTML 契约。为帖子内容分类和漫画/小说识别提供元数据。
 - `thread`：帖子详情核心。详情、回复分页、只看楼主、评分/点评的准备与提交、投票、收藏动作、楼层定位经 forum client 契约；负责内容分类、HTML-first 正文准备/主题适配/缓存图片、原生帖子页、历史记录和帖子图片阅读器桥接。帖子编辑的表单准备、提交与图片附件删除契约已在包内，本模块负责编辑 composer 工作流、提交回读验证、capability gate、原生编辑页及 WebView fallback。
@@ -64,7 +64,8 @@
 - 漫画与帖子图片阅读通过 capability/adapter 接入 `reader_shared` 的 `ImageReaderEngine`；图片缓存与预加载通过 `cache` 服务完成。owner/session generation 是章节或帖子切换的异步边界，旧回调不得污染新内容。
 - 小说纵向正文复用 HTML-first 渲染准备，分页模式由 `novel` 自己的文档模型、分类器和混合分页器负责；复杂 HTML 测量属于 presentation 布局能力。小说作者帖读取固定经 forum client `threadAuthorPosts` 契约使用 `version=1`，不得改成 `version=4`。
 - `posting` 与 `reply` 只保留各自表单建模与提交结果映射，preparation/command 协议在 forum client 内；编辑器、草稿、附件上传、表情与 BBCode 由 `composer_shared` 统一维护。`thread` 的帖子编辑复用该 surface，编辑表单准备、提交与图片附件删除契约已在包内，但每次进入必须重新 GET 编辑表单且不保存/恢复编辑草稿。帖子编辑只对 capability allowlist 内的普通表单开放原生提交，未知、复杂或结果无法确认的状态必须 fail closed 到 WebView 或停留当前页保留内容，提交后由 app 回读编辑表单证明最终状态。
+- 日志草稿由 `profile` 独立保存原始 HTML 和发布设置，复用公开 SQLite 生命周期管理及选图契约，不进入 BBCode 草稿库。账号切换使旧 UI/异步任务失效；提交前保存待确认标记，applied 才删除，未知结果必须经用户核对后解锁。图片只存 ID/原地址，经 forum client `blogMedia` 的相册回读能力校验后重新生成凭据；`cache` 存储统计通过 `BlogDraftRepository.usage` 汇入草稿，不清理服务器图片或持久草稿。
 - `collapse=0` 的语法、递归解析与序列化归 `composer_shared`，视觉 chrome 归 `shared/widgets`；collapse 在 Quill 中是不可被外层格式包裹的原子块，内部仍可包含已支持的 BBCode、表情、附件和嵌套折叠。非法、行内、交叉或超深结构必须保留原始源码，不得猜测修复或丢失内容。
-- 页面访问由 `history` 的 mapper/recorder 统一落库，`app/navigation` 的 `HistoryEntryRouter` 再按记录类型打开论坛、帖子、漫画或小说目标。
+- 页面访问由 `history` 的 mapper/recorder 统一落库，`app/navigation` 的 `HistoryEntryRouter` 再按记录类型打开帖子、漫画、小说或日志目标。日志重开始终进入原生详情正文开头，使用 `BlogHistoryTarget` 恢复作者与日志身份，不沿用评论定位；日志 route 内去重并校验 controller 与账号会话，后台读取和内置网页日志不记录。
 - 图片、HTML 文档和解析快照写入后通过 `CacheMutationBus` 通知统一预算调度器；“更多/数据与存储”只通过缓存维护与容量契约统计或清理，不扫描并误删下载和用户数据。
 - 搜索请求默认经过搜索调度器和限流器，协议层（formhash、POST、redirect、结果页解析）由 forum client 承担；旧搜索 raw service 已删除，不得重建旁路。应用更新使用独立的 Gitee release/checksum/download 边界，不复用论坛搜索或漫画下载队列。

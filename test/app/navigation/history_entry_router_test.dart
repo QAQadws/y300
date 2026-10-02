@@ -3,7 +3,9 @@ import '../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
+import 'package:y300/features/history/domain/models/blog_history_target.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 
 void main() {
   testWidgets('opens thread in the current native forum mode', (tester) async {
@@ -81,6 +83,157 @@ void main() {
       'mobile': '2',
     });
     expect(capturedUri.toString(), isNot(contains('highlight')));
+  });
+
+  for (final mode in ForumShellMode.values) {
+    testWidgets('blog history opens natively with $mode forum preference', (
+      tester,
+    ) async {
+      var modeReads = 0;
+      ({String ownerUserId, String blogId, String title})? destination;
+      final router = HistoryEntryRouter(
+        loadForumMode: () async {
+          modeReads += 1;
+          return mode;
+        },
+        comicWorkExists: (_) async => throw StateError('unexpected lookup'),
+        novelWorkExists: (_) async => throw StateError('unexpected lookup'),
+        nativeBlogPageBuilder:
+            ({required ownerUserId, required blogId, required title}) {
+              destination = (
+                ownerUserId: ownerUserId,
+                blogId: blogId,
+                title: title,
+              );
+              return const _DestinationPage(label: 'native-blog');
+            },
+        webViewPageBuilder: (_) => throw StateError('unexpected webview'),
+      );
+      late BuildContext context;
+      await tester.pumpWidget(
+        _routerHarness(onContext: (value) => context = value),
+      );
+
+      final result = await router.open(
+        context,
+        _entry(
+          type: HistoryTargetType.blog,
+          id: BlogHistoryTarget(ownerUserId: '101', blogId: '11').encodedId,
+          title: '日志标题',
+          page: 9,
+          canonicalUri: Uri.parse(
+            'https://unrelated.test/home.php?mod=space&uid=999&do=blog'
+            '&id=99&cid=777&page=9#comment_777',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(result, isA<HistoryOpenSuccess>());
+      expect(destination, (ownerUserId: '101', blogId: '11', title: '日志标题'));
+      expect(modeReads, 0);
+      expect(find.text('native-blog'), findsOneWidget);
+    });
+  }
+
+  testWidgets('default blog destination starts at the article without a URL', (
+    tester,
+  ) async {
+    final observer = _RouteObserver();
+    final router = HistoryEntryRouter(
+      loadForumMode: () async => throw StateError('unexpected mode lookup'),
+      comicWorkExists: (_) async => throw StateError('unexpected lookup'),
+      novelWorkExists: (_) async => throw StateError('unexpected lookup'),
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      _routerHarness(
+        onContext: (value) => context = value,
+        observers: [observer],
+      ),
+    );
+
+    final result = await router.open(
+      context,
+      _entry(
+        type: HistoryTargetType.blog,
+        id: ' 00101:00011 ',
+        title: '日志标题',
+        page: 9,
+      ),
+    );
+    final route = observer.routes.last as MaterialPageRoute<void>;
+    final destination = route.builder(context) as ProfileBlogDetailPage;
+
+    expect(result, isA<HistoryOpenSuccess>());
+    expect(destination.ownerUserId, '101');
+    expect(destination.blogId, '11');
+    expect(destination.initialTitle, '日志标题');
+    expect(destination.initialPage, 1);
+    expect(destination.commentId, isNull);
+    expect(destination.lastCommentPage, isFalse);
+    expect(destination.focusComments, isFalse);
+    // The route arguments are under test; do not mount a live detail reader.
+    Navigator.of(context).removeRoute(route);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('invalid blog identity cannot fall back to a canonical URL', (
+    tester,
+  ) async {
+    var destinationsBuilt = 0;
+    final observer = _RouteObserver();
+    final router = HistoryEntryRouter(
+      loadForumMode: () async => throw StateError('unexpected mode lookup'),
+      comicWorkExists: (_) async => throw StateError('unexpected lookup'),
+      novelWorkExists: (_) async => throw StateError('unexpected lookup'),
+      nativeBlogPageBuilder:
+          ({required ownerUserId, required blogId, required title}) {
+            destinationsBuilt += 1;
+            return const _DestinationPage(label: 'native-blog');
+          },
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      _routerHarness(
+        onContext: (value) => context = value,
+        observers: [observer],
+      ),
+    );
+
+    for (final id in ['', '11', '0:11', '101:0', '101:bad', '101:11:12']) {
+      final result = await router.open(
+        context,
+        _entry(
+          type: HistoryTargetType.blog,
+          id: id,
+          title: '日志',
+          canonicalUri: Uri.parse(
+            'https://bbs.yamibo.com/home.php?mod=space&uid=101&do=blog&id=11',
+          ),
+        ),
+      );
+      expect(
+        result,
+        isA<HistoryOpenUnavailable>()
+            .having(
+              (value) => value.code,
+              'code',
+              HistoryOpenUnavailableCode.targetMissing,
+            )
+            .having(
+              (value) => value.targetType,
+              'targetType',
+              HistoryTargetType.blog,
+            ),
+        reason: id,
+      );
+    }
+    await tester.pumpAndSettle();
+
+    expect(destinationsBuilt, 0);
+    expect(observer.routes, hasLength(1));
+    expect(find.text('home'), findsOneWidget);
   });
 
   testWidgets('opens comic and novel records with their local work ids', (
@@ -339,8 +492,12 @@ void main() {
   });
 }
 
-Widget _routerHarness({required ValueChanged<BuildContext> onContext}) {
+Widget _routerHarness({
+  required ValueChanged<BuildContext> onContext,
+  List<NavigatorObserver> observers = const [],
+}) {
   return LocalizedTestApp(
+    navigatorObservers: observers,
     home: Builder(
       builder: (context) {
         onContext(context);
@@ -368,6 +525,7 @@ HistoryEntry _entry({
       HistoryTargetType.thread => HistoryVisitSurface.threadNative,
       HistoryTargetType.comic => HistoryVisitSurface.comicDetail,
       HistoryTargetType.novel => HistoryVisitSurface.novelDetail,
+      HistoryTargetType.blog => HistoryVisitSurface.blogDetail,
     },
     firstVisitedAt: DateTime.utc(2026, 7, 16),
     lastVisitedAt: DateTime.utc(2026, 7, 16),
@@ -377,6 +535,15 @@ HistoryEntry _entry({
 }
 
 Future<bool> _workExists(String workId) async => true;
+
+class _RouteObserver extends NavigatorObserver {
+  final routes = <Route<dynamic>>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    routes.add(route);
+  }
+}
 
 class _DestinationPage extends StatelessWidget {
   const _DestinationPage({required this.label});

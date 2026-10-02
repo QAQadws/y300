@@ -147,6 +147,13 @@ final class YamiboForumClientBuilder {
               : null),
     );
     final unusedImages = factory.createUnusedImageAttachments(formhash);
+    final blogEditor = factory.createUserBlogEditor(
+      multipart:
+          multipartClient ??
+          (network is ForumMultipartClient
+              ? network as ForumMultipartClient
+              : null),
+    );
     final privateMessageBatch = factory.createPrivateMessageBatch();
     final dailySignIn = factory.createDailySignIn();
     final standardPlan = ForumClientSourcePlan(
@@ -181,6 +188,11 @@ final class YamiboForumClientBuilder {
       forumUserProfile: factory.createForumUserProfile(),
       userBlogDirectory: factory.createUserBlogDirectory(),
       userBlogDetail: factory.createUserBlogDetail(),
+      blogComments: factory.createUserBlogComments(),
+      blogOperations: blogEditor.operations,
+      blogMedia: blogEditor.media,
+      blogFavorites: factory.createUserBlogFavorites(),
+      blogNavigation: factory.createUserBlogNavigation(),
       forumSearch: factory.createForumSearch(formhash),
       comicEpisodeCatalog: factory.createApiComicEpisodeCatalog(),
       comicThreadDiscovery: factory.createApiComicThreadDiscovery(),

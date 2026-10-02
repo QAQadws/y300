@@ -66,27 +66,12 @@ class ThreadMetricPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 25,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: palette.chipBackground,
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: palette.softText),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: palette.muted,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+    return ForumMetricPill(
+      icon: icon,
+      label: label,
+      backgroundColor: palette.chipBackground,
+      iconColor: palette.softText,
+      textColor: palette.muted,
     );
   }
 }

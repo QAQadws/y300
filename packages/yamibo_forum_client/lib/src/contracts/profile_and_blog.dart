@@ -3,6 +3,8 @@ library;
 
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
+import 'user_blog_comments.dart';
+import '../network/forum_request.dart' show ForumRequestCancellation;
 
 /// Source-neutral profile user identity.
 final class ProfileUserIdentity {
@@ -381,6 +383,36 @@ enum UserBlogOrder {
   recommended,
 }
 
+/// Journal operations supported by the mobile workflow.
+enum UserBlogAction {
+  /// Publish a journal entry.
+  create,
+
+  /// Edit an existing entry.
+  edit,
+
+  /// Delete an existing entry.
+  delete,
+
+  /// Pin an entry in the author's journal.
+  pin,
+
+  /// Remove an entry's pin.
+  unpin,
+}
+
+/// Reader actions advertised by the article's mobile toolbar.
+enum UserBlogSocialAction {
+  /// Save a personal bookmark with an optional description.
+  favorite,
+
+  /// Publish a share to the reader's activity feed.
+  share,
+
+  /// Invite selected friends to read the article.
+  invite,
+}
+
 /// Query parameters for user blog directory.
 final class UserBlogDirectoryQuery {
   /// Creates a [UserBlogDirectoryQuery].
@@ -388,23 +420,45 @@ final class UserBlogDirectoryQuery {
     required this.scope,
     this.order,
     this.page = 1,
+    this.ownerUserId,
+    this.categoryId,
+    this.personalCategoryId,
   });
 
   /// Creates a [UserBlogDirectoryQuery].
   const UserBlogDirectoryQuery.public({
     this.order = UserBlogOrder.latest,
     this.page = 1,
-  }) : scope = UserBlogFeedScope.public;
+    this.categoryId,
+  }) : scope = UserBlogFeedScope.public,
+       ownerUserId = null,
+       personalCategoryId = null;
 
   /// Creates a [UserBlogDirectoryQuery].
   const UserBlogDirectoryQuery.friends({this.page = 1})
     : scope = UserBlogFeedScope.friends,
-      order = null;
+      order = null,
+      ownerUserId = null,
+      categoryId = null,
+      personalCategoryId = null;
 
   /// Creates a [UserBlogDirectoryQuery].
-  const UserBlogDirectoryQuery.self({this.page = 1})
-    : scope = UserBlogFeedScope.self,
-      order = null;
+  const UserBlogDirectoryQuery.self({
+    this.page = 1,
+    this.ownerUserId,
+    this.personalCategoryId,
+  }) : scope = UserBlogFeedScope.self,
+       order = null,
+       categoryId = null;
+
+  /// A specific author's journal; omitted for the signed-in user's own feed.
+  final String? ownerUserId;
+
+  /// Site category, available only for the public feed.
+  final String? categoryId;
+
+  /// Author-defined category, available only for an author's feed.
+  final String? personalCategoryId;
 
   /// Scope.
   final UserBlogFeedScope scope;
@@ -420,10 +474,20 @@ final class UserBlogDirectoryQuery {
       other is UserBlogDirectoryQuery &&
       other.scope == scope &&
       other.order == order &&
-      other.page == page;
+      other.page == page &&
+      other.ownerUserId == ownerUserId &&
+      other.categoryId == categoryId &&
+      other.personalCategoryId == personalCategoryId;
 
   @override
-  int get hashCode => Object.hash(scope, order, page);
+  int get hashCode => Object.hash(
+    scope,
+    order,
+    page,
+    ownerUserId,
+    categoryId,
+    personalCategoryId,
+  );
 }
 
 /// Source-neutral user blog directory data.
@@ -434,6 +498,7 @@ final class UserBlogDirectoryData {
     required this.order,
     required this.items,
     required this.pagination,
+    this.categories = const [],
   });
 
   /// Scope.
@@ -447,6 +512,33 @@ final class UserBlogDirectoryData {
 
   /// Pagination.
   final UserBlogPagination pagination;
+
+  /// Server-advertised filters for the current scope.
+  final List<UserBlogCategory> categories;
+}
+
+/// A site or personal category advertised by the selected journal feed.
+final class UserBlogCategory {
+  /// Creates a category with a source identifier and display name.
+  const UserBlogCategory({required this.id, required this.name});
+
+  /// Stable category identifier.
+  final String id;
+
+  /// Server-authored category name.
+  final String name;
+}
+
+/// A category advertised by an article, with its exact reading destination.
+final class UserBlogCategoryLink {
+  /// Creates a link without deriving category identity from its display name.
+  const UserBlogCategoryLink({required this.name, required this.query});
+
+  /// Server-authored display name.
+  final String name;
+
+  /// Complete site or author category query resolved by the source.
+  final UserBlogDirectoryQuery query;
 }
 
 /// Source-neutral user blog summary.
@@ -460,6 +552,8 @@ final class UserBlogSummary {
     this.excerpt,
     this.avatarUrl,
     this.publishedAtText,
+    this.actions = const {},
+    this.categoryNames = const [],
   });
 
   /// Blog id.
@@ -482,6 +576,12 @@ final class UserBlogSummary {
 
   /// Published at text.
   final String? publishedAtText;
+
+  /// Operations explicitly advertised in the current feed response.
+  final Set<UserBlogAction> actions;
+
+  /// Display-only labels from the list; they do not prove category identities.
+  final List<String> categoryNames;
 }
 
 /// Source-neutral user blog pagination.
@@ -606,13 +706,29 @@ abstract interface class UserBlogDirectoryRepository {
   load(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   });
 }
 
 /// Query parameters for user blog detail.
 final class UserBlogDetailQuery {
   /// Creates a [UserBlogDetailQuery].
-  const UserBlogDetailQuery({required this.ownerUserId, required this.blogId});
+  const UserBlogDetailQuery({
+    required this.ownerUserId,
+    required this.blogId,
+    this.page = 1,
+    this.commentId,
+    this.lastCommentPage = false,
+  });
+
+  /// One-based comment page.
+  final int page;
+
+  /// A specific comment, used by links to replies and notifications.
+  final String? commentId;
+
+  /// Requests the server's last comment page after a confirmed submission.
+  final bool lastCommentPage;
 
   /// Owner user id.
   final String ownerUserId;
@@ -624,10 +740,14 @@ final class UserBlogDetailQuery {
   bool operator ==(Object other) =>
       other is UserBlogDetailQuery &&
       other.ownerUserId == ownerUserId &&
-      other.blogId == blogId;
+      other.blogId == blogId &&
+      other.page == page &&
+      other.commentId == commentId &&
+      other.lastCommentPage == lastCommentPage;
 
   @override
-  int get hashCode => Object.hash(ownerUserId, blogId);
+  int get hashCode =>
+      Object.hash(ownerUserId, blogId, page, commentId, lastCommentPage);
 }
 
 /// Source-neutral user blog detail data.
@@ -645,6 +765,10 @@ final class UserBlogDetailData {
     this.viewCount,
     this.commentCount,
     this.commentsOpen,
+    this.commentPagination = const UserBlogPagination(currentPage: 1),
+    this.actions = const {},
+    this.categoryLinks = const [],
+    this.socialActions = const {},
   });
 
   /// Blog id.
@@ -679,6 +803,18 @@ final class UserBlogDetailData {
 
   /// Comments open.
   final bool? commentsOpen;
+
+  /// Paging evidence for comments, independent of the article body.
+  final UserBlogPagination commentPagination;
+
+  /// Operations explicitly advertised on this article.
+  final Set<UserBlogAction> actions;
+
+  /// Validated category links, separate from the article title.
+  final List<UserBlogCategoryLink> categoryLinks;
+
+  /// Source-advertised reader actions, separate from author management.
+  final Set<UserBlogSocialAction> socialActions;
 }
 
 /// Source-neutral user blog comment.
@@ -691,6 +827,7 @@ final class UserBlogComment {
     this.authorUserId,
     this.avatarUrl,
     this.publishedAtText,
+    this.actions = const {},
   });
 
   /// Comment id.
@@ -710,6 +847,9 @@ final class UserBlogComment {
 
   /// Published at text.
   final String? publishedAtText;
+
+  /// Operations explicitly advertised for this comment in the current session.
+  final Set<UserBlogCommentAction> actions;
 }
 
 /// Capabilities exposed by user blog detail.
@@ -805,5 +945,6 @@ abstract interface class UserBlogDetailRepository {
   load(
     UserBlogDetailQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   });
 }

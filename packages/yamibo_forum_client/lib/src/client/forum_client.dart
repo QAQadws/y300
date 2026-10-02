@@ -15,6 +15,11 @@ import '../contracts/forum_search.dart';
 import '../contracts/forum_resource.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/user_blog_comments.dart';
+import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_media.dart';
+import '../contracts/user_blog_favorites.dart';
+import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
 import '../contracts/private_message_batch_command.dart';
@@ -185,6 +190,21 @@ final class YamiboForumClient {
   /// Configured user-blog directory source, if installed.
   UserBlogDirectoryRepository? get userBlogDirectory =>
       sourcePlan.userBlogDirectory;
+
+  /// Account-bound journal comment preparation and commands.
+  UserBlogCommentService? get blogComments => sourcePlan.blogComments;
+
+  /// Account-bound journal publishing, editing, and management.
+  UserBlogOperations? get blogOperations => sourcePlan.blogOperations;
+
+  /// Optional journal album uploads; separate from forum attachment IDs.
+  UserBlogMediaOperations? get blogMedia => sourcePlan.blogMedia;
+
+  /// Prepared personal blog bookmarks, without shelf ingestion or content writes.
+  UserBlogFavoriteService? get blogFavorites => sourcePlan.blogFavorites;
+
+  /// Source-owned browser destinations for complete forms and access gates.
+  UserBlogNavigation? get blogNavigation => sourcePlan.blogNavigation;
 
   /// Configured user-blog detail source, if installed.
   UserBlogDetailRepository? get userBlogDetail => sourcePlan.userBlogDetail;
@@ -705,8 +725,13 @@ final class YamiboForumClient {
   loadUserBlogs(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) =>
-      sourcePlan.userBlogDirectory?.load(query, cachePolicy: cachePolicy) ??
+      sourcePlan.userBlogDirectory?.load(
+        query,
+        cachePolicy: cachePolicy,
+        cancellation: cancellation,
+      ) ??
       unsupported<UserBlogDirectoryData, UserBlogDirectoryReadCapabilities>();
 
   /// Loads user blog detail and returns a structured result.
@@ -714,8 +739,13 @@ final class YamiboForumClient {
   loadUserBlogDetail(
     UserBlogDetailQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) =>
-      sourcePlan.userBlogDetail?.load(query, cachePolicy: cachePolicy) ??
+      sourcePlan.userBlogDetail?.load(
+        query,
+        cachePolicy: cachePolicy,
+        cancellation: cancellation,
+      ) ??
       unsupported<UserBlogDetailData, UserBlogDetailReadCapabilities>();
 
   /// Starts a forum search.

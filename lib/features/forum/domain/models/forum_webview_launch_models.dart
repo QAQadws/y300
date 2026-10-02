@@ -25,10 +25,15 @@ final class ForumWebViewLaunchConfig {
     this.popOnRootBack = false,
     this.purpose = ForumWebViewHostPurpose.browse,
     this.completionTarget,
+    this.expectedAccountId,
   });
 
   final Uri initialUri;
   final bool popOnRootBack;
   final ForumWebViewHostPurpose purpose;
   final ForumWebViewCompletionTarget? completionTarget;
+
+  /// Optional actor binding for forms and authenticated browser fallbacks.
+  /// Losing this actor disposes the browser; switching back does not revive it.
+  final String? expectedAccountId;
 }

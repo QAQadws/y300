@@ -149,6 +149,7 @@ class _HistoryThumbnailFallback extends StatelessWidget {
       HistoryTargetType.thread => Icons.forum_outlined,
       HistoryTargetType.comic => Icons.collections_bookmark_outlined,
       HistoryTargetType.novel => Icons.local_library_outlined,
+      HistoryTargetType.blog => Icons.article_outlined,
     };
     return ColoredBox(
       key: ValueKey<String>('history-thumbnail-fallback-${type.name}'),

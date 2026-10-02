@@ -509,6 +509,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyDeleteFailed => '删除记录失败';
 
   @override
+  String get historyDeleted => '已删除记录';
+
+  @override
+  String get historyUndoDelete => '撤销';
+
+  @override
+  String get historyRestoreFailed => '恢复记录失败';
+
+  @override
   String get historyClearAllFailed => '清空记录失败';
 
   @override
@@ -537,6 +546,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historyTypeNovel => '小说';
+
+  @override
+  String get historyTypeBlog => '日志';
+
+  @override
+  String historyBlogAuthor(String author) {
+    return '日志 · $author';
+  }
 
   @override
   String get historySourceThread => '来源原帖';
@@ -4351,6 +4368,24 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get forumWebViewAccountChanged => '账号已变更，请关闭此页面后重新打开。';
+
+  @override
+  String get profileBlogOpenWeb => '在网页中打开';
+
+  @override
+  String get profileBlogWebInputNotice => '当前输入不会自动带入网页。你可以取消并先复制内容，再打开网页继续操作。';
+
+  @override
+  String get profileBlogReadPasswordRequired => '这篇日志需要密码，可在网页中输入后阅读。';
+
+  @override
+  String get profileBlogPrivate => '作者限制了这篇日志的访问范围。';
+
+  @override
+  String get profileBlogUnavailable => '日志暂时无法访问，可能已删除、尚未审核或没有查看权限。';
+
+  @override
   String get profileOpenForumPage => '打开论坛资料页';
 
   @override
@@ -4358,9 +4393,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogWrite => '写日志';
-
-  @override
-  String get profileBlogWriteUnavailable => '发表新日志暂未接入';
 
   @override
   String get profileBlogEmpty => '还没有相关的日志';
@@ -4381,13 +4413,87 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogRecommended => '推荐阅读的日志';
 
   @override
+  String get profileBlogLatestShort => '最新';
+
+  @override
+  String get profileBlogRecommendedShort => '推荐';
+
+  @override
   String get profileBlogComments => '日志评论';
 
   @override
-  String get profileBlogCommentUnavailable => '日志评论提交暂未接入';
+  String get profileBlogCommentsEmpty => '暂无评论';
+
+  @override
+  String get profileBlogAllCategories => '全部分类';
+
+  @override
+  String get profileBlogAllComments => '全部评论';
+
+  @override
+  String get profileBlogMoreComments => '更多评论';
+
+  @override
+  String get profileBlogReplyComment => '回复评论';
+
+  @override
+  String get profileBlogEditComment => '编辑评论';
+
+  @override
+  String get profileBlogDeleteComment => '删除评论';
+
+  @override
+  String get profileBlogDeleteCommentBody => '确定删除这条评论吗？删除后无法恢复。';
+
+  @override
+  String get profileBlogCommentInputRequired => '请填写评论内容。';
+
+  @override
+  String get profileBlogCommentTooShort => '评论内容太短，请补充后再提交。';
+
+  @override
+  String get profileBlogCommentSubmitted => '评论已提交；如需审核，显示可能延迟。';
+
+  @override
+  String get profileBlogCommentSaved => '评论已保存';
+
+  @override
+  String get profileBlogCommentDeleted => '评论已删除';
+
+  @override
+  String get profileBlogCommentContent => '评论内容';
+
+  @override
+  String get profileBlogSubmitComment => '发布';
+
+  @override
+  String get profileBlogPreparingComment => '正在准备评论…';
+
+  @override
+  String get profileBlogSubmittingComment => '正在提交…';
+
+  @override
+  String get profileBlogCommentSessionChanged => '账号已变更，请返回日志后重新操作。';
+
+  @override
+  String get profileBlogCommentOutcomeUnknown =>
+      '无法确认这次操作是否成功，请先返回日志核对。为避免重复提交，本页不会再次发送；输入内容可以复制。';
+
+  @override
+  String get profileBlogLeaveCommentTitle => '离开评论页面？';
+
+  @override
+  String get profileBlogLeaveCommentBody => '尚未提交的修改会丢失，不会保存为草稿。';
+
+  @override
+  String get profileBlogLeavePendingCommentBody =>
+      '操作可能已送达服务器，离开不会撤回。请返回日志核对后再操作，避免重复提交。';
 
   @override
   String get profileBlogComment => '评论';
+
+  @override
+  String get profileBlogReply => '回复日志';
 
   @override
   String profileBlogViews(int count) {
@@ -4731,6 +4837,236 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postEditLocalVersion => '本地版本';
+
+  @override
+  String get profileBlogEdit => '编辑日志';
+
+  @override
+  String get profileBlogDelete => '删除日志';
+
+  @override
+  String get profileBlogPin => '置顶日志';
+
+  @override
+  String get profileBlogUnpin => '取消置顶';
+
+  @override
+  String get profileBlogDeleteBody => '删除后将无法恢复这篇日志及其评论。请确认是否继续。';
+
+  @override
+  String get profileBlogPinBody => '将这篇日志置顶到作者的日志列表。';
+
+  @override
+  String get profileBlogUnpinBody => '取消这篇日志在作者日志列表中的置顶。';
+
+  @override
+  String get profileBlogPreparingAction => '正在读取确认信息…';
+
+  @override
+  String get profileBlogSubmittingAction => '正在提交，离开不会撤回操作。离开后请刷新日志核对结果。';
+
+  @override
+  String get profileBlogActionOutcomeUnknown => '暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。';
+
+  @override
+  String get profileBlogBody => '正文';
+
+  @override
+  String get profileBlogImageUploadUnknown => '无法确认图片是否上传成功，已停止本次上传。请在网页相册中核实。';
+
+  @override
+  String get profileBlogStartWriting => '写下想记录的事…';
+
+  @override
+  String get profileBlogPublishSettings => '发布设置';
+
+  @override
+  String get profileBlogSubject => '标题';
+
+  @override
+  String get profileBlogSiteCategory => '站点分类';
+
+  @override
+  String get profileBlogPersonalCategory => '个人分类';
+
+  @override
+  String get profileBlogNewCategoryName => '新分类名称';
+
+  @override
+  String get profileBlogNewCategoryNameRequired => '请填写新分类名称。';
+
+  @override
+  String get profileBlogTags => '标签';
+
+  @override
+  String get profileBlogPublishFeed => '发布到动态';
+
+  @override
+  String profileBlogAccessPolicy(String value) {
+    return '访问范围：$value';
+  }
+
+  @override
+  String get profileBlogCommentsAllowed => '允许评论';
+
+  @override
+  String get profileBlogCommentsClosed => '不允许评论';
+
+  @override
+  String get profileBlogAccessScope => '访问范围';
+
+  @override
+  String get profileBlogPassword => '访问密码';
+
+  @override
+  String get profileBlogKeepPassword => '留空保留原密码';
+
+  @override
+  String get profileBlogPasswordRequired => '请设置访问密码。';
+
+  @override
+  String get profileBlogTargetNames => '指定好友';
+
+  @override
+  String get profileBlogTargetNamesHint => '填写用户名，用空格或换行分隔。';
+
+  @override
+  String get profileBlogTargetNamesRequired => '请填写至少一个用户名。';
+
+  @override
+  String get profileBlogVisibilityUnavailable => '当前访问范围不可用，请重新选择。';
+
+  @override
+  String get profileBlogCommentsUnavailable => '当前无法更改评论设置，请重新进入编辑。';
+
+  @override
+  String get profileBlogNoCategory => '未分类';
+
+  @override
+  String get profileBlogNewCategory => '新建个人分类';
+
+  @override
+  String get profileBlogChooseCategory => '请选择分类';
+
+  @override
+  String profileBlogServerCategories(String site, String personal) {
+    return '站点分类：$site\n个人分类：$personal';
+  }
+
+  @override
+  String profileBlogServerTags(String tags) {
+    return '标签：$tags';
+  }
+
+  @override
+  String get profileBlogVisibilityPublic => '公开';
+
+  @override
+  String get profileBlogVisibilityFriends => '好友可见';
+
+  @override
+  String get profileBlogVisibilitySelected => '指定好友可见';
+
+  @override
+  String get profileBlogVisibilityPrivate => '仅自己可见';
+
+  @override
+  String get profileBlogVisibilityPassword => '密码保护';
+
+  @override
+  String get profileBlogBackToEditor => '返回编辑';
+
+  @override
+  String get profileBlogPublish => '发布日志';
+
+  @override
+  String get profileBlogPreparingEditor => '正在读取编辑表单…';
+
+  @override
+  String get profileBlogSubmittingEditor => '正在保存日志…';
+
+  @override
+  String get profileBlogEditorOutcomeUnknown =>
+      '暂时无法确认是否保存成功。请返回核对，避免重复提交。当前输入可以复制。';
+
+  @override
+  String get profileBlogLeaveEditorTitle => '离开编辑？';
+
+  @override
+  String get profileBlogLeaveEditorBody => '当前修改不会保留，确定离开吗？';
+
+  @override
+  String get profileBlogLeavePendingEditor =>
+      '请求可能已经送达，离开不会撤回。当前输入不会保留，返回后请先检查日志。';
+
+  @override
+  String get profileBlogServerChanged =>
+      '服务器上的日志内容或设置已变化。请查看服务器版本，再选择保留修改或采用新版本。';
+
+  @override
+  String get profileBlogUseServer => '采用服务器版本';
+
+  @override
+  String get profileBlogKeepLocal => '保留我的修改';
+
+  @override
+  String get profileBlogSubjectRequired => '请填写标题。';
+
+  @override
+  String get profileBlogBodyRequired => '请填写正文。';
+
+  @override
+  String get profileBlogSiteCategoryRequired => '请选择站点分类。';
+
+  @override
+  String get profileBlogCategoryUnavailable => '所选分类已不可用，请重新选择。';
+
+  @override
+  String get profileBlogNewCategoryUnavailable => '当前无法创建个人分类，请选择已有分类。';
+
+  @override
+  String get profileBlogCategoryConflict => '请选择已有分类或新建分类，不能同时使用。';
+
+  @override
+  String get profileBlogFeedUnavailable => '当前无法发布动态，请关闭此选项后重试。';
+
+  @override
+  String get profileBlogDraftLoadFailed => '草稿加载失败，已有内容未被覆盖。请重试或重置草稿。';
+
+  @override
+  String get profileBlogDraftSaveFailed => '草稿保存失败，请重试后再离开。';
+
+  @override
+  String get profileBlogDraftPasswordRestored => '已恢复日志草稿，请重新输入访问密码。';
+
+  @override
+  String get profileBlogDraftPending => '上次发布结果尚未确认。请先检查我的日志，避免重复发布。';
+
+  @override
+  String get profileBlogDraftResume => '确认未发布，继续编辑';
+
+  @override
+  String get profileBlogDraftResumeConfirm => '请确认已检查我的日志，且上次内容尚未发布。继续后可再次提交。';
+
+  @override
+  String get profileBlogDraftImagesChecking => '正在校验草稿图片…';
+
+  @override
+  String get profileBlogDraftImagesUnavailable =>
+      '部分草稿图片未能确认可用。请重试校验，或移除并替换这些图片后发布。';
+
+  @override
+  String moreStorageBlogDraft(int count) {
+    return '日志草稿（$count）';
+  }
+
+  @override
+  String get profileBlogDraftSettingsChanged =>
+      '分类或发布权限已变化，请调整发布设置。已保留你的内容和原有选择。';
+
+  @override
+  String get profileBlogDraftCleanupFailed =>
+      '日志已发布，但本地草稿清理失败。再次打开时请先检查“我的日志”，避免重复发布。';
 
   @override
   String get composerReadAccess => '阅读权限';
@@ -5415,6 +5751,15 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get historyDeleteFailed => '刪除記錄失敗';
 
   @override
+  String get historyDeleted => '已刪除記錄';
+
+  @override
+  String get historyUndoDelete => '復原';
+
+  @override
+  String get historyRestoreFailed => '還原記錄失敗';
+
+  @override
   String get historyClearAllFailed => '清空記錄失敗';
 
   @override
@@ -5443,6 +5788,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get historyTypeNovel => '小說';
+
+  @override
+  String get historyTypeBlog => '日誌';
+
+  @override
+  String historyBlogAuthor(String author) {
+    return '日誌 · $author';
+  }
 
   @override
   String get historySourceThread => '來源原帖';
@@ -9258,6 +9611,24 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
+  String get forumWebViewAccountChanged => '帳號已變更，請關閉此頁面後重新開啟。';
+
+  @override
+  String get profileBlogOpenWeb => '在網頁中開啟';
+
+  @override
+  String get profileBlogWebInputNotice => '目前輸入不會自動帶入網頁。你可以取消並先複製內容，再開啟網頁繼續操作。';
+
+  @override
+  String get profileBlogReadPasswordRequired => '這篇日誌需要密碼，可在網頁中輸入後閱讀。';
+
+  @override
+  String get profileBlogPrivate => '作者限制了這篇日誌的存取範圍。';
+
+  @override
+  String get profileBlogUnavailable => '日誌暫時無法存取，可能已刪除、尚未審核或沒有查看權限。';
+
+  @override
   String get profileOpenForumPage => '開啟論壇資料頁';
 
   @override
@@ -9265,9 +9636,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogWrite => '寫日誌';
-
-  @override
-  String get profileBlogWriteUnavailable => '目前尚未支援發表新日誌';
 
   @override
   String get profileBlogEmpty => '還沒有相關日誌';
@@ -9288,13 +9656,87 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogRecommended => '推薦閱讀的日誌';
 
   @override
+  String get profileBlogLatestShort => '最新';
+
+  @override
+  String get profileBlogRecommendedShort => '推薦';
+
+  @override
   String get profileBlogComments => '日誌留言';
 
   @override
-  String get profileBlogCommentUnavailable => '目前尚未支援提交日誌留言';
+  String get profileBlogCommentsEmpty => '暫無留言';
+
+  @override
+  String get profileBlogAllCategories => '全部分類';
+
+  @override
+  String get profileBlogAllComments => '全部留言';
+
+  @override
+  String get profileBlogMoreComments => '更多留言';
+
+  @override
+  String get profileBlogReplyComment => '回覆留言';
+
+  @override
+  String get profileBlogEditComment => '編輯留言';
+
+  @override
+  String get profileBlogDeleteComment => '刪除留言';
+
+  @override
+  String get profileBlogDeleteCommentBody => '確定刪除這則留言嗎？刪除後無法復原。';
+
+  @override
+  String get profileBlogCommentInputRequired => '請填寫留言內容。';
+
+  @override
+  String get profileBlogCommentTooShort => '留言內容太短，請補充後再提交。';
+
+  @override
+  String get profileBlogCommentSubmitted => '留言已提交；如需審核，顯示可能延遲。';
+
+  @override
+  String get profileBlogCommentSaved => '留言已儲存';
+
+  @override
+  String get profileBlogCommentDeleted => '留言已刪除';
+
+  @override
+  String get profileBlogCommentContent => '留言內容';
+
+  @override
+  String get profileBlogSubmitComment => '發佈';
+
+  @override
+  String get profileBlogPreparingComment => '正在準備留言…';
+
+  @override
+  String get profileBlogSubmittingComment => '正在提交…';
+
+  @override
+  String get profileBlogCommentSessionChanged => '帳號已變更，請返回日誌後重新操作。';
+
+  @override
+  String get profileBlogCommentOutcomeUnknown =>
+      '無法確認這次操作是否成功，請先返回日誌核對。為避免重複提交，本頁不會再次傳送；輸入內容可以複製。';
+
+  @override
+  String get profileBlogLeaveCommentTitle => '離開留言頁面？';
+
+  @override
+  String get profileBlogLeaveCommentBody => '尚未提交的修改會遺失，不會儲存為草稿。';
+
+  @override
+  String get profileBlogLeavePendingCommentBody =>
+      '操作可能已送達伺服器，離開不會撤回。請返回日誌核對後再操作，避免重複提交。';
 
   @override
   String get profileBlogComment => '留言';
+
+  @override
+  String get profileBlogReply => '回覆日誌';
 
   @override
   String profileBlogViews(int count) {
@@ -9638,6 +10080,237 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get postEditLocalVersion => '本地版本';
+
+  @override
+  String get profileBlogEdit => '編輯日誌';
+
+  @override
+  String get profileBlogDelete => '刪除日誌';
+
+  @override
+  String get profileBlogPin => '置頂日誌';
+
+  @override
+  String get profileBlogUnpin => '取消置頂';
+
+  @override
+  String get profileBlogDeleteBody => '刪除後將無法恢復這篇日誌及其評論。請確認是否繼續。';
+
+  @override
+  String get profileBlogPinBody => '將這篇日誌置頂到作者的日誌列表。';
+
+  @override
+  String get profileBlogUnpinBody => '取消這篇日誌在作者日誌列表中的置頂。';
+
+  @override
+  String get profileBlogPreparingAction => '正在讀取確認資訊…';
+
+  @override
+  String get profileBlogSubmittingAction => '正在提交，離開不會撤回操作。離開後請重新整理日誌核對結果。';
+
+  @override
+  String get profileBlogActionOutcomeUnknown =>
+      '暫時無法確認操作結果。請返回並重新整理日誌核對，避免重複提交。';
+
+  @override
+  String get profileBlogBody => '內文';
+
+  @override
+  String get profileBlogImageUploadUnknown => '無法確認圖片是否上傳成功，已停止本次上傳。請在網頁相簿中確認。';
+
+  @override
+  String get profileBlogStartWriting => '寫下想記錄的事…';
+
+  @override
+  String get profileBlogPublishSettings => '發佈設定';
+
+  @override
+  String get profileBlogSubject => '標題';
+
+  @override
+  String get profileBlogSiteCategory => '網站分類';
+
+  @override
+  String get profileBlogPersonalCategory => '個人分類';
+
+  @override
+  String get profileBlogNewCategoryName => '新分類名稱';
+
+  @override
+  String get profileBlogNewCategoryNameRequired => '請填寫新分類名稱。';
+
+  @override
+  String get profileBlogTags => '標籤';
+
+  @override
+  String get profileBlogPublishFeed => '發佈到動態';
+
+  @override
+  String profileBlogAccessPolicy(String value) {
+    return '存取範圍：$value';
+  }
+
+  @override
+  String get profileBlogCommentsAllowed => '允許評論';
+
+  @override
+  String get profileBlogCommentsClosed => '不允許評論';
+
+  @override
+  String get profileBlogAccessScope => '存取範圍';
+
+  @override
+  String get profileBlogPassword => '存取密碼';
+
+  @override
+  String get profileBlogKeepPassword => '留空保留原密碼';
+
+  @override
+  String get profileBlogPasswordRequired => '請設定存取密碼。';
+
+  @override
+  String get profileBlogTargetNames => '指定好友';
+
+  @override
+  String get profileBlogTargetNamesHint => '填寫使用者名稱，以空格或換行分隔。';
+
+  @override
+  String get profileBlogTargetNamesRequired => '請填寫至少一個使用者名稱。';
+
+  @override
+  String get profileBlogVisibilityUnavailable => '目前存取範圍無法使用，請重新選擇。';
+
+  @override
+  String get profileBlogCommentsUnavailable => '目前無法更改評論設定，請重新進入編輯。';
+
+  @override
+  String get profileBlogNoCategory => '未分類';
+
+  @override
+  String get profileBlogNewCategory => '新增個人分類';
+
+  @override
+  String get profileBlogChooseCategory => '請選擇分類';
+
+  @override
+  String profileBlogServerCategories(String site, String personal) {
+    return '網站分類：$site\n個人分類：$personal';
+  }
+
+  @override
+  String profileBlogServerTags(String tags) {
+    return '標籤：$tags';
+  }
+
+  @override
+  String get profileBlogVisibilityPublic => '公開';
+
+  @override
+  String get profileBlogVisibilityFriends => '好友可見';
+
+  @override
+  String get profileBlogVisibilitySelected => '指定好友可見';
+
+  @override
+  String get profileBlogVisibilityPrivate => '僅自己可見';
+
+  @override
+  String get profileBlogVisibilityPassword => '密碼保護';
+
+  @override
+  String get profileBlogBackToEditor => '返回編輯';
+
+  @override
+  String get profileBlogPublish => '發佈日誌';
+
+  @override
+  String get profileBlogPreparingEditor => '正在讀取編輯表單…';
+
+  @override
+  String get profileBlogSubmittingEditor => '正在儲存日誌…';
+
+  @override
+  String get profileBlogEditorOutcomeUnknown =>
+      '暫時無法確認是否儲存成功。請返回核對，避免重複提交。目前輸入可以複製。';
+
+  @override
+  String get profileBlogLeaveEditorTitle => '離開編輯？';
+
+  @override
+  String get profileBlogLeaveEditorBody => '目前修改不會保留，確定離開嗎？';
+
+  @override
+  String get profileBlogLeavePendingEditor =>
+      '請求可能已經送達，離開不會撤回。目前輸入不會保留，返回後請先檢查日誌。';
+
+  @override
+  String get profileBlogServerChanged =>
+      '伺服器上的日誌內容或設定已變化。請查看伺服器版本，再選擇保留修改或採用新版本。';
+
+  @override
+  String get profileBlogUseServer => '採用伺服器版本';
+
+  @override
+  String get profileBlogKeepLocal => '保留我的修改';
+
+  @override
+  String get profileBlogSubjectRequired => '請填寫標題。';
+
+  @override
+  String get profileBlogBodyRequired => '請填寫內文。';
+
+  @override
+  String get profileBlogSiteCategoryRequired => '請選擇網站分類。';
+
+  @override
+  String get profileBlogCategoryUnavailable => '所選分類已無法使用，請重新選擇。';
+
+  @override
+  String get profileBlogNewCategoryUnavailable => '目前無法新增個人分類，請選擇既有分類。';
+
+  @override
+  String get profileBlogCategoryConflict => '請選擇既有分類或新增分類，不能同時使用。';
+
+  @override
+  String get profileBlogFeedUnavailable => '目前無法發佈動態，請關閉此選項後重試。';
+
+  @override
+  String get profileBlogDraftLoadFailed => '草稿載入失敗，已有內容未被覆蓋。請重試或重設草稿。';
+
+  @override
+  String get profileBlogDraftSaveFailed => '草稿儲存失敗，請重試後再離開。';
+
+  @override
+  String get profileBlogDraftPasswordRestored => '已恢復日誌草稿，請重新輸入存取密碼。';
+
+  @override
+  String get profileBlogDraftPending => '上次發佈結果尚未確認。請先檢查我的日誌，避免重複發佈。';
+
+  @override
+  String get profileBlogDraftResume => '確認未發佈，繼續編輯';
+
+  @override
+  String get profileBlogDraftResumeConfirm => '請確認已檢查我的日誌，且上次內容尚未發佈。繼續後可再次提交。';
+
+  @override
+  String get profileBlogDraftImagesChecking => '正在驗證草稿圖片…';
+
+  @override
+  String get profileBlogDraftImagesUnavailable =>
+      '部分草稿圖片未能確認可用。請重試驗證，或移除並替換這些圖片後發佈。';
+
+  @override
+  String moreStorageBlogDraft(int count) {
+    return '日誌草稿（$count）';
+  }
+
+  @override
+  String get profileBlogDraftSettingsChanged =>
+      '分類或發佈權限已變化，請調整發佈設定。已保留你的內容和原有選擇。';
+
+  @override
+  String get profileBlogDraftCleanupFailed =>
+      '日誌已發佈，但本機草稿清理失敗。再次開啟時請先檢查「我的日誌」，避免重複發佈。';
 
   @override
   String get composerReadAccess => '閱讀權限';

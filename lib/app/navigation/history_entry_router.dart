@@ -10,15 +10,23 @@ import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dar
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/history/domain/models/blog_history_target.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 typedef HistoryForumModeLoader = Future<ForumShellMode> Function();
 typedef HistoryWorkAvailabilityLoader = Future<bool> Function(String workId);
 typedef HistoryNativeThreadPageBuilder =
     Widget Function(String tid, String subject, int? initialPage);
+typedef HistoryNativeBlogPageBuilder =
+    Widget Function({
+      required String ownerUserId,
+      required String blogId,
+      required String title,
+    });
 typedef HistoryWorkPageBuilder = Widget Function(String workId);
 typedef HistoryWebViewPageBuilder = Widget Function(Uri initialUri);
 
@@ -51,6 +59,7 @@ class HistoryEntryRouter {
     required HistoryWorkAvailabilityLoader novelWorkExists,
     HistoryNativeThreadPageBuilder nativeThreadPageBuilder =
         _buildNativeThreadPage,
+    HistoryNativeBlogPageBuilder nativeBlogPageBuilder = _buildNativeBlogPage,
     HistoryWorkPageBuilder comicPageBuilder = _buildComicPage,
     HistoryWorkPageBuilder novelPageBuilder = _buildNovelPage,
     HistoryWebViewPageBuilder webViewPageBuilder = _buildWebViewPage,
@@ -58,6 +67,7 @@ class HistoryEntryRouter {
        _comicWorkExists = comicWorkExists,
        _novelWorkExists = novelWorkExists,
        _nativeThreadPageBuilder = nativeThreadPageBuilder,
+       _nativeBlogPageBuilder = nativeBlogPageBuilder,
        _comicPageBuilder = comicPageBuilder,
        _novelPageBuilder = novelPageBuilder,
        _webViewPageBuilder = webViewPageBuilder;
@@ -66,6 +76,7 @@ class HistoryEntryRouter {
   final HistoryWorkAvailabilityLoader _comicWorkExists;
   final HistoryWorkAvailabilityLoader _novelWorkExists;
   final HistoryNativeThreadPageBuilder _nativeThreadPageBuilder;
+  final HistoryNativeBlogPageBuilder _nativeBlogPageBuilder;
   final HistoryWorkPageBuilder _comicPageBuilder;
   final HistoryWorkPageBuilder _novelPageBuilder;
   final HistoryWebViewPageBuilder _webViewPageBuilder;
@@ -77,6 +88,7 @@ class HistoryEntryRouter {
     try {
       final page = switch (entry.target.type) {
         HistoryTargetType.thread => await _buildThreadDestination(entry),
+        HistoryTargetType.blog => _buildBlogDestination(entry),
         HistoryTargetType.comic => await _buildWorkDestination(
           entry,
           exists: _comicWorkExists,
@@ -154,6 +166,22 @@ class HistoryEntryRouter {
     return builder(workId);
   }
 
+  Object _buildBlogDestination(HistoryEntry entry) {
+    final target = BlogHistoryTarget.tryParse(entry.target.id);
+    if (target == null) {
+      return const HistoryOpenUnavailable(
+        code: HistoryOpenUnavailableCode.targetMissing,
+        targetType: HistoryTargetType.blog,
+      );
+    }
+    // Blog history always resumes at the article, not a stored comment page.
+    return _nativeBlogPageBuilder(
+      ownerUserId: target.ownerUserId,
+      blogId: target.blogId,
+      title: entry.title,
+    );
+  }
+
   Uri _threadUri(String tid, int? page) {
     final base = Uri.parse(AppConfig.siteBaseUrl);
     return base.replace(
@@ -183,6 +211,16 @@ class HistoryEntryRouter {
 Widget _buildNativeThreadPage(String tid, String subject, int? initialPage) {
   return ThreadDetailPage(tid: tid, subject: subject, initialPage: initialPage);
 }
+
+Widget _buildNativeBlogPage({
+  required String ownerUserId,
+  required String blogId,
+  required String title,
+}) => ProfileBlogDetailPage(
+  ownerUserId: ownerUserId,
+  blogId: blogId,
+  initialTitle: title,
+);
 
 Widget _buildComicPage(String workId) => ComicDetailPage(comicId: workId);
 

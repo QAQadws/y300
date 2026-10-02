@@ -10,6 +10,7 @@ enum TextConversionSurface {
   forumDisplay,
   threadDetail,
   comicComments,
+  blogs,
 }
 
 /// Privacy-safe conversion telemetry.

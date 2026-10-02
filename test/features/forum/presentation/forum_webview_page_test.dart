@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -57,6 +58,54 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  for (final action in ['stay', 'navigate', 'dispose', 'accountChange']) {
+    testWidgets(
+      'page-finished cookie sync respects $action while the read is pending',
+      (tester) async {
+        final driver = _FakeForumWebViewDriver();
+        final jar = _PendingWebViewCookieJar();
+        final store = CookieStore();
+        var active = true;
+        final uri = Uri.parse(
+          'https://bbs.yamibo.com/home.php?mod=space&do=blog&uid=101&id=42',
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              webViewCookieSyncServiceProvider.overrideWithValue(
+                WebViewCookieSyncService(cookieJar: jar, cookieStore: store),
+              ),
+            ],
+            child: _buildTestApp(
+              driver: driver,
+              isAccountCurrent: () => active,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await driver.dispatchPageFinished(uri.toString());
+        expect(jar.readCount, 1);
+        switch (action) {
+          case 'navigate':
+            await driver.dispatchPageStarted(
+              'https://bbs.yamibo.com/forum.php',
+            );
+          case 'dispose':
+            await tester.pumpWidget(const SizedBox());
+          case 'accountChange':
+            active = false;
+        }
+        jar.pending.complete({'auth': 'browser-actor'});
+        await tester.pumpAndSettle();
+        expect(
+          await store.readCookieMap(uri),
+          action == 'stay' ? {'auth': 'browser-actor'} : isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   for (final purpose in [
     ForumWebViewHostPurpose.browse,
@@ -892,6 +941,50 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'pending findpost result cannot navigate after its account expires before disposal',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final pending = Completer<ApiResult<ThreadPostLocation>>();
+      final locator = _FakeThreadPostLocator(null, pending: pending);
+      var accountCurrent = true;
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          isAccountCurrent: () => accountCurrent,
+          forumMode: ForumShellMode.native,
+          threadPostLocator: locator,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final browserState = tester.state(find.byType(ForumWebViewPage));
+      final decision = await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705',
+      );
+      await tester.pump();
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(locator.lastPid, '41575705');
+      expect(find.byType(ThreadDetailPage), findsNothing);
+
+      // The guard expires synchronously; the platform view detaches next frame.
+      accountCurrent = false;
+      expect(browserState.mounted, isTrue);
+      pending.complete(
+        const ApiSuccess(
+          ThreadPostLocation(tid: '570388', pid: '41575705', page: 2, url: ''),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(browserState.mounted, isTrue);
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      expect(
+        find.byKey(const Key('thread-post-route-failure-dialog')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'native filtered floor link relocates instead of trusting its page',
@@ -2204,6 +2297,7 @@ bool _isVisibleAndReady(
 
 Widget _buildTestApp({
   required _FakeForumWebViewDriver driver,
+  bool Function()? isAccountCurrent,
   CookieStore? cookieStore,
   ForumTagRepository? tagRepository,
   _FakeForumFavoriteRepository? favoriteRepository,
@@ -2269,7 +2363,9 @@ Widget _buildTestApp({
         historyRecorder ?? _NoopHistoryVisitRecorder(),
       ),
     ],
-    child: const LocalizedTestApp(home: ForumWebViewPage()),
+    child: LocalizedTestApp(
+      home: ForumWebViewPage(isAccountCurrent: isAccountCurrent),
+    ),
   );
 }
 
@@ -2602,9 +2698,10 @@ class _FakeThreadRepository implements ThreadRepository {
 }
 
 class _FakeThreadPostLocator implements ThreadPostLocator {
-  _FakeThreadPostLocator(this.location);
+  _FakeThreadPostLocator(this.location, {this.pending});
 
   ThreadPostLocation? location;
+  final Completer<ApiResult<ThreadPostLocation>>? pending;
   String? lastTid;
   String? lastPid;
   Uri? lastSourceUri;
@@ -2618,6 +2715,7 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
     lastTid = tid;
     lastPid = pid;
     lastSourceUri = sourceUri;
+    if (pending != null) return pending!.future;
     final value = location;
     if (value == null) {
       return const ApiFailure<ThreadPostLocation>(
@@ -2847,6 +2945,23 @@ class _LoadRequestRecord {
 
   final Uri uri;
   final Map<String, String> headers;
+}
+
+class _PendingWebViewCookieJar implements WebViewCookieJar {
+  final pending = Completer<Map<String, String>>();
+  int readCount = 0;
+
+  @override
+  Future<Map<String, String>> readCookies(Uri uri) {
+    readCount++;
+    return pending.future;
+  }
+
+  @override
+  Future<void> writeCookies(Uri uri, Map<String, String> cookies) async {}
+
+  @override
+  Future<void> clear() async {}
 }
 
 class _FakeCookieStore extends CookieStore {

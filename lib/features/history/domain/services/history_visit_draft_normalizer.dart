@@ -1,4 +1,5 @@
 import 'package:characters/characters.dart';
+import 'package:y300/features/history/domain/models/blog_history_target.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 
 class HistoryVisitDraftNormalizer {
@@ -44,6 +45,13 @@ class HistoryVisitDraftNormalizer {
     if (rawId.isEmpty) {
       throw const FormatException('History target id must not be empty');
     }
+    if (target.type == HistoryTargetType.blog) {
+      final blogTarget = BlogHistoryTarget.tryParse(rawId);
+      if (blogTarget == null) {
+        throw const FormatException('Invalid blog history identity');
+      }
+      return blogTarget.key;
+    }
     if (target.type == HistoryTargetType.thread) {
       final tid = _normalizePositiveInteger(rawId);
       if (tid == null) {
@@ -64,6 +72,7 @@ class HistoryVisitDraftNormalizer {
             surface == HistoryVisitSurface.threadWebView,
       HistoryTargetType.comic => surface == HistoryVisitSurface.comicDetail,
       HistoryTargetType.novel => surface == HistoryVisitSurface.novelDetail,
+      HistoryTargetType.blog => surface == HistoryVisitSurface.blogDetail,
     };
     if (!matches) {
       throw FormatException(
@@ -78,6 +87,7 @@ class HistoryVisitDraftNormalizer {
       HistoryTargetType.thread => '帖子 ${target.id}',
       HistoryTargetType.comic => '未命名漫画',
       HistoryTargetType.novel => '未命名小说',
+      HistoryTargetType.blog => '',
     };
     final resolved = normalized ?? fallback;
     if (maxTitleCharacters <= 0) {
@@ -101,6 +111,7 @@ class HistoryVisitDraftNormalizer {
         forumName ?? (page != null && page > 1 ? '第 $page 页' : '帖子详情'),
       HistoryTargetType.comic => '漫画详情',
       HistoryTargetType.novel => '小说详情',
+      HistoryTargetType.blog => '',
     };
   }
 

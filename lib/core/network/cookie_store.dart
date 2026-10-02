@@ -5,6 +5,12 @@ import 'package:y300/core/config/technical_storage_keys.dart';
 
 /// 轻量 Cookie 存储：按 host 维度持久化键值对
 class CookieStore {
+  Future<void> _mutationTail = Future<void>.value();
+  int _revision = 0;
+
+  /// In-memory version for asynchronous browser snapshots, never persisted.
+  int get revision => _revision;
+
   Future<Map<String, String>> readCookieMap(Uri uri) async {
     final all = await _readAll();
     final cookieMap = all[uri.host];
@@ -29,6 +35,14 @@ class CookieStore {
       return;
     }
 
+    _revision++;
+    await _enqueue(() => _saveFromSetCookie(uri, setCookieHeaders));
+  }
+
+  Future<void> _saveFromSetCookie(
+    Uri uri,
+    List<String> setCookieHeaders,
+  ) async {
     final all = await _readAll();
     final hostCookies = <String, String>{...?all[uri.host]};
 
@@ -83,6 +97,30 @@ class CookieStore {
       return;
     }
 
+    _revision++;
+    await _enqueue(() => _saveCookies(uri, cookies));
+  }
+
+  /// Commits a browser snapshot only while both its store version and owner
+  /// remain current. A queued clear or native write takes precedence.
+  Future<bool> saveCookiesIfCurrent(
+    Uri uri,
+    Map<String, String> cookies, {
+    required int expectedRevision,
+    required bool Function() isCurrent,
+  }) {
+    bool canCommit() => _revision == expectedRevision && isCurrent();
+    if (cookies.isEmpty || !canCommit()) return Future.value(false);
+    return _enqueue(() => _saveCookies(uri, cookies, canCommit: canCommit));
+  }
+
+  Future<bool> _saveCookies(
+    Uri uri,
+    Map<String, String> cookies, {
+    bool Function()? canCommit,
+  }) async {
+    if (canCommit?.call() == false) return false;
+
     final all = await _readAll();
     final hostCookies = <String, String>{...?all[uri.host]};
 
@@ -104,12 +142,26 @@ class CookieStore {
     } else {
       all[uri.host] = hostCookies;
     }
-    await _writeAll(all);
+    return _writeAll(all, canCommit: canCommit);
   }
 
   Future<void> clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(TechnicalStorageKeys.networkCookiesV1);
+    _revision++;
+    await _enqueue(() async {
+      final prefs = await SharedPreferences.getInstance();
+      _revision++;
+      await prefs.remove(TechnicalStorageKeys.networkCookiesV1);
+    });
+  }
+
+  Future<T> _enqueue<T>(Future<T> Function() mutation) {
+    final result = _mutationTail.then((_) => mutation());
+    // Failures still reach the caller, but must not poison later logout/login.
+    _mutationTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
   }
 
   Future<Map<String, Map<String, String>>> _readAll() async {
@@ -143,9 +195,15 @@ class CookieStore {
     }
   }
 
-  Future<void> _writeAll(Map<String, Map<String, String>> data) async {
+  Future<bool> _writeAll(
+    Map<String, Map<String, String>> data, {
+    bool Function()? canCommit,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    // Check after storage awaits, with no asynchronous gap before publication.
+    if (canCommit?.call() == false) return false;
+    _revision++;
+    return prefs.setString(
       TechnicalStorageKeys.networkCookiesV1,
       jsonEncode(data),
     );

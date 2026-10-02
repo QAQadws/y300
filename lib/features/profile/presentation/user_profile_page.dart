@@ -10,6 +10,7 @@ import 'package:y300/features/cache/presentation/widgets/library_cached_image.da
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/my_profile_action_navigation.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -266,6 +267,20 @@ class UserProfilePage extends ConsumerWidget {
       appBar: AppBar(
         title: Text(_profilePageTitle(l10n, profile)),
         actions: [
+          if (RegExp(r'^[1-9]\d*$').hasMatch(uid))
+            IconButton(
+              key: const Key('user-profile-blogs'),
+              tooltip: l10n.profileBlogTitle,
+              icon: const Icon(Icons.article_outlined),
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => ProfileBlogPage(
+                    ownerUserId: uid,
+                    initialScope: UserBlogFeedScope.self,
+                  ),
+                ),
+              ),
+            ),
           if (profile != null)
             IconButton(
               tooltip: l10n.messageNew,

@@ -28,3 +28,21 @@ final userBlogDetailRepositoryProvider = Provider<UserBlogDetailRepository>((
 ) {
   return ref.watch(yamiboForumClientProvider).userBlogDetail!;
 });
+
+final userBlogCommentServiceProvider = Provider<UserBlogCommentService>((ref) {
+  return ref.watch(yamiboForumClientProvider).blogComments!;
+});
+
+final userBlogNavigationProvider = Provider<UserBlogNavigation?>((ref) {
+  return ref.watch(yamiboForumClientProvider).blogNavigation;
+});
+
+final userBlogOperationsProvider = Provider<UserBlogOperations>((ref) {
+  return ref.watch(yamiboForumClientProvider).blogOperations!;
+});
+
+final userBlogMediaOperationsProvider = Provider<UserBlogMediaOperations?>((
+  ref,
+) {
+  return ref.watch(yamiboForumClientProvider).blogMedia;
+});

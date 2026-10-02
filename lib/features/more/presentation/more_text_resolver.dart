@@ -112,9 +112,10 @@ final class MoreTextResolver {
         _snapshotLabel(l10n, ref.code),
         ref.count ?? 0,
       ),
-      StorageUsageLabelKind.composerDraft => l10n.moreStorageComposerDraft(
-        ref.count ?? 0,
-      ),
+      StorageUsageLabelKind.composerDraft =>
+        ref.code == 'blog_draft'
+            ? l10n.moreStorageBlogDraft(ref.count ?? 0)
+            : l10n.moreStorageComposerDraft(ref.count ?? 0),
       StorageUsageLabelKind.downloadKind => _downloadLabel(l10n, ref.code),
       StorageUsageLabelKind.libraryKind => l10n.moreStorageLibraryCount(
         _libraryLabel(l10n, ref.code),

@@ -11,6 +11,11 @@ import '../contracts/forum_home.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/user_blog_comments.dart';
+import '../contracts/user_blog_operations.dart';
+import '../contracts/user_blog_media.dart';
+import '../contracts/user_blog_favorites.dart';
+import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
 import '../contracts/private_message_batch_command.dart';
@@ -50,6 +55,10 @@ import 'discuz_forum_home_html_repository.dart';
 import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
+import 'discuz_blog_comment_service.dart';
+import 'discuz_blog_operations.dart';
+import 'discuz_blog_favorite_service.dart';
+import 'discuz_blog_navigation.dart';
 import 'discuz_account_summary_adapter.dart';
 import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
@@ -421,6 +430,44 @@ final class ForumClientAdapterFactory {
         network: network,
         requestProfiles: requestProfiles,
       );
+
+  /// Creates journal publishing and management operations.
+  UserBlogOperations createUserBlogOperations() =>
+      createUserBlogEditor().operations;
+
+  /// Shares form tickets and image ownership between journal capabilities.
+  ({UserBlogOperations operations, UserBlogMediaOperations media})
+  createUserBlogEditor({ForumMultipartClient? multipart}) {
+    final adapter = DiscuzBlogOperations(
+      config: config,
+      network: network,
+      profiles: requestProfiles,
+      sessions: sessionStore,
+      multipart: multipart,
+    );
+    return (operations: adapter, media: adapter);
+  }
+
+  /// Personal journal bookmarks, reusing the current account and transport.
+  UserBlogFavoriteService createUserBlogFavorites() =>
+      DiscuzBlogFavoriteService(
+        config: config,
+        network: network,
+        profiles: requestProfiles,
+        sessions: sessionStore,
+      );
+
+  /// Browser-only references, using the same source root and no new transport.
+  UserBlogNavigation createUserBlogNavigation() =>
+      DiscuzBlogNavigation(siteOrigin: config.siteOrigin);
+
+  /// Creates account-bound journal comment operations.
+  UserBlogCommentService createUserBlogComments() => DiscuzBlogCommentService(
+    config: config,
+    network: network,
+    requestProfiles: requestProfiles,
+    sessions: sessionStore,
+  );
 
   /// Creates the user-blog detail HTML source.
   UserBlogDetailRepository createUserBlogDetail() =>

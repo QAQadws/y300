@@ -21,6 +21,7 @@ import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
@@ -135,14 +136,16 @@ void main() {
     expect(find.text('普通会员'), findsOneWidget);
   });
 
-  testWidgets('public profile opens a direct conversation by UID', (
+  testWidgets('public profile opens owner blogs and a direct conversation', (
     tester,
   ) async {
     ForumConversationTarget? opened;
     String? openedTitle;
+    final blogRepository = _FakeBlogDirectoryRepository();
     await _pumpPublicProfile(
       tester,
       repository: _FakeProfileRepository(),
+      blogRepository: blogRepository,
       conversationRoute: (target, {title = ''}) {
         opened = target;
         openedTitle = title;
@@ -154,6 +157,15 @@ void main() {
     final l10n = AppLocalizations.of(
       tester.element(find.byType(UserProfilePage)),
     );
+    expect(find.byTooltip(l10n.messageNew), findsOneWidget);
+    await tester.tap(find.byKey(const Key('user-profile-blogs')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileBlogPage), findsOneWidget);
+    expect(blogRepository.queries.single.ownerUserId, '123456');
+    expect(blogRepository.queries.single.scope, UserBlogFeedScope.self);
+    Navigator.of(tester.element(find.byType(ProfileBlogPage))).pop();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byTooltip(l10n.messageNew));
     await tester.pumpAndSettle();
     expect(opened, const ForumConversationTarget.direct('123456'));
@@ -853,11 +865,16 @@ Future<void> _pumpPublicProfile(
   Locale locale = const Locale('zh'),
   ImageCacheService? imageCacheService,
   PrivateConversationRouteFactory? conversationRoute,
+  UserBlogDirectoryRepository? blogRepository,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
+        if (blogRepository != null) ...[
+          userBlogDirectoryRepositoryProvider.overrideWithValue(blogRepository),
+          blogAccountIdProvider.overrideWithValue(null),
+        ],
         if (conversationRoute != null)
           privateConversationRouteFactoryProvider.overrideWithValue(
             conversationRoute,
@@ -1074,6 +1091,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   load(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
     return DataReadSuccess(

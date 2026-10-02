@@ -69,6 +69,154 @@ void main() {
     );
 
     test(
+      'v1 retains existing entries while round-tripping blog snapshots',
+      () async {
+        for (final type in [
+          HistoryTargetType.thread,
+          HistoryTargetType.comic,
+          HistoryTargetType.novel,
+        ]) {
+          await repository.recordVisit(
+            _entry(type: type, id: '100', title: type.name, at: _time(1)),
+          );
+        }
+        repository.dispose();
+        await db.close();
+
+        final reopened = HistoryLocalDb.open(databaseName: dbName);
+        db = await reopened;
+        repository = SqfliteHistoryRepository(reopened);
+        final blog = _entry(
+          type: HistoryTargetType.blog,
+          id: '101:100',
+          title: '日志标题',
+          contextLabel: '作者原名',
+          at: _time(2),
+          page: 3,
+          canonicalUri: Uri.parse(
+            'https://bbs.yamibo.com/home.php?mod=space&uid=101&do=blog&id=100',
+          ),
+          thumbnail: const HistoryThumbnailSnapshot(
+            remoteUrl: 'https://bbs.yamibo.com/data/attachment/blog/cover.jpg',
+          ),
+        );
+        await repository.recordVisit(blog);
+        repository.dispose();
+        await db.close();
+
+        final reopenedWithBlog = HistoryLocalDb.open(databaseName: dbName);
+        db = await reopenedWithBlog;
+        repository = SqfliteHistoryRepository(reopenedWithBlog);
+        final entries = (await repository.query(const HistoryQuery())).items;
+
+        expect(await db.getVersion(), 1);
+        expect(entries, hasLength(4));
+        expect(entries.first, blog);
+        expect(entries.skip(1).map((entry) => entry.target.type).toSet(), {
+          HistoryTargetType.thread,
+          HistoryTargetType.comic,
+          HistoryTargetType.novel,
+        });
+      },
+    );
+
+    test(
+      'blog visits aggregate, search by author and keep ordinary lifecycle',
+      () async {
+        final first = _entry(
+          type: HistoryTargetType.blog,
+          id: '101:23',
+          title: '旧标题',
+          contextLabel: '原作者',
+          at: _time(1),
+        );
+        await repository.recordVisit(first);
+        await repository.recordVisit(
+          _entry(
+            target: first.target,
+            title: '新标题',
+            contextLabel: '原作者',
+            at: _time(3),
+          ),
+        );
+        await repository.recordVisit(
+          _entry(
+            type: HistoryTargetType.blog,
+            id: '102:23',
+            title: '另一作者日志',
+            contextLabel: '另一作者',
+            at: _time(2),
+          ),
+        );
+
+        final found = (await repository.query(
+          const HistoryQuery(searchText: '原作者'),
+        )).items.single;
+        expect(found.target, first.target);
+        expect(found.title, '新标题');
+        expect(found.visitCount, 2);
+        expect(found.firstVisitedAt, _time(1));
+        expect(found.lastVisitedAt, _time(3));
+        expect(
+          (await repository.query(const HistoryQuery())).items.first,
+          found,
+        );
+
+        await repository.delete(found.target);
+        expect(
+          (await repository.query(const HistoryQuery(searchText: '原作者'))).items,
+          isEmpty,
+        );
+        await repository.restore(found);
+        expect(
+          (await repository.query(const HistoryQuery())).items.first,
+          found,
+        );
+        await repository.clear();
+        expect((await repository.query(const HistoryQuery())).items, isEmpty);
+      },
+    );
+
+    test('blog entries participate in the shared retention limit', () async {
+      final retained = SqfliteHistoryRepository(
+        Future<Database>.value(db),
+        retentionPolicy: const HistoryRetentionPolicy(maxEntries: 2),
+      );
+      addTearDown(retained.dispose);
+      await retained.recordVisit(
+        _entry(
+          type: HistoryTargetType.blog,
+          id: '101:23',
+          title: '较早日志',
+          at: _time(1),
+        ),
+      );
+      await retained.recordVisit(
+        _entry(
+          type: HistoryTargetType.thread,
+          id: '23',
+          title: '帖子',
+          at: _time(2),
+        ),
+      );
+      await retained.recordVisit(
+        _entry(
+          type: HistoryTargetType.blog,
+          id: '101:24',
+          title: '较新日志',
+          at: _time(3),
+        ),
+      );
+
+      expect(
+        (await retained.query(
+          const HistoryQuery(),
+        )).items.map((entry) => entry.target.id),
+        ['101:24', '23'],
+      );
+    });
+
+    test(
       'upserts the same target and moves its latest visit to the top',
       () async {
         await repository.recordVisit(
@@ -105,25 +253,23 @@ void main() {
       },
     );
 
-    test(
-      'keeps thread, comic and novel identities separate for the same id',
-      () async {
-        for (final type in HistoryTargetType.values) {
-          await repository.recordVisit(
-            _entry(type: type, id: '100', title: type.name, at: _time(1)),
-          );
-        }
+    test('keeps target types separate for the same stored id', () async {
+      for (final type in HistoryTargetType.values) {
+        await repository.recordVisit(
+          _entry(type: type, id: '100', title: type.name, at: _time(1)),
+        );
+      }
 
-        final page = await repository.query(const HistoryQuery());
+      final page = await repository.query(const HistoryQuery());
 
-        expect(page.items, hasLength(3));
-        expect(page.items.map((entry) => entry.target.type).toSet(), {
-          HistoryTargetType.thread,
-          HistoryTargetType.comic,
-          HistoryTargetType.novel,
-        });
-      },
-    );
+      expect(page.items, hasLength(4));
+      expect(page.items.map((entry) => entry.target.type).toSet(), {
+        HistoryTargetType.thread,
+        HistoryTargetType.comic,
+        HistoryTargetType.novel,
+        HistoryTargetType.blog,
+      });
+    });
 
     test(
       'late writes increment visits without replacing the newer snapshot',
@@ -448,6 +594,7 @@ HistoryEntry _entry({
     HistoryTargetType.thread => HistoryVisitSurface.threadNative,
     HistoryTargetType.comic => HistoryVisitSurface.comicDetail,
     HistoryTargetType.novel => HistoryVisitSurface.novelDetail,
+    HistoryTargetType.blog => HistoryVisitSurface.blogDetail,
   };
   return HistoryEntry(
     target: resolvedTarget,

@@ -12,6 +12,40 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MainNavigationSettingsSnapshotCodec', () {
+    test('hides optional destinations for defaults and legacy snapshots', () {
+      final defaults = MainNavigationSettings.defaults();
+      expect(defaults.isVisible(MainShellDestination.blogs), isFalse);
+      expect(defaults.isVisible(MainShellDestination.messages), isFalse);
+      final legacy = MainNavigationSettingsSnapshotCodec.decode('''
+        {"schemaVersion":1,"order":["novel","forum","history","comic","favorites"],
+         "hidden":["comic"]}
+      ''');
+      expect(legacy.managedOrder.first, MainShellDestination.novel);
+      expect(legacy.managedOrder.skip(5), [
+        MainShellDestination.blogs,
+        MainShellDestination.messages,
+      ]);
+      expect(legacy.hiddenDestinations, {
+        MainShellDestination.comic,
+        MainShellDestination.blogs,
+        MainShellDestination.messages,
+      });
+      for (final visible in [true, false]) {
+        final settings = legacy.copyWith(
+          hiddenDestinations: {
+            MainShellDestination.comic,
+            if (!visible) MainShellDestination.blogs,
+          },
+        );
+        expect(
+          MainNavigationSettingsSnapshotCodec.decode(
+            MainNavigationSettingsSnapshotCodec.encode(settings),
+          ),
+          settings,
+        );
+      }
+    });
+
     test('round-trips a normalized snapshot', () {
       final settings = MainNavigationSettings(
         managedOrder: const <MainShellDestination>[
@@ -33,6 +67,36 @@ void main() {
 
       expect(decoded, settings);
       expect(decoded.visibleDestinations.last, MainShellDestination.more);
+    });
+
+    test('preserves optional visibility from either pre-merge snapshot', () {
+      for (final existing in const [
+        MainShellDestination.blogs,
+        MainShellDestination.messages,
+      ]) {
+        final introduced = existing == MainShellDestination.blogs
+            ? MainShellDestination.messages
+            : MainShellDestination.blogs;
+        for (final visible in [true, false]) {
+          final hidden = visible ? '' : '"${existing.name}"';
+          final decoded = MainNavigationSettingsSnapshotCodec.decode('''
+            {"schemaVersion":1,
+             "order":["${existing.name}","novel","forum","history","comic","favorites"],
+             "hidden":[$hidden]}
+          ''');
+
+          expect(decoded.managedOrder.first, existing);
+          expect(decoded.managedOrder.last, introduced);
+          expect(decoded.isVisible(existing), visible);
+          expect(decoded.isVisible(introduced), isFalse);
+          expect(
+            MainNavigationSettingsSnapshotCodec.decode(
+              MainNavigationSettingsSnapshotCodec.encode(decoded),
+            ),
+            decoded,
+          );
+        }
+      }
     });
 
     test('messages are opt-in for defaults and existing saved navigation', () {
@@ -68,6 +132,7 @@ void main() {
         MainShellDestination.forum,
         MainShellDestination.favorites,
         MainShellDestination.novel,
+        MainShellDestination.blogs,
         MainShellDestination.messages,
       ]);
       expect(decoded.visibleManagedDestinations, const <MainShellDestination>[
@@ -152,6 +217,7 @@ void main() {
           .requireValue
           .settings;
       expect(settings.hiddenDestinations, <MainShellDestination>{
+        MainShellDestination.blogs,
         MainShellDestination.history,
         MainShellDestination.messages,
       });
@@ -179,6 +245,7 @@ void main() {
             MainShellDestination.comic,
             MainShellDestination.novel,
             MainShellDestination.history,
+            MainShellDestination.blogs,
             MainShellDestination.messages,
           },
         ),

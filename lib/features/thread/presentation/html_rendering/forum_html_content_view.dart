@@ -20,10 +20,12 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.contentImageKind = ForumImageKind.blogInline,
     this.contentLayout = ForumHtmlContentLayout.document,
     this.onOpenLink,
+    this.onOpenImage,
     this.theme,
     this.surfaceColor,
     this.foregroundColor,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.linkBaseUri,
   });
 
   final String html;
@@ -33,10 +35,13 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final ForumImageKind contentImageKind;
   final ForumHtmlContentLayout contentLayout;
   final ValueChanged<String>? onOpenLink;
+  final void Function(ForumHtmlReadableImageSequence, ForumHtmlImageRequest)?
+  onOpenImage;
   final ForumHtmlThemeContext? theme;
   final Color? surfaceColor;
   final Color? foregroundColor;
   final ForumHtmlRenderPreparer renderPreparer;
+  final Uri? linkBaseUri;
 
   @override
   ConsumerState<ForumHtmlContentView> createState() =>
@@ -90,6 +95,8 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       _preparationIdentity = preparationIdentity;
       _preparedDocument = preparedDocument;
     }
+    final sequence = _preparedDocument!.sequence;
+    final onOpenImage = widget.onOpenImage;
     return ForumHtmlWidgetPostRenderer(
       html: trimmedHtml,
       theme: renderTheme,
@@ -100,8 +107,14 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       preferences: preferences,
       preparedDocument: _preparedDocument,
       contentImageKind: widget.contentImageKind,
+      linkBaseUri: widget.linkBaseUri,
       contentLayout: widget.contentLayout,
       callbacks: ForumHtmlRenderCallbacks(
+        onTapImage: onOpenImage == null
+            ? null
+            : (image) {
+                if (mounted) onOpenImage(sequence, image);
+              },
         onTapUrl: (url) {
           widget.onOpenLink?.call(url);
           return true;

@@ -48,6 +48,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
+    this.linkBaseUri,
     this.contentLayout = ForumHtmlContentLayout.document,
   });
 
@@ -88,6 +89,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final ForumHtmlContentLayout contentLayout;
 
+  /// The current source document, so fragment links retain article identity.
+  final Uri? linkBaseUri;
+
   @override
   Widget build(BuildContext context) {
     final resolvedPreferences =
@@ -127,7 +131,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     Widget buildBody(VoidCallback? onReady) => HtmlWidget(
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
-      baseUrl: forumBaseUri,
+      baseUrl: linkBaseUri ?? forumBaseUri,
       onErrorBuilder: onReady == null
           ? null
           : (_, _, _) {
@@ -146,7 +150,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       factoryBuilder: _cachedImageFactoryBuilder(onReady),
       enableCaching: enableCaching,
       renderMode: renderMode,
-      rebuildTriggers: [contentLayout],
+      rebuildTriggers: [contentLayout, linkBaseUri],
       textStyle: baseStyle,
       onTapUrl: callbacks.onTapUrl == null
           ? null
@@ -168,6 +172,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       resolvedPreferences,
       theme.signature,
       contentLayout,
+      linkBaseUri,
     );
     return ThreadPostBodyLayout(
       key: ValueKey((presentation, revision)),
@@ -267,6 +272,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           contentImageKind: contentImageKind,
           blockSpacingMode: blockSpacingMode,
           contentLayout: contentLayout,
+          linkBaseUri: linkBaseUri,
           preparedDocument: document.copyWith(preparedHtml: html),
         );
       },

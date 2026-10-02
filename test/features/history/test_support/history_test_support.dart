@@ -163,6 +163,7 @@ HistoryEntry historyEntry({
     HistoryTargetType.thread => HistoryVisitSurface.threadNative,
     HistoryTargetType.comic => HistoryVisitSurface.comicDetail,
     HistoryTargetType.novel => HistoryVisitSurface.novelDetail,
+    HistoryTargetType.blog => HistoryVisitSurface.blogDetail,
   };
   return HistoryEntry(
     target: HistoryTargetKey(type: type, id: id),

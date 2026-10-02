@@ -29,9 +29,10 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.da
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
+import 'package:y300/shared/widgets/forum_metric_pill.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
-import 'package:y300/shared/widgets/native_page_dropdown_button.dart';
+import 'package:y300/shared/widgets/native_pagination_bar.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 // File split (Phase 5b): cohesive widget groups live in part files under the
@@ -646,7 +647,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onLoadPreviousPage: widget.onLoadPreviousPage,
           onLoadNextPage: widget.onLoadNextPage,
           onLoadPageNumber: widget.onLoadPageNumber,
-          palette: palette,
         );
       case ThreadDetailRenderEntryKind.targetSpacer:
         return SizedBox(

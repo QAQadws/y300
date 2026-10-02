@@ -6,6 +6,8 @@ import 'package:y300/features/history/domain/services/history_date_grouping_poli
 import 'package:y300/features/history/presentation/history_text_resolver.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
 
+import '../test_support/history_test_support.dart';
+
 void main() {
   final zh = AppLocalizationsZh();
   final zhTw = AppLocalizationsZhTw();
@@ -25,6 +27,44 @@ void main() {
       HistoryTextResolver.typeLabel(zhTw, HistoryTargetType.novel),
       zhTw.historyTypeNovel,
     );
+    expect(
+      HistoryTextResolver.typeLabel(zh, HistoryTargetType.blog),
+      zh.historyTypeBlog,
+    );
+    expect(
+      HistoryTextResolver.typeLabel(zhTw, HistoryTargetType.blog),
+      zhTw.historyTypeBlog,
+    );
+  });
+
+  test('localizes blog framing while retaining source titles and authors', () {
+    final entry = historyEntry(
+      type: HistoryTargetType.blog,
+      id: '101:23',
+      title: '日志原文',
+      contextLabel: '原作者名字',
+      visitedAt: DateTime.utc(2026, 9, 27),
+    );
+    final empty = historyEntry(
+      type: HistoryTargetType.blog,
+      id: '101:24',
+      title: '',
+      contextLabel: '',
+      visitedAt: DateTime.utc(2026, 9, 27),
+    );
+
+    for (final l10n in [zh, zhTw]) {
+      expect(HistoryTextResolver.entryTitle(l10n, entry), entry.title);
+      expect(
+        HistoryTextResolver.entryContext(l10n, entry),
+        l10n.historyBlogAuthor(entry.contextLabel),
+      );
+      expect(HistoryTextResolver.entryTitle(l10n, empty), l10n.historyTypeBlog);
+      expect(
+        HistoryTextResolver.entryContext(l10n, empty),
+        l10n.historyTypeBlog,
+      );
+    }
   });
 
   test('formats relative and calendar date groups in presentation', () {

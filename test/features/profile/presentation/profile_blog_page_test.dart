@@ -1,14 +1,546 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
+import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
+import 'package:y300/features/profile/presentation/profile_user_link.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../test_support/blog_comment_fixture.dart';
+import '../test_support/blog_draft_fixture.dart';
+import '../test_support/blog_operation_fixture.dart';
+import '../test_support/profile_repository_fixture.dart';
 
 void main() {
+  for (final source in ['list', 'detail', 'comment']) {
+    for (final avatar in [false, true]) {
+      testWidgets(
+        '$source ${avatar ? 'avatar' : 'name'} opens the source author and preserves the article on return',
+        (tester) async {
+          final profiles = ProfileRepositoryFixture();
+          final directory = _FakeBlogDirectoryRepository();
+          final details = _FakeBlogDetailRepository(commentAuthorId: '909');
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                blogAccountIdProvider.overrideWithValue('101'),
+                forumUserProfileRepositoryProvider.overrideWithValue(profiles),
+                userBlogDirectoryRepositoryProvider.overrideWithValue(
+                  directory,
+                ),
+                userBlogDetailRepositoryProvider.overrideWithValue(details),
+                forumImageRefererProvider.overrideWithValue(
+                  'https://example.test/',
+                ),
+              ],
+              child: const LocalizedTestApp(home: ProfileBlogPage()),
+            ),
+          );
+          await tester.pumpAndSettle();
+          if (source != 'list') {
+            await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+            await tester.pumpAndSettle();
+          }
+          final author = source == 'comment' ? '909' : '257582';
+          final target = avatar
+              ? find
+                    .descendant(
+                      of: find.byWidgetPredicate(
+                        (widget) =>
+                            widget is ProfileUserLink &&
+                            widget.userId == author,
+                      ),
+                      matching: find.byType(ForumCachedAvatar),
+                    )
+                    .first
+              : find.byKey(
+                  Key(switch (source) {
+                    'list' => 'blog-list-author-117558',
+                    'detail' => 'blog-detail-author',
+                    _ => 'blog-comment-author-646846',
+                  }),
+                );
+          await tester.ensureVisible(target);
+          await tester.pumpAndSettle();
+          expect(profiles.queries, isEmpty);
+          await tester.tap(target);
+          await tester.pumpAndSettle();
+          expect(find.byType(UserProfilePage), findsOneWidget);
+          expect(profiles.queries.single.userId, author);
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+          expect(directory.queries, hasLength(1));
+          expect(details.queries, hasLength(source == 'list' ? 0 : 1));
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'publishing opens the verified article and defers the feed refresh',
+    (tester) async {
+      final directory = _FakeBlogDirectoryRepository();
+      final details = _FakeBlogDetailRepository(title: 'Newly published');
+      final operations = BlogOperationFixture(autoPrepare: true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            blogAccountIdProvider.overrideWithValue('101'),
+            blogDraftRepositoryProvider.overrideWithValue(
+              MemoryBlogDraftRepository(),
+            ),
+            userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+            userBlogDetailRepositoryProvider.overrideWithValue(details),
+            userBlogOperationsProvider.overrideWithValue(operations),
+            forumImageRefererProvider.overrideWithValue(
+              'https://example.test/',
+            ),
+          ],
+          child: const LocalizedTestApp(home: ProfileBlogPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('blog-write')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BlogEditorPage), findsOneWidget);
+      expect(
+        operations.editorPreparations.single.target.action,
+        UserBlogAction.create,
+      );
+      await tester.enterText(
+        find.byKey(const Key('blog-editor-subject')),
+        'Newly published',
+      );
+      tester
+          .widget<QuillEditor>(find.byType(QuillEditor))
+          .controller
+          .replaceText(
+            0,
+            0,
+            'New body',
+            const TextSelection.collapsed(offset: 8),
+          );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('blog-editor-submit')));
+      await tester.pump();
+      operations.saved();
+      await tester.pumpAndSettle();
+      final page = tester.widget<ProfileBlogDetailPage>(
+        find.byType(ProfileBlogDetailPage),
+      );
+      expect(page.blogId, '12');
+      expect(page.ownerUserId, '101');
+      expect(page.initialTitle, 'Newly published');
+      expect(details.queries.single.blogId, '12');
+      expect(directory.queries, hasLength(1));
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(directory.queries, hasLength(2));
+      expect(directory.policies.last, CacheLoadPolicy.networkFirst);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final fromDetail in [false, true]) {
+    testWidgets(
+      'editing from ${fromDetail ? 'detail' : 'list'} refreshes existing views after saving',
+      (tester) async {
+        final directory = _FakeBlogDirectoryRepository(
+          blogActions: {UserBlogAction.edit},
+        );
+        final details = _FakeBlogDetailRepository(
+          blogActions: {UserBlogAction.edit},
+        );
+        final operations = BlogOperationFixture(autoPrepare: true);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              blogAccountIdProvider.overrideWithValue('257582'),
+              userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+              userBlogDetailRepositoryProvider.overrideWithValue(details),
+              userBlogOperationsProvider.overrideWithValue(operations),
+              forumImageRefererProvider.overrideWithValue(
+                'https://example.test/',
+              ),
+            ],
+            child: const LocalizedTestApp(home: ProfileBlogPage()),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ProfileBlogPage)),
+        );
+        if (fromDetail) {
+          await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+          await tester.pumpAndSettle();
+        }
+        if (fromDetail) {
+          await tester.longPress(find.byKey(const Key('blog-detail-card')));
+        } else {
+          await tester.tap(find.byKey(const Key('blog-list-actions-117558')));
+        }
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(l10n.profileBlogEdit));
+        await tester.pumpAndSettle();
+        expect(find.byType(BlogEditorPage), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const Key('blog-editor-subject')),
+          'Changed title',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('blog-editor-submit')));
+        await tester.pump();
+        details.title = 'Changed title';
+        operations.saved();
+        await tester.pumpAndSettle();
+        if (fromDetail) {
+          expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+          expect(details.queries, hasLength(2));
+          expect(find.text('Changed title'), findsWidgets);
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+        }
+        expect(find.byType(ProfileBlogPage), findsOneWidget);
+        expect(directory.queries, hasLength(2));
+        expect(
+          operations.editorSubmissions.single.input.subject,
+          'Changed title',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final fromDetail in [false, true]) {
+    for (final action in blogManagementActions) {
+      for (final applied in [false, true]) {
+        testWidgets(
+          '$action from ${fromDetail ? 'detail' : 'list'} updates only when applied=$applied',
+          (tester) async {
+            final directory = _FakeBlogDirectoryRepository(
+              blogActions: {action},
+            );
+            final details = _FakeBlogDetailRepository(blogActions: {action});
+            final operations = BlogOperationFixture(autoPrepare: true);
+            await tester.pumpWidget(
+              ProviderScope(
+                overrides: [
+                  blogAccountIdProvider.overrideWithValue('257582'),
+                  userBlogDirectoryRepositoryProvider.overrideWithValue(
+                    directory,
+                  ),
+                  userBlogDetailRepositoryProvider.overrideWithValue(details),
+                  userBlogOperationsProvider.overrideWithValue(operations),
+                  forumImageRefererProvider.overrideWithValue(
+                    'https://example.test/',
+                  ),
+                ],
+                child: const LocalizedTestApp(home: ProfileBlogPage()),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final l10n = AppLocalizations.of(
+              tester.element(find.byType(ProfileBlogPage)),
+            );
+            if (fromDetail) {
+              await tester.tap(
+                find.byKey(const Key('profile-blog-item-117558')),
+              );
+              await tester.pumpAndSettle();
+            }
+            if (fromDetail) {
+              await tester.longPress(find.byKey(const Key('blog-detail-card')));
+            } else {
+              await tester.tap(
+                find.byKey(const Key('blog-list-actions-117558')),
+              );
+            }
+            await tester.pumpAndSettle();
+            for (final other in blogManagementActions.where(
+              (other) => other != action,
+            )) {
+              expect(find.text(blogActionLabel(l10n, other)), findsNothing);
+            }
+            await tester.tap(find.text(blogActionLabel(l10n, action)));
+            await tester.pumpAndSettle();
+            expect(find.byType(BlogActionPage), findsOneWidget);
+            expect(operations.preparations.single.target.blogId, '117558');
+            expect(operations.preparations.single.target.ownerUserId, '257582');
+            expect(operations.submissions, isEmpty);
+            await tester.tap(find.byKey(const Key('blog-action-submit')));
+            await tester.pump();
+            expect(directory.queries, hasLength(1));
+            expect(details.queries, hasLength(fromDetail ? 1 : 0));
+            if (applied) {
+              directory.removed = action == UserBlogAction.delete;
+              operations.applied();
+            } else {
+              operations.submissions.last.result.complete(
+                const DataCommandOutcomeUnknown(blogActionWriteFailure),
+              );
+            }
+            await tester.pumpAndSettle();
+            if (!applied) {
+              expect(find.byType(BlogActionPage), findsOneWidget);
+              expect(find.byKey(const Key('blog-action-retry')), findsNothing);
+              await tester.tap(find.byType(BackButton));
+              await tester.pumpAndSettle();
+            }
+            if (fromDetail && !(applied && action == UserBlogAction.delete)) {
+              expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+              expect(details.queries, hasLength(applied ? 2 : 1));
+              await tester.tap(find.byType(BackButton));
+              await tester.pumpAndSettle();
+            }
+            expect(find.byType(ProfileBlogPage), findsOneWidget);
+            expect(directory.queries, hasLength(applied ? 2 : 1));
+            if (applied) {
+              expect(directory.policies.last, CacheLoadPolicy.networkFirst);
+            }
+            if (applied && action == UserBlogAction.delete) {
+              expect(
+                find.byKey(const Key('profile-blog-item-117558')),
+                findsNothing,
+              );
+            }
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
+  for (final action in UserBlogCommentAction.values) {
+    for (final applied in [true, false]) {
+      testWidgets('$action refreshes comment data only when applied=$applied', (
+        tester,
+      ) async {
+        final details = _FakeBlogDetailRepository(commentActions: {action});
+        final comments = BlogCommentFixture(autoPrepare: true);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              blogAccountIdProvider.overrideWithValue('101'),
+              userBlogDetailRepositoryProvider.overrideWithValue(details),
+              userBlogCommentServiceProvider.overrideWithValue(comments),
+              forumImageRefererProvider.overrideWithValue(
+                'https://bbs.yamibo.com/',
+              ),
+            ],
+            child: const LocalizedTestApp(
+              home: ProfileBlogDetailPage(ownerUserId: '202', blogId: '11'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ProfileBlogDetailPage)),
+        );
+        if (action == UserBlogCommentAction.add) {
+          await tester.tap(find.byKey(const Key('blog-detail-reply')));
+        } else {
+          final menu = find.byKey(const Key('profile-blog-comment-646846'));
+          await tester.scrollUntilVisible(
+            menu,
+            150,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.longPress(menu);
+          await tester.pumpAndSettle();
+          for (final other in UserBlogCommentAction.values) {
+            if (other != action && other != UserBlogCommentAction.add) {
+              expect(
+                find.text(blogCommentActionLabel(l10n, other)),
+                findsNothing,
+              );
+            }
+          }
+          await tester.tap(find.text(blogCommentActionLabel(l10n, action)));
+        }
+        await tester.pumpAndSettle();
+        expect(find.byType(BlogCommentPage), findsOneWidget);
+        expect(
+          comments.preparations.single.target,
+          UserBlogCommentTarget(
+            actorUserId: '101',
+            ownerUserId: '202',
+            blogId: '11',
+            action: action,
+            commentId: action == UserBlogCommentAction.add ? null : '646846',
+          ),
+        );
+        if (action != UserBlogCommentAction.delete) {
+          await tester.enterText(find.byType(TextField), '实际输入内容');
+        }
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('blog-comment-submit')));
+        await tester.pump();
+        expect(details.queries, hasLength(1));
+        if (applied) {
+          comments.applied();
+          await tester.pumpAndSettle();
+          expect(details.queries, hasLength(2));
+          expect(details.policies.last, CacheLoadPolicy.networkFirst);
+          expect(
+            details.queries.last.lastCommentPage,
+            action == UserBlogCommentAction.add ||
+                action == UserBlogCommentAction.reply,
+          );
+        } else {
+          comments.submissions.single.result.complete(
+            const DataCommandOutcomeUnknown(blogCommentWriteFailure),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('blog-comment-leave')));
+          await tester.pumpAndSettle();
+          expect(details.queries, hasLength(1));
+          // An inconclusive write leaves the article untouched, but the
+          // user must still be able to check it by pulling a short page.
+          await tester.drag(
+            find.byKey(const Key('profile-blog-detail')),
+            const Offset(0, 400),
+          );
+          await tester.pumpAndSettle();
+          expect(details.queries, hasLength(2));
+          expect(details.policies.last, CacheLoadPolicy.networkFirst);
+        }
+        expect(find.byType(BlogCommentPage), findsNothing);
+        expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('tabs remain usable while the first request is pending', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repository = _FakeBlogDirectoryRepository(gate: gate);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+      settle: false,
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('profile-blog-view-tabs')), findsOneWidget);
+    await tester.tap(find.text('我的日志'));
+    await tester.pump();
+    expect(repository.queries.map((q) => q.scope), [
+      UserBlogFeedScope.public,
+      UserBlogFeedScope.self,
+    ]);
+    expect(repository.cancellations.first!.isCancelled, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('一种体验'), findsNothing);
+    expect(find.text('还没有相关的日志'), findsOneWidget);
+  });
+
+  testWidgets('returning from a pending article cancels its read', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final details = _FakeBlogDetailRepository(gate: gate);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: _FakeBlogDirectoryRepository(),
+      detailRepository: details,
+    );
+    await tester.tap(find.text('一种体验'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ProfileBlogDetailPage),
+        matching: find.text('一种体验'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(details.cancellations.single!.isCancelled, isTrue);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileBlogDetailPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the last scroll offset is restored independently for each tab', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository(longList: true);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+    );
+    final list = find.byKey(const Key('profile-blog-list'));
+    await tester.drag(list, const Offset(0, -650));
+    await tester.pumpAndSettle();
+    double offset() => tester
+        .state<ScrollableState>(
+          find.descendant(of: list, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+    final before = offset();
+    expect(before, greaterThan(400));
+    await tester.tap(find.text('我的日志'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('随便看看'));
+    await tester.pumpAndSettle();
+    expect(offset(), closeTo(before, 1));
+    expect(repository.queries, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'two routes with the same feed use separate controller instances',
+    (tester) async {
+      final repository = _FakeBlogDirectoryRepository();
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: repository,
+        detailRepository: _FakeBlogDetailRepository(),
+      );
+      final context = tester.element(find.text('随便看看'));
+      unawaited(
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const ProfileBlogPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.queries, hasLength(2));
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
+      await tester.pumpAndSettle();
+      expect(repository.queries, hasLength(3));
+      expect(find.text('一种体验'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('ProfileBlogPage switches structured queries and opens detail', (
     tester,
   ) async {
@@ -19,14 +551,17 @@ void main() {
       directoryRepository: directoryRepository,
       detailRepository: detailRepository,
     );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
 
     expect(find.byKey(const Key('profile-blog-list')), findsOneWidget);
     expect(find.byKey(const Key('profile-blog-view-tabs')), findsOneWidget);
     expect(find.text('随便看看'), findsOneWidget);
-    expect(find.text('最新发表的日志'), findsOneWidget);
+    expect(find.text(l10n.profileBlogLatestShort), findsOneWidget);
     expect(find.text('一种体验'), findsOneWidget);
 
-    await tester.tap(find.text('推荐阅读的日志'));
+    await tester.tap(find.text(l10n.profileBlogRecommendedShort));
     await tester.pumpAndSettle();
 
     expect(directoryRepository.queries.last.order, UserBlogOrder.recommended);
@@ -41,7 +576,7 @@ void main() {
 
     await tester.tap(find.text('随便看看'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('推荐阅读的日志'));
+    await tester.tap(find.text(l10n.profileBlogRecommendedShort));
     await tester.pumpAndSettle();
     await tester.tap(find.text('我们小区的公共交通极其不便利'));
     await tester.pumpAndSettle();
@@ -49,30 +584,348 @@ void main() {
     expect(detailRepository.queries.single.ownerUserId, '257582');
     expect(detailRepository.queries.single.blogId, '117548');
     expect(find.byKey(const Key('profile-blog-detail')), findsOneWidget);
+    expect(find.text('2026-6-18 00:25'), findsOneWidget);
+    final views = find.byKey(const Key('blog-detail-views'));
+    final comments = find.byKey(const Key('blog-detail-comment-count'));
     expect(
-      find.text('hsyhlj · 2026-6-18 00:25 · 浏览 39 · 评论 1'),
+      find.descendant(
+        of: views,
+        matching: find.byIcon(Icons.visibility_outlined),
+      ),
       findsOneWidget,
     );
+    expect(
+      find.descendant(of: views, matching: find.text('39')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: comments,
+        matching: find.byIcon(Icons.forum_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: comments, matching: find.text('1')),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.profileBlogViews(39)), findsNothing);
+    expect(find.text(l10n.profileBlogCommentCount(1)), findsNothing);
+    expect(find.text('hsyhlj'), findsOneWidget);
     expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
-    expect(find.text('日志评论'), findsOneWidget);
+    expect(find.text(l10n.profileBlogComments), findsOneWidget);
     expect(_richTextContaining('探险的感觉'), findsOneWidget);
   });
 
-  testWidgets('next page constructs a page-only domain query', (tester) async {
-    final repository = _FakeBlogDirectoryRepository();
+  testWidgets(
+    'an empty article keeps zero-count badges and AppBar reply without comment placeholders or web action',
+    (tester) async {
+      final details = _FakeBlogDetailRepository(
+        emptyComments: true,
+        viewCount: 0,
+        commentCount: 0,
+      );
+      final comments = BlogCommentFixture(autoPrepare: true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            blogAccountIdProvider.overrideWithValue('101'),
+            userBlogDetailRepositoryProvider.overrideWithValue(details),
+            userBlogCommentServiceProvider.overrideWithValue(comments),
+            forumImageRefererProvider.overrideWithValue(
+              'https://bbs.yamibo.com/',
+            ),
+          ],
+          child: const LocalizedTestApp(
+            home: ProfileBlogDetailPage(ownerUserId: '202', blogId: '11'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileBlogDetailPage)),
+      );
+      expect(find.text(l10n.profileBlogComments), findsNothing);
+      expect(find.text(l10n.profileBlogCommentsEmpty), findsNothing);
+      expect(
+        find.byKey(const Key('profile-blog-comments-heading')),
+        findsNothing,
+      );
+      for (final key in ['blog-detail-views', 'blog-detail-comment-count']) {
+        expect(
+          find.descendant(of: find.byKey(Key(key)), matching: find.text('0')),
+          findsOneWidget,
+        );
+      }
+      expect(find.byKey(const Key('blog-detail-open-web')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.open_in_browser),
+        ),
+        findsNothing,
+      );
+      expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('blog-detail-reply')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BlogCommentPage), findsOneWidget);
+      expect(
+        comments.preparations.single.target,
+        const UserBlogCommentTarget(
+          actorUserId: '101',
+          ownerUserId: '202',
+          blogId: '11',
+          action: UserBlogCommentAction.add,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final missing in [
+    'values',
+    'unknown capabilities',
+    'unsupported capabilities',
+  ]) {
+    testWidgets('detail hides statistics with $missing', (tester) async {
+      final supported = UserBlogDetailCapability.values.where(
+        (capability) =>
+            capability != UserBlogDetailCapability.viewCount &&
+            capability != UserBlogDetailCapability.commentCount,
+      );
+      final capabilities = switch (missing) {
+        'unknown capabilities' => UserBlogDetailReadCapabilities(
+          values: DataCapabilitySet<UserBlogDetailCapability>.from(
+            supported: supported,
+          ),
+        ),
+        'unsupported capabilities' => _detailCapabilities(supported: supported),
+        _ => _detailCapabilities(),
+      };
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: _FakeBlogDirectoryRepository(),
+        detailRepository: _FakeBlogDetailRepository(
+          capabilities: capabilities,
+          viewCount: missing == 'values' ? null : 39,
+          commentCount: missing == 'values' ? null : 1,
+        ),
+      );
+      await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('blog-detail-views')), findsNothing);
+      expect(find.byKey(const Key('blog-detail-comment-count')), findsNothing);
+      expect(find.text('2026-6-18 00:25'), findsOneWidget);
+      expect(find.byKey(const Key('blog-detail-reply')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'pagination replaces each page and can return from the last page',
+    (tester) async {
+      final repository = _FakeBlogDirectoryRepository();
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: repository,
+        detailRepository: _FakeBlogDetailRepository(),
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileBlogPage)),
+      );
+      expect(find.byKey(const Key('profile-blog-pagination')), findsOneWidget);
+      expect(find.text(l10n.commonPage(1)), findsOneWidget);
+      expect(find.text(l10n.commonPreviousPage), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+
+      await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
+      await tester.pumpAndSettle();
+
+      expect(repository.queries.last.page, 2);
+      expect(repository.queries.last.scope, UserBlogFeedScope.public);
+      expect(repository.queries.last.order, UserBlogOrder.latest);
+      expect(find.text('第二页日志'), findsOneWidget);
+      expect(find.text('一种体验'), findsNothing);
+      expect(find.text(l10n.commonPage(2)), findsOneWidget);
+      expect(find.text(l10n.forumDisplayNoMore), findsOneWidget);
+      expect(_paginationButton(tester, 'next-page').onPressed, isNull);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNotNull);
+
+      await tester.tap(
+        find.byKey(const Key('profile-blog-previous-page-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.queries.map((query) => query.page), [1, 2, 1]);
+      expect(find.text('一种体验'), findsOneWidget);
+      expect(find.text('第二页日志'), findsNothing);
+      expect(find.text(l10n.commonPage(1)), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final unknownTotalPages in [false, true]) {
+    testWidgets(
+      'page picker navigates with ${unknownTotalPages ? 'unknown' : 'exact'} page counts',
+      (tester) async {
+        final repository = _FakeBlogDirectoryRepository(
+          unknownTotalPages: unknownTotalPages,
+        );
+        await _pumpBlogPage(
+          tester,
+          directoryRepository: repository,
+          detailRepository: _FakeBlogDetailRepository(),
+        );
+
+        await tester.tap(
+          find.byKey(const Key('profile-blog-current-page-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('profile-blog-page-list')), findsOneWidget);
+        expect(
+          find.byKey(const Key('profile-blog-page-option-1')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('profile-blog-page-option-2')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('profile-blog-page-option-3')),
+          findsNothing,
+        );
+        await tester.tap(find.byKey(const Key('profile-blog-page-option-2')));
+        await tester.pumpAndSettle();
+        expect(repository.queries.map((query) => query.page), [1, 2]);
+        expect(find.text('第二页日志'), findsOneWidget);
+        expect(find.text('一种体验'), findsNothing);
+
+        await tester.tap(
+          find.byKey(const Key('profile-blog-current-page-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('profile-blog-page-option-3')),
+          findsNothing,
+        );
+        await tester.tap(find.byKey(const Key('profile-blog-page-option-1')));
+        await tester.pumpAndSettle();
+        expect(repository.queries.map((query) => query.page), [1, 2, 1]);
+        expect(find.text('一种体验'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'pending page navigation keeps the displayed page and disables controls',
+    (tester) async {
+      final nextPageGate = Completer<void>();
+      final repository = _FakeBlogDirectoryRepository(
+        nextPageGate: nextPageGate,
+      );
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: repository,
+        detailRepository: _FakeBlogDetailRepository(),
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileBlogPage)),
+      );
+
+      await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
+      await tester.pump();
+      expect(repository.queries.last.page, 2);
+      expect(find.text('一种体验'), findsOneWidget);
+      expect(find.text(l10n.commonPage(1)), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+      expect(_paginationButton(tester, 'current-page').onPressed, isNull);
+      expect(
+        find.byKey(const Key('profile-blog-next-page-button')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('profile-blog-pagination')),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      nextPageGate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('第二页日志'), findsOneWidget);
+      expect(find.text(l10n.commonPage(2)), findsOneWidget);
+      expect(_paginationButton(tester, 'previous-page').onPressed, isNotNull);
+      expect(_paginationButton(tester, 'current-page').onPressed, isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('page navigation failure retains its page and can be retried', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository()..failedPages.add(2);
     await _pumpBlogPage(
       tester,
       directoryRepository: repository,
       detailRepository: _FakeBlogDetailRepository(),
     );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
 
     await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
     await tester.pumpAndSettle();
+    expect(find.text('一种体验'), findsOneWidget);
+    expect(find.text('第二页日志'), findsNothing);
+    expect(find.text(l10n.commonPage(1)), findsOneWidget);
+    expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
+    expect(_paginationButton(tester, 'next-page').onPressed, isNotNull);
 
-    expect(repository.queries.last.page, 2);
-    expect(repository.queries.last.scope, UserBlogFeedScope.public);
-    expect(repository.queries.last.order, UserBlogOrder.latest);
+    repository.failedPages.clear();
+    await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
+    await tester.pumpAndSettle();
+    expect(repository.queries.map((query) => query.page), [1, 2, 2]);
     expect(find.text('第二页日志'), findsOneWidget);
+    expect(find.text(l10n.commonPage(2)), findsOneWidget);
+    expect(find.text('一种体验'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('successful page navigation starts the new list at the top', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository(longList: true);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+    );
+    final list = find.byKey(const Key('profile-blog-list'));
+    final scrollable = find.descendant(
+      of: list,
+      matching: find.byType(Scrollable),
+    );
+    final next = find.byKey(const Key('profile-blog-next-page-button'));
+    await tester.scrollUntilVisible(next, 500, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(
+      tester.state<ScrollableState>(scrollable).position.pixels,
+      greaterThan(400),
+    );
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    expect(find.text('第二页日志'), findsOneWidget);
+    expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
+
+    await tester.tap(
+      find.byKey(const Key('profile-blog-previous-page-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Entry 0'), findsOneWidget);
+    expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('capabilities hide optional list and detail fields', (
@@ -113,12 +966,14 @@ void main() {
     await tester.tap(find.text('一种体验'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('浏览 39'), findsNothing);
-    expect(find.text('日志评论'), findsNothing);
-    expect(
-      find.byKey(const Key('profile-blog-comment-placeholder')),
-      findsNothing,
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogDetailPage)),
     );
+    expect(find.byKey(const Key('blog-detail-views')), findsNothing);
+    expect(find.byKey(const Key('blog-detail-comment-count')), findsNothing);
+    expect(find.text(l10n.profileBlogComments), findsNothing);
+    expect(find.byKey(const Key('blog-detail-reply')), findsNothing);
+    expect(find.byKey(const Key('profile-blog-comment-button')), findsNothing);
   });
 
   testWidgets('refresh failure retains existing directory content', (
@@ -130,13 +985,9 @@ void main() {
       directoryRepository: repository,
       detailRepository: _FakeBlogDetailRepository(),
     );
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(ProfileBlogPage)),
-    );
-
-    await container
-        .read(profileBlogListProvider(const ProfileBlogPageArgs()).notifier)
-        .refresh();
+    await tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
     await tester.pumpAndSettle();
 
     expect(find.text('一种体验'), findsOneWidget);
@@ -177,9 +1028,12 @@ void main() {
       detailRepository: _FakeBlogDetailRepository(),
       locale: const Locale('zh', 'TW'),
     );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
 
     expect(find.text('隨便看看'), findsOneWidget);
-    expect(find.text('最新發表的日誌'), findsOneWidget);
+    expect(find.text(l10n.profileBlogLatestShort), findsOneWidget);
     expect(find.text('一种体验'), findsOneWidget);
   });
 
@@ -194,6 +1048,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          blogAccountIdProvider.overrideWithValue('101'),
           userBlogDirectoryRepositoryProvider.overrideWithValue(
             _FakeBlogDirectoryRepository(),
           ),
@@ -227,6 +1082,7 @@ Future<void> _pumpBlogPage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        blogAccountIdProvider.overrideWithValue('101'),
         userBlogDirectoryRepositoryProvider.overrideWithValue(
           directoryRepository,
         ),
@@ -240,6 +1096,14 @@ Future<void> _pumpBlogPage(
     await tester.pumpAndSettle();
   }
 }
+
+TextButton _paginationButton(WidgetTester tester, String action) =>
+    tester.widget<TextButton>(
+      find.descendant(
+        of: find.byKey(Key('profile-blog-$action-button')),
+        matching: find.byType(TextButton),
+      ),
+    );
 
 UserBlogDirectoryReadCapabilities _directoryCapabilities({
   Iterable<UserBlogDirectoryCapability> supported =
@@ -278,11 +1142,32 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     UserBlogDirectoryReadCapabilities? capabilities,
     this.failAfterSuccess = false,
     this.failFirst = false,
-  }) : readCapabilities = capabilities ?? _directoryCapabilities();
+    this.gate,
+    this.nextPageGate,
+    this.unknownTotalPages = false,
+    this.longList = false,
+    this.blogActions = const {},
+  }) : readCapabilities =
+           capabilities ??
+           _directoryCapabilities(
+             supported: UserBlogDirectoryCapability.values.where(
+               (capability) =>
+                   !unknownTotalPages ||
+                   capability != UserBlogDirectoryCapability.totalPageCount,
+             ),
+           );
 
   final UserBlogDirectoryReadCapabilities readCapabilities;
   final bool failAfterSuccess;
   final bool failFirst;
+  final Completer<void>? gate;
+  final Completer<void>? nextPageGate;
+  final bool unknownTotalPages;
+  final failedPages = <int>{};
+  final bool longList;
+  final Set<UserBlogAction> blogActions;
+  bool removed = false;
+  final cancellations = <ForumRequestCancellation?>[];
   final List<UserBlogDirectoryQuery> queries = <UserBlogDirectoryQuery>[];
   final List<CacheLoadPolicy> policies = <CacheLoadPolicy>[];
 
@@ -300,11 +1185,16 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   load(
     UserBlogDirectoryQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
     policies.add(cachePolicy);
+    cancellations.add(cancellation);
+    await gate?.future;
+    if (query.page > 1) await nextPageGate?.future;
     if ((failFirst && queries.length == 1) ||
-        (failAfterSuccess && queries.length > 1)) {
+        (failAfterSuccess && queries.length > 1) ||
+        failedPages.contains(query.page)) {
       return const DataReadFailure(
         kind: DataReadFailureKind.network,
         diagnosticMessage: 'network failure',
@@ -326,11 +1216,32 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
         pagination: UserBlogPagination(currentPage: query.page),
       );
     }
+    if (longList && query.page == 1) {
+      return UserBlogDirectoryData(
+        scope: query.scope,
+        order: query.order,
+        items: [
+          for (var i = 0; i < 30; i++)
+            UserBlogSummary(
+              blogId: '${i + 1}',
+              ownerUserId: '101',
+              title: 'Entry $i',
+              excerpt:
+                  'A longer journal excerpt for checking retained scroll position.',
+            ),
+        ],
+        pagination: const UserBlogPagination(
+          currentPage: 1,
+          totalPages: 2,
+          hasNext: true,
+        ),
+      );
+    }
     if (query.page == 2) {
-      return const UserBlogDirectoryData(
+      return UserBlogDirectoryData(
         scope: UserBlogFeedScope.public,
         order: UserBlogOrder.latest,
-        items: <UserBlogSummary>[
+        items: const <UserBlogSummary>[
           UserBlogSummary(
             blogId: '117600',
             ownerUserId: '257582',
@@ -339,7 +1250,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
         ],
         pagination: UserBlogPagination(
           currentPage: 2,
-          totalPages: 2,
+          totalPages: unknownTotalPages ? null : 2,
           hasPrevious: true,
           hasNext: false,
         ),
@@ -350,18 +1261,20 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
       scope: UserBlogFeedScope.public,
       order: query.order ?? UserBlogOrder.latest,
       items: <UserBlogSummary>[
-        UserBlogSummary(
-          blogId: recommended ? '117548' : '117558',
-          ownerUserId: '257582',
-          title: recommended ? '我们小区的公共交通极其不便利' : '一种体验',
-          authorName: recommended ? 'hsyhlj' : '抉择',
-          excerpt: '作为女生，见血是常有的事',
-          publishedAtText: '2026-6-21 13:06',
-        ),
+        if (!removed)
+          UserBlogSummary(
+            blogId: recommended ? '117548' : '117558',
+            ownerUserId: '257582',
+            title: recommended ? '我们小区的公共交通极其不便利' : '一种体验',
+            authorName: recommended ? 'hsyhlj' : '抉择',
+            excerpt: '作为女生，见血是常有的事',
+            publishedAtText: '2026-6-21 13:06',
+            actions: blogActions,
+          ),
       ],
-      pagination: const UserBlogPagination(
+      pagination: UserBlogPagination(
         currentPage: 1,
-        totalPages: 2,
+        totalPages: unknownTotalPages ? null : 2,
         hasPrevious: false,
         hasNext: true,
       ),
@@ -370,10 +1283,29 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
 }
 
 class _FakeBlogDetailRepository implements UserBlogDetailRepository {
-  _FakeBlogDetailRepository({UserBlogDetailReadCapabilities? capabilities})
-    : readCapabilities = capabilities ?? _detailCapabilities();
+  _FakeBlogDetailRepository({
+    UserBlogDetailReadCapabilities? capabilities,
+    this.gate,
+    this.commentActions = const {},
+    this.blogActions = const {},
+    this.title = '我们小区的公共交通极其不便利',
+    this.commentAuthorId,
+    this.emptyComments = false,
+    this.viewCount = 39,
+    this.commentCount = 1,
+  }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
+  final Set<UserBlogCommentAction> commentActions;
+  final Set<UserBlogAction> blogActions;
+  String title;
+  final String? commentAuthorId;
+  final bool emptyComments;
+  final int? viewCount;
+  final int? commentCount;
+  final policies = <CacheLoadPolicy>[];
+  final Completer<void>? gate;
+  final cancellations = <ForumRequestCancellation?>[];
   final List<UserBlogDetailQuery> queries = <UserBlogDetailQuery>[];
 
   @override
@@ -385,26 +1317,34 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
   load(
     UserBlogDetailQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
+    policies.add(cachePolicy);
+    cancellations.add(cancellation);
+    await gate?.future;
     return DataReadSuccess(
       data: UserBlogDetailData(
         blogId: query.blogId,
         ownerUserId: query.ownerUserId,
-        title: '我们小区的公共交通极其不便利',
+        title: title,
         bodyHtml: '<p>一直对着电脑屏幕</p>',
         authorName: 'hsyhlj',
         publishedAtText: '2026-6-18 00:25',
-        viewCount: 39,
-        commentCount: 1,
+        viewCount: viewCount,
+        commentCount: commentCount,
         commentsOpen: true,
-        comments: const <UserBlogComment>[
-          UserBlogComment(
-            commentId: '646846',
-            authorName: 'thessky',
-            bodyHtml: '<p>探险的感觉</p>',
-            publishedAtText: '2026-6-18 01:00',
-          ),
+        actions: blogActions,
+        comments: <UserBlogComment>[
+          if (!emptyComments)
+            UserBlogComment(
+              commentId: '646846',
+              authorName: 'thessky',
+              authorUserId: commentAuthorId,
+              bodyHtml: '<p>探险的感觉</p>',
+              publishedAtText: '2026-6-18 01:00',
+              actions: commentActions,
+            ),
         ],
       ),
       capabilities: readCapabilities,
