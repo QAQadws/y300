@@ -6,7 +6,6 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
-import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -16,7 +15,7 @@ void main() {
       'my blogs renders ${empty ? 'the empty state' : 'entries'} when the active self link omits uid',
       (tester) async {
         final network = _SelfFeedNetwork(empty: empty);
-        final repository = ForumClientAdapterFactory(
+        final repository = YamiboForumClientBuilder(
           config: ForumClientConfig(
             siteOrigin: Uri.parse('https://example.test'),
             apiOrigin: Uri.parse('https://example.test/api/mobile/index.php'),
@@ -24,7 +23,7 @@ void main() {
             desktopUserAgent: 'desktop-test',
           ),
           network: network,
-        ).createUserBlogDirectory();
+        ).buildStandardClient().userBlogDirectory!;
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
