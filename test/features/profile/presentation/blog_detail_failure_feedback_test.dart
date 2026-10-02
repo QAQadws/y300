@@ -126,10 +126,14 @@ void main() {
         .first;
     final entry = find.byKey(const Key('profile-blog-item-30'));
     await tester.scrollUntilVisible(entry, 150, scrollable: scrollable);
+    // ensureVisible changes the scroll offset before the next layout frame.
+    await tester.pumpAndSettle();
+    expect(entry.hitTestable(), findsOneWidget);
     final offset = tester.state<ScrollableState>(scrollable).position.pixels;
     expect(offset, greaterThan(0));
     await tester.tap(entry);
     await tester.pump();
+    expect(host.details.requests, hasLength(1));
     host.details.requests.single.complete(_failure('user_blog_private'));
     await tester.pumpAndSettle();
     expect(tester.state<ScrollableState>(scrollable).position.pixels, offset);
