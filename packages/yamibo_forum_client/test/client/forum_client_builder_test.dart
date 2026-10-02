@@ -76,6 +76,7 @@ void main() {
         sources.stickerCatalog,
         sources.forumUserProfile,
         sources.userBlogDirectory,
+        sources.userThreadDirectory,
         sources.userBlogDetail,
         sources.blogComments,
         sources.blogOperations,

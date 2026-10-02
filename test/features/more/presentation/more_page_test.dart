@@ -30,12 +30,104 @@ import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
+import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
+  for (final type in UserThreadDirectoryType.values) {
+    testWidgets('account ${type.name} statistic opens its native directory', (
+      tester,
+    ) async {
+      final directory = _ThreadDirectoryRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
+            userThreadDirectoryRepositoryProvider.overrideWithValue(directory),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            appAppearanceControllerProvider.overrideWith(
+              () => _FakeAppAppearanceController(),
+            ),
+          ],
+          child: const LocalizedTestApp(home: MorePage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('more-account-${type.name}')));
+      await tester.pumpAndSettle();
+      expect(find.byType(MyThreadPage), findsOneWidget);
+      expect(
+        tester.widget<MyThreadPage>(find.byType(MyThreadPage)).initialType,
+        type,
+      );
+      expect(directory.queries.single.type, type);
+      expect(directory.queries.single.userId, '100');
+    });
+  }
+
+  testWidgets(
+    'account navigation ignores competing callbacks in the same frame',
+    (tester) async {
+      final observer = _RouteNameObserver();
+      final webLaunches = <ForumWebViewLaunchConfig>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
+            userThreadDirectoryRepositoryProvider.overrideWithValue(
+              _ThreadDirectoryRepository(),
+            ),
+            forumWebViewRouteFactoryProvider.overrideWithValue(
+              _profileWebRoutes(webLaunches),
+            ),
+            forumModeSettingsRepositoryProvider.overrideWithValue(
+              _FakeForumModeSettingsRepository(),
+            ),
+            appAppearanceControllerProvider.overrideWith(
+              () => _FakeAppAppearanceController(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: const MorePage(),
+            navigatorObservers: [observer],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      VoidCallback statisticTap(String type) => tester
+          .widget<InkWell>(
+            find.descendant(
+              of: find.byKey(Key('more-account-$type')),
+              matching: find.byType(InkWell),
+            ),
+          )
+          .onTap!;
+      final threadTap = statisticTap('threads');
+      final replyTap = statisticTap('replies');
+      final profileTap = tester
+          .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
+          .onTap!;
+      final logoutTap = tester
+          .widget<IconButton>(find.byKey(const Key('more-logout-entry')))
+          .onPressed!;
+      threadTap();
+      replyTap();
+      profileTap();
+      logoutTap();
+      await tester.pumpAndSettle();
+      expect(find.byType(MyThreadPage), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(observer.pushedNames.length, 2);
+      expect(webLaunches, isEmpty);
+    },
+  );
 
   testWidgets('MorePage builds dark theme chrome', (tester) async {
     await tester.pumpWidget(
@@ -1173,6 +1265,37 @@ class _AccountSummaryRepository implements CurrentAccountSummaryRepository {
     return DataReadSuccess(
       data: currentData(),
       capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
+  }
+}
+
+class _ThreadDirectoryRepository extends Fake
+    implements UserThreadDirectoryRepository {
+  final queries = <UserThreadDirectoryQuery>[];
+
+  @override
+  Future<
+    DataReadResult<UserThreadDirectoryData, UserThreadDirectoryReadCapabilities>
+  >
+  load(
+    UserThreadDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
+  }) async {
+    queries.add(query);
+    return DataReadSuccess(
+      data: const UserThreadDirectoryData(
+        items: [],
+        pagination: UserThreadDirectoryPagination(
+          currentPage: 1,
+          hasNext: false,
+          hasPrevious: false,
+        ),
+      ),
+      capabilities: UserThreadDirectoryReadCapabilities(
+        values: DataCapabilitySet<UserThreadDirectoryCapability>({}),
+      ),
       metadata: const DataReadMetadata.network(),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
@@ -19,6 +20,7 @@ import 'package:y300/features/profile/presentation/current_account_summary_contr
 import 'package:y300/features/profile/presentation/current_account_avatar_controller.dart';
 import 'package:y300/features/profile/presentation/my_profile_action_navigation.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 
@@ -32,6 +34,7 @@ class MorePage extends ConsumerStatefulWidget {
 class _MorePageState extends ConsumerState<MorePage> {
   final MoreDebugTools _debugTools = const MoreDebugTools();
   bool _openingMyProfile = false;
+  bool _openingMyThreads = false;
   bool _openingLogin = false;
   bool _confirmingLogout = false;
 
@@ -63,7 +66,11 @@ class _MorePageState extends ConsumerState<MorePage> {
           MoreAccountAction(
             onLogin: () => _openLoginPage(context),
             onLogout: () => _confirmAndLogout(context, ref),
-            isPending: _openingLogin || _confirmingLogout,
+            isPending:
+                _openingLogin ||
+                _confirmingLogout ||
+                _openingMyProfile ||
+                _openingMyThreads,
           ),
         ],
       ),
@@ -79,7 +86,15 @@ class _MorePageState extends ConsumerState<MorePage> {
               onOpenProfile: _openingMyProfile
                   ? null
                   : () => _openMyProfilePage(context),
-              isAccountActionPending: _openingLogin || _confirmingLogout,
+              onOpenThreads: () =>
+                  _openMyThreadsPage(UserThreadDirectoryType.threads),
+              onOpenReplies: () =>
+                  _openMyThreadsPage(UserThreadDirectoryType.replies),
+              isAccountActionPending:
+                  _openingLogin ||
+                  _confirmingLogout ||
+                  _openingMyProfile ||
+                  _openingMyThreads,
             ),
             const Divider(
               key: Key('more-account-divider'),
@@ -167,6 +182,28 @@ class _MorePageState extends ConsumerState<MorePage> {
     );
   }
 
+  Future<void> _openMyThreadsPage(UserThreadDirectoryType type) async {
+    if (_openingMyThreads ||
+        _openingMyProfile ||
+        _openingLogin ||
+        _confirmingLogout) {
+      return;
+    }
+    final owner = ref.read(verifiedProfileOwnerProvider);
+    if (owner == null) return;
+    setState(() => _openingMyThreads = true);
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => MyThreadPage(initialType: type),
+        ),
+      );
+      await _refreshAccountAfterVisit(owner);
+    } finally {
+      if (mounted) setState(() => _openingMyThreads = false);
+    }
+  }
+
   // 内容含迁移状态卡与总览，可能超过默认半屏高度，允许抽屉撑满。
   Future<void> _showDataStorageSheet(BuildContext context) {
     return showModalBottomSheet<void>(
@@ -249,7 +286,7 @@ class _MorePageState extends ConsumerState<MorePage> {
   }
 
   Future<bool> _openLoginPage(BuildContext context) async {
-    if (_openingLogin || _confirmingLogout) return false;
+    if (_openingLogin || _confirmingLogout || _openingMyThreads) return false;
     setState(() => _openingLogin = true);
     try {
       final result = await Navigator.of(context).push<bool>(
@@ -296,7 +333,12 @@ class _MorePageState extends ConsumerState<MorePage> {
   }
 
   Future<void> _openMyProfilePage(BuildContext context) async {
-    if (_openingMyProfile || _openingLogin || _confirmingLogout) return;
+    if (_openingMyProfile ||
+        _openingMyThreads ||
+        _openingLogin ||
+        _confirmingLogout) {
+      return;
+    }
     setState(() => _openingMyProfile = true);
     try {
       var session = ref.read(authSessionControllerProvider).asData?.value;
@@ -329,6 +371,8 @@ class _MorePageState extends ConsumerState<MorePage> {
         ?.value;
     if (_confirmingLogout ||
         _openingLogin ||
+        _openingMyProfile ||
+        _openingMyThreads ||
         initialSession == null ||
         !initialSession.isLoggedIn ||
         initialSession.isLoggingOut) {

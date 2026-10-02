@@ -4342,6 +4342,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileMyThreads => '我的主题';
 
   @override
+  String get profileMyThreadsTitle => '我的主题';
+
+  @override
+  String get profileMyThreadsTab => '主题';
+
+  @override
+  String get profileMyRepliesTab => '回复';
+
+  @override
+  String get profileNoThreads => '暂无主题';
+
+  @override
+  String get profileNoReplies => '暂无回复';
+
+  @override
+  String get profileThreadsLoginRequired => '登录后查看我的主题和回复';
+
+  @override
+  String get profileThreadsReadFailed => '主题和回复加载失败';
+
+  @override
+  String profileThreadViews(int count) {
+    return '浏览 $count';
+  }
+
+  @override
+  String profileThreadReplies(int count) {
+    return '回复 $count';
+  }
+
+  @override
   String get profileForumFavorites => '论坛收藏';
 
   @override
@@ -9583,6 +9614,37 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileMyThreads => '我的主題';
+
+  @override
+  String get profileMyThreadsTitle => '我的主題';
+
+  @override
+  String get profileMyThreadsTab => '主題';
+
+  @override
+  String get profileMyRepliesTab => '回覆';
+
+  @override
+  String get profileNoThreads => '暫無主題';
+
+  @override
+  String get profileNoReplies => '暫無回覆';
+
+  @override
+  String get profileThreadsLoginRequired => '登入後查看我的主題和回覆';
+
+  @override
+  String get profileThreadsReadFailed => '主題和回覆載入失敗';
+
+  @override
+  String profileThreadViews(int count) {
+    return '瀏覽 $count';
+  }
+
+  @override
+  String profileThreadReplies(int count) {
+    return '回覆 $count';
+  }
 
   @override
   String get profileForumFavorites => '論壇收藏';

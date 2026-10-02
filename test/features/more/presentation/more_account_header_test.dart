@@ -38,6 +38,53 @@ final _sessionSource = StateProvider<AuthSessionViewState>((ref) => _session);
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
+  testWidgets('thread and reply statistics open from both number and label', (
+    tester,
+  ) async {
+    var threads = 0;
+    var replies = 0;
+    await _pumpHeader(
+      tester,
+      repository: _Repository((_) async => _success()),
+      onOpenThreads: () => threads++,
+      onOpenReplies: () => replies++,
+    );
+    final l10n = _l10n(tester);
+    for (final (name, label) in [
+      ('threads', l10n.moreAccountThreads),
+      ('replies', l10n.moreAccountReplies),
+    ]) {
+      final statistic = find.byKey(Key('more-account-$name'));
+      await tester.tap(
+        find.descendant(
+          of: statistic,
+          matching: find.byType(AnimatedFlipCounter),
+        ),
+      );
+      await tester.tap(
+        find.descendant(of: statistic, matching: find.text(label)),
+      );
+    }
+    expect(threads, 2);
+    expect(replies, 2);
+  });
+
+  testWidgets('statistics remain inactive while an account action is pending', (
+    tester,
+  ) async {
+    var opens = 0;
+    await _pumpHeader(
+      tester,
+      repository: _Repository((_) async => _success()),
+      pendingAction: true,
+      onOpenThreads: () => opens++,
+      onOpenReplies: () => opens++,
+    );
+    await tester.tap(find.byKey(const Key('more-account-threads')));
+    await tester.tap(find.byKey(const Key('more-account-replies')));
+    expect(opens, 0);
+  });
+
   testWidgets(
     'numeric refresh keeps the counter state and uses the shared animation duration',
     (tester) async {
@@ -422,6 +469,8 @@ Future<void> _pumpHeader(
   VoidCallback? onLogin,
   VoidCallback? onLogout,
   VoidCallback? onOpenProfile,
+  VoidCallback? onOpenThreads,
+  VoidCallback? onOpenReplies,
   bool pendingAction = false,
   bool settle = true,
   ThemeData? theme,
@@ -465,6 +514,8 @@ Future<void> _pumpHeader(
             children: [
               MoreAccountHeader(
                 onOpenProfile: onOpenProfile ?? () {},
+                onOpenThreads: onOpenThreads,
+                onOpenReplies: onOpenReplies,
                 isAccountActionPending: pendingAction,
               ),
             ],

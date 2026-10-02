@@ -16,10 +16,14 @@ class MoreAccountHeader extends ConsumerWidget {
   const MoreAccountHeader({
     super.key,
     required this.onOpenProfile,
+    this.onOpenThreads,
+    this.onOpenReplies,
     this.isAccountActionPending = false,
   });
 
   final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenThreads;
+  final VoidCallback? onOpenReplies;
   final bool isAccountActionPending;
 
   @override
@@ -205,6 +209,9 @@ class MoreAccountHeader extends ConsumerWidget {
                             label: l10n.moreAccountThreads,
                             value: threads,
                             accountUid: displayUid,
+                            onTap: owner != null && !busy
+                                ? onOpenThreads
+                                : null,
                           ),
                         ),
                         const SizedBox(
@@ -218,6 +225,9 @@ class MoreAccountHeader extends ConsumerWidget {
                             label: l10n.moreAccountReplies,
                             value: replies,
                             accountUid: displayUid,
+                            onTap: owner != null && !busy
+                                ? onOpenReplies
+                                : null,
                           ),
                         ),
                         const SizedBox(
@@ -320,12 +330,14 @@ class _AccountStatistic extends StatelessWidget {
     required this.label,
     this.value,
     this.accountUid,
+    this.onTap,
   });
 
   final String? accountUid;
 
   final String label;
   final int? value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -334,51 +346,66 @@ class _AccountStatistic extends StatelessWidget {
     final text = value?.toString() ?? l10n.moreAccountUnavailable;
     return Semantics(
       label: l10n.moreAccountStatistic(label, text),
+      button: onTap != null,
+      onTap: onTap,
       excludeSemantics: true,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final style = theme.textTheme.bodyMedium?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-              );
-              final measurement = TextPainter(
-                text: TextSpan(text: text, style: style),
-                textDirection: Directionality.of(context),
-                textScaler: MediaQuery.textScalerOf(context),
-              )..layout();
-              final fits = measurement.width + 2 <= constraints.maxWidth;
-              measurement.dispose();
-              // The counter converts through double; preserve large integers exactly.
-              if (value == null ||
-                  (value! < -9007199254740991 || value! > 9007199254740991) ||
-                  !fits) {
-                return Text(text, textAlign: TextAlign.center, style: style);
-              }
-              return AnimatedFlipCounter(
-                key: ValueKey(accountUid),
-                value: value!,
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 260),
-                negativeSignDuration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 150),
-                textStyle: style,
-              );
-            },
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final style = theme.textTheme.bodyMedium?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  );
+                  final measurement = TextPainter(
+                    text: TextSpan(text: text, style: style),
+                    textDirection: Directionality.of(context),
+                    textScaler: MediaQuery.textScalerOf(context),
+                  )..layout();
+                  final fits = measurement.width + 2 <= constraints.maxWidth;
+                  measurement.dispose();
+                  // The counter converts through double; preserve large integers exactly.
+                  if (value == null ||
+                      (value! < -9007199254740991 ||
+                          value! > 9007199254740991) ||
+                      !fits) {
+                    return Text(
+                      text,
+                      textAlign: TextAlign.center,
+                      style: style,
+                    );
+                  }
+                  return AnimatedFlipCounter(
+                    key: ValueKey(accountUid),
+                    value: value!,
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 260),
+                    negativeSignDuration:
+                        MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 150),
+                    textStyle: style,
+                  );
+                },
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

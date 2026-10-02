@@ -7197,6 +7197,60 @@ abstract class AppLocalizations {
   /// **'我的主题'**
   String get profileMyThreads;
 
+  /// No description provided for @profileMyThreadsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的主题'**
+  String get profileMyThreadsTitle;
+
+  /// No description provided for @profileMyThreadsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题'**
+  String get profileMyThreadsTab;
+
+  /// No description provided for @profileMyRepliesTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复'**
+  String get profileMyRepliesTab;
+
+  /// No description provided for @profileNoThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无主题'**
+  String get profileNoThreads;
+
+  /// No description provided for @profileNoReplies.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无回复'**
+  String get profileNoReplies;
+
+  /// No description provided for @profileThreadsLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录后查看我的主题和回复'**
+  String get profileThreadsLoginRequired;
+
+  /// No description provided for @profileThreadsReadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题和回复加载失败'**
+  String get profileThreadsReadFailed;
+
+  /// No description provided for @profileThreadViews.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览 {count}'**
+  String profileThreadViews(int count);
+
+  /// No description provided for @profileThreadReplies.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复 {count}'**
+  String profileThreadReplies(int count);
+
   /// No description provided for @profileForumFavorites.
   ///
   /// In zh, this message translates to:

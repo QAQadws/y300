@@ -29,6 +29,7 @@ export 'src/network/forum_multipart.dart'
 export 'src/contracts/forum_search.dart';
 export 'src/contracts/forum_tag_directory.dart';
 export 'src/contracts/profile_and_blog.dart';
+export 'src/contracts/user_thread_directory.dart';
 export 'src/contracts/user_blog_comments.dart';
 export 'src/contracts/user_blog_operations.dart';
 export 'src/contracts/user_blog_media.dart';

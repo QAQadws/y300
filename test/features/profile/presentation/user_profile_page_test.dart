@@ -19,6 +19,8 @@ import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_repository.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
+import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
@@ -697,6 +699,22 @@ void main() {
     expect(find.byKey(const Key('user-profile-actions')), findsNothing);
   });
 
+  testWidgets('MyProfilePage opens its native topic directory', (tester) async {
+    final directory = _ProfileThreadDirectoryRepository();
+    await _pumpMyProfile(
+      tester,
+      repository: _FakeProfileRepository(data: _allActionsProfile),
+      threadDirectory: directory,
+    );
+    final entry = find.byKey(const Key('user-profile-action-threads'));
+    await tester.ensureVisible(entry);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.byType(MyThreadPage), findsOneWidget);
+    expect(directory.queries.single.userId, '654321');
+    expect(directory.queries.single.type, UserThreadDirectoryType.threads);
+  });
+
   testWidgets('MyProfilePage opens fixed managed WebView action targets', (
     tester,
   ) async {
@@ -716,7 +734,6 @@ void main() {
     );
 
     const targets = <ForumUserProfileActionKind>[
-      ForumUserProfileActionKind.threads,
       ForumUserProfileActionKind.forumFavorites,
       ForumUserProfileActionKind.friends,
       ForumUserProfileActionKind.settings,
@@ -733,10 +750,7 @@ void main() {
       expect(opened.last.popOnRootBack, isTrue);
       expect(
         opened.last.initialUri.queryParameters['uid'],
-        kind == ForumUserProfileActionKind.threads ||
-                kind == ForumUserProfileActionKind.forumFavorites
-            ? '654321'
-            : null,
+        kind == ForumUserProfileActionKind.forumFavorites ? '654321' : null,
       );
       Navigator.of(tester.element(find.text('managed destination'))).pop();
       await tester.pumpAndSettle();
@@ -744,13 +758,6 @@ void main() {
     expect(
       opened.map((config) => config.initialUri.queryParameters),
       <Map<String, String>>[
-        {
-          'mod': 'space',
-          'uid': '654321',
-          'do': 'thread',
-          'view': 'me',
-          'mobile': '2',
-        },
         {
           'mod': 'space',
           'uid': '654321',
@@ -897,6 +904,7 @@ Future<void> _pumpMyProfile(
   required ForumUserProfileRepository repository,
   YamiboSessionStore? store,
   ForumWebViewRouteFactory? routeFactory,
+  UserThreadDirectoryRepository? threadDirectory,
   Widget? home,
 }) async {
   await tester.pumpWidget(
@@ -904,6 +912,10 @@ Future<void> _pumpMyProfile(
       overrides: [
         ...forumAuthOverrides(const _FakeAuthRepository()),
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
+        if (threadDirectory != null)
+          userThreadDirectoryRepositoryProvider.overrideWithValue(
+            threadDirectory,
+          ),
         if (store != null) yamiboSessionStoreProvider.overrideWithValue(store),
         if (routeFactory != null)
           forumWebViewRouteFactoryProvider.overrideWithValue(routeFactory),
@@ -966,6 +978,28 @@ class _ScriptedProfileRepository implements ForumUserProfileRepository {
     queries.add(query);
     policies.add(cachePolicy);
     return onLoad(query, call);
+  }
+}
+
+class _ProfileThreadDirectoryRepository extends Fake
+    implements UserThreadDirectoryRepository {
+  final queries = <UserThreadDirectoryQuery>[];
+
+  @override
+  Future<
+    DataReadResult<UserThreadDirectoryData, UserThreadDirectoryReadCapabilities>
+  >
+  load(
+    UserThreadDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
+  }) async {
+    queries.add(query);
+    return const DataReadFailure(
+      kind: DataReadFailureKind.parse,
+      code: 'fixture_unavailable',
+      diagnosticMessage: 'fixture_unavailable',
+    );
   }
 }
 

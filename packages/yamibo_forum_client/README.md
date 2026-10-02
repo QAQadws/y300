@@ -109,7 +109,7 @@ currently verified by Y300:
 | Capability | Source |
 | --- | --- |
 | Forum home document, directory, forum display, thread detail | HTML-first |
-| Tag directory, public profile, user blogs | HTML |
+| Tag directory, public profile, user blogs, personal topics/replies | HTML |
 | Favorites, current-user profile, notifications, private messages, stickers | Discuz API |
 | Comic catalog, discovery, replies, ingestion detail | Discuz v4 API |
 | Full post ratings | Discuz AJAX CDATA |
@@ -324,6 +324,19 @@ sending, notification author/type filters, stickers, full rating details, post l
 author-filtered post pages, comic episode discovery, reply-page reads, and
 protected image transport. Login UI and remaining write operations—including
 complex post-edit WebView fallback—remain application-owned.
+
+`userThreadDirectory` / `loadUserThreads` read the authenticated account's
+mobile topic or reply directory with a positive `userId`, directory `type`,
+and one-based `page`. The adapter uses the shared mobile HTML transport and
+validates the personal page context before returning data. Private directory
+reads are not stored in document/snapshot caches. Hosts must isolate retained
+pages and pending reads by account and session generation.
+
+Reply pages group several post previews under one topic. Pagination follows
+validated server links, independently of the number of visible topic groups.
+When combining pages, hosts merge topics by `threadId` and replies by `postId`;
+each reply retains its own find-post destination. Missing dates, counts, or
+author metadata remain unknown instead of being inferred from the account.
 
 ## Y300 parity and unmigrated APIs
 

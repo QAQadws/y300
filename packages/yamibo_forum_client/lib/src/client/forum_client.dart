@@ -15,6 +15,7 @@ import '../contracts/forum_search.dart';
 import '../contracts/forum_resource.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/user_thread_directory.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
 import '../contracts/user_blog_media.dart';
@@ -190,6 +191,10 @@ final class YamiboForumClient {
   /// Configured user-blog directory source, if installed.
   UserBlogDirectoryRepository? get userBlogDirectory =>
       sourcePlan.userBlogDirectory;
+
+  /// Configured personal topic and reply directory source.
+  UserThreadDirectoryRepository? get userThreadDirectory =>
+      sourcePlan.userThreadDirectory;
 
   /// Account-bound journal comment preparation and commands.
   UserBlogCommentService? get blogComments => sourcePlan.blogComments;
@@ -717,6 +722,25 @@ final class YamiboForumClient {
   }) =>
       sourcePlan.forumUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumUserProfileData, ForumUserProfileReadCapabilities>();
+
+  /// Loads the verified account's topics or replies.
+  Future<
+    DataReadResult<UserThreadDirectoryData, UserThreadDirectoryReadCapabilities>
+  >
+  loadUserThreads(
+    UserThreadDirectoryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
+  }) =>
+      sourcePlan.userThreadDirectory?.load(
+        query,
+        cachePolicy: cachePolicy,
+        cancellation: cancellation,
+      ) ??
+      unsupported<
+        UserThreadDirectoryData,
+        UserThreadDirectoryReadCapabilities
+      >();
 
   /// Loads user blogs and returns a structured result.
   Future<

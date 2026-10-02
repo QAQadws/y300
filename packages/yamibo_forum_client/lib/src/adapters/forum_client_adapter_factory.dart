@@ -11,6 +11,7 @@ import '../contracts/forum_home.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/user_thread_directory.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
 import '../contracts/user_blog_media.dart';
@@ -55,6 +56,7 @@ import 'discuz_forum_home_html_repository.dart';
 import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
+import 'discuz_user_thread_directory_repository.dart';
 import 'discuz_blog_comment_service.dart';
 import 'discuz_blog_operations.dart';
 import 'discuz_blog_favorite_service.dart';
@@ -423,7 +425,15 @@ final class ForumClientAdapterFactory {
         requestProfiles: requestProfiles,
       );
 
-  /// Creates the user-blog directory HTML source.
+  /// Creates the verified account's topic and reply HTML source.
+  UserThreadDirectoryRepository createUserThreadDirectory() =>
+      DiscuzUserThreadDirectoryRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
+
+  /// Creates the mobile HTML blog directory source.
   UserBlogDirectoryRepository createUserBlogDirectory() =>
       DiscuzUserBlogDirectoryRepository(
         config: config,

@@ -10,6 +10,7 @@ import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/user_thread_directory.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
 import '../contracts/user_blog_media.dart';
@@ -59,6 +60,7 @@ final class ForumClientSourcePlan {
     this.stickerCatalog,
     this.forumUserProfile,
     this.userBlogDirectory,
+    this.userThreadDirectory,
     this.userBlogDetail,
     this.blogComments,
     this.blogOperations,
@@ -135,6 +137,7 @@ final class ForumClientSourcePlan {
     stickerCatalog: overrides.stickerCatalog ?? stickerCatalog,
     forumUserProfile: overrides.forumUserProfile ?? forumUserProfile,
     userBlogDirectory: overrides.userBlogDirectory ?? userBlogDirectory,
+    userThreadDirectory: overrides.userThreadDirectory ?? userThreadDirectory,
     userBlogDetail: overrides.userBlogDetail ?? userBlogDetail,
     blogComments: overrides.blogComments ?? blogComments,
     blogOperations: overrides.blogOperations ?? blogOperations,
@@ -262,6 +265,9 @@ final class ForumClientSourcePlan {
 
   /// Source for a user's blog directory.
   final UserBlogDirectoryRepository? userBlogDirectory;
+
+  /// Source for the verified account's topics and replies.
+  final UserThreadDirectoryRepository? userThreadDirectory;
 
   /// Source for an individual blog entry.
   final UserBlogDetailRepository? userBlogDetail;

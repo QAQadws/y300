@@ -6,6 +6,7 @@ import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 
 /// Routes only protocol-approved action kinds. No page-provided href reaches
 /// Navigator; WebView destinations are built from fixed application paths.
@@ -34,6 +35,10 @@ void openMyProfileAction({
       );
       return;
     case ForumUserProfileActionKind.threads:
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const MyThreadPage()));
+      return;
     case ForumUserProfileActionKind.forumFavorites:
     case ForumUserProfileActionKind.friends:
     case ForumUserProfileActionKind.settings:
@@ -80,13 +85,6 @@ Future<Object?> openMyProfileForumPage({
 
 Uri _myProfileWebUri(ForumUserProfileActionKind action, String uid) {
   final parameters = switch (action) {
-    ForumUserProfileActionKind.threads => <String, String>{
-      'mod': 'space',
-      'uid': uid,
-      'do': 'thread',
-      'view': 'me',
-      'mobile': '2',
-    },
     ForumUserProfileActionKind.forumFavorites => <String, String>{
       'mod': 'space',
       'uid': uid,
@@ -109,8 +107,13 @@ Uri _myProfileWebUri(ForumUserProfileActionKind action, String uid) {
       'ac': 'credit',
       'op': 'log',
     },
-    ForumUserProfileActionKind.blogs || ForumUserProfileActionKind.messages =>
-      throw ArgumentError.value(action, 'action', 'Native route only'),
+    ForumUserProfileActionKind.threads ||
+    ForumUserProfileActionKind.blogs ||
+    ForumUserProfileActionKind.messages => throw ArgumentError.value(
+      action,
+      'action',
+      'Native route only',
+    ),
   };
   return Uri.parse(
     AppConfig.siteBaseUrl,
