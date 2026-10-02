@@ -482,10 +482,13 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    // The local-default fallback is also a CachedLibraryImage.
     final avatar = tester.widget<CachedLibraryImage>(
       find.descendant(
         of: find.byKey(const Key('thread-author-avatar-p5')),
-        matching: find.byType(CachedLibraryImage),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is CachedLibraryImage && widget.request != null,
+        ),
       ),
     );
     expect(avatar.request?.role, ImageCacheRole.avatar);
