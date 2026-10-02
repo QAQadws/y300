@@ -47,6 +47,70 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageRecipientInvalid => '请填写一位用户的完整用户名，不支持逗号分隔的多个收件人。';
 
   @override
+  String get messageRecipientAdd => '添加收件人';
+
+  @override
+  String get messageRecipientChooseFriends => '从好友中选择';
+
+  @override
+  String messageRecipientSelectedCount(int count) {
+    return '已选 $count/20 人';
+  }
+
+  @override
+  String get messageRecipientAlreadySelected => '该收件人已添加。';
+
+  @override
+  String get messageRecipientLimitReached => '最多选择 20 位收件人。';
+
+  @override
+  String get messageFriendSearch => '搜索好友用户名';
+
+  @override
+  String get messageFriendEmpty => '没有可选择的好友';
+
+  @override
+  String get messageFriendNoMatches => '没有匹配的好友';
+
+  @override
+  String get messageFriendLoadFailed => '暂时无法加载好友，可重试或手动添加用户名。';
+
+  @override
+  String get messageBatchResultTitle => '发送结果';
+
+  @override
+  String get messageBatchOnlyFriends => '当前账号只能向好友群发私信，请从好友中选择收件人。';
+
+  @override
+  String messageBatchReportedAccepted(int count) {
+    return '论坛报告已受理 $count 位收件人。';
+  }
+
+  @override
+  String get messageBatchExcluded => '明确未提交的收件人';
+
+  @override
+  String get messageBatchUnproven => '送达未逐一证实的收件人';
+
+  @override
+  String get messageBatchSubmittedMessage => '已提交的消息';
+
+  @override
+  String get messageBatchResultCaution => '群发回执不能证明每位收件人都已收到。请到对应对话核实。';
+
+  @override
+  String get messageBatchSendAgain => '再次发送给这组收件人';
+
+  @override
+  String get messageBatchRepeatTitle => '确认再次发送？';
+
+  @override
+  String get messageBatchRepeatBody => '这组收件人可能已收到消息，再次发送可能造成重复。请先到对应对话核实。';
+
+  @override
+  String get messageBatchDone => '完成';
+
+  @override
   String get messageInput => '输入消息';
 
   @override
@@ -4571,6 +4635,70 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageRecipientInvalid => '請填寫一位使用者的完整使用者名稱，不支援逗號分隔的多個收件人。';
+
+  @override
+  String get messageRecipientAdd => '新增收件人';
+
+  @override
+  String get messageRecipientChooseFriends => '從好友中選擇';
+
+  @override
+  String messageRecipientSelectedCount(int count) {
+    return '已選 $count/20 人';
+  }
+
+  @override
+  String get messageRecipientAlreadySelected => '此收件人已新增。';
+
+  @override
+  String get messageRecipientLimitReached => '最多選擇 20 位收件人。';
+
+  @override
+  String get messageFriendSearch => '搜尋好友使用者名稱';
+
+  @override
+  String get messageFriendEmpty => '沒有可選擇的好友';
+
+  @override
+  String get messageFriendNoMatches => '沒有符合的好友';
+
+  @override
+  String get messageFriendLoadFailed => '暫時無法載入好友，可重試或手動新增使用者名稱。';
+
+  @override
+  String get messageBatchResultTitle => '傳送結果';
+
+  @override
+  String get messageBatchOnlyFriends => '目前帳號只能向好友群發私訊，請從好友中選擇收件人。';
+
+  @override
+  String messageBatchReportedAccepted(int count) {
+    return '論壇回報已受理 $count 位收件人。';
+  }
+
+  @override
+  String get messageBatchExcluded => '明確未提交的收件人';
+
+  @override
+  String get messageBatchUnproven => '送達未逐一證實的收件人';
+
+  @override
+  String get messageBatchSubmittedMessage => '已提交的訊息';
+
+  @override
+  String get messageBatchResultCaution => '群發回執不能證明每位收件人都已收到。請到對應對話確認。';
+
+  @override
+  String get messageBatchSendAgain => '再次傳送給這組收件人';
+
+  @override
+  String get messageBatchRepeatTitle => '確認再次傳送？';
+
+  @override
+  String get messageBatchRepeatBody => '這組收件人可能已收到訊息，再次傳送可能造成重複。請先到對應對話確認。';
+
+  @override
+  String get messageBatchDone => '完成';
 
   @override
   String get messageInput => '輸入訊息';

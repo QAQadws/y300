@@ -169,6 +169,126 @@ abstract class AppLocalizations {
   /// **'请填写一位用户的完整用户名，不支持逗号分隔的多个收件人。'**
   String get messageRecipientInvalid;
 
+  /// No description provided for @messageRecipientAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加收件人'**
+  String get messageRecipientAdd;
+
+  /// No description provided for @messageRecipientChooseFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'从好友中选择'**
+  String get messageRecipientChooseFriends;
+
+  /// No description provided for @messageRecipientSelectedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count}/20 人'**
+  String messageRecipientSelectedCount(int count);
+
+  /// No description provided for @messageRecipientAlreadySelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'该收件人已添加。'**
+  String get messageRecipientAlreadySelected;
+
+  /// No description provided for @messageRecipientLimitReached.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多选择 20 位收件人。'**
+  String get messageRecipientLimitReached;
+
+  /// No description provided for @messageFriendSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索好友用户名'**
+  String get messageFriendSearch;
+
+  /// No description provided for @messageFriendEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可选择的好友'**
+  String get messageFriendEmpty;
+
+  /// No description provided for @messageFriendNoMatches.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的好友'**
+  String get messageFriendNoMatches;
+
+  /// No description provided for @messageFriendLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法加载好友，可重试或手动添加用户名。'**
+  String get messageFriendLoadFailed;
+
+  /// No description provided for @messageBatchResultTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送结果'**
+  String get messageBatchResultTitle;
+
+  /// No description provided for @messageBatchOnlyFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号只能向好友群发私信，请从好友中选择收件人。'**
+  String get messageBatchOnlyFriends;
+
+  /// No description provided for @messageBatchReportedAccepted.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛报告已受理 {count} 位收件人。'**
+  String messageBatchReportedAccepted(int count);
+
+  /// No description provided for @messageBatchExcluded.
+  ///
+  /// In zh, this message translates to:
+  /// **'明确未提交的收件人'**
+  String get messageBatchExcluded;
+
+  /// No description provided for @messageBatchUnproven.
+  ///
+  /// In zh, this message translates to:
+  /// **'送达未逐一证实的收件人'**
+  String get messageBatchUnproven;
+
+  /// No description provided for @messageBatchSubmittedMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'已提交的消息'**
+  String get messageBatchSubmittedMessage;
+
+  /// No description provided for @messageBatchResultCaution.
+  ///
+  /// In zh, this message translates to:
+  /// **'群发回执不能证明每位收件人都已收到。请到对应对话核实。'**
+  String get messageBatchResultCaution;
+
+  /// No description provided for @messageBatchSendAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'再次发送给这组收件人'**
+  String get messageBatchSendAgain;
+
+  /// No description provided for @messageBatchRepeatTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认再次发送？'**
+  String get messageBatchRepeatTitle;
+
+  /// No description provided for @messageBatchRepeatBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'这组收件人可能已收到消息，再次发送可能造成重复。请先到对应对话核实。'**
+  String get messageBatchRepeatBody;
+
+  /// No description provided for @messageBatchDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get messageBatchDone;
+
   /// No description provided for @messageInput.
   ///
   /// In zh, this message translates to:

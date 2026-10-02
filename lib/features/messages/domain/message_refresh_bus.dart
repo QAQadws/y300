@@ -16,7 +16,8 @@ final class MessageRefreshEvent {
   final MessageRefreshKind kind;
   final ForumConversationTarget? target;
 
-  /// Reading a conversation updates unread markers without reloading itself.
+  /// Refresh directory metadata without reloading an open conversation. Used
+  /// for read markers and aggregate writes with no proven conversation target.
   final bool directoryOnly;
 }
 

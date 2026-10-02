@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,7 +8,9 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
+import 'package:y300/features/messages/data/private_message_compose_repository_provider.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
+import 'package:y300/features/messages/domain/private_message_compose_repository.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
@@ -20,14 +24,17 @@ import '../support/message_input_test_helper.dart';
 
 void main() {
   late MessageTestRepository repository;
+  late _CenterComposeRepository compose;
   late ProviderContainer container;
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     repository = MessageTestRepository();
+    compose = _CenterComposeRepository();
     container = ProviderContainer.test(
       overrides: [
         messageAccountIdProvider.overrideWithValue('10'),
         messageRepositoryProvider.overrideWithValue(repository),
+        privateMessageComposeRepositoryProvider.overrideWithValue(compose),
       ],
     );
   });
@@ -448,7 +455,8 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const Key('message-send')));
       await tester.pump();
-      repository.sends.single.succeed();
+      expect(compose.sends.single.submission.usernames, ['Alice']);
+      compose.sends.single.succeed();
       await tester.pump();
       // Sending schedules the pop after the editor rebuilds its PopScope.
       // Start that reverse route animation before advancing its duration.
@@ -607,6 +615,7 @@ void main() {
       container.updateOverrides([
         messageAccountIdProvider.overrideWithValue('11'),
         messageRepositoryProvider.overrideWithValue(repository),
+        privateMessageComposeRepositoryProvider.overrideWithValue(compose),
       ]);
       await tester.pump();
       await tester.pump();
@@ -750,5 +759,40 @@ void main() {
       expect(find.byType(ForumHtmlContentView), findsOneWidget);
       expect(repository.notificationReads, hasLength(1));
     },
+  );
+}
+
+class _CenterComposeRepository implements PrivateMessageComposeRepository {
+  final sends = <_CenterBatchSend>[];
+
+  @override
+  Future<FriendDirectoryRead> loadFriends(ForumFriendDirectoryQuery query) =>
+      throw UnimplementedError();
+
+  @override
+  Future<DataCommandResult<ForumPrivateMessageBatchReceipt>> sendBatch(
+    ForumPrivateMessageBatchSubmission submission,
+  ) {
+    final send = _CenterBatchSend(submission);
+    sends.add(send);
+    return send.result.future;
+  }
+}
+
+class _CenterBatchSend {
+  _CenterBatchSend(this.submission);
+
+  final ForumPrivateMessageBatchSubmission submission;
+  final result =
+      Completer<DataCommandResult<ForumPrivateMessageBatchReceipt>>();
+
+  void succeed() => result.complete(
+    DataCommandApplied(
+      ForumPrivateMessageBatchReceipt(
+        usernames: submission.usernames,
+        serverReportedAcceptedCount: 1,
+        excludedUsernames: const [],
+      ),
+    ),
   );
 }

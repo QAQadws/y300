@@ -105,9 +105,38 @@ class MessageAvatarTestCache extends Fake implements ImageCacheService {
       return directory;
     });
     addTearDown(() async {
-      PaintingBinding.instance.imageCache.clear();
-      PaintingBinding.instance.imageCache.clearLiveImages();
-      await directory!.delete(recursive: true);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _releaseAvatarImages(tester);
+      final fixtureDirectory = directory!.absolute;
+      // The cleanup owns exactly the directory returned by createTemp above.
+      final temporaryRoot = Directory.systemTemp.absolute;
+      if (fixtureDirectory.parent.path != temporaryRoot.path ||
+          !fixtureDirectory.uri.pathSegments
+              .where((segment) => segment.isNotEmpty)
+              .last
+              .startsWith('message-avatars-')) {
+        throw StateError(
+          'Refusing to delete a directory outside the avatar fixture',
+        );
+      }
+      for (var attempt = 0; ; attempt++) {
+        try {
+          await fixtureDirectory.delete(recursive: true);
+          break;
+        } on FileSystemException catch (error) {
+          // A decode already in flight can retain a Windows file mapping after
+          // its widget is gone. Other IO failures must still fail immediately.
+          if (!Platform.isWindows ||
+              error.osError?.errorCode != 32 ||
+              attempt >= 19) {
+            rethrow;
+          }
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 50)),
+          );
+          await _releaseAvatarImages(tester);
+        }
+      }
     });
     return cache;
   }
@@ -134,6 +163,14 @@ class MessageAvatarTestCache extends Fake implements ImageCacheService {
     writes.add(request);
     return CachedImageResult.failed;
   }
+}
+
+Future<void> _releaseAvatarImages(WidgetTester tester) async {
+  PaintingBinding.instance.imageCache.clear();
+  PaintingBinding.instance.imageCache.clearLiveImages();
+  // ImageCache disposes retained completer handles in a post-frame callback.
+  // Pumping also lets late decodes finish before the next cleanup attempt.
+  await tester.pump();
 }
 
 class MessageAvatarTestNetworkCache extends Fake implements BaseCacheManager {

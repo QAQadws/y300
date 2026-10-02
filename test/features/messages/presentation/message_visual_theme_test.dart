@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -14,6 +15,8 @@ import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
+import 'package:y300/features/messages/data/private_message_compose_repository_provider.dart';
+import 'package:y300/features/messages/domain/private_message_compose_repository.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
@@ -287,16 +290,7 @@ void main() {
           await tester.pumpAndSettle();
           await harness.capture('rich-content');
 
-          await harness.show(const NewPrivateMessagePage());
-          await tester.pumpAndSettle();
-          await tester.enterText(
-            find.byKey(const Key('message-recipient')),
-            '一起读书的朋友',
-          );
-          await enterMessageText(tester, '你好，想和你聊聊最近读到的故事。');
-          await tester.pumpAndSettle();
-          _expectInputTheme(tester, theme);
-          await harness.capture('compose');
+          await _captureBatchCompose(harness);
           await harness.export('${family.name}-${brightness.name}');
           expect(tester.takeException(), isNull);
         },
@@ -372,6 +366,34 @@ void main() {
     expect(send.hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     await harness.capture('keyboard');
+    await harness.show(const NewPrivateMessagePage());
+    await tester.pumpAndSettle();
+    await _addRecipient(harness, '一起读书的朋友');
+    await _addRecipient(harness, '周末一起分享故事的朋友');
+    await enterMessageText(tester, '你好，想分享最近读到的故事。\n周末一起聊聊！');
+    await tester.pumpAndSettle();
+    final composeSend = find.byKey(const Key('message-send'));
+    await tester.ensureVisible(composeSend);
+    await tester.pumpAndSettle();
+    expect(composeSend.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await harness.capture('narrow-compose-keyboard');
+    final friends = find.byKey(const Key('message-friends-open'));
+    await tester.ensureVisible(friends);
+    await tester.tap(friends);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('message-friends-search')),
+      '周',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('message-friends-done')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await harness.capture('narrow-friends-keyboard');
     await harness.export('narrow-large-text');
   });
 
@@ -474,6 +496,76 @@ MessageCenterPage _center() => MessageCenterPage(
   onOpenUser: (_, _) {},
 );
 void _ignoreLink(BuildContext context, String url) {}
+
+Future<void> _addRecipient(_Harness harness, String username) async {
+  final input = find.byKey(const Key('message-recipient'));
+  await harness.tester.ensureVisible(input);
+  await harness.tester.enterText(input, username);
+  await harness.tester.tap(find.byKey(const Key('message-recipient-add')));
+  await harness.tester.pumpAndSettle();
+}
+
+Future<void> _captureBatchCompose(_Harness harness) async {
+  final tester = harness.tester;
+  await harness.show(const NewPrivateMessagePage());
+  await tester.pumpAndSettle();
+  await _addRecipient(harness, '一起读书的朋友');
+  await _addRecipient(harness, '不接收私信的朋友');
+  await enterMessageText(tester, '你好，想和你聊聊最近读到的故事。');
+  await tester.pumpAndSettle();
+  _expectInputTheme(tester, harness.theme);
+  await harness.capture('compose');
+
+  final openFriends = find.byKey(const Key('message-friends-open'));
+  await tester.ensureVisible(openFriends);
+  await tester.tap(openFriends);
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('message-friend-30')));
+  await tester.pumpAndSettle();
+  await harness.capture('compose-friends');
+  final search = find.byKey(const Key('message-friends-search'));
+  await tester.enterText(search, '周');
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.pumpAndSettle();
+  expect(harness.composeRepository.reads.last.username, '周');
+  expect(find.byKey(const Key('message-friend-30')), findsNothing);
+  expect(find.byKey(const Key('message-friend-40')), findsOneWidget);
+  await harness.capture('compose-friends-filtered');
+  await tester.enterText(search, '');
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.pumpAndSettle();
+  expect(
+    tester
+        .widget<CheckboxListTile>(find.byKey(const Key('message-friend-30')))
+        .value,
+    isTrue,
+  );
+  await tester.tap(find.byKey(const Key('message-friends-done')));
+  await tester.pumpAndSettle();
+  final sendButton = find.byKey(const Key('message-send'));
+  await tester.ensureVisible(sendButton);
+  await tester.tap(sendButton);
+  await tester.pump();
+  final send = harness.composeRepository.sends.single;
+  expect(send.submission.usernames, ['一起读书的朋友', '不接收私信的朋友', '小林']);
+  send.result.complete(
+    DataCommandApplied(
+      ForumPrivateMessageBatchReceipt(
+        usernames: send.submission.usernames,
+        serverReportedAcceptedCount: 2,
+        excludedUsernames: ['不接收私信的朋友'],
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('message-batch-result')), findsOneWidget);
+  expect(find.text(harness.l10n.messageBatchResultCaution), findsOneWidget);
+  expect(
+    find.text(harness.l10n.messageBatchReportedAccepted(2)),
+    findsOneWidget,
+  );
+  await harness.capture('compose-result');
+}
 
 ForumPrivateMessageItem _chatItem(
   String id, {
@@ -602,6 +694,7 @@ class _Harness {
   final images = <ui.Image>[];
   final labels = <String>[];
   late MessageTestRepository repository;
+  late _VisualComposeRepository composeRepository;
   late MessageAvatarTestCache avatars;
 
   AppLocalizations get l10n =>
@@ -623,10 +716,14 @@ class _Harness {
   Future<void> show(Widget page, {String? account = '10'}) async {
     await tester.pumpWidget(const SizedBox.shrink());
     repository = MessageTestRepository();
+    composeRepository = _VisualComposeRepository();
     final container = ProviderContainer.test(
       overrides: [
         messageAccountIdProvider.overrideWithValue(account),
         messageRepositoryProvider.overrideWithValue(repository),
+        privateMessageComposeRepositoryProvider.overrideWithValue(
+          composeRepository,
+        ),
         imageCacheServiceProvider.overrideWithValue(avatars),
       ],
     );
@@ -639,6 +736,13 @@ class _Harness {
           theme: _font.isEmpty
               ? theme
               : theme.copyWith(
+                  chipTheme: theme.chipTheme.copyWith(
+                    labelStyle: theme.chipTheme.labelStyle?.copyWith(
+                      fontFamily: 'Roboto',
+                    ),
+                    secondaryLabelStyle: theme.chipTheme.secondaryLabelStyle
+                        ?.copyWith(fontFamily: 'Roboto'),
+                  ),
                   dialogTheme: theme.dialogTheme.copyWith(
                     titleTextStyle: theme.dialogTheme.titleTextStyle?.copyWith(
                       fontFamily: 'Roboto',
@@ -736,3 +840,60 @@ class _Harness {
     });
   }
 }
+
+class _VisualComposeRepository implements PrivateMessageComposeRepository {
+  final reads = <ForumFriendDirectoryQuery>[];
+  final sends = <_VisualBatchSend>[];
+
+  @override
+  Future<FriendDirectoryRead> loadFriends(
+    ForumFriendDirectoryQuery query,
+  ) async {
+    reads.add(query);
+    final items = _friends
+        .where((friend) => friend.username.startsWith(query.username))
+        .toList();
+    return DataReadSuccess(
+      data: ForumFriendDirectoryPage(
+        items: query.page == 1 ? items : const [],
+        page: query.page,
+        perPage: 20,
+        count: items.length,
+        currentUserId: '10',
+      ),
+      capabilities: ForumFriendDirectoryReadCapabilities(
+        values: DataCapabilitySet.supported(
+          ForumFriendDirectoryCapability.values,
+        ),
+      ),
+      metadata: const DataReadMetadata.network(),
+    );
+  }
+
+  @override
+  Future<DataCommandResult<ForumPrivateMessageBatchReceipt>> sendBatch(
+    ForumPrivateMessageBatchSubmission submission,
+  ) {
+    final send = _VisualBatchSend(submission);
+    sends.add(send);
+    return send.result.future;
+  }
+}
+
+class _VisualBatchSend {
+  _VisualBatchSend(this.submission);
+  final ForumPrivateMessageBatchSubmission submission;
+  final result =
+      Completer<DataCommandResult<ForumPrivateMessageBatchReceipt>>();
+}
+
+const _friends = [
+  ForumFriendDirectoryItem(
+    userId: '20',
+    username: '一起读书的朋友',
+    avatarUrl: MessageAvatarTestCache.aliceUrl,
+  ),
+  ForumFriendDirectoryItem(userId: '30', username: '小林'),
+  ForumFriendDirectoryItem(userId: '31', username: '小杉'),
+  ForumFriendDirectoryItem(userId: '40', username: '周末读书同伴'),
+];

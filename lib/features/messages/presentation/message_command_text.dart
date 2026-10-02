@@ -3,15 +3,16 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 
 /// Only stable failure codes reach UI; server response prose is never shown.
-String? privateMessageCommandText(
+String? privateMessageCommandText<T>(
   AppLocalizations l10n,
-  DataCommandResult<ForumPrivateMessageReceipt>? result,
+  DataCommandResult<T>? result,
 ) {
   if (result is DataCommandOutcomeUnknown) return l10n.messageUnknownOutcome;
   final failure = result?.failureOrNull;
   if (failure == null) return null;
   return switch (failure.code) {
     'message_can_not_send_onlyfriend' => l10n.messageOnlyFriends,
+    'message_can_not_send_3' => l10n.messageBatchOnlyFriends,
     'message_bad_touid' ||
     'message_bad_touser' => l10n.messageRecipientUnavailable,
     'message_can_not_send_to_self' ||
