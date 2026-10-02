@@ -19,6 +19,7 @@ import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
@@ -70,7 +71,10 @@ void main() {
           final title = tester.widget<Text>(
             find.text(threadSummary('100').title),
           );
-          expect(title.style!.color, theme.y300NativeContent.itemTitle);
+          expect(
+            title.style!.color,
+            ThreadDetailNativePalette.resolve(theme).title,
+          );
           final secondReply = find.byKey(const Key('my-thread-reply-502'));
           await tester.ensureVisible(secondReply);
           await tester.pumpAndSettle();
@@ -236,6 +240,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(ForumCachedAvatar), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text(item.title)).dy,
+      greaterThan(tester.getBottomLeft(find.byType(ForumCachedAvatar)).dy),
+    );
     final previews = tester
         .widgetList<CachedLibraryImage>(find.byType(CachedLibraryImage))
         .where((image) => image.request?.role == ImageCacheRole.threadInline)

@@ -17,6 +17,7 @@ import 'package:y300/features/thread/presentation/services/thread_post_route_lau
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 
 typedef MyThreadOpener =
@@ -280,10 +281,16 @@ class _MyThreadFeed extends StatelessWidget {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                padding: const EdgeInsets.fromLTRB(
+                  ForumContentSpacing.pageHorizontal,
+                  ForumContentSpacing.listTop,
+                  ForumContentSpacing.pageHorizontal,
+                  0,
+                ),
                 sliver: SliverList.separated(
                   itemCount: data.items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: ForumContentSpacing.postCardGap),
                   itemBuilder: (context, index) {
                     final item = data.items[index];
                     return MyThreadCard(

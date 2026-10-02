@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/forum_metric_pill.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -30,13 +32,13 @@ class MyThreadCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final palette = theme.y300NativeContent;
+    final palette = ThreadDetailNativePalette.resolve(theme);
     final l10n = AppLocalizations.of(context);
     final metadata = [
       item.forumName,
-      item.authorName,
       item.publishedAtText,
     ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' · ');
+    final author = item.authorName?.trim() ?? '';
     final excerpt = item.excerpt?.trim() ?? '';
     const radius = BorderRadius.all(Radius.circular(12));
     return DecoratedBox(
@@ -53,60 +55,87 @@ class MyThreadCard extends ConsumerWidget {
         child: InkWell(
           key: ValueKey('my-thread-open-${item.threadId}'),
           onTap: onOpenThread,
-          overlayColor: WidgetStatePropertyAll(palette.subtleStateLayer),
+          overlayColor: WidgetStatePropertyAll(palette.stateLayer),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(
+              ForumContentSpacing.postBodyHorizontal,
+              ForumContentSpacing.postCardHeaderTop,
+              ForumContentSpacing.postBodyHorizontal,
+              ForumContentSpacing.postCardSingleBottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.title,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: palette.itemTitle,
-                    fontWeight: FontWeight.w700,
-                    height: 1.28,
-                  ),
-                ),
-                if (metadata.isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                if (author.isNotEmpty ||
+                    metadata.isNotEmpty ||
+                    item.avatarUrl?.trim().isNotEmpty == true) ...[
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (item.avatarUrl?.trim().isNotEmpty == true) ...[
                         ForumCachedAvatar(
                           imageUrl: item.avatarUrl,
                           ownerId: item.authorUserId ?? item.threadId,
                           ownerType: ImageCacheOwnerType.profile,
-                          size: 26,
+                          size: 34,
                           imageReferer: ref.watch(forumImageRefererProvider),
                         ),
-                        const SizedBox(width: 7),
+                        const SizedBox(width: 9),
                       ],
                       Expanded(
-                        child: Text(
-                          metadata,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: palette.soft,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (author.isNotEmpty)
+                              Text(
+                                author,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: palette.author,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            if (metadata.isNotEmpty) ...[
+                              if (author.isNotEmpty) const SizedBox(height: 2),
+                              Text(
+                                metadata,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: palette.softText,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 7),
                 ],
+                Text(
+                  item.title,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: palette.title,
+                    fontWeight: FontWeight.w800,
+                    height: 1.24,
+                  ),
+                ),
                 if (excerpt.isNotEmpty &&
                     (type == UserThreadDirectoryType.threads ||
                         item.replyPreviews.isEmpty)) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: ForumContentSpacing.postCardBodyTop),
                   Text(
                     excerpt,
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: palette.body,
-                      height: 1.4,
+                      color: palette.bodyText,
+                      height: 1.5,
                     ),
                   ),
                 ],
@@ -115,16 +144,27 @@ class MyThreadCard extends ConsumerWidget {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final width = (constraints.maxWidth - 12) / 3;
-                      return Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                      final images = item.images
+                          .take(3)
+                          .toList(growable: false);
+                      // Allocate the same three slots before any cache lookup
+                      // or decode, so loading and fade-out never reflow a row.
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          for (final url in item.images.take(3))
-                            _ThreadPreviewImage(
-                              threadId: item.threadId,
-                              url: url,
-                              size: width,
+                          for (var index = 0; index < 3; index++) ...[
+                            if (index > 0) const SizedBox(width: 6),
+                            Expanded(
+                              child: index < images.length
+                                  ? _ThreadPreviewImage(
+                                      key: ValueKey(images[index]),
+                                      threadId: item.threadId,
+                                      url: images[index],
+                                      size: width,
+                                    )
+                                  : const SizedBox.shrink(),
                             ),
+                          ],
                         ],
                       );
                     },
@@ -135,7 +175,7 @@ class MyThreadCard extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Material(
-                        color: palette.subtleStateLayer,
+                        color: palette.panelBackground,
                         borderRadius: BorderRadius.circular(8),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
@@ -160,8 +200,8 @@ class MyThreadCard extends ConsumerWidget {
                                     maxLines: 5,
                                     overflow: TextOverflow.ellipsis,
                                     style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: palette.body,
-                                      height: 1.4,
+                                      color: palette.bodyText,
+                                      height: 1.5,
                                     ),
                                   ),
                                 ),
@@ -187,9 +227,9 @@ class MyThreadCard extends ConsumerWidget {
                           icon: Icons.visibility_outlined,
                           label: '${item.views}',
                           semanticsLabel: l10n.profileThreadViews(item.views!),
-                          backgroundColor: palette.subtleStateLayer,
-                          iconColor: palette.muted,
-                          textColor: palette.supportingText,
+                          backgroundColor: palette.chipBackground,
+                          iconColor: palette.softText,
+                          textColor: palette.muted,
                         ),
                       if (item.replies != null)
                         ForumMetricPill(
@@ -198,9 +238,9 @@ class MyThreadCard extends ConsumerWidget {
                           semanticsLabel: l10n.profileThreadReplies(
                             item.replies!,
                           ),
-                          backgroundColor: palette.subtleStateLayer,
-                          iconColor: palette.muted,
-                          textColor: palette.supportingText,
+                          backgroundColor: palette.chipBackground,
+                          iconColor: palette.softText,
+                          textColor: palette.muted,
                         ),
                     ],
                   ),
@@ -214,8 +254,9 @@ class MyThreadCard extends ConsumerWidget {
   }
 }
 
-class _ThreadPreviewImage extends ConsumerWidget {
+class _ThreadPreviewImage extends ConsumerStatefulWidget {
   const _ThreadPreviewImage({
+    super.key,
     required this.threadId,
     required this.url,
     required this.size,
@@ -226,9 +267,19 @@ class _ThreadPreviewImage extends ConsumerWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ThreadPreviewImage> createState() =>
+      _ThreadPreviewImageState();
+}
+
+class _ThreadPreviewImageState extends ConsumerState<_ThreadPreviewImage> {
+  int _retryToken = 0;
+
+  void _retryImage() => setState(() => _retryToken += 1);
+
+  @override
+  Widget build(BuildContext context) {
     final referer = ref.watch(forumImageRefererProvider);
-    final uri = Uri.tryParse(url);
+    final uri = Uri.tryParse(widget.url);
     final request = uri == null
         ? null
         : ref
@@ -237,37 +288,45 @@ class _ThreadPreviewImage extends ConsumerWidget {
                 ForumImageLoadSpec(
                   kind: ForumImageKind.threadInline,
                   url: uri,
-                  ownerId: threadId,
+                  ownerId: widget.threadId,
                   ownerType: ImageCacheOwnerType.thread,
                   referer: referer,
-                  displayWidth: size,
-                  displayHeight: size,
+                  displayWidth: widget.size,
+                  displayHeight: widget.size,
                   allowReaderOpen: false,
                 ),
               );
-    final placeholder = ColoredBox(
-      color: ForumMediaLoadingStyle.placeholderColorFor(
-        Theme.of(context).y300NativeContent.card,
-      ),
-      child: Center(
-        child: Icon(
-          Icons.image_outlined,
-          color: Theme.of(context).y300NativeContent.muted,
+    final errorPlaceholder = Container(
+      alignment: Alignment.center,
+      color: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.38),
+      child: ImageRetryPlaceholder(
+        onRetry: _retryImage,
+        retryButtonKey: ValueKey(
+          'my-thread-image-retry-${request?.cacheKey ?? widget.url}',
         ),
       ),
     );
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: CachedLibraryImage(
-        request: request,
-        fit: BoxFit.cover,
-        width: size,
-        height: size,
-        placeholder: placeholder,
-        errorPlaceholder: placeholder,
-        referer: referer,
-        remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
-        fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+    // Reserve geometry without an immediate loading glyph or surface. The
+    // shared cache widget shows its indicator only after the loading deadline.
+    return SizedBox.square(
+      dimension: widget.size,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CachedLibraryImage(
+          request: request,
+          fit: BoxFit.cover,
+          width: widget.size,
+          height: widget.size,
+          placeholder: const SizedBox.expand(),
+          errorPlaceholder: errorPlaceholder,
+          showDelayedLoadingIndicator: true,
+          referer: referer,
+          remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
+          fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+          retryToken: _retryToken,
+        ),
       ),
     );
   }
