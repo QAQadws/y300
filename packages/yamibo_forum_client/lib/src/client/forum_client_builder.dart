@@ -147,6 +147,7 @@ final class YamiboForumClientBuilder {
               : null),
     );
     final unusedImages = factory.createUnusedImageAttachments(formhash);
+    final privateMessageBatch = factory.createPrivateMessageBatch();
     final standardPlan = ForumClientSourcePlan(
       forumDirectory: forumHome.directory,
       forumHome: forumHome.home,
@@ -166,6 +167,9 @@ final class YamiboForumClientBuilder {
       notifications: factory.createNotifications(),
       privateMessages: factory.createPrivateMessages(),
       privateMessageCommand: factory.createPrivateMessageCommand(formhash),
+      friendDirectory: factory.createFriendDirectory(),
+      privateMessageBatchPreparation: privateMessageBatch.preparation,
+      privateMessageBatchCommand: privateMessageBatch.command,
       notificationIgnoreCommand: factory.createNotificationIgnoreCommand(
         formhash,
       ),

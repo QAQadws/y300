@@ -12,6 +12,10 @@ import '../contracts/forum_search.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
+import '../contracts/private_message_batch_command.dart';
+import '../contracts/friend_directory.dart';
+import 'discuz_private_message_batch_command.dart';
+import 'discuz_friend_directory_repository.dart';
 import 'discuz_private_message_command.dart';
 import '../contracts/notification_ignore_command.dart';
 import 'discuz_notification_ignore_command.dart';
@@ -144,6 +148,28 @@ final class ForumClientAdapterFactory {
     config: config,
     formhash: formhash,
   );
+
+  /// Creates the desktop friend selector without persisting private data.
+  ForumFriendDirectoryRepository createFriendDirectory() =>
+      DiscuzFriendDirectoryRepository(
+        config: config,
+        network: network,
+        profiles: requestProfiles,
+      );
+
+  /// Creates shared fresh preparation and single-request batch roles.
+  ({
+    ForumPrivateMessageBatchPreparationRepository preparation,
+    ForumPrivateMessageBatchCommand command,
+  })
+  createPrivateMessageBatch() {
+    final adapter = DiscuzPrivateMessageBatchCommand(
+      config: config,
+      network: network,
+      profiles: requestProfiles,
+    );
+    return (preparation: adapter, command: adapter);
+  }
 
   /// Creates the notification-type/author filtering command.
   ForumNotificationIgnoreCommand createNotificationIgnoreCommand(

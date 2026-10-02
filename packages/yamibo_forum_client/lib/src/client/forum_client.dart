@@ -16,6 +16,8 @@ import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
 import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
+import '../contracts/private_message_batch_command.dart';
+import '../contracts/friend_directory.dart';
 import '../contracts/notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
@@ -312,6 +314,19 @@ final class YamiboForumClient {
   ForumPrivateMessageRepository? get privateMessages =>
       sourcePlan.privateMessages;
 
+  /// Configured friend selector source, if installed.
+  ForumFriendDirectoryRepository? get friendDirectory =>
+      sourcePlan.friendDirectory;
+
+  /// Configured desktop batch preparation source, if installed.
+  ForumPrivateMessageBatchPreparationRepository?
+  get privateMessageBatchPreparation =>
+      sourcePlan.privateMessageBatchPreparation;
+
+  /// Configured single-request direct-message batch command, if installed.
+  ForumPrivateMessageBatchCommand? get privateMessageBatchCommand =>
+      sourcePlan.privateMessageBatchCommand;
+
   /// Configured sticker catalog source, if installed.
   ForumStickerCatalogRepository? get stickerCatalog =>
       sourcePlan.stickerCatalog;
@@ -436,6 +451,46 @@ final class YamiboForumClient {
         ForumPrivateMessagePage,
         ForumPrivateMessageReadCapabilities
       >();
+
+  /// Loads the current account's friends, optionally by username prefix.
+  Future<
+    DataReadResult<
+      ForumFriendDirectoryPage,
+      ForumFriendDirectoryReadCapabilities
+    >
+  >
+  loadFriends(ForumFriendDirectoryQuery query) =>
+      sourcePlan.friendDirectory?.load(query) ??
+      unsupported<
+        ForumFriendDirectoryPage,
+        ForumFriendDirectoryReadCapabilities
+      >();
+
+  /// Inspects a fresh desktop compose form without sending a message.
+  Future<
+    DataReadResult<
+      ForumPrivateMessageBatchPreparation,
+      ForumPrivateMessageBatchCapabilities
+    >
+  >
+  preparePrivateMessageBatch(
+    ForumPrivateMessageBatchPreparationRequest request,
+  ) =>
+      sourcePlan.privateMessageBatchPreparation?.prepare(request) ??
+      unsupported<
+        ForumPrivateMessageBatchPreparation,
+        ForumPrivateMessageBatchCapabilities
+      >();
+
+  /// Sends separate direct messages in one freshly prepared desktop request.
+  ///
+  /// An applied receipt proves an aggregate write, not delivery to every user.
+  Future<DataCommandResult<ForumPrivateMessageBatchReceipt>>
+  sendPrivateMessageBatch(ForumPrivateMessageBatchSubmission submission) =>
+      sourcePlan.privateMessageBatchCommand?.execute(submission) ??
+      Future.value(
+        const DataCommandUnsupported<ForumPrivateMessageBatchReceipt>(),
+      );
 
   /// Sends one explicit private message; uncertain outcomes are never retried.
   Future<DataCommandResult<ForumPrivateMessageReceipt>> sendPrivateMessage(

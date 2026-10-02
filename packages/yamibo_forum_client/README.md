@@ -317,6 +317,42 @@ use the shared formhash/transport boundary and return structured outcomes; an
 unknown result must never be automatically resubmitted. Reads are not stored in
 the document/snapshot cache. See the message contract Dartdoc for all fields.
 
+`friendDirectory` / `loadFriends` read the current account's friends with a
+one-based page and optional username prefix. The desktop friend selector uses
+a fixed page size of 20; it is not a global user search. Its single-quoted data
+literal is parsed with a bounded object/string/integer parser, never evaluated
+as JavaScript. Pages include exact usernames, positive user IDs, validated
+optional avatar references and the server's total count. The endpoint omits
+the account UID, so `currentUserId` is nullable; Hosts must isolate loads by
+their account generation. Friend data is not persisted in package caches.
+
+`preparePrivateMessageBatch` exposes a validated desktop compose capability
+and opaque preparation token without raw form fields. `sendPrivateMessageBatch`
+always obtains a fresh form itself and accepts no reused caller token. It
+trims and exact-case deduplicates 1–20 usernames, rejects comma/control-character
+names, then submits the message once with repeated `users[]` fields and
+`type=0`. This creates separate direct conversations, never a group. Both new
+operations use the desktop request profile and no `mobile` parameter, including
+in their Referer. The existing single-recipient/group-reply API is unchanged.
+
+The batch receipt deliberately reports **aggregate evidence**. A validated
+positive JSON result proves at least one UCenter write, while
+`serverReportedAcceptedCount` is Discuz's count before UCenter applies its own
+recipient blacklist. `excludedUsernames` lists only exclusions explicitly
+reported by Discuz. Even an empty exclusion list cannot prove delivery to every
+recipient. Only `confirmsSingleRecipient` proves the sole requested recipient's
+write. No per-recipient success or message ID is fabricated. Hosts should clear
+input or invalidate message reads only on `applied`, and must not mark every
+recipient delivered or automatically resend excluded/unconfirmed recipients.
+
+An invalid preparation or pre-dispatch cancellation returns `notSent` with no
+POST. Exact known server rejections return `rejected`. A timeout, cancellation
+after dispatch, unexpected redirect, malformed response, inconsistent count,
+or unfamiliar response returns `outcomeUnknown`; it must never trigger automatic
+resubmission. Raw server payloads and session fields do not enter failure
+diagnostics. The adapter does not perform N-way conversation readback, which
+would alter read state without reliably correlating identical message bodies.
+
 The following responsibilities are intentionally application-owned even when
 their network references are produced by the package:
 
