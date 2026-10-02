@@ -18,6 +18,7 @@ class ComposerStickerInput extends StatefulWidget {
     required this.onChanged,
     this.enabled = true,
     this.hintText,
+    this.semanticLabel,
     this.keyPrefix = 'message',
     this.minLines = 1,
     this.maxLines = 5,
@@ -28,6 +29,7 @@ class ComposerStickerInput extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final bool enabled;
   final String? hintText;
+  final String? semanticLabel;
   final String keyPrefix;
   final int minLines;
   final int maxLines;
@@ -258,68 +260,101 @@ class _ComposerStickerInputState extends State<ComposerStickerInput> {
     )..layout();
     final lineHeight = painter.height;
     painter.dispose();
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+    );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        IconButton(
-          key: Key('${widget.keyPrefix}-sticker-button'),
-          tooltip: AppLocalizations.of(context).composerSticker,
-          onPressed: widget.enabled ? _pickSticker : null,
-          icon: const Icon(Icons.mood),
+        SizedBox.square(
+          dimension: 48,
+          child: IconButton(
+            key: Key('${widget.keyPrefix}-sticker-button'),
+            tooltip: AppLocalizations.of(context).composerSticker,
+            onPressed: widget.enabled ? _pickSticker : null,
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.mood, size: 28),
+          ),
         ),
+        const SizedBox(width: 4),
         Expanded(
           child: InputDecorator(
             isEmpty: _source.isEmpty,
             isFocused: _focusNode.hasFocus,
+            textAlignVertical: TextAlignVertical.center,
             decoration: InputDecoration(
               enabled: widget.enabled,
               hintText: widget.hintText,
+              // This grows like a chat composer, without a form field's
+              // label reserve and default vertical padding.
+              isDense: true,
+              constraints: const BoxConstraints(minHeight: 44),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              border: border,
+              enabledBorder: border,
+              focusedBorder: border.copyWith(
+                borderSide: BorderSide(
+                  color: theme.y300NativeContent.accent,
+                  width: 1.2,
+                ),
+              ),
             ).applyDefaults(theme.inputDecorationTheme),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // InputDecorator has already reserved its themed padding. A
-                // short keyboard viewport may leave less than one full line.
-                final maxHeight = (lineHeight * widget.maxLines).clamp(
-                  0.0,
-                  constraints.maxHeight,
-                );
-                if (maxHeight == 0) return const SizedBox.shrink();
-                return QuillEditor.basic(
-                  key: Key('${widget.keyPrefix}-input'),
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  scrollController: _scrollController,
-                  config: QuillEditorConfig(
-                    minHeight: (lineHeight * widget.minLines).clamp(
-                      0.0,
-                      maxHeight,
-                    ),
-                    maxHeight: maxHeight,
-                    scrollPhysics: const ClampingScrollPhysics(),
-                    // Pinned Quill public hook runs before formatting actions.
-                    // ignore: experimental_member_use
-                    onKeyPressed: _handleKeyPressed,
-                    customStyles: DefaultStyles(
-                      paragraph: DefaultTextBlockStyle(
-                        style,
-                        const HorizontalSpacing(0, 0),
-                        const VerticalSpacing(0, 0),
-                        const VerticalSpacing(0, 0),
-                        null,
-                      ),
-                    ),
-                    embedBuilders: [
-                      ComposerQuillStickerEmbedBuilder(
-                        stickers: _selectedStickers.values.toList(
-                          growable: false,
+            // A scrolling editor has no stable text baseline. Treat it as a
+            // box so decoration/hint baseline alignment cannot move its viewport.
+            child: IgnoreBaseline(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // InputDecorator has already reserved its themed padding. A
+                  // short keyboard viewport may leave less than one full line.
+                  final maxHeight = (lineHeight * widget.maxLines).clamp(
+                    0.0,
+                    constraints.maxHeight,
+                  );
+                  if (maxHeight == 0) return const SizedBox.shrink();
+                  return Semantics(
+                    label: widget.semanticLabel,
+                    child: QuillEditor.basic(
+                      key: Key('${widget.keyPrefix}-input'),
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      scrollController: _scrollController,
+                      config: QuillEditorConfig(
+                        minHeight: (lineHeight * widget.minLines).clamp(
+                          0.0,
+                          maxHeight,
                         ),
-                        fixedSize:
-                            textScaler.scale(style.fontSize ?? 16) * 1.25,
+                        maxHeight: maxHeight,
+                        scrollPhysics: const ClampingScrollPhysics(),
+                        // Pinned Quill public hook runs before formatting actions.
+                        // ignore: experimental_member_use
+                        onKeyPressed: _handleKeyPressed,
+                        customStyles: DefaultStyles(
+                          paragraph: DefaultTextBlockStyle(
+                            style,
+                            const HorizontalSpacing(0, 0),
+                            const VerticalSpacing(0, 0),
+                            const VerticalSpacing(0, 0),
+                            null,
+                          ),
+                        ),
+                        embedBuilders: [
+                          ComposerQuillStickerEmbedBuilder(
+                            stickers: _selectedStickers.values.toList(
+                              growable: false,
+                            ),
+                            fixedSize:
+                                textScaler.scale(style.fontSize ?? 16) * 1.25,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),

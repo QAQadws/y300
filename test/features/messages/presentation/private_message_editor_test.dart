@@ -120,7 +120,8 @@ void main() {
     await pumpEditor(tester, recipient: null);
     final input = tester.widget<ComposerStickerInput>(messageInputSurface);
     expect(input.minLines, 1);
-    expect(input.hintText, l10n(tester).messageInput);
+    expect(input.hintText, isNull);
+    expect(input.semanticLabel, l10n(tester).messageInput);
     expect(find.byKey(const Key('message-recipient')), findsOneWidget);
     expect(
       tester.getTopLeft(find.byKey(const Key('message-send'))).dy,
@@ -139,7 +140,8 @@ void main() {
     final input = tester.widget<ComposerStickerInput>(messageInputSurface);
     expect(input.minLines, 1);
     expect(input.maxLines, 5);
-    expect(input.hintText, l10n(tester).messageInput);
+    expect(input.hintText, isNull);
+    expect(input.semanticLabel, l10n(tester).messageInput);
     expect(tester.widget<IconButton>(sendFinder).onPressed, isNull);
     expect(find.byKey(const Key('message-recipient')), findsNothing);
     await enterMessageText(tester, 'first line\nsecond line');

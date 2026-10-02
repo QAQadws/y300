@@ -201,8 +201,12 @@ void main() {
             _contrast(palette.body, outgoing.surfaceColor!),
             greaterThanOrEqualTo(4.5),
           );
-          _expectInputTheme(tester, theme);
+          _expectInputTheme(tester, theme, singleLine: true);
           await harness.capture('conversation');
+          await enterMessageText(tester, '好呀');
+          await tester.pumpAndSettle();
+          _expectInputTheme(tester, theme, singleLine: true);
+          await harness.capture('conversation-one-line');
 
           await harness.show(
             const PrivateConversationPage(
@@ -257,16 +261,7 @@ void main() {
             find.byKey(const Key('message-send')).hitTestable(),
             findsOneWidget,
           );
-          final sendStyle = tester
-              .widget<IconButton>(find.byKey(const Key('message-send')))
-              .style!;
-          expect(
-            _contrast(
-              sendStyle.foregroundColor!.resolve({})!,
-              sendStyle.backgroundColor!.resolve({})!,
-            ),
-            greaterThanOrEqualTo(4.5),
-          );
+          _expectInputTheme(tester, theme);
           await harness.capture('multiline-keyboard');
           tester.view.resetViewInsets();
 
@@ -358,24 +353,43 @@ void main() {
     await tester.pumpAndSettle();
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    _expectInputTheme(tester, harness.theme, singleLine: true);
+    await harness.capture('narrow-conversation-empty-keyboard');
     await enterMessageText(tester, '回复内容');
     await tester.pumpAndSettle();
     final send = find.byKey(const Key('message-send'));
     await tester.ensureVisible(send);
     await tester.pumpAndSettle();
     expect(send.hitTestable(), findsOneWidget);
+    _expectInputTheme(tester, harness.theme, singleLine: true);
     expect(tester.takeException(), isNull);
     await harness.capture('keyboard');
+    await enterMessageText(tester, '第一行\n第二行\n第三行');
+    await tester.pumpAndSettle();
+    _expectInputTheme(tester, harness.theme);
+    await harness.capture('narrow-conversation-multiline-keyboard');
     await harness.show(const NewPrivateMessagePage());
     await tester.pumpAndSettle();
     await _addRecipient(harness, '一起读书的朋友');
     await _addRecipient(harness, '周末一起分享故事的朋友');
+    await tester.ensureVisible(find.byKey(const Key('message-send')));
+    await tester.pumpAndSettle();
+    _expectInputTheme(tester, harness.theme, singleLine: true);
+    await harness.capture('narrow-compose-empty-keyboard');
+    await enterMessageText(tester, '你好');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('message-send')));
+    await tester.pumpAndSettle();
+    _expectInputTheme(tester, harness.theme, singleLine: true);
+    await harness.capture('narrow-compose-one-line-keyboard');
     await enterMessageText(tester, '你好，想分享最近读到的故事。\n周末一起聊聊！');
     await tester.pumpAndSettle();
     final composeSend = find.byKey(const Key('message-send'));
     await tester.ensureVisible(composeSend);
     await tester.pumpAndSettle();
     expect(composeSend.hitTestable(), findsOneWidget);
+    _expectInputTheme(tester, harness.theme);
     expect(tester.takeException(), isNull);
     await harness.capture('narrow-compose-keyboard');
     final friends = find.byKey(const Key('message-friends-open'));
@@ -511,10 +525,27 @@ Future<void> _captureBatchCompose(_Harness harness) async {
   await tester.pumpAndSettle();
   await _addRecipient(harness, '一起读书的朋友');
   await _addRecipient(harness, '不接收私信的朋友');
+  _expectInputTheme(tester, harness.theme, singleLine: true);
+  await harness.capture('compose-empty');
+  await enterMessageText(tester, '你好');
+  await tester.pumpAndSettle();
+  _expectInputTheme(tester, harness.theme, singleLine: true);
+  await harness.capture('compose-one-line');
   await enterMessageText(tester, '你好，想和你聊聊最近读到的故事。');
   await tester.pumpAndSettle();
   _expectInputTheme(tester, harness.theme);
   await harness.capture('compose');
+  tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+  addTearDown(tester.view.resetViewInsets);
+  await enterMessageText(tester, '刚读完这一章。\n想分享几句感想，\n周末一起聊！');
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.byKey(const Key('message-send')));
+  await tester.pumpAndSettle();
+  _expectInputTheme(tester, harness.theme);
+  await harness.capture('compose-multiline-keyboard');
+  tester.view.resetViewInsets();
+  await enterMessageText(tester, '你好，想和你聊聊最近读到的故事。');
+  await tester.pumpAndSettle();
 
   final openFriends = find.byKey(const Key('message-friends-open'));
   await tester.ensureVisible(openFriends);
@@ -654,27 +685,97 @@ void _expectSurfaces(WidgetTester tester, ThemeData theme) {
   }
 }
 
-void _expectInputTheme(WidgetTester tester, ThemeData theme) {
-  final field = tester.widget<QuillEditor>(
-    find.byKey(const Key('message-input')),
-  );
+void _expectInputTheme(
+  WidgetTester tester,
+  ThemeData theme, {
+  bool singleLine = false,
+}) {
+  final input = find.byKey(const Key('message-input'));
+  final field = tester.widget<QuillEditor>(input);
   expect(
     field.config.customStyles!.paragraph!.style.color,
     theme.y300NativeContent.body,
   );
-  final decoration = tester.widget<InputDecorator>(
-    find
-        .ancestor(
-          of: find.byKey(const Key('message-input')),
-          matching: find.byType(InputDecorator),
-        )
-        .first,
+  final surface = find
+      .ancestor(of: input, matching: find.byType(InputDecorator))
+      .first;
+  final decoration = tester.widget<InputDecorator>(surface).decoration;
+  expect(decoration.hintText, isNull);
+  expect(field.config.placeholder, isNull);
+  expect(
+    find.text(AppLocalizations.of(tester.element(input)).messageInput),
+    findsNothing,
+  );
+  // Chat inputs have their own compact geometry rather than the theme's
+  // general form-field padding and borders.
+  expect(
+    decoration.contentPadding,
+    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
   );
   expect(
-    decoration.decoration.enabledBorder,
-    theme.inputDecorationTheme.enabledBorder,
+    (decoration.enabledBorder! as OutlineInputBorder).borderRadius,
+    BorderRadius.circular(12),
   );
-  expect(decoration.decoration.fillColor, theme.inputDecorationTheme.fillColor);
+  final inputRect = tester.getRect(surface);
+  final editorRect = tester.getRect(input);
+  final container = InputDecorator.containerOf(tester.element(input));
+  expect(container, isNotNull);
+  final borderBox = container!;
+  final borderRect = borderBox.localToGlobal(Offset.zero) & borderBox.size;
+  // The outer box can look correct while a scrollable editor's baseline
+  // places its viewport below the painted border, especially at large text.
+  expect(
+    editorRect.top,
+    greaterThanOrEqualTo(borderRect.top + 7),
+    reason: 'The editor viewport must retain the input\'s 8dp top padding.',
+  );
+  expect(
+    editorRect.bottom,
+    lessThanOrEqualTo(borderRect.bottom - 7),
+    reason: 'The editor viewport must retain the input\'s 8dp bottom padding.',
+  );
+  if (singleLine) {
+    expect(
+      editorRect.center.dy,
+      closeTo(borderRect.center.dy, 1),
+      reason: 'Single-line content must be centered in the painted border.',
+    );
+    final textScale = MediaQuery.textScalerOf(tester.element(input));
+    if (textScale.scale(16) == 16) {
+      expect(borderRect.height, inInclusiveRange(40, 48));
+    }
+  }
+  final sticker = find.byKey(const Key('message-sticker-button'));
+  final send = find.byKey(const Key('message-send'));
+  for (final button in [sticker, send]) {
+    final rect = tester.getRect(button);
+    expect(rect.width, greaterThanOrEqualTo(48));
+    expect(rect.height, greaterThanOrEqualTo(48));
+    final icon = find.descendant(of: button, matching: find.byType(Icon));
+    expect(tester.getSize(icon), const Size.square(28));
+    expect(button.hitTestable(), findsOneWidget);
+  }
+  final stickerRect = tester.getRect(sticker);
+  final sendRect = tester.getRect(send);
+  expect(stickerRect.right, lessThanOrEqualTo(inputRect.left));
+  expect(inputRect.right, lessThanOrEqualTo(sendRect.left));
+  expect(stickerRect.center.dy, closeTo(sendRect.center.dy, 0.1));
+  expect(sendRect.bottom, closeTo(inputRect.bottom, 4));
+  final media = MediaQuery.of(tester.element(input));
+  final visibleBottom = media.size.height - media.viewInsets.bottom;
+  expect(inputRect.bottom, lessThanOrEqualTo(visibleBottom));
+  expect(sendRect.bottom, lessThanOrEqualTo(visibleBottom));
+  final sendWidget = tester.widget<IconButton>(send);
+  final background = sendWidget.style?.backgroundColor?.resolve({});
+  expect(background?.a ?? 0, 0);
+  if (sendWidget.onPressed != null) {
+    final iconFinder = find.descendant(of: send, matching: find.byType(Icon));
+    final icon = tester.widget<Icon>(iconFinder);
+    expect(
+      icon.color ?? IconTheme.of(tester.element(iconFinder)).color,
+      theme.y300NativeContent.accent,
+    );
+  }
 }
 
 double _contrast(Color foreground, Color background) {

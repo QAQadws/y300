@@ -7,6 +7,7 @@ import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_refresh_bus.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/message_command_text.dart';
+import 'package:y300/features/messages/presentation/widgets/message_composer_row.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 enum PrivateMessageEditorLayout { form, conversation }
@@ -207,7 +208,7 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
     final input = ComposerStickerInput(
       value: _message,
       enabled: widget.enabled && !_busy,
-      hintText: l10n.messageInput,
+      semanticLabel: l10n.messageInput,
       onChanged: (value) => setState(() => _message = value),
     );
     return PopScope(
@@ -297,10 +298,8 @@ class _ConversationInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final palette = Theme.of(context).y300NativeContent;
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -316,40 +315,7 @@ class _ConversationInputBar extends StatelessWidget {
           // away when the keyboard, text scale, or error reduces available room.
           Flexible(
             flex: 3,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(child: input),
-                const SizedBox(width: 8),
-                SizedBox.square(
-                  dimension: 48,
-                  child: IconButton.filled(
-                    key: const Key('message-send'),
-                    tooltip: busy ? l10n.messageSending : l10n.messageSend,
-                    onPressed: onSend,
-                    // Plain icon-button colors are not paired with a filled
-                    // surface. Use the theme's contrasting accent foreground.
-                    style: IconButton.styleFrom(
-                      backgroundColor: palette.accent,
-                      foregroundColor: palette.onAccent,
-                      disabledBackgroundColor: busy
-                          ? palette.accent
-                          : palette.stateLayer,
-                      disabledForegroundColor: palette.disabled,
-                    ),
-                    icon: busy
-                        ? SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: palette.onAccent,
-                            ),
-                          )
-                        : const Icon(Icons.send_outlined, size: 20),
-                  ),
-                ),
-              ],
-            ),
+            child: MessageComposerRow(input: input, busy: busy, onSend: onSend),
           ),
         ],
       ),

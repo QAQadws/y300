@@ -10,6 +10,7 @@ import 'package:y300/features/messages/presentation/message_feed_providers.dart'
 import 'package:y300/features/messages/presentation/message_friend_directory_controller.dart';
 import 'package:y300/features/messages/presentation/private_message_batch_send_controller.dart';
 import 'package:y300/features/messages/presentation/widgets/message_friend_picker_sheet.dart';
+import 'package:y300/features/messages/presentation/widgets/message_composer_row.dart';
 import 'package:y300/features/messages/presentation/widgets/private_message_batch_result_view.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -374,46 +375,15 @@ class _PrivateMessageBatchComposerState
                 ),
               ),
             ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: ComposerStickerInput(
-                  value: _message,
-                  enabled: !_blocked,
-                  hintText: l10n.messageInput,
-                  onChanged: (message) => setState(() => _message = message),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox.square(
-                dimension: 48,
-                child: IconButton.filled(
-                  key: const Key('message-send'),
-                  tooltip: _sender.value.isSending
-                      ? l10n.messageSending
-                      : l10n.messageSend,
-                  onPressed: _blocked || _message.trim().isEmpty ? null : _send,
-                  style: IconButton.styleFrom(
-                    backgroundColor: palette.accent,
-                    foregroundColor: palette.onAccent,
-                    disabledBackgroundColor: _sender.value.isSending
-                        ? palette.accent
-                        : palette.stateLayer,
-                    disabledForegroundColor: palette.disabled,
-                  ),
-                  icon: _sender.value.isSending
-                      ? SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: palette.onAccent,
-                          ),
-                        )
-                      : const Icon(Icons.send_outlined, size: 20),
-                ),
-              ),
-            ],
+          MessageComposerRow(
+            input: ComposerStickerInput(
+              value: _message,
+              enabled: !_blocked,
+              semanticLabel: l10n.messageInput,
+              onChanged: (message) => setState(() => _message = message),
+            ),
+            busy: _sender.value.isSending,
+            onSend: _blocked || _message.trim().isEmpty ? null : _send,
           ),
         ],
       ),
