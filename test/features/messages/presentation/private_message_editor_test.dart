@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_input.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_refresh_bus.dart';
@@ -10,6 +13,7 @@ import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_test_repository.dart';
+import '../support/message_input_test_helper.dart';
 
 void main() {
   late MessageTestRepository repository;
@@ -104,7 +108,7 @@ void main() {
   AppLocalizations l10n(WidgetTester tester) =>
       AppLocalizations.of(tester.element(find.byType(PrivateMessageEditor)));
   Future<void> sendText(WidgetTester tester, [String text = 'draft']) async {
-    await tester.enterText(find.byKey(const Key('message-input')), text);
+    await enterMessageText(tester, text);
     await tester.pump();
     await tester.tap(find.byKey(const Key('message-send')));
     await tester.pump();
@@ -114,11 +118,9 @@ void main() {
     tester,
   ) async {
     await pumpEditor(tester, recipient: null);
-    final input = tester.widget<TextField>(
-      find.byKey(const Key('message-input')),
-    );
-    expect(input.minLines, 4);
-    expect(input.decoration!.labelText, l10n(tester).messageInput);
+    final input = tester.widget<ComposerStickerInput>(messageInputSurface);
+    expect(input.minLines, 1);
+    expect(input.hintText, l10n(tester).messageInput);
     expect(find.byKey(const Key('message-recipient')), findsOneWidget);
     expect(
       tester.getTopLeft(find.byKey(const Key('message-send'))).dy,
@@ -134,24 +136,23 @@ void main() {
     await pumpEditor(tester, layout: PrivateMessageEditorLayout.conversation);
     final inputFinder = find.byKey(const Key('message-input'));
     final sendFinder = find.byKey(const Key('message-send'));
-    final input = tester.widget<TextField>(inputFinder);
+    final input = tester.widget<ComposerStickerInput>(messageInputSurface);
     expect(input.minLines, 1);
     expect(input.maxLines, 5);
-    expect(input.decoration!.labelText, isNull);
-    expect(input.decoration!.hintText, l10n(tester).messageInput);
+    expect(input.hintText, l10n(tester).messageInput);
     expect(tester.widget<IconButton>(sendFinder).onPressed, isNull);
     expect(find.byKey(const Key('message-recipient')), findsNothing);
-    await tester.enterText(inputFinder, 'first line\nsecond line');
+    await enterMessageText(tester, 'first line\nsecond line');
     await tester.pumpAndSettle();
     final sendRect = tester.getRect(sendFinder);
-    final inputRect = tester.getRect(inputFinder);
+    final inputRect = tester.getRect(messageInputSurface);
     expect(sendRect.size, const Size.square(48));
     expect(sendRect.left, greaterThan(inputRect.right));
     expect(sendRect.bottom, closeTo(inputRect.bottom, 0.1));
 
     await tester.tap(sendFinder);
     await tester.pump();
-    expect(tester.widget<TextField>(inputFinder).readOnly, isTrue);
+    expect(tester.widget<QuillEditor>(inputFinder).controller.readOnly, isTrue);
     expect(tester.widget<IconButton>(sendFinder).onPressed, isNull);
     expect(tester.getRect(sendFinder), sendRect);
     expect(find.byTooltip(l10n(tester).messageSending), findsOneWidget);
@@ -164,10 +165,10 @@ void main() {
     );
     await tester.tap(sendFinder);
     expect(repository.sends, hasLength(1));
-    expect(input.controller!.text, 'first line\nsecond line');
+    expect(messageInputValue(tester), 'first line\nsecond line');
     repository.sends.single.succeed();
     await tester.pumpAndSettle();
-    expect(input.controller!.text, isEmpty);
+    expect(messageInputValue(tester), isEmpty);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byTooltip(l10n(tester).messageSend), findsOneWidget);
     expect(events, hasLength(1));
@@ -191,7 +192,7 @@ void main() {
       final inputFinder = find.byKey(const Key('message-input'));
       final sendFinder = find.byKey(const Key('message-send'));
       const draft = 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight';
-      await tester.enterText(inputFinder, draft);
+      await enterMessageText(tester, draft);
       await tester.pumpAndSettle();
       final inputScroll = tester.state<ScrollableState>(
         find.descendant(of: inputFinder, matching: find.byType(Scrollable)),
@@ -201,7 +202,7 @@ void main() {
       expect(tester.getSize(sendFinder), const Size.square(48));
       expect(
         tester.getBottomLeft(sendFinder).dy,
-        closeTo(tester.getBottomLeft(inputFinder).dy, 0.1),
+        closeTo(tester.getBottomLeft(messageInputSurface).dy, 0.1),
       );
       await tester.tap(sendFinder);
       await tester.pump();
@@ -211,7 +212,7 @@ void main() {
       expect(find.textContaining('SECRET'), findsNothing);
       expect(sendFinder.hitTestable(), findsOneWidget);
       expect(tester.getSize(sendFinder), const Size.square(48));
-      expect(tester.widget<TextField>(inputFinder).controller!.text, draft);
+      expect(messageInputValue(tester), draft);
       await tester.tap(sendFinder);
       await tester.pumpAndSettle();
       expect(find.text(l10n(tester).messageSendAgain), findsOneWidget);
@@ -234,22 +235,10 @@ void main() {
         repository.sends.single.submission.message,
         '  原始繁體 <text>\n[文字]  ',
       );
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('message-input')))
-            .controller!
-            .text,
-        isNotEmpty,
-      );
+      expect(messageInputValue(tester), isNotEmpty);
       repository.sends.single.succeed();
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('message-input')))
-            .controller!
-            .text,
-        isEmpty,
-      );
+      expect(messageInputValue(tester), isEmpty);
       expect(receipts, hasLength(1));
       expect(events.single.accountId, '10');
       expect(events.single.target, const ForumConversationTarget.direct('20'));
@@ -272,6 +261,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(events.single.target, const ForumConversationTarget.group('91'));
   });
+
+  testWidgets(
+    'a sticker-only message submits its forum code and clears on proof',
+    (tester) async {
+      await pumpEditor(tester, layout: PrivateMessageEditorLayout.conversation);
+      const code = '{:3_41:}';
+      final controller = tester
+          .widget<QuillEditor>(find.byKey(const Key('message-input')))
+          .controller;
+      controller.replaceText(
+        0,
+        0,
+        composerQuillStickerEmbed(code),
+        const TextSelection.collapsed(offset: 1),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('message-send')));
+      await tester.pump();
+      expect(repository.sends.single.submission.message, code);
+      expect(messageInputValue(tester), code);
+      repository.sends.single.succeed();
+      await tester.pumpAndSettle();
+      expect(messageInputValue(tester), isEmpty);
+      expect(receipts, hasLength(1));
+    },
+  );
 
   testWidgets(
     'unknown send keeps draft, hides raw error, and requires explicit resend confirmation',
@@ -326,13 +341,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text(l10n(tester).messageOnlyFriends), findsOneWidget);
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('message-input')))
-            .controller!
-            .text,
-        'draft',
-      );
+      expect(messageInputValue(tester), 'draft');
       expect(events, isEmpty);
       expect(receipts, isEmpty);
     },
@@ -376,19 +385,10 @@ void main() {
         repository.sends.single.submission.cancellation!.isCancelled,
         isTrue,
       );
-      await tester.enterText(
-        find.byKey(const Key('message-input')),
-        'new account draft',
-      );
+      await enterMessageText(tester, 'new account draft');
       repository.sends.single.succeed();
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('message-input')))
-            .controller!
-            .text,
-        'new account draft',
-      );
+      expect(messageInputValue(tester), 'new account draft');
       expect(receipts, isEmpty);
       expect(events, isEmpty);
       expect(tester.takeException(), isNull);

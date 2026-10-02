@@ -16,6 +16,7 @@ import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_test_repository.dart';
+import '../support/message_input_test_helper.dart';
 
 void main() {
   late MessageTestRepository repository;
@@ -260,10 +261,7 @@ void main() {
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 180);
       addTearDown(tester.view.resetViewInsets);
-      await tester.enterText(
-        find.byKey(const Key('message-input')),
-        'multiple\nlines\nof\ninput',
-      );
+      await enterMessageText(tester, 'multiple\nlines\nof\ninput');
       await tester.pumpAndSettle();
       expectLatest(tester, '20');
 
@@ -282,7 +280,7 @@ void main() {
       expectLatest(tester, '20');
 
       tester.view.resetViewInsets();
-      await tester.enterText(find.byKey(const Key('message-input')), '');
+      await enterMessageText(tester, '');
       await tester.pumpAndSettle();
       expectLatest(tester, '20');
       expect(tester.takeException(), isNull);
@@ -467,7 +465,7 @@ void main() {
     final scroll = scrollController(tester);
     scroll.jumpTo(350);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('message-input')), 'reply');
+    await enterMessageText(tester, 'reply');
     await tester.pump();
     await tester.tap(find.byKey(const Key('message-send')));
     await tester.pump();
@@ -488,13 +486,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('message-input')))
-          .controller!
-          .text,
-      isEmpty,
-    );
+    expect(messageInputValue(tester), isEmpty);
     expectLatest(tester, '100');
     expect(tester.takeException(), isNull);
   });
@@ -521,7 +513,7 @@ void main() {
       final scroll = scrollController(tester);
       scroll.jumpTo(350);
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('message-input')), 'reply');
+      await enterMessageText(tester, 'reply');
       await tester.pump();
       await tester.tap(find.byKey(const Key('message-send')));
       await tester.pump();
@@ -530,13 +522,7 @@ void main() {
       expect(repository.reads, hasLength(1));
       expect(scroll.offset - scroll.position.minScrollExtent, greaterThan(80));
       expect(find.text(l10n(tester).messageLatest), findsOneWidget);
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('message-input')))
-            .controller!
-            .text,
-        'reply',
-      );
+      expect(messageInputValue(tester), 'reply');
       expect(tester.takeException(), isNull);
     });
   }
@@ -552,10 +538,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       scrollController(tester).jumpTo(350);
-      await tester.enterText(
-        find.byKey(const Key('message-input')),
-        'old draft',
-      );
+      await enterMessageText(tester, 'old draft');
       final oldRefresh = container
           .read(privateMessageFeedProvider(target))
           .refresh();
@@ -580,13 +563,7 @@ void main() {
         closeTo(tester.getTopLeft(timeline()).dy, 0.1),
       );
       expect(find.text(l10n(tester).messageLatest), findsNothing);
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('message-input')))
-            .controller!
-            .text,
-        isEmpty,
-      );
+      expect(messageInputValue(tester), isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
@@ -606,10 +583,7 @@ void main() {
         await tester.pumpAndSettle();
         tester.view.viewInsets = const FakeViewPadding(bottom: 260);
         addTearDown(tester.view.resetViewInsets);
-        await tester.enterText(
-          find.byKey(const Key('message-input')),
-          'multiple\nlines\nof\ninput',
-        );
+        await enterMessageText(tester, 'multiple\nlines\nof\ninput');
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       },
@@ -712,7 +686,7 @@ void main() {
       await tester.pumpAndSettle();
       tester.view.viewInsets = const FakeViewPadding(bottom: 180);
       addTearDown(tester.view.resetViewInsets);
-      await tester.enterText(find.byKey(const Key('message-input')), '两行\n输入');
+      await enterMessageText(tester, '两行\n输入');
       await tester.pumpAndSettle();
       await container
           .read(forumHtmlReaderPreferencesControllerProvider.notifier)

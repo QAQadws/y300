@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_input.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_refresh_bus.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
@@ -34,7 +35,7 @@ class PrivateMessageEditor extends ConsumerStatefulWidget {
 }
 
 class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
-  final _text = TextEditingController();
+  String _message = '';
   final _username = TextEditingController();
   ForumRequestCancellation? _cancellation;
   DataCommandResult<ForumPrivateMessageReceipt>? _result;
@@ -43,14 +44,13 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
   bool _allowPop = false;
   bool _invalidRecipient = false;
 
-  bool get _dirty => _text.text.isNotEmpty || _username.text.isNotEmpty;
+  bool get _dirty => _message.isNotEmpty || _username.text.isNotEmpty;
   bool get _ownsAccount =>
       mounted && ref.read(messageAccountIdProvider) == widget.accountId;
 
   @override
   void dispose() {
     _cancellation?.cancel();
-    _text.dispose();
     _username.dispose();
     super.dispose();
   }
@@ -103,7 +103,7 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
         _confirming ||
         !widget.enabled ||
         !_ownsAccount ||
-        _text.text.trim().isEmpty) {
+        _message.trim().isEmpty) {
       return;
     }
     final recipient =
@@ -138,7 +138,7 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
       result = await repository.send(
         ForumPrivateMessageSubmission(
           recipient: recipient,
-          message: _text.text,
+          message: _message,
           cancellation: cancellation,
         ),
       );
@@ -158,7 +158,7 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
       _busy = false;
       _result = result;
       if (result is DataCommandApplied<ForumPrivateMessageReceipt>) {
-        _text.clear();
+        _message = '';
         _username.clear();
       }
     });
@@ -192,7 +192,7 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
     final palette = theme.y300NativeContent;
     final conversation =
         widget.layout == PrivateMessageEditorLayout.conversation;
-    final onSend = _busy || !widget.enabled || _text.text.trim().isEmpty
+    final onSend = _busy || !widget.enabled || _message.trim().isEmpty
         ? null
         : _send;
     final errorNotice = error == null
@@ -204,19 +204,11 @@ class _PrivateMessageEditorState extends ConsumerState<PrivateMessageEditor> {
               style: TextStyle(color: theme.colorScheme.error),
             ),
           );
-    final input = TextField(
-      key: const Key('message-input'),
-      controller: _text,
-      style: theme.textTheme.bodyLarge?.copyWith(color: palette.body),
-      readOnly: _busy,
-      minLines: !conversation && widget.recipient == null ? 4 : 1,
-      maxLines: 5,
-      keyboardType: TextInputType.multiline,
-      textCapitalization: TextCapitalization.sentences,
-      decoration: conversation
-          ? InputDecoration(hintText: l10n.messageInput)
-          : InputDecoration(labelText: l10n.messageInput),
-      onChanged: (_) => setState(() {}),
+    final input = ComposerStickerInput(
+      value: _message,
+      enabled: widget.enabled && !_busy,
+      hintText: l10n.messageInput,
+      onChanged: (value) => setState(() => _message = value),
     );
     return PopScope(
       canPop: _allowPop || !_dirty,

@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -27,6 +28,7 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_test_repository.dart';
+import '../support/message_input_test_helper.dart';
 import '../support/message_avatar_test_cache.dart';
 
 // Ordinary regression runs require no local font or screenshot directory.
@@ -246,10 +248,7 @@ void main() {
           await tester.pumpAndSettle();
           await harness.capture('long-latest');
           tester.view.viewInsets = const FakeViewPadding(bottom: 260);
-          await tester.enterText(
-            find.byKey(const Key('message-input')),
-            '刚读完这一章。\n想分享几句感想，\n周末一起聊！',
-          );
+          await enterMessageText(tester, '刚读完这一章。\n想分享几句感想，\n周末一起聊！');
           await tester.pumpAndSettle();
           expect(
             find.byKey(const Key('message-send')).hitTestable(),
@@ -294,10 +293,7 @@ void main() {
             find.byKey(const Key('message-recipient')),
             '一起读书的朋友',
           );
-          await tester.enterText(
-            find.byKey(const Key('message-input')),
-            '你好，想和你聊聊最近读到的故事。',
-          );
+          await enterMessageText(tester, '你好，想和你聊聊最近读到的故事。');
           await tester.pumpAndSettle();
           _expectInputTheme(tester, theme);
           await harness.capture('compose');
@@ -368,7 +364,7 @@ void main() {
     await tester.pumpAndSettle();
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     addTearDown(tester.view.resetViewInsets);
-    await tester.enterText(find.byKey(const Key('message-input')), '回复内容');
+    await enterMessageText(tester, '回复内容');
     await tester.pumpAndSettle();
     final send = find.byKey(const Key('message-send'));
     await tester.ensureVisible(send);
@@ -567,16 +563,20 @@ void _expectSurfaces(WidgetTester tester, ThemeData theme) {
 }
 
 void _expectInputTheme(WidgetTester tester, ThemeData theme) {
-  final field = tester.widget<TextField>(
+  final field = tester.widget<QuillEditor>(
     find.byKey(const Key('message-input')),
   );
-  expect(field.decoration!.border, isNull);
-  expect(field.style!.color, theme.y300NativeContent.body);
+  expect(
+    field.config.customStyles!.paragraph!.style.color,
+    theme.y300NativeContent.body,
+  );
   final decoration = tester.widget<InputDecorator>(
-    find.descendant(
-      of: find.byKey(const Key('message-input')),
-      matching: find.byType(InputDecorator),
-    ),
+    find
+        .ancestor(
+          of: find.byKey(const Key('message-input')),
+          matching: find.byType(InputDecorator),
+        )
+        .first,
   );
   expect(
     decoration.decoration.enabledBorder,
