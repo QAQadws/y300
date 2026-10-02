@@ -452,6 +452,121 @@ void main() {
     expect(find.text('还没有相关的日志'), findsOneWidget);
   });
 
+  testWidgets('swiping selects lazy feeds and retains the public sort', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository();
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
+    expect(repository.queries.map((query) => query.scope), [
+      UserBlogFeedScope.public,
+    ]);
+
+    await tester.tap(find.text(l10n.profileBlogRecommendedShort));
+    await tester.pumpAndSettle();
+    final publicRefresh = tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator).hitTestable())
+        .onRefresh;
+    await _swipeToScope(tester, UserBlogFeedScope.self);
+    expect(_blogTabs(tester).controller!.index, UserBlogFeedScope.self.index);
+    expect(repository.queries.last.scope, UserBlogFeedScope.self);
+    expect(repository.queries.last.order, isNull);
+    expect(
+      find.text(l10n.profileBlogRecommendedShort).hitTestable(),
+      findsNothing,
+    );
+    expect(find.text(l10n.profileBlogEmpty).hitTestable(), findsOneWidget);
+    await publicRefresh();
+    await tester.pumpAndSettle();
+    expect(repository.queries, hasLength(3));
+
+    await _swipeToScope(tester, UserBlogFeedScope.friends);
+    expect(
+      _blogTabs(tester).controller!.index,
+      UserBlogFeedScope.friends.index,
+    );
+    expect(repository.queries.map((query) => query.scope), [
+      UserBlogFeedScope.public,
+      UserBlogFeedScope.public,
+      UserBlogFeedScope.self,
+      UserBlogFeedScope.friends,
+    ]);
+
+    await _swipeToScope(tester, UserBlogFeedScope.public);
+    expect(_blogTabs(tester).controller!.index, UserBlogFeedScope.public.index);
+    expect(repository.queries, hasLength(4));
+    expect(find.text('我们小区的公共交通极其不便利').hitTestable(), findsOneWidget);
+    await tester.tap(find.text(l10n.profileBlogLatestShort));
+    await tester.pumpAndSettle();
+    expect(repository.queries.last.order, UserBlogOrder.latest);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('swiping cancels a pending feed and ignores its late result', (
+    tester,
+  ) async {
+    final publicGate = Completer<void>();
+    final repository = _FakeBlogDirectoryRepository(
+      scopeGates: {UserBlogFeedScope.public: publicGate},
+    );
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+      settle: false,
+    );
+    await tester.pump();
+    expect(repository.queries.map((query) => query.scope), [
+      UserBlogFeedScope.public,
+    ]);
+
+    await _swipeToScope(tester, UserBlogFeedScope.self);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ProfileBlogPage)),
+    );
+    expect(repository.queries.map((query) => query.scope), [
+      UserBlogFeedScope.public,
+      UserBlogFeedScope.self,
+    ]);
+    expect(repository.cancellations.first!.isCancelled, isTrue);
+    expect(find.text(l10n.profileBlogEmpty).hitTestable(), findsOneWidget);
+
+    publicGate.complete();
+    await tester.pumpAndSettle();
+    expect(_blogTabs(tester).controller!.index, UserBlogFeedScope.self.index);
+    expect(find.text('一种体验').hitTestable(), findsNothing);
+    expect(find.text(l10n.profileBlogEmpty).hitTestable(), findsOneWidget);
+    expect(repository.queries, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an author feed keeps its fixed scope when dragged sideways', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository();
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+      page: const ProfileBlogPage(ownerUserId: '909'),
+    );
+    expect(find.byKey(const Key('profile-blog-view-tabs')), findsNothing);
+    expect(find.byType(TabBarView), findsNothing);
+    expect(repository.queries.single.scope, UserBlogFeedScope.self);
+    expect(repository.queries.single.ownerUserId, '909');
+
+    await tester.drag(find.byType(ProfileBlogPage), const Offset(600, 0));
+    await tester.pumpAndSettle();
+    expect(repository.queries, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('returning from a pending article cancels its read', (
     tester,
   ) async {
@@ -483,31 +598,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the last scroll offset is restored independently for each tab', (
+  testWidgets('swiping restores an independent scroll offset for each feed', (
     tester,
   ) async {
-    final repository = _FakeBlogDirectoryRepository(longList: true);
+    final repository = _FakeBlogDirectoryRepository(
+      longList: true,
+      longListScopes: {UserBlogFeedScope.public, UserBlogFeedScope.self},
+    );
     await _pumpBlogPage(
       tester,
       directoryRepository: repository,
       detailRepository: _FakeBlogDetailRepository(),
     );
-    final list = find.byKey(const Key('profile-blog-list'));
+    final list = find.byKey(const Key('profile-blog-list')).hitTestable();
     await tester.drag(list, const Offset(0, -650));
     await tester.pumpAndSettle();
     double offset() => tester
         .state<ScrollableState>(
-          find.descendant(of: list, matching: find.byType(Scrollable)),
+          find
+              .descendant(of: list, matching: find.byType(Scrollable))
+              .hitTestable(),
         )
         .position
         .pixels;
     final before = offset();
     expect(before, greaterThan(400));
-    await tester.tap(find.text('我的日志'));
+    await _swipeToScope(tester, UserBlogFeedScope.self);
+    expect(offset(), 0);
+    await tester.drag(list, const Offset(0, -950));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('随便看看'));
-    await tester.pumpAndSettle();
+    final selfOffset = offset();
+    expect(selfOffset, greaterThan(before + 100));
+
+    await _swipeToScope(tester, UserBlogFeedScope.public);
     expect(offset(), closeTo(before, 1));
+    await _swipeToScope(tester, UserBlogFeedScope.self);
+    expect(offset(), closeTo(selfOffset, 1));
     expect(repository.queries, hasLength(2));
     expect(tester.takeException(), isNull);
   });
@@ -1078,6 +1204,7 @@ Future<void> _pumpBlogPage(
   required UserBlogDetailRepository detailRepository,
   Locale locale = const Locale('zh'),
   bool settle = true,
+  ProfileBlogPage page = const ProfileBlogPage(),
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -1089,11 +1216,32 @@ Future<void> _pumpBlogPage(
         userBlogDetailRepositoryProvider.overrideWithValue(detailRepository),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       ],
-      child: LocalizedTestApp(locale: locale, home: const ProfileBlogPage()),
+      child: LocalizedTestApp(locale: locale, home: page),
     ),
   );
   if (settle) {
     await tester.pumpAndSettle();
+  }
+}
+
+TabBar _blogTabs(WidgetTester tester) => tester.widget<TabBar>(
+  find.descendant(
+    of: find.byKey(const Key('profile-blog-view-tabs')),
+    matching: find.byType(TabBar),
+  ),
+);
+
+Future<void> _swipeToScope(WidgetTester tester, UserBlogFeedScope scope) async {
+  while (_blogTabs(tester).controller!.index != scope.index) {
+    final previousIndex = _blogTabs(tester).controller!.index;
+    final direction = scope.index > previousIndex ? -1 : 1;
+    final pager = find.byType(TabBarView);
+    await tester.drag(
+      pager,
+      Offset(tester.getSize(pager).width * 0.8 * direction, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(_blogTabs(tester).controller!.index, isNot(previousIndex));
   }
 }
 
@@ -1146,6 +1294,8 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     this.nextPageGate,
     this.unknownTotalPages = false,
     this.longList = false,
+    this.longListScopes = const {UserBlogFeedScope.public},
+    this.scopeGates = const {},
     this.blogActions = const {},
   }) : readCapabilities =
            capabilities ??
@@ -1165,6 +1315,8 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   final bool unknownTotalPages;
   final failedPages = <int>{};
   final bool longList;
+  final Set<UserBlogFeedScope> longListScopes;
+  final Map<UserBlogFeedScope, Completer<void>> scopeGates;
   final Set<UserBlogAction> blogActions;
   bool removed = false;
   final cancellations = <ForumRequestCancellation?>[];
@@ -1191,6 +1343,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     policies.add(cachePolicy);
     cancellations.add(cancellation);
     await gate?.future;
+    await scopeGates[query.scope]?.future;
     if (query.page > 1) await nextPageGate?.future;
     if ((failFirst && queries.length == 1) ||
         (failAfterSuccess && queries.length > 1) ||
@@ -1208,24 +1361,19 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   }
 
   UserBlogDirectoryData _directoryData(UserBlogDirectoryQuery query) {
-    if (query.scope != UserBlogFeedScope.public) {
-      return UserBlogDirectoryData(
-        scope: query.scope,
-        order: null,
-        items: const <UserBlogSummary>[],
-        pagination: UserBlogPagination(currentPage: query.page),
-      );
-    }
-    if (longList && query.page == 1) {
+    if (longList && longListScopes.contains(query.scope) && query.page == 1) {
       return UserBlogDirectoryData(
         scope: query.scope,
         order: query.order,
         items: [
           for (var i = 0; i < 30; i++)
             UserBlogSummary(
-              blogId: '${i + 1}',
+              blogId:
+                  '${i + (query.scope == UserBlogFeedScope.self ? 1001 : 1)}',
               ownerUserId: '101',
-              title: 'Entry $i',
+              title: query.scope == UserBlogFeedScope.self
+                  ? 'Self entry $i'
+                  : 'Entry $i',
               excerpt:
                   'A longer journal excerpt for checking retained scroll position.',
             ),
@@ -1235,6 +1383,14 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
           totalPages: 2,
           hasNext: true,
         ),
+      );
+    }
+    if (query.scope != UserBlogFeedScope.public) {
+      return UserBlogDirectoryData(
+        scope: query.scope,
+        order: null,
+        items: const <UserBlogSummary>[],
+        pagination: UserBlogPagination(currentPage: query.page),
       );
     }
     if (query.page == 2) {

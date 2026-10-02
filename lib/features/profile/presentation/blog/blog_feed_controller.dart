@@ -129,6 +129,21 @@ final class ProfileBlogPageController
   bool _refreshing = false;
   int _generation = 0;
 
+  /// Read-only page state for swipe previews; inactive scopes never start reads.
+  UserBlogDirectoryPageState stateForScope(UserBlogFeedScope scope) =>
+      value.query.scope == scope
+      ? value
+      : _retained[scope] ??
+            UserBlogDirectoryPageState(
+              query: _initialQuery(
+                ProfileBlogPageArgs(
+                  initialScope: scope,
+                  initialOrder: _args.initialOrder,
+                ),
+                accountId,
+              ),
+            );
+
   Future<void> setActive(bool active) {
     if (_disposed) return Future.value();
     _active = active;
@@ -170,17 +185,7 @@ final class ProfileBlogPageController
     }
     _cancel();
     _retained[value.query.scope] = value.waiting(loading: false);
-    value =
-        _retained[scope] ??
-        UserBlogDirectoryPageState(
-          query: _initialQuery(
-            ProfileBlogPageArgs(
-              initialScope: scope,
-              initialOrder: _args.initialOrder,
-            ),
-            accountId,
-          ),
-        );
+    value = stateForScope(scope);
     return setActive(_active);
   }
 

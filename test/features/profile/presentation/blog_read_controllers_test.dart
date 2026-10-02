@@ -226,6 +226,9 @@ void main() {
       final controller = feed(repository);
       await controller.setActive(false);
       expect(repository.requests, isEmpty);
+      expect(controller.stateForScope(UserBlogFeedScope.self).data, isNull);
+      expect(controller.stateForScope(UserBlogFeedScope.friends).data, isNull);
+      expect(repository.requests, isEmpty);
       final first = controller.setActive(true);
       expect(controller.value.isLoading, isTrue);
       expect(controller.setActive(true), same(first));
@@ -795,6 +798,8 @@ void main() {
       ),
     );
     await pending;
+    expect(controller.stateForScope(UserBlogFeedScope.self).data, isNull);
+    expect(repository.requests, hasLength(2));
     pending = controller.selectScope(UserBlogFeedScope.self);
     expect(controller.value.data, isNull);
     expect(repository.requests, hasLength(3));

@@ -37,6 +37,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_metric_pill.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/native_primary_tab_bar.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../../../test_support/localized_test_app.dart';
@@ -139,10 +140,16 @@ void main() {
           expect(title.style!.color, host.theme.y300NativeContent.itemTitle);
           final tabs = find.byKey(const Key('profile-blog-view-tabs'));
           expect(tester.getSize(tabs).height, greaterThanOrEqualTo(48));
-          expect(
-            find.descendant(of: tabs, matching: find.byType(AnimatedContainer)),
-            findsNothing,
+          final bar = tester.widget<TabBar>(
+            find.descendant(of: tabs, matching: find.byType(TabBar)),
           );
+          final tabSurface = tester.widget<Material>(
+            find.descendant(of: tabs, matching: find.byType(Material)).first,
+          );
+          expect(tabSurface.color, host.theme.y300NativeContent.background);
+          expect(bar.labelColor, host.theme.y300NativeContent.accent);
+          expect(bar.unselectedLabelColor, host.theme.y300NativeContent.muted);
+          expect(bar.indicator, isA<NativePrimaryTabIndicator>());
           expect(find.text(l10n.profileBlogTitle), findsOneWidget);
           await _save(tester, '$name-list');
 

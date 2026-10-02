@@ -12,6 +12,7 @@ import 'package:y300/features/profile/presentation/blog/blog_detail_header.dart'
 import 'package:y300/features/profile/presentation/blog/blog_detail_metadata.dart';
 import 'package:y300/features/profile/presentation/blog/blog_history_visit_observer.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
+import 'package:y300/features/profile/presentation/blog/blog_scope_pager.dart';
 import 'package:y300/features/profile/presentation/blog/blog_text_tabs.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
@@ -127,104 +128,150 @@ class _ProfileBlogPageState extends ConsumerState<ProfileBlogPage> {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            if (widget.ownerUserId == null)
-              _ViewTabs(
-                activeScope: state.query.scope,
-                palette: palette,
-                onSelect: controller.selectScope,
+        body: widget.ownerUserId == null
+            ? BlogScopePager(
+                key: ObjectKey(controller),
+                selectedScope: state.query.scope,
+                onSelected: controller.selectScope,
+                pageBuilder: (context, scope) => _ProfileBlogFeedPage(
+                  controller: controller,
+                  state: controller.stateForScope(scope),
+                  imageReferer: referer,
+                  isActive: widget.isActive && state.query.scope == scope,
+                ),
+              )
+            : _ProfileBlogFeedPage(
+                controller: controller,
+                state: state,
+                imageReferer: referer,
+                isActive: widget.isActive,
               ),
-            if (state.query.scope == UserBlogFeedScope.public)
-              _OrderTabs(
-                activeOrder: state.query.order ?? UserBlogOrder.latest,
-                onSelect: controller.selectOrder,
-              ),
-            if (state.categories.isNotEmpty)
-              _CategoryFilter(
-                query: state.query,
-                categories: state.categories,
-                onSelect: controller.selectCategory,
-              ),
-            Expanded(
-              child: state.data != null
-                  ? RefreshIndicator(
-                      onRefresh: controller.refresh,
-                      child: _ProfileBlogListContent(
-                        key: ValueKey((
-                          controller.accountId,
-                          state.query.scope,
-                          state.query.order,
-                          state.query.ownerUserId,
-                          state.query.categoryId,
-                          state.query.personalCategoryId,
-                        )),
-                        state: state,
-                        accountId: controller.accountId,
-                        palette: palette,
-                        imageReferer: referer,
-                        onOpenBlog: (item) => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ProfileBlogDetailPage(
-                              ownerUserId: item.ownerUserId,
-                              blogId: item.blogId,
-                              initialTitle: item.title,
-                            ),
+      ),
+    );
+  }
+}
+
+class _ProfileBlogFeedPage extends ConsumerWidget {
+  const _ProfileBlogFeedPage({
+    required this.controller,
+    required this.state,
+    required this.imageReferer,
+    required this.isActive,
+  });
+
+  final ProfileBlogPageController controller;
+  final UserBlogDirectoryPageState state;
+  final String imageReferer;
+  final bool isActive;
+
+  // An outgoing page can still receive gestures during the swipe animation.
+  // Bind its actions to the query it displays, not the newly selected feed.
+  bool get _isCurrent => isActive && controller.value.query == state.query;
+
+  void _whenCurrent(VoidCallback action) {
+    if (_isCurrent) action();
+  }
+
+  Future<void> _refresh() => _isCurrent ? controller.refresh() : Future.value();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = Theme.of(context).y300NativeContent;
+    return Column(
+      children: [
+        if (state.query.scope == UserBlogFeedScope.public)
+          _OrderTabs(
+            activeOrder: state.query.order ?? UserBlogOrder.latest,
+            onSelect: (order) =>
+                _whenCurrent(() => controller.selectOrder(order)),
+          ),
+        if (state.categories.isNotEmpty)
+          _CategoryFilter(
+            query: state.query,
+            categories: state.categories,
+            onSelect: (category) =>
+                _whenCurrent(() => controller.selectCategory(category)),
+          ),
+        Expanded(
+          child: state.data != null
+              ? RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: _ProfileBlogListContent(
+                    key: ValueKey((
+                      controller.accountId,
+                      state.query.scope,
+                      state.query.order,
+                      state.query.ownerUserId,
+                      state.query.categoryId,
+                      state.query.personalCategoryId,
+                    )),
+                    state: state,
+                    accountId: controller.accountId,
+                    palette: palette,
+                    imageReferer: imageReferer,
+                    onOpenBlog: (item) => _whenCurrent(
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProfileBlogDetailPage(
+                            ownerUserId: item.ownerUserId,
+                            blogId: item.blogId,
+                            initialTitle: item.title,
                           ),
                         ),
-                        onLoadPreviousPage: controller.loadPreviousPage,
-                        onLoadNextPage: controller.loadNextPage,
-                        onSelectPage: (page) async {
-                          // Closing the picker must restore BlogReadView's
-                          // active route before the controller accepts a read.
-                          await WidgetsBinding.instance.endOfFrame;
-                          if (!mounted ||
-                              !context.mounted ||
-                              controller.value.query != state.query) {
-                            return;
-                          }
-                          await controller.loadPageNumber(page);
-                        },
-                        onAction: (item, action) =>
-                            action == UserBlogAction.edit
-                            ? openBlogEditorPage(
-                                context,
-                                ref,
-                                ownerUserId: item.ownerUserId,
-                                blogId: item.blogId,
-                              )
-                            : openBlogActionPage(
-                                context,
-                                ref,
-                                ownerUserId: item.ownerUserId,
-                                blogId: item.blogId,
-                                action: action,
-                              ),
-                      ),
-                    )
-                  : !widget.isActive
-                  ? const SizedBox.expand()
-                  : state.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _ProfileBlogError(
-                      error: state.failure,
-                      palette: palette,
-                      onRetry: controller.refresh,
-                      onLogin: () => Navigator.of(context).push<void>(
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                      ),
-                      onOpenWeb: () => openBlogWebPage(
-                        context,
-                        ref,
-                        expectedActor: ref.read(blogAccountIdProvider),
-                        destination: (navigation) =>
-                            navigation.directory(state.query),
                       ),
                     ),
-            ),
-          ],
+                    onLoadPreviousPage: () =>
+                        _whenCurrent(controller.loadPreviousPage),
+                    onLoadNextPage: () => _whenCurrent(controller.loadNextPage),
+                    onSelectPage: (page) async {
+                      // The picker must close before the active route can read.
+                      await WidgetsBinding.instance.endOfFrame;
+                      if (!context.mounted || !_isCurrent) return;
+                      await controller.loadPageNumber(page);
+                    },
+                    onAction: (item, action) => _whenCurrent(
+                      () => action == UserBlogAction.edit
+                          ? openBlogEditorPage(
+                              context,
+                              ref,
+                              ownerUserId: item.ownerUserId,
+                              blogId: item.blogId,
+                            )
+                          : openBlogActionPage(
+                              context,
+                              ref,
+                              ownerUserId: item.ownerUserId,
+                              blogId: item.blogId,
+                              action: action,
+                            ),
+                    ),
+                  ),
+                )
+              : !isActive
+              ? const SizedBox.expand()
+              : state.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _ProfileBlogError(
+                  error: state.failure,
+                  palette: palette,
+                  onRetry: _refresh,
+                  onLogin: () => _whenCurrent(
+                    () => Navigator.of(context).push<void>(
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                    ),
+                  ),
+                  onOpenWeb: () => _whenCurrent(
+                    () => openBlogWebPage(
+                      context,
+                      ref,
+                      expectedActor: ref.read(blogAccountIdProvider),
+                      destination: (navigation) =>
+                          navigation.directory(state.query),
+                    ),
+                  ),
+                ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -592,42 +639,6 @@ class _CategoryFilter extends ConsumerWidget {
   }
 }
 
-class _ViewTabs extends StatelessWidget {
-  const _ViewTabs({
-    required this.activeScope,
-    required this.palette,
-    required this.onSelect,
-  });
-
-  final UserBlogFeedScope activeScope;
-  final Y300NativeContentColors palette;
-  final ValueChanged<UserBlogFeedScope> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: palette.card,
-      child: Row(
-        key: const Key('profile-blog-view-tabs'),
-        children: [
-          for (final scope in UserBlogFeedScope.values)
-            Expanded(
-              child: _TabButton(
-                label: ProfileTextResolver.blogView(
-                  AppLocalizations.of(context),
-                  scope,
-                ),
-                selected: activeScope == scope,
-                palette: palette,
-                onTap: () => onSelect(scope),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _OrderTabs extends StatelessWidget {
   const _OrderTabs({required this.activeOrder, required this.onSelect});
 
@@ -650,56 +661,6 @@ class _OrderTabs extends StatelessWidget {
             description: ProfileTextResolver.blogOrder(l10n, order),
           ),
       ],
-    );
-  }
-}
-
-class _TabButton extends StatelessWidget {
-  const _TabButton({
-    required this.label,
-    required this.selected,
-    required this.palette,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final Y300NativeContentColors palette;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 13, 8, 11),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: selected ? palette.accent : palette.muted,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Container(
-                height: 2,
-                width: selected ? 28 : 0,
-                decoration: BoxDecoration(
-                  color: palette.accent,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

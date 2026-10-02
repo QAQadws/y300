@@ -28,6 +28,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_cont
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/native_primary_tab_bar.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_test_repository.dart';
@@ -70,12 +71,25 @@ void main() {
           await tester.pumpAndSettle();
           _expectSurfaces(tester, theme);
           final tabs = tester.widget<TabBar>(find.byType(TabBar));
-          final foreground = theme.appBarTheme.foregroundColor!;
-          expect(tabs.labelColor, foreground);
-          expect(tabs.unselectedLabelColor, foreground.withValues(alpha: 0.72));
-          expect(tabs.indicatorColor, foreground);
+          expect(tabs.labelColor, palette.accent);
+          expect(tabs.unselectedLabelColor, palette.muted);
+          expect(tabs.indicator, isA<NativePrimaryTabIndicator>());
           expect(
-            _contrast(foreground, theme.appBarTheme.backgroundColor!),
+            (tabs.indicator! as NativePrimaryTabIndicator).color,
+            palette.accent,
+          );
+          final tabBar = find.byKey(const Key('message-center-tabs'));
+          final tabSurface = tester.widget<Material>(
+            find.descendant(of: tabBar, matching: find.byType(Material)).first,
+          );
+          expect(tabSurface.color, palette.background);
+          expect(tester.getSize(tabBar).height, greaterThanOrEqualTo(48));
+          expect(
+            tester.getRect(tabBar).top,
+            tester.getRect(find.byType(AppBar)).bottom,
+          );
+          expect(
+            _contrast(palette.accent, palette.background),
             greaterThanOrEqualTo(4.5),
           );
           final badge = tester.widget<Badge>(find.byType(Badge).first);
@@ -90,6 +104,10 @@ void main() {
             const Size.square(40),
           );
           expect(tester.getRect(find.byType(MessageSurface).first).left, 10);
+          expect(
+            tester.getRect(find.byType(MessageSurface).first).top,
+            tester.getRect(tabBar).bottom + 8,
+          );
           final title = tester.widget<Text>(find.text('一起读书的朋友'));
           expect(title.style!.color, palette.itemTitle);
           await harness.capture('messages');
