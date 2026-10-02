@@ -200,20 +200,39 @@ void main() {
             expect(pill.iconColor, palette.softText);
             expect(pill.textColor, palette.muted);
           }
+          final metadata = find.byKey(const Key('blog-detail-categories'));
+          final metadataWrap = tester.widget<Wrap>(metadata);
+          final metadataRender = tester.renderObject<RenderWrap>(metadata);
+          final categoryGroup = find
+              .ancestor(of: category, matching: find.byType(Row))
+              .first;
+          final dateBounds = tester.getRect(date);
+          final categoryBounds = tester.getRect(category);
+          final metadataBounds = tester.getRect(metadata);
+          // The optional screenshot font and Ahem have different text widths.
+          // The long date/category fixture may wrap even at normal text size.
+          final fitsOnDateRow =
+              dateBounds.width +
+                  metadataWrap.spacing +
+                  tester.getSize(categoryGroup).width <=
+              metadataRender.constraints.maxWidth;
+          expect(
+            categoryBounds.left,
+            greaterThanOrEqualTo(metadataBounds.left),
+          );
+          expect(categoryBounds.right, lessThanOrEqualTo(metadataBounds.right));
+          if (fitsOnDateRow) {
+            expect(categoryBounds.center.dy, closeTo(dateBounds.center.dy, 1));
+            expect(categoryBounds.left, greaterThan(dateBounds.right));
+          } else {
+            expect(categoryBounds.top, greaterThanOrEqualTo(dateBounds.bottom));
+          }
           if (compact) {
-            expect(
-              tester.getTopLeft(category).dy,
-              greaterThan(tester.getBottomRight(date).dy),
-            );
             expect(
               tester.getTopLeft(views).dy,
               greaterThan(tester.getBottomRight(author).dy),
             );
           } else {
-            expect(
-              tester.getCenter(category).dy,
-              closeTo(tester.getCenter(date).dy, 1),
-            );
             expect(
               tester.getTopLeft(views).dy,
               closeTo(tester.getTopLeft(author).dy, 1),

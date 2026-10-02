@@ -71,6 +71,13 @@ class YamiboForumLinkResolver {
         kind: YamiboForumLinkKind.thread,
         uri: uri,
         tid: threadTid,
+        page:
+            _parsePositiveInt(uri.queryParameters['page']) ??
+            _parsePositiveInt(
+              RegExp(
+                r'thread-\d+-(\d+)-\d+\.html',
+              ).firstMatch(uri.path)?.group(1),
+            ),
       );
     }
 
@@ -82,6 +89,7 @@ class YamiboForumLinkResolver {
         kind: YamiboForumLinkKind.tagThreadPage,
         uri: Uri.parse(tagUrl),
         tagId: tagId,
+        page: _parsePositiveInt(uri.queryParameters['page']),
       );
     }
 

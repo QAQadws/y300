@@ -21,7 +21,7 @@ void main() {
   final loader = NovelPaginationHtmlFixtureLoader();
   for (final sample in novelPaginationHtmlFixtures) {
     test(
-      'real UTF-8 ${sample.title} fixture reaches the hybrid planner',
+      'synthetic UTF-8 ${sample.title} fixture reaches the hybrid planner',
       () async {
         final message = loader.loadFirstPostMessage(sample);
         final episode = NovelEpisodeItem(

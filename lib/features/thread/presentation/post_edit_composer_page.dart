@@ -12,6 +12,8 @@ import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_r
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_load_error_view.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_message_editor_surface.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_read_access_tile.dart';
+import 'package:y300/features/composer_shared/presentation/widgets/composer_settings_sheet.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_status_banner.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
@@ -121,6 +123,13 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
               ),
             ),
             IconButton(
+              key: const Key('post-edit-composer-more-button'),
+              tooltip: l10n.composerMoreSettings,
+              onPressed: state == null ? null : _showSettingsSheet,
+              style: composerAppBarActionStyle(context),
+              icon: const Icon(Icons.more_horiz),
+            ),
+            IconButton(
               key: const Key('post-edit-save-button'),
               tooltip: l10n.postEditSave,
               onPressed: state?.canSubmit == true
@@ -185,6 +194,49 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
     );
   }
 
+  void _showSettingsSheet() {
+    final provider = postEditComposerControllerProvider(widget.args);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final value = ref.watch(provider).value;
+          final notifier = ref.read(provider.notifier);
+          final l10n = AppLocalizations.of(context);
+          final enabled =
+              value != null &&
+              !value.isSubmitting &&
+              value.submitState == PostEditSubmitState.idle &&
+              value.webReturnVerificationState !=
+                  PostEditWebReturnVerificationState.verifying;
+          return ComposerSettingsSheet(
+            key: const Key('post-edit-composer-settings-sheet'),
+            title: l10n.composerMoreSettings,
+            children: [
+              if (value != null && value.target.isFirstPost)
+                ComposerReadAccessTile(
+                  key: const Key('post-edit-read-access'),
+                  access: value.snapshot.readAccess,
+                  selectedValue: value.minimumReadAccess,
+                  preservingExisting: true,
+                  enabled: enabled,
+                  onChanged: notifier.updateMinimumReadAccess,
+                ),
+              ComposerSettingsSwitchTile(
+                tileKey: const Key('post-edit-use-signature-switch'),
+                title: l10n.composerUseSignature,
+                value: value?.useSignature ?? false,
+                enabled: enabled,
+                onChanged: notifier.toggleUseSignature,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _submit(PostEditComposerController controller) async {
     final current = ref
         .read(postEditComposerControllerProvider(widget.args))
@@ -227,6 +279,7 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
       PostEditRouteResult(
         target: widget.args.target,
         outcome: PostEditRouteOutcome.saved,
+        readAccess: controller.lastReadAccessEvidence,
         serverMutationPossible: true,
       ),
     );

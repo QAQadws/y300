@@ -1,0 +1,331 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/features/messages/presentation/conversation_scroll_controller.dart';
+import 'package:y300/features/messages/presentation/message_feed_controller.dart';
+import 'package:y300/features/messages/presentation/message_feed_providers.dart';
+import 'package:y300/features/messages/presentation/conversation_message_presentation.dart';
+import 'package:y300/features/messages/presentation/widgets/conversation_message_tile.dart';
+import 'package:y300/features/messages/presentation/widgets/conversation_history_loader.dart';
+import 'package:y300/features/messages/presentation/widgets/conversation_scroll_view.dart';
+import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
+import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
+import 'package:y300/features/messages/presentation/widgets/private_message_editor.dart';
+import 'package:y300/l10n/app_localizations.dart';
+
+typedef MessageLinkOpener = void Function(BuildContext context, String url);
+
+class PrivateConversationPage extends ConsumerWidget {
+  const PrivateConversationPage({
+    super.key,
+    required this.target,
+    required this.onOpenLink,
+    this.title = '',
+  });
+  final ForumConversationTarget target;
+  final String title;
+  final MessageLinkOpener onOpenLink;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(messageAccountIdProvider);
+    final l10n = AppLocalizations.of(context);
+    final label = title.isNotEmpty
+        ? title
+        : target.kind == ForumConversationKind.group
+        ? l10n.messageGroup
+        : l10n.profilePrivateMessage;
+    if (account == null) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).y300NativeContent.background,
+        appBar: AppBar(title: Text(label)),
+        body: const MessageLoginPrompt(),
+      );
+    }
+    return _ConversationBody(
+      key: ValueKey((account, target)),
+      accountId: account,
+      target: target,
+      title: title,
+      onOpenLink: onOpenLink,
+    );
+  }
+}
+
+class _ConversationBody extends ConsumerStatefulWidget {
+  const _ConversationBody({
+    super.key,
+    required this.accountId,
+    required this.target,
+    required this.title,
+    required this.onOpenLink,
+  });
+  final String accountId;
+  final ForumConversationTarget target;
+  final String title;
+  final MessageLinkOpener onOpenLink;
+
+  @override
+  ConsumerState<_ConversationBody> createState() => _ConversationBodyState();
+}
+
+class _ConversationBodyState extends ConsumerState<_ConversationBody> {
+  final _timeline = GlobalKey<_ConversationTimelineState>();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = ref.watch(privateMessageFeedProvider(widget.target));
+    final imageReferer = ref.watch(forumImageRefererProvider);
+    final l10n = AppLocalizations.of(context);
+    return MessageFeedView(
+      controller: controller,
+      builder: (context, state) => Scaffold(
+        backgroundColor: Theme.of(context).y300NativeContent.background,
+        appBar: AppBar(
+          title: Text(
+            resolveConversationTitle(
+                  state.data?.items ?? const [],
+                  widget.target,
+                  widget.title,
+                ) ??
+                (widget.target.kind == ForumConversationKind.group
+                    ? l10n.messageGroup
+                    : l10n.profilePrivateMessage),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 840),
+            child: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                children: [
+                  if (state.failure != null &&
+                      state.failedOperation != MessageFeedOperation.more &&
+                      state.data != null)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: constraints.maxHeight * 0.25,
+                      ),
+                      child: SingleChildScrollView(
+                        child: MessageReadStatus(
+                          failure: state.failure,
+                          onRetry: controller.refresh,
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: state.data == null
+                        ? RefreshIndicator(
+                            onRefresh: controller.refresh,
+                            child: CustomScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(
+                                    child: MessageReadStatus(
+                                      failure: state.failure,
+                                      onRetry: controller.refresh,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _ConversationTimeline(
+                            key: _timeline,
+                            page: state.data!,
+                            accountId: widget.accountId,
+                            target: widget.target,
+                            controller: controller,
+                            imageReferer: imageReferer,
+                            onOpenLink: widget.onOpenLink,
+                          ),
+                  ),
+                  if (state.data != null)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: constraints.maxHeight * 0.55,
+                      ),
+                      child: PrivateMessageEditor(
+                        key: ValueKey((
+                          'conversation-editor',
+                          widget.accountId,
+                        )),
+                        accountId: widget.accountId,
+                        layout: PrivateMessageEditorLayout.conversation,
+                        recipient:
+                            widget.target.kind == ForumConversationKind.direct
+                            ? ForumPrivateMessageRecipient.user(
+                                widget.target.id,
+                              )
+                            : ForumPrivateMessageRecipient.group(
+                                conversationId: widget.target.id,
+                                replyMessageId: state.data!.replyMessageId,
+                              ),
+                        enabled:
+                            widget.target.kind ==
+                                ForumConversationKind.direct ||
+                            state.data!.replyMessageId.isNotEmpty,
+                        onApplied: (_) => _timeline.currentState?.showLatest(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationTimeline extends StatefulWidget {
+  const _ConversationTimeline({
+    super.key,
+    required this.page,
+    required this.accountId,
+    required this.target,
+    required this.controller,
+    required this.imageReferer,
+    required this.onOpenLink,
+  });
+  final ForumPrivateMessagePage page;
+  final String accountId;
+  final ForumConversationTarget target;
+  final MessageFeedController<ForumPrivateMessagePage> controller;
+  final String imageReferer;
+  final MessageLinkOpener onOpenLink;
+
+  @override
+  State<_ConversationTimeline> createState() => _ConversationTimelineState();
+}
+
+class _ConversationTimelineState extends State<_ConversationTimeline> {
+  final _scroll = ConversationScrollController();
+  final _center = GlobalKey();
+  String? _anchor;
+
+  @override
+  void initState() {
+    super.initState();
+    _anchor = widget.page.items.lastOrNull?.messageId;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConversationTimeline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.page.items.any((item) => item.messageId == _anchor)) {
+      _anchor = widget.page.items.lastOrNull?.messageId;
+      showLatest();
+    }
+  }
+
+  void showLatest() => _scroll.showLatest();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.page.items;
+    if (items.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: widget.controller.refresh,
+        child: ConversationScrollView(
+          key: const Key('private-conversation-list'),
+          controller: _scroll,
+          center: _center,
+          slivers: [
+            SliverFillRemaining(
+              key: _center,
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    AppLocalizations.of(context).profileNoMessages,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).y300NativeContent.supportingText,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final presentations = deriveConversationMessagePresentations(items);
+    final split = items.indexWhere((item) => item.messageId == _anchor) + 1;
+    final history = presentations.take(split).toList().reversed.toList();
+    final newer = presentations.skip(split).toList();
+    Widget bubble(ConversationMessagePresentation presentation) =>
+        ConversationMessageTile(
+          key: ValueKey(presentation.item.messageId),
+          presentation: presentation,
+          accountId: widget.accountId,
+          target: widget.target,
+          imageReferer: widget.imageReferer,
+          onOpenLink: widget.onOpenLink,
+        );
+    // A stable center separates older and newer messages. Both ends may grow
+    // without moving the content the user is currently reading, even for HTML
+    // rows of different heights. Avoid estimated scroll-offset corrections.
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: widget.controller.refresh,
+          child: ConversationHistoryLoader(
+            controller: widget.controller,
+            child: ConversationScrollView(
+              key: const Key('private-conversation-list'),
+              controller: _scroll,
+              center: _center,
+              slivers: [
+                SliverList.builder(
+                  itemCount: newer.length,
+                  itemBuilder: (_, index) => bubble(newer[index]),
+                ),
+                SliverList.builder(
+                  key: _center,
+                  itemCount:
+                      history.length + (widget.controller.hasMore ? 1 : 0),
+                  itemBuilder: (context, index) => index < history.length
+                      ? bubble(history[index])
+                      : ConversationHistoryEntry(
+                          key: const Key('conversation-history-entry'),
+                          controller: widget.controller,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned.directional(
+          textDirection: Directionality.of(context),
+          end: 12,
+          bottom: 8,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _scroll.followingLatest,
+            builder: (context, following, _) => following
+                ? const SizedBox.shrink()
+                : FilledButton.tonalIcon(
+                    onPressed: showLatest,
+                    icon: const Icon(Icons.arrow_downward, size: 18),
+                    label: Text(AppLocalizations.of(context).messageLatest),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}

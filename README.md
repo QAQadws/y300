@@ -32,7 +32,7 @@ y300-v<version>-android-arm64-v8a-release.apk
 
 ## 本地开发
 
-环境要求：最新版 Flutter stable、JDK 17 和 Android SDK。具体 SDK 兼容范围以 [`pubspec.yaml`](./pubspec.yaml) 为准。
+环境要求：Flutter 3.44.4（与 CI 一致）、JDK 17 和 Android SDK。具体 SDK 兼容范围以 [`pubspec.yaml`](./pubspec.yaml) 为准。
 
 ```bash
 git clone https://github.com/QAQadws/y300.git
@@ -44,13 +44,19 @@ flutter run
 检查与构建：
 
 ```bash
-dart format .
+dart format <本次修改的Dart文件>
 flutter test
 flutter analyze
 flutter build apk --release --target-platform android-arm64
 ```
 
 公开分发前请配置自己的 release keystore，不要提交签名文件、密码、账号凭据或包含认证信息的日志
+
+## CI
+
+面向 `main` 的 PR、`main` push 和手动运行会触发 `.github/workflows/ci.yml`。一个 Job 使用 Flutter 3.44.4 和 Ubuntu 24.04，执行 App 与协议包的静态分析和全部测试；依赖来源沿用现有锁文件的镜像配置。测试样本随仓库提交，不依赖本地 `docs/html` 或签名资料。
+
+原有 `Android arm64 release` 手动 APK 构建入口保持独立。CI 只执行检查，GitHub 与 Gitee Release 由维护者手动创建。
 
 ## 设计参考
 

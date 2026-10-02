@@ -1,23 +1,19 @@
+import 'package:y300/features/thread/presentation/services/thread_post_navigation.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
-import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
-import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_diagnostic_recorder.dart';
@@ -25,48 +21,34 @@ import 'package:y300/features/history/domain/services/history_visit_recorder.dar
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
-import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/data/services/thread_post_locator.dart';
-import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/models/post_edit_models.dart';
-import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
-import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
-import 'package:y300/features/thread/domain/services/thread_floor_link_builder.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
-import 'package:y300/features/thread/domain/services/post_edit_target_parser.dart';
+import 'package:y300/features/thread/presentation/thread_post_comment_projection_provider.dart';
 import 'package:y300/features/thread/presentation/thread_content_projection_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projector.dart';
-import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/mappers/thread_history_visit_mapper.dart';
 import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_prewarmer.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
-import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
-import 'package:y300/features/thread/presentation/post_edit_composer_page.dart';
-import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
-import 'package:y300/features/thread/presentation/post_edit_native_entry_gate.dart';
-import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
-import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_button.dart';
+import 'package:y300/features/thread/domain/models/thread_quick_scroll_dock_side.dart';
+import 'package:y300/features/thread/presentation/thread_quick_scroll_preferences_controller.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_quick_scroll_dock.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_quick_scroll_dock_location.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
-import 'package:y300/shared/widgets/forum_content_action_sheet.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
 
@@ -77,13 +59,21 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.subject = '',
     this.initialPage,
     this.targetPid,
+    this.initialHandoff,
+    this.landing = ThreadPostLanding.top,
     this.initialForumName,
-  });
+  }) : assert(
+         landing == ThreadPostLanding.top ||
+             (targetPid != null && targetPid != ''),
+         'A body-end landing requires a target post.',
+       );
 
   final String tid;
   final String subject;
   final int? initialPage;
   final String? targetPid;
+  final ThreadDetailHandoff? initialHandoff;
+  final ThreadPostLanding landing;
   final String? initialForumName;
 
   @override
@@ -93,9 +83,9 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   late final ScrollController _scrollController;
   late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
-  final ThreadFloorLinkBuilder _floorLinkBuilder = ThreadFloorLinkBuilder();
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
+  bool _targetHighlightStarted = false;
   String? _latestImageReferer;
   bool _quickScrollMetricsSyncScheduled = false;
 
@@ -107,6 +97,8 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   final ThreadHistoryCommitGuard _historyCommitGuard =
       ThreadHistoryCommitGuard();
   bool _didReportHistoryDuplicate = false;
+  bool _postActionActive = false;
+  final _postRouteSession = ThreadPostNavigationSession();
 
   @override
   void initState() {
@@ -115,19 +107,30 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     _quickScrollCoordinator = ThreadDetailQuickScrollCoordinator(
       scrollController: _scrollController,
     );
-    _activateTargetHighlight(widget.targetPid);
   }
 
   @override
   void didUpdateWidget(covariant ThreadDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.targetPid?.trim() != widget.targetPid?.trim()) {
-      _activateTargetHighlight(widget.targetPid);
+    if (oldWidget.tid != widget.tid ||
+        oldWidget.targetPid != widget.targetPid ||
+        oldWidget.initialPage != widget.initialPage ||
+        !identical(oldWidget.initialHandoff, widget.initialHandoff) ||
+        oldWidget.landing != widget.landing) {
+      _postRouteSession.invalidate();
+    }
+    if (oldWidget.tid != widget.tid ||
+        oldWidget.targetPid?.trim() != widget.targetPid?.trim() ||
+        oldWidget.landing != widget.landing) {
+      _highlightClearTimer?.cancel();
+      _highlightPostPid = null;
+      _targetHighlightStarted = false;
     }
   }
 
   @override
   void dispose() {
+    _postRouteSession.dispose();
     _highlightClearTimer?.cancel();
     _quickScrollCoordinator.dispose();
     _scrollController.dispose();
@@ -143,6 +146,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       subject: widget.subject,
       initialPage: widget.initialPage,
       targetPid: widget.targetPid,
+      initialHandoff: widget.initialHandoff,
     );
     final asyncState = ref.watch(threadDetailControllerProvider(args));
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
@@ -160,6 +164,13 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       converterId: converter.id,
       candidate: projectionCandidate,
     );
+    final extraCommentProjection = ref
+        .watch(threadPostCommentProjectionProvider(args))
+        .value;
+    final extraComments =
+        extraCommentProjection?.matches(state.commentsByPostId) == true
+        ? extraCommentProjection!.displayLists
+        : const <String, List<ThreadPostCommentEntry>>{};
     final imageReferer = ref.watch(
       forumImageRefererForSourceProvider(_imageRefererFor(state)),
     );
@@ -185,6 +196,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       },
     );
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    final quickScrollSide =
+        ref.watch(threadQuickScrollPreferencesControllerProvider).value ??
+        ThreadQuickScrollDockSide.right;
     _schedulePrewarmImageDimensions(state);
     if (state.posts.isNotEmpty) {
       _scheduleQuickScrollMetricsSync();
@@ -293,15 +307,30 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                                 state.loadFailure!.detail,
                               ),
                         onRetry: controller.refresh,
+                        onOpenHome: widget.targetPid == null
+                            ? null
+                            : () {
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ThreadDetailPage(
+                                      tid: widget.tid,
+                                      subject: widget.subject,
+                                    ),
+                                  ),
+                                );
+                              },
                       )
                     : ForumPullToRefresh(
                         onRefresh: () => controller.refresh(forceNetwork: true),
                         child: ThreadDetailContent(
                           state: state,
                           projection: projection,
+                          displayExtraCommentsByPostId: extraComments,
                           scrollController: _scrollController,
                           highlightPostPid: _highlightPostPid,
                           targetPid: widget.targetPid,
+                          landing: widget.landing,
+                          onTargetVisible: _onTargetVisible,
                           imageReferer: _imageRefererFor(state),
                           imageDimensionStore: _imageDimensionStore,
                           onLoadPreviousPage: () {
@@ -347,6 +376,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                           onTogglePollOption: controller.togglePollOption,
                           onSubmitPollVote: controller.submitPollVote,
                           onLoadAllRatings: controller.loadAllRatings,
+                          onLoadMoreComments: controller.loadMoreComments,
                         ),
                       ),
               ),
@@ -356,14 +386,17 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: ThreadDetailQuickScrollButton(
+        child: ThreadDetailQuickScrollDock(
           coordinator: _quickScrollCoordinator,
           hasContent: state.posts.isNotEmpty,
           backgroundColor: palette.cardElevated,
           foregroundColor: palette.title,
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButtonLocation: ThreadQuickScrollDockLocation(
+        quickScrollSide,
+      ),
+      floatingActionButtonAnimator: FloatingActionButtonAnimator.noAnimation,
     );
   }
 
@@ -556,185 +589,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     await _handleReplyComposerResult(args, result);
   }
 
-  Future<void> _openPostReplyComposer(
-    ThreadDetailArgs args,
-    ThreadDetailPageState state,
-    ThreadPost post,
-  ) async {
-    final replyUrl = post.replyUrl?.trim();
-    final fid = state.fid.trim();
-    final tid = state.tid.trim();
-    if (replyUrl == null || replyUrl.isEmpty || fid.isEmpty || tid.isEmpty) {
-      await _copyUrl(
-        AppLocalizations.of(context).threadDetailReplyLink,
-        post.replyUrl ?? '',
-      );
-      return;
-    }
-    final replyFormUri = Uri.tryParse(replyUrl);
-    if (replyFormUri == null) {
-      await _copyUrl(
-        AppLocalizations.of(context).threadDetailReplyLink,
-        replyUrl,
-      );
-      return;
-    }
-    final result = await Navigator.of(context).push<ReplyComposerResult>(
-      MaterialPageRoute<ReplyComposerResult>(
-        builder: (_) => ReplyComposerPage(
-          args: ReplyComposerArgs(
-            target: ReplyTarget.post(
-              fid: fid,
-              tid: tid,
-              pid: post.pid,
-              sourceUri: replyFormUri,
-            ),
-            replyFormUri: replyFormUri,
-          ),
-        ),
-      ),
-    );
-    await _handleReplyComposerResult(args, result);
-  }
-
-  Future<void> _openPostRateSheet(
-    ThreadDetailArgs args,
-    ThreadDetailController controller,
-    ThreadPost post,
-  ) async {
-    final formResult = await controller.loadRateForm(post);
-    if (!mounted) {
-      return;
-    }
-    if (formResult
-        case DataReadFailure<ThreadPostRateForm, ThreadPostRatingCapabilities>(
-          :final kind,
-        )) {
-      _showActionFailure(
-        ThreadActionFailure(
-          code: kind == DataReadFailureKind.unauthorized
-              ? ThreadUiErrorCode.loginRequired
-              : ThreadUiErrorCode.rateFailed,
-          action: ThreadActionKind.rate,
-        ),
-      );
-      return;
-    }
-    final form =
-        (formResult
-                as DataReadSuccess<
-                  ThreadPostRateForm,
-                  ThreadPostRatingCapabilities
-                >)
-            .data;
-    final conversionMode = ref.read(appServerContentConversionModeProvider);
-    final converter = ref.read(textConverterProvider(conversionMode));
-    final formProjection = await ThreadPostRateFormProjector(
-      plainTextBatchConversionService: ref.read(
-        plainTextBatchConversionServiceProvider,
-      ),
-    ).project(form, converter: converter);
-    if (!mounted) {
-      return;
-    }
-    final result = await showModalBottomSheet<ThreadPostRateDraft>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => ThreadPostRateSheet(projection: formProjection),
-    );
-    if (!mounted || result == null) {
-      return;
-    }
-    final submitResult = await ref
-        .read(threadDetailControllerProvider(args).notifier)
-        .submitPostRate(result);
-    if (!mounted) {
-      return;
-    }
-    switch (submitResult) {
-      case DataCommandApplied<ThreadPostRatingReceipt>():
-        _showActionNotice(
-          const ThreadActionNotice(
-            code: ThreadActionNoticeCode.success,
-            action: ThreadActionKind.rate,
-          ),
-        );
-      case final DataCommandResult<ThreadPostRatingReceipt> failure:
-        _showActionNotice(
-          ThreadActionNotice(
-            code: _noticeCodeForCommandResult(failure),
-            action: ThreadActionKind.rate,
-            commandFailure: failure.failureOrNull,
-          ),
-        );
-    }
-  }
-
-  Future<void> _openPostCommentSheet(
-    ThreadDetailArgs args,
-    ThreadDetailController controller,
-    ThreadPost post,
-  ) async {
-    final formResult = await controller.loadCommentForm(post);
-    if (!mounted) {
-      return;
-    }
-    if (formResult case DataReadFailure<
-      ThreadPostCommentForm,
-      ThreadPostCommentCapabilities
-    >(
-      :final kind,
-    )) {
-      _showActionFailure(
-        ThreadActionFailure(
-          code: kind == DataReadFailureKind.unauthorized
-              ? ThreadUiErrorCode.loginRequired
-              : ThreadUiErrorCode.commentFailed,
-          action: ThreadActionKind.comment,
-        ),
-      );
-      return;
-    }
-    final form =
-        (formResult
-                as DataReadSuccess<
-                  ThreadPostCommentForm,
-                  ThreadPostCommentCapabilities
-                >)
-            .data;
-    final result = await showModalBottomSheet<ThreadPostCommentDraft>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => ThreadPostCommentSheet(form: form),
-    );
-    if (!mounted || result == null) {
-      return;
-    }
-    final submitResult = await ref
-        .read(threadDetailControllerProvider(args).notifier)
-        .submitPostComment(result);
-    if (!mounted) {
-      return;
-    }
-    switch (submitResult) {
-      case DataCommandApplied<ThreadPostCommentReceipt>():
-        _showActionNotice(
-          const ThreadActionNotice(
-            code: ThreadActionNoticeCode.success,
-            action: ThreadActionKind.comment,
-          ),
-        );
-      case final DataCommandResult<ThreadPostCommentReceipt> failure:
-        _showActionNotice(
-          ThreadActionNotice(
-            code: _noticeCodeForCommandResult(failure),
-            action: ThreadActionKind.comment,
-            commandFailure: failure.failureOrNull,
-          ),
-        );
-    }
-  }
-
   Future<void> _handleReplyComposerResult(
     ThreadDetailArgs args,
     ReplyComposerResult? result,
@@ -810,24 +664,16 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         .toString();
   }
 
-  void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) {
-    final readerRequest = request.readerRequest;
-    if (readerRequest == null || readerRequest.continuousImages.isEmpty) {
-      _copyUrl(
-        '${post.number}# ${AppLocalizations.of(context).threadDetailImageLink}',
-        request.image.url,
-      );
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ThreadImageReaderPage(
-          request: readerRequest,
-          imageReferer: _latestImageReferer,
-        ),
-      ),
-    );
-  }
+  ThreadPostNavigation get _postNavigation => ThreadPostNavigation(
+    routeSession: _postRouteSession,
+    context: context,
+    ref: ref,
+    tid: widget.tid,
+    imageReferer: _latestImageReferer,
+    isCurrent: () => mounted,
+  );
+  void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) =>
+      _postNavigation.openImages(post, request);
 
   Future<void> _openPostActions(
     ThreadDetailArgs args,
@@ -837,249 +683,48 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ThreadPost displayPost,
     ThreadPostBodyRenderPlan plan,
   ) async {
-    final editTarget = state.supports(ThreadDetailCapability.editAction)
-        ? _resolvePostEditTarget(sourcePost, state)
-        : null;
-    final action = await showModalBottomSheet<_ThreadPostAction>(
-      context: context,
-      builder: (context) => _ThreadPostActionSheet(
-        post: sourcePost,
-        editUri: editTarget?.editUri,
-        capabilities: state.capabilities,
-      ),
-    );
-    if (!mounted || action == null) {
-      return;
-    }
-    switch (action) {
-      case _ThreadPostAction.edit:
-        if (editTarget != null) {
-          await _openPostEdit(controller, editTarget);
-        }
-        return;
-      case _ThreadPostAction.reply:
-        await _openPostReplyComposer(args, state, sourcePost);
-        return;
-      case _ThreadPostAction.rate:
-        await _openPostRateSheet(args, controller, sourcePost);
-        return;
-      case _ThreadPostAction.comment:
-        await _openPostCommentSheet(args, controller, sourcePost);
-        return;
-      case _ThreadPostAction.selectCopy:
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => ThreadPostHtmlSelectionCopyPage(
-              post: displayPost,
-              sourcePost: sourcePost,
-              threadId: widget.tid,
-              imageReferer: _imageRefererFor(state),
-              plan: plan,
-              onOpenPostLink: _openForumLink,
-              onOpenPostImage: _openPostImages,
-              onImageFallback: _copyHtmlFirstImageUrl,
-            ),
-          ),
-        );
-        return;
-      case _ThreadPostAction.copyAll:
-        await _copyPostPlainText(sourcePost, plan);
-        return;
-      case _ThreadPostAction.copyFloorLink:
-        await _copyFloorLink(sourcePost);
-        return;
-    }
-  }
-
-  PostEditTarget? _resolvePostEditTarget(
-    ThreadPost post,
-    ThreadDetailPageState state,
-  ) {
-    final result = ref
-        .read(postEditTargetParserProvider)
-        .parse(
-          rawUrl: post.editUrl ?? '',
-          currentTid: state.tid.isNotEmpty ? state.tid : widget.tid,
-          currentPid: post.pid,
-          currentFid: state.fid,
-          currentPage: state.currentPage,
-          isFirstPost: post.isFirst,
-        );
-    return result.target;
-  }
-
-  Future<void> _openPostEdit(
-    ThreadDetailController controller,
-    PostEditTarget target,
-  ) async {
-    final nativeEnabled = ref.read(postEditNativeEntryGateProvider);
-    if (!nativeEnabled) {
-      final routeResult = await _openPostEditFallback(target);
-      if (routeResult?.serverMutationPossible == true && mounted) {
-        await controller.refreshAfterMutation();
-      }
-      return;
-    }
-
-    ThreadPostEditPreparation? preparation;
+    if (_postActionActive) return;
+    _postActionActive = true;
+    final invalidation = ref.read(nativePageCacheInvalidationServiceProvider);
     try {
-      // Opening an editor is an explicit freshness boundary. Do not rely on
-      // auto-dispose timing when the same post is reopened quickly.
-      ref.invalidate(postEditPreparationProvider(target));
-      final result = await ref.read(postEditPreparationProvider(target).future);
-      if (result case DataReadSuccess<
-        ThreadPostEditPreparation,
-        ThreadPostEditCapabilities
-      >(
-        :final data,
-      )) {
-        preparation = data;
-      }
-    } catch (_) {
-      // A failed preparation remains safely recoverable through WebView.
-    }
-    if (!mounted) {
-      return;
-    }
-    if (preparation == null) {
-      final routeResult = await _openPostEditFallback(target);
-      if (routeResult?.serverMutationPossible == true && mounted) {
-        await controller.refreshAfterMutation();
-      }
-      return;
-    }
-
-    final result = await Navigator.of(context).push<Object?>(
-      MaterialPageRoute<Object?>(
-        builder: (_) => PostEditComposerPage(
-          args: PostEditComposerArgs(target: target, preparation: preparation!),
+      final mutation = await ThreadPostActions(
+        context: context,
+        ref: ref,
+        target: ThreadPostActionContext(
+          tid: args.tid,
+          fid: state.fid,
+          subject: state.subject,
+          page: state.currentPage,
+          capabilities: state.capabilities,
+          sourceUri: Uri.tryParse(_threadUrlForCopy(state)),
         ),
-      ),
-    );
-    if (!mounted) {
+        imageReferer: _imageRefererFor(state),
+        isCurrent: () => mounted && widget.tid == args.tid,
+      ).show(sourcePost: sourcePost, displayPost: displayPost, plan: plan);
+      if (mutation == null) return;
+      try {
+        await invalidation.invalidateThread(args.tid);
+      } catch (_) {
+        // A confirmed write remains valid if cache maintenance fails.
+      }
+      if (mounted && widget.tid == args.tid) await controller.refresh();
+    } finally {
+      _postActionActive = false;
+    }
+  }
+
+  void _openAuthorProfile(ThreadPost post) => _postNavigation.openAuthor(post);
+  void _openCommentAuthorProfile(ThreadPostCommentEntry comment) =>
+      _postNavigation.openCommentAuthor(comment);
+
+  void _onTargetVisible(String pid) {
+    if (!mounted ||
+        _targetHighlightStarted ||
+        widget.targetPid?.trim() != pid) {
       return;
     }
-    if (result is PostEditRouteResult && result.serverMutationPossible) {
-      await controller.refreshAfterMutation();
-    }
-  }
-
-  Future<ForumWebViewRouteResult?> _openPostEditFallback(
-    PostEditTarget target,
-  ) async {
-    final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
-    final result = await Navigator.of(context).push<Object?>(
-      routeFactory(
-        ForumWebViewLaunchConfig(
-          initialUri: target.editUri,
-          popOnRootBack: true,
-          purpose: ForumWebViewHostPurpose.postEditFallback,
-          completionTarget: ForumWebViewCompletionTarget(
-            tid: target.tid,
-            pid: target.pid,
-          ),
-        ),
-      ),
-    );
-    return result is ForumWebViewRouteResult ? result : null;
-  }
-
-  Future<void> _copyFloorLink(ThreadPost sourcePost) async {
-    final authSession = ref.read(authSessionControllerProvider).asData?.value;
-    final link = _floorLinkBuilder.build(
-      tid: widget.tid,
-      pid: sourcePost.pid,
-      fromUid: authSession?.isLoggedIn == true ? authSession?.uid : null,
-    );
-    if (link == null) {
-      _showSnackBar(
-        AppLocalizations.of(context).threadDetailCopyFloorLinkFailed,
-      );
-      return;
-    }
-    await _copyUrl(
-      AppLocalizations.of(context).threadDetailFloorLink,
-      link.toString(),
-    );
-  }
-
-  Future<void> _copyPostPlainText(
-    ThreadPost post,
-    ThreadPostBodyRenderPlan plan,
-  ) {
-    final text = const ThreadPostBodyPlainTextExtractor().extract(
-      plan.document,
-    );
-    return _copyUrl(
-      '${post.number}# ${AppLocalizations.of(context).threadDetailPostBody}',
-      text,
-    );
-  }
-
-  void _copyHtmlFirstImageUrl(ThreadPost post, ForumHtmlImageRequest request) {
-    _copyUrl(
-      '${post.number}# ${AppLocalizations.of(context).threadDetailImageLink}',
-      request.url,
-    );
-  }
-
-  void _openAuthorProfile(ThreadPost post) {
-    final uid = post.authorId.trim();
-    if (uid.isEmpty) {
-      _showSnackBar(AppLocalizations.of(context).threadDetailUidMissing);
-      return;
-    }
-    _openManagedWebView(_authorProfileUri(uid));
-  }
-
-  void _openCommentAuthorProfile(ThreadPostCommentEntry comment) {
-    final uid = _commentAuthorUid(comment);
-    if (uid == null || uid.isEmpty) {
-      _showSnackBar(AppLocalizations.of(context).threadDetailUidMissing);
-      return;
-    }
-    _openManagedWebView(_authorProfileUri(uid));
-  }
-
-  String? _commentAuthorUid(ThreadPostCommentEntry comment) {
-    final authorId = comment.authorId?.trim();
-    if (authorId != null && authorId.isNotEmpty) {
-      return authorId;
-    }
-    final authorUrl = comment.authorUrl?.trim();
-    if (authorUrl == null || authorUrl.isEmpty) {
-      return null;
-    }
-    final uri = Uri.tryParse(authorUrl);
-    final uid = uri?.queryParameters['uid']?.trim();
-    if (uid != null && uid.isNotEmpty) {
-      return uid;
-    }
-    final match = RegExp(
-      r'space-uid-(\d+)',
-      caseSensitive: false,
-    ).firstMatch(authorUrl);
-    return match?.group(1);
-  }
-
-  Uri _authorProfileUri(String uid) {
-    return Uri.parse(AppConfig.siteBaseUrl).replace(
-      path: '/home.php',
-      queryParameters: <String, String>{
-        'mod': 'space',
-        'uid': uid,
-        'mobile': '2',
-      },
-    );
-  }
-
-  void _activateTargetHighlight(String? rawPid) {
-    _highlightClearTimer?.cancel();
-    final pid = rawPid?.trim();
-    _highlightPostPid = pid == null || pid.isEmpty ? null : pid;
-    if (_highlightPostPid == null) {
-      return;
-    }
+    _targetHighlightStarted = true;
+    setState(() => _highlightPostPid = pid);
     _highlightClearTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted && _highlightPostPid == pid) {
         setState(() => _highlightPostPid = null);
@@ -1087,127 +732,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     });
   }
 
-  void _openForumLink(String url) {
-    final destination = const YamiboForumLinkResolver().resolve(url);
-    if (destination == null) {
-      _copyUrl(AppLocalizations.of(context).threadDetailCopyLink, url);
-      return;
-    }
-    switch (destination.kind) {
-      case YamiboForumLinkKind.thread:
-        final tid = destination.tid;
-        if (tid == null || tid.isEmpty) {
-          _copyUrl(
-            AppLocalizations.of(context).threadDetailPostLink,
-            destination.uri.toString(),
-          );
-          return;
-        }
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => ThreadDetailPage(tid: tid)),
-        );
-        return;
-      case YamiboForumLinkKind.threadPost:
-        _openThreadPost(destination);
-        return;
-      case YamiboForumLinkKind.tagThreadPage:
-        final tagId = destination.tagId;
-        if (tagId == null || tagId.isEmpty) {
-          _copyUrl(
-            AppLocalizations.of(context).threadDetailExternalLink,
-            destination.uri.toString(),
-          );
-          return;
-        }
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) =>
-                YamiboTagThreadPage(tagId: tagId, page: destination.page ?? 1),
-          ),
-        );
-        return;
-      case YamiboForumLinkKind.managedWebView:
-        _openManagedWebView(destination.uri);
-        return;
-      case YamiboForumLinkKind.external:
-        _copyUrl(
-          AppLocalizations.of(context).threadDetailExternalLink,
-          destination.uri.toString(),
-        );
-        return;
-    }
-  }
-
-  Future<void> _openThreadPost(YamiboForumLinkDestination destination) async {
-    final tid = destination.tid?.trim();
-    final pid = destination.pid?.trim();
-    if (tid == null || tid.isEmpty || pid == null || pid.isEmpty) {
-      _copyUrl(
-        AppLocalizations.of(context).threadDetailFloorLink,
-        destination.uri.toString(),
-      );
-      return;
-    }
-    final directPage = destination.page;
-    if (directPage != null && directPage > 0) {
-      _pushThreadPost(tid: tid, page: directPage, pid: pid);
-      return;
-    }
-    final result = await ref
-        .read(threadPostLocatorProvider)
-        .locate(tid: tid, pid: pid, sourceUri: destination.uri);
-    if (!mounted) {
-      return;
-    }
-    if (result case ApiSuccess<ThreadPostLocation>(:final data)) {
-      _pushThreadPost(tid: data.tid, page: data.page, pid: data.pid);
-      return;
-    }
-    _showSnackBar(AppLocalizations.of(context).threadDetailFloorLocatorFailed);
-    _pushThreadPost(tid: tid, page: 1, pid: pid);
-  }
-
-  void _pushThreadPost({
-    required String tid,
-    required int page,
-    required String pid,
-  }) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            ThreadDetailPage(tid: tid, initialPage: page, targetPid: pid),
-      ),
-    );
-  }
-
-  void _openManagedWebView(Uri uri) {
-    final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
-    Navigator.of(context).push(
-      routeFactory(
-        ForumWebViewLaunchConfig(initialUri: uri, popOnRootBack: true),
-      ),
-    );
-  }
-
-  Future<void> _copyUrl(String label, String url) async {
-    final value = url.trim();
-    if (value.isEmpty) {
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: value));
-    if (!mounted) {
-      return;
-    }
-    _showSnackBar(
-      ThreadTextResolver.copySuccess(AppLocalizations.of(context), label),
-    );
-  }
-
-  void _showActionFailure(ThreadActionFailure failure) {
-    _showSnackBar(
-      ThreadTextResolver.actionFailure(AppLocalizations.of(context), failure),
-    );
-  }
+  void _openForumLink(String url) => _postNavigation.openLink(url);
+  Future<void> _copyUrl(String label, String url) =>
+      _postNavigation.copyUrl(label, url);
 
   void _showActionNotice(ThreadActionNotice notice) {
     _showSnackBar(
@@ -1348,100 +875,18 @@ class _ThreadDetailMoreMenu extends StatelessWidget {
   }
 }
 
-enum _ThreadPostAction {
-  edit,
-  reply,
-  rate,
-  comment,
-  selectCopy,
-  copyAll,
-  copyFloorLink,
-}
-
-class _ThreadPostActionSheet extends StatelessWidget {
-  const _ThreadPostActionSheet({
-    required this.post,
-    required this.editUri,
-    required this.capabilities,
-  });
-
-  final ThreadPost post;
-  final Uri? editUri;
-  final ThreadDetailReadCapabilities? capabilities;
-
-  bool _supports(ThreadDetailCapability capability) {
-    return capabilities?.supports(capability) ?? false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return ForumContentActionSheet<_ThreadPostAction>(
-      key: const Key('thread-post-action-sheet'),
-      actions: [
-        if (editUri != null)
-          ForumContentAction(
-            key: const Key('thread-post-edit-action'),
-            value: _ThreadPostAction.edit,
-            icon: Icons.edit_outlined,
-            label: l10n.threadDetailEdit,
-          ),
-        if (_supports(ThreadDetailCapability.replyAction))
-          ForumContentAction(
-            key: const Key('thread-post-reply-action'),
-            value: _ThreadPostAction.reply,
-            icon: Icons.reply_outlined,
-            label: l10n.threadDetailReply,
-          ),
-        if (_supports(ThreadDetailCapability.ratingAction) &&
-            post.rateUrl?.trim().isNotEmpty == true)
-          ForumContentAction(
-            key: const Key('thread-post-rate-action'),
-            value: _ThreadPostAction.rate,
-            icon: Icons.favorite_border,
-            label: l10n.threadRatingTitle,
-          ),
-        if (_supports(ThreadDetailCapability.commentAction) &&
-            post.commentUrl?.trim().isNotEmpty == true)
-          ForumContentAction(
-            key: const Key('thread-post-comment-action'),
-            value: _ThreadPostAction.comment,
-            icon: Icons.chat_bubble_outline,
-            label: l10n.threadCommentTitle,
-          ),
-        ForumContentAction(
-          key: const Key('thread-post-select-copy-action'),
-          value: _ThreadPostAction.selectCopy,
-          icon: Icons.text_fields,
-          label: l10n.threadDetailSelectCopy,
-        ),
-        ForumContentAction(
-          key: const Key('thread-post-copy-all-action'),
-          value: _ThreadPostAction.copyAll,
-          icon: Icons.copy_all_outlined,
-          label: l10n.threadDetailCopyAll,
-        ),
-        ForumContentAction(
-          key: const Key('thread-post-copy-floor-link-action'),
-          value: _ThreadPostAction.copyFloorLink,
-          icon: Icons.link_outlined,
-          label: l10n.threadDetailCopyFloorLink,
-        ),
-      ],
-    );
-  }
-}
-
 class _ThreadErrorView extends StatelessWidget {
   const _ThreadErrorView({
     required this.subject,
     required this.message,
     required this.onRetry,
+    this.onOpenHome,
   });
 
   final String subject;
   final String message;
   final VoidCallback onRetry;
+  final VoidCallback? onOpenHome;
 
   @override
   Widget build(BuildContext context) {
@@ -1460,6 +905,11 @@ class _ThreadErrorView extends StatelessWidget {
               onPressed: onRetry,
               child: Text(l10n.commonRetry),
             ),
+            if (onOpenHome != null)
+              TextButton(
+                onPressed: onOpenHome,
+                child: Text(l10n.threadPostOpenHome),
+              ),
           ],
         ),
       ),
@@ -1521,21 +971,6 @@ Widget threadDetailPostCardPreview() {
     ),
   );
 }
-
-ThreadActionNoticeCode _noticeCodeForCommandResult<T>(
-  DataCommandResult<T> result,
-) => switch (result) {
-  DataCommandOutcomeUnknown<T>() => ThreadActionNoticeCode.unknown,
-  _ => switch (result.failureOrNull?.kind) {
-    DataCommandFailureKind.unauthenticated =>
-      ThreadActionNoticeCode.loginRequired,
-    DataCommandFailureKind.permissionDenied =>
-      ThreadActionNoticeCode.permissionDenied,
-    DataCommandFailureKind.validation => ThreadActionNoticeCode.validation,
-    DataCommandFailureKind.unsupported => ThreadActionNoticeCode.unsupported,
-    _ => ThreadActionNoticeCode.failure,
-  },
-};
 
 final ThreadPost _threadDetailPreviewPost = ThreadPost(
   pid: 'preview-post',

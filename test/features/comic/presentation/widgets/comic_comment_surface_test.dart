@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,7 +49,7 @@ void main() {
     expect(find.text('評論暫不可用'), findsOneWidget);
   });
 
-  testWidgets('consolidated feedback states keep a local visual baseline', (
+  testWidgets('consolidated feedback states keep a platform visual baseline', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1.0;
@@ -102,7 +104,13 @@ void main() {
 
     await expectLater(
       find.byType(Scaffold),
-      matchesGoldenFile('goldens/comic_comment_feedback_surface.png'),
+      // Ahem glyph edges rasterize differently on Linux and Windows.
+      // Keep exact comparisons on each platform instead of adding tolerance.
+      matchesGoldenFile(
+        Platform.isLinux
+            ? 'goldens/comic_comment_feedback_surface_linux.png'
+            : 'goldens/comic_comment_feedback_surface.png',
+      ),
     );
   });
 }

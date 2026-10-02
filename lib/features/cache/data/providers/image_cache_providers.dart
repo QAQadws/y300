@@ -1,17 +1,19 @@
-import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    show ThreadReadInvalidation;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/media/encoded_image_dimension_probe.dart';
-import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/data/providers/cache_mutation_provider.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
+import 'package:y300/features/cache/data/services/long_term_image_revalidator.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/services/image_cache_manager_factory.dart';
@@ -41,6 +43,7 @@ import 'package:y300/features/cache/presentation/services/default_forum_image_pr
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
+import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 
 export 'cache_mutation_provider.dart';
 
@@ -108,7 +111,11 @@ final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
 
 final nativePageCacheInvalidationServiceProvider =
     Provider<NativePageCacheInvalidationService>((ref) {
+      final detail = ref.watch(yamiboForumClientProvider).threadDetail;
       return DefaultNativePageCacheInvalidationService(
+        beforeThreadInvalidation: detail is ThreadReadInvalidation
+            ? (detail as ThreadReadInvalidation).invalidatePendingReads
+            : null,
         documentCache: ref.watch(documentCacheServiceProvider),
         snapshotCache: ref.watch(parsedSnapshotCacheServiceProvider),
       );
@@ -143,6 +150,15 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     mutationReporter: ref.watch(cacheMutationBusProvider),
     diagnosticRecorder: ref.watch(imageCacheDiagnosticRecorderProvider),
     accessRecorder: accessRecorder,
+    revalidator: LongTermImageRevalidator(
+      repository: repository,
+      fileService: Y300ForumResourceFileService(
+        client: ref.watch(yamiboForumResourceClientProvider),
+        siteOrigin: Uri.parse(AppConfig.siteBaseUrl),
+      ),
+      directories: ref.watch(imageCacheDirectoryResolverProvider),
+      mutations: ref.watch(cacheMutationBusProvider),
+    ),
   );
 });
 

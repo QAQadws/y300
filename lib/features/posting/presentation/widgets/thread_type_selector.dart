@@ -7,7 +7,7 @@ import 'package:y300/l10n/app_localizations.dart';
 ///
 /// 行为：
 /// - `types` 为空时整个 widget 隐藏（部分版块没有主题分类）。
-/// - 必选分类可渲染成下拉菜单，不把选项铺进正文空间。
+/// - 始终使用下拉菜单，不把选项铺进正文空间。
 /// - `typeRequired == false` 时第一项是"无分类"，对应 `typeId == null`。
 class ThreadTypeSelector extends StatelessWidget {
   const ThreadTypeSelector({
@@ -22,7 +22,6 @@ class ThreadTypeSelector extends StatelessWidget {
     this.noneChipKey,
     this.toggleKey,
     this.summaryKey,
-    this.useDropdown = false,
   });
 
   final List<ThreadCreationType> types;
@@ -37,7 +36,6 @@ class ThreadTypeSelector extends StatelessWidget {
   final Key? noneChipKey;
   final Key? toggleKey;
   final Key? summaryKey;
-  final bool useDropdown;
 
   ThreadCreationType? get _selectedType {
     final selectedTypeId = this.selectedTypeId;
@@ -62,58 +60,32 @@ class ThreadTypeSelector extends StatelessWidget {
     final selectedLabel =
         _selectedType?.name ??
         (typeRequired ? l10n.postingTypeUnselected : l10n.postingTypeNone);
-    if (useDropdown) {
-      return SizedBox(
-        key: containerKey,
-        width: double.infinity,
-        child: ComposerAnchoredDropdown<String?>(
-          anchorKey: toggleKey,
-          summaryKey: summaryKey,
-          label: title,
-          value: selectedTypeId,
-          valueLabelBuilder: (_) => selectedLabel,
-          items: [
-            for (final type in types)
-              ComposerDropdownItem<String?>(
-                key: chipKeyBuilder?.call(type),
-                value: type.id,
-                label: type.name,
-              ),
-          ],
-          onSelected: onSelected,
-          enabled: enabled,
-        ),
-      );
-    }
-
-    final theme = Theme.of(context);
-    return Column(
+    return SizedBox(
       key: containerKey,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: theme.textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            if (!typeRequired)
-              ChoiceChip(
-                key: noneChipKey,
-                label: Text(l10n.postingTypeNone),
-                selected: selectedTypeId == null,
-                onSelected: enabled ? (_) => onSelected(null) : null,
-              ),
-            for (final type in types)
-              ChoiceChip(
-                key: chipKeyBuilder?.call(type),
-                label: Text(type.name),
-                selected: selectedTypeId == type.id,
-                onSelected: enabled ? (_) => onSelected(type.id) : null,
-              ),
-          ],
-        ),
-      ],
+      width: double.infinity,
+      child: ComposerAnchoredDropdown<String?>(
+        anchorKey: toggleKey,
+        summaryKey: summaryKey,
+        label: title,
+        value: selectedTypeId,
+        valueLabelBuilder: (_) => selectedLabel,
+        items: [
+          if (!typeRequired)
+            ComposerDropdownItem<String?>(
+              key: noneChipKey,
+              value: null,
+              label: l10n.postingTypeNone,
+            ),
+          for (final type in types)
+            ComposerDropdownItem<String?>(
+              key: chipKeyBuilder?.call(type),
+              value: type.id,
+              label: type.name,
+            ),
+        ],
+        onSelected: onSelected,
+        enabled: enabled,
+      ),
     );
   }
 }

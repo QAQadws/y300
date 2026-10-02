@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -43,6 +44,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
+    this.bodyPresentation,
     this.imagePrecacheService,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
@@ -70,6 +72,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   )?
   onBlockImageResolved;
   final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ThreadPostBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
@@ -85,12 +88,16 @@ class _ThreadPostHtmlFirstBodyState
   bool _loggedEmptyBody = false;
   String? _lastPreparedLogKey;
   String? _lastRenderFailureLogKey;
+  Object? _preparedIdentity;
+  ForumHtmlPreparedRenderDocument? _preparedDocument;
 
   @override
   Widget build(BuildContext context) {
     final html = widget.post.message.trim();
     final sourcePost = widget.sourcePost ?? widget.post;
     if (html.isEmpty) {
+      _preparedIdentity = null;
+      _preparedDocument = null;
       if (!_loggedEmptyBody) {
         _loggedEmptyBody = true;
         _logNative(
@@ -115,14 +122,30 @@ class _ThreadPostHtmlFirstBodyState
       final sourceId = sourcePost.pid.trim().isEmpty
           ? 'post'
           : sourcePost.pid.trim();
-      final preparedDocument = widget.renderPreparer.prepare(
-        html: html,
-        preferences: preferences,
-        theme: widget.theme,
-        sourceId: sourceId,
-        threadId: widget.threadId,
-        imageCacheOwnerId: widget.threadId,
+      final identity = (
+        html,
+        preferences,
+        widget.theme.signature,
+        sourceId,
+        widget.threadId,
+        widget.renderPreparer,
       );
+      // Keep only this mounted body's document. Unrelated card/chrome updates
+      // must not repeat DOM parsing and theme adaptation.
+      if (_preparedIdentity != identity || _preparedDocument == null) {
+        _preparedDocument = null;
+        _preparedIdentity = null;
+        _preparedDocument = widget.renderPreparer.prepare(
+          html: html,
+          preferences: preferences,
+          theme: widget.theme,
+          sourceId: sourceId,
+          threadId: widget.threadId,
+          imageCacheOwnerId: widget.threadId,
+        );
+        _preparedIdentity = identity;
+      }
+      final preparedDocument = _preparedDocument!;
       _logPreparedDocument(
         sourceId: sourceId,
         htmlLength: html.length,
@@ -141,6 +164,8 @@ class _ThreadPostHtmlFirstBodyState
           imageFallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
           onBlockImageResolved: widget.onBlockImageResolved,
           imageViewportCoordinator: widget.imageViewportCoordinator,
+          bodyPresentation: widget.bodyPresentation,
+          collapseExpansion: widget.bodyPresentation?.collapseExpansion,
           imagePrecacheService: widget.imagePrecacheService,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(
@@ -299,6 +324,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
+    this.bodyPresentation,
     this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
@@ -325,6 +351,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   )?
   onBlockImageResolved;
   final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ThreadPostBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
@@ -346,6 +373,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
       onBlockImageResolved: onBlockImageResolved,
       imageViewportCoordinator: imageViewportCoordinator,
+      bodyPresentation: bodyPresentation,
       imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,
       imageReaderBridge: imageReaderBridge,

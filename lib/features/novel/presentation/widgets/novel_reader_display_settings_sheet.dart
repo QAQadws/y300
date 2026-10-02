@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
@@ -165,6 +169,46 @@ class _NovelReaderDisplaySettingsSheetState
                     onChanged: (value) => _applyPreferences(
                       _draft.copyWith(safeAreaEnabled: value),
                     ),
+                  ),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final dock = ref.watch(
+                        novelChapterInteractionsDockControllerProvider,
+                      );
+                      return SwitchListTile.adaptive(
+                        key: const Key(
+                          'novel-reader-chapter-interactions-dock-switch',
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                        ),
+                        title: Text(l10n.novelChapterInteractionsDockSetting),
+                        value: dock.value?.enabled ?? true,
+                        onChanged: dock.value == null
+                            ? null
+                            : (enabled) {
+                                unawaited(() async {
+                                  final saved = await ref
+                                      .read(
+                                        novelChapterInteractionsDockControllerProvider
+                                            .notifier,
+                                      )
+                                      .setEnabled(enabled);
+                                  if (!saved && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          AppLocalizations.of(
+                                            context,
+                                          ).novelChapterInteractionsSettingSaveFailed,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }());
+                              },
+                      );
+                    },
                   ),
                 ],
               ),

@@ -19,46 +19,13 @@ class ContinuousImageViewportTracker {
     required double crossAxisExtent,
     required ContinuousImageScrollDirection userScrollDirection,
   }) {
-    if (items.isEmpty || viewportExtent <= 0 || crossAxisExtent <= 0) {
-      return ContinuousImageViewportState(
-        firstVisibleIndex: null,
-        lastVisibleIndex: null,
-        lastEndVisibleIndex: null,
-        scrollOffset: scrollOffset.clamp(0, double.infinity).toDouble(),
-        viewportExtent: viewportExtent.clamp(0, double.infinity).toDouble(),
-        userScrollDirection: userScrollDirection,
-      );
-    }
-
-    final viewportStart = scrollOffset.clamp(0, double.infinity).toDouble();
-    final viewportEnd = viewportStart + viewportExtent;
-    int? firstVisibleIndex;
-    int? lastVisibleIndex;
-    int? lastEndVisibleIndex;
-    var cursor = 0.0;
-
-    for (final item in items) {
-      final mainAxisExtent =
-          extentRegistry.extentOf(item.id)?.mainAxisExtent ??
-          _estimatedMainAxisExtent(item, crossAxisExtent);
-      final itemStart = cursor;
-      final itemEnd = itemStart + mainAxisExtent;
-      final isVisible = itemEnd >= viewportStart && itemStart <= viewportEnd;
-      if (isVisible) {
-        firstVisibleIndex ??= item.index;
-        lastVisibleIndex = item.index;
-      }
-      if (itemEnd >= viewportStart && itemEnd <= viewportEnd) {
-        lastEndVisibleIndex = item.index;
-      }
-      cursor = itemEnd + item.spacingAfter;
-    }
-
-    return ContinuousImageViewportState(
-      firstVisibleIndex: firstVisibleIndex,
-      lastVisibleIndex: lastVisibleIndex,
-      lastEndVisibleIndex: lastEndVisibleIndex,
-      scrollOffset: viewportStart,
+    return ContinuousImageLayoutIndex(
+      items: items,
+      extentRegistry: extentRegistry,
+      crossAxisExtent: crossAxisExtent,
+      resolver: layoutResolver,
+    ).resolve(
+      scrollOffset: scrollOffset,
       viewportExtent: viewportExtent,
       userScrollDirection: userScrollDirection,
     );

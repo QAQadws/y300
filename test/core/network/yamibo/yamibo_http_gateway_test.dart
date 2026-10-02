@@ -1,12 +1,15 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
 import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/waf/waf.dart';
+import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo/yamibo_http_gateway.dart';
 import 'package:y300/core/network/yamibo/yamibo_request_context.dart';
 
@@ -55,6 +58,102 @@ void main() {
       );
 
       expect(adapter.lastHeaders['User-Agent'], 'CustomAgent/1.0');
+    });
+
+    test(
+      'reports the final URI supplied by an auto-following transport',
+      () async {
+        final siteOrigin = Uri.parse('https://bbs.yamibo.com');
+        final requestUri = siteOrigin.resolve('/forum.php?mod=redirect');
+        final finalUri = siteOrigin.resolve('/thread-100-3-1.html');
+        final adapter = _GatewayTestAdapter.scripted([
+          _ScriptedResponse(
+            textBody: 'ok',
+            redirects: [RedirectRecord(301, 'GET', finalUri)],
+          ),
+        ]);
+
+        final result = await _buildGateway(adapter: adapter).getText(
+          requestUri,
+          context: const YamiboRequestContext(
+            kind: YamiboRequestKind.html,
+            operation: 'thread.post.locate',
+          ),
+        );
+
+        expect(adapter.requests.single.uri, requestUri);
+        expect(result.dataOrNull?.uri, finalUri);
+      },
+    );
+
+    test('real redirect keeps the mobile UA and exposes its final URI', () async {
+      // Flutter's test binding replaces HttpClient with a 400 response.
+      final previousOverrides = HttpOverrides.current;
+      HttpOverrides.global = null;
+      addTearDown(() => HttpOverrides.global = previousOverrides);
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final siteOrigin = Uri.parse('http://127.0.0.1:${server.port}');
+      final finalUri = siteOrigin.resolve(
+        '/forum.php?mod=viewthread&tid=100&page=3&ordertype=1',
+      );
+      final userAgents = <String?>[];
+      server.listen((request) async {
+        userAgents.add(request.headers.value(HttpHeaders.userAgentHeader));
+        if (request.uri.queryParameters['goto'] == 'findpost') {
+          request.response.statusCode = HttpStatus.movedPermanently;
+          request.response.headers.set(HttpHeaders.locationHeader, finalUri);
+        } else {
+          request.response.headers.contentType = ContentType.html;
+          request.response.write(_mobileFloorHtml);
+        }
+        await request.response.close();
+      });
+      final gateway = YamiboHttpGateway(
+        cookieStore: CookieStore(),
+        logger: Logger(
+          printer: SimplePrinter(colors: false),
+          output: _MemoryLogOutput(),
+          filter: ProductionFilter(),
+          level: Level.trace,
+        ),
+        dio: Dio(
+          BaseOptions(
+            followRedirects: true,
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
+          ),
+        ),
+        siteUri: siteOrigin,
+      );
+      final network = Y300ForumClientNetworkAdapter(
+        gateway: gateway,
+        apiOrigin: siteOrigin.resolve('/api/mobile/index.php'),
+        siteOrigin: siteOrigin,
+        resourceUserAgent: BrowserUserAgents.mobile,
+      );
+      final client = forum.YamiboForumClientBuilder(
+        config: forum.ForumClientConfig(
+          siteOrigin: siteOrigin,
+          apiOrigin: siteOrigin.resolve('/api/mobile/index.php'),
+          userAgent: BrowserUserAgents.mobile,
+        ),
+        network: network,
+      ).buildStandardClient();
+
+      final result = await client.locatePost(
+        const forum.ThreadPostLocationQuery(tid: '100', pid: '200'),
+      );
+
+      expect(
+        result.dataOrNull?.resolvedUri,
+        finalUri.replace(
+          queryParameters: {...finalUri.queryParameters, 'mobile': '2'},
+        ),
+        reason:
+            'failure=${result.failureOrNull?.code} requests=${userAgents.length}',
+      );
+      expect(userAgents, [BrowserUserAgents.mobile, BrowserUserAgents.mobile]);
     });
 
     test(
@@ -445,6 +544,152 @@ void main() {
       expect(adapter.fetchCount, 2);
     });
 
+    test('sign command disables WAF replay through the package bridge', () async {
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(statusCode: 405, textBody: 'Method Not Allowed'),
+        _ScriptedResponse(textBody: 'unexpected second submission'),
+      ]);
+      final logOutput = _MemoryLogOutput();
+      var recoveryCalls = 0;
+      final coordinator =
+          WafChallengeRecoveryCoordinator(retryCooldown: Duration.zero)
+            ..attachLauncher((_) async {
+              recoveryCalls += 1;
+              return WafChallengeRecoveryResult.verified;
+            });
+      final gateway = _buildGateway(
+        adapter: adapter,
+        logOutput: logOutput,
+        wafChallengeRecoveryCoordinator: coordinator,
+      );
+      final network = Y300ForumClientNetworkAdapter(
+        gateway: gateway,
+        apiOrigin: Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+        siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+        resourceUserAgent: BrowserUserAgents.mobile,
+      );
+
+      final result = await network.send(
+        forum.ForumRequest(
+          method: forum.ForumRequestMethod.get,
+          uri: Uri.parse(
+            'https://bbs.yamibo.com/plugin.php?id=zqlj_sign&sign=opaque-fixture-value',
+          ),
+          context: const forum.ForumRequestContext(
+            operation: 'daily_sign_in.submit',
+          ),
+          followRedirects: false,
+          allowWafReplay: false,
+        ),
+      );
+
+      expect(
+        result,
+        isA<forum.ForumTransportError<forum.ForumResponse<Object?>>>(),
+      );
+      expect(adapter.fetchCount, 1);
+      expect(adapter.requests.single.followRedirects, isFalse);
+      expect(recoveryCalls, 0);
+      expect(
+        logOutput.lines.join('\n'),
+        isNot(contains('opaque-fixture-value')),
+      );
+    });
+
+    test('sign transport errors exclude the one-use value', () async {
+      final signUri = Uri.parse(
+        'https://bbs.yamibo.com/plugin.php?id=zqlj_sign&sign=opaque-fixture-value',
+      );
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) => handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+                message: 'connection failed for opaque-fixture-value',
+                error: 'opaque-fixture-value',
+              ),
+            ),
+          ),
+        );
+      final logOutput = _MemoryLogOutput();
+      final gateway = YamiboHttpGateway(
+        cookieStore: CookieStore(),
+        logger: Logger(
+          printer: SimplePrinter(colors: false),
+          output: logOutput,
+          filter: ProductionFilter(),
+          level: Level.trace,
+        ),
+        dio: dio,
+      );
+
+      final result = await gateway.getText(
+        signUri,
+        context: const YamiboRequestContext(
+          kind: YamiboRequestKind.html,
+          operation: 'daily_sign_in.submit',
+        ),
+        followRedirects: false,
+        allowWafReplay: false,
+      );
+
+      expect(result.isFailure, isTrue);
+      expect(
+        result.errorOrNull?.message,
+        isNot(contains('opaque-fixture-value')),
+      );
+      expect(result.errorOrNull?.raw, isNull);
+      expect(
+        logOutput.lines.join('\n'),
+        isNot(contains('opaque-fixture-value')),
+      );
+    });
+
+    test('sign command does not follow a redirect through the bridge', () async {
+      final adapter = _GatewayTestAdapter.scripted(const <_ScriptedResponse>[
+        _ScriptedResponse(
+          statusCode: 302,
+          headers: <String, List<String>>{
+            'location': <String>['/plugin.php?id=zqlj_sign'],
+          },
+        ),
+        _ScriptedResponse(textBody: 'unexpected redirected GET'),
+      ]);
+      final network = Y300ForumClientNetworkAdapter(
+        gateway: _buildGateway(adapter: adapter),
+        apiOrigin: Uri.parse('https://bbs.yamibo.com/api/mobile/index.php'),
+        siteOrigin: Uri.parse('https://bbs.yamibo.com'),
+        resourceUserAgent: BrowserUserAgents.mobile,
+      );
+
+      final result = await network.send(
+        forum.ForumRequest(
+          method: forum.ForumRequestMethod.get,
+          uri: Uri.parse(
+            'https://bbs.yamibo.com/plugin.php?id=zqlj_sign&sign=opaque-fixture-value',
+          ),
+          context: const forum.ForumRequestContext(
+            operation: 'daily_sign_in.submit',
+          ),
+          followRedirects: false,
+          allowWafReplay: false,
+        ),
+      );
+
+      expect(
+        result,
+        isA<forum.ForumTransportSuccess<forum.ForumResponse<Object?>>>(),
+      );
+      final response =
+          (result as forum.ForumTransportSuccess<forum.ForumResponse<Object?>>)
+              .response;
+      expect(response.statusCode, 302);
+      expect(adapter.requests.single.followRedirects, isFalse);
+      expect(adapter.fetchCount, 1);
+    });
+
     test(
       'native clearance probe classifies a WAF 405 without opening recovery',
       () async {
@@ -730,6 +975,7 @@ class _ScriptedResponse {
     this.setCookie = const <String>[],
     this.contentType,
     this.headers = const <String, List<String>>{},
+    this.redirects = const <RedirectRecord>[],
   });
 
   final int statusCode;
@@ -738,6 +984,7 @@ class _ScriptedResponse {
   final List<String> setCookie;
   final String? contentType;
   final Map<String, List<String>> headers;
+  final List<RedirectRecord> redirects;
 }
 
 class _GatewayTestAdapter implements HttpClientAdapter {
@@ -828,7 +1075,7 @@ class _GatewayTestAdapter implements HttpClientAdapter {
       scripted.textBody,
       scripted.statusCode,
       headers: responseHeaders,
-    );
+    )..redirects = scripted.redirects;
   }
 
   Future<String?> _readRequestBody(Stream<Uint8List>? requestStream) async {
@@ -851,3 +1098,10 @@ class _MemoryLogOutput extends LogOutput {
     lines.addAll(event.lines);
   }
 }
+
+const String _mobileFloorHtml = '''
+<html><head><link rel="canonical" href="/thread-100-3-1.html"></head>
+<body id="forum"><div class="viewthread"><div class="plc" id="pid200">
+<div class="display"><div class="message">Chapter ending.</div></div>
+</div></div><div class="pg"><strong>3</strong></div></body></html>
+''';

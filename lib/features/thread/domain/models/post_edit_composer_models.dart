@@ -15,6 +15,7 @@ final class PostEditConflictState {
   const PostEditConflictState({
     required this.localSubject,
     required this.localMessage,
+    this.localMinimumReadAccess,
     required this.localUseSignature,
     required this.localImageAttachments,
     required this.localAttachmentSession,
@@ -23,6 +24,7 @@ final class PostEditConflictState {
 
   final String localSubject;
   final String localMessage;
+  final int? localMinimumReadAccess;
   final bool localUseSignature;
   final List<ComposerImageAttachment> localImageAttachments;
   final PostEditAttachmentSession localAttachmentSession;
@@ -51,9 +53,11 @@ final class PostEditRouteResult {
     required this.target,
     required this.outcome,
     this.serverMutationPossible = false,
+    this.readAccess,
   });
 
   final PostEditTarget target;
   final PostEditRouteOutcome outcome;
   final bool serverMutationPossible;
+  final ThreadReadAccessEvidence? readAccess;
 }

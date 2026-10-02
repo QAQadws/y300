@@ -15,6 +15,8 @@ enum ThreadUiErrorCode {
   replyFailed,
   loginRequired,
   permissionDenied,
+  targetUnconfirmed,
+  targetNetworkFailed,
   validation,
   unsupported,
   unknown,

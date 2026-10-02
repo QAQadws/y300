@@ -10,6 +10,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -18,6 +19,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_styl
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatelessWidget {
@@ -31,6 +33,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.enableCaching,
     this.renderMode = RenderMode.column,
     this.onBodyBuilt,
+    this.bodyPresentation,
     this.collapseExpansion,
     this.sourceId,
     this.threadId,
@@ -46,6 +49,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.linkBaseUri,
+    this.contentLayout = ForumHtmlContentLayout.document,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -60,6 +64,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   /// Only the outer chapter may be a sliver; nested collapse content stays a box.
   final RenderMode renderMode;
   final VoidCallback? onBodyBuilt;
+  final ThreadPostBodyPresentation? bodyPresentation;
 
   /// Chapter-owned expansion memory when offscreen sliver children unmount.
   final Map<String, bool>? collapseExpansion;
@@ -82,6 +87,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
+  final ForumHtmlContentLayout contentLayout;
 
   /// The current source document, so fragment links retain article identity.
   final Uri? linkBaseUri;
@@ -94,6 +100,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       resolvedPreferences,
       theme: theme,
       blockSpacingMode: blockSpacingMode,
+      contentLayout: contentLayout,
     );
     final document =
         preparedDocument ??
@@ -119,10 +126,18 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     final preparedHtml = document.preparedHtml;
     final imageAttachmentIdsByUrl = document.attachmentIdsByUrl;
     final handlesImageTapInFactory = threadId?.trim().isNotEmpty == true;
-    return HtmlWidget(
+    final presentation = bodyPresentation;
+    final baseStyle = stylePolicy.baseTextStyle(context);
+    Widget buildBody(VoidCallback? onReady) => HtmlWidget(
       preparedHtml,
       key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
       baseUrl: linkBaseUri ?? forumBaseUri,
+      onErrorBuilder: onReady == null
+          ? null
+          : (_, _, _) {
+              onReady();
+              return null;
+            },
       buildAsync: buildAsync,
       customStylesBuilder: stylePolicy.customStylesFor,
       customWidgetBuilder: (element) => _buildCustomWidget(
@@ -132,10 +147,11 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         resolvedPreferences,
         document,
       ),
-      factoryBuilder: _cachedImageFactoryBuilder(),
+      factoryBuilder: _cachedImageFactoryBuilder(onReady),
       enableCaching: enableCaching,
       renderMode: renderMode,
-      textStyle: stylePolicy.baseTextStyle(context),
+      rebuildTriggers: [contentLayout, linkBaseUri],
+      textStyle: baseStyle,
       onTapUrl: callbacks.onTapUrl == null
           ? null
           : (url) {
@@ -146,18 +162,38 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           ? null
           : (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
     );
+    if (presentation == null || renderMode != RenderMode.column) {
+      return buildBody(onBodyBuilt);
+    }
+    final revision = (
+      preparedHtml,
+      baseStyle,
+      MediaQuery.textScalerOf(context),
+      resolvedPreferences,
+      theme.signature,
+      contentLayout,
+      linkBaseUri,
+    );
+    return ThreadPostBodyLayout(
+      key: ValueKey((presentation, revision)),
+      presentation: presentation,
+      sourceId: sourceId ?? 'anonymous',
+      revision: revision,
+      builder: (ready) => buildBody(() {
+        ready();
+        onBodyBuilt?.call();
+      }),
+    );
   }
 
-  WidgetFactory Function()? _cachedImageFactoryBuilder() {
+  WidgetFactory Function()? _cachedImageFactoryBuilder(VoidCallback? onReady) {
     final tid = threadId?.trim();
     if (tid == null || tid.isEmpty) {
-      return onBodyBuilt == null
-          ? null
-          : () => _BodyReadyWidgetFactory(onBodyBuilt!);
+      return onReady == null ? null : () => _BodyReadyWidgetFactory(onReady);
     }
     return () => ForumHtmlCachedImageWidgetFactory(
       threadId: tid,
-      onBodyBuilt: onBodyBuilt,
+      onBodyBuilt: onReady,
       imageReferer: imageReferer,
       imageCacheOwnerId: imageCacheOwnerId,
       onTapImageRequest: callbacks.onTapImage == null
@@ -219,6 +255,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           theme: theme,
           callbacks: callbacks,
           collapseExpansion: collapseExpansion,
+          bodyPresentation: bodyPresentation,
           preferences: resolvedPreferences,
           buildAsync: buildAsync,
           enableCaching: enableCaching,
@@ -234,6 +271,8 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           imagePrecacheService: imagePrecacheService,
           contentImageKind: contentImageKind,
           blockSpacingMode: blockSpacingMode,
+          contentLayout: contentLayout,
+          linkBaseUri: linkBaseUri,
           preparedDocument: document.copyWith(preparedHtml: html),
         );
       },

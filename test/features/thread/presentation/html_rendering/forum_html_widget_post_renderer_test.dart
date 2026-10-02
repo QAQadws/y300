@@ -16,6 +16,7 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
@@ -565,7 +566,7 @@ void main() {
     expect(tester.takeException(), isA<AssertionError>());
   });
 
-  testWidgets('renders thread images through project cache pipeline', (
+  testWidgets('compact HTML keeps images in the project cache pipeline', (
     tester,
   ) async {
     final cacheService = _RecordingImageCacheService();
@@ -587,6 +588,7 @@ void main() {
               sourceId: 'cached-thread-image',
               threadId: '573279',
               imageReferer: referer,
+              contentLayout: ForumHtmlContentLayout.compact,
               html:
                   '<img src="data/attachment/forum/page-1.jpg" '
                   'width="640" height="480">',

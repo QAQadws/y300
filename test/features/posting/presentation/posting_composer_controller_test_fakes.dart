@@ -32,17 +32,24 @@ ThreadCreationPreparation _metadataWithTypes({required bool typeRequired}) {
   );
 }
 
-ThreadCreationPreparation _metadataNoTypes() {
-  return const ThreadCreationPreparation(
+ThreadCreationPreparation _metadataNoTypes({
+  ThreadReadAccess readAccess = ThreadReadAccess.unavailable,
+  ThreadCreationKind kind = ThreadCreationKind.ordinary,
+  ThreadPollConstraints? pollConstraints,
+}) {
+  return ThreadCreationPreparation(
     fid: '33',
     forumName: '版块名',
+    kind: kind,
+    readAccess: readAccess,
+    pollConstraints: pollConstraints,
     threadTypes: <ThreadCreationType>[],
     threadSorts: <ThreadCreationSort>[],
     typeRequired: false,
     sortRequired: false,
     maxSubjectLength: 0,
     maxMessageLength: 0,
-    token: _TestThreadCreationToken(),
+    token: const _TestThreadCreationToken(),
   );
 }
 
@@ -218,9 +225,28 @@ class _FakeMetadataRepository implements ThreadCreationPreparationRepository {
     if (_queue.isNotEmpty) {
       final next = _queue.removeAt(0);
       _last = next;
-      return next;
     }
-    return _last!;
+    final result = _last!;
+    final data = result.dataOrNull;
+    if (data == null) return result;
+    return DataReadSuccess(
+      data: ThreadCreationPreparation(
+        fid: data.fid,
+        forumName: data.forumName,
+        threadTypes: data.threadTypes,
+        threadSorts: data.threadSorts,
+        typeRequired: data.typeRequired,
+        sortRequired: data.sortRequired,
+        maxSubjectLength: data.maxSubjectLength,
+        maxMessageLength: data.maxMessageLength,
+        token: data.token,
+        kind: request.kind,
+        readAccess: data.readAccess,
+        pollConstraints: data.pollConstraints,
+      ),
+      capabilities: capabilities,
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }
 
@@ -346,4 +372,37 @@ class _FakeUploadCoordinator implements ComposerImageUploadCoordinator {
       };
     }
   }
+}
+
+final class _DelayedCreationRepository
+    implements ThreadCreationPreparationRepository {
+  final requests = <ThreadCreationPreparationRequest>[];
+  final pending =
+      <
+        Completer<
+          DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>
+        >
+      >[];
+  @override
+  ThreadCreationCapabilities get capabilities => _threadCreationCapabilities;
+  @override
+  Future<DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>>
+  load(ThreadCreationPreparationRequest request) {
+    requests.add(request);
+    final completer =
+        Completer<
+          DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>
+        >();
+    pending.add(completer);
+    return completer.future;
+  }
+
+  void complete(int index, ThreadCreationPreparation data) =>
+      pending[index].complete(
+        DataReadSuccess(
+          data: data,
+          capabilities: capabilities,
+          metadata: const DataReadMetadata.network(),
+        ),
+      );
 }

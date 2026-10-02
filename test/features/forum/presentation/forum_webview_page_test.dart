@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +32,7 @@ import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
@@ -103,6 +105,46 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  }
+
+  for (final purpose in [
+    ForumWebViewHostPurpose.browse,
+    ForumWebViewHostPurpose.selfProfile,
+  ]) {
+    testWidgets('profile WebView AppBar opts into native action with $purpose', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            verifiedProfileOwnerProvider.overrideWithValue((
+              uid: '654321',
+              revision: 0,
+            )),
+            forumWebViewInitialUriProvider.overrideWithValue(
+              Uri.parse(
+                'https://bbs.yamibo.com/home.php?mod=space&uid=654321&do=profile&mobile=2',
+              ),
+            ),
+            forumWebViewHostPurposeProvider.overrideWithValue(purpose),
+          ],
+          child: _buildTestApp(driver: driver),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(
+            const Key('forum-webview-native-profile-button'),
+          ),
+        ),
+        purpose == ForumWebViewHostPurpose.selfProfile
+            ? findsOneWidget
+            : findsNothing,
+      );
+    });
   }
 
   testWidgets('standalone forum home has a working route back button', (
@@ -888,13 +930,132 @@ void main() {
     expect(decision, ForumWebViewNavigationDecision.prevent);
     expect(locator.lastTid, '570388');
     expect(locator.lastPid, '41575705');
-    expect(locator.lastSourceUri?.queryParameters['mobile'], '2');
+    expect(locator.lastSourceUri?.queryParameters['ptid'], '570388');
+    expect(
+      locator.lastSourceUri?.queryParameters.containsKey('authorid'),
+      isFalse,
+    );
     expect(find.byType(ThreadDetailPage), findsOneWidget);
     expect(
       find.byKey(const Key('thread-detail-target-scroll-spacer')),
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'pending findpost result cannot navigate after its account expires before disposal',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final pending = Completer<ApiResult<ThreadPostLocation>>();
+      final locator = _FakeThreadPostLocator(null, pending: pending);
+      var accountCurrent = true;
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          isAccountCurrent: () => accountCurrent,
+          forumMode: ForumShellMode.native,
+          threadPostLocator: locator,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final browserState = tester.state(find.byType(ForumWebViewPage));
+      final decision = await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705',
+      );
+      await tester.pump();
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(locator.lastPid, '41575705');
+      expect(find.byType(ThreadDetailPage), findsNothing);
+
+      // The guard expires synchronously; the platform view detaches next frame.
+      accountCurrent = false;
+      expect(browserState.mounted, isTrue);
+      pending.complete(
+        const ApiSuccess(
+          ThreadPostLocation(tid: '570388', pid: '41575705', page: 2, url: ''),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(browserState.mounted, isTrue);
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      expect(
+        find.byKey(const Key('thread-post-route-failure-dialog')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'native filtered floor link relocates instead of trusting its page',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final locator = _FakeThreadPostLocator(
+        const ThreadPostLocation(
+          tid: '570388',
+          pid: '41575705',
+          page: 2,
+          url: '',
+        ),
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          forumMode: ForumShellMode.native,
+          threadPostLocator: locator,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570388&page=99&authorid=10&ordertype=1#pid41575705',
+      );
+      await tester.pumpAndSettle();
+      expect(locator.lastPid, '41575705');
+      final page = tester.widget<ThreadDetailPage>(
+        find.byType(ThreadDetailPage),
+      );
+      expect(page.initialPage, 2);
+      expect(page.targetPid, '41575705');
+    },
+  );
+
+  testWidgets(
+    'native location failure stays in WebView until explicitly retried',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final locator = _FakeThreadPostLocator(null);
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          forumMode: ForumShellMode.native,
+          threadPostLocator: locator,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      expect(
+        find.byKey(const Key('thread-post-route-failure-dialog')),
+        findsOneWidget,
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ForumWebViewPage)),
+      );
+      expect(find.text(l10n.threadPostTargetUnconfirmed), findsOneWidget);
+      locator.location = const ThreadPostLocation(
+        tid: '570388',
+        pid: '41575705',
+        page: 2,
+        url: '',
+      );
+      await tester.tap(find.text(l10n.commonRetry));
+      await tester.pumpAndSettle();
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+    },
+  );
 
   testWidgets('ForumWebViewPage native mode resolves empty findpost redirect', (
     tester,
@@ -2520,7 +2681,7 @@ class _FakeThreadRepository implements ThreadRepository {
         perPage: 20,
         posts: [
           ThreadPost(
-            pid: 'p1',
+            pid: tid == '570388' ? '41575705' : 'p1',
             author: 'alice',
             authorId: '1',
             message: '<p>正文</p>',
@@ -2537,9 +2698,10 @@ class _FakeThreadRepository implements ThreadRepository {
 }
 
 class _FakeThreadPostLocator implements ThreadPostLocator {
-  _FakeThreadPostLocator(this.location);
+  _FakeThreadPostLocator(this.location, {this.pending});
 
-  final ThreadPostLocation? location;
+  ThreadPostLocation? location;
+  final Completer<ApiResult<ThreadPostLocation>>? pending;
   String? lastTid;
   String? lastPid;
   Uri? lastSourceUri;
@@ -2553,6 +2715,7 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
     lastTid = tid;
     lastPid = pid;
     lastSourceUri = sourceUri;
+    if (pending != null) return pending!.future;
     final value = location;
     if (value == null) {
       return const ApiFailure<ThreadPostLocation>(

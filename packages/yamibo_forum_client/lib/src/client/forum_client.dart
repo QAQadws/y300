@@ -5,6 +5,7 @@ import '../contracts/data_command_contract.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_daily_sign_in.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_image_attachments.dart';
 import '../contracts/forum_authentication.dart';
@@ -20,6 +21,10 @@ import '../contracts/user_blog_media.dart';
 import '../contracts/user_blog_favorites.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
+import '../contracts/private_message_command.dart';
+import '../contracts/private_message_batch_command.dart';
+import '../contracts/friend_directory.dart';
+import '../contracts/notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_detail_models.dart';
@@ -166,6 +171,17 @@ final class YamiboForumClient {
   /// Configured current-user profile source, if installed.
   CurrentUserProfileRepository? get currentUserProfile =>
       sourcePlan.currentUserProfile;
+
+  /// Configured verified account-summary source, if installed.
+  CurrentAccountSummaryRepository? get currentAccountSummary =>
+      sourcePlan.currentAccountSummary;
+
+  /// Configured network-only daily sign-in status source, if installed.
+  ForumDailySignInRepository? get dailySignIn => sourcePlan.dailySignIn;
+
+  /// Configured ordinary daily sign-in command, if installed.
+  ForumDailySignInCommand? get dailySignInCommand =>
+      sourcePlan.dailySignInCommand;
 
   /// Configured public-profile source, if installed.
   ForumUserProfileRepository? get forumUserProfile =>
@@ -330,12 +346,28 @@ final class YamiboForumClient {
   ForumPrivateMessageRepository? get privateMessages =>
       sourcePlan.privateMessages;
 
+  /// Configured friend selector source, if installed.
+  ForumFriendDirectoryRepository? get friendDirectory =>
+      sourcePlan.friendDirectory;
+
+  /// Configured desktop batch preparation source, if installed.
+  ForumPrivateMessageBatchPreparationRepository?
+  get privateMessageBatchPreparation =>
+      sourcePlan.privateMessageBatchPreparation;
+
+  /// Configured single-request direct-message batch command, if installed.
+  ForumPrivateMessageBatchCommand? get privateMessageBatchCommand =>
+      sourcePlan.privateMessageBatchCommand;
+
   /// Configured sticker catalog source, if installed.
   ForumStickerCatalogRepository? get stickerCatalog =>
       sourcePlan.stickerCatalog;
 
   /// Configured complete-rating source, if installed.
   ThreadPostRatingsRepository? get postRatings => sourcePlan.postRatings;
+
+  /// Configured paginated-comment source, if installed.
+  ThreadPostCommentsRepository? get postComments => sourcePlan.postComments;
 
   /// Configured post-location source, if installed.
   ThreadPostLocatorRepository? get postLocator => sourcePlan.postLocator;
@@ -455,6 +487,62 @@ final class YamiboForumClient {
         ForumPrivateMessageReadCapabilities
       >();
 
+  /// Loads the current account's friends, optionally by username prefix.
+  Future<
+    DataReadResult<
+      ForumFriendDirectoryPage,
+      ForumFriendDirectoryReadCapabilities
+    >
+  >
+  loadFriends(ForumFriendDirectoryQuery query) =>
+      sourcePlan.friendDirectory?.load(query) ??
+      unsupported<
+        ForumFriendDirectoryPage,
+        ForumFriendDirectoryReadCapabilities
+      >();
+
+  /// Inspects a fresh desktop compose form without sending a message.
+  Future<
+    DataReadResult<
+      ForumPrivateMessageBatchPreparation,
+      ForumPrivateMessageBatchCapabilities
+    >
+  >
+  preparePrivateMessageBatch(
+    ForumPrivateMessageBatchPreparationRequest request,
+  ) =>
+      sourcePlan.privateMessageBatchPreparation?.prepare(request) ??
+      unsupported<
+        ForumPrivateMessageBatchPreparation,
+        ForumPrivateMessageBatchCapabilities
+      >();
+
+  /// Sends separate direct messages in one freshly prepared desktop request.
+  ///
+  /// An applied receipt proves an aggregate write, not delivery to every user.
+  Future<DataCommandResult<ForumPrivateMessageBatchReceipt>>
+  sendPrivateMessageBatch(ForumPrivateMessageBatchSubmission submission) =>
+      sourcePlan.privateMessageBatchCommand?.execute(submission) ??
+      Future.value(
+        const DataCommandUnsupported<ForumPrivateMessageBatchReceipt>(),
+      );
+
+  /// Sends one explicit private message; uncertain outcomes are never retried.
+  Future<DataCommandResult<ForumPrivateMessageReceipt>> sendPrivateMessage(
+    ForumPrivateMessageSubmission submission,
+  ) =>
+      sourcePlan.privateMessageCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ForumPrivateMessageReceipt>());
+
+  /// Mutes future notifications of one type for the selected author scope.
+  Future<DataCommandResult<ForumNotificationIgnoreReceipt>> ignoreNotifications(
+    ForumNotificationIgnoreSubmission submission,
+  ) =>
+      sourcePlan.notificationIgnoreCommand?.execute(submission) ??
+      Future.value(
+        const DataCommandUnsupported<ForumNotificationIgnoreReceipt>(),
+      );
+
   /// Loads sticker catalog and returns a structured result.
   Future<
     DataReadResult<ForumStickerCatalogData, ForumStickerCatalogReadCapabilities>
@@ -473,6 +561,14 @@ final class YamiboForumClient {
   loadPostRatings(ThreadPostRatingsQuery query) =>
       sourcePlan.postRatings?.load(query) ??
       unsupported<ThreadPostRatingsData, ThreadPostRatingsReadCapabilities>();
+
+  /// Loads one server-confirmed continuation page of post comments.
+  Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  loadPostComments(ThreadPostCommentsQuery query) =>
+      sourcePlan.postComments?.load(query) ??
+      unsupported<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>();
 
   /// Resolves the exact page and URI containing the requested post.
   Future<
@@ -558,6 +654,60 @@ final class YamiboForumClient {
   }) =>
       sourcePlan.currentUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
+
+  /// Loads the verified account's presentation summary.
+  Future<
+    DataReadSuccess<CurrentUserProfileData, CurrentUserProfileReadCapabilities>?
+  >
+  readCachedCurrentAccountSummary(CurrentAccountSummaryQuery query) async {
+    final repository = sourcePlan.currentAccountSummary;
+    return repository is CurrentAccountSummaryCacheReader
+        ? (repository as CurrentAccountSummaryCacheReader).readCached(query)
+        : null;
+  }
+
+  /// Loads the verified account's presentation summary from the network.
+  Future<
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+  >
+  loadCurrentAccountSummary(
+    CurrentAccountSummaryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) =>
+      sourcePlan.currentAccountSummary?.load(query, cachePolicy: cachePolicy) ??
+      unsupported<CurrentUserProfileData, CurrentUserProfileReadCapabilities>();
+
+  /// Loads a fresh sign-in page without any document-cache fallback.
+  Future<
+    DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
+  >
+  loadDailySignIn(ForumDailySignInQuery query) =>
+      sourcePlan.dailySignIn?.load(query) ??
+      unsupported<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>();
+
+  /// Prepares one network read for display and a short-lived submission.
+  Future<
+    DataReadResult<
+      ForumDailySignInPreparation,
+      ForumDailySignInReadCapabilities
+    >
+  >
+  prepareDailySignIn(ForumDailySignInQuery query) {
+    final repository = sourcePlan.dailySignIn;
+    return repository is ForumDailySignInPreparationRepository
+        ? (repository as ForumDailySignInPreparationRepository).prepare(query)
+        : unsupported<
+            ForumDailySignInPreparation,
+            ForumDailySignInReadCapabilities
+          >();
+  }
+
+  /// Attempts one ordinary sign-in using a fresh page-local action.
+  Future<DataCommandResult<ForumDailySignInReceipt>> signInToday(
+    ForumDailySignInRequest request,
+  ) =>
+      sourcePlan.dailySignInCommand?.execute(request) ??
+      Future.value(const DataCommandUnsupported<ForumDailySignInReceipt>());
 
   /// Loads forum user profile and returns a structured result.
   Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>

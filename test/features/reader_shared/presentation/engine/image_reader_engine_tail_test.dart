@@ -11,6 +11,123 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 
 void main() {
+  testWidgets(
+    'page highlight updates locally, dims after 900ms and resets when hidden',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'reader_pref_mode': 'vertical'});
+      await tester.pumpWidget(_host(_ActionTail()));
+      await tester.pumpAndSettle();
+      final scroll = tester
+          .widget<ListView>(find.byKey(const Key('tail-test-list')))
+          .controller!;
+      final beforeHook = debugOnRebuildDirtyWidget;
+      var builds = 0;
+      debugOnRebuildDirtyWidget = (element, builtOnce) {
+        beforeHook?.call(element, builtOnce);
+        if (element.widget is ImageReaderEngine) builds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = beforeHook);
+      ReaderPageIndicatorOverlay indicator() =>
+          tester.widget<ReaderPageIndicatorOverlay>(
+            find.byType(ReaderPageIndicatorOverlay),
+          );
+      scroll.jumpTo(10);
+      await tester.pump();
+      expect(indicator().highlighted, isTrue);
+      for (var i = 1; i <= 20; i++) {
+        scroll.jumpTo(10.0 + i);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(const Duration(milliseconds: 880));
+      expect(indicator().highlighted, isTrue);
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(indicator().highlighted, isFalse);
+      expect(builds, 0);
+
+      scroll.jumpTo(1500);
+      await tester.pumpAndSettle();
+      expect(indicator().visible, isFalse);
+      expect(indicator().highlighted, isFalse);
+      builds = 0;
+      scroll.jumpTo(1550);
+      await tester.pumpAndSettle();
+      expect(builds, 0);
+      scroll.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(indicator().visible, isTrue);
+      expect(indicator().highlighted, isFalse);
+    },
+  );
+
+  for (final mode in ['ltr', 'rtl']) {
+    testWidgets(
+      '$mode fixed actions follow the tail and yield to the reader menu',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({'reader_pref_mode': mode});
+        final tail = _ActionTail();
+        await tester.pumpWidget(_host(tail));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('tail-action-button')), findsNothing);
+        final page = find.byKey(const Key('tail-test-page'));
+        final swipe = Offset(mode == 'ltr' ? -700 : 700, 0);
+        await tester.drag(page, swipe);
+        await tester.pumpAndSettle();
+        await tester.drag(page, swipe);
+        await tester.pumpAndSettle();
+        final button = find.byKey(const Key('tail-action-button'));
+        expect(button, findsOneWidget);
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(tail.actionCount, 1);
+        expect(tail.advanceCount, 0);
+        expect(button, findsOneWidget);
+        await tester.tapAt(
+          tester.getCenter(
+            find.byKey(const Key('shared-reader-center-tap-zone')),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pumpAndSettle();
+        expect(button, findsNothing);
+        await tester.tapAt(
+          tester.getCenter(
+            find.byKey(const Key('shared-reader-center-tap-zone')),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pumpAndSettle();
+        expect(button, findsOneWidget);
+        await tester.drag(page, swipe);
+        await tester.pumpAndSettle();
+        expect(button, findsNothing);
+        expect(tail.advanceCount, 1);
+      },
+    );
+  }
+
+  testWidgets(
+    'vertical cached tail does not show actions; long comments retain them',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'reader_pref_mode': 'vertical'});
+      final tail = _ActionTail();
+      await tester.pumpWidget(_host(tail));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('tail-action-button')), findsNothing);
+      final list = find.byKey(const Key('tail-test-list'));
+      final scroll = tester.widget<ListView>(list).controller!;
+      scroll.jumpTo(1450);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('tail-action-button')), findsOneWidget);
+      scroll.jumpTo(3300);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('tail-action-button')), findsOneWidget);
+      scroll.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('tail-action-button')), findsNothing);
+      expect(tail.visibility, containsAllInOrder([true, false]));
+    },
+  );
+
   testWidgets('LTR reaches tail and advance without extending image progress', (
     tester,
   ) async {
@@ -362,6 +479,34 @@ class _RecordingTailSurface implements ReaderTailSurface {
 
   @override
   void dispose() {}
+}
+
+class _ActionTail extends _RecordingTailSurface
+    implements ReaderTailActionSurface {
+  int actionCount = 0;
+  final visibility = <bool>[];
+  @override
+  Widget buildVertical(BuildContext context, ReaderTailActions actions) =>
+      const SizedBox(height: 3000, child: ColoredBox(color: Colors.blue));
+  @override
+  Widget buildActionBar(BuildContext context) => Material(
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            key: const Key('tail-action-button'),
+            onPressed: () => actionCount++,
+            child: const Text('action'),
+          ),
+        ),
+      ),
+    ),
+  );
+  @override
+  void onVisibilityChanged(bool visible) => visibility.add(visible);
 }
 
 class _OwnerSwitchHarness extends StatefulWidget {

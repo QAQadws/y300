@@ -98,7 +98,9 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 
 普通命令失败不会自动重发；只有同站 HTTP 405 经 WAF delegate 验证恢复后，传输层允许重放一次。`outcomeUnknown` 必须保留用户输入，并由用户明确决定是否重试。
 
-当前结构化命令覆盖收藏/取消收藏、评分、点评、投票、发帖、回复、普通帖子编辑，以及图片附件上传和删除。服务器原始 JSON、XML/CDATA、HTML、Cookie 和 formhash 不会进入回执。
+当前结构化命令覆盖收藏/取消收藏、评分、点评、投票、发帖、回复、普通帖子编辑、图片附件上传和删除，以及单人／已有群组私信发送和按类型／作者屏蔽提醒。服务器原始 JSON、XML/CDATA、HTML、Cookie 和 formhash 不会进入回执。
+
+`privateMessages` 区分目录与单人／群组对话，支持分页；对话页码 0 表示最新页，历史页码递减。`sendPrivateMessage` 接受单个 UID、用户名或带回复锚点的已有群组。`ignoreNotifications` 只过滤今后同类型和作者的提醒，不删除已有行。消息与提醒读取本身可能更新服务端已读状态，不使用 document/snapshot 磁盘缓存；未知写入结果不得自动重发。
 
 ## 受保护图片与 WAF
 
@@ -112,7 +114,7 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 
 - 复杂帖子编辑表单的 WebView fallback；
 - 非图片附件、附件描述/readperm/price、替换和批量删除；
-- 通知状态变更和私信发送。
+- 私信删除、群组创建／成员管理、提醒删除或独立的标记已读命令（读取本身可能更新已读状态）。
 
 有意由 App/Host 保留：
 

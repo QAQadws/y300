@@ -113,6 +113,7 @@ final class ForumRequest {
     this.body,
     this.responseType = ForumResponseType.text,
     this.followRedirects = true,
+    this.allowWafReplay = true,
     this.cancellation,
   });
 
@@ -136,6 +137,11 @@ final class ForumRequest {
 
   /// Follow redirects.
   final bool followRedirects;
+
+  /// Whether a verified WAF challenge may replay this request once.
+  ///
+  /// Commands whose GET can change server state must disable this.
+  final bool allowWafReplay;
 
   /// Cancellation.
   final ForumRequestCancellation? cancellation;

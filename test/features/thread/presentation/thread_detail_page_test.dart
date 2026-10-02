@@ -17,13 +17,16 @@ import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
-import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ThreadPostRatingsRepository;
+import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum_client;
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
@@ -64,6 +67,9 @@ import 'package:y300/features/thread/data/repositories/thread_post_ratings_repos
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -72,6 +78,7 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_post_htm
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
@@ -89,6 +96,518 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
+    testWidgets(
+      'loads one comment page, deduplicates IDs, and retries failure',
+      (tester) async {
+        final pending =
+            Completer<
+              DataReadResult<
+                ThreadPostCommentsPage,
+                ThreadPostCommentsReadCapabilities
+              >
+            >();
+        var thirdAttempts = 0;
+        final comments = _FakePagedCommentsRepository((query) async {
+          if (query.page == 2) return pending.future;
+          thirdAttempts++;
+          if (thirdAttempts == 1) {
+            return const DataReadFailure(
+              kind: DataReadFailureKind.network,
+              code: 'offline',
+              diagnosticMessage: 'offline',
+            );
+          }
+          if (thirdAttempts == 2) {
+            return const DataReadFailure(
+              kind: DataReadFailureKind.unauthorized,
+              code: 'thread_post_comments_login_required',
+              diagnosticMessage: 'thread_post_comments_login_required',
+            );
+          }
+          if (thirdAttempts == 3) {
+            return const DataReadFailure(
+              kind: DataReadFailureKind.business,
+              code: 'thread_post_comments_permission_denied',
+              diagnosticMessage: 'thread_post_comments_permission_denied',
+            );
+          }
+          return DataReadSuccess(
+            data: const ThreadPostCommentsPage(
+              tid: '100',
+              pid: '200',
+              page: 3,
+              comments: [
+                ThreadPostCommentEntry(
+                  author: 'Carol',
+                  message: 'Third page',
+                  dateline: 'today',
+                  commentId: '903',
+                ),
+              ],
+              nextPage: null,
+            ),
+            capabilities: commentsCapabilities,
+            metadata: const DataReadMetadata.network(),
+          );
+        });
+        final client = _clientWithPagedComments(comments);
+        final converter = _ThreadProjectionTestConverter(
+          TextConversionMode.toTraditional,
+        );
+        final sessionStore = YamiboSessionStore()
+          ..saveExtracted(
+            YamiboSessionSnapshot(
+              isLoggedIn: true,
+              uid: '10',
+              username: 'Alice',
+              formhash: '',
+              updatedAt: DateTime(2026, 1, 1),
+              source: 'test',
+            ),
+          );
+        final repository = _FakeThreadRepository(
+          (String tid, int page) async => ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '33',
+              subject: 'Comments',
+              author: 'Alice',
+              replies: 1,
+              views: 1,
+              currentPage: page,
+              perPage: 20,
+              posts: [
+                ThreadPost(
+                  pid: '200',
+                  author: 'Alice',
+                  authorId: '10',
+                  message: '<p>Body</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                  commentNextPage: 2,
+                  comments: const [
+                    ThreadPostCommentEntry(
+                      author: 'Alice',
+                      message: 'First page',
+                      dateline: 'today',
+                      commentId: '901',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            additionalOverrides: [
+              yamiboForumClientProvider.overrideWithValue(client),
+              yamiboSessionStoreProvider.overrideWithValue(sessionStore),
+              appServerContentConversionModeProvider.overrideWithValue(
+                TextConversionMode.toTraditional,
+              ),
+              textConverterProvider.overrideWith((ref, mode) => converter),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        expect(find.text(l10n.threadCommentLoadMore), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pump();
+        expect(comments.queries, hasLength(1));
+        expect(find.text(l10n.threadCommentLoadingMore), findsOneWidget);
+        pending.complete(
+          DataReadSuccess(
+            data: const ThreadPostCommentsPage(
+              tid: '100',
+              pid: '200',
+              page: 2,
+              comments: [
+                ThreadPostCommentEntry(
+                  author: 'Alice',
+                  message: 'Duplicate',
+                  dateline: 'today',
+                  commentId: '901',
+                ),
+                ThreadPostCommentEntry(
+                  author: 'Bob',
+                  message: '软件内容',
+                  dateline: 'today',
+                  commentId: '902',
+                ),
+                ThreadPostCommentEntry(
+                  author: 'Bob',
+                  message: 'Duplicate again',
+                  dateline: 'today',
+                  commentId: '902',
+                ),
+              ],
+              nextPage: 3,
+            ),
+            capabilities: commentsCapabilities,
+            metadata: const DataReadMetadata.network(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('軟體內容'), findsOneWidget);
+        expect(find.text('Duplicate'), findsNothing);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(find.text('軟體內容'), findsOneWidget);
+        expect(find.text(l10n.threadCommentRetry), findsOneWidget);
+        expect(find.text(l10n.threadCommentLoadFailed), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.threadCommentLoginRequired), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.threadCommentPermissionDenied), findsOneWidget);
+        await tester.tap(find.byKey(const Key('thread-comment-load-more')));
+        await tester.pumpAndSettle();
+        expect(comments.queries.map((query) => query.page), [2, 3, 3, 3, 3]);
+        expect(find.text('Third page'), findsOneWidget);
+        expect(find.byKey(const Key('thread-comment-load-more')), findsNothing);
+        sessionStore.saveExtracted(
+          YamiboSessionSnapshot(
+            isLoggedIn: true,
+            uid: '11',
+            username: 'Bob',
+            formhash: '',
+            updatedAt: DateTime(2026, 1, 2),
+            source: 'test',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('軟體內容'), findsNothing);
+        expect(find.text('Third page'), findsNothing);
+        expect(find.text('First page'), findsOneWidget);
+      },
+    );
+    testWidgets(
+      'late comment page cannot attach to a replacement thread page',
+      (tester) async {
+        final pending =
+            Completer<
+              DataReadResult<
+                ThreadPostCommentsPage,
+                ThreadPostCommentsReadCapabilities
+              >
+            >();
+        final comments = _FakePagedCommentsRepository((_) => pending.future);
+        final repository = _FakeThreadRepository(
+          (String tid, int page) async => ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '33',
+              subject: 'Comments',
+              author: 'Alice',
+              replies: 1,
+              views: 1,
+              currentPage: page,
+              perPage: 20,
+              posts: [
+                ThreadPost(
+                  pid: page == 1 ? '200' : '201',
+                  author: 'Alice',
+                  authorId: '10',
+                  message: '<p>Body</p>',
+                  number: 1,
+                  isFirst: true,
+                  dateline: 'today',
+                  commentNextPage: 2,
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            additionalOverrides: [
+              yamiboForumClientProvider.overrideWithValue(
+                _clientWithPagedComments(comments),
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        const args = ThreadDetailArgs(tid: '100', subject: '测试主题');
+        final controller = container.read(
+          threadDetailControllerProvider(args).notifier,
+        );
+        final post = container
+            .read(threadDetailControllerProvider(args))
+            .value!
+            .posts
+            .single;
+        final loading = controller.loadMoreComments(post);
+        await tester.pump();
+        await controller.loadPage(2);
+        pending.complete(
+          DataReadSuccess(
+            data: const ThreadPostCommentsPage(
+              tid: '100',
+              pid: '200',
+              page: 2,
+              comments: [
+                ThreadPostCommentEntry(
+                  author: 'Old',
+                  message: 'Late',
+                  dateline: 'today',
+                  commentId: '902',
+                ),
+              ],
+              nextPage: null,
+            ),
+            capabilities: commentsCapabilities,
+            metadata: const DataReadMetadata.network(),
+          ),
+        );
+        await loading;
+        await tester.pumpAndSettle();
+        final current = container
+            .read(threadDetailControllerProvider(args))
+            .value!;
+        expect(current.posts.single.pid, '201');
+        expect(current.commentsByPostId, isEmpty);
+        expect(find.text('Late'), findsNothing);
+      },
+    );
+
+    testWidgets('empty interaction hint belongs only to body-end target', (
+      tester,
+    ) async {
+      final state = ThreadDetailPageState.initial(tid: '100', subject: 'Title')
+          .copyWith(
+            posts: [
+              ThreadPost(
+                pid: '200',
+                author: 'Alice',
+                authorId: '10',
+                message: '<p>Body</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          );
+      Widget content(ThreadPostLanding landing) => ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+        ],
+        child: LocalizedTestApp(
+          home: Scaffold(
+            body: ThreadDetailContent(
+              state: state,
+              targetPid: '200',
+              landing: landing,
+              imageReferer:
+                  'https://bbs.example.test/forum.php?mod=viewthread&tid=100',
+              onLoadPreviousPage: () {},
+              onLoadNextPage: () {},
+              onLoadPageNumber: (_) {},
+              onOpenAuthorProfile: (_) {},
+              onOpenCommentAuthorProfile: (_) {},
+              onCopyActionUrl: (_, _) {},
+              onOpenPostLink: (_) {},
+              onOpenPostActions: (_, _) {},
+              onTogglePollOption: (_, _) {},
+              onSubmitPollVote: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(content(ThreadPostLanding.bodyEnd));
+      await tester.pump();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ThreadDetailContent)),
+      );
+      expect(find.text(l10n.threadInteractionsEmpty), findsOneWidget);
+      await tester.pumpWidget(content(ThreadPostLanding.top));
+      await tester.pump();
+      expect(find.text(l10n.threadInteractionsEmpty), findsNothing);
+    });
+    testWidgets(
+      'target recovery invalidates a same-page snapshot and commits only verified history',
+      (tester) async {
+        final cache = _FakeNativePageCacheInvalidationService();
+        final history = _RecordingHistoryVisitRecorder();
+        final locator = _FakeThreadPostLocator(
+          const ThreadPostLocation(tid: '100', pid: '200', page: 2, url: ''),
+        );
+        final repository = _FakeThreadRepository((tid, page, query) async {
+          expect(query, isEmpty);
+          return ApiSuccess(
+            _navigationData(
+              page,
+              pid: cache.invalidatedThreadIds.isEmpty || page == 3
+                  ? '199'
+                  : '200',
+            ),
+          );
+        });
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            threadPostLocator: locator,
+            pageCacheInvalidationService: cache,
+            historyVisitRecorder: history,
+            home: const ThreadDetailPage(
+              tid: '100',
+              initialPage: 2,
+              targetPid: '200',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(repository.queryHistory, hasLength(2));
+        expect(cache.invalidatedThreadIds, ['100']);
+        expect(locator.calls, 1);
+        expect(find.byKey(const Key('thread-post-card-200')), findsOneWidget);
+        expect(history.drafts, hasLength(1));
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        await container
+            .read(
+              threadDetailControllerProvider(
+                const ThreadDetailArgs(
+                  tid: '100',
+                  initialPage: 2,
+                  targetPid: '200',
+                ),
+              ).notifier,
+            )
+            .loadPage(3);
+        await tester.pumpAndSettle();
+        expect(locator.calls, 1);
+        expect(repository.queryHistory, hasLength(3));
+        expect(find.byKey(const Key('thread-post-card-199')), findsOneWidget);
+      },
+    );
+
+    testWidgets('body-end target consumes the initial detail handoff once', (
+      tester,
+    ) async {
+      final handoff = _PageHandoff();
+      final history = _RecordingHistoryVisitRecorder();
+      final repository = _HandoffThreadRepository(handoff);
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          historyVisitRecorder: history,
+          home: ThreadDetailPage(
+            tid: '100',
+            initialPage: 3,
+            targetPid: '200',
+            landing: ThreadPostLanding.bodyEnd,
+            initialHandoff: handoff,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repository.handoffReads, 1);
+      expect(repository.ordinaryReads, 0);
+      expect(
+        find.byKey(const Key('thread-post-body-entry-200')),
+        findsOneWidget,
+      );
+      expect(history.drafts, hasLength(1));
+    });
+
+    testWidgets(
+      'unconfirmed target stops, retry is bounded and home requires user action',
+      (tester) async {
+        final history = _RecordingHistoryVisitRecorder();
+        final locator = _FakeThreadPostLocator(
+          const ThreadPostLocation(tid: '100', pid: '200', page: 3, url: ''),
+        );
+        final repository = _FakeThreadRepository(
+          (tid, page) async => ApiSuccess(_navigationData(page, pid: '199')),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            threadPostLocator: locator,
+            historyVisitRecorder: history,
+            home: const ThreadDetailPage(
+              tid: '100',
+              initialPage: 9,
+              targetPid: '200',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        expect(find.text(l10n.threadPostTargetUnconfirmed), findsOneWidget);
+        expect(repository.queryHistory, hasLength(2));
+        expect(history.drafts, isEmpty);
+        await tester.tap(find.byKey(const Key('thread-detail-retry-button')));
+        await tester.pumpAndSettle();
+        expect(repository.queryHistory, hasLength(4));
+        expect(locator.calls, 2);
+        expect(history.drafts, isEmpty);
+        await tester.tap(find.text(l10n.threadPostOpenHome));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<ThreadDetailPage>(find.byType(ThreadDetailPage))
+              .targetPid,
+          isNull,
+        );
+        expect(history.drafts, hasLength(1));
+        expect(locator.calls, 2);
+      },
+    );
+
+    testWidgets(
+      'target network failure never relocates or exposes raw payload',
+      (tester) async {
+        final locator = _FakeThreadPostLocator(null);
+        final history = _RecordingHistoryVisitRecorder();
+        final repository = _FakeThreadRepository(
+          (tid, page) async => const ApiFailure<ThreadDetailData>(
+            ApiError(
+              type: ApiErrorType.network,
+              message: 'private server payload',
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            threadPostLocator: locator,
+            historyVisitRecorder: history,
+            home: const ThreadDetailPage(
+              tid: '100',
+              initialPage: 9,
+              targetPid: '200',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ThreadDetailPage)),
+        );
+        expect(find.text(l10n.threadPostLocationNetworkFailed), findsOneWidget);
+        expect(find.textContaining('private server payload'), findsNothing);
+        expect(repository.queryHistory, hasLength(1));
+        expect(locator.calls, 0);
+        expect(history.drafts, isEmpty);
+      },
+    );
+
     testWidgets('cold entry keeps the title anchored until content is ready', (
       tester,
     ) async {
@@ -537,7 +1056,7 @@ void main() {
     });
 
     testWidgets(
-      'quick scroll button moves within the loaded page without fetching',
+      'quick scroll button drags and scrolls within the loaded page without fetching',
       (tester) async {
         var requestCount = 0;
         final repository = _FakeThreadRepository((tid, page, query) async {
@@ -571,7 +1090,8 @@ void main() {
           const Key('thread-detail-quick-scroll-button'),
         );
         expect(button, findsOneWidget);
-        expect(find.byTooltip('滚动到底部'), findsOneWidget);
+        final l10n = AppLocalizations.of(tester.element(button));
+        expect(find.byTooltip(l10n.threadDetailScrollBottom), findsOneWidget);
         expect(requestCount, 1);
 
         final list = tester.widget<ListView>(
@@ -584,6 +1104,22 @@ void main() {
         final scrollController = list.controller!;
         expect(scrollController.position.pixels, 0);
 
+        final originalCenter = tester.getCenter(button);
+        final gesture = await tester.startGesture(originalCenter);
+        await tester.pump(const Duration(milliseconds: 650));
+        expect(
+          find.byKey(const Key('thread-quick-scroll-drag-feedback')),
+          findsOneWidget,
+        );
+        await gesture.moveTo(const Offset(100, 200));
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(tester.getCenter(button).dx, lessThan(originalCenter.dx));
+        expect(tester.getCenter(button).dy, originalCenter.dy);
+        expect(scrollController.position.pixels, 0);
+        expect(requestCount, 1);
+
         await tester.tap(button);
         await tester.pumpAndSettle();
 
@@ -591,7 +1127,7 @@ void main() {
           scrollController.position.pixels,
           closeTo(scrollController.position.maxScrollExtent, 0.5),
         );
-        expect(find.byTooltip('滚动到顶部'), findsOneWidget);
+        expect(find.byTooltip(l10n.threadDetailScrollTop), findsOneWidget);
         expect(requestCount, 1);
 
         await tester.tap(button);
@@ -601,7 +1137,7 @@ void main() {
           scrollController.position.pixels,
           closeTo(scrollController.position.minScrollExtent, 0.5),
         );
-        expect(find.byTooltip('滚动到底部'), findsOneWidget);
+        expect(find.byTooltip(l10n.threadDetailScrollBottom), findsOneWidget);
         expect(requestCount, 1);
       },
     );
@@ -3171,6 +3707,318 @@ void main() {
       },
     );
 
+    testWidgets('body-end landing reveals the target body above its footer', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 520);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final repository = _FakeThreadRepository(
+        (tid, page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '正文末尾定位',
+            author: 'author',
+            replies: 1,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'before',
+                author: 'author',
+                authorId: '1',
+                message: List.generate(70, (i) => '<p>前楼 $i</p>').join(),
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+              ThreadPost(
+                pid: 'target',
+                author: 'author',
+                authorId: '1',
+                message: List.generate(45, (i) => '<p>目标正文 $i</p>').join(),
+                number: 2,
+                isFirst: false,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final textScale = ValueNotifier<double>(1);
+      addTearDown(textScale.dispose);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: ValueListenableBuilder<double>(
+            valueListenable: textScale,
+            builder: (context, scale, _) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: const ThreadDetailPage(
+                tid: '100',
+                targetPid: 'target',
+                landing: ThreadPostLanding.bodyEnd,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final viewport = find.byKey(const Key('thread-detail-list'));
+      final body = find.byKey(const Key('thread-post-body-entry-target'));
+      final footer = find.byKey(const Key('thread-post-footer-entry-target'));
+      expect(body, findsOneWidget);
+      expect(footer, findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-post-card-entry-before')),
+        findsNothing,
+      );
+      final viewportTop = tester.getTopLeft(viewport).dy;
+      final footerTop = tester.getTopLeft(footer).dy;
+      final viewportHeight = tester.getSize(viewport).height;
+      expect(
+        footerTop - viewportTop,
+        inInclusiveRange(25, viewportHeight * 0.18 + 2),
+      );
+      expect(tester.getBottomLeft(body).dy, closeTo(footerTop, 1));
+      final initialAnchor = tester.widget<CustomScrollView>(viewport).anchor;
+      expect(initialAnchor, greaterThan(0));
+
+      await _longPressVisibleTop(tester, footer);
+      await _pumpThreadUiTransition(tester);
+      expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
+      Navigator.of(
+        tester.element(find.byKey(const Key('thread-post-action-sheet'))),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      await tester.drag(viewport, const Offset(0, -90));
+      await tester.pumpAndSettle();
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(of: viewport, matching: find.byType(Scrollable)),
+      );
+      final scrolledPixels = scrollable.position.pixels;
+      expect(scrolledPixels, greaterThan(0));
+      textScale.value = 1.4;
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CustomScrollView>(viewport).anchor,
+        greaterThan(initialAnchor),
+      );
+      expect(scrollable.position.pixels, closeTo(scrolledPixels, 1));
+    });
+
+    testWidgets('body-end landing keeps an empty footer on a short last post', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository(
+        (tid, page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '短正文定位',
+            author: 'author',
+            replies: 0,
+            views: 12,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'only',
+                author: 'author',
+                authorId: '1',
+                message: '<p>短正文</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: const ThreadDetailPage(
+            tid: '100',
+            targetPid: 'only',
+            landing: ThreadPostLanding.bodyEnd,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final footer = find.byKey(const Key('thread-post-footer-entry-only'));
+      final body = find.byKey(const Key('thread-post-body-entry-only'));
+      expect(footer, findsOneWidget);
+      expect(
+        tester.getBottomLeft(body).dy,
+        closeTo(tester.getTopLeft(footer).dy, 1),
+      );
+      expect(
+        find.byKey(const Key('thread-detail-target-scroll-spacer')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('late body image dimensions keep the footer landing stable', (
+      tester,
+    ) async {
+      const message =
+          '<p>章节末段</p>'
+          '<img file="data/attachment/forum/late.jpg">'
+          '<p>正文最后一行</p>';
+      final post = ThreadPost(
+        pid: 'image-target',
+        author: 'alice',
+        authorId: '1',
+        message: message,
+        number: 1,
+        isFirst: true,
+        dateline: 'today',
+      );
+      final state = ThreadDetailPageState.initial(
+        tid: '100',
+        subject: '图片定位',
+      ).copyWith(posts: [post]);
+      final image = const ThreadPostBodyRenderPlanner()
+          .plan(message)
+          .images
+          .single;
+      final imageKey = ThreadPostResourceLayoutHints.blockImageKey(image);
+      final dimensions = ThreadPostImageDimensionStore();
+      final controller = ScrollController();
+      addTearDown(dimensions.dispose);
+      addTearDown(controller.dispose);
+      var visibleCount = 0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _NoopImageCacheService(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: ThreadDetailContent(
+                state: state,
+                scrollController: controller,
+                targetPid: post.pid,
+                landing: ThreadPostLanding.bodyEnd,
+                onTargetVisible: (_) => visibleCount++,
+                imageDimensionStore: dimensions,
+                imageReferer:
+                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
+                onLoadPreviousPage: () {},
+                onLoadNextPage: () {},
+                onLoadPageNumber: (_) {},
+                onOpenAuthorProfile: (_) {},
+                onOpenCommentAuthorProfile: (_) {},
+                onCopyActionUrl: (_, _) {},
+                onOpenPostLink: (_) {},
+                onOpenPostActions: (_, _) {},
+                onTogglePollOption: (_, _) {},
+                onSubmitPollVote: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final footer = find.byKey(
+        const Key('thread-post-footer-entry-image-target'),
+      );
+      final initialTop = tester.getTopLeft(footer).dy;
+      expect(visibleCount, 1);
+
+      dimensions.recordAll(
+        blockDimensions: {
+          imageKey: const ThreadPostResourceDimension(width: 100, height: 280),
+        },
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(footer).dy, closeTo(initialTop, 1));
+      expect(controller.offset, closeTo(0, 1));
+      expect(visibleCount, 1);
+    });
+
+    testWidgets('rating expansion does not move a body-end landing', (
+      tester,
+    ) async {
+      final ratings = _FakeThreadPostRatingsRepository();
+      final repository = _FakeThreadRepository(
+        (tid, page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '55',
+            subject: '评分定位',
+            author: 'alice',
+            replies: 0,
+            views: 1,
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: 'rated',
+                author: 'alice',
+                authorId: '1',
+                message: '<p>正文尾声</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'today',
+                ratingSummary: const ThreadPostRatingSummary(
+                  participantText: '参与人数 1',
+                  scoreText: '积分 +2',
+                  viewAllUrl:
+                      'https://bbs.yamibo.com/forum.php?mod=misc&action=viewratings&tid=100&pid=rated',
+                  ratings: [
+                    ThreadPostRating(
+                      userName: '预览用户',
+                      score: '+2',
+                      reason: '预览理由',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          postRatingsRepository: ratings,
+          home: const ThreadDetailPage(
+            tid: '100',
+            targetPid: 'rated',
+            landing: ThreadPostLanding.bodyEnd,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final footer = find.byKey(const Key('thread-post-footer-entry-rated'));
+      final initialTop = tester.getTopLeft(footer).dy;
+      await tester.tap(find.byKey(const Key('thread-post-rating-body')));
+      await tester.pumpAndSettle();
+      expect(ratings.loadCount, 1);
+      expect(find.text('完整评分用户'), findsOneWidget);
+      expect(tester.getTopLeft(footer).dy, closeTo(initialTop, 1));
+    });
+
     testWidgets('locates findpost link before opening native thread page', (
       tester,
     ) async {
@@ -5191,6 +6039,87 @@ void main() {
   });
 }
 
+final commentsCapabilities = ThreadPostCommentsReadCapabilities(
+  values: DataCapabilitySet.supported(ThreadPostCommentsCapability.values),
+);
+
+forum_client.YamiboForumClient _clientWithPagedComments(
+  ThreadPostCommentsRepository repository,
+) => forum_client.YamiboForumClient(
+  config: forum_client.ForumClientConfig(
+    siteOrigin: Uri.parse('https://bbs.example.test'),
+    apiOrigin: Uri.parse('https://api.example.test/mobile/index.php'),
+    userAgent: 'test',
+    desktopUserAgent: 'test',
+  ),
+  network: _UnusedForumNetwork(),
+  sourcePlan: forum_client.ForumClientSourcePlan(postComments: repository),
+);
+
+final class _FakePagedCommentsRepository
+    implements ThreadPostCommentsRepository {
+  _FakePagedCommentsRepository(this._load);
+
+  final Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  Function(ThreadPostCommentsQuery)
+  _load;
+  final List<ThreadPostCommentsQuery> queries = [];
+
+  @override
+  ThreadPostCommentsSourceCapabilities get capabilities =>
+      ThreadPostCommentsSourceCapabilities(
+        values: DataCapabilitySet.supported(
+          ThreadPostCommentsCapability.values,
+        ),
+      );
+
+  @override
+  Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  load(
+    ThreadPostCommentsQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.networkFirst,
+  }) {
+    queries.add(query);
+    return _load(query);
+  }
+}
+
+final class _UnusedForumNetwork implements forum_client.ForumClientNetwork {
+  @override
+  Future<forum_client.ForumTransportResult<forum_client.ForumResponse<Object?>>>
+  send(forum_client.ForumRequest request) {
+    throw StateError('The comment repository should handle this read');
+  }
+}
+
+ThreadDetailData _navigationData(int page, {required String pid}) =>
+    ThreadDetailData(
+      tid: '100',
+      fid: '33',
+      subject: 'Navigation fixture',
+      author: 'Author',
+      replies: 60,
+      views: 1,
+      currentPage: page,
+      perPage: 20,
+      lastPage: 4,
+      posts: [
+        ThreadPost(
+          pid: pid,
+          author: 'Author',
+          authorId: '10',
+          message: '<p>Verified body</p>',
+          number: 21,
+          isFirst: false,
+          dateline: '',
+        ),
+      ],
+    );
+
 Widget _buildTestApp(
   ThreadRepository repository, {
   ThreadReplyCommand? replyRepository,
@@ -5787,6 +6716,7 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
   _FakeThreadPostLocator(this.location);
 
   final ThreadPostLocation? location;
+  int calls = 0;
   String? lastTid;
   String? lastPid;
   Uri? lastSourceUri;
@@ -5797,6 +6727,7 @@ class _FakeThreadPostLocator implements ThreadPostLocator {
     required String pid,
     required Uri sourceUri,
   }) async {
+    calls++;
     lastTid = tid;
     lastPid = pid;
     lastSourceUri = sourceUri;
@@ -6183,6 +7114,60 @@ class _FakeThreadRepository implements ThreadRepository {
       capabilities: capabilities.toReadCapabilities(),
     );
   }
+}
+
+final class _PageHandoff implements ThreadDetailHandoff {}
+
+final class _HandoffThreadRepository
+    implements ThreadRepository, ThreadDetailHandoffReader {
+  _HandoffThreadRepository(this._handoff);
+
+  final _PageHandoff _handoff;
+  int handoffReads = 0;
+  int ordinaryReads = 0;
+
+  @override
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    ordinaryReads++;
+    return _result(page);
+  }
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>?>
+  consumeHandoff(
+    ThreadDetailHandoff handoff, {
+    required String tid,
+    required String pid,
+    required int page,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    handoffReads++;
+    if (!identical(handoff, _handoff) ||
+        tid != '100' ||
+        pid != '200' ||
+        page != 3 ||
+        !query.isEmpty) {
+      return null;
+    }
+    return _result(page);
+  }
+
+  DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities> _result(
+    int page,
+  ) => DataReadSuccess(
+    data: _navigationData(page, pid: '200'),
+    capabilities: capabilities.toReadCapabilities(),
+    metadata: const DataReadMetadata.network(),
+  );
 }
 
 class _ThreadProjectionTestConverter implements TextConverter {

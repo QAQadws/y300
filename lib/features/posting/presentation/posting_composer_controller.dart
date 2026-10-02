@@ -30,7 +30,7 @@ final postingComposerControllerProvider = AsyncNotifierProvider.autoDispose
 ///
 /// 通用流程（草稿恢复 / 防抖落盘 / 模式切换 / 图片上传 / submit 调度）走
 /// [ComposerControllerBase]；这里只补：
-/// 1) `_loadMetadata`：拉取 forumdisplay 元数据，并在 metadata 到位后校正
+/// 1) `_loadMetadata`：拉取当前类型的 HTML 发帖表单，并在 metadata 到位后校正
 ///    草稿恢复出来的 typeid。
 /// 2) 业务字段更新（subject / typeid / 选项 / tags / special / poll）+
 ///    草稿落盘。tags / poll 走单独的小型 setter，避免基类感知发帖独有字段。
@@ -42,6 +42,10 @@ class PostingComposerController
   PostingComposerController(this._args);
 
   final PostingComposerArgs _args;
+  int _preparationGeneration = 0;
+  ForumRequestCancellation? _preparationCancellation;
+  Future<void>? _preparationFlight;
+  ThreadCreationKind? _preparingKind;
   ThreadCreationPreparationRepository? _preparationRepository;
   ThreadCreationCommand? _creationCommand;
   ThreadCreationSubmissionMapper? _submissionMapper;
@@ -85,6 +89,7 @@ class PostingComposerController
           restoredDraft?.imageAttachments ?? const <ComposerImageAttachment>[],
       isLoadingMetadata: true,
       selectedTypeId: extras.selectedTypeId,
+      minimumReadAccess: extras.minimumReadAccess,
       allowNoticeAuthor: extras.allowNoticeAuthor,
       bbCodeOff: extras.bbCodeOff,
       smileyOff: extras.smileyOff,
@@ -97,6 +102,10 @@ class PostingComposerController
 
   @override
   void onAfterBuild(PostingComposerState initial) {
+    ref.onDispose(() {
+      _preparationGeneration++;
+      _preparationCancellation?.cancel();
+    });
     // 沿用 reply 的时序约定：用 microtask 把元数据拉取推迟到 build 完成之后。
     unawaited(Future<void>.microtask(_loadMetadata));
   }
@@ -144,6 +153,7 @@ class PostingComposerController
   Map<String, String> draftExtrasFor(PostingComposerState value) {
     return _draftExtrasCodec!.encode(
       selectedTypeId: value.selectedTypeId,
+      minimumReadAccess: value.minimumReadAccess,
       allowNoticeAuthor: value.allowNoticeAuthor,
       bbCodeOff: value.bbCodeOff,
       smileyOff: value.smileyOff,
@@ -161,12 +171,17 @@ class PostingComposerController
 
   @override
   PostingComposerState resetDraftContent(PostingComposerState value) {
+    if (value.special != NewThreadSpecial.normal) {
+      unawaited(Future<void>.microtask(_loadMetadata));
+    }
     return _resetDraftFields(value);
   }
 
   PostingComposerState _resetDraftFields(PostingComposerState value) {
     return value.copyWith(
       subject: '',
+      minimumReadAccess: 0,
+      submitOutcomeUnknown: false,
       clearSelectedTypeId: true,
       allowNoticeAuthor: false,
       bbCodeOff: false,
@@ -186,6 +201,23 @@ class PostingComposerController
       return;
     }
     setStateValue(current.copyWith(subject: value, clearFailure: true));
+    unawaited(scheduleDraftSave());
+  }
+
+  void updateMinimumReadAccess(int value) {
+    final current = state.value;
+    if (current == null ||
+        current.isSubmitting ||
+        current.isLoadingMetadata ||
+        (current.metadata?.readAccess.allows(value) != true &&
+            !(value == 0 &&
+                current.metadata?.readAccess.canModify == false &&
+                (current.metadata?.readAccess.currentValue ?? 0) == 0))) {
+      return;
+    }
+    setStateValue(
+      current.copyWith(minimumReadAccess: value, clearFailure: true),
+    );
     unawaited(scheduleDraftSave());
   }
 
@@ -245,7 +277,7 @@ class PostingComposerController
   void updateSpecial(NewThreadSpecial next) {
     final current = state.value;
     if (current == null) return;
-    if (current.special == next) return;
+    if (current.isSubmitting || current.special == next) return;
     final NewThreadPollDraft? poll;
     if (next == NewThreadSpecial.poll) {
       poll = current.poll ?? NewThreadPollDraft.empty;
@@ -253,9 +285,16 @@ class PostingComposerController
       poll = current.poll;
     }
     setStateValue(
-      current.copyWith(special: next, poll: poll, clearFailure: true),
+      current.copyWith(
+        special: next,
+        poll: poll,
+        clearFailure: true,
+        clearMetadata: true,
+        isLoadingMetadata: true,
+      ),
     );
     unawaited(scheduleDraftSave());
+    unawaited(_loadMetadata());
   }
 
   // ── poll 字段编辑 ─────────────────────────────────
@@ -315,28 +354,78 @@ class PostingComposerController
     unawaited(scheduleDraftSave());
   }
 
-  // PLACEHOLDER_PHASE_4_METADATA_FLOW
   /// 重新拉取版块 metadata。失败状态下用户点"重试"会调到这里。
   Future<void> retryLoadMetadata() => _loadMetadata();
 
-  Future<void> _loadMetadata() async {
+  Future<void> _loadMetadata() {
     final current = state.value;
-    if (current == null) {
-      return;
+    if (current == null) return Future.value();
+    final kind = current.creationKind;
+    if (_preparationFlight != null &&
+        _preparingKind == kind &&
+        !(_preparationCancellation?.isCancelled ?? true)) {
+      return _preparationFlight!;
     }
-    if (!current.isLoadingMetadata) {
-      setStateValue(
-        current.copyWith(isLoadingMetadata: true, clearMetadataFailure: true),
+    _preparationCancellation?.cancel();
+    final cancellation = ForumRequestCancellation();
+    _preparationCancellation = cancellation;
+    _preparingKind = kind;
+    final generation = ++_preparationGeneration;
+    setStateValue(
+      current.copyWith(
+        isLoadingMetadata: true,
+        clearMetadata: true,
+        clearMetadataFailure: true,
+      ),
+    );
+    final flight = _prepareMetadata(kind, generation, cancellation)
+        .whenComplete(() {
+          if (generation == _preparationGeneration) {
+            _preparationFlight = null;
+            _preparingKind = null;
+          }
+        });
+    _preparationFlight = flight;
+    return flight;
+  }
+
+  Future<void> _prepareMetadata(
+    ThreadCreationKind kind,
+    int generation,
+    ForumRequestCancellation cancellation,
+  ) async {
+    DataReadResult<ThreadCreationPreparation, ThreadCreationCapabilities>
+    result;
+    try {
+      result = await _preparationRepository!.load(
+        ThreadCreationPreparationRequest(
+          fid: _args.target.fid,
+          kind: kind,
+          cancellation: cancellation,
+        ),
+      );
+      final data = result.dataOrNull;
+      if (data != null && (data.fid != _args.target.fid || data.kind != kind)) {
+        result = const DataReadFailure(
+          kind: DataReadFailureKind.parse,
+          code: 'preparation_identity_mismatch',
+          diagnosticMessage: 'preparation_identity_mismatch',
+        );
+      }
+    } catch (_) {
+      result = const DataReadFailure(
+        kind: DataReadFailureKind.network,
+        code: 'preparation_failed',
+        diagnosticMessage: 'preparation_failed',
       );
     }
-
-    final result = await _preparationRepository!.load(
-      ThreadCreationPreparationRequest(fid: _args.target.fid),
-    );
-    final latest = state.value;
-    if (latest == null) {
+    if (!ref.mounted ||
+        cancellation.isCancelled ||
+        generation != _preparationGeneration) {
       return;
     }
+    final latest = state.value;
+    if (latest == null || latest.creationKind != kind) return;
     if (result case DataReadSuccess<
       ThreadCreationPreparation,
       ThreadCreationCapabilities
@@ -414,7 +503,9 @@ class PostingComposerController
       );
     }
     final metadata = state.metadata;
-    if (metadata == null) {
+    if (state.isLoadingMetadata ||
+        metadata == null ||
+        metadata.kind != state.creationKind) {
       return ComposerValidationFailure(
         code: state.metadataFailure == null
             ? ComposerValidationFailureCode.metadataLoading
@@ -422,7 +513,12 @@ class PostingComposerController
         detail: state.metadataFailure?.detail,
       );
     }
-    if (metadata.typeRequired) {
+    if (!state.isReadAccessValid) {
+      return const ComposerValidationFailure(
+        code: ComposerValidationFailureCode.readAccessUnavailable,
+      );
+    }
+    if (metadata.typeRequired == true) {
       final typeid = state.selectedTypeId?.trim() ?? '';
       if (typeid.isEmpty || typeid == '0') {
         return const ComposerValidationFailure(
@@ -430,29 +526,32 @@ class PostingComposerController
         );
       }
     }
-    // metadata 可能没有声明上限——`hasSubjectLimit` 已经把 `<=0` 当作"不限制"。
+    // 仅对表单明确提供的长度上限执行本地校验。
     if (metadata.hasSubjectLimit &&
-        subject.length > metadata.maxSubjectLength) {
+        subject.length > metadata.maxSubjectLength!) {
       return ComposerValidationFailure(
         code: ComposerValidationFailureCode.subjectTooLong,
         limit: metadata.maxSubjectLength,
       );
     }
     if (metadata.hasMessageLimit &&
-        message.length > metadata.maxMessageLength) {
+        message.length > metadata.maxMessageLength!) {
       return ComposerValidationFailure(
         code: ComposerValidationFailureCode.bodyTooLong,
         limit: metadata.maxMessageLength,
       );
     }
     if (state.special == NewThreadSpecial.poll) {
-      final pollError = _validatePoll(state.poll);
+      final pollError = _validatePoll(state.poll, metadata.pollConstraints);
       if (pollError != null) return pollError;
     }
     return null;
   }
 
-  ComposerValidationFailure? _validatePoll(NewThreadPollDraft? poll) {
+  ComposerValidationFailure? _validatePoll(
+    NewThreadPollDraft? poll,
+    ThreadPollConstraints? constraints,
+  ) {
     if (poll == null) {
       return const ComposerValidationFailure(
         code: ComposerValidationFailureCode.pollMissing,
@@ -468,13 +567,20 @@ class PostingComposerController
         limit: NewThreadPollValidation.minOptions,
       );
     }
-    if (poll.options.any(
-      (option) =>
-          option.trim().length > NewThreadPollValidation.maxOptionLength,
-    )) {
-      return const ComposerValidationFailure(
+    if (constraints?.maximumOptions != null &&
+        validOptions.length > constraints!.maximumOptions!) {
+      return ComposerValidationFailure(
+        code: ComposerValidationFailureCode.pollTooManyOptions,
+        limit: constraints.maximumOptions,
+      );
+    }
+    if (constraints?.maximumOptionLength != null &&
+        poll.options.any(
+          (option) => option.trim().length > constraints!.maximumOptionLength!,
+        )) {
+      return ComposerValidationFailure(
         code: ComposerValidationFailureCode.pollOptionTooLong,
-        limit: NewThreadPollValidation.maxOptionLength,
+        limit: constraints!.maximumOptionLength,
       );
     }
     if (poll.multiple && poll.maxChoices < 2) {
@@ -505,6 +611,7 @@ class PostingComposerController
       subject: state.subject,
       message: state.message,
       selectedTypeId: state.selectedTypeId,
+      minimumReadAccess: state.minimumReadAccess,
       useSignature: state.useSignature,
       allowNoticeAuthor: state.allowNoticeAuthor,
       bbCodeOff: state.bbCodeOff,
@@ -525,6 +632,11 @@ class PostingComposerController
       _lastSuccess = receipt;
       return const ComposerSubmissionOutcome.success();
     }
+    if (result is DataCommandOutcomeUnknown<ThreadCreationReceipt>) {
+      setStateValue(
+        (this.state.value ?? state).copyWith(submitOutcomeUnknown: true),
+      );
+    }
     final failure = _failureClassifier!.classifyCommand(
       result.failureOrNull!,
       kind: ComposerKind.newThread,
@@ -538,12 +650,22 @@ class PostingComposerController
   /// 这里再裹上一层把成功路径下的 tid/pid 带出去。
   @override
   Future<PostingComposerResult> submit() async {
+    if (state.value?.submitOutcomeUnknown == true) {
+      return const PostingComposerResult(
+        sent: false,
+        failure: ComposerSubmissionFailure(
+          code: ComposerSubmissionFailureCode.outcomeUnknown,
+          kind: ComposerKind.newThread,
+        ),
+      );
+    }
     _lastSuccess = null;
     final result = await super.submit();
     return PostingComposerResult.fromInvocation(
       result,
       tid: _lastSuccess?.tid,
       pid: _lastSuccess?.pid,
+      readAccess: _lastSuccess?.readAccess,
     );
   }
 

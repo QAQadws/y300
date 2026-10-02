@@ -1,38 +1,47 @@
+import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import '../../../support/forum_auth_test_support.dart';
+import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
-import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
+import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 
-import '../../../support/favorite_command_test_support.dart';
-
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
   testWidgets('MorePage builds dark theme chrome', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -50,11 +59,11 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
   });
 
-  testWidgets('MorePage renders stage-1 entries', (tester) async {
+  testWidgets('MorePage renders entries without descriptions', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -69,30 +78,45 @@ void main() {
 
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const Key('more-login-entry')),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('登录'), findsOneWidget);
-    expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
-    expect(find.text('我的资料'), findsOneWidget);
+    expect(find.byKey(const Key('more-my-profile-entry')), findsNothing);
+    expect(find.byKey(const Key('more-daily-sign-in-entry')), findsNothing);
     expect(find.byKey(const Key('more-unused-images-entry')), findsOneWidget);
     expect(find.text('未使用图片管理'), findsOneWidget);
     expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
     expect(find.text('论坛显示模式'), findsOneWidget);
-    expect(find.text('当前：WebView 模式'), findsOneWidget);
     expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
     expect(find.text('外观与文字'), findsOneWidget);
-    expect(find.text('当前：暖纸 · 日间'), findsOneWidget);
     expect(
       find.byKey(const Key('more-navigation-management-entry')),
       findsOneWidget,
     );
     expect(find.text('导航栏管理'), findsOneWidget);
-    expect(find.text('已显示 5 项'), findsOneWidget);
     expect(find.byKey(const Key('more-cache-settings-entry')), findsNothing);
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
-    expect(find.text('管理缓存与离线内容'), findsOneWidget);
+    final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
+    expect(find.text(l10n.moreMyProfile), findsNothing);
+    expect(find.text(l10n.moreDailySignIn), findsNothing);
+    expect(find.text(l10n.moreMyProfileSignedOutSubtitle), findsNothing);
+    expect(find.text(l10n.moreDailySignInSubtitle), findsNothing);
+    expect(find.text(l10n.moreUnusedImagesSubtitle), findsNothing);
+    expect(find.text(l10n.moreDataAndStorageSubtitle), findsNothing);
+    expect(find.text(l10n.moreVisibleNavigationCount(5)), findsNothing);
+    await _scrollUntilVisibleIfNeeded(
+      tester,
+      find.byKey(const Key('more-download-queue-entry')),
+    );
     expect(find.byKey(const Key('more-download-queue-entry')), findsOneWidget);
     expect(find.text('缓存队列'), findsOneWidget);
-    expect(find.text('暂无缓存任务'), findsOneWidget);
+    expect(find.text(l10n.moreDownloadEmpty), findsNothing);
     expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
     expect(find.byKey(const Key('about-check-update-entry')), findsNothing);
     expect(
@@ -129,6 +153,7 @@ void main() {
     );
     expect(find.byKey(const Key('more-about-entry')), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
+    expect(find.text(l10n.moreAboutSubtitle), findsNothing);
   });
 
   testWidgets('MorePage cache queue entry supports large Traditional text', (
@@ -142,7 +167,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -164,8 +189,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await _scrollUntilVisibleIfNeeded(tester, find.text('快取佇列'));
     expect(find.text('快取佇列'), findsOneWidget);
-    expect(find.text('目前沒有快取工作'), findsOneWidget);
+    final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
+    expect(find.text(l10n.moreDownloadEmpty), findsNothing);
     expect(find.byIcon(Icons.offline_pin_outlined), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -176,7 +203,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -203,58 +230,140 @@ void main() {
 
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
     final repository = _FakeAuthRepository(isLoggedIn: true);
-    final webViewDriver = _FakeForumWebViewDriver();
+    final profileRepository = _SignedProfileRepository();
+    final signInRepository = _SignedDailySignInRepository();
+    final webLaunches = <ForumWebViewLaunchConfig>[];
+    final summaryRepository = _AccountSummaryRepository(
+      () => const CurrentUserProfileData(
+        identity: ProfileUserIdentity(userId: '100', displayName: 'tester'),
+        groupName: '普通会员',
+        creditTotal: 42,
+      ),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(repository),
+          ..._moreAuthOverrides(
+            repository,
+            summaryRepository: summaryRepository,
+          ),
+          dailySignInRepositoryProvider.overrideWithValue(signInRepository),
+          forumWebViewRouteFactoryProvider.overrideWithValue(
+            _profileWebRoutes(webLaunches),
+          ),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            profileRepository,
+          ),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
-          forumWebViewDriverFactoryProvider.overrideWith(
-            (ref) =>
-                () => webViewDriver,
-          ),
-          cookieStoreProvider.overrideWithValue(_FakeCookieStore()),
           webViewCookieSyncServiceProvider.overrideWithValue(
             _FakeWebViewCookieSyncService(),
-          ),
-          favoriteForumCommandProvider.overrideWithValue(
-            FakeFavoriteForumCommand(),
           ),
         ],
         child: const LocalizedTestApp(home: MorePage()),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
+    final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
     expect(find.byKey(const Key('more-login-entry')), findsNothing);
     expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
-    expect(find.byKey(const Key('more-my-profile-entry')), findsOneWidget);
-    expect(find.text('退出登录'), findsOneWidget);
-    expect(find.text('当前账号：tester'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('more-my-profile-entry')));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ForumWebViewPage), findsOneWidget);
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
-    expect(find.text('我的资料'), findsWidgets);
     expect(
-      webViewDriver.bootstrapConfig?.initialUri.toString(),
-      'https://bbs.yamibo.com/home.php?mod=space&uid=100&do=profile&mycenter=1&mobile=2',
-    );
-    expect(webViewDriver.loadedUris, <Uri>[
-      Uri.parse(
-        'https://bbs.yamibo.com/home.php?mod=space&uid=100&do=profile&mycenter=1&mobile=2',
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const Key('more-logout-entry')),
       ),
-    ]);
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('more-my-profile-entry')), findsNothing);
+    expect(find.text(l10n.moreLogout), findsNothing);
+    expect(find.byTooltip(l10n.moreLogout), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('more-logout-entry')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(find.text('tester'), findsOneWidget);
+    expect(find.text('普通会员'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('more-account-credits')),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is AnimatedFlipCounter && widget.value == 42,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(summaryRepository.reads, 1);
 
-    await tester.tap(find.byKey(const Key('forum-webview-back-button')));
+    final scrollable = tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byKey(const Key('more-page-list')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
     await tester.pumpAndSettle();
+    scrollable.position.jumpTo(0);
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(summaryRepository.reads, 1);
+
+    expect(find.byKey(const Key('more-daily-sign-in-entry')), findsNothing);
+    expect(find.text(l10n.moreDailySignIn), findsNothing);
+    expect(find.byKey(const Key('daily-auto-sign-in-toggle')), findsOneWidget);
+    expect(signInRepository.reads, 0);
+
+    await tester.tap(find.byKey(const Key('more-account-name')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyProfilePage), findsNothing);
+    expect(find.byKey(const Key('test-profile-webview')), findsOneWidget);
+    expect(profileRepository.queries, isEmpty);
+    expect(
+      webLaunches.single.initialUri.origin,
+      Uri.parse(AppConfig.siteBaseUrl).origin,
+    );
+    expect(webLaunches.single.initialUri.path, '/home.php');
+    expect(webLaunches.single.initialUri.queryParameters, {
+      'mod': 'space',
+      'uid': '100',
+      'do': 'profile',
+      'mycenter': '1',
+      'mobile': '2',
+    });
+    expect(webLaunches.single.popOnRootBack, isTrue);
+    expect(webLaunches.single.purpose, ForumWebViewHostPurpose.selfProfile);
+
+    Navigator.of(
+      tester.element(find.byKey(const Key('test-profile-webview'))),
+    ).pop();
+    await tester.pumpAndSettle();
+    expect(summaryRepository.reads, 2);
+
+    await tester.drag(
+      find.byKey(const Key('more-page-list')),
+      const Offset(0, 400),
+    );
+    await tester.pumpAndSettle();
+    expect(summaryRepository.reads, 3);
+
+    // Cancelling the existing confirmation leaves the current account intact.
+    await tester.tap(find.byKey(const Key('more-logout-entry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.commonCancel));
+    await tester.pumpAndSettle();
+    expect(repository.logoutCount, 0);
+    expect(find.text('tester'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('more-logout-entry')));
     await tester.pumpAndSettle();
@@ -264,6 +373,8 @@ void main() {
     expect(repository.logoutCount, 1);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
     expect(find.text('已退出登录'), findsOneWidget);
+    expect(find.byKey(const Key('more-account-group')), findsNothing);
+    expect(find.byKey(const Key('more-account-credits')), findsNothing);
   });
 
   testWidgets('MorePage switches forum shell mode from bottom sheet', (
@@ -273,7 +384,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
@@ -283,8 +394,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-
-    expect(find.text('当前：WebView 模式'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
     await tester.pumpAndSettle();
@@ -298,12 +407,29 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('解析模式'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const Key('more-forum-mode-option-webview')),
+          )
+          .trailing,
+      isA<Icon>(),
+    );
 
     await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
     await tester.pumpAndSettle();
 
     expect(modeRepository.mode, ForumShellMode.native);
-    expect(find.text('当前：解析模式'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const Key('more-forum-mode-option-native')),
+          )
+          .trailing,
+      isA<Icon>(),
+    );
   });
 
   testWidgets('MorePage login entry navigates to the WebView login page', (
@@ -314,7 +440,109 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(repository),
+          ..._moreAuthOverrides(repository),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final login = tester
+        .widget<TextButton>(find.byKey(const Key('more-login-entry')))
+        .onPressed!;
+    login();
+    login();
+    // 不 pump 目标页：Navigator.push 会同步通知 observer.didPush 记录路由名，
+    // 而目标页（含真实 InAppWebView 平台视图）的 build 被推迟到下一帧。此处
+    // 只断言“入栈了正确的登录路由”，避免在纯 widget 测试环境构建平台视图。
+    // 登录检测/校验逻辑已由 resolver 单测覆盖。
+
+    expect(routeObserver.pushedNames, contains(LoginWebViewPage.routeName));
+    expect(
+      routeObserver.pushedNames.where(
+        (name) => name == LoginWebViewPage.routeName,
+      ),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('account avatar opens the current account after login', (
+    tester,
+  ) async {
+    final routeObserver = _RouteNameObserver();
+    final profileRepository = _SignedProfileRepository();
+    final webLaunches = <ForumWebViewLaunchConfig>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          forumWebViewRouteFactoryProvider.overrideWithValue(
+            _profileWebRoutes(webLaunches),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            profileRepository,
+          ),
+          dailySignInRepositoryProvider.overrideWithValue(
+            _SignedDailySignInRepository(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MorePage)),
+    );
+
+    await tester.tap(find.byKey(const Key('more-login-entry')));
+    expect(routeObserver.pushedNames.last, LoginWebViewPage.routeName);
+
+    // LoginWebViewPage verifies the session before returning true. Simulate
+    // that handoff without constructing a platform WebView in this widget test.
+    container
+        .read(authSessionControllerProvider.notifier)
+        .acceptSession(
+          const ForumSessionIdentity(userId: '200', username: 'next-account'),
+        );
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop(true);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyProfilePage), findsNothing);
+    await tester.tap(find.byKey(const Key('more-account-avatar')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyProfilePage), findsNothing);
+    expect(find.byKey(const Key('test-profile-webview')), findsOneWidget);
+    expect(webLaunches.single.initialUri.queryParameters['uid'], '200');
+    expect(profileRepository.queries, isEmpty);
+  });
+
+  testWidgets('account avatar stays disabled when login is cancelled', (
+    tester,
+  ) async {
+    final routeObserver = _RouteNameObserver();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -331,12 +559,65 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('more-login-entry')));
-    // 不 pump 目标页：Navigator.push 会同步通知 observer.didPush 记录路由名，
-    // 而目标页（含真实 InAppWebView 平台视图）的 build 被推迟到下一帧。此处
-    // 只断言“入栈了正确的登录路由”，避免在纯 widget 测试环境构建平台视图。
-    // 登录检测/校验逻辑已由 resolver 单测覆盖。
+    expect(routeObserver.pushedNames.last, LoginWebViewPage.routeName);
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop(false);
+    await tester.pumpAndSettle();
 
-    expect(routeObserver.pushedNames, contains(LoginWebViewPage.routeName));
+    expect(find.byType(MorePage), findsOneWidget);
+    expect(find.byType(MyProfilePage), findsNothing);
+    expect(routeObserver.pushedNames.length, 2);
+    expect(
+      tester
+          .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
+          .onTap,
+      isNull,
+    );
+  });
+
+  testWidgets('account avatar ignores duplicate taps while navigating', (
+    tester,
+  ) async {
+    final routeObserver = _RouteNameObserver();
+    final webLaunches = <ForumWebViewLaunchConfig>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
+          forumWebViewRouteFactoryProvider.overrideWithValue(
+            _profileWebRoutes(webLaunches),
+          ),
+          forumModeSettingsRepositoryProvider.overrideWithValue(
+            _FakeForumModeSettingsRepository(),
+          ),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+          forumUserProfileRepositoryProvider.overrideWithValue(
+            _SignedProfileRepository(),
+          ),
+          dailySignInRepositoryProvider.overrideWithValue(
+            _SignedDailySignInRepository(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          navigatorObservers: [routeObserver],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final tap = tester
+        .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
+        .onTap!;
+    tap();
+    tap();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MyProfilePage), findsNothing);
+    expect(find.byKey(const Key('test-profile-webview')), findsOneWidget);
+    expect(webLaunches, hasLength(1));
+    expect(routeObserver.pushedNames.length, 2);
   });
 
   testWidgets(
@@ -346,7 +627,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+            ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
             forumModeSettingsRepositoryProvider.overrideWithValue(
               _FakeForumModeSettingsRepository(),
             ),
@@ -387,7 +668,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -426,7 +707,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(failOnSave: true),
           ),
@@ -445,7 +726,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('论坛显示模式切换失败'), findsOneWidget);
-    expect(find.text('当前：WebView 模式'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.byKey(const Key('more-forum-mode-option-webview')),
+          )
+          .trailing,
+      isA<Icon>(),
+    );
     expect(
       find.byKey(const Key('more-forum-mode-option-native')),
       findsOneWidget,
@@ -459,7 +747,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -552,7 +840,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance-settings-sheet')), findsNothing);
-    expect(find.text('当前：梅紫 · 夜间'), findsOneWidget);
   });
 
   testWidgets('Appearance theme swatches follow the active brightness', (
@@ -697,7 +984,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -765,7 +1052,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...forumAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumModeSettingsRepositoryProvider.overrideWithValue(
             _FakeForumModeSettingsRepository(),
           ),
@@ -799,6 +1086,15 @@ void main() {
   });
 }
 
+ForumWebViewRouteFactory _profileWebRoutes(
+  List<ForumWebViewLaunchConfig> launches,
+) => (config) {
+  launches.add(config);
+  return MaterialPageRoute<Object?>(
+    builder: (_) => const Scaffold(key: Key('test-profile-webview')),
+  );
+};
+
 void _expectSameVerticalCenter(WidgetTester tester, List<Key> keys) {
   final centers = keys
       .map((key) => tester.getCenter(find.byKey(key)).dy)
@@ -826,6 +1122,60 @@ Future<void> _scrollUntilVisibleIfNeeded(
     return;
   }
   await tester.scrollUntilVisible(finder, 160);
+}
+
+List<Override> _moreAuthOverrides(
+  AuthRepository repository, {
+  CurrentAccountSummaryRepository? summaryRepository,
+}) => [
+  ...forumAuthOverrides(repository),
+  if (summaryRepository != null)
+    currentAccountSummaryRepositoryProvider.overrideWithValue(summaryRepository)
+  else
+    currentAccountSummaryRepositoryProvider.overrideWith((ref) {
+      return _AccountSummaryRepository(() {
+        final session = ref.read(authSessionControllerProvider).asData!.value;
+        return CurrentUserProfileData(
+          identity: ProfileUserIdentity(
+            userId: session.uid,
+            displayName: session.username,
+          ),
+          groupName: '普通会员',
+          creditTotal: 42,
+        );
+      });
+    }),
+];
+
+class _AccountSummaryRepository implements CurrentAccountSummaryRepository {
+  _AccountSummaryRepository(this.currentData);
+
+  final CurrentUserProfileData Function() currentData;
+  int reads = 0;
+
+  @override
+  CurrentUserProfileSourceCapabilities get capabilities =>
+      CurrentUserProfileSourceCapabilities(
+        values: DataCapabilitySet.supported(
+          CurrentUserProfileCapability.values,
+        ),
+      );
+
+  @override
+  Future<
+    DataReadResult<CurrentUserProfileData, CurrentUserProfileReadCapabilities>
+  >
+  load(
+    CurrentAccountSummaryQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) async {
+    reads++;
+    return DataReadSuccess(
+      data: currentData(),
+      capabilities: capabilities.toReadCapabilities(),
+      metadata: const DataReadMetadata.network(),
+    );
+  }
 }
 
 class _RouteNameObserver extends NavigatorObserver {
@@ -1025,78 +1375,72 @@ class _FakeWebViewCookieSyncService extends WebViewCookieSyncService {
   }
 }
 
-class _FakeForumWebViewDriver implements ForumWebViewDriver {
-  final List<Uri> loadedUris = <Uri>[];
-  ForumWebViewBootstrapConfig? bootstrapConfig;
-  ForumWebViewCallbacks? _callbacks;
+class _SignedProfileRepository implements ForumUserProfileRepository {
+  final queries = <ForumUserProfileQuery>[];
+  final policies = <CacheLoadPolicy>[];
 
   @override
-  Widget buildWidget({Key? key}) {
-    return SizedBox.expand(key: key);
-  }
+  ForumUserProfileSourceCapabilities get capabilities =>
+      ForumUserProfileSourceCapabilities(
+        values: DataCapabilitySet.supported(ForumUserProfileCapability.values),
+      );
 
   @override
-  Future<bool> canGoBack() async {
-    return false;
-  }
-
-  @override
-  Future<bool> clearCookies() async {
-    return true;
-  }
-
-  @override
-  Future<String?> getTitle() async {
-    return '我的资料';
-  }
-
-  @override
-  Future<void> goBack() async {}
-
-  @override
-  Future<void> initialize({
-    required ForumWebViewCallbacks callbacks,
-    required ForumWebViewBootstrapConfig bootstrapConfig,
+  Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>
+  load(
+    ForumUserProfileQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    _callbacks = callbacks;
-    this.bootstrapConfig = bootstrapConfig;
-  }
-
-  @override
-  Future<void> load(Uri uri, {Map<String, String> headers = const {}}) async {
-    loadedUris.add(uri);
-    _callbacks?.onPageStarted(uri.toString());
-    _callbacks?.onProgress(100);
-    await _callbacks?.onPageFinished(uri.toString());
-  }
-
-  @override
-  Future<ForumWebViewCapabilityProfile> probeCapabilities() async {
-    return const ForumWebViewCapabilityProfile(
-      documentStartMode: ForumWebViewDocumentStartMode.reliable,
-      supportsContentBlockers: false,
-      supportsTransparentBackground: true,
-      supportsPlatformScrollTuning: true,
-      supportsCookieHooks: true,
-      supportsPageCommitVisible: true,
+    queries.add(query);
+    policies.add(cachePolicy);
+    return DataReadSuccess(
+      data: ForumUserProfileData(
+        identity: ProfileUserIdentity(
+          userId: query.userId,
+          displayName: 'sample-member',
+        ),
+        metrics: const <ForumUserProfileMetric>[],
+        details: <ForumUserProfileDetail>[
+          ForumUserProfileDetail(label: 'UID', value: query.userId),
+        ],
+      ),
+      capabilities: ForumUserProfileReadCapabilities(
+        values: DataCapabilitySet.supported(ForumUserProfileCapability.values),
+      ),
+      metadata: const DataReadMetadata.network(),
     );
   }
+}
+
+class _SignedDailySignInRepository implements ForumDailySignInRepository {
+  int reads = 0;
 
   @override
-  Future<void> reload() async {}
+  ForumDailySignInSourceCapabilities get capabilities =>
+      ForumDailySignInSourceCapabilities(
+        values: DataCapabilitySet.supported(
+          ForumDailySignInReadCapability.values,
+        ),
+      );
 
   @override
-  Future<void> runJavaScript(String script) async {}
-
-  @override
-  Future<Object?> runJavaScriptReturningResult(String script) async {
-    return null;
+  Future<
+    DataReadResult<ForumDailySignInSnapshot, ForumDailySignInReadCapabilities>
+  >
+  load(ForumDailySignInQuery query) async {
+    reads++;
+    return DataReadSuccess(
+      data: ForumDailySignInSnapshot(
+        userId: query.userId,
+        forumDay: '20260925',
+        status: ForumDailySignInStatus.signed,
+      ),
+      capabilities: ForumDailySignInReadCapabilities(
+        values: DataCapabilitySet.supported(
+          ForumDailySignInReadCapability.values,
+        ),
+      ),
+      metadata: const DataReadMetadata.network(),
+    );
   }
-
-  @override
-  Future<void> seedCookies({
-    required String domain,
-    required Map<String, String> cookies,
-    String path = '/',
-  }) async {}
 }

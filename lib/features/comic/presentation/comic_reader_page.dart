@@ -87,6 +87,9 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
           final commentSession = ref.watch(
             comicCommentSessionControllerProvider(commentSessionKey),
           );
+          commentTail.updateChapterImages(
+            viewState.images.map((image) => image.imageUrl),
+          );
           commentTail.updateNavigation(
             hasNextEpisode: viewState.hasNextEpisode,
             onAdvanceEpisode: viewState.nextChapter == null
@@ -393,7 +396,10 @@ class _ComicReaderPageState extends ConsumerState<ComicReaderPage> {
     if (selected == null || selected.isCurrent || !mounted) {
       return;
     }
-    await _controller().openEpisode(episodeId: selected.episodeId);
+    await _controller().openEpisode(
+      episodeId: selected.episodeId,
+      policy: ComicEpisodeOpenPolicy.startAtBeginning,
+    );
   }
 }
 
@@ -438,7 +444,7 @@ class _ReaderNextChapterTransition extends StatelessWidget {
     final canOpen = !isSwitchingEpisode;
     return Padding(
       key: const Key('comic-reader-next-chapter-transition'),
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 56),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
       child: Material(
         color: chromePalette.transitionCardBackground,
         borderRadius: BorderRadius.circular(8),

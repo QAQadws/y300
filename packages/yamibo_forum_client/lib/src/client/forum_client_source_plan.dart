@@ -2,6 +2,7 @@ import '../contracts/comic_contracts.dart';
 import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_daily_sign_in.dart';
 import '../contracts/forum_authentication.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_image_attachments.dart';
@@ -15,6 +16,10 @@ import '../contracts/user_blog_media.dart';
 import '../contracts/user_blog_favorites.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
+import '../contracts/private_message_command.dart';
+import '../contracts/private_message_batch_command.dart';
+import '../contracts/friend_directory.dart';
+import '../contracts/notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
 import '../contracts/thread_repository.dart';
@@ -41,8 +46,16 @@ final class ForumClientSourcePlan {
     this.favoriteForumCommand,
     this.favoriteThreadCommand,
     this.currentUserProfile,
+    this.currentAccountSummary,
+    this.dailySignIn,
+    this.dailySignInCommand,
     this.notifications,
     this.privateMessages,
+    this.privateMessageCommand,
+    this.friendDirectory,
+    this.privateMessageBatchPreparation,
+    this.privateMessageBatchCommand,
+    this.notificationIgnoreCommand,
     this.stickerCatalog,
     this.forumUserProfile,
     this.userBlogDirectory,
@@ -75,6 +88,7 @@ final class ForumClientSourcePlan {
     this.unusedImageAttachmentDelete,
     this.postImageAttachmentDelete,
     this.postRatings,
+    this.postComments,
     this.postLocator,
     this.threadAuthorPosts,
     this.session,
@@ -102,8 +116,22 @@ final class ForumClientSourcePlan {
     favoriteThreadCommand:
         overrides.favoriteThreadCommand ?? favoriteThreadCommand,
     currentUserProfile: overrides.currentUserProfile ?? currentUserProfile,
+    currentAccountSummary:
+        overrides.currentAccountSummary ?? currentAccountSummary,
+    dailySignIn: overrides.dailySignIn ?? dailySignIn,
+    dailySignInCommand: overrides.dailySignInCommand ?? dailySignInCommand,
     notifications: overrides.notifications ?? notifications,
     privateMessages: overrides.privateMessages ?? privateMessages,
+    privateMessageCommand:
+        overrides.privateMessageCommand ?? privateMessageCommand,
+    friendDirectory: overrides.friendDirectory ?? friendDirectory,
+    privateMessageBatchPreparation:
+        overrides.privateMessageBatchPreparation ??
+        privateMessageBatchPreparation,
+    privateMessageBatchCommand:
+        overrides.privateMessageBatchCommand ?? privateMessageBatchCommand,
+    notificationIgnoreCommand:
+        overrides.notificationIgnoreCommand ?? notificationIgnoreCommand,
     stickerCatalog: overrides.stickerCatalog ?? stickerCatalog,
     forumUserProfile: overrides.forumUserProfile ?? forumUserProfile,
     userBlogDirectory: overrides.userBlogDirectory ?? userBlogDirectory,
@@ -160,6 +188,7 @@ final class ForumClientSourcePlan {
     postImageAttachmentDelete:
         overrides.postImageAttachmentDelete ?? postImageAttachmentDelete,
     postRatings: overrides.postRatings ?? postRatings,
+    postComments: overrides.postComments ?? postComments,
     postLocator: overrides.postLocator ?? postLocator,
     threadAuthorPosts: overrides.threadAuthorPosts ?? threadAuthorPosts,
     session: overrides.session ?? session,
@@ -194,11 +223,36 @@ final class ForumClientSourcePlan {
   /// Source for the authenticated user's profile projection.
   final CurrentUserProfileRepository? currentUserProfile;
 
+  /// Network-only source for the verified current account's display summary.
+  final CurrentAccountSummaryRepository? currentAccountSummary;
+
+  /// Network-only source for today's authenticated sign-in state.
+  final ForumDailySignInRepository? dailySignIn;
+
+  /// Command for one ordinary daily sign-in attempt.
+  final ForumDailySignInCommand? dailySignInCommand;
+
   /// Source for notification pages.
   final ForumNotificationRepository? notifications;
 
   /// Source for private-message pages.
   final ForumPrivateMessageRepository? privateMessages;
+
+  /// Command for sending a private message to one explicit destination.
+  final ForumPrivateMessageCommand? privateMessageCommand;
+
+  /// Source for the current account's friend selector.
+  final ForumFriendDirectoryRepository? friendDirectory;
+
+  /// Fresh desktop batch-form preparation source.
+  final ForumPrivateMessageBatchPreparationRepository?
+  privateMessageBatchPreparation;
+
+  /// Command for one request delivering separate direct messages.
+  final ForumPrivateMessageBatchCommand? privateMessageBatchCommand;
+
+  /// Command for muting future notifications of a type for selected authors.
+  final ForumNotificationIgnoreCommand? notificationIgnoreCommand;
 
   /// Source for the forum sticker catalog.
   final ForumStickerCatalogRepository? stickerCatalog;
@@ -296,6 +350,9 @@ final class ForumClientSourcePlan {
 
   /// Source for complete post-rating details.
   final ThreadPostRatingsRepository? postRatings;
+
+  /// Source for paginated post comments.
+  final ThreadPostCommentsRepository? postComments;
 
   /// Source for locating a post within a paginated thread.
   final ThreadPostLocatorRepository? postLocator;

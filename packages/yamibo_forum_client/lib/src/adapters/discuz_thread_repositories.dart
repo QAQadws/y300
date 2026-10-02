@@ -15,6 +15,7 @@ import 'discuz_api_client.dart';
 import 'thread_detail_api_mapper.dart';
 import 'thread_detail_html_parser.dart';
 import 'thread_detail_snapshot_codec.dart';
+import 'thread_detail_handoff_coordinator.dart';
 
 final class ApiThreadRepository implements ThreadRepository {
   const ApiThreadRepository(
@@ -85,7 +86,11 @@ final class ApiThreadRepository implements ThreadRepository {
   }
 }
 
-final class ThreadDetailHtmlRepository implements ThreadRepository {
+final class ThreadDetailHtmlRepository
+    implements
+        ThreadRepository,
+        ThreadReadInvalidation,
+        ThreadDetailHandoffReader {
   ThreadDetailHtmlRepository({
     required ForumClientConfig config,
     required this.network,
@@ -100,6 +105,7 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
       keepStaleFor: Duration(days: 7),
     ),
     DateTime Function()? now,
+    this.handoffCoordinator,
   }) : _config = config,
        _parser =
            parser ?? ThreadDetailHtmlParser(siteOrigin: config.siteOrigin),
@@ -107,6 +113,33 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
            cacheKeys ??
            ForumCacheKeyCanonicalizer(siteOrigin: config.siteOrigin),
        _now = now ?? DateTime.now;
+
+  final Map<String, int> _cacheGenerations = {};
+  final Map<String, Future<void>> _cacheCommits = {};
+
+  @override
+  Future<void> invalidatePendingReads(String tid) async {
+    _cacheGenerations[tid] = (_cacheGenerations[tid] ?? 0) + 1;
+    handoffCoordinator?.invalidate(tid);
+    await _cacheCommits[tid];
+  }
+
+  Future<void> _commit(
+    String tid,
+    int generation,
+    Future<void> Function() write,
+  ) async {
+    final previous = _cacheCommits[tid] ?? Future<void>.value();
+    final task = previous.then((_) async {
+      if (generation == (_cacheGenerations[tid] ?? 0)) await write();
+    });
+    _cacheCommits[tid] = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_cacheCommits[tid], task)) _cacheCommits.remove(tid);
+    }
+  }
 
   final ForumClientConfig _config;
   final ForumClientNetwork network;
@@ -118,6 +151,31 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
   final ThreadDetailSnapshotCodec _snapshotCodec;
   final ForumSnapshotPolicy _snapshotPolicy;
   final DateTime Function() _now;
+  final ThreadDetailHandoffCoordinator? handoffCoordinator;
+
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>?>
+  consumeHandoff(
+    ThreadDetailHandoff handoff, {
+    required String tid,
+    required String pid,
+    required int page,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async {
+    final detail = await handoffCoordinator?.consume(
+      handoff,
+      tid: tid,
+      pid: pid,
+      page: page,
+      query: query,
+    );
+    if (detail == null) return null;
+    return _validated(
+      detail,
+      requestedTid: tid,
+      capabilities: _htmlReadCapabilities(detail),
+    );
+  }
 
   @override
   ThreadDetailSourceCapabilities get capabilities => _htmlCapabilities;
@@ -129,6 +187,7 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
     int page = 1,
     ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
+    final generation = _cacheGenerations[tid] ?? 0;
     final queryParameters = query.toRequestParameters();
     final documentDescriptor = _cacheKeys.threadDetail(
       tid: tid,
@@ -180,6 +239,7 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
       :final failure,
     )) {
       final cached = await _cachedDocument(
+        generation: generation,
         descriptor: documentDescriptor,
         snapshotDescriptor: snapshotDescriptor,
         tid: tid,
@@ -211,8 +271,10 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
       if (data.posts.isEmpty) {
         return _parseFailure('thread_detail_posts_missing');
       }
-      await _putDocument(documentDescriptor, body);
-      await _putSnapshot(snapshotDescriptor, data);
+      await _commit(tid, generation, () async {
+        await _putDocument(documentDescriptor, body);
+        await _putSnapshot(snapshotDescriptor, data);
+      });
       return _validated(
         data,
         requestedTid: tid,
@@ -224,6 +286,7 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
   }
 
   Future<ThreadDetailData?> _cachedDocument({
+    required int generation,
     required ForumDocumentDescriptor descriptor,
     required ForumSnapshotDescriptor snapshotDescriptor,
     required String tid,
@@ -245,8 +308,10 @@ final class ThreadDetailHtmlRepository implements ThreadRepository {
         fallbackPage: page,
       );
       if (data.posts.isEmpty) return null;
-      await _safeTouch(descriptor);
-      await _putSnapshot(snapshotDescriptor, data);
+      await _commit(tid, generation, () async {
+        await _safeTouch(descriptor);
+        await _putSnapshot(snapshotDescriptor, data);
+      });
       return data;
     } on FormatException {
       return null;

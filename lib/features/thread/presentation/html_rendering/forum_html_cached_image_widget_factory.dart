@@ -578,6 +578,11 @@ class _ForumHtmlCachedBlockImageViewState
     if (!mounted || _loadedCacheKey != cacheKey || dimensions == null) {
       return;
     }
+    widget.onBlockImageResolved?.call(
+      widget.spec,
+      widget.request,
+      Size(dimensions.width.toDouble(), dimensions.height.toDouble()),
+    );
     final next = widget.layoutHintResolver.resolve(
       spec: widget.spec,
       cacheDimensions: dimensions,

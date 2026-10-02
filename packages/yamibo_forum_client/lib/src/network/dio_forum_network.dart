@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../client/forum_client_config.dart';
 import '../contracts/forum_resource.dart';
 import '../logging/forum_client_logger.dart';
+import '../logging/forum_log_uri_redactor.dart';
 import '../session/forum_cookie_store.dart';
 import '../waf/forum_waf.dart';
 import 'forum_network.dart';
@@ -40,6 +41,7 @@ final class DioForumClientNetwork
   /// Logger.
   final ForumClientLogger logger;
   final Dio _dio;
+  static const _logUriRedactor = ForumLogUriRedactor();
   int _sequence = 0;
 
   @override
@@ -472,7 +474,7 @@ final class DioForumClientNetwork
     logger.requestStarted(
       operation: request.context.operation,
       method: request.method.name.toUpperCase(),
-      uri: request.uri,
+      uri: _logUriRedactor.redact(request.uri),
     );
 
     try {
@@ -511,6 +513,15 @@ final class DioForumClientNetwork
       final body = response.data;
       final challenge = _detectChallenge(response.realUri, response.statusCode);
       if (challenge != null) {
+        if (!request.allowWafReplay) {
+          return ForumTransportError<ForumResponse<Object?>>(
+            ForumTransportFailure(
+              kind: ForumTransportFailureKind.server,
+              code: 'security_verification_not_completed',
+              statusCode: response.statusCode,
+            ),
+          );
+        }
         final recovery = waf == null
             ? ForumWafRecoveryResult.unavailable
             : await waf!.recover(
@@ -544,13 +555,13 @@ final class DioForumClientNetwork
       final result = _statusResult(
         response.statusCode,
         body,
-        request.uri,
+        response.realUri,
         headers: response.headers.map,
       );
       logger.requestFinished(
         operation: request.context.operation,
         method: request.method.name.toUpperCase(),
-        uri: request.uri,
+        uri: _logUriRedactor.redact(request.uri),
         statusCode: response.statusCode,
         elapsedMs: DateTime.now().difference(started).inMilliseconds,
       );
@@ -560,7 +571,7 @@ final class DioForumClientNetwork
       logger.requestFailed(
         operation: request.context.operation,
         method: request.method.name.toUpperCase(),
-        uri: request.uri,
+        uri: _logUriRedactor.redact(request.uri),
         code: failure.code,
         statusCode: failure.statusCode,
       );
@@ -596,6 +607,7 @@ final class DioForumClientNetwork
       body: request.body,
       responseType: request.responseType,
       followRedirects: request.followRedirects,
+      allowWafReplay: request.allowWafReplay,
       cancellation: request.cancellation,
     );
     // A verified challenge permits exactly one replay. The recursive call is
@@ -654,7 +666,7 @@ final class DioForumClientNetwork
       return _statusResult(
         response.statusCode,
         response.data,
-        request.uri,
+        response.realUri,
         headers: response.headers.map,
       );
     } on DioException catch (error) {

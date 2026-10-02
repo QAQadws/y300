@@ -1,8 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/composer_shared/presentation/services/read_access_feedback.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
@@ -35,13 +39,13 @@ import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
+import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
-import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
@@ -57,6 +61,7 @@ class ForumWebViewPage extends ConsumerStatefulWidget {
 }
 
 class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
+  final _postRouteSession = ThreadPostNavigationSession();
   static const String _refreshPageAction = 'refresh-page';
   static const String _homeUnfavoriteAction = 'home-unfavorite';
   static const String _forumFavoriteAction = 'forum-favorite';
@@ -105,6 +110,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
   @override
   void dispose() {
+    _postRouteSession.dispose();
     _delayedCleanupTimer?.cancel();
     _historyCoordinator.dispose();
     super.dispose();
@@ -270,6 +276,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return;
     }
     _delayedCleanupTimer?.cancel();
+    _postRouteSession.invalidate();
     _delayedCleanupTimer = null;
     _navigationGeneration += 1;
     final uri = ref.read(forumWebViewNavigatorProvider).resolve(url);
@@ -506,19 +513,15 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   ) async {
     switch (resolution.kind) {
       case ForumWebViewThreadLinkKind.thread:
+        _postRouteSession.invalidate();
         _pushNativeThread(tid: resolution.tid!);
         return;
       case ForumWebViewThreadLinkKind.threadPost:
-        _pushNativeThread(
-          tid: resolution.tid!,
-          initialPage: resolution.page,
-          targetPid: resolution.pid,
-        );
-        return;
       case ForumWebViewThreadLinkKind.findPostRedirect:
         await _openNativeFindPostRedirect(resolution);
         return;
       case ForumWebViewThreadLinkKind.emptyFindPostRedirect:
+        _postRouteSession.invalidate();
         await _openNativeEmptyFindPostRedirect(resolution);
         return;
       case ForumWebViewThreadLinkKind.none:
@@ -530,29 +533,18 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   Future<void> _openNativeFindPostRedirect(
     ForumWebViewThreadLinkResolution resolution,
   ) async {
-    final result = await ref
-        .read(threadPostLocatorProvider)
-        .locate(
-          tid: resolution.tid!,
-          pid: resolution.pid!,
-          sourceUri: resolution.normalizedUri,
-        );
-    if (!mounted) {
-      return;
-    }
-    if (result case ApiSuccess<ThreadPostLocation>(:final data)) {
-      _pushNativeThread(
-        tid: data.tid,
-        initialPage: data.page,
-        targetPid: data.pid,
-      );
-      return;
-    }
-    _showSnackBar(
-      ScaffoldMessenger.of(context),
-      AppLocalizations.of(context).forumWebViewLocationFallback,
+    await launchThreadPostRoute(
+      context: context,
+      session: _postRouteSession,
+      resolver: ref.read(threadPostRouteResolverProvider),
+      target: ThreadPostTarget.fromLink(
+        tid: resolution.tid!,
+        pid: resolution.pid!,
+        sourceUri: resolution.normalizedUri,
+        pageHint: resolution.page,
+      ),
+      isCurrent: () => mounted && widget.isAccountCurrent?.call() != false,
     );
-    _pushNativeThread(tid: resolution.tid!);
   }
 
   Future<void> _openNativeEmptyFindPostRedirect(
@@ -638,6 +630,8 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             ),
       title: Text(title),
       actions: [
+        if (hostPurpose == ForumWebViewHostPurpose.selfProfile)
+          MyProfileWebViewAction(currentUri: state.currentUri),
         if (hostPurpose == ForumWebViewHostPurpose.postEditFallback)
           IconButton(
             key: const Key('forum-webview-post-edit-native-button'),
@@ -954,11 +948,12 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (messenger != null) {
       _showSnackBar(
         messenger,
-        ComposerTextResolver.submitSuccess(
-          l10n,
-          ComposerKind.newThread,
-          result.rawSuccessDetail,
-        ),
+        readAccessFeedback(l10n, result.readAccess) ??
+            ComposerTextResolver.submitSuccess(
+              l10n,
+              ComposerKind.newThread,
+              result.rawSuccessDetail,
+            ),
       );
     }
     // 方案 §4.2 本期保持简单：仅刷新当前 WebView。新帖 tid 已经在
@@ -1297,6 +1292,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     Uri targetUri, {
     Uri? referrerUri,
   }) {
+    _postRouteSession.invalidate();
     final navigator = ref.read(forumWebViewNavigatorProvider);
     if (!navigator.isManagedSite(targetUri)) {
       return driver.load(targetUri);

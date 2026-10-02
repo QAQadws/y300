@@ -38,7 +38,9 @@ final class DiscuzForumUserProfileRepository
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     final userId = query.userId.trim();
-    if (userId.isEmpty) {
+    if (userId.isEmpty ||
+        (query.view == ForumUserProfileView.self &&
+            !RegExp(r'^[1-9]\d*$').hasMatch(userId))) {
       return const DataReadFailure(
         kind: DataReadFailureKind.business,
         code: 'forum_user_profile_query_invalid',
@@ -87,12 +89,36 @@ final class DiscuzForumUserProfileRepository
         diagnosticMessage: 'forum_user_profile_unauthorized',
       );
     }
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    if (query.view == ForumUserProfileView.self &&
+        (response.statusCode != 200 ||
+            !_parser.isExpectedSelfResponseUri(
+              uri: response.uri,
+              expectedUserId: userId,
+            ))) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        code: 'forum_user_profile_context_invalid',
+        diagnosticMessage: 'forum_user_profile_context_invalid',
+      );
+    }
     try {
-      final data = _parser.parse(html: html, expectedUserId: userId);
+      final data = _parser.parse(
+        html: html,
+        expectedUserId: userId,
+        view: query.view,
+      );
       return DataReadSuccess(
         data: data,
-        capabilities: _profileReadCapabilities(data),
+        capabilities: _profileReadCapabilities(data, query.view),
         metadata: const DataReadMetadata.network(),
+      );
+    } on ForumUserProfileUnauthorized {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.unauthorized,
+        code: 'forum_user_profile_unauthorized',
+        diagnosticMessage: 'forum_user_profile_unauthorized',
       );
     } on FormatException {
       return const DataReadFailure(
@@ -365,6 +391,7 @@ DataCapabilitySet<T> _optional<T extends Enum>(
 
 ForumUserProfileReadCapabilities _profileReadCapabilities(
   ForumUserProfileData data,
+  ForumUserProfileView view,
 ) {
   var values = _profileCapabilities.values;
   values = _optional(
@@ -381,6 +408,11 @@ ForumUserProfileReadCapabilities _profileReadCapabilities(
     values,
     ForumUserProfileCapability.signatureMarkup,
     data.signatureHtml != null,
+  );
+  values = _optional(
+    values,
+    ForumUserProfileCapability.orderedActions,
+    view == ForumUserProfileView.self,
   );
   return ForumUserProfileReadCapabilities(values: values);
 }

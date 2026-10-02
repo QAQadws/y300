@@ -24,6 +24,13 @@ abstract final class PreferenceKeys {
   static const forumShellMode = PreferenceKey<String>(
     PreferenceKeyNames.forumShellMode,
   );
+  static PreferenceKey<bool> dailyAutoSignInEnabledForUid(String userId) =>
+      PreferenceKey<bool>(
+        '${PreferenceKeyNames.dailyAutoSignInEnabledV1Prefix}$userId',
+      );
+  static const threadQuickScrollDockSide = PreferenceKey<String>(
+    PreferenceKeyNames.threadQuickScrollDockSide,
+  );
 
   static const forumHtmlReaderFontScale = PreferenceKey<double>(
     PreferenceKeyNames.forumHtmlReaderFontScale,
@@ -62,6 +69,9 @@ abstract final class PreferenceKeys {
 
   static const novelReaderSnapshotV1 = PreferenceKey<String>(
     PreferenceKeyNames.novelReaderSnapshotV1,
+  );
+  static const novelChapterInteractionsDockV1 = PreferenceKey<String>(
+    PreferenceKeyNames.novelChapterInteractionsDockV1,
   );
   static const novelReaderMigrationVersion = PreferenceKey<int>(
     PreferenceKeyNames.novelReaderMigrationVersion,

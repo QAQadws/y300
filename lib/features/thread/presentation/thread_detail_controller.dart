@@ -1,7 +1,10 @@
+import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_target_loader.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -16,7 +19,9 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_rating_service.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 
 class ThreadDetailArgs {
   const ThreadDetailArgs({
@@ -24,12 +29,14 @@ class ThreadDetailArgs {
     this.subject = '',
     this.initialPage,
     this.targetPid,
+    this.initialHandoff,
   });
 
   final String tid;
   final String subject;
   final int? initialPage;
   final String? targetPid;
+  final ThreadDetailHandoff? initialHandoff;
 
   @override
   bool operator ==(Object other) {
@@ -40,11 +47,13 @@ class ThreadDetailArgs {
         other.tid == tid &&
         other.subject == subject &&
         other.initialPage == initialPage &&
-        other.targetPid == targetPid;
+        other.targetPid == targetPid &&
+        identical(other.initialHandoff, initialHandoff);
   }
 
   @override
-  int get hashCode => Object.hash(tid, subject, initialPage, targetPid);
+  int get hashCode =>
+      Object.hash(tid, subject, initialPage, targetPid, initialHandoff);
 }
 
 final threadDetailControllerProvider = AsyncNotifierProvider.autoDispose
@@ -58,10 +67,32 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
   final ThreadDetailArgs _args;
   final Map<String, Object> _ratingsLoadTokens = <String, Object>{};
+  final Map<String, Object> _commentsLoadTokens = <String, Object>{};
+  var _commentsContentGeneration = 0;
   var _ratingsContentGeneration = 0;
+  var _pageLoadGeneration = 0;
+  bool _initialTargetValidated = false;
 
   @override
   FutureOr<ThreadDetailPageState> build() async {
+    final sessionStore = ref.read(yamiboSessionStoreProvider);
+    final identitySubscription = sessionStore.identityChanges.listen((_) {
+      _commentsContentGeneration++;
+      _commentsLoadTokens.clear();
+      final current = state.value;
+      if (ref.mounted && current != null) {
+        state = AsyncData(
+          current.copyWith(
+            commentsByPostId: const <String, ThreadPostCommentsViewState>{},
+          ),
+        );
+      }
+    });
+    ref.onDispose(() {
+      _pageLoadGeneration++;
+      _commentsContentGeneration++;
+      unawaited(identitySubscription.cancel());
+    });
     final initialPage = _args.initialPage == null || _args.initialPage! <= 0
         ? 1
         : _args.initialPage!;
@@ -69,6 +100,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       page: initialPage,
       previous: const <ThreadPost>[],
       queryParameters: const <String, String>{},
+      validateTarget: true,
     );
   }
 
@@ -81,17 +113,22 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     if (forceNetwork) {
       await _invalidateCurrentThreadCache(state.value?.tid ?? _args.tid);
     }
+    if (!ref.mounted) return;
     final current = state.value;
     final currentPage = current?.currentPage;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final next = AsyncValue.guard(
       () => _loadPage(
         page: currentPage == null || currentPage <= 0 ? 1 : currentPage,
         previous: const <ThreadPost>[],
         queryParameters: current?.queryParameters ?? const <String, String>{},
         failureCode: ThreadUiErrorCode.refreshFailed,
+        validateTarget: !_initialTargetValidated,
       ),
     );
+    final generation = _pageLoadGeneration;
+    final value = await next;
+    if (ref.mounted && generation == _pageLoadGeneration) state = value;
   }
 
   Future<void> refreshAfterMutation() => refresh(forceNetwork: true);
@@ -103,12 +140,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
 
     state = AsyncData(current.copyWith(isLoadingMore: true, clearError: true));
+    final generation = ++_pageLoadGeneration;
     final result = await _readRepository().getThreadDetail(
       tid: _args.tid,
       page: current.currentPage + 1,
       query: ThreadDetailQuery.fromLegacyParameters(current.queryParameters),
     );
 
+    if (!ref.mounted || generation != _pageLoadGeneration) return;
     state = result.when(
       success: (data, capabilities, metadata) {
         final effectiveCapabilities = current.capabilities == null
@@ -469,12 +508,13 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
 
     await _invalidateCurrentThreadCache(afterSubmit.tid);
+    final generation = _pageLoadGeneration + 1;
     final reloaded = await _loadPage(
       page: afterSubmit.currentPage <= 0 ? 1 : afterSubmit.currentPage,
       previous: const <ThreadPost>[],
       queryParameters: afterSubmit.queryParameters,
     );
-    if (!ref.mounted) {
+    if (!ref.mounted || generation != _pageLoadGeneration) {
       return;
     }
     state = AsyncData(
@@ -572,57 +612,131 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     _ratingsLoadTokens.remove(pid);
   }
 
-  Future<DataReadResult<ThreadPostRateForm, ThreadPostRatingCapabilities>>
-  loadRateForm(ThreadPost post) async {
+  /// Loads exactly one confirmed continuation page for a visible post.
+  Future<void> loadMoreComments(ThreadPost post) async {
     final current = state.value;
-    final rateUrl = post.rateUrl?.trim();
-    if (rateUrl == null || rateUrl.isEmpty) {
-      return const DataReadFailure(
-        kind: DataReadFailureKind.business,
-        code: 'thread_post_rating_entry_missing',
-        diagnosticMessage: 'thread_post_rating_entry_missing',
-      );
+    final pid = post.pid.trim();
+    final currentPost = current == null
+        ? null
+        : _findPostByPid(current.posts, pid);
+    if (current == null || pid.isEmpty || currentPost == null) {
+      return;
     }
+    final previous =
+        current.commentsByPostId[pid] ??
+        ThreadPostCommentsViewState(
+          comments: const <ThreadPostCommentEntry>[],
+          nextPage: currentPost.commentNextPage,
+        );
+    final page = previous.nextPage;
+    if (page == null || previous.isLoading) {
+      return;
+    }
+    final token = Object();
+    final generation = _commentsContentGeneration;
+    _commentsLoadTokens[pid] = token;
+    state = AsyncData(
+      current.copyWith(
+        commentsByPostId: Map.unmodifiable({
+          ...current.commentsByPostId,
+          pid: previous.copyWith(isLoading: true, clearFailure: true),
+        }),
+      ),
+    );
     final result = await ref
-        .read(threadPostRatingPreparationProvider)
-        .load(
-          ThreadPostRatingPreparationRequest(
-            tid: current?.tid ?? _args.tid,
-            pid: post.pid,
-            referer: Uri.tryParse(_rateReferer(current, post)),
+        .read(yamiboForumClientProvider)
+        .loadPostComments(
+          ThreadPostCommentsQuery(tid: current.tid, pid: pid, page: page),
+        );
+    if (!ref.mounted ||
+        generation != _commentsContentGeneration ||
+        !identical(_commentsLoadTokens[pid], token)) {
+      return;
+    }
+    _commentsLoadTokens.remove(pid);
+    final latest = state.value;
+    final activePost = latest == null
+        ? null
+        : _findPostByPid(latest.posts, pid);
+    final active = latest?.commentsByPostId[pid];
+    if (latest == null ||
+        latest.tid != current.tid ||
+        activePost == null ||
+        active == null ||
+        active.nextPage != page ||
+        active.isLoading != true) {
+      return;
+    }
+    result.when(
+      success: (data, capabilities, metadata) {
+        if (data.tid != latest.tid || data.pid != pid || data.page != page) {
+          state = AsyncData(
+            latest.copyWith(
+              commentsByPostId: Map.unmodifiable({
+                ...latest.commentsByPostId,
+                pid: active.copyWith(
+                  isLoading: false,
+                  failure: ThreadPostCommentsFailure.other,
+                ),
+              }),
+            ),
+          );
+          return;
+        }
+        final ids = <String>{
+          for (final comment in activePost.comments)
+            if (comment.commentId != null) comment.commentId!,
+          for (final comment in active.comments)
+            if (comment.commentId != null) comment.commentId!,
+        };
+        final appended = <ThreadPostCommentEntry>[];
+        for (final comment in data.comments) {
+          final id = comment.commentId;
+          if (id == null || ids.add(id)) appended.add(comment);
+        }
+        state = AsyncData(
+          latest.copyWith(
+            commentsByPostId: Map.unmodifiable({
+              ...latest.commentsByPostId,
+              pid: active.copyWith(
+                comments: List.unmodifiable([...active.comments, ...appended]),
+                nextPage: data.nextPage,
+                clearNextPage: data.nextPage == null,
+                isLoading: false,
+                clearFailure: true,
+              ),
+            }),
           ),
         );
-    return switch (result) {
-      DataReadFailure<
-        ThreadPostRatingPreparation,
-        ThreadPostRatingCapabilities
-      >() =>
-        result.failureOrNull!.retype(),
-      DataReadSuccess<
-        ThreadPostRatingPreparation,
-        ThreadPostRatingCapabilities
-      >(
-        :final data,
-        :final capabilities,
-        :final metadata,
-      ) =>
-        data.dimensions.isEmpty
-            ? const DataReadFailure(
-                kind: DataReadFailureKind.parse,
-                code: 'thread_post_rating_dimensions_missing',
-                diagnosticMessage: 'thread_post_rating_dimensions_missing',
-              )
-            : DataReadSuccess(
-                data: ThreadPostRateForm(
-                  preparation: data,
-                  dimension: data.dimensions.first,
-                ),
-                capabilities: capabilities,
-                metadata: metadata,
+      },
+      failure: (failure) {
+        state = AsyncData(
+          latest.copyWith(
+            commentsByPostId: Map.unmodifiable({
+              ...latest.commentsByPostId,
+              pid: active.copyWith(
+                isLoading: false,
+                failure: failure.kind == DataReadFailureKind.unauthorized
+                    ? ThreadPostCommentsFailure.loginRequired
+                    : failure.code == 'thread_post_comments_permission_denied'
+                    ? ThreadPostCommentsFailure.permissionDenied
+                    : ThreadPostCommentsFailure.other,
               ),
-    };
+            }),
+          ),
+        );
+      },
+    );
   }
 
+  Future<DataReadResult<ThreadPostRateForm, ThreadPostRatingCapabilities>>
+  loadRateForm(ThreadPost post) => ref
+      .read(threadPostRatingServiceProvider)
+      .load(
+        tid: state.value?.tid ?? _args.tid,
+        post: post,
+        referer: Uri.tryParse(_rateReferer(state.value, post)),
+      );
   ThreadPost? _findPostByPid(List<ThreadPost> posts, String pid) {
     for (final post in posts) {
       if (post.pid.trim() == pid) {
@@ -636,8 +750,8 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     ThreadPostRateDraft draft,
   ) async {
     final result = await ref
-        .read(threadPostRatingCommandProvider)
-        .execute(draft.toSubmission());
+        .read(threadPostRatingServiceProvider)
+        .submit(draft);
     if (result is! DataCommandApplied<ThreadPostRatingReceipt>) {
       return result;
     }
@@ -646,66 +760,21 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
   }
 
   Future<DataReadResult<ThreadPostCommentForm, ThreadPostCommentCapabilities>>
-  loadCommentForm(ThreadPost post) async {
-    final current = state.value;
-    final pid = post.pid.trim();
-    if (pid.isEmpty) {
-      return const DataReadFailure(
-        kind: DataReadFailureKind.business,
-        code: 'thread_post_comment_pid_missing',
-        diagnosticMessage: 'thread_post_comment_pid_missing',
+  loadCommentForm(ThreadPost post) => ref
+      .read(threadPostCommentServiceProvider)
+      .load(
+        tid: state.value?.tid ?? _args.tid,
+        page: state.value?.currentPage ?? 1,
+        post: post,
+        referer: Uri.tryParse(_rateReferer(state.value, post)),
       );
-    }
-    final tid = current?.tid.trim().isNotEmpty == true
-        ? current!.tid.trim()
-        : _args.tid;
-    final page = current?.currentPage ?? 1;
-    final commentUrl = post.commentUrl?.trim();
-    if (commentUrl == null || commentUrl.isEmpty) {
-      return const DataReadFailure(
-        kind: DataReadFailureKind.business,
-        code: 'thread_post_comment_entry_missing',
-        diagnosticMessage: 'thread_post_comment_entry_missing',
-      );
-    }
-    final result = await ref
-        .read(threadPostCommentPreparationProvider)
-        .load(
-          ThreadPostCommentPreparationRequest(
-            tid: tid,
-            pid: pid,
-            page: page <= 0 ? 1 : page,
-            referer: Uri.tryParse(_rateReferer(current, post)),
-          ),
-        );
-    return switch (result) {
-      DataReadFailure<
-        ThreadPostCommentPreparation,
-        ThreadPostCommentCapabilities
-      >() =>
-        result.failureOrNull!.retype(),
-      DataReadSuccess<
-        ThreadPostCommentPreparation,
-        ThreadPostCommentCapabilities
-      >(
-        :final data,
-        :final capabilities,
-        :final metadata,
-      ) =>
-        DataReadSuccess(
-          data: ThreadPostCommentForm(preparation: data),
-          capabilities: capabilities,
-          metadata: metadata,
-        ),
-    };
-  }
 
   Future<DataCommandResult<ThreadPostCommentReceipt>> submitPostComment(
     ThreadPostCommentDraft draft,
   ) async {
     final result = await ref
-        .read(threadPostCommentCommandProvider)
-        .execute(draft.toSubmission());
+        .read(threadPostCommentServiceProvider)
+        .submit(draft);
     if (result is! DataCommandApplied<ThreadPostCommentReceipt>) {
       return result;
     }
@@ -717,12 +786,13 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     final current = state.value;
     if (current != null) {
       await _invalidateCurrentThreadCache(current.tid);
+      final generation = _pageLoadGeneration + 1;
       final reloaded = await _loadPage(
         page: current.currentPage <= 0 ? 1 : current.currentPage,
         previous: const <ThreadPost>[],
         queryParameters: current.queryParameters,
       );
-      if (ref.mounted) {
+      if (ref.mounted && generation == _pageLoadGeneration) {
         state = AsyncData(
           reloaded.copyWith(
             isThreadFavorited: current.isThreadFavorited,
@@ -809,11 +879,13 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
         return;
       }
       await _invalidateCurrentThreadCache(latest.tid);
+      final generation = _pageLoadGeneration + 1;
       final reloaded = await _loadPage(
         page: latest.currentPage <= 0 ? 1 : latest.currentPage,
         previous: const <ThreadPost>[],
         queryParameters: latest.queryParameters,
       );
+      if (!ref.mounted || generation != _pageLoadGeneration) return;
       state = AsyncData(
         reloaded.copyWith(
           replyHint: latest.replyHint,
@@ -832,19 +904,60 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     required List<ThreadPost> previous,
     required Map<String, String> queryParameters,
     ThreadUiErrorCode? failureCode,
+    bool validateTarget = false,
   }) async {
+    final generation = ++_pageLoadGeneration;
+    bool isCurrent() => ref.mounted && generation == _pageLoadGeneration;
     _ratingsContentGeneration += 1;
     _ratingsLoadTokens.clear();
+    _commentsContentGeneration += 1;
+    _commentsLoadTokens.clear();
     _logNative(
       'controller_load',
       'tid=${_args.tid} page=$page previous=${previous.length} '
           'query=${_formatQuery(queryParameters)}',
     );
-    final result = await _readRepository().getThreadDetail(
-      tid: _args.tid,
-      page: page,
-      query: ThreadDetailQuery.fromLegacyParameters(queryParameters),
-    );
+    final targetPid = _args.targetPid?.trim();
+    final checkTarget =
+        validateTarget && targetPid != null && targetPid.isNotEmpty;
+    Future<ThreadPostTargetRead> readPage(int requestedPage) =>
+        _readRepository().getThreadDetail(
+          tid: _args.tid,
+          page: requestedPage,
+          query: ThreadDetailQuery.fromLegacyParameters(queryParameters),
+        );
+    final result = checkTarget
+        ? await ThreadPostTargetLoader(
+            readPage: readPage,
+            readHandoff: (handoff, requestedPage) {
+              final repository = _readRepository();
+              if (repository is! ThreadDetailHandoffReader) {
+                return Future<ThreadPostTargetRead?>.value();
+              }
+              return (repository as ThreadDetailHandoffReader).consumeHandoff(
+                handoff,
+                tid: _args.tid,
+                pid: targetPid,
+                page: requestedPage,
+              );
+            },
+            resolver: ref.read(threadPostRouteResolverProvider),
+            invalidate: () => ref
+                .read(nativePageCacheInvalidationServiceProvider)
+                .invalidateThread(_args.tid),
+          ).load(
+            target: ThreadPostTarget(tid: _args.tid, pid: targetPid),
+            page: page,
+            initialHandoff: _args.initialHandoff,
+            isCurrent: isCurrent,
+          )
+        : await readPage(page);
+    if (!isCurrent()) {
+      return ThreadDetailPageState.initial(
+        tid: _args.tid,
+        subject: _args.subject,
+      );
+    }
 
     if (result
         case DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>(
@@ -889,6 +1002,12 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
           fid: data.fid,
           typeid: data.typeid,
         );
+        if (!isCurrent()) {
+          return ThreadDetailPageState.initial(
+            tid: _args.tid,
+            subject: _args.subject,
+          );
+        }
         tagLookupStopwatch.stop();
         _logNative(
           'controller_tag_lookup_done',
@@ -980,6 +1099,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
               'firstPid=${merged.isEmpty ? '-' : merged.first.pid} '
               'firstMessageLength=${merged.isEmpty ? 0 : merged.first.message.length}',
         );
+        if (checkTarget) _initialTargetValidated = true;
         return viewState;
       } catch (error, stackTrace) {
         _logNative(
@@ -1022,6 +1142,17 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
       failure: ThreadActionFailure(
         code: failure.kind == DataReadFailureKind.unauthorized
             ? ThreadUiErrorCode.loginRequired
+            : checkTarget &&
+                  (failure.statusCode == 403 ||
+                      failure.code == 'thread_post_location_permission_denied')
+            ? ThreadUiErrorCode.permissionDenied
+            : checkTarget &&
+                  (failure.kind == DataReadFailureKind.network ||
+                      failure.kind == DataReadFailureKind.timeout ||
+                      failure.kind == DataReadFailureKind.server)
+            ? ThreadUiErrorCode.targetNetworkFailed
+            : checkTarget
+            ? ThreadUiErrorCode.targetUnconfirmed
             : (failureCode ??
                   (page == 1
                       ? ThreadUiErrorCode.loadFailed
@@ -1091,12 +1222,14 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
     }
     final nextQuery = queryParameters ?? current.queryParameters;
     state = AsyncData(current.copyWith(isLoadingMore: true, clearError: true));
+    final generation = _pageLoadGeneration + 1;
     final next = await _loadPage(
       page: page,
       previous: const <ThreadPost>[],
       queryParameters: nextQuery,
       failureCode: ThreadUiErrorCode.pageLoadFailed,
     );
+    if (!ref.mounted || generation != _pageLoadGeneration) return;
     final afterLoading = state.value ?? current;
     state = AsyncData(
       next.copyWith(

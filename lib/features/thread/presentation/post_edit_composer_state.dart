@@ -30,6 +30,7 @@ final class PostEditComposerState extends ComposerStateBase {
     required super.isSubmitting,
     required super.restoredDraft,
     required this.subject,
+    this.minimumReadAccess,
     required super.imageAttachments,
     required super.isUploadingImages,
     required super.imageUploadCurrent,
@@ -58,7 +59,7 @@ final class PostEditComposerState extends ComposerStateBase {
     required ThreadPostEditPreparation snapshot,
     String? subject,
     String? message,
-    bool useSignature = true,
+    bool? useSignature,
     bool nativeSupported = true,
     bool restoredDraft = false,
     PostEditConflictState? pendingConflict,
@@ -74,8 +75,9 @@ final class PostEditComposerState extends ComposerStateBase {
       baselineFingerprint: snapshot.revision,
       nativeSupported: nativeSupported,
       subject: subject ?? snapshot.subject,
+      minimumReadAccess: snapshot.readAccess.currentValue,
       message: message ?? snapshot.message,
-      useSignature: useSignature,
+      useSignature: useSignature ?? snapshot.useSignature,
       isSubmitting: false,
       restoredDraft: restoredDraft,
       imageAttachments: imageAttachments,
@@ -95,6 +97,7 @@ final class PostEditComposerState extends ComposerStateBase {
   final String baselineSubject;
   final String baselineMessage;
   final String subject;
+  final int? minimumReadAccess;
   final String baselineFingerprint;
   final bool nativeSupported;
   final PostEditAttachmentSession attachmentSession;
@@ -111,6 +114,8 @@ final class PostEditComposerState extends ComposerStateBase {
   bool get isDirtyAgainstBaseline {
     return subject != baselineSubject ||
         message != baselineMessage ||
+        useSignature != snapshot.useSignature ||
+        minimumReadAccess != snapshot.readAccess.currentValue ||
         imageAttachments.isNotEmpty ||
         isUploadingImages ||
         pendingAttachmentAids.isNotEmpty ||
@@ -143,6 +148,7 @@ final class PostEditComposerState extends ComposerStateBase {
   bool get canSubmit {
     if (!nativeSupported ||
         !hasValidSubmitContract ||
+        !isReadAccessValid ||
         !isDirtyAgainstBaseline ||
         isSubmitting ||
         isUploadingImages ||
@@ -162,6 +168,13 @@ final class PostEditComposerState extends ComposerStateBase {
     return true;
   }
 
+  bool get isReadAccessValid =>
+      minimumReadAccess == snapshot.readAccess.currentValue ||
+      (target.isFirstPost &&
+          snapshot.readAccess.canModify &&
+          minimumReadAccess != null &&
+          snapshot.readAccess.allows(minimumReadAccess!));
+
   bool get hasValidSubmitContract {
     return snapshot.target == target.toClientTarget();
   }
@@ -169,6 +182,8 @@ final class PostEditComposerState extends ComposerStateBase {
   PostEditComposerState copyWith({
     String? subject,
     String? message,
+    int? minimumReadAccess,
+    bool resetReadAccess = false,
     bool? useSignature,
     bool? isSubmitting,
     bool? restoredDraft,
@@ -215,6 +230,9 @@ final class PostEditComposerState extends ComposerStateBase {
       baselineFingerprint: baselineFingerprint ?? this.baselineFingerprint,
       nativeSupported: nativeSupported ?? this.nativeSupported,
       subject: subject ?? this.subject,
+      minimumReadAccess: resetReadAccess
+          ? nextSnapshot.readAccess.currentValue
+          : minimumReadAccess ?? this.minimumReadAccess,
       message: message ?? this.message,
       useSignature: useSignature ?? this.useSignature,
       isSubmitting: isSubmitting ?? this.isSubmitting,

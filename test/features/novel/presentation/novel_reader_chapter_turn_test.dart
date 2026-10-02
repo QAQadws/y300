@@ -65,6 +65,107 @@ void main() {
   });
 
   group('paged surface chapter turns', () {
+    testWidgets('single page chapter has no inline action or extra page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('novel-reader-paged-page-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('novel-reader-paged-page-1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('tiny viewport keeps content and hides inline action', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 120));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('last page uses the same content inset as the first', (
+      tester,
+    ) async {
+      final navigationController = NovelReaderPagedNavigationController();
+      addTearDown(navigationController.dispose);
+      final positions = <NovelReaderPaginationPosition>[];
+      await tester.pumpWidget(
+        _buildSurface(
+          coordinator: _FixedPlanPaginationCoordinator(pageCount: 2),
+          navigationController: navigationController,
+          onPositionChanged: positions.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+      final firstInset = tester.widget<Padding>(
+        find.byKey(
+          const ValueKey<String>('novel-reader-paged-content-inset-0'),
+        ),
+      );
+      expect((firstInset.padding as EdgeInsets).bottom, lessThan(48));
+
+      expect(navigationController.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      expect(positions.last.pageIndex, 1);
+      expect(positions.last.isPageCountFinal, isTrue);
+      final lastInset = tester.widget<Padding>(
+        find.byKey(
+          const ValueKey<String>('novel-reader-paged-content-inset-1'),
+        ),
+      );
+      expect(lastInset.padding, firstInset.padding);
+    });
+
+    testWidgets('progressive provisional last page has no chapter action', (
+      tester,
+    ) async {
+      final coordinator = _GrowingPlanPaginationCoordinator();
+      await tester.pumpWidget(_buildSurface(coordinator: coordinator));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+      coordinator.complete();
+      await tester.pumpAndSettle();
+      await _advanceToLastPage(tester);
+      expect(
+        find.byKey(const Key('novel-reader-paged-chapter-interactions')),
+        findsNothing,
+      );
+    });
+
     testWidgets('tap controller animates between pages and rejects overlap', (
       tester,
     ) async {

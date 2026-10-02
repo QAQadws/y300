@@ -63,14 +63,23 @@ void main() {
         sources.favoriteForumCommand,
         sources.favoriteThreadCommand,
         sources.currentUserProfile,
+        sources.currentAccountSummary,
+        sources.dailySignIn,
+        sources.dailySignInCommand,
         sources.notifications,
         sources.privateMessages,
+        sources.privateMessageCommand,
+        sources.friendDirectory,
+        sources.privateMessageBatchPreparation,
+        sources.privateMessageBatchCommand,
+        sources.notificationIgnoreCommand,
         sources.stickerCatalog,
         sources.forumUserProfile,
         sources.userBlogDirectory,
         sources.userBlogDetail,
         sources.blogComments,
         sources.blogOperations,
+        sources.blogMedia,
         sources.blogFavorites,
         sources.blogNavigation,
         sources.forumSearch,
@@ -96,6 +105,7 @@ void main() {
         sources.unusedImageAttachmentDelete,
         sources.postImageAttachmentDelete,
         sources.postRatings,
+        sources.postComments,
         sources.postLocator,
         sources.threadAuthorPosts,
         sources.session,
@@ -114,6 +124,14 @@ void main() {
         identical(
           sources.imageAttachmentUploadPreparation,
           sources.imageAttachmentUploadCommand,
+        ),
+        isTrue,
+      );
+      expect(identical(sources.blogOperations, sources.blogMedia), isTrue);
+      expect(
+        identical(
+          sources.privateMessageBatchPreparation,
+          sources.privateMessageBatchCommand,
         ),
         isTrue,
       );

@@ -154,6 +154,8 @@ final class YamiboForumClientBuilder {
               ? network as ForumMultipartClient
               : null),
     );
+    final privateMessageBatch = factory.createPrivateMessageBatch();
+    final dailySignIn = factory.createDailySignIn();
     final standardPlan = ForumClientSourcePlan(
       forumDirectory: forumHome.directory,
       forumHome: forumHome.home,
@@ -170,8 +172,18 @@ final class YamiboForumClientBuilder {
         directory: favoriteThreadDirectory,
       ),
       currentUserProfile: factory.createCurrentUserProfile(),
+      currentAccountSummary: factory.createCurrentAccountSummary(),
+      dailySignIn: dailySignIn.repository,
+      dailySignInCommand: dailySignIn.command,
       notifications: factory.createNotifications(),
       privateMessages: factory.createPrivateMessages(),
+      privateMessageCommand: factory.createPrivateMessageCommand(formhash),
+      friendDirectory: factory.createFriendDirectory(),
+      privateMessageBatchPreparation: privateMessageBatch.preparation,
+      privateMessageBatchCommand: privateMessageBatch.command,
+      notificationIgnoreCommand: factory.createNotificationIgnoreCommand(
+        formhash,
+      ),
       stickerCatalog: factory.createStickerCatalog(store: stickerCatalogStore),
       forumUserProfile: factory.createForumUserProfile(),
       userBlogDirectory: factory.createUserBlogDirectory(),
@@ -206,6 +218,7 @@ final class YamiboForumClientBuilder {
         formhash,
       ),
       postRatings: factory.createThreadPostRatings(),
+      postComments: factory.createThreadPostComments(),
       postLocator: factory.createThreadPostLocator(),
       threadAuthorPosts: factory.createThreadAuthorPosts(),
       session: authentication.session,

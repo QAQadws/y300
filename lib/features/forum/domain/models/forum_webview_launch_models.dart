@@ -1,4 +1,4 @@
-enum ForumWebViewHostPurpose { browse, postEditFallback }
+enum ForumWebViewHostPurpose { browse, postEditFallback, selfProfile }
 
 final class ForumWebViewCompletionTarget {
   const ForumWebViewCompletionTarget({required this.tid, required this.pid});

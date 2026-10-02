@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
@@ -13,14 +14,17 @@ import 'package:y300/features/thread/presentation/html_rendering/theme/forum_htm
 
 void main() {
   testWidgets(
-    'relative links follow the current document when its query changes',
+    'relative links follow the current document across compact layout changes',
     (tester) async {
       final links = <String>[];
       final preparer = _CountingRenderPreparer();
       final repository = _FixedPreferencesRepository(
         ForumHtmlReaderPreferences.defaults(),
       );
-      Future<void> show(Uri base) async {
+      Future<void> show(
+        Uri base, {
+        ForumHtmlContentLayout contentLayout = ForumHtmlContentLayout.document,
+      }) async {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
@@ -34,6 +38,7 @@ void main() {
                   html: '<a href="#comment_5">link</a>',
                   sourceId: 'current-document',
                   linkBaseUri: base,
+                  contentLayout: contentLayout,
                   renderPreparer: preparer,
                   onOpenLink: links.add,
                 ),
@@ -42,6 +47,9 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        final renderer = tester.widget<HtmlWidget>(find.byType(HtmlWidget));
+        expect(renderer.baseUrl, base);
+        expect(renderer.rebuildTriggers, contains(contentLayout));
         await tester.tap(find.text('link', findRichText: true));
         await tester.pumpAndSettle();
       }
@@ -53,7 +61,7 @@ void main() {
         queryParameters: {...first.queryParameters, 'page': '3'},
       );
       await show(first);
-      await show(second);
+      await show(second, contentLayout: ForumHtmlContentLayout.compact);
       expect(links, [
         first.replace(fragment: 'comment_5').toString(),
         second.replace(fragment: 'comment_5').toString(),
@@ -122,12 +130,43 @@ void main() {
       expect(lightHtml, isNot(darkHtml));
     },
   );
+
+  testWidgets(
+    'layout changes reuse the prepared document for the same source',
+    (tester) async {
+      final preparer = _CountingRenderPreparer();
+      final repository = _FixedPreferencesRepository(
+        ForumHtmlReaderPreferences.defaults(),
+      );
+      final theme = ThemeData.light(useMaterial3: true);
+      await tester.pumpWidget(
+        _host(theme: theme, repository: repository, preparer: preparer),
+      );
+      await tester.pumpAndSettle();
+      expect(preparer.callCount, 1);
+      await tester.pumpWidget(
+        _host(
+          theme: theme,
+          repository: repository,
+          preparer: preparer,
+          contentLayout: ForumHtmlContentLayout.compact,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(preparer.callCount, 1);
+      expect(
+        tester.widget<HtmlWidget>(find.byType(HtmlWidget)).rebuildTriggers,
+        contains(ForumHtmlContentLayout.compact),
+      );
+    },
+  );
 }
 
 Widget _host({
   required ThemeData theme,
   required ForumHtmlReaderPreferencesRepository repository,
   required ForumHtmlRenderPreparer preparer,
+  ForumHtmlContentLayout contentLayout = ForumHtmlContentLayout.document,
 }) {
   return ProviderScope(
     overrides: [
@@ -143,6 +182,7 @@ Widget _host({
           html: '<font id="body" color="black">共享正文</font>',
           sourceId: 'shared-content',
           renderPreparer: preparer,
+          contentLayout: contentLayout,
         ),
       ),
     ),

@@ -118,7 +118,9 @@ void main() {
 }
 
 bool _mentionsPrivateDocs(String source) =>
-    source.contains('docs/') || source.contains(r'docs\');
+    source.contains('docs/') ||
+    source.contains(r'docs\') ||
+    source.contains('.sourceDocPath');
 
 bool _containsNonFixtureFormhash(String source) {
   final inputPattern = RegExp(r'<input\b[^>]*>', caseSensitive: false);

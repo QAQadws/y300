@@ -7,12 +7,24 @@ enum MainShellDestination {
   novel,
   history,
   blogs,
+  messages,
   more;
 
   static const List<MainShellDestination> defaultManagedOrder =
-      <MainShellDestination>[forum, favorites, comic, novel, history, blogs];
+      <MainShellDestination>[
+        forum,
+        favorites,
+        comic,
+        novel,
+        history,
+        blogs,
+        messages,
+      ];
 
-  static const defaultHiddenDestinations = <MainShellDestination>{blogs};
+  static const defaultHiddenDestinations = <MainShellDestination>{
+    blogs,
+    messages,
+  };
 
   bool get isManaged => this != MainShellDestination.more;
 }

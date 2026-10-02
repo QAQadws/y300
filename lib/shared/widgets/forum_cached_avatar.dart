@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/media/svg_image_file_probe.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -11,6 +12,7 @@ enum ForumAvatarFallbackPolicy { neutralSurface, localDefaultAvatar }
 
 class ForumCachedAvatar extends ConsumerWidget {
   static const Duration fadeInDuration = ForumMediaLoadingStyle.fadeInDuration;
+  static final _localFileProbe = SvgImageFileProbe();
 
   const ForumCachedAvatar({
     super.key,
@@ -20,6 +22,7 @@ class ForumCachedAvatar extends ConsumerWidget {
     required this.size,
     this.imageReferer,
     this.fallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
+    this.transitionDuration = fadeInDuration,
   });
 
   final String? imageUrl;
@@ -28,6 +31,7 @@ class ForumCachedAvatar extends ConsumerWidget {
   final double size;
   final String? imageReferer;
   final ForumAvatarFallbackPolicy fallbackPolicy;
+  final Duration transitionDuration;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -74,8 +78,13 @@ class ForumCachedAvatar extends ConsumerWidget {
             height: size,
             placeholder: fallback,
             errorPlaceholder: unavailableAvatar,
+            // Avatar endpoints can redirect to SVG without exposing that in
+            // their URL. Inspect both old cache hits and new files before decode.
+            remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
+            localFileFallbackPredicate: _localFileProbe.isSvg,
+            localFileFallback: unavailableAvatar,
             referer: imageReferer,
-            fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+            fadeInDuration: transitionDuration,
           )
         : unavailableAvatar;
     return SizedBox(
@@ -99,7 +108,7 @@ class ForumCachedAvatar extends ConsumerWidget {
       height: size,
       placeholder: placeholder,
       errorPlaceholder: placeholder,
-      fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+      fadeInDuration: transitionDuration,
     );
   }
 

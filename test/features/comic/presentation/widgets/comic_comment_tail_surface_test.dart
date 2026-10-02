@@ -74,7 +74,7 @@ void main() {
       find.byKey(const ValueKey<String>('comic-comment-tail-item-p2')),
       findsOneWidget,
     );
-    expect(tail.verticalItemCount, 2);
+    expect(tail.verticalItemCount, 1);
   });
 
   test('success results expose one lazy vertical item per comment', () async {
@@ -95,7 +95,7 @@ void main() {
 
     await session.load();
 
-    expect(tail.verticalItemCount, 2);
+    expect(tail.verticalItemCount, 1);
     expect(tail.hasAdvance, isFalse);
   });
 
@@ -264,7 +264,8 @@ class _TailFakeLoader implements ComicCommentLoader {
   int calls = 0;
 
   @override
-  Future<ComicCommentLoadResult> loadAll({
+  Future<ComicCommentLoadResult> loadPage({
+    int page = 1,
     required String sourceTid,
     ComicCommentCancellationToken? cancellationToken,
   }) async {

@@ -16,7 +16,6 @@ class MoreDebugTools {
         key: const Key('more-composer-quill-prototype-entry'),
         leading: const Icon(Icons.edit_note_outlined),
         title: Text(l10n.moreDebugQuillComposer),
-        subtitle: Text(l10n.moreDebugQuillComposerSubtitle),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
@@ -29,7 +28,6 @@ class MoreDebugTools {
         key: const Key('more-html-renderer-prototype-entry'),
         leading: const Icon(Icons.article_outlined),
         title: Text(l10n.moreDebugHtmlRenderer),
-        subtitle: Text(l10n.moreDebugHtmlRendererSubtitle),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(

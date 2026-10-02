@@ -6,6 +6,7 @@ import 'package:y300/features/comic/data/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
+import 'package:y300/features/comic/domain/services/comic_duplicate_metadata_matcher.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 
@@ -22,6 +23,7 @@ class ComicDuplicateMergeStore {
   final LibraryCoverStore _libraryCoverStore;
   static Future<void> _exclusiveTail = Future<void>.value();
   static int _operationSequence = 0;
+  static const _metadataMatcher = ComicDuplicateMetadataMatcher();
 
   Future<List<ComicDuplicateGroup>> findDuplicateGroups({
     String? comicId,
@@ -29,10 +31,10 @@ class ComicDuplicateMergeStore {
     final db = await _dbFuture;
     final normalizedComicId = _normalizeNullable(comicId);
     final rows = await db.rawQuery('''
-      SELECT comic_id, source_tid
+      SELECT comic_id, source_tid, NULL AS title, NULL AS author
       FROM ${ComicLocalDb.episodesTable}
       UNION ALL
-      SELECT comic_id, source_tid
+      SELECT comic_id, source_tid, title, author
       FROM ${ComicLocalDb.comicsTable}
       ''');
     if (rows.isEmpty) {
@@ -41,14 +43,29 @@ class ComicDuplicateMergeStore {
 
     final comicIdsByTid = <String, Set<String>>{};
     final tidsByComicId = <String, Set<String>>{};
+    final comicIdsByMetadata = <ComicDuplicateMetadataKey, Set<String>>{};
+    final metadataByComicId = <String, ComicDuplicateMetadataKey>{};
     for (final row in rows) {
       final rowComicId = _normalizeNullable(row['comic_id'] as String?);
       final sourceTid = _normalizeNullable(row['source_tid'] as String?);
-      if (rowComicId == null || sourceTid == null) {
+      if (rowComicId == null) {
         continue;
       }
-      comicIdsByTid.putIfAbsent(sourceTid, () => <String>{}).add(rowComicId);
-      tidsByComicId.putIfAbsent(rowComicId, () => <String>{}).add(sourceTid);
+      final tids = tidsByComicId.putIfAbsent(rowComicId, () => <String>{});
+      if (sourceTid != null) {
+        comicIdsByTid.putIfAbsent(sourceTid, () => <String>{}).add(rowComicId);
+        tids.add(sourceTid);
+      }
+      final metadata = _metadataMatcher.keyFor(
+        title: row['title'] as String?,
+        author: row['author'] as String?,
+      );
+      if (metadata != null) {
+        metadataByComicId[rowComicId] = metadata;
+        comicIdsByMetadata
+            .putIfAbsent(metadata, () => <String>{})
+            .add(rowComicId);
+      }
     }
 
     final candidateComicIds = normalizedComicId == null
@@ -63,14 +80,25 @@ class ComicDuplicateMergeStore {
       }
       final groupComicIds = <String>{};
       final groupTids = <String>{};
+      final groupMetadata = <ComicDuplicateMetadataKey>{};
       final queue = <String>[startComicId];
       visited.add(startComicId);
       while (queue.isNotEmpty) {
         final current = queue.removeLast();
         groupComicIds.add(current);
         for (final tid in tidsByComicId[current] ?? const <String>{}) {
-          groupTids.add(tid);
+          if (!groupTids.add(tid)) {
+            continue;
+          }
           for (final neighbor in comicIdsByTid[tid] ?? const <String>{}) {
+            if (visited.add(neighbor)) {
+              queue.add(neighbor);
+            }
+          }
+        }
+        final metadata = metadataByComicId[current];
+        if (metadata != null && groupMetadata.add(metadata)) {
+          for (final neighbor in comicIdsByMetadata[metadata]!) {
             if (visited.add(neighbor)) {
               queue.add(neighbor);
             }

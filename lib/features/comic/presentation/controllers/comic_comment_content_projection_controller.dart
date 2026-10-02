@@ -31,6 +31,9 @@ final class ComicCommentContentProjectionController extends ChangeNotifier {
   TextConversionMode _mode;
   TextConverter _converter;
   ComicCommentContentProjection? _projection;
+  ComicCommentContentProjection? _fallbackProjection;
+  ComicCommentLoadResult? _revisionSource;
+  String? _sourceRevision;
   bool _isConverting = false;
   int _generation = 0;
   bool _disposed = false;
@@ -51,23 +54,39 @@ final class ComicCommentContentProjectionController extends ChangeNotifier {
   }
 
   ComicCommentContentProjection projectionFor(ComicCommentLoadResult source) {
-    final revision = ComicCommentContentProjector.sourceRevisionFor(
-      sessionKey: _session.key,
-      source: source,
-    );
     final candidate = _projection;
     if (candidate != null &&
-        candidate.sourceRevision == revision &&
+        identical(candidate.sourceResult, source) &&
         candidate.mode == _mode &&
         candidate.converterId == _converter.id) {
       return candidate;
     }
-    return ComicCommentContentProjection.raw(
+    final fallback = _fallbackProjection;
+    if (fallback != null &&
+        identical(fallback.sourceResult, source) &&
+        fallback.mode == _mode &&
+        fallback.converterId == _converter.id) {
+      return fallback;
+    }
+    return _fallbackProjection = ComicCommentContentProjection.raw(
       source,
       mode: _mode,
       converterId: _converter.id,
-      sourceRevision: revision,
+      sourceRevision: _revisionFor(source),
     );
+  }
+
+  // Session results are replacement snapshots. Row builds must not rehash
+  // every loaded post just to retrieve the same display projection.
+  String _revisionFor(ComicCommentLoadResult source) {
+    if (!identical(_revisionSource, source)) {
+      _sourceRevision = ComicCommentContentProjector.sourceRevisionFor(
+        sessionKey: _session.key,
+        source: source,
+      );
+      _revisionSource = source;
+    }
+    return _sourceRevision!;
   }
 
   void _onSessionChanged() => _synchronize();
@@ -81,6 +100,9 @@ final class ComicCommentContentProjectionController extends ChangeNotifier {
       final changed = _projection != null || _isConverting;
       _generation += 1;
       _projection = null;
+      _fallbackProjection = null;
+      _revisionSource = null;
+      _sourceRevision = null;
       _isConverting = false;
       if (changed) {
         notifyListeners();
@@ -88,20 +110,51 @@ final class ComicCommentContentProjectionController extends ChangeNotifier {
       return;
     }
 
-    final revision = ComicCommentContentProjector.sourceRevisionFor(
-      sessionKey: _session.key,
-      source: source,
-    );
     final current = _projection;
     if (!force &&
         current != null &&
-        current.sourceRevision == revision &&
+        identical(current.sourceResult, source) &&
         current.mode == _mode &&
         current.converterId == _converter.id) {
       return;
     }
 
+    // Even an unchanged body can arrive with new pagination/capability data.
+    // Keep the new snapshot as the source of both rendering and commands.
+    final revision = _revisionFor(source);
+    if (!force &&
+        !_isConverting &&
+        current != null &&
+        current.sourceRevision == revision &&
+        current.items.length == source.items.length &&
+        current.mode == _mode &&
+        current.converterId == _converter.id) {
+      _fallbackProjection = null;
+      _projection = ComicCommentContentProjection(
+        sourceResult: source,
+        items: [
+          for (var i = 0; i < source.items.length; i++)
+            identical(current.items[i].sourceItem, source.items[i])
+                ? current.items[i]
+                : ComicCommentItemProjection(
+                    sourceItem: source.items[i],
+                    displayMessage: current.items[i].displayMessage,
+                    displayDateline: current.items[i].displayDateline,
+                    projectedPost: current.items[i].projectedPost,
+                    renderedPost: current.items[i].renderedPost,
+                  ),
+        ],
+        mode: current.mode,
+        converterId: current.converterId,
+        sourceRevision: revision,
+        isConverted: current.isConverted,
+        bodyRevision: current.bodyRevision,
+      );
+      notifyListeners();
+      return;
+    }
     final generation = ++_generation;
+    _fallbackProjection = null;
     _projection = ComicCommentContentProjection.raw(
       source,
       mode: _mode,
@@ -134,6 +187,7 @@ final class ComicCommentContentProjectionController extends ChangeNotifier {
       sessionKey: _session.key,
       source: source,
       converter: converter,
+      sourceRevision: expectedRevision,
     );
     if (_disposed ||
         generation != _generation ||
@@ -154,6 +208,10 @@ final class ComicCommentContentProjectionController extends ChangeNotifier {
     }
     _disposed = true;
     _generation += 1;
+    _projection = null;
+    _fallbackProjection = null;
+    _revisionSource = null;
+    _sourceRevision = null;
     _session.removeListener(_onSessionChanged);
     super.dispose();
   }

@@ -6,6 +6,12 @@ void main() {
   const codec = PostingDraftExtrasCodec();
 
   group('PostingDraftExtrasCodec', () {
+    test('old and malformed permissions remain distinguishable', () {
+      expect(codec.decode({}).minimumReadAccess, 0);
+      expect(codec.decode({'readAccess': '37'}).minimumReadAccess, 37);
+      expect(codec.decode({'readAccess': 'broken'}).minimumReadAccess, -1);
+    });
+
     test('encodes only set fields, omits defaults', () {
       final encoded = codec.encode(
         selectedTypeId: null,

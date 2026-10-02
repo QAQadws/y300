@@ -11,6 +11,55 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
+    'long-term snapshots survive clearing, expiry and stale eviction candidates',
+    () async {
+      final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);
+      addTearDown(db.close);
+      final service = LocalParsedSnapshotCacheService(Future.value(db));
+      const descriptor = SnapshotCacheDescriptor(
+        cacheKey: 'account:42',
+        ownerType: CacheOwnerType.profile,
+        ownerId: '42',
+        snapshotType: 'test.snapshot',
+      );
+      const codec = _StringSnapshotCodec();
+      await service.put(
+        descriptor,
+        'initial',
+        codec,
+        policy: const SnapshotCachePolicy(
+          freshFor: Duration.zero,
+          keepStaleFor: Duration(days: 1),
+        ),
+      );
+      final candidate = (await service.loadEvictionCandidates()).single;
+      await service.put(
+        descriptor,
+        'durable',
+        codec,
+        policy: const SnapshotCachePolicy(
+          freshFor: Duration.zero,
+          keepStaleFor: Duration.zero,
+          retainLongTerm: true,
+        ),
+      );
+      expect((await service.loadUsage()).longTermBytes, greaterThan(0));
+      expect((await service.loadUsage()).budgetedBytes, 0);
+      expect((await service.calculateUsage()).clearable, isFalse);
+      expect(await service.loadEvictionCandidates(), isEmpty);
+      expect(await service.deleteCandidate(candidate), isFalse);
+      expect((await service.clearRegular()).deletedEntries, 0);
+      expect(await service.deleteExpired(DateTime(9999)), 0);
+      final restoredService = LocalParsedSnapshotCacheService(Future.value(db));
+      expect((await restoredService.get(descriptor, codec))?.value, 'durable');
+      await db.update(ComicLocalDb.cachedSnapshotsTable, {
+        'payload_json': 'invalid',
+      });
+      expect(await restoredService.get(descriptor, codec), isNull);
+    },
+  );
+
+  test(
     'LocalParsedSnapshotCacheService stores and reads matching snapshot',
     () async {
       const dbName = 'parsed_snapshot_cache_service_test.db';

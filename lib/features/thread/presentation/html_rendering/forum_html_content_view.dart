@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
@@ -17,6 +18,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.imageReferer,
     this.imageCacheOwnerId,
     this.contentImageKind = ForumImageKind.blogInline,
+    this.contentLayout = ForumHtmlContentLayout.document,
     this.onOpenLink,
     this.onOpenImage,
     this.theme,
@@ -31,6 +33,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final String? imageReferer;
   final String? imageCacheOwnerId;
   final ForumImageKind contentImageKind;
+  final ForumHtmlContentLayout contentLayout;
   final ValueChanged<String>? onOpenLink;
   final void Function(ForumHtmlReadableImageSequence, ForumHtmlImageRequest)?
   onOpenImage;
@@ -105,6 +108,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       preparedDocument: _preparedDocument,
       contentImageKind: widget.contentImageKind,
       linkBaseUri: widget.linkBaseUri,
+      contentLayout: widget.contentLayout,
       callbacks: ForumHtmlRenderCallbacks(
         onTapImage: onOpenImage == null
             ? null

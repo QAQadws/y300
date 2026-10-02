@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 
 class YamiboSessionStore {
@@ -9,6 +11,11 @@ class YamiboSessionStore {
   final Duration formhashTtl;
   final DateTime Function() _now;
   YamiboSessionSnapshot? _current;
+  final StreamController<void> _identityChanges =
+      StreamController<void>.broadcast(sync: true);
+
+  /// Emits only when the authenticated identity changes or is cleared.
+  Stream<void> get identityChanges => _identityChanges.stream;
 
   YamiboSessionSnapshot? readCurrent() => _current;
 
@@ -30,11 +37,18 @@ class YamiboSessionStore {
     final current = _current;
     final next = current == null ? extracted : _merge(current, extracted);
     _current = next;
+    if ((current?.uid ?? '', current?.isLoggedIn ?? false) !=
+        (next.uid, next.isLoggedIn)) {
+      _identityChanges.add(null);
+    }
     return next;
   }
 
   void clear() {
+    final hadIdentity =
+        _current?.isLoggedIn == true || (_current?.uid.isNotEmpty ?? false);
     _current = null;
+    if (hadIdentity) _identityChanges.add(null);
   }
 
   YamiboSessionSnapshot _merge(

@@ -3,6 +3,14 @@
 /// 新增小说样例时优先扩展这里；测试文件 import 之，避免到处复制实例。
 library;
 
+/// Synthetic UTF-8 forum documents used by the hybrid pagination pipeline.
+const novelPaginationFixtureTitles = <String, String>{
+  'ruby': '注音',
+  'background_color': '文字背景色',
+  'collapse_directory': '折叠目录',
+  'text_color_size': '字颜色字号',
+};
+
 class NovelTitleFixture {
   const NovelTitleFixture({
     required this.id,
