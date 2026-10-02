@@ -16,6 +16,7 @@ final class YamiboUriRedactor {
     'session',
     'sessionid',
     'sid',
+    'sign',
   };
 
   Uri redact(Uri uri) {

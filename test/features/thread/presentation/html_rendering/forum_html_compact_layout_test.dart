@@ -5,6 +5,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_cont
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 import 'forum_html_test_theme.dart';
@@ -130,6 +131,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('remembered body heights are isolated by content layout', (
+    tester,
+  ) async {
+    final presentation = ThreadPostBodyPresentation();
+    final preferences = ForumHtmlReaderPreferences.defaults();
+    addTearDown(presentation.dispose);
+    const sourceId = 'compact-layout';
+    const html = '<p>Hi</p>';
+    await _pump(
+      tester,
+      html,
+      layout: ForumHtmlContentLayout.document,
+      preferences: preferences,
+      bodyPresentation: presentation,
+    );
+    final documentRevision = tester
+        .widget<ThreadPostBodyLayout>(find.byType(ThreadPostBodyLayout))
+        .revision;
+    final documentMemoryKey = (
+      documentRevision,
+      _availableWidth,
+      presentation.expansionRevision,
+    );
+    expect(
+      presentation.heightFor(sourceId, documentMemoryKey),
+      tester.getSize(find.byKey(_bodyKey)).height,
+    );
+
+    await _pump(
+      tester,
+      html,
+      preferences: preferences,
+      bodyPresentation: presentation,
+    );
+    final compactRevision = tester
+        .widget<ThreadPostBodyLayout>(find.byType(ThreadPostBodyLayout))
+        .revision;
+    expect(compactRevision, isNot(documentRevision));
+    expect(presentation.heightFor(sourceId, documentMemoryKey), isNull);
+    expect(
+      presentation.heightFor(sourceId, (
+        compactRevision,
+        _availableWidth,
+        presentation.expansionRevision,
+      )),
+      tester.getSize(find.byKey(_bodyKey)).height,
+    );
+    expect(
+      tester.getSize(find.byKey(_bodyKey)).width,
+      lessThan(_availableWidth / 2),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'tables and code retain bounded layouts without intrinsic sizing',
     (tester) async {
@@ -183,6 +238,7 @@ Future<void> _pump(
   ForumHtmlRenderCallbacks callbacks = const ForumHtmlRenderCallbacks(),
   double width = _availableWidth,
   double textScale = 1,
+  ThreadPostBodyPresentation? bodyPresentation,
 }) async {
   await tester.pumpWidget(
     LocalizedTestApp(
@@ -206,6 +262,7 @@ Future<void> _pump(
                 contentLayout: layout,
                 preferences: preferences,
                 callbacks: callbacks,
+                bodyPresentation: bodyPresentation,
               ),
             ),
           ),

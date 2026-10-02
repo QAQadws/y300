@@ -8,6 +8,8 @@
 .build/
 .buildlog/
 .history
+# Local branch experiments and AI handoff notes; never publish these records.
+/.local/agent-notes/
 .svn/
 .swiftpm/
 migrate_working_dir/

@@ -64,6 +64,8 @@ class PostingComposerState extends ComposerStateBase {
     this.metadata,
     this.metadataFailure,
     this.selectedTypeId,
+    this.minimumReadAccess = 0,
+    this.submitOutcomeUnknown = false,
     this.allowNoticeAuthor = false,
     this.bbCodeOff = false,
     this.smileyOff = false,
@@ -91,6 +93,7 @@ class PostingComposerState extends ComposerStateBase {
     ThreadCreationPreparation? metadata,
     ComposerOperationFailure? metadataFailure,
     String? selectedTypeId,
+    int minimumReadAccess = 0,
     bool allowNoticeAuthor = false,
     bool bbCodeOff = false,
     bool smileyOff = false,
@@ -120,6 +123,7 @@ class PostingComposerState extends ComposerStateBase {
       metadata: metadata,
       metadataFailure: metadataFailure,
       selectedTypeId: selectedTypeId,
+      minimumReadAccess: minimumReadAccess,
       allowNoticeAuthor: allowNoticeAuthor,
       bbCodeOff: bbCodeOff,
       smileyOff: smileyOff,
@@ -140,6 +144,8 @@ class PostingComposerState extends ComposerStateBase {
   /// 用户当前选择的 typeid。`null` 表示"未选择"或"无分类"。
   /// 草稿恢复出的 typeid 如果不在 metadata 列表里，会在 metadata 加载完成后被重置为 `null`。
   final String? selectedTypeId;
+  final int minimumReadAccess;
+  final bool submitOutcomeUnknown;
   final bool allowNoticeAuthor;
   final bool bbCodeOff;
   final bool smileyOff;
@@ -160,6 +166,7 @@ class PostingComposerState extends ComposerStateBase {
       super.hasDraftContent ||
       subject.trim().isNotEmpty ||
       (selectedTypeId?.trim().isNotEmpty ?? false) ||
+      minimumReadAccess != 0 ||
       allowNoticeAuthor ||
       bbCodeOff ||
       smileyOff ||
@@ -170,29 +177,48 @@ class PostingComposerState extends ComposerStateBase {
 
   bool get canPickImages => !isSubmitting && !isUploadingImages;
 
+  ThreadCreationKind get creationKind => special == NewThreadSpecial.poll
+      ? ThreadCreationKind.poll
+      : ThreadCreationKind.ordinary;
+
+  bool get isReadAccessValid {
+    final access = metadata?.readAccess;
+    if (minimumReadAccess < 0 || minimumReadAccess > 255 || access == null) {
+      return false;
+    }
+    return access.canModify
+        ? access.allows(minimumReadAccess)
+        : minimumReadAccess == (access.currentValue ?? 0);
+  }
+
   bool get canSubmit {
     if (subject.trim().isEmpty || message.trim().isEmpty) {
       return false;
     }
-    if (isSubmitting || isUploadingImages || isLoadingMetadata) {
+    if (isSubmitting ||
+        isUploadingImages ||
+        isLoadingMetadata ||
+        submitOutcomeUnknown) {
       return false;
     }
-    if (metadata == null) {
+    if (metadata == null ||
+        metadata!.kind != creationKind ||
+        !isReadAccessValid) {
       return false;
     }
-    if (metadata!.typeRequired) {
+    if (metadata!.typeRequired == true) {
       final typeid = selectedTypeId?.trim() ?? '';
       if (typeid.isEmpty || typeid == '0') {
         return false;
       }
     }
-    // 字数上限——metadata 可能没有声明（hasXxxLimit 已经把 <=0 当成不限制）。
+    // 仅对准备表单明确声明的正数上限做本地校验；未知不代表服务器无限制。
     if (metadata!.hasSubjectLimit &&
-        subject.trim().length > metadata!.maxSubjectLength) {
+        subject.trim().length > metadata!.maxSubjectLength!) {
       return false;
     }
     if (metadata!.hasMessageLimit &&
-        message.trim().length > metadata!.maxMessageLength) {
+        message.trim().length > metadata!.maxMessageLength!) {
       return false;
     }
     if (special == NewThreadSpecial.poll) {
@@ -204,10 +230,16 @@ class PostingComposerState extends ComposerStateBase {
       if (validOptions.length < NewThreadPollValidation.minOptions) {
         return false;
       }
-      if (p.options.any(
-        (option) =>
-            option.trim().length > NewThreadPollValidation.maxOptionLength,
-      )) {
+      final constraints = metadata!.pollConstraints;
+      if (constraints?.maximumOptions != null &&
+          validOptions.length > constraints!.maximumOptions!) {
+        return false;
+      }
+      if (constraints?.maximumOptionLength != null &&
+          p.options.any(
+            (option) =>
+                option.trim().length > constraints!.maximumOptionLength!,
+          )) {
         return false;
       }
       if (p.multiple && p.maxChoices < 2) return false;
@@ -233,6 +265,8 @@ class PostingComposerState extends ComposerStateBase {
     ThreadCreationPreparation? metadata,
     ComposerOperationFailure? metadataFailure,
     String? selectedTypeId,
+    int? minimumReadAccess,
+    bool? submitOutcomeUnknown,
     bool? allowNoticeAuthor,
     bool? bbCodeOff,
     bool? smileyOff,
@@ -277,6 +311,8 @@ class PostingComposerState extends ComposerStateBase {
       metadataFailure: clearMetadataFailure
           ? null
           : metadataFailure ?? this.metadataFailure,
+      minimumReadAccess: minimumReadAccess ?? this.minimumReadAccess,
+      submitOutcomeUnknown: submitOutcomeUnknown ?? this.submitOutcomeUnknown,
       selectedTypeId: clearSelectedTypeId
           ? null
           : selectedTypeId ?? this.selectedTypeId,
@@ -308,12 +344,14 @@ class PostingComposerResult extends ComposerSubmitInvocationResult {
     super.failure,
     this.tid,
     this.pid,
+    this.readAccess,
   });
 
   factory PostingComposerResult.fromInvocation(
     ComposerSubmitInvocationResult invocation, {
     String? tid,
     String? pid,
+    ThreadReadAccessEvidence? readAccess,
   }) {
     return PostingComposerResult(
       sent: invocation.sent,
@@ -321,9 +359,11 @@ class PostingComposerResult extends ComposerSubmitInvocationResult {
       failure: invocation.failure,
       tid: tid,
       pid: pid,
+      readAccess: readAccess,
     );
   }
 
   final String? tid;
   final String? pid;
+  final ThreadReadAccessEvidence? readAccess;
 }

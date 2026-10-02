@@ -11,8 +11,9 @@ import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_formhash_provider.dart';
 import 'discuz_api_client.dart';
+import 'discuz_thread_creation_form_parser.dart';
 
-/// Experimental Discuz v4 adapter for thread preparation and creation.
+/// Mobile HTML preparation with Discuz v4 creation commands.
 final class DiscuzThreadCreationAdapter
     implements ThreadCreationPreparationRepository, ThreadCreationCommand {
   /// Creates an adapter on the shared API transport and formhash source.
@@ -20,6 +21,8 @@ final class DiscuzThreadCreationAdapter
     required this.api,
     required this.config,
     required this.formhashProvider,
+    required this.network,
+    required this.requestProfiles,
   });
 
   /// Discuz API decoder and transport.
@@ -30,6 +33,12 @@ final class DiscuzThreadCreationAdapter
 
   /// Canonical package formhash source.
   final ForumFormhashProvider formhashProvider;
+
+  /// Shared host transport used for mobile HTML preparation.
+  final ForumClientNetwork network;
+
+  /// User-agent and referer policy for the shared transport.
+  final ForumRequestProfileResolver requestProfiles;
 
   @override
   ThreadCreationCapabilities get capabilities => _creationCapabilities;
@@ -44,91 +53,75 @@ final class DiscuzThreadCreationAdapter
     if (request.cancellation?.isCancelled ?? false) {
       return _cancelledRead();
     }
-    final result = await api.get(
-      module: 'forumdisplay',
-      queryParameters: <String, Object?>{'version': '4', 'fid': fid, 'page': 1},
-      cancellation: request.cancellation,
+    final uri = config.siteOrigin.replace(
+      path: '/forum.php',
+      queryParameters: {
+        'mod': 'post',
+        'action': 'newthread',
+        'fid': fid,
+        'mobile': '2',
+        if (request.kind == ThreadCreationKind.poll) ...{
+          'special': '1',
+          'cedit': 'yes',
+        },
+      },
     );
-    if (result case ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(
+    final result = await network.send(
+      ForumRequest(
+        method: ForumRequestMethod.get,
+        uri: uri,
+        context: const ForumRequestContext(
+          operation: 'thread.creation.prepare',
+          pageKind: 'thread.creation.form',
+        ),
+        headers: requestProfiles
+            .resolve(ForumRequestProfileKind.mobileHtml, referer: uri)
+            .headers,
+        cancellation: request.cancellation,
+      ),
+    );
+    if (result case ForumTransportError<ForumResponse<Object?>>(
       :final failure,
     )) {
       return _readTransportFailure(failure);
     }
+    if (request.cancellation?.isCancelled ?? false) return _cancelledRead();
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
     try {
-      final response =
-          (result as ForumTransportSuccess<ForumResponse<DiscuzApiEnvelope>>)
-              .response;
-      final envelope = response.body;
-      if (envelope.version != '4') {
-        throw const FormatException('thread_creation_api_version_invalid');
+      if (response.body is! String) {
+        throw const FormatException('thread_creation_form_not_text');
       }
-      final variables = envelope.variables;
-      final forum = _map(variables['forum']);
-      final responseFid = _text(forum['fid']);
-      if (responseFid != fid) {
-        throw const FormatException('thread_creation_forum_identity_mismatch');
-      }
-      final threadTypes = _parseChoices<ThreadCreationType>(
-        variables['threadtypes'],
-        sort: false,
-      );
-      final threadSorts = _parseChoices<ThreadCreationSort>(
-        variables['threadsorts'],
-        sort: true,
-      );
-      final typeRequired = _required(
-        _map(variables['threadtypes'])['required'],
-      );
-      final sortRequired = _required(
-        _map(variables['threadsorts'])['required'],
-      );
-      if (sortRequired) {
-        return const DataReadFailure(
-          kind: DataReadFailureKind.unsupported,
-          code: 'thread_creation_required_sort_unsupported',
-          diagnosticMessage: 'thread_creation_required_sort_unsupported',
-        );
-      }
-      final formhash = await _resolveFormhash(
-        _text(variables['formhash']),
-        cancellation: request.cancellation,
-      );
-      if (formhash case ForumFormhashError(:final failure)) {
-        return _formhashReadFailure(failure);
-      }
-      final value = (formhash as ForumFormhashSuccess).value;
-      final token = _DiscuzThreadCreationToken(
-        owner: this,
+      final form = const DiscuzThreadCreationFormParser().parse(
+        response.body as String,
+        sourceUri: response.uri,
+        requestedUri: uri,
         fid: fid,
-        formhash: value,
-        allowedTypeIds: threadTypes.map((item) => item.id).toSet(),
-        typeRequired: typeRequired,
-        maxSubjectLength: _length(
-          forum['maxsubject'] ??
-              forum['maxsubjects'] ??
-              variables['maxsubject'],
-        ),
-        maxMessageLength: _length(
-          forum['maxpostsize'] ??
-              forum['maxpost'] ??
-              variables['maxpostsize'] ??
-              variables['maxchars'],
-        ),
+        kind: request.kind,
       );
       return DataReadSuccess(
         data: ThreadCreationPreparation(
           fid: fid,
-          forumName: _text(forum['name']),
-          threadTypes: List<ThreadCreationType>.unmodifiable(threadTypes),
-          threadSorts: List<ThreadCreationSort>.unmodifiable(threadSorts),
-          typeRequired: typeRequired,
+          forumName: '',
+          kind: form.kind,
+          threadTypes: form.types,
+          threadSorts: const [],
+          typeRequired: form.typeRequired,
           sortRequired: false,
-          maxSubjectLength: token.maxSubjectLength,
-          maxMessageLength: token.maxMessageLength,
-          token: token,
+          maxSubjectLength: form.maximumSubjectLength,
+          maxMessageLength: form.maximumMessageLength,
+          readAccess: form.readAccess,
+          pollConstraints: form.pollConstraints,
+          token: _DiscuzThreadCreationToken(owner: this, form: form),
         ),
         capabilities: capabilities,
         metadata: const DataReadMetadata.network(),
+      );
+    } on DiscuzCreationFormFailure catch (error) {
+      return DataReadFailure(
+        kind: error.kind,
+        code: error.code,
+        diagnosticMessage: error.code,
       );
     } on FormatException catch (error) {
       return _readParseFailure(
@@ -147,7 +140,9 @@ final class DiscuzThreadCreationAdapter
     if (token is! _DiscuzThreadCreationToken || token.owner != this) {
       return _notSent('thread_creation_preparation_invalid');
     }
-    if (preparation.fid != token.fid) {
+    if (preparation.fid != token.fid ||
+        preparation.kind != token.form.kind ||
+        submission.kind != token.form.kind) {
       return _notSent('thread_creation_preparation_identity_mismatch');
     }
     final validation = _validateCreation(submission, token);
@@ -161,14 +156,7 @@ final class DiscuzThreadCreationAdapter
       queryParameters: <String, Object?>{'version': '4', 'fid': token.fid},
       form: form,
       treatMessageAsBusinessError: false,
-      referer: config.siteOrigin.replace(
-        path: '/forum.php',
-        queryParameters: <String, String>{
-          'mod': 'post',
-          'action': 'newthread',
-          'fid': token.fid,
-        },
-      ),
+      referer: token.form.sourceUri,
       cancellation: submission.cancellation,
     );
     if (result case ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(
@@ -215,49 +203,6 @@ final class DiscuzThreadCreationAdapter
     );
   }
 
-  List<T> _parseChoices<T>(Object? rawRoot, {required bool sort}) {
-    final root = _map(rawRoot);
-    final raw = root['types'];
-    final entries = <MapEntry<String, String>>[];
-    if (raw is Map) {
-      for (final entry in raw.entries) {
-        entries.add(MapEntry(entry.key.toString().trim(), _text(entry.value)));
-      }
-    } else if (raw is List) {
-      for (final item in raw) {
-        final map = _map(item);
-        entries.add(
-          MapEntry(
-            _text(map['id']).isNotEmpty
-                ? _text(map['id'])
-                : _text(map[sort ? 'sortid' : 'typeid']),
-            _text(map['name']).isNotEmpty
-                ? _text(map['name'])
-                : _text(map[sort ? 'sortname' : 'typename']),
-          ),
-        );
-      }
-    } else if (raw != null) {
-      throw const FormatException('thread_creation_choices_invalid');
-    }
-    final seen = <String>{};
-    final values = <T>[];
-    for (final entry in entries) {
-      if (!_positive(entry.key) ||
-          entry.value.isEmpty ||
-          !seen.add(entry.key)) {
-        throw const FormatException('thread_creation_choice_identity_invalid');
-      }
-      values.add(
-        (sort
-                ? ThreadCreationSort(id: entry.key, name: entry.value)
-                : ThreadCreationType(id: entry.key, name: entry.value))
-            as T,
-      );
-    }
-    return values;
-  }
-
   String? _validateCreation(
     ThreadCreationSubmission submission,
     _DiscuzThreadCreationToken token,
@@ -266,17 +211,19 @@ final class DiscuzThreadCreationAdapter
     final message = submission.message;
     if (subject.trim().isEmpty) return 'thread_creation_subject_empty';
     if (message.trim().isEmpty) return 'thread_creation_message_empty';
-    if (token.maxSubjectLength > 0 && subject.length > token.maxSubjectLength) {
+    if ((token.maxSubjectLength ?? 0) > 0 &&
+        subject.length > token.maxSubjectLength!) {
       return 'thread_creation_subject_too_long';
     }
-    if (token.maxMessageLength > 0 && message.length > token.maxMessageLength) {
+    if ((token.maxMessageLength ?? 0) > 0 &&
+        message.length > token.maxMessageLength!) {
       return 'thread_creation_message_too_long';
     }
     final typeId = submission.typeId.trim();
     if (typeId != '0' && !token.allowedTypeIds.contains(typeId)) {
       return 'thread_creation_type_invalid';
     }
-    if (token.typeRequired && typeId == '0') {
+    if (token.typeRequired == true && typeId == '0') {
       return 'post_type_isnull';
     }
     if (submission.minimumReadAccess < 0 ||
@@ -285,6 +232,12 @@ final class DiscuzThreadCreationAdapter
     }
     if (!_validPositiveUnique(submission.attachmentIds)) {
       return 'thread_creation_attachment_identity_invalid';
+    }
+    final access = token.form.readAccess;
+    if (access.canModify
+        ? !access.allows(submission.minimumReadAccess)
+        : submission.minimumReadAccess != (access.currentValue ?? 0)) {
+      return 'thread_creation_read_access_not_allowed';
     }
     final tags = submission.tags;
     if (tags.length > 5 ||
@@ -300,14 +253,19 @@ final class DiscuzThreadCreationAdapter
       case ThreadCreationKind.poll:
         final poll = submission.poll;
         if (poll == null) return 'thread_creation_poll_missing';
-        if (poll.options.length < 2 || poll.options.length > 20) {
+        if (poll.options.length < 2 ||
+            (token.form.pollConstraints?.maximumOptions != null &&
+                poll.options.length >
+                    token.form.pollConstraints!.maximumOptions!)) {
           return 'thread_creation_poll_option_count_invalid';
         }
         if (poll.options.any(
               (option) =>
                   option.isEmpty ||
                   option.trim() != option ||
-                  option.length > 80,
+                  (token.form.pollConstraints?.maximumOptionLength != null &&
+                      option.length >
+                          token.form.pollConstraints!.maximumOptionLength!),
             ) ||
             poll.options.toSet().length != poll.options.length) {
           return 'thread_creation_poll_option_invalid';
@@ -327,11 +285,13 @@ final class DiscuzThreadCreationAdapter
   ) {
     final form = <String, String>{
       'formhash': token.formhash,
+      'posttime': token.form.posttime,
       'topicsubmit': 'yes',
       'subject': submission.subject,
       'message': submission.message,
       'typeid': submission.typeId.trim(),
-      'readperm': submission.minimumReadAccess.toString(),
+      if (token.form.readAccess.canModify)
+        'readperm': submission.minimumReadAccess.toString(),
       'usesig': submission.useSignature ? '1' : '0',
       'allownoticeauthor': submission.notifyAuthor ? '1' : '0',
       if (submission.disableBbCode) 'bbcodeoff': '1',
@@ -405,19 +365,6 @@ final class DiscuzThreadCreationAdapter
       requested: requested,
     );
   }
-
-  Future<ForumFormhashResult> _resolveFormhash(
-    String prepared, {
-    ForumRequestCancellation? cancellation,
-  }) {
-    if (prepared.trim().isNotEmpty) {
-      return Future.value(ForumFormhashSuccess(prepared.trim()));
-    }
-    return formhashProvider.loadFormhash(
-      preferProfile: true,
-      cancellation: cancellation,
-    );
-  }
 }
 
 /// Experimental Discuz HTML/v4 adapter for reply preparation and commands.
@@ -439,9 +386,11 @@ final class DiscuzThreadReplyAdapter
   final ForumClientConfig config;
 
   /// Shared Cookie/WAF-aware transport used for HTML preparation.
+  /// Shared host transport used for mobile HTML preparation.
   final ForumClientNetwork network;
 
   /// Request identity resolver supplied by the composition root.
+  /// User-agent and referer policy for the shared transport.
   final ForumRequestProfileResolver requestProfiles;
 
   /// Canonical package formhash source.
@@ -799,23 +748,15 @@ final class DiscuzThreadReplyAdapter
 
 final class _DiscuzThreadCreationToken
     implements ThreadCreationPreparationToken {
-  const _DiscuzThreadCreationToken({
-    required this.owner,
-    required this.fid,
-    required this.formhash,
-    required this.allowedTypeIds,
-    required this.typeRequired,
-    required this.maxSubjectLength,
-    required this.maxMessageLength,
-  });
-
+  const _DiscuzThreadCreationToken({required this.owner, required this.form});
   final DiscuzThreadCreationAdapter owner;
-  final String fid;
-  final String formhash;
-  final Set<String> allowedTypeIds;
-  final bool typeRequired;
-  final int maxSubjectLength;
-  final int maxMessageLength;
+  final DiscuzThreadCreationForm form;
+  String get fid => form.fid;
+  String get formhash => form.formhash;
+  Set<String> get allowedTypeIds => form.types.map((type) => type.id).toSet();
+  bool? get typeRequired => form.typeRequired;
+  int? get maxSubjectLength => form.maximumSubjectLength;
+  int? get maxMessageLength => form.maximumMessageLength;
 
   @override
   String toString() => '_DiscuzThreadCreationToken(redacted)';
@@ -850,16 +791,6 @@ Map<String, Object?> _map(Object? value) => value is Map
 String _text(Object? value) => value?.toString().trim() ?? '';
 
 int? _int(Object? value) => int.tryParse(_text(value));
-
-int _length(Object? value) {
-  final parsed = _int(value) ?? 0;
-  return parsed < 0 ? 0 : parsed;
-}
-
-bool _required(Object? value) {
-  final normalized = _text(value).toLowerCase();
-  return normalized == '1' || normalized == 'true' || normalized == 'yes';
-}
 
 bool _positive(String value) => RegExp(r'^[1-9]\d*$').hasMatch(value.trim());
 
@@ -922,15 +853,6 @@ DataReadFailure<T, C> _readParseFailure<T, C>(
 );
 
 DataReadFailure<T, C> _readTransportFailure<T, C>(
-  ForumTransportFailure failure,
-) => DataReadFailure(
-  kind: toReadFailureKind(failure.kind),
-  code: failure.code,
-  statusCode: failure.statusCode,
-  diagnosticMessage: failure.code,
-);
-
-DataReadFailure<T, C> _formhashReadFailure<T, C>(
   ForumTransportFailure failure,
 ) => DataReadFailure(
   kind: toReadFailureKind(failure.kind),

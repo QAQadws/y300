@@ -7,6 +7,12 @@ import '../client/forum_client_config.dart';
 import '../contracts/data_command_contract.dart';
 import '../contracts/data_read_contract.dart';
 import '../contracts/thread_post_edit.dart';
+import '../contracts/thread_read_access.dart';
+import '../contracts/thread_composer_commands.dart'
+    show ThreadReadAccessEvidence, ThreadReadAccessEvidenceKind;
+import 'discuz_read_access_parser.dart';
+import 'discuz_thread_read_access_reader.dart';
+import 'discuz_api_client.dart';
 import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
@@ -18,6 +24,7 @@ final class DiscuzThreadPostEditAdapter
     implements ThreadPostEditPreparationRepository, ThreadPostEditCommand {
   /// Creates an adapter on the Host's shared transport.
   const DiscuzThreadPostEditAdapter({
+    required this.api,
     required this.config,
     required this.network,
     required this.requestProfiles,
@@ -25,6 +32,9 @@ final class DiscuzThreadPostEditAdapter
 
   /// Managed forum origins and request identities.
   final ForumClientConfig config;
+
+  /// Shared API client used to resolve and verify thread permissions.
+  final DiscuzApiClient api;
 
   /// Shared Cookie/WAF-aware transport.
   final ForumClientNetwork network;
@@ -85,6 +95,7 @@ final class DiscuzThreadPostEditAdapter
       sourceUri: documentResponse.uri,
       profileKind: profileKind,
       referer: referer,
+      cancellation: request.cancellation,
     );
   }
 
@@ -103,6 +114,14 @@ final class DiscuzThreadPostEditAdapter
     }
     if (submission.cancellation?.isCancelled ?? false) {
       return _cancelledNotSent();
+    }
+    final requestedAccess = submission.minimumReadAccess;
+    if (requestedAccess != null &&
+        (!token.target.isFirstPost ||
+            !token.readAccess.canModify ||
+            (!token.readAccess.allows(requestedAccess) &&
+                requestedAccess != token.readAccess.currentValue))) {
+      return _notSent('post_edit_read_access_not_allowed');
     }
     final message = submission.message;
     final subject = preparation.target.isFirstPost
@@ -131,6 +150,7 @@ final class DiscuzThreadPostEditAdapter
       useSignature: submission.useSignature,
       newAids: newAids,
       removedAids: removedAids.toSet(),
+      minimumReadAccess: submission.minimumReadAccess,
     );
     if (fields == null) {
       return _notSent('post_edit_preparation_contract_changed');
@@ -196,6 +216,7 @@ final class DiscuzThreadPostEditAdapter
                 ? ThreadPostEditPublicationState.pendingModeration
                 : ThreadPostEditPublicationState.published,
             confirmation: ThreadPostEditConfirmation.serverCallback,
+            readAccess: await _readSubmittedAccess(submission, token),
           ),
         );
       case _EditSubmitRejected(:final code):
@@ -211,6 +232,30 @@ final class DiscuzThreadPostEditAdapter
           originalFailure: _commandFailure(DataCommandFailureKind.parse, code),
         );
     }
+  }
+
+  Future<ThreadReadAccessEvidence?> _readSubmittedAccess(
+    ThreadPostEditSubmission submission,
+    _DiscuzThreadPostEditToken token,
+  ) async {
+    final requested = submission.minimumReadAccess;
+    if (requested == null || requested == token.readAccess.currentValue) {
+      return null;
+    }
+    final actual = await DiscuzThreadReadAccessReader(api).load(
+      tid: token.target.tid,
+      fid: token.target.fid,
+      cancellation: submission.cancellation,
+    );
+    return ThreadReadAccessEvidence(
+      kind: actual == null
+          ? ThreadReadAccessEvidenceKind.unverified
+          : actual == requested
+          ? ThreadReadAccessEvidenceKind.confirmed
+          : ThreadReadAccessEvidenceKind.serverAdjusted,
+      requested: requested,
+      actual: actual,
+    );
   }
 
   Future<DataCommandResult<ThreadPostEditReceipt>> _confirmAfterAmbiguous(
@@ -259,16 +304,31 @@ final class DiscuzThreadPostEditAdapter
     final attachmentsMatch =
         returnedAids.containsAll(expectedAids) &&
         removedAids.every((aid) => !returnedAids.contains(aid));
-    if (contentMatches && attachmentsMatch) {
+    final expectedAccess =
+        submission.minimumReadAccess ?? token.readAccess.currentValue;
+    final accessMatches =
+        !token.target.isFirstPost ||
+        expectedAccess == null ||
+        data.readAccess.currentValue == expectedAccess;
+    if (contentMatches && attachmentsMatch && accessMatches) {
       return DataCommandApplied(
         ThreadPostEditReceipt(
           target: token.target,
           publicationState: ThreadPostEditPublicationState.published,
           confirmation: ThreadPostEditConfirmation.readback,
+          readAccess: submission.minimumReadAccess == null
+              ? null
+              : ThreadReadAccessEvidence(
+                  kind: ThreadReadAccessEvidenceKind.confirmed,
+                  requested: submission.minimumReadAccess!,
+                  actual: data.readAccess.currentValue,
+                ),
         ),
       );
     }
-    final code = contentMatches
+    final code = !accessMatches
+        ? 'post_edit_read_access_unconfirmed'
+        : contentMatches
         ? 'post_edit_attachment_state_unconfirmed'
         : 'post_edit_readback_mismatch';
     return DataCommandOutcomeUnknown(
@@ -276,14 +336,15 @@ final class DiscuzThreadPostEditAdapter
     );
   }
 
-  DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>
+  Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
   _parsePreparation(
     String source, {
     required ThreadPostEditTarget target,
     required Uri sourceUri,
     required ForumRequestProfileKind profileKind,
     required Uri referer,
-  }) {
+    ForumRequestCancellation? cancellation,
+  }) async {
     final document = html_parser.parse(source);
     final pageFailure = _documentFailure(document, source);
     if (pageFailure != null) return pageFailure;
@@ -342,7 +403,25 @@ final class DiscuzThreadPostEditAdapter
         int.tryParse(criticalValues['page']!) != target.page) {
       return _readFailure('post_edit_form_identity_mismatch');
     }
-    final extraction = _extractControls(form);
+    ThreadReadAccess readAccess;
+    try {
+      readAccess = target.isFirstPost
+          ? const DiscuzReadAccessParser().parse(form, creating: false)
+          : ThreadReadAccess.unavailable;
+      if (readAccess.canModify && !readAccess.isCurrentValueConfirmed) {
+        final actual = await DiscuzThreadReadAccessReader(
+          api,
+        ).load(tid: target.tid, fid: target.fid, cancellation: cancellation);
+        if (actual == null) {
+          return _readFailure('post_edit_read_access_unconfirmed');
+        }
+        readAccess = readAccess.withCurrentValue(actual);
+      }
+    } on FormatException {
+      return _readFailure('post_edit_read_access_invalid');
+    }
+    if (cancellation?.isCancelled ?? false) return _cancelledRead();
+    final extraction = _extractControls(form, readAccess);
     if (extraction.unsupported || _hasExternalControls(document, form)) {
       return _unsupportedRead('post_edit_unknown_successful_control');
     }
@@ -377,6 +456,7 @@ final class DiscuzThreadPostEditAdapter
       referer: referer,
       profileKind: profileKind,
       fields: extraction.fields,
+      readAccess: readAccess,
       subject: subject,
       message: message,
       images: images,
@@ -392,6 +472,7 @@ final class DiscuzThreadPostEditAdapter
         existingImages: List.unmodifiable(images),
         revision: revision,
         token: token,
+        readAccess: readAccess,
       ),
       capabilities: _capabilities,
       metadata: const DataReadMetadata.network(),
@@ -405,6 +486,7 @@ final class DiscuzThreadPostEditAdapter
     required bool useSignature,
     required List<String> newAids,
     required Set<String> removedAids,
+    required int? minimumReadAccess,
   }) {
     final result = <MapEntry<String, String>>[];
     var subjectCount = 0;
@@ -425,6 +507,17 @@ final class DiscuzThreadPostEditAdapter
       } else if (lower == 'message') {
         messageCount += 1;
         result.add(MapEntry(name, message));
+      } else if (lower == 'readperm') {
+        if (token.target.isFirstPost) {
+          result.add(
+            MapEntry(
+              name,
+              (minimumReadAccess ?? token.readAccess.currentValue)
+                      ?.toString() ??
+                  field.value,
+            ),
+          );
+        }
       } else if (lower == 'usesig') {
         continue;
       } else if (lower == 'editsubmit') {
@@ -584,13 +677,18 @@ final class DiscuzThreadPostEditAdapter
     return null;
   }
 
-  _ControlExtraction _extractControls(html_dom.Element form) {
+  _ControlExtraction _extractControls(
+    html_dom.Element form,
+    ThreadReadAccess readAccess,
+  ) {
     final fields = <_EditField>[];
     var unsupported = false;
     for (final control in form.querySelectorAll('input, textarea, select')) {
       final name = control.attributes['name']?.trim() ?? '';
       if (name.isEmpty || _disabled(control)) continue;
-      if (control.localName == 'textarea') {
+      if (name == 'readperm' && readAccess.currentValue != null) {
+        fields.add(_EditField(name, readAccess.currentValue.toString()));
+      } else if (control.localName == 'textarea') {
         fields.add(_EditField(name, control.text));
       } else if (control.localName == 'select') {
         final options = control
@@ -1044,6 +1142,7 @@ final class _DiscuzThreadPostEditToken
     implements ThreadPostEditPreparationToken {
   const _DiscuzThreadPostEditToken({
     required this.owner,
+    required this.readAccess,
     required this.target,
     required this.sourceUri,
     required this.submitUri,
@@ -1057,6 +1156,7 @@ final class _DiscuzThreadPostEditToken
   });
 
   final DiscuzThreadPostEditAdapter owner;
+  final ThreadReadAccess readAccess;
   final ThreadPostEditTarget target;
   final Uri sourceUri;
   final Uri submitUri;

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
@@ -26,6 +27,7 @@ class ThreadDetailRenderEntryPlanner {
   List<ThreadDetailRenderEntry> buildEntries({
     required List<ThreadPost> posts,
     String? targetPid,
+    ThreadPostLanding landing = ThreadPostLanding.top,
   }) {
     return buildProjectionEntries(
       posts: [
@@ -33,17 +35,46 @@ class ThreadDetailRenderEntryPlanner {
           ThreadDetailPostProjection(sourcePost: post, displayPost: post),
       ],
       targetPid: targetPid,
+      landing: landing,
     );
   }
 
   List<ThreadDetailRenderEntry> buildProjectionEntries({
     required List<ThreadDetailPostProjection> posts,
     String? targetPid,
+    ThreadPostLanding landing = ThreadPostLanding.top,
   }) {
     final entries = <ThreadDetailRenderEntry>[];
+    final normalizedTargetPid = targetPid?.trim();
     for (var index = 0; index < posts.length; index++) {
       final post = posts[index];
       final plan = planFor(post.displayPost);
+      if (landing == ThreadPostLanding.bodyEnd &&
+          post.sourcePost.pid == normalizedTargetPid) {
+        final pid = post.sourcePost.pid;
+        entries.addAll([
+          ThreadDetailRenderEntry.postHeader(
+            key: 'thread-post-header-entry-$pid',
+            sourcePost: post.sourcePost,
+            displayPost: post.displayPost,
+            postIndex: index,
+          ),
+          ThreadDetailRenderEntry.postBody(
+            key: 'thread-post-body-entry-$pid',
+            sourcePost: post.sourcePost,
+            displayPost: post.displayPost,
+            postIndex: index,
+            resolvePlan: () => plan,
+          ),
+          ThreadDetailRenderEntry.postFooter(
+            key: 'thread-post-footer-entry-$pid',
+            sourcePost: post.sourcePost,
+            displayPost: post.displayPost,
+            postIndex: index,
+          ),
+        ]);
+        continue;
+      }
       entries.add(
         ThreadDetailRenderEntry.postCard(
           key: 'thread-post-card-entry-${post.sourcePost.pid}',
@@ -55,7 +86,7 @@ class ThreadDetailRenderEntryPlanner {
       );
     }
     entries.add(const ThreadDetailRenderEntry.pagination());
-    if (targetPid?.trim().isNotEmpty == true) {
+    if (normalizedTargetPid?.isNotEmpty == true) {
       entries.add(const ThreadDetailRenderEntry.targetSpacer());
     }
     return List<ThreadDetailRenderEntry>.unmodifiable(entries);

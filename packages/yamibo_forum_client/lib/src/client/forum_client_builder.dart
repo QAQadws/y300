@@ -148,6 +148,7 @@ final class YamiboForumClientBuilder {
     );
     final unusedImages = factory.createUnusedImageAttachments(formhash);
     final privateMessageBatch = factory.createPrivateMessageBatch();
+    final dailySignIn = factory.createDailySignIn();
     final standardPlan = ForumClientSourcePlan(
       forumDirectory: forumHome.directory,
       forumHome: forumHome.home,
@@ -164,6 +165,9 @@ final class YamiboForumClientBuilder {
         directory: favoriteThreadDirectory,
       ),
       currentUserProfile: factory.createCurrentUserProfile(),
+      currentAccountSummary: factory.createCurrentAccountSummary(),
+      dailySignIn: dailySignIn.repository,
+      dailySignInCommand: dailySignIn.command,
       notifications: factory.createNotifications(),
       privateMessages: factory.createPrivateMessages(),
       privateMessageCommand: factory.createPrivateMessageCommand(formhash),
@@ -202,6 +206,7 @@ final class YamiboForumClientBuilder {
         formhash,
       ),
       postRatings: factory.createThreadPostRatings(),
+      postComments: factory.createThreadPostComments(),
       postLocator: factory.createThreadPostLocator(),
       threadAuthorPosts: factory.createThreadAuthorPosts(),
       session: authentication.session,

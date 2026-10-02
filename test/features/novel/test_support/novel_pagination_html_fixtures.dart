@@ -1,21 +1,12 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
-import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
 
-final List<ForumHtmlSampleDocument> novelPaginationHtmlFixtures =
-    List<ForumHtmlSampleDocument>.unmodifiable(
-      forumHtmlPrototypeSamples.where(
-        (sample) => const <String>{
-          'ruby',
-          'background_color',
-          'collapse_directory',
-          'text_color_size',
-        }.contains(sample.id),
-      ),
-    );
+import '../../../test_support/utf8_test_fixture.dart';
+import 'novel_title_fixtures.dart';
+
+final novelPaginationHtmlFixtures = novelPaginationFixtureTitles.entries
+    .map((entry) => (id: entry.key, title: entry.value))
+    .toList(growable: false);
 
 final class NovelPaginationHtmlFixtureLoader {
   NovelPaginationHtmlFixtureLoader({ThreadDetailDocumentDecoder? decoder})
@@ -25,9 +16,8 @@ final class NovelPaginationHtmlFixtureLoader {
 
   final ThreadDetailDocumentDecoder decoder;
 
-  String loadFirstPostMessage(ForumHtmlSampleDocument sample) {
-    final bytes = File(sample.sourceDocPath).readAsBytesSync();
-    final source = utf8.decode(bytes);
+  String loadFirstPostMessage(({String id, String title}) sample) {
+    final source = readUtf8TestFixture('novel/pagination/${sample.id}.html');
     final detail = decoder.decode(
       source,
       fallbackTid: 'phase6-${sample.id}',

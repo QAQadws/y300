@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
@@ -9,6 +13,9 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
+import 'package:y300/features/library_shared/domain/models/reader_corner_dock_side.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock_location.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
@@ -16,6 +23,7 @@ import 'package:y300/features/novel/data/services/novel_reader_progress_diagnost
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
@@ -29,10 +37,12 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_display_se
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_chapter_interactions_button.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
@@ -94,6 +104,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _isProgressSeekInFlight = false;
   String? _progressControlOwner;
   String? _readyReaderSurfaceIdentity;
+  final _postRouteSession = ThreadPostNavigationSession();
+  String? _postRouteOwner;
+  String? _chapterInteractionsPendingOwner;
+  ThreadPostTarget? _chapterInteractionsPendingTarget;
+  final ValueNotifier<bool> _verticalDockVisible = ValueNotifier<bool>(false);
+  String? _verticalDockIdentity;
+  String? _pendingVerticalDockIdentity;
+  bool _verticalDockUpdateScheduled = false;
 
   NovelReaderArgs get _args => NovelReaderArgs(
     novelId: widget.novelId,
@@ -123,6 +141,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   void dispose() {
+    _verticalDockVisible.dispose();
+    _postRouteSession.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _overlayController.dispose();
     _readerGestureCoordinator.dispose();
@@ -159,6 +179,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         unawaited(_flushProgressAndPop());
       },
       child: Scaffold(
+        floatingActionButton: state.asData?.value == null
+            ? null
+            : _buildChapterInteractionsDock(state.asData!.value),
+        floatingActionButtonLocation: ReaderCornerDockLocation(
+          ref
+                  .watch(novelChapterInteractionsDockControllerProvider)
+                  .value
+                  ?.side ??
+              ReaderCornerDockSide.right,
+        ),
+        floatingActionButtonAnimator: FloatingActionButtonAnimator.noAnimation,
         body: state.when(
           loading: () {
             _readyReaderSurfaceIdentity = null;
@@ -182,6 +213,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           data: (viewState) {
             final systemPadding = MediaQuery.paddingOf(context);
             final readerSurfaceIdentity = _readerSurfaceIdentity(viewState);
+            if (_postRouteOwner != readerSurfaceIdentity) {
+              _postRouteOwner = readerSurfaceIdentity;
+              _postRouteSession.invalidate();
+              _chapterInteractionsPendingOwner = null;
+              _chapterInteractionsPendingTarget = null;
+            } else if (_chapterInteractionsPendingOwner ==
+                    readerSurfaceIdentity &&
+                _chapterInteractionsPendingTarget !=
+                    _chapterInteractionsTarget(viewState)) {
+              _postRouteSession.invalidate();
+              _chapterInteractionsPendingOwner = null;
+              _chapterInteractionsPendingTarget = null;
+            }
             final restoreOwner = _verticalRestoreOwnerFor(
               readerSurfaceIdentity,
             );
@@ -342,6 +386,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     setState(() {
       _readyReaderSurfaceIdentity = identity;
     });
+    _scheduleVerticalDockUpdate(identity);
   }
 
   bool _isCurrentReaderSurface(String identity) {
@@ -493,7 +538,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderController controller,
   ) {
     final l10n = AppLocalizations.of(context);
+    final surfaceIdentity = _readerSurfaceIdentity(viewState);
     return [
+      if (_chapterInteractionsTarget(viewState) != null)
+        ReaderToolbarAction(
+          id: 'chapter-interactions',
+          icon: Icons.rate_review_outlined,
+          label: _chapterInteractionsPendingOwner == surfaceIdentity
+              ? l10n.novelOpeningChapterInteractions
+              : l10n.novelViewChapterInteractions,
+          enabled: _chapterInteractionsPendingOwner != surfaceIdentity,
+          onPressed: () => _openChapterInteractions(surfaceIdentity),
+        ),
       ReaderToolbarAction(
         id: 'catalog',
         icon: Icons.format_list_bulleted,
@@ -786,6 +842,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               episodeId: viewState.currentEpisode.episodeId,
               trigger: 'metrics_changed',
             );
+            _scheduleVerticalDockUpdate(surfaceIdentity);
           }
           return false;
         },
@@ -819,9 +876,120 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
   }
 
+  Widget _buildChapterInteractionsDock(NovelReaderViewState viewState) {
+    final preferences = ref
+        .watch(novelChapterInteractionsDockControllerProvider)
+        .value;
+    final identity = _readerSurfaceIdentity(viewState);
+    final l10n = AppLocalizations.of(context);
+    final dockPalette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    final isPaged =
+        viewState.preferences.flowMode != NovelReaderFlowMode.vertical;
+    final bottomClearance =
+        isPaged && viewState.preferences.showProgressIndicator
+        ? NovelReaderPagedIndicatorLayout.reservedHeight(
+                MediaQuery.textScalerOf(context),
+              ) +
+              8
+        : 12.0;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomClearance),
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_overlayController, _verticalDockVisible]),
+        builder: (context, _) {
+          final position = _pagedPosition;
+          final atChapterEnd = isPaged
+              ? position != null &&
+                    position.episodeId == viewState.currentEpisode.episodeId &&
+                    position.isPageCountFinal &&
+                    position.pageIndex == position.pageCount - 1
+              : _verticalDockIdentity == identity && _verticalDockVisible.value;
+          final visible =
+              preferences?.enabled == true &&
+              _chapterInteractionsTarget(viewState) != null &&
+              viewState.transition == null &&
+              _readyReaderSurfaceIdentity == identity &&
+              !_overlayController.isMenuVisible &&
+              atChapterEnd;
+          final busy = _chapterInteractionsPendingOwner == identity;
+          return ReaderCornerDock(
+            side: preferences?.side,
+            visible: visible,
+            onSideChanged: (side) => ref
+                .read(novelChapterInteractionsDockControllerProvider.notifier)
+                .setSide(side),
+            dragHint: l10n.threadQuickScrollDragHint,
+            moveLeftLabel: l10n.threadQuickScrollMoveLeft,
+            moveRightLabel: l10n.threadQuickScrollMoveRight,
+            saveFailedLabel: l10n.threadQuickScrollPositionSaveFailed,
+            child: NovelReaderChapterInteractionsButton(
+              visible: visible,
+              busy: busy,
+              onPointerDown: _cancelPendingReaderTap,
+              onPressed: () => _openChapterInteractions(identity),
+              backgroundColor: dockPalette.cardElevated,
+              foregroundColor: dockPalette.title,
+            ),
+            feedbackBuilder: (elevation) =>
+                NovelReaderChapterInteractionsButton(
+                  surfaceKey: const Key(
+                    'novel-reader-chapter-interactions-drag-feedback',
+                  ),
+                  visible: visible,
+                  busy: busy,
+                  onPressed: () => _openChapterInteractions(identity),
+                  backgroundColor: dockPalette.cardElevated,
+                  foregroundColor: dockPalette.title,
+                  elevation: elevation,
+                ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _scheduleVerticalDockUpdate(String identity) {
+    _pendingVerticalDockIdentity = identity;
+    if (_verticalDockUpdateScheduled) return;
+    _verticalDockUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _verticalDockUpdateScheduled = false;
+      if (!mounted) return;
+      final requested = _pendingVerticalDockIdentity;
+      final current = ref
+          .read(novelReaderControllerProvider(_args))
+          .asData
+          ?.value;
+      final valid =
+          requested != null &&
+          current != null &&
+          current.preferences.flowMode == NovelReaderFlowMode.vertical &&
+          _readerSurfaceIdentity(current) == requested &&
+          _readyReaderSurfaceIdentity == requested &&
+          _hasRestoredOffset &&
+          _scrollController.hasClients &&
+          _scrollController.position.hasContentDimensions;
+      _verticalDockIdentity = valid ? requested : null;
+      final metrics = valid ? _scrollController.position : null;
+      final nearEnd =
+          metrics != null &&
+          metrics.extentAfter <= metrics.viewportDimension * 0.75;
+      if (_verticalDockVisible.value != nearEnd) {
+        _verticalDockVisible.value = nearEnd;
+      }
+    });
+  }
+
   void _onScroll() {
     if (!_scrollController.hasClients) {
       return;
+    }
+    final current = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    if (current != null) {
+      _scheduleVerticalDockUpdate(_readerSurfaceIdentity(current));
     }
     if (_isProgrammaticScrollChange) {
       return;
@@ -1549,6 +1717,91 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
   }
 
+  ThreadPostTarget? _chapterInteractionsTarget(NovelReaderViewState viewState) {
+    final target = ThreadPostTarget(
+      tid: viewState.currentEpisode.sourceTid,
+      pid: viewState.currentEpisode.sourcePid ?? '',
+      landing: ThreadPostLanding.bodyEnd,
+    );
+    return target.isValid ? target : null;
+  }
+
+  Future<void> _openChapterInteractions(String surfaceIdentity) async {
+    _cancelPendingReaderTap();
+    if (!_isCurrentReaderSurface(surfaceIdentity)) {
+      return;
+    }
+    final viewState = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    final target = viewState == null
+        ? null
+        : _chapterInteractionsTarget(viewState);
+    if (target == null) return;
+    if (_chapterInteractionsPendingOwner == surfaceIdentity &&
+        _chapterInteractionsPendingTarget == target) {
+      return;
+    }
+    if (_chapterInteractionsPendingOwner == surfaceIdentity) {
+      _postRouteSession.invalidate();
+    }
+    setState(() {
+      _chapterInteractionsPendingOwner = surfaceIdentity;
+      _chapterInteractionsPendingTarget = target;
+    });
+    _overlayController.hideMenu();
+    try {
+      try {
+        await _saveVisibleProgressNow(reason: 'before_chapter_interactions');
+      } catch (_) {
+        if (mounted && _isCurrentReaderSurface(surfaceIdentity)) {
+          _showReaderSnackBar(
+            AppLocalizations.of(context).novelSaveReadingProgressFailed,
+          );
+        }
+        return;
+      }
+      if (!_isCurrentReaderSurface(surfaceIdentity)) return;
+      final current = ref
+          .read(novelReaderControllerProvider(_args))
+          .asData
+          ?.value;
+      if (current == null || _chapterInteractionsTarget(current) != target) {
+        return;
+      }
+      if (!mounted) return;
+      await launchThreadPostRoute(
+        context: context,
+        session: _postRouteSession,
+        resolver: ref.read(threadPostRouteResolverProvider),
+        target: target,
+        subject: NovelTextResolver.chapterTitle(
+          AppLocalizations.of(context),
+          current.currentEpisode.episodeTitle,
+          current.currentEpisode.sourceTid,
+        ),
+        isCurrent: () {
+          if (!_isCurrentReaderSurface(surfaceIdentity)) return false;
+          final latest = ref
+              .read(novelReaderControllerProvider(_args))
+              .asData
+              ?.value;
+          return latest != null && _chapterInteractionsTarget(latest) == target;
+        },
+      );
+    } finally {
+      if (mounted &&
+          _chapterInteractionsPendingOwner == surfaceIdentity &&
+          _chapterInteractionsPendingTarget == target) {
+        setState(() {
+          _chapterInteractionsPendingOwner = null;
+          _chapterInteractionsPendingTarget = null;
+        });
+      }
+    }
+  }
+
   String _imageRefererFor(NovelReaderViewState viewState) {
     final tid = viewState.currentEpisode.sourceTid.trim();
     if (tid.isEmpty) {
@@ -1590,8 +1843,25 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     ForumWebViewExternalLauncher externalLauncher,
   ) async {
     final destination = const YamiboForumLinkResolver().resolve(link.url);
-    if (destination?.kind == YamiboForumLinkKind.thread ||
-        destination?.kind == YamiboForumLinkKind.threadPost) {
+    if (destination?.kind == YamiboForumLinkKind.threadPost) {
+      final owner = _postRouteOwner;
+      await launchThreadPostRoute(
+        context: context,
+        session: _postRouteSession,
+        resolver: ref.read(threadPostRouteResolverProvider),
+        target: ThreadPostTarget.fromLink(
+          tid: destination!.tid ?? '',
+          pid: destination.pid ?? '',
+          sourceUri: destination.uri,
+          pageHint: destination.page,
+        ),
+        subject: link.text,
+        isCurrent: () => owner != null && _isCurrentReaderSurface(owner),
+      );
+      return;
+    }
+    _postRouteSession.invalidate();
+    if (destination?.kind == YamiboForumLinkKind.thread) {
       final tid = destination?.tid;
       if (tid != null && tid.trim().isNotEmpty) {
         await Navigator.of(context).push(

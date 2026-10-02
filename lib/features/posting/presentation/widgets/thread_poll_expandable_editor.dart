@@ -1,3 +1,4 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:flutter/material.dart';
 import 'package:y300/features/posting/domain/models/posting_models.dart';
 import 'package:y300/features/posting/presentation/widgets/thread_poll_editor.dart';
@@ -7,6 +8,7 @@ class ThreadPollExpandableEditor extends StatelessWidget {
   const ThreadPollExpandableEditor({
     super.key,
     required this.poll,
+    this.constraints,
     required this.expanded,
     required this.onExpansionChanged,
     required this.onOptionsChanged,
@@ -31,6 +33,7 @@ class ThreadPollExpandableEditor extends StatelessWidget {
   });
 
   final NewThreadPollDraft poll;
+  final ThreadPollConstraints? constraints;
   final bool expanded;
   final ValueChanged<bool> onExpansionChanged;
   final ValueChanged<List<String>> onOptionsChanged;
@@ -76,6 +79,7 @@ class ThreadPollExpandableEditor extends StatelessWidget {
                   key: panelKey,
                   padding: const EdgeInsets.only(top: 8),
                   child: ThreadPollEditor(
+                    constraints: constraints,
                     containerKey: editorKey,
                     optionFieldKeyBuilder: optionFieldKeyBuilder,
                     optionRemoveKeyBuilder: optionRemoveKeyBuilder,

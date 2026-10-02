@@ -97,6 +97,36 @@ abstract class AppLocalizations {
     Locale('zh', 'TW'),
   ];
 
+  /// No description provided for @comicInteractionLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'互动信息加载失败，点击评分或回复重试'**
+  String get comicInteractionLoadFailed;
+
+  /// No description provided for @comicInteractionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前帖子暂不支持评分和回复'**
+  String get comicInteractionUnavailable;
+
+  /// No description provided for @comicRatingUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前帖子暂不支持评分'**
+  String get comicRatingUnavailable;
+
+  /// No description provided for @comicReplyUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前帖子暂不支持回复'**
+  String get comicReplyUnavailable;
+
+  /// No description provided for @comicCommentRefreshFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'评论刷新失败，已保留原有评论'**
+  String get comicCommentRefreshFailed;
+
   /// 应用设置中的界面语言分区标题
   ///
   /// In zh, this message translates to:
@@ -3500,6 +3530,18 @@ abstract class AppLocalizations {
   /// **'安全显示正文'**
   String get novelSafeContent;
 
+  /// No description provided for @novelChapterInteractionsDockSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示章末互动悬浮按钮'**
+  String get novelChapterInteractionsDockSetting;
+
+  /// No description provided for @novelChapterInteractionsSettingSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'按钮设置保存失败，已恢复之前的设置'**
+  String get novelChapterInteractionsSettingSaveFailed;
+
   /// No description provided for @novelConversionOriginal.
   ///
   /// In zh, this message translates to:
@@ -3565,6 +3607,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'打开原帖'**
   String get novelOpenSourceThread;
+
+  /// No description provided for @novelViewChapterInteractions.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看本章点评与评分'**
+  String get novelViewChapterInteractions;
+
+  /// No description provided for @novelViewChapterInteractionsSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看本章正文后的点评与评分'**
+  String get novelViewChapterInteractionsSemantics;
+
+  /// No description provided for @novelOpeningChapterInteractions.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在打开本章点评与评分…'**
+  String get novelOpeningChapterInteractions;
+
+  /// No description provided for @novelSaveReadingProgressFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存阅读进度失败，请重试'**
+  String get novelSaveReadingProgressFailed;
 
   /// No description provided for @novelCatalog.
   ///
@@ -3816,6 +3882,12 @@ abstract class AppLocalizations {
   /// **'我的资料'**
   String get moreMyProfile;
 
+  /// No description provided for @profileOpenNative.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原生资料页'**
+  String get profileOpenNative;
+
   /// No description provided for @moreMyProfileSignedOutSubtitle.
   ///
   /// In zh, this message translates to:
@@ -3845,6 +3917,84 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'登录'**
   String get moreLogin;
+
+  /// No description provided for @moreAccountSignedOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'未登录'**
+  String get moreAccountSignedOut;
+
+  /// No description provided for @moreAccountSignedIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已登录'**
+  String get moreAccountSignedIn;
+
+  /// No description provided for @moreAccountChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在确认登录状态…'**
+  String get moreAccountChecking;
+
+  /// No description provided for @moreAccountCredits.
+  ///
+  /// In zh, this message translates to:
+  /// **'总积分：{value}'**
+  String moreAccountCredits(String value);
+
+  /// No description provided for @moreAccountThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题'**
+  String get moreAccountThreads;
+
+  /// No description provided for @moreAccountReplies.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复'**
+  String get moreAccountReplies;
+
+  /// No description provided for @moreAccountCreditLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'积分'**
+  String get moreAccountCreditLabel;
+
+  /// No description provided for @moreAccountStatistic.
+  ///
+  /// In zh, this message translates to:
+  /// **'{label}：{value}'**
+  String moreAccountStatistic(String label, String value);
+
+  /// No description provided for @moreAccountUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'—'**
+  String get moreAccountUnavailable;
+
+  /// No description provided for @moreAccountGroup.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户组：{name}'**
+  String moreAccountGroup(String name);
+
+  /// No description provided for @moreAccountAvatar.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name}的头像'**
+  String moreAccountAvatar(String name);
+
+  /// No description provided for @moreAccountOpenProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看{name}的资料'**
+  String moreAccountOpenProfile(String name);
+
+  /// No description provided for @moreAccountLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'资料暂时无法加载'**
+  String get moreAccountLoadFailed;
 
   /// No description provided for @moreLoginSubtitle.
   ///
@@ -5243,6 +5393,48 @@ abstract class AppLocalizations {
   /// **'点评'**
   String get threadCommentTitle;
 
+  /// No description provided for @threadCommentLoadMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更多点评'**
+  String get threadCommentLoadMore;
+
+  /// No description provided for @threadCommentLoadingMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载点评…'**
+  String get threadCommentLoadingMore;
+
+  /// No description provided for @threadCommentLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'点评加载失败，可重试'**
+  String get threadCommentLoadFailed;
+
+  /// No description provided for @threadCommentLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后查看后续点评'**
+  String get threadCommentLoginRequired;
+
+  /// No description provided for @threadCommentPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号无法查看后续点评'**
+  String get threadCommentPermissionDenied;
+
+  /// No description provided for @threadCommentRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试加载点评'**
+  String get threadCommentRetry;
+
+  /// No description provided for @threadInteractionsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无可显示的点评与评分'**
+  String get threadInteractionsEmpty;
+
   /// No description provided for @threadCommentSubmit.
   ///
   /// In zh, this message translates to:
@@ -5404,6 +5596,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'滚动到顶部'**
   String get threadDetailScrollTop;
+
+  /// No description provided for @threadQuickScrollDragHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'长按拖动，松手后吸附到左下角或右下角'**
+  String get threadQuickScrollDragHint;
+
+  /// No description provided for @threadQuickScrollMoveLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'移动到左下角'**
+  String get threadQuickScrollMoveLeft;
+
+  /// No description provided for @threadQuickScrollMoveRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'移动到右下角'**
+  String get threadQuickScrollMoveRight;
+
+  /// No description provided for @threadQuickScrollPositionSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'按钮位置保存失败，已恢复之前的位置'**
+  String get threadQuickScrollPositionSaveFailed;
 
   /// No description provided for @threadDetailScrollBottom.
   ///
@@ -6945,6 +7161,42 @@ abstract class AppLocalizations {
   /// **'消息提醒'**
   String get profileMessages;
 
+  /// No description provided for @profileMyThreads.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的主题'**
+  String get profileMyThreads;
+
+  /// No description provided for @profileForumFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛收藏'**
+  String get profileForumFavorites;
+
+  /// No description provided for @profileFriends.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友'**
+  String get profileFriends;
+
+  /// No description provided for @profileSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'资料设置'**
+  String get profileSettings;
+
+  /// No description provided for @profileCreditHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'积分明细'**
+  String get profileCreditHistory;
+
+  /// No description provided for @profileNoAdditionalDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无其他资料'**
+  String get profileNoAdditionalDetails;
+
   /// No description provided for @profileSignature.
   ///
   /// In zh, this message translates to:
@@ -6962,6 +7214,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'资料加载失败：{error}'**
   String profileLoadFailed(String error);
+
+  /// No description provided for @profileOpenForumPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开论坛资料页'**
+  String get profileOpenForumPage;
 
   /// No description provided for @profileBlogTitle.
   ///
@@ -7511,6 +7769,318 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地版本'**
   String get postEditLocalVersion;
+
+  /// No description provided for @composerReadAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读权限'**
+  String get composerReadAccess;
+
+  /// No description provided for @composerReadAccessUnlimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'不限'**
+  String get composerReadAccessUnlimited;
+
+  /// No description provided for @composerReadAccessHighest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最高权限'**
+  String get composerReadAccessHighest;
+
+  /// No description provided for @composerReadAccessUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法修改阅读权限'**
+  String get composerReadAccessUnavailable;
+
+  /// No description provided for @composerReadAccessUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前权限未确认'**
+  String get composerReadAccessUnknown;
+
+  /// No description provided for @composerReadAccessInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'原阅读权限已不可选，请重新选择'**
+  String get composerReadAccessInvalid;
+
+  /// No description provided for @composerReadAccessLevel.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读权限 {value}'**
+  String composerReadAccessLevel(int value);
+
+  /// No description provided for @composerReadAccessKeep.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留当前权限（{value}）'**
+  String composerReadAccessKeep(int value);
+
+  /// No description provided for @composerReadAccessAdjusted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存，但阅读权限由 {requested} 调整为 {actual}，请检查帖子设置。'**
+  String composerReadAccessAdjusted(int requested, int actual);
+
+  /// No description provided for @composerReadAccessUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存，但暂时无法确认阅读权限是否为 {value}，请检查帖子设置。'**
+  String composerReadAccessUnverified(int value);
+
+  /// No description provided for @postingPollMinimumOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少填写 {count} 个选项'**
+  String postingPollMinimumOptions(int count);
+
+  /// No description provided for @postingPollMaximumOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'最多 {count} 个选项'**
+  String postingPollMaximumOptions(int count);
+
+  /// No description provided for @postingPollMaximumOptionLength.
+  ///
+  /// In zh, this message translates to:
+  /// **'每个选项最多 {count} 个字符'**
+  String postingPollMaximumOptionLength(int count);
+
+  /// No description provided for @postingPollTooManyOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票选项超过 {count} 个，请调整后再发布'**
+  String postingPollTooManyOptions(int count);
+
+  /// No description provided for @comicPostCommentUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法点评'**
+  String get comicPostCommentUnavailable;
+
+  /// No description provided for @threadPostLocationFailedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法定位楼层'**
+  String get threadPostLocationFailedTitle;
+
+  /// No description provided for @threadPostTargetUnconfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法确认目标楼层。你可以重试，或打开主题首页。'**
+  String get threadPostTargetUnconfirmed;
+
+  /// No description provided for @threadPostLocationNetworkFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取目标楼层失败，请检查网络后重试。'**
+  String get threadPostLocationNetworkFailed;
+
+  /// No description provided for @threadPostOpenHome.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开主题首页'**
+  String get threadPostOpenHome;
+
+  /// No description provided for @moreDailySignIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'每日签到'**
+  String get moreDailySignIn;
+
+  /// No description provided for @moreDailySignInSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看今日状态并手动签到'**
+  String get moreDailySignInSubtitle;
+
+  /// No description provided for @dailySignInTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'每日签到'**
+  String get dailySignInTitle;
+
+  /// No description provided for @dailySignInChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在核对论坛签到状态…'**
+  String get dailySignInChecking;
+
+  /// No description provided for @dailySignInSigned.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日已签到'**
+  String get dailySignInSigned;
+
+  /// No description provided for @dailySignInUnsigned.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日尚未签到'**
+  String get dailySignInUnsigned;
+
+  /// No description provided for @dailySignInLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后查看签到状态'**
+  String get dailySignInLoginRequired;
+
+  /// No description provided for @dailySignInFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认签到状态，请稍后重试。'**
+  String get dailySignInFailed;
+
+  /// No description provided for @dailySignInPluginUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛签到页暂不可用。'**
+  String get dailySignInPluginUnavailable;
+
+  /// No description provided for @dailySignInSignNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即签到'**
+  String get dailySignInSignNow;
+
+  /// No description provided for @dailySignInSubmitting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在签到…'**
+  String get dailySignInSubmitting;
+
+  /// No description provided for @dailySignInVerify.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新核验'**
+  String get dailySignInVerify;
+
+  /// No description provided for @dailySignInRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新状态'**
+  String get dailySignInRefresh;
+
+  /// No description provided for @dailySignInOpenForum.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开论坛签到页'**
+  String get dailySignInOpenForum;
+
+  /// No description provided for @dailySignInStatistics.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的签到统计'**
+  String get dailySignInStatistics;
+
+  /// No description provided for @dailySignInOutcomeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次签到结果无法确认。请先重新核验；应用不会自动再次提交。'**
+  String get dailySignInOutcomeUnknown;
+
+  /// No description provided for @dailySignInUnknownButSigned.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次请求结果不明；论坛页面显示今日已签到。'**
+  String get dailySignInUnknownButSigned;
+
+  /// No description provided for @dailySignInApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'签到成功，论坛已确认今日记录。'**
+  String get dailySignInApplied;
+
+  /// No description provided for @dailySignInPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号没有签到权限。'**
+  String get dailySignInPermissionDenied;
+
+  /// No description provided for @dailySignInTimeWindowClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前时段尚未开放签到。'**
+  String get dailySignInTimeWindowClosed;
+
+  /// No description provided for @dailySignInRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛未接受本次签到，请稍后核验。'**
+  String get dailySignInRejected;
+
+  /// No description provided for @dailySignInNotSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次未提交签到，请核对最新状态后再试。'**
+  String get dailySignInNotSent;
+
+  /// No description provided for @dailySignInDayChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛日期已变化，本次未提交。请核对最新状态后再试。'**
+  String get dailySignInDayChanged;
+
+  /// No description provided for @dailySignInRetryUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'再次尝试签到'**
+  String get dailySignInRetryUnknown;
+
+  /// No description provided for @dailySignInRetryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认再次提交？'**
+  String get dailySignInRetryTitle;
+
+  /// No description provided for @dailySignInRetryBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次请求可能已经生效，即使当前页面仍显示未签到。继续将重新读取页面并发送一次新的签到请求。'**
+  String get dailySignInRetryBody;
+
+  /// No description provided for @dailyAutoSignInToggle.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动签到'**
+  String get dailyAutoSignInToggle;
+
+  /// No description provided for @dailyAutoSignInDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'每次启动应用后自动核验签到状态，符合条件时尝试签到；切回前台不会重复触发。'**
+  String get dailyAutoSignInDescription;
+
+  /// No description provided for @dailyAutoSignInSaving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存自动签到设置…'**
+  String get dailyAutoSignInSaving;
+
+  /// No description provided for @dailyAutoSignInStorageUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法安全读取或保存签到记录，当前不能提交签到。请稍后重试。'**
+  String get dailyAutoSignInStorageUnavailable;
+
+  /// No description provided for @dailyAutoSignInPausedPreviousDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'前一论坛日的签到结果仍未确认，今天暂停自动提交。你可以核验状态，或确认后手动重试。'**
+  String get dailyAutoSignInPausedPreviousDay;
+
+  /// No description provided for @dailyAutoSignInPendingToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日已有结果未明的签到尝试，自动提交已暂停。请核验状态；手动重试需要确认。'**
+  String get dailyAutoSignInPendingToday;
+
+  /// No description provided for @dailyAutoSignInBlockedToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日签到记录与论坛当前状态不一致，自动提交已暂停。请先核验状态。'**
+  String get dailyAutoSignInBlockedToday;
 }
 
 class _AppLocalizationsDelegate

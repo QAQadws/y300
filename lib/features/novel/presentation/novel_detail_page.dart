@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -19,7 +25,6 @@ import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.d
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_hydration_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_open_mode_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
-import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_chapter_hydration_panel.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
@@ -38,6 +43,25 @@ class NovelDetailPage extends ConsumerStatefulWidget {
 }
 
 class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
+  final _postRouteSession = ThreadPostNavigationSession();
+  String? _chapterSelection;
+  int _chapterSelectionGeneration = 0;
+
+  @override
+  void didUpdateWidget(covariant NovelDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.novelId != widget.novelId) {
+      _chapterSelectionGeneration++;
+      _postRouteSession.invalidate();
+    }
+  }
+
+  @override
+  void dispose() {
+    _postRouteSession.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -196,6 +220,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
   }
 
   Future<void> _updateOpenMode(NovelChapterOpenMode mode) async {
+    _chapterSelectionGeneration++;
+    _postRouteSession.invalidate();
     try {
       await ref
           .read(novelChapterOpenModeControllerProvider.notifier)
@@ -215,6 +241,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     BuildContext context,
     LibraryChapterItem chapter,
   ) async {
+    _selectChapter(chapter.episodeId);
     final mode =
         ref.read(novelChapterOpenModeControllerProvider).value ??
         NovelChapterOpenMode.reader;
@@ -241,6 +268,9 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     BuildContext context,
     ReaderRouteTarget target,
   ) async {
+    _selectChapter(target.episodeId);
+    final selectionGeneration = _chapterSelectionGeneration;
+    final novelId = widget.novelId;
     final mode =
         ref.read(novelChapterOpenModeControllerProvider).value ??
         NovelChapterOpenMode.reader;
@@ -259,7 +289,10 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     final matches = episodes.where(
       (episode) => episode.episodeId == target.episodeId,
     );
-    if (matches.isEmpty || !context.mounted) {
+    if (matches.isEmpty ||
+        !context.mounted ||
+        widget.novelId != novelId ||
+        selectionGeneration != _chapterSelectionGeneration) {
       return;
     }
     final episode = matches.first;
@@ -276,81 +309,48 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     required String tid,
     required String pid,
     required String subject,
-  }) async {
-    try {
-      final route = await ref
-          .read(novelChapterSourceRouteResolverProvider)
-          .resolve(NovelChapterSourceReference(tid: tid, pid: pid));
-      if (!context.mounted) {
-        return;
-      }
-      await _openThread(
-        context,
-        ThreadRouteTarget(
-          tid: route.tid,
-          subject: subject,
-          initialPage: route.page,
-          targetPid: route.pid,
-        ),
-      );
-    } on NovelChapterSourceRouteException catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-      await _showSourceRouteFailure(
-        context: context,
-        error: error,
-        fallbackTid: tid,
-        subject: subject,
-      );
-    }
-  }
-
-  Future<void> _showSourceRouteFailure({
-    required BuildContext context,
-    required NovelChapterSourceRouteException error,
-    required String fallbackTid,
-    required String subject,
-  }) async {
-    final canOpenThreadHome = RegExp(r'^[1-9]\d*$').hasMatch(fallbackTid);
-    final openThreadHome = await showDialog<bool>(
+  }) {
+    final novelId = widget.novelId;
+    return launchThreadPostRoute(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          key: const Key('novel-source-route-failure-dialog'),
-          title: Text(
-            AppLocalizations.of(dialogContext).novelSourceRouteDialogTitle,
-          ),
-          content: Text(
-            NovelTextResolver.sourceRouteFailure(
-              AppLocalizations.of(dialogContext),
-              error,
+      session: _postRouteSession,
+      resolver: ref.read(threadPostRouteResolverProvider),
+      target: ThreadPostTarget(tid: tid, pid: pid),
+      subject: subject,
+      failureDialogKey: const Key('novel-source-route-failure-dialog'),
+      isCurrent: () => mounted && widget.novelId == novelId,
+      resolve: () async {
+        try {
+          final route = await ref
+              .read(novelChapterSourceRouteResolverProvider)
+              .resolve(NovelChapterSourceReference(tid: tid, pid: pid));
+          return ApiSuccess(
+            ThreadPostLocation(
+              tid: route.tid,
+              pid: route.pid,
+              page: route.page,
+              url: route.url,
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(AppLocalizations.of(dialogContext).commonCancel),
-            ),
-            if (canOpenThreadHome)
-              FilledButton(
-                key: const Key('novel-source-route-open-thread-home'),
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(
-                  AppLocalizations.of(dialogContext).novelOpenThreadHome,
-                ),
-              ),
-          ],
-        );
+          );
+        } on NovelChapterSourceRouteException catch (error) {
+          return ApiFailure(
+            error.detail is ApiError
+                ? error.detail as ApiError
+                : const ApiError(
+                    type: ApiErrorType.parse,
+                    message: 'thread_post_target_unconfirmed',
+                  ),
+          );
+        }
       },
     );
-    if (openThreadHome != true || !context.mounted) {
-      return;
-    }
-    await _openThread(
-      context,
-      ThreadRouteTarget(tid: fallbackTid, subject: subject),
-    );
+  }
+
+  void _selectChapter(String? episodeId) {
+    if (_chapterSelection == episodeId) return;
+    _chapterSelection = episodeId;
+    _chapterSelectionGeneration++;
+    _postRouteSession.invalidate();
   }
 
   Future<void> _openReader(
@@ -358,6 +358,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     ReaderRouteTarget target, {
     NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.startAtBeginning,
   }) async {
+    _postRouteSession.invalidate();
+    _chapterSelectionGeneration++;
     _progressDiagnostics.log(
       'reader_route',
       fields: <String, Object?>{
@@ -381,6 +383,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     BuildContext context,
     ThreadRouteTarget target,
   ) async {
+    _chapterSelectionGeneration++;
+    _postRouteSession.invalidate();
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ThreadDetailPage(

@@ -19,6 +19,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_page_indi
 import 'package:y300/features/reader_shared/presentation/engine/reader_paged_image_fit_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_position_state.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_tail_action_controller.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_position_driver.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
@@ -57,7 +58,8 @@ class ImageReaderEngine extends ConsumerStatefulWidget {
 
 class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     implements ReaderEngineActions {
-  late final ScrollController _scrollController;
+  late ScrollController _scrollController;
+  int _scrollControllerSessionGeneration = -1;
   PageController? _pageController;
   String? _pageControllerOwnerId;
   late final ReaderOverlayController _overlayController;
@@ -74,6 +76,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   final Set<String> _reportedTailSurfaceKeys = <String>{};
   final Set<String> _reportedAdvanceSurfaceKeys = <String>{};
   final Set<String> _reportedAdjacentPreloadKeys = <String>{};
+  final ReaderTailActionController _tailActionController =
+      ReaderTailActionController();
 
   // 滑块拖动会话 + commit 锁状态机（迁移自 ComicReaderPage）。
   int? _sliderPreviewIndex;
@@ -82,7 +86,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   int? _pendingCommittedIndex;
   int? _activeSeekGeneration;
 
-  bool _isPageIndicatorHighlighted = false;
+  final ValueNotifier<bool> _pageIndicatorHighlighted = ValueNotifier(false);
+  bool _pageIndicatorVisible = false;
   Timer? _pageIndicatorDimTimer;
 
   final Set<int> _reportedVisibleImageIndexes = <int>{};
@@ -92,8 +97,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ReaderPositionState? _positionState;
   bool _exitFlushed = false;
 
-  // These counters are diagnostic-only. Position and preload behavior must
-  // remain independent from observability state.
+  // A session generation also isolates viewport callbacks across content
+  // replacements, including refreshed images belonging to the same owner.
   int _readerSessionGeneration = 0;
   int _verticalViewportPrimedGeneration = -1;
   int _restoreGeneration = 0;
@@ -120,6 +125,9 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   final Map<String, GlobalKey> _verticalItemAnchors = <String, GlobalKey>{};
 
   List<ContinuousImageItem> _latestItems = const <ContinuousImageItem>[];
+  ContinuousImageLayoutIndex? _verticalLayoutIndex;
+  List<ContinuousImageItem>? _indexedItems;
+  double? _indexedWidth;
   double _pendingScrollCompensationDelta = 0;
   double _pendingPageSpacingCompensationDelta = 0;
   String? _verticalSpacingOwnerId;
@@ -134,7 +142,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController()..addListener(_onVerticalScroll);
+    _scrollController = _createScrollController();
+    _tailActionController.addListener(_onTailActionChanged);
     _overlayController = ReaderOverlayController()
       ..addListener(_onOverlayVisibilityChanged);
     _gestureCoordinator = ReaderGestureCoordinator(
@@ -153,7 +162,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       isReady: () => mounted && _scrollController.hasClients,
       currentOffset: () => _scrollController.offset,
       clampOffset: _clampVerticalOffset,
-      jumpTo: _scrollController.jumpTo,
+      jumpTo: (offset) => _scrollController.jumpTo(offset),
       estimateOffset: _estimateVerticalOffset,
       exactOffset: _resolveExactVerticalOffset,
       waitForLayout: _waitForVerticalLayout,
@@ -170,6 +179,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     );
     _scrollController
       ..removeListener(_onVerticalScroll)
+      ..removeListener(_tailActionController.schedule)
       ..dispose();
     _releasePagedZoomScrollHold();
     _pageController?.dispose();
@@ -180,11 +190,17 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _zoomGate.dispose();
     _activePagedIndex.dispose();
     _pageIndicatorDimTimer?.cancel();
+    _pageIndicatorHighlighted.dispose();
     _verticalPositionDriver.dispose();
     _sessionPreloadCoordinator.dispose();
     _imageSessionStore.dispose();
     _disposeTailSurface();
+    _tailActionController.dispose();
     super.dispose();
+  }
+
+  void _onTailActionChanged() {
+    if (mounted) setState(() {});
   }
   // ENGINE_BODY_PLACEHOLDER
 
@@ -203,6 +219,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
 
     final positionState = _resetIfOwnerChanged(content, preferences.readerMode);
+    _syncScrollControllerIfNeeded();
     _syncPageControllerIfNeeded(
       mode,
       positionState.committedLogicalIndex,
@@ -212,8 +229,30 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
     final total = content.length;
     final engineContext = _engineContext(preferences, total);
+    final tail = _tailSurface;
+    final actionSurface = tail is ReaderTailActionSurface
+        ? tail as ReaderTailActionSurface
+        : null;
+    _tailActionController.configure(
+      identity: (content.ownerId, tail, preferences.readerMode),
+      surface: actionSurface,
+      vertical: mode == ContinuousImageReaderMode.vertical,
+      pagedVisible: _pagedPosition.isTail,
+    );
+    _pageIndicatorVisible =
+        !_overlayController.isMenuVisible &&
+        !_tailActionController.visible &&
+        preferences.showPageIndicator;
+    if (!_pageIndicatorVisible) {
+      _pageIndicatorDimTimer?.cancel();
+      _pageIndicatorDimTimer = null;
+      _pageIndicatorHighlighted.value = false;
+    }
 
+    // Chrome and viewport must retire together: a chapter can change while a
+    // modal is dismissing and the old tail's semantics are still offstage.
     return Scaffold(
+      key: ValueKey<int>(_readerSessionGeneration),
       body: Stack(
         children: [
           ReaderOverlayScaffold(
@@ -247,15 +286,23 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
               engineContext: engineContext,
             ),
           ),
-          ReaderPageIndicatorOverlay(
-            visible:
-                !_overlayController.isMenuVisible &&
-                preferences.showPageIndicator,
-            highlighted: _isPageIndicatorHighlighted,
-            currentPage: (_sliderPreviewIndex ?? _lastKnownIndex) + 1,
-            totalPages: total,
-            positionLabel: _sequencePositionLabel(),
+          ValueListenableBuilder<bool>(
+            valueListenable: _pageIndicatorHighlighted,
+            builder: (context, highlighted, _) => ReaderPageIndicatorOverlay(
+              visible: _pageIndicatorVisible,
+              highlighted: highlighted,
+              currentPage: (_sliderPreviewIndex ?? _lastKnownIndex) + 1,
+              totalPages: total,
+              positionLabel: _sequencePositionLabel(),
+            ),
           ),
+          if (actionSurface != null)
+            ReaderTailActionOverlay(
+              key: ValueKey(_tailActionController.identity),
+              controller: _tailActionController,
+              surface: actionSurface,
+              menuVisible: _overlayController.isMenuVisible,
+            ),
         ],
       ),
     );
@@ -278,8 +325,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _latestItems = items;
     _syncVerticalItemAnchors(items);
     final verticalTrailing = _buildVerticalTrailingSpec(engineContext);
+    final sessionGeneration = _readerSessionGeneration;
+    final scrollController = _scrollController;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (_isCurrentVerticalSession(sessionGeneration, scrollController)) {
         _syncScrollPositionActivityListener();
         if (_verticalViewportPrimedGeneration != _readerSessionGeneration) {
           // A ListView may build cached rows without scrolling. Resolve the
@@ -287,7 +336,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           // reported to the business capability. This is once per owner;
           // running it on every rebuild can create a persistent UI loop while
           // image extents are settling.
-          _verticalViewportPrimedGeneration = _readerSessionGeneration;
           _onVerticalScroll();
         }
         _submitSessionPreloadWindow(
@@ -297,17 +345,21 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       }
     });
     final reader = NotificationListener<ScrollNotification>(
-      onNotification: _onVerticalScrollNotification,
+      onNotification: (notification) =>
+          _isCurrentVerticalSession(sessionGeneration, scrollController)
+          ? _onVerticalScrollNotification(notification)
+          : false,
       child: ContinuousImageReaderView(
         items: items,
         mode: ContinuousImageReaderMode.vertical,
-        scrollController: _scrollController,
+        scrollController: scrollController,
         scrollCacheExtent: ScrollCacheExtent.pixels(
           MediaQuery.sizeOf(context).height *
               widget.flowPolicy.viewportCacheExtentFactor,
         ),
         layoutResolver: _layoutResolver,
-        onExtentResolved: _recordExtent,
+        onExtentResolved: (extent) =>
+            _recordExtent(extent, sessionGeneration: sessionGeneration),
         verticalListKey: widget.listKey,
         slotKeyPrefix: widget.slotKeyPrefix,
         verticalItemAnchorKeyBuilder: (item, _) =>
@@ -334,9 +386,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final items = content.items;
     final tail = _tailSurface;
     final pageController = _pageController;
+    final sessionGeneration = _readerSessionGeneration;
     _latestItems = items;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (mounted &&
+          sessionGeneration == _readerSessionGeneration &&
+          identical(pageController, _pageController)) {
         _precachePagedWindow(_lastKnownIndex);
       }
     });
@@ -369,7 +424,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             ? null
             : (context) => _buildPagedAdvance(context, tail),
         layoutResolver: _layoutResolver,
-        onExtentResolved: _recordExtent,
+        onExtentResolved: (extent) =>
+            _recordExtent(extent, sessionGeneration: sessionGeneration),
         itemBuilder: (context, item, index, {required paged}) {
           return _buildImage(item, index, preferences, paged: true);
         },
@@ -723,13 +779,31 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (tailCount <= 0) {
       return _ReaderVerticalTrailingSpec.single(legacyTrailing);
     }
+    final hasActionBar = tail is ReaderTailActionSurface;
     return _ReaderVerticalTrailingSpec(
-      itemCount: tailCount + (legacyTrailing == null ? 0 : 1),
+      itemCount:
+          tailCount + (hasActionBar ? 1 : 0) + (legacyTrailing == null ? 0 : 1),
       indexedBuilder: (context, index) {
         if (index < tailCount) {
           return _buildVerticalTailItem(context, tail!, index);
         }
-        return legacyTrailing!(context);
+        if (legacyTrailing != null && index == tailCount) {
+          final trailing = legacyTrailing(context);
+          return hasActionBar
+              ? ReaderTailVisibilityItem(
+                  controller: _tailActionController,
+                  identity: _tailActionController.identity,
+                  child: trailing,
+                )
+              : trailing;
+        }
+        // The measured bar includes SafeArea. Reserve it once, after all
+        // content, so it cannot create a gap before the chapter transition.
+        return ReaderTailVisibilityItem(
+          controller: _tailActionController,
+          identity: _tailActionController.identity,
+          child: SizedBox(height: _tailActionController.barHeight),
+        );
       },
     );
   }
@@ -738,7 +812,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _scheduleAdjacentPreloadIfReady(tail);
     return KeyedSubtree(
       key: Key('reader-tail-${tail.id}'),
-      child: tail.buildPaged(context, _tailActions(tail)),
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: tail is ReaderTailActionSurface
+              ? _tailActionController.barHeight
+              : 0,
+        ),
+        child: tail.buildPaged(context, _tailActions(tail)),
+      ),
     );
   }
 
@@ -758,9 +839,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       _scheduleTailVisible(tail);
     }
     _scheduleAdjacentPreloadIfReady(tail);
-    return KeyedSubtree(
+    final child = KeyedSubtree(
       key: Key('reader-tail-vertical-${tail.id}-$index'),
       child: tail.buildVerticalItem(context, _tailActions(tail), index),
+    );
+    if (tail is! ReaderTailActionSurface) return child;
+    return ReaderTailVisibilityItem(
+      key: ValueKey((_tailActionController.identity, index)),
+      controller: _tailActionController,
+      identity: _tailActionController.identity,
+      child: child,
     );
   }
 
@@ -990,6 +1078,33 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   // --- owner reset / page controller sync / restore ---
 
+  ScrollController _createScrollController() =>
+      ScrollController(keepScrollOffset: false)
+        ..addListener(_onVerticalScroll)
+        ..addListener(_tailActionController.schedule);
+
+  void _syncScrollControllerIfNeeded() {
+    if (_scrollControllerSessionGeneration == _readerSessionGeneration) return;
+    final previous = _scrollController;
+    _observedScrollPosition?.isScrollingNotifier.removeListener(
+      _onScrollActivityChanged,
+    );
+    _observedScrollPosition = null;
+    previous
+      ..removeListener(_onVerticalScroll)
+      ..removeListener(_tailActionController.schedule);
+    _scrollController = _createScrollController();
+    _scrollControllerSessionGeneration = _readerSessionGeneration;
+    // The old keyed viewport detaches during this frame's tree update.
+    WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+  }
+
+  bool _isCurrentVerticalSession(int generation, ScrollController controller) =>
+      mounted &&
+      generation == _readerSessionGeneration &&
+      identical(controller, _scrollController) &&
+      _diagnosticMode == ReaderModePreference.vertical;
+
   ReaderPositionState _resetIfOwnerChanged(
     ReaderContent content,
     ReaderModePreference readerMode,
@@ -1002,6 +1117,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           ReaderVerticalSeekCancelReason.ownerChanged,
         );
         _extentRegistry.clearForOwner(content.ownerId);
+        _invalidateVerticalLayoutIndex();
         _verticalItemAnchors.clear();
         final initialIndex = content.initialIndex
             .clamp(0, content.length - 1)
@@ -1046,6 +1162,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
     _verticalItemAnchors.clear();
     _performanceMetrics.reset();
+    _invalidateVerticalLayoutIndex();
     final initialIndex = content.initialIndex
         .clamp(0, content.length - 1)
         .toInt();
@@ -1216,6 +1333,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       }
     } else if (_scrollController.offset == 0 && targetIndex > 0) {
       verticalSeek = await _verticalPositionDriver.seekToIndex(targetIndex);
+      if (!_isCurrentPositionState(positionState, content.length) ||
+          _diagnosticMode != ReaderModePreference.vertical) {
+        return;
+      }
       _performanceMetrics.recordSeek(
         elapsed: verticalSeek.elapsed,
         correctionDelta: verticalSeek.correctionDelta,
@@ -1253,6 +1374,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       elapsedMs: verticalSeek?.elapsed.inMilliseconds,
       correctionDelta: verticalSeek?.correctionDelta,
     );
+    _scheduleVerticalProgressSync();
   }
 
   void _restorePaged(
@@ -1442,9 +1564,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   // --- vertical scroll progress + active index ---
 
   void _onVerticalScroll() {
-    if (!_scrollController.hasClients || _isSliderCommitInFlight) {
+    if (!_scrollController.hasClients ||
+        _isSliderCommitInFlight ||
+        (_positionState?.needsInitialRestore ?? true)) {
       return;
     }
+    _verticalViewportPrimedGeneration = _readerSessionGeneration;
     _syncScrollPositionActivityListener();
     _applyPendingScrollCompensationIfIdle();
     _hideReaderMenuForContentMotion();
@@ -1458,24 +1583,19 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (total == 0) {
       return;
     }
-    final ratio = position.maxScrollExtent <= 0
-        ? 0.0
-        : (position.pixels / position.maxScrollExtent)
-              .clamp(0.0, 1.0)
-              .toDouble();
-    final viewport = _viewportTracker.resolve(
-      items: items,
-      extentRegistry: _extentRegistry,
-      scrollOffset: position.pixels,
-      viewportExtent: position.viewportDimension,
-      crossAxisExtent: MediaQuery.sizeOf(context).width,
-      userScrollDirection: _viewportTracker.directionFromPosition(position),
-    );
+    final viewport = _verticalLayoutFor(MediaQuery.sizeOf(context).width)
+        .resolve(
+          scrollOffset: position.pixels,
+          viewportExtent: position.viewportDimension,
+          userScrollDirection: _viewportTracker.directionFromPosition(position),
+        );
     final index =
         viewport.lastEndVisibleIndex ??
         viewport.lastVisibleIndex ??
-        viewport.firstVisibleIndex ??
-        ((total - 1) * ratio).round();
+        viewport.firstVisibleIndex;
+    // Tail rows contribute to scroll extent, but never to image progress or
+    // image preloading. Keep the last real image position in the comment feed.
+    if (index == null) return;
     _reportActualImageVisible(
       index: index,
       ownerId: _lastOwnerId ?? _capability.content.ownerId,
@@ -1494,11 +1614,44 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
   }
 
-  void _recordExtent(ContinuousImageExtent extent) {
+  void _recordExtent(
+    ContinuousImageExtent extent, {
+    required int sessionGeneration,
+  }) {
+    if (!mounted ||
+        extent.ownerId != _lastOwnerId ||
+        sessionGeneration != _readerSessionGeneration) {
+      return;
+    }
     final previous = _extentRegistry.extentOf(extent.itemId);
     final plan = _planScrollCompensation(previous, extent);
     _extentRegistry.record(extent);
+    if (previous?.mainAxisExtent != extent.mainAxisExtent) {
+      _verticalLayoutIndex = null;
+    }
     _applyScrollCompensationPlan(plan);
+  }
+
+  ContinuousImageLayoutIndex _verticalLayoutFor(double width) {
+    if (_verticalLayoutIndex == null ||
+        !identical(_indexedItems, _latestItems) ||
+        _indexedWidth != width) {
+      _verticalLayoutIndex = ContinuousImageLayoutIndex(
+        items: _latestItems,
+        extentRegistry: _extentRegistry,
+        crossAxisExtent: width,
+        resolver: _layoutResolver,
+      );
+      _indexedItems = _latestItems;
+      _indexedWidth = width;
+    }
+    return _verticalLayoutIndex!;
+  }
+
+  void _invalidateVerticalLayoutIndex() {
+    _verticalLayoutIndex = null;
+    _indexedItems = null;
+    _indexedWidth = null;
   }
 
   ContinuousImageScrollCompensationPlan _planScrollCompensation(
@@ -1534,8 +1687,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       return;
     }
     if (plan.shouldApplyImmediately) {
+      final sessionGeneration = _readerSessionGeneration;
+      final scrollController = _scrollController;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scrollController.hasClients) {
+        if (!_isCurrentVerticalSession(sessionGeneration, scrollController) ||
+            !scrollController.hasClients) {
           return;
         }
         final position = _scrollController.position;
@@ -2071,8 +2227,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   }
 
   void _scheduleVerticalProgressSync() {
+    final sessionGeneration = _readerSessionGeneration;
+    final scrollController = _scrollController;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_isSliderCommitInFlight) {
+      if (_isCurrentVerticalSession(sessionGeneration, scrollController) &&
+          !_isSliderCommitInFlight) {
         _onVerticalScroll();
       }
     });
@@ -2697,18 +2856,19 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   void _pulsePageIndicator() {
     _pageIndicatorDimTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _isPageIndicatorHighlighted = true;
-      });
+    if (!mounted || !_pageIndicatorVisible) {
+      _pageIndicatorDimTimer = null;
+      return;
     }
+    // Scroll notifications must never rebuild the reader's lazy rows just
+    // to highlight chrome; repeated true values do not notify listeners.
+    _pageIndicatorHighlighted.value = true;
     _pageIndicatorDimTimer = Timer(const Duration(milliseconds: 900), () {
       if (!mounted) {
         return;
       }
-      setState(() {
-        _isPageIndicatorHighlighted = false;
-      });
+      _pageIndicatorDimTimer = null;
+      _pageIndicatorHighlighted.value = false;
     });
   }
 

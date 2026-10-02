@@ -25,6 +25,267 @@ part 'posting_composer_controller_test_fakes.dart';
 
 void main() {
   group('PostingComposerController', () {
+    const access = ThreadReadAccess(
+      canModify: true,
+      currentValue: 0,
+      options: [
+        ThreadReadAccessOption(value: 0),
+        ThreadReadAccessOption(value: 20),
+        ThreadReadAccessOption(value: 255),
+      ],
+    );
+
+    test(
+      'permission-only draft saves, restores, and invalid choices never reset silently',
+      () async {
+        final drafts = _MemoryDraftRepository();
+        final args = _args();
+        final repo = _FakeMetadataRepository.success(
+          _metadataNoTypes(readAccess: access),
+        );
+        final container = _buildContainer(
+          draftRepository: drafts,
+          metadataRepository: repo,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .minimumReadAccess,
+          0,
+        );
+        controller.updateMinimumReadAccess(20);
+        await controller.flushDraft();
+        expect(
+          (await drafts.loadDraft(args.identity))!.extras['readAccess'],
+          '20',
+        );
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .hasDraftContent,
+          isTrue,
+        );
+        repo.queueSuccess(_metadataNoTypes());
+        await controller.retryLoadMetadata();
+        final invalid = container
+            .read(postingComposerControllerProvider(args))
+            .value!;
+        expect(invalid.minimumReadAccess, 20);
+        expect(invalid.isReadAccessValid, isFalse);
+        controller.updateMinimumReadAccess(0);
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .isReadAccessValid,
+          isTrue,
+        );
+
+        final restored = _buildContainer(
+          draftRepository: drafts,
+          metadataRepository: _FakeMetadataRepository.success(
+            _metadataNoTypes(),
+          ),
+        );
+        addTearDown(restored.dispose);
+        final restoredSubscription = _keepAlive(restored, args);
+        addTearDown(restoredSubscription.close);
+        await restored.read(postingComposerControllerProvider(args).future);
+        await _drain();
+        expect(
+          restored
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .minimumReadAccess,
+          20,
+        );
+        expect(
+          restored
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .canSubmit,
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'same-kind preparation shares a flight and older kind responses cannot overwrite state',
+      () async {
+        final repo = _DelayedCreationRepository();
+        final args = _args();
+        final container = _buildContainer(metadataRepository: repo);
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+        final sameFlight = controller.retryLoadMetadata();
+        expect(repo.requests, hasLength(1));
+        controller.updateSubject('preserved title');
+        controller.updateMessage('preserved body');
+        controller.updateSpecial(NewThreadSpecial.poll);
+        await _drain();
+        expect(repo.requests, hasLength(2));
+        expect(repo.requests.first.cancellation!.isCancelled, isTrue);
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .canSubmit,
+          isFalse,
+        );
+        repo.complete(
+          1,
+          _metadataNoTypes(
+            kind: ThreadCreationKind.poll,
+            readAccess: access,
+            pollConstraints: const ThreadPollConstraints(maximumOptions: 3),
+          ),
+        );
+        await _drain();
+        controller.updateMinimumReadAccess(20);
+        controller.updatePollOptions(['A', 'B', 'C', 'D']);
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .canSubmit,
+          isFalse,
+        );
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .poll!
+              .options,
+          hasLength(4),
+        );
+        repo.complete(0, _metadataNoTypes());
+        await sameFlight;
+        final state = container
+            .read(postingComposerControllerProvider(args))
+            .value!;
+        expect(state.metadata!.kind, ThreadCreationKind.poll);
+        expect(state.minimumReadAccess, 20);
+        expect(state.subject, 'preserved title');
+        expect(state.message, 'preserved body');
+        controller.updateSpecial(NewThreadSpecial.normal);
+        await _drain();
+        repo.complete(2, _metadataNoTypes(readAccess: access));
+        await _drain();
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .poll!
+              .options,
+          hasLength(4),
+        );
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .minimumReadAccess,
+          20,
+        );
+      },
+    );
+
+    test(
+      'uncertain creation remains blocked after local edits and prepare retries',
+      () async {
+        final command = _FakeThreadCreationCommand(
+          result: const DataCommandOutcomeUnknown(
+            DataCommandFailure(
+              kind: DataCommandFailureKind.unknown,
+              retryPolicy: DataCommandRetryPolicy.never,
+              diagnosticMessage: 'unknown',
+            ),
+          ),
+        );
+        final args = _args();
+        final container = _buildContainer(threadCreationCommand: command);
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+        controller.updateSubject('title');
+        controller.updateMessage('body');
+        await controller.submit();
+        controller.updateMessage('updated body');
+        await controller.retryLoadMetadata();
+        expect(
+          container
+              .read(postingComposerControllerProvider(args))
+              .value!
+              .canSubmit,
+          isFalse,
+        );
+        expect((await controller.submit()).sent, isFalse);
+        expect(command.submissions, hasLength(1));
+      },
+    );
+
+    test(
+      'successful creation returns unverified permission evidence to its entry',
+      () async {
+        const evidence = ThreadReadAccessEvidence(
+          kind: ThreadReadAccessEvidenceKind.unverified,
+          requested: 20,
+        );
+        final command = _FakeThreadCreationCommand(
+          result: const DataCommandApplied(
+            ThreadCreationReceipt(
+              tid: '1',
+              pid: '2',
+              publicationState: ThreadPublicationState.published,
+              readAccess: evidence,
+            ),
+          ),
+        );
+        final args = _args();
+        final container = _buildContainer(
+          metadataRepository: _FakeMetadataRepository.success(
+            _metadataNoTypes(readAccess: access),
+          ),
+          threadCreationCommand: command,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepAlive(container, args);
+        addTearDown(subscription.close);
+        await container.read(postingComposerControllerProvider(args).future);
+        await _drain();
+        final controller = container.read(
+          postingComposerControllerProvider(args).notifier,
+        );
+        controller.updateSubject('title');
+        controller.updateMessage('body');
+        controller.updateMinimumReadAccess(20);
+        final result = await controller.submit();
+        expect(result.sent, isTrue);
+        expect(result.readAccess, same(evidence));
+        expect(command.submissions.single.minimumReadAccess, 20);
+      },
+    );
+
     test('build loads metadata via microtask after initial state', () async {
       final metadataRepository = _FakeMetadataRepository.success(
         _metadataWithTypes(typeRequired: false),
@@ -300,6 +561,7 @@ void main() {
         controller.updateParseUrlOff(true);
         controller.updateTags(const <String>['百合']);
         controller.updateSpecial(NewThreadSpecial.poll);
+        await _drain();
         controller.updatePollOptions(const <String>['A', 'B']);
         await controller.flushDraft();
 
@@ -640,6 +902,7 @@ void main() {
       controller.updateSubject('投票');
       controller.updateMessage('说明');
       controller.updateSpecial(NewThreadSpecial.poll);
+      await _drain();
       await controller.flushDraft();
 
       final state = container
@@ -675,6 +938,7 @@ void main() {
         controller.updateSubject('投票');
         controller.updateMessage('说明');
         controller.updateSpecial(NewThreadSpecial.poll);
+        await _drain();
         controller.updatePollOptions(['只有一个']);
 
         final result = await controller.submit();
@@ -710,6 +974,7 @@ void main() {
       controller.updateSubject('投票标题');
       controller.updateMessage('正文');
       controller.updateSpecial(NewThreadSpecial.poll);
+      await _drain();
       controller.updatePollOptions(['  A ', '', 'B', 'C']);
       controller.updatePollMultiple(true);
       controller.updatePollMaxChoices(2);

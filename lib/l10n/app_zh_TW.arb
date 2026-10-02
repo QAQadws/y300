@@ -1,4 +1,10 @@
 {
+  "comicInteractionLoadFailed": "互動資訊載入失敗，點擊評分或回覆重試",
+  "comicInteractionUnavailable": "目前帖子暫不支援評分和回覆",
+  "comicRatingUnavailable": "目前帖子暫不支援評分",
+  "comicReplyUnavailable": "目前帖子暫不支援回覆",
+  "comicCommentRefreshFailed": "評論重新整理失敗，已保留原有評論",
+
   "@@locale": "zh_TW",
 
   "appLanguageSectionTitle": "介面語言",
@@ -479,11 +485,30 @@
 
   "moreTitle": "更多",
   "moreMyProfile": "我的資料",
+  "profileOpenNative": "開啟原生資料頁",
   "moreMyProfileSignedOutSubtitle": "登入後查看個人資料、訊息提醒",
   "moreMyProfileSubtitle": "{username} 的資料與訊息提醒",
   "moreUnusedImages": "未使用圖片管理",
   "moreUnusedImagesSubtitle": "查看並刪除尚未用於帖子的上傳圖片",
   "moreLogin": "登入",
+  "moreAccountSignedOut": "未登入",
+  "moreAccountSignedIn": "已登入",
+  "moreAccountChecking": "正在確認登入狀態…",
+  "moreAccountCredits": "總積分：{value}",
+  "moreAccountThreads": "主題",
+  "moreAccountReplies": "回覆",
+  "moreAccountCreditLabel": "積分",
+  "moreAccountStatistic": "{label}：{value}",
+  "@moreAccountStatistic": { "placeholders": { "label": { "type": "String" }, "value": { "type": "String" } } },
+  "@moreAccountCredits": { "placeholders": { "value": { "type": "String" } } },
+  "moreAccountUnavailable": "—",
+  "moreAccountGroup": "使用者群組：{name}",
+  "@moreAccountGroup": { "placeholders": { "name": { "type": "String" } } },
+  "moreAccountAvatar": "{name}的頭像",
+  "@moreAccountAvatar": { "placeholders": { "name": { "type": "String" } } },
+  "moreAccountOpenProfile": "查看{name}的資料",
+  "@moreAccountOpenProfile": { "placeholders": { "name": { "type": "String" } } },
+  "moreAccountLoadFailed": "資料暫時無法載入",
   "moreLoginSubtitle": "登入論壇帳號並同步登入狀態",
   "moreLogout": "登出",
   "moreLogoutSubtitle": "登出目前論壇帳號",
@@ -793,6 +818,8 @@
   "novelReadingMode": "閱讀模式",
   "novelConversionMode": "簡繁",
   "novelSafeContent": "安全顯示正文",
+  "novelChapterInteractionsDockSetting": "顯示章末互動懸浮按鈕",
+  "novelChapterInteractionsSettingSaveFailed": "按鈕設定儲存失敗，已還原先前設定",
   "novelConversionOriginal": "原文",
   "novelConversionSimplified": "簡體",
   "novelConversionTraditional": "繁體",
@@ -804,6 +831,10 @@
   "novelBookmarkAdded": "已新增書籤",
   "novelBookmarkRemoved": "已移除書籤",
   "novelOpenSourceThread": "開啟原帖",
+  "novelViewChapterInteractions": "查看本章點評與評分",
+  "novelViewChapterInteractionsSemantics": "查看本章正文後的點評與評分",
+  "novelOpeningChapterInteractions": "正在開啟本章點評與評分…",
+  "novelSaveReadingProgressFailed": "儲存閱讀進度失敗，請重試",
   "novelCatalog": "目錄",
   "novelDisplay": "顯示",
   "novelPageCountPending": "計算中",
@@ -976,6 +1007,13 @@
     "placeholders": {"error": {"type": "String"}}
   },
   "threadCommentTitle": "點評",
+  "threadCommentLoadMore": "載入更多點評",
+  "threadCommentLoadingMore": "正在載入點評…",
+  "threadCommentLoadFailed": "點評載入失敗，可重試",
+  "threadCommentLoginRequired": "請先登入後查看後續點評",
+  "threadCommentPermissionDenied": "目前帳號無法查看後續點評",
+  "threadCommentRetry": "重試載入點評",
+  "threadInteractionsEmpty": "暫無可顯示的點評與評分",
   "threadCommentSubmit": "發佈",
   "threadCommentContent": "點評內容",
   "threadCommentSuccess": "點評成功",
@@ -1009,6 +1047,10 @@
   "threadHtmlRenderFailed": "正文渲染失敗，可長按樓層複製正文或開啟原帖查看。",
   "threadSelectionCopyTitle": "選擇複製",
   "threadDetailScrollTop": "滾動到頂部",
+  "threadQuickScrollDragHint": "長按拖曳，放開後吸附到左下角或右下角",
+  "threadQuickScrollMoveLeft": "移動到左下角",
+  "threadQuickScrollMoveRight": "移動到右下角",
+  "threadQuickScrollPositionSaveFailed": "按鈕位置儲存失敗，已恢復先前的位置",
   "threadDetailScrollBottom": "滾動到底部",
   "commonUse": "使用",
   "commonReset": "重置",
@@ -1322,10 +1364,17 @@
   "profileLoginRequired": "請先登入後查看個人資料",
   "profileMyBlogs": "我的日誌",
   "profileMessages": "訊息提醒",
+  "profileMyThreads": "我的主題",
+  "profileForumFavorites": "論壇收藏",
+  "profileFriends": "好友",
+  "profileSettings": "資料設定",
+  "profileCreditHistory": "積分明細",
+  "profileNoAdditionalDetails": "暫無其他資料",
   "profileSignature": "個人簽名",
   "profileDetails": "個人資料",
   "profileLoadFailed": "資料載入失敗：{error}",
   "@profileLoadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "profileOpenForumPage": "開啟論壇資料頁",
   "profileBlogTitle": "日誌",
   "profileBlogWrite": "寫日誌",
   "profileBlogWriteUnavailable": "目前尚未支援發表新日誌",
@@ -1445,5 +1494,116 @@
   "postEditLoadFailed": "讀取帖子編輯表單失敗：{error}",
   "@postEditLoadFailed": {"placeholders": {"error": {"type": "String"}}},
   "postEditServerVersion": "伺服器版本",
-  "postEditLocalVersion": "本地版本"
+  "postEditLocalVersion": "本地版本",
+  "composerReadAccess": "閱讀權限",
+  "composerReadAccessUnlimited": "不限",
+  "composerReadAccessHighest": "最高權限",
+  "composerReadAccessUnavailable": "目前無法修改閱讀權限",
+  "composerReadAccessUnknown": "目前權限未確認",
+  "composerReadAccessInvalid": "原閱讀權限已不可選，請重新選擇",
+  "composerReadAccessLevel": "閱讀權限 {value}",
+  "@composerReadAccessLevel": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "composerReadAccessKeep": "保留目前權限（{value}）",
+  "@composerReadAccessKeep": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "composerReadAccessAdjusted": "已儲存，但閱讀權限由 {requested} 調整為 {actual}，請檢查帖子設定。",
+  "@composerReadAccessAdjusted": {
+    "placeholders": {
+      "requested": {
+        "type": "int"
+      },
+      "actual": {
+        "type": "int"
+      }
+    }
+  },
+  "composerReadAccessUnverified": "已儲存，但暫時無法確認閱讀權限是否為 {value}，請檢查帖子設定。",
+  "@composerReadAccessUnverified": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollMinimumOptions": "至少填寫 {count} 個選項",
+  "@postingPollMinimumOptions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollMaximumOptions": "最多 {count} 個選項",
+  "@postingPollMaximumOptions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollMaximumOptionLength": "每個選項最多 {count} 個字元",
+  "@postingPollMaximumOptionLength": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "postingPollTooManyOptions": "投票選項超過 {count} 個，請調整後再發佈",
+  "@postingPollTooManyOptions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "comicPostCommentUnavailable": "目前無法點評",
+  "threadPostLocationFailedTitle": "無法定位樓層",
+  "threadPostTargetUnconfirmed": "無法確認目標樓層。你可以重試，或開啟主題首頁。",
+  "threadPostLocationNetworkFailed": "讀取目標樓層失敗，請檢查網路後重試。",
+  "threadPostOpenHome": "開啟主題首頁",
+  "moreDailySignIn": "每日簽到",
+  "moreDailySignInSubtitle": "查看今日狀態並手動簽到",
+  "dailySignInTitle": "每日簽到",
+  "dailySignInChecking": "正在核對論壇簽到狀態…",
+  "dailySignInSigned": "今日已簽到",
+  "dailySignInUnsigned": "今日尚未簽到",
+  "dailySignInLoginRequired": "請先登入後查看簽到狀態",
+  "dailySignInFailed": "暫時無法確認簽到狀態，請稍後重試。",
+  "dailySignInPluginUnavailable": "論壇簽到頁暫時無法使用。",
+  "dailySignInSignNow": "立即簽到",
+  "dailySignInSubmitting": "正在簽到…",
+  "dailySignInVerify": "重新核驗",
+  "dailySignInRefresh": "重新整理狀態",
+  "dailySignInOpenForum": "開啟論壇簽到頁",
+  "dailySignInStatistics": "我的簽到統計",
+  "dailySignInOutcomeUnknown": "本次簽到結果無法確認。請先重新核驗；應用不會自動再次提交。",
+  "dailySignInUnknownButSigned": "本次請求結果不明；論壇頁面顯示今日已簽到。",
+  "dailySignInApplied": "簽到成功，論壇已確認今日記錄。",
+  "dailySignInPermissionDenied": "目前帳號沒有簽到權限。",
+  "dailySignInTimeWindowClosed": "目前時段尚未開放簽到。",
+  "dailySignInRejected": "論壇未接受本次簽到，請稍後核驗。",
+  "dailySignInNotSent": "本次未提交簽到，請核對最新狀態後再試。",
+  "dailySignInDayChanged": "論壇日期已變更，本次未提交。請核對最新狀態後再試。",
+  "dailySignInRetryUnknown": "再次嘗試簽到",
+  "dailySignInRetryTitle": "確認再次提交？",
+  "dailySignInRetryBody": "上次請求可能已經生效，即使目前頁面仍顯示未簽到。繼續將重新讀取頁面並傳送一次新的簽到請求。",
+  "dailyAutoSignInToggle": "自動簽到",
+  "dailyAutoSignInDescription": "每次啟動應用後自動核對簽到狀態，符合條件時嘗試簽到；切回前景不會重複觸發。",
+  "dailyAutoSignInSaving": "正在儲存自動簽到設定…",
+  "dailyAutoSignInStorageUnavailable": "無法安全讀取或儲存簽到記錄，目前無法提交簽到。請稍後重試。",
+  "dailyAutoSignInPausedPreviousDay": "前一論壇日的簽到結果仍未確認，今天暫停自動提交。你可以核對狀態，或確認後手動重試。",
+  "dailyAutoSignInPendingToday": "今日已有結果未明的簽到嘗試，自動提交已暫停。請核對狀態；手動重試需要確認。",
+  "dailyAutoSignInBlockedToday": "今日簽到記錄與論壇目前狀態不一致，自動提交已暫停。請先核對狀態。"
 }

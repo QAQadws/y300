@@ -22,6 +22,7 @@ import 'discuz_api_client.dart';
 import 'discuz_ucenter_avatar_resolver.dart';
 import 'thread_detail_api_mapper.dart';
 import 'thread_detail_html_parser.dart';
+import 'thread_detail_handoff_coordinator.dart';
 
 final class DiscuzForumNotificationRepository
     implements ForumNotificationRepository {
@@ -516,6 +517,197 @@ final class DiscuzForumStickerCatalogRepository
   }
 }
 
+final class DiscuzThreadPostCommentsRepository
+    implements ThreadPostCommentsRepository {
+  DiscuzThreadPostCommentsRepository({
+    required this.config,
+    required this.network,
+    required this.requestProfiles,
+  }) : _commentParser = ThreadDetailHtmlParser(siteOrigin: config.siteOrigin);
+
+  final ForumClientConfig config;
+  final ForumClientNetwork network;
+  final ForumRequestProfileResolver requestProfiles;
+  final ThreadDetailHtmlParser _commentParser;
+
+  @override
+  ThreadPostCommentsSourceCapabilities get capabilities =>
+      _commentsCapabilities;
+
+  @override
+  Future<
+    DataReadResult<ThreadPostCommentsPage, ThreadPostCommentsReadCapabilities>
+  >
+  load(
+    ThreadPostCommentsQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.networkFirst,
+  }) async {
+    if (!_positive(query.tid) || !_positive(query.pid) || query.page < 2) {
+      return _businessFailure('thread_post_comments_query_invalid');
+    }
+    final uri = config.siteOrigin.replace(
+      path: '/forum.php',
+      queryParameters: {
+        'mod': 'misc',
+        'action': 'commentmore',
+        'tid': query.tid,
+        'pid': query.pid,
+        'page': '${query.page}',
+        'mobile': '2',
+        'inajax': '1',
+      },
+    );
+    final referer = config.siteOrigin.replace(
+      path: '/forum.php',
+      queryParameters: {'mod': 'viewthread', 'tid': query.tid, 'mobile': '2'},
+    );
+    final result = await network.send(
+      ForumRequest(
+        method: ForumRequestMethod.get,
+        uri: uri,
+        context: const ForumRequestContext(
+          operation: 'thread.post.comments',
+          pageKind: 'thread.detail',
+        ),
+        headers: requestProfiles
+            .resolve(ForumRequestProfileKind.mobileHtml, referer: referer)
+            .headers,
+      ),
+    );
+    if (result case ForumTransportError<ForumResponse<Object?>>(
+      :final failure,
+    )) {
+      return _failure(failure);
+    }
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    if (response.uri.scheme != config.siteOrigin.scheme ||
+        response.uri.host != config.siteOrigin.host ||
+        response.uri.port != config.siteOrigin.port) {
+      return _parseFailure(
+        'thread_post_comments_cross_site',
+        const FormatException('comment response left site'),
+      );
+    }
+    if (response.statusCode == 401) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.unauthorized,
+        code: 'thread_post_comments_login_required',
+        diagnosticMessage: 'thread_post_comments_login_required',
+      );
+    }
+    if (response.statusCode == 403) {
+      return _businessFailure('thread_post_comments_permission_denied');
+    }
+    if (response.statusCode != null && response.statusCode! >= 500) {
+      return DataReadFailure(
+        kind: DataReadFailureKind.server,
+        code: 'thread_post_comments_server_failed',
+        statusCode: response.statusCode,
+        diagnosticMessage: 'thread_post_comments_server_failed',
+      );
+    }
+    if (response.statusCode != 200 ||
+        response.uri.path != '/forum.php' ||
+        response.uri.queryParameters['mod'] != 'misc' ||
+        response.uri.queryParameters['action'] != 'commentmore' ||
+        response.uri.queryParameters['tid'] != query.tid ||
+        response.uri.queryParameters['pid'] != query.pid ||
+        response.uri.queryParameters['page'] != '${query.page}') {
+      return _parseFailure(
+        'thread_post_comments_response_unconfirmed',
+        const FormatException('comment response identity unconfirmed'),
+      );
+    }
+    try {
+      if (response.body is! String) {
+        throw const FormatException('comment response is not text');
+      }
+      final xml = RegExp(
+        r'<root(?:\s[^>]*)?>[\s\S]*?<!\[CDATA\[([\s\S]*?)\]\]>[\s\S]*?</root\s*>',
+        caseSensitive: false,
+      ).firstMatch(response.body as String);
+      if (xml == null) {
+        throw const FormatException('comment AJAX payload missing');
+      }
+      final document = html_parser.parse(xml.group(1)!);
+      if (document.querySelector('form[action*="mod=logging"]') != null) {
+        return const DataReadFailure(
+          kind: DataReadFailureKind.unauthorized,
+          code: 'thread_post_comments_login_required',
+          diagnosticMessage: 'thread_post_comments_login_required',
+        );
+      }
+      if (document.querySelector('.alert_error, .showmessage, #messagetext') !=
+          null) {
+        return _businessFailure('thread_post_comments_permission_denied');
+      }
+      final rows = document.querySelectorAll('.plc[id^="commentdetail_"]');
+      final current = int.tryParse(
+        document.querySelector('.pg strong')?.text.trim() ?? '',
+      );
+      if (rows.isEmpty || current != query.page) {
+        throw const FormatException('comment page or mobile rows missing');
+      }
+      final comments = _commentParser.parseMobileCommentRows(document.body!);
+      if (comments.isEmpty) {
+        throw const FormatException('comment rows contained no readable items');
+      }
+      int? next;
+      for (final link in document.querySelectorAll('.pg a.nxt')) {
+        final href = link.attributes['href'];
+        final parsed = _sameSiteUrl(href);
+        if (parsed == null) {
+          throw const FormatException('comment next link left site');
+        }
+        final params = Uri.parse(parsed).queryParameters;
+        if (params['mod'] != 'misc' ||
+            params['action'] != 'commentmore' ||
+            params['tid'] != query.tid ||
+            params['pid'] != query.pid) {
+          throw const FormatException('comment next link identity invalid');
+        }
+        final candidate = int.tryParse(params['page'] ?? '');
+        if (candidate != query.page + 1) {
+          throw const FormatException('comment continuation did not advance');
+        }
+        next = candidate;
+      }
+      return DataReadSuccess(
+        data: ThreadPostCommentsPage(
+          tid: query.tid,
+          pid: query.pid,
+          page: query.page,
+          comments: List.unmodifiable(comments),
+          nextPage: next,
+        ),
+        capabilities: ThreadPostCommentsReadCapabilities(
+          values: capabilities.values.withSupport(
+            ThreadPostCommentsCapability.commentIdentity,
+            comments.every((comment) => comment.commentId != null)
+                ? DataCapabilitySupport.supported
+                : DataCapabilitySupport.unknown,
+          ),
+        ),
+        metadata: const DataReadMetadata.network(),
+      );
+    } on FormatException catch (error) {
+      return _parseFailure('thread_post_comments_parse_failed', error);
+    }
+  }
+
+  String? _sameSiteUrl(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final uri = config.siteOrigin.resolve(raw.replaceAll('&amp;', '&'));
+    if (uri.scheme != config.siteOrigin.scheme ||
+        uri.host != config.siteOrigin.host ||
+        uri.port != config.siteOrigin.port) {
+      return null;
+    }
+    return uri.toString();
+  }
+}
+
 final class DiscuzThreadPostRatingsRepository
     implements ThreadPostRatingsRepository {
   DiscuzThreadPostRatingsRepository({
@@ -691,6 +883,7 @@ final class DiscuzThreadPostLocatorRepository
     required this.network,
     required this.requestProfiles,
     ThreadDetailHtmlParser? parser,
+    this.handoffCoordinator,
   }) : _config = config,
        _parser =
            parser ?? ThreadDetailHtmlParser(siteOrigin: config.siteOrigin);
@@ -699,6 +892,7 @@ final class DiscuzThreadPostLocatorRepository
   final ForumClientNetwork network;
   final ForumRequestProfileResolver requestProfiles;
   final ThreadDetailHtmlParser _parser;
+  final ThreadDetailHandoffCoordinator? handoffCoordinator;
 
   @override
   ThreadPostLocatorSourceCapabilities get capabilities => _locatorCapabilities;
@@ -714,6 +908,7 @@ final class DiscuzThreadPostLocatorRepository
     if (!_positive(query.tid) || !_positive(query.pid)) {
       return _businessFailure('thread_post_location_query_invalid');
     }
+    final handoffBoundary = await handoffCoordinator?.capture(query.tid);
     final uri = _config.siteOrigin.replace(
       path: '/forum.php',
       queryParameters: {
@@ -721,50 +916,176 @@ final class DiscuzThreadPostLocatorRepository
         'goto': 'findpost',
         'ptid': query.tid,
         'pid': query.pid,
+        'mobile': '2',
       },
     );
-    final response = await network.send(
-      ForumRequest(
-        method: ForumRequestMethod.get,
-        uri: uri,
-        context: const ForumRequestContext(
-          operation: 'thread.post.locate',
-          pageKind: 'thread.detail',
+    ForumResponse<Object?>? value;
+    var requestUri = uri;
+    // Discuz's findpost redirect drops mobile=2. Read each same-site hop via
+    // the shared gateway so both the mobile request profile and Cookie state
+    // apply to the final viewthread request too.
+    for (var hop = 0; hop < 5; hop++) {
+      final response = await network.send(
+        ForumRequest(
+          method: ForumRequestMethod.get,
+          uri: requestUri,
+          context: const ForumRequestContext(
+            operation: 'thread.post.locate',
+            pageKind: 'thread.detail',
+          ),
+          headers: requestProfiles
+              .resolve(ForumRequestProfileKind.mobileHtml)
+              .headers,
+          followRedirects: false,
         ),
-        headers: requestProfiles
-            .resolve(ForumRequestProfileKind.mobileHtml)
-            .headers,
-      ),
-    );
-    if (response case ForumTransportError<ForumResponse<Object?>>(
-      :final failure,
-    )) {
-      return _failure(failure);
-    }
-    try {
-      final value =
+      );
+      if (response case ForumTransportError<ForumResponse<Object?>>(
+        :final failure,
+      )) {
+        return _failure(failure);
+      }
+      value =
           (response as ForumTransportSuccess<ForumResponse<Object?>>).response;
       if (!_sameSite(value.uri)) {
-        throw const FormatException('thread_post_location_cross_site');
+        return _parseFailure(
+          'thread_post_location_cross_site',
+          const FormatException('cross-site response'),
+        );
       }
-      if (value.body is! String) {
+      if (!_isRedirect(value.statusCode)) break;
+      if (hop == 4) {
+        return _parseFailure(
+          'thread_post_location_redirect_limit',
+          const FormatException('redirect limit'),
+        );
+      }
+      final location = _redirectLocation(value.headers);
+      if (location == null) {
+        return _parseFailure(
+          'thread_post_location_response_unconfirmed',
+          const FormatException('redirect location missing'),
+        );
+      }
+      try {
+        final destination = value.uri.resolve(location);
+        if (!_sameSite(destination) || destination.userInfo.isNotEmpty) {
+          return _parseFailure(
+            'thread_post_location_cross_site',
+            const FormatException('cross-site redirect'),
+          );
+        }
+        requestUri = destination
+            .replace(
+              queryParameters: {...destination.queryParameters, 'mobile': '2'},
+            )
+            .removeFragment();
+      } on FormatException catch (error) {
+        return _parseFailure(
+          'thread_post_location_response_unconfirmed',
+          error,
+        );
+      }
+    }
+    try {
+      final resolved = value!;
+      if (resolved.statusCode == 401) {
+        return const DataReadFailure(
+          kind: DataReadFailureKind.unauthorized,
+          code: 'thread_post_location_login_required',
+          diagnosticMessage: 'thread_post_location_login_required',
+        );
+      }
+      if (resolved.statusCode == 403) {
+        return _businessFailure('thread_post_location_permission_denied');
+      }
+      final statusCode = resolved.statusCode;
+      if (statusCode != null && statusCode >= 500) {
+        return DataReadFailure(
+          kind: DataReadFailureKind.server,
+          code: 'thread_post_location_server_failed',
+          statusCode: resolved.statusCode,
+          diagnosticMessage: 'thread_post_location_server_failed',
+        );
+      }
+      if (statusCode == null || statusCode < 200 || statusCode >= 300) {
+        return _parseFailure(
+          'thread_post_location_response_unconfirmed',
+          const FormatException('unsuccessful final response'),
+        );
+      }
+      if (resolved.body is! String) {
         throw const FormatException('thread_post_location_text_expected');
       }
+      final document = html_parser.parse(resolved.body as String);
+      if (document.querySelector('form[action*="mod=logging"]') != null &&
+          document.querySelector('.viewthread .plc[id^="pid"]') == null) {
+        return const DataReadFailure(
+          kind: DataReadFailureKind.unauthorized,
+          code: 'thread_post_location_login_required',
+          diagnosticMessage: 'thread_post_location_login_required',
+        );
+      }
+      final resolvedTid =
+          resolved.uri.queryParameters['tid'] ??
+          RegExp(
+            r'^/?thread-(\d+)-\d+-\d+\.html$',
+          ).firstMatch(resolved.uri.path)?.group(1);
+      if (resolvedTid != query.tid) {
+        return _parseFailure(
+          'thread_post_location_identity_mismatch',
+          const FormatException('identity mismatch'),
+        );
+      }
+      // A mobile UA alone is not proof: Discuz's mobile=no cookie can select
+      // desktop pagination. Discuz may append ordertype=1 itself when the
+      // thread's default order is reversed, even though our request omits it.
+      final orderType = resolved.uri.queryParameters['ordertype'];
+      if (document.body?.id != 'forum' ||
+          document.querySelector('.viewthread .plc[id^="pid"]') == null ||
+          resolved.uri.queryParameters['mobile'] == 'no' ||
+          (resolved.uri.queryParameters['authorid']?.isNotEmpty == true &&
+              resolved.uri.queryParameters['authorid'] != '0') ||
+          (orderType != null && orderType != '1') ||
+          resolved.uri.queryParameters.containsKey('filter') ||
+          resolved.uri.queryParameters.containsKey('viewpid') ||
+          resolved.uri.queryParameters.containsKey('ppp')) {
+        return _parseFailure(
+          'thread_post_location_view_unconfirmed',
+          const FormatException('unconfirmed mobile view'),
+        );
+      }
       final detail = _parser.parse(
-        value.body as String,
+        resolved.body as String,
         fallbackTid: query.tid,
-        fallbackPage: _pageFromUri(value.uri) ?? 1,
+        fallbackPage: _pageFromUri(resolved.uri) ?? 1,
       );
       if (detail.tid.trim() != query.tid ||
           !detail.posts.any((post) => post.pid.trim() == query.pid)) {
-        throw const FormatException('thread_post_location_identity_mismatch');
+        return _parseFailure(
+          'thread_post_location_identity_mismatch',
+          const FormatException('identity mismatch'),
+        );
       }
+      final page = detail.currentPage <= 0 ? 1 : detail.currentPage;
+      // The parser's page and the final ordinary mobile URL must agree before
+      // its parsed document can stand in for a normal detail read.
+      final urlPage = _pageFromUri(resolved.uri) ?? 1;
+      final handoff = page == urlPage
+          ? await handoffCoordinator?.issue(
+              boundary: handoffBoundary,
+              tid: query.tid,
+              pid: query.pid,
+              page: page,
+              detail: detail,
+            )
+          : null;
       return DataReadSuccess(
         data: ThreadPostLocationData(
           tid: query.tid,
           pid: query.pid,
-          page: detail.currentPage <= 0 ? 1 : detail.currentPage,
-          resolvedUri: value.uri,
+          page: page,
+          resolvedUri: resolved.uri,
+          detailHandoff: handoff,
         ),
         capabilities: capabilities.toReadCapabilities(),
         metadata: const DataReadMetadata.network(),
@@ -778,6 +1099,23 @@ final class DiscuzThreadPostLocatorRepository
       uri.scheme.toLowerCase() == _config.siteOrigin.scheme.toLowerCase() &&
       uri.host.toLowerCase() == _config.siteOrigin.host.toLowerCase() &&
       uri.port == _config.siteOrigin.port;
+
+  bool _isRedirect(int? statusCode) =>
+      statusCode == 301 ||
+      statusCode == 302 ||
+      statusCode == 303 ||
+      statusCode == 307 ||
+      statusCode == 308;
+
+  String? _redirectLocation(Map<String, List<String>> headers) {
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() != 'location') continue;
+      for (final value in entry.value) {
+        if (value.trim().isNotEmpty) return value.trim();
+      }
+    }
+    return null;
+  }
 
   int? _pageFromUri(Uri uri) {
     final queryPage = int.tryParse(uri.queryParameters['page'] ?? '');
@@ -910,6 +1248,9 @@ final _stickerCapabilities = ForumStickerCatalogSourceCapabilities(
 );
 final _ratingsCapabilities = ThreadPostRatingsSourceCapabilities(
   values: DataCapabilitySet.supported(ThreadPostRatingsCapability.values),
+);
+final _commentsCapabilities = ThreadPostCommentsSourceCapabilities(
+  values: DataCapabilitySet.supported(ThreadPostCommentsCapability.values),
 );
 final _locatorCapabilities = ThreadPostLocatorSourceCapabilities(
   values: DataCapabilitySet.supported(ThreadPostLocatorCapability.values),

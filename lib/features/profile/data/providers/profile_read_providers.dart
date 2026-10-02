@@ -7,6 +7,11 @@ final currentUserProfileRepositoryProvider =
       return ref.watch(yamiboForumClientProvider).currentUserProfile!;
     });
 
+final currentAccountSummaryRepositoryProvider =
+    Provider<CurrentAccountSummaryRepository>((ref) {
+      return ref.watch(yamiboForumClientProvider).currentAccountSummary!;
+    });
+
 final forumUserProfileRepositoryProvider = Provider<ForumUserProfileRepository>(
   (ref) {
     return ref.watch(yamiboForumClientProvider).forumUserProfile!;

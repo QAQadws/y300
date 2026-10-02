@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
@@ -12,6 +13,41 @@ import 'package:y300/features/thread/presentation/thread_detail_render_entries.d
 
 void main() {
   group('ThreadDetailRenderEntryPlanner', () {
+    test('splits only the body-end target and retains an empty footer', () {
+      final planner = ThreadDetailRenderEntryPlanner();
+      ThreadPost post(String pid, int number) => ThreadPost(
+        pid: pid,
+        author: 'alice',
+        authorId: '1',
+        message: '<p>正文 $pid</p>',
+        number: number,
+        isFirst: number == 1,
+        dateline: 'today',
+      );
+      final entries = planner.buildEntries(
+        posts: [post('before', 1), post('target', 2), post('after', 3)],
+        targetPid: 'target',
+        landing: ThreadPostLanding.bodyEnd,
+      );
+
+      expect(entries.map((entry) => entry.kind), [
+        ThreadDetailRenderEntryKind.postCard,
+        ThreadDetailRenderEntryKind.postHeader,
+        ThreadDetailRenderEntryKind.postBody,
+        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.postCard,
+        ThreadDetailRenderEntryKind.pagination,
+        ThreadDetailRenderEntryKind.targetSpacer,
+      ]);
+      expect(entries[3].sourcePost?.pid, 'target');
+      expect(
+        entries[2].requirePlan(),
+        same(planner.planFor(entries[2].displayPost!)),
+      );
+      expect(entries[0].key, 'thread-post-card-entry-before');
+      expect(entries[4].key, 'thread-post-card-entry-after');
+    });
+
     test('builds one body entry for short text posts', () {
       final parser = _CountingThreadPostBodyParser();
       final planner = ThreadDetailRenderEntryPlanner(

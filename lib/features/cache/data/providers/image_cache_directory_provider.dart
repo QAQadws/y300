@@ -32,4 +32,12 @@ class ImageCacheDirectoryResolver {
       await marker.writeAsString('');
     }
   }
+
+  /// Durable files are outside both the OS temporary cache and the image LRU.
+  Future<String> resolveLongTermDirectory() async {
+    final base = await getApplicationSupportDirectory();
+    final directory = io.Directory(p.join(base.path, 'y300_long_term_images'));
+    await _prepareDirectory(directory);
+    return directory.path;
+  }
 }

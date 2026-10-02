@@ -9,12 +9,22 @@ class ThreadPostCommentSection extends StatefulWidget {
     required this.imageReferer,
     required this.palette,
     this.onOpenAuthorProfile,
+    this.expanded,
+    this.onExpansionChanged,
+    this.continuation,
+    this.nextPage,
+    this.onLoadMore,
   });
 
   final List<ThreadPostCommentEntry> comments;
   final String? imageReferer;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPostCommentEntry>? onOpenAuthorProfile;
+  final bool? expanded;
+  final ValueChanged<bool>? onExpansionChanged;
+  final ThreadPostCommentsViewState? continuation;
+  final int? nextPage;
+  final VoidCallback? onLoadMore;
 
   @override
   State<ThreadPostCommentSection> createState() =>
@@ -22,7 +32,8 @@ class ThreadPostCommentSection extends StatefulWidget {
 }
 
 class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
-  var _expanded = true;
+  var _localExpanded = true;
+  bool get _expanded => widget.expanded ?? _localExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +60,11 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
                 palette: widget.palette,
               ),
             ],
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: () {
+              final next = !_expanded;
+              setState(() => _localExpanded = next);
+              widget.onExpansionChanged?.call(next);
+            },
           ),
           if (_expanded)
             Column(
@@ -75,6 +90,31 @@ class _ThreadPostCommentSectionState extends State<ThreadPostCommentSection> {
                     imageReferer: widget.imageReferer,
                     palette: widget.palette,
                     onOpenAuthorProfile: widget.onOpenAuthorProfile,
+                  ),
+                ],
+                if (widget.nextPage != null ||
+                    widget.continuation?.hasFailure == true) ...[
+                  const SizedBox(height: 9),
+                  if (widget.continuation?.hasFailure == true)
+                    Text(switch (widget.continuation!.failure) {
+                      ThreadPostCommentsFailure.loginRequired =>
+                        l10n.threadCommentLoginRequired,
+                      ThreadPostCommentsFailure.permissionDenied =>
+                        l10n.threadCommentPermissionDenied,
+                      _ => l10n.threadCommentLoadFailed,
+                    }),
+                  TextButton(
+                    key: const Key('thread-comment-load-more'),
+                    onPressed: widget.continuation?.isLoading == true
+                        ? null
+                        : widget.onLoadMore,
+                    child: widget.continuation?.isLoading == true
+                        ? Text(l10n.threadCommentLoadingMore)
+                        : Text(
+                            widget.continuation?.hasFailure == true
+                                ? l10n.threadCommentRetry
+                                : l10n.threadCommentLoadMore,
+                          ),
                   ),
                 ],
               ],
@@ -389,12 +429,16 @@ class ThreadPostRatingSection extends StatefulWidget {
     required this.viewState,
     required this.palette,
     this.onLoadAllRatings,
+    this.expanded,
+    this.onExpansionChanged,
   });
 
   final ThreadPostRatingSummary summary;
   final ThreadPostRatingsViewState viewState;
   final ThreadDetailNativePalette palette;
   final VoidCallback? onLoadAllRatings;
+  final bool? expanded;
+  final ValueChanged<bool>? onExpansionChanged;
 
   @override
   State<ThreadPostRatingSection> createState() =>
@@ -402,7 +446,8 @@ class ThreadPostRatingSection extends StatefulWidget {
 }
 
 class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
-  var _expanded = true;
+  var _localExpanded = true;
+  bool get _expanded => widget.expanded ?? _localExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -439,7 +484,11 @@ class _ThreadPostRatingSectionState extends State<ThreadPostRatingSection> {
                   palette: widget.palette,
                 ),
             ],
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: () {
+              final next = !_expanded;
+              setState(() => _localExpanded = next);
+              widget.onExpansionChanged?.call(next);
+            },
           ),
           if (_expanded)
             Material(

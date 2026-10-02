@@ -17,6 +17,7 @@ import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../../test_support/localized_test_app.dart';
 
@@ -44,6 +45,8 @@ void main() {
       ],
     );
   });
+
+  tearDown(() => container.dispose());
 
   Future<void> pumpHost(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -102,13 +105,22 @@ void main() {
       await pumpHost(tester);
       await open(tester, 'forum.php?mod=redirect&goto=findpost&ptid=42&pid=90');
       expect(observer.pushed, isEmpty);
+      final handoff = _Handoff();
       locator.requests.single.complete(
-        const ApiSuccess(
-          ThreadPostLocation(tid: '42', pid: '90', page: 5, url: ''),
+        ApiSuccess(
+          ThreadPostLocation(
+            tid: '42',
+            pid: '90',
+            page: 5,
+            url: '',
+            detailHandoff: handoff,
+          ),
         ),
       );
       await tester.idle();
-      expect((takeDestination() as ThreadDetailPage).initialPage, 5);
+      final destination = takeDestination() as ThreadDetailPage;
+      expect(destination.initialPage, 5);
+      expect(destination.initialHandoff, same(handoff));
       await open(tester, 'forum.php?mod=redirect&goto=findpost&ptid=42&pid=91');
       final other = MaterialPageRoute<void>(builder: (_) => const Scaffold());
       unawaited(Navigator.of(source).push(other));
@@ -122,6 +134,83 @@ void main() {
       Navigator.of(source).removeRoute(other);
     },
   );
+
+  testWidgets('filtered floor links relocate ordinary-view page hints', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    for (final filter in [
+      'authorid=2',
+      'ordertype=1',
+      'viewpid=90',
+      'ppp=20',
+    ]) {
+      await open(
+        tester,
+        'forum.php?mod=viewthread&tid=42&page=8&$filter#pid90',
+      );
+      expect(observer.pushed, isEmpty);
+      locator.requests.last.complete(
+        const ApiSuccess(
+          ThreadPostLocation(tid: '42', pid: '90', page: 3, url: ''),
+        ),
+      );
+      await tester.idle();
+      expect((takeDestination() as ThreadDetailPage).initialPage, 3);
+      // Finish returning from the route before starting another navigation.
+      await tester.pumpAndSettle();
+    }
+    expect(locator.requests, hasLength(4));
+  });
+
+  testWidgets('duplicate floor taps share work and the latest target wins', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    const first = 'forum.php?mod=redirect&goto=findpost&ptid=42&pid=90';
+    await open(tester, first);
+    await open(tester, first);
+    expect(locator.requests, hasLength(1));
+    await open(tester, 'forum.php?mod=redirect&goto=findpost&ptid=42&pid=91');
+    expect(locator.requests, hasLength(2));
+    locator.requests.first.complete(
+      const ApiSuccess(
+        ThreadPostLocation(tid: '42', pid: '90', page: 2, url: ''),
+      ),
+    );
+    await tester.idle();
+    expect(observer.pushed, isEmpty);
+    locator.requests.last.complete(
+      const ApiSuccess(
+        ThreadPostLocation(tid: '42', pid: '91', page: 4, url: ''),
+      ),
+    );
+    await tester.idle();
+    final destination = takeDestination() as ThreadDetailPage;
+    expect(destination.targetPid, '91');
+    expect(destination.initialPage, 4);
+  });
+
+  testWidgets('unconfirmed floors expose recovery before opening a thread', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    await open(tester, 'forum.php?mod=redirect&goto=findpost&ptid=42&pid=90');
+    locator.requests.single.complete(
+      const ApiFailure(
+        ApiError(type: ApiErrorType.network, message: 'failure'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(observer.pushed.single, isA<DialogRoute<dynamic>>());
+    expect(find.byType(ThreadDetailPage), findsNothing);
+    final l10n = AppLocalizations.of(source);
+    expect(find.text(l10n.threadPostLocationNetworkFailed), findsOneWidget);
+    await tester.tap(find.text(l10n.commonCancel));
+    await tester.pumpAndSettle();
+    expect(find.byType(ThreadDetailPage), findsNothing);
+  });
 
   testWidgets(
     'mobile profile, direct, group, compose and center links open native destinations',
@@ -223,3 +312,5 @@ class _ExternalLauncher implements ForumWebViewExternalLauncher {
     return true;
   }
 }
+
+class _Handoff implements ThreadDetailHandoff {}

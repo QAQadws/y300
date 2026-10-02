@@ -107,7 +107,10 @@ class LocalParsedSnapshotCacheService
         'updated_at': now.millisecondsSinceEpoch,
         'last_accessed_at': now.millisecondsSinceEpoch,
         'stale_at': now.add(policy.freshFor).millisecondsSinceEpoch,
-        'expires_at': now.add(policy.keepStaleFor).millisecondsSinceEpoch,
+        'retain_long_term': policy.retainLongTerm ? 1 : 0,
+        'expires_at': policy.retainLongTerm
+            ? null
+            : now.add(policy.keepStaleFor).millisecondsSinceEpoch,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -156,7 +159,8 @@ class LocalParsedSnapshotCacheService
     final db = await _db;
     return db.delete(
       ComicLocalDb.cachedSnapshotsTable,
-      where: 'expires_at IS NOT NULL AND expires_at <= ?',
+      where:
+          'retain_long_term = 0 AND expires_at IS NOT NULL AND expires_at <= ?',
       whereArgs: <Object>[now.millisecondsSinceEpoch],
     );
   }
@@ -165,9 +169,9 @@ class LocalParsedSnapshotCacheService
   Future<StorageUsageSection> calculateUsage() async {
     final db = await _db;
     final rows = await db.rawQuery('''
-      SELECT snapshot_type, COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS total
+      SELECT snapshot_type, retain_long_term, COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS total
       FROM ${ComicLocalDb.cachedSnapshotsTable}
-      GROUP BY snapshot_type
+      GROUP BY snapshot_type, retain_long_term
       ORDER BY snapshot_type ASC
       ''');
     final slices = rows
@@ -182,7 +186,7 @@ class LocalParsedSnapshotCacheService
               count: count,
             ),
             bytes: row['total'] as int? ?? 0,
-            protected: false,
+            protected: row['retain_long_term'] == 1,
           );
         })
         .where((slice) => slice.bytes > 0)
@@ -195,7 +199,7 @@ class LocalParsedSnapshotCacheService
         code: 'page_cache',
       ),
       bytes: total,
-      clearable: total > 0,
+      clearable: slices.any((slice) => !slice.protected && slice.bytes > 0),
       slices: slices,
     );
   }
@@ -207,11 +211,16 @@ class LocalParsedSnapshotCacheService
   Future<CacheParticipantUsage> loadUsage() async {
     final db = await _db;
     final rows = await db.rawQuery('''
-      SELECT COALESCE(SUM(payload_bytes), 0) AS total
+      SELECT COALESCE(SUM(CASE WHEN retain_long_term = 0 THEN payload_bytes ELSE 0 END), 0) AS total,
+        COALESCE(SUM(CASE WHEN retain_long_term = 1 THEN payload_bytes ELSE 0 END), 0) AS long_term
       FROM ${ComicLocalDb.cachedSnapshotsTable}
       ''');
     final bytes = rows.first['total'] as int? ?? 0;
-    return CacheParticipantUsage(clearableBytes: bytes, budgetedBytes: bytes);
+    return CacheParticipantUsage(
+      clearableBytes: bytes,
+      budgetedBytes: bytes,
+      longTermBytes: rows.first['long_term'] as int? ?? 0,
+    );
   }
 
   @override
@@ -225,6 +234,7 @@ class LocalParsedSnapshotCacheService
         'last_accessed_at',
         'updated_at',
       ],
+      where: 'retain_long_term = 0',
       orderBy: 'COALESCE(last_accessed_at, updated_at) ASC, cache_key ASC',
     );
     return rows
@@ -251,7 +261,7 @@ class LocalParsedSnapshotCacheService
     final db = await _db;
     final deleted = await db.delete(
       ComicLocalDb.cachedSnapshotsTable,
-      where: 'cache_key = ?',
+      where: 'cache_key = ? AND retain_long_term = 0',
       whereArgs: <Object>[candidate.cacheKey],
     );
     return deleted > 0;
@@ -261,7 +271,10 @@ class LocalParsedSnapshotCacheService
   Future<CacheParticipantClearResult> clearRegular() async {
     final usage = await loadUsage();
     final db = await _db;
-    final deleted = await db.delete(ComicLocalDb.cachedSnapshotsTable);
+    final deleted = await db.delete(
+      ComicLocalDb.cachedSnapshotsTable,
+      where: 'retain_long_term = 0',
+    );
     return CacheParticipantClearResult(
       deletedEntries: deleted,
       deletedBytes: usage.clearableBytes,

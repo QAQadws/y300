@@ -17,7 +17,6 @@ enum ComicCommentLoadErrorCode {
   unauthorized,
   invalidPageResponse,
   emptyPageResponse,
-  maxPageRequestsReached,
 }
 
 class ComicCommentItem {
@@ -29,6 +28,8 @@ class ComicCommentItem {
     required this.floorNumber,
     required this.rawMessage,
     required this.avatarUrl,
+    this.sourcePost,
+    this.sourcePage = 1,
   });
 
   final String pid;
@@ -38,6 +39,32 @@ class ComicCommentItem {
   final int floorNumber;
   final String rawMessage;
   final String? avatarUrl;
+  final ThreadPost? sourcePost;
+  final int sourcePage;
+  ThreadPost get post =>
+      sourcePost ??
+      ThreadPost(
+        pid: pid,
+        author: authorName,
+        authorId: authorId,
+        message: rawMessage,
+        number: floorNumber,
+        isFirst: floorNumber == 1,
+        dateline: dateline,
+        avatarUrl: avatarUrl,
+      );
+  factory ComicCommentItem.fromPost(ThreadPost post, int page) =>
+      ComicCommentItem(
+        pid: post.pid,
+        authorId: post.authorId,
+        authorName: post.author,
+        dateline: post.dateline,
+        floorNumber: post.number,
+        rawMessage: post.message,
+        avatarUrl: post.avatarUrl,
+        sourcePost: post,
+        sourcePage: page,
+      );
 }
 
 class ComicCommentLoadResult {
@@ -49,6 +76,8 @@ class ComicCommentLoadResult {
     required this.expectedPages,
     this.errorCode,
     this.diagnosticDetail,
+    this.reads = const {},
+    this.nextPage,
   });
 
   factory ComicCommentLoadResult.cancelled({
@@ -95,81 +124,73 @@ class ComicCommentLoadResult {
         errorCode == ComicCommentLoadErrorCode.pageTimeout;
   }
 
-  static ComicCommentLoadResult fromPages({
-    required String sourceTid,
-    required List<ThreadReplyPage> pages,
-    required Set<int> loadedPages,
-    required int expectedPages,
-    required ComicCommentItem Function(
-      String pid,
-      String authorId,
-      String authorName,
-      String dateline,
-      int floorNumber,
-      String rawMessage,
-    )
-    mapPost,
-    ComicCommentLoadErrorCode? errorCode,
-    Object? diagnosticDetail,
-  }) {
-    final firstPid = _findFirstPostPid(pages);
-    final byPid = <String, ComicCommentItem>{};
+  final Map<
+    int,
+    DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>
+  >
+  reads;
+  final int? nextPage;
+  bool get hasMore => nextPage != null;
 
-    for (final page in pages) {
-      for (final post in page.posts) {
-        final pid = post.pid.trim();
-        if (pid.isEmpty || post.isFirst || pid == firstPid) {
-          continue;
-        }
-        byPid.putIfAbsent(
-          pid,
-          () => mapPost(
-            pid,
-            post.authorId.trim(),
-            post.authorName.trim(),
-            post.dateline.trim(),
-            post.floorNumber,
-            post.rawMessage,
-          ),
-        );
-      }
-    }
-
-    final items = List<ComicCommentItem>.unmodifiable(byPid.values);
-    final status = errorCode != null
-        ? ComicCommentLoadStatus.partialFailure
-        : items.isEmpty
-        ? ComicCommentLoadStatus.empty
-        : ComicCommentLoadStatus.success;
+  factory ComicCommentLoadResult.failure(
+    String tid,
+    ComicCommentLoadErrorCode code,
+  ) => ComicCommentLoadResult(
+    sourceTid: tid,
+    status: ComicCommentLoadStatus.failure,
+    items: const [],
+    loadedPages: const {},
+    expectedPages: 0,
+    errorCode: code,
+  );
+  factory ComicCommentLoadResult.fromRead(
+    DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities> read,
+  ) {
+    final data = read.data;
     return ComicCommentLoadResult(
-      sourceTid: sourceTid,
-      status: status,
-      items: items,
-      loadedPages: Set<int>.unmodifiable(loadedPages),
-      expectedPages: expectedPages,
-      errorCode: errorCode,
-      diagnosticDetail: diagnosticDetail,
+      sourceTid: data.tid,
+      status: ComicCommentLoadStatus.success,
+      items: List.unmodifiable(
+        data.posts.map(
+          (post) => ComicCommentItem.fromPost(post, data.currentPage),
+        ),
+      ),
+      loadedPages: {data.currentPage},
+      expectedPages: data.lastPage ?? data.currentPage,
+      reads: {data.currentPage: read},
+      nextPage: data.hasMore ? data.currentPage + 1 : null,
     );
   }
 
-  static String? _findFirstPostPid(List<ThreadReplyPage> pages) {
-    for (final page in pages) {
-      for (final post in page.posts) {
-        if (post.isFirst && post.pid.trim().isNotEmpty) {
-          return post.pid.trim();
-        }
+  /// Page ownership is retained for commands; PID identity controls display.
+  factory ComicCommentLoadResult.merge(
+    String tid,
+    Map<int, ComicCommentLoadResult> pages,
+  ) {
+    final ordered = pages.keys.toList()..sort();
+    final byPid = <String, ComicCommentItem>{};
+    final reads =
+        <
+          int,
+          DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>
+        >{};
+    for (final page in ordered) {
+      reads.addAll(pages[page]!.reads);
+      for (final item in pages[page]!.items) {
+        byPid.putIfAbsent(item.pid, () => item);
       }
     }
-
-    // Some cached/legacy responses omit `first`; only use the canonical
-    // floor-one identity as a narrow fallback, never the author ID.
-    for (final page in pages.where((page) => page.page == 1)) {
-      for (final post in page.posts) {
-        if (post.floorNumber == 1 && post.pid.trim().isNotEmpty) {
-          return post.pid.trim();
-        }
-      }
-    }
-    return null;
+    final last = pages[ordered.last]!;
+    return ComicCommentLoadResult(
+      sourceTid: tid,
+      status: byPid.isEmpty
+          ? ComicCommentLoadStatus.empty
+          : ComicCommentLoadStatus.success,
+      items: List.unmodifiable(byPid.values),
+      loadedPages: Set.unmodifiable(ordered),
+      expectedPages: last.expectedPages,
+      reads: Map.unmodifiable(reads),
+      nextPage: last.nextPage,
+    );
   }
 }

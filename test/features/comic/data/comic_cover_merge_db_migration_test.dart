@@ -6,7 +6,7 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  test('v39 to v40 keeps comics and creates cover merge journal', () async {
+  test('v39 upgrade keeps comics and creates cover merge journal', () async {
     const dbName = 'comic_cover_merge_v40_migration.db';
     await deleteDatabase(dbName);
     final oldDb = await databaseFactory.openDatabase(
@@ -49,7 +49,7 @@ void main() {
       await deleteDatabase(dbName);
     });
 
-    expect(await db.getVersion(), 40);
+    expect(await db.getVersion(), ComicLocalDb.dbVersion);
     final legacy = (await db.query(
       ComicLocalDb.comicsTable,
       where: 'comic_id = ?',

@@ -26,6 +26,10 @@ void main() {
       TechnicalStorageKeys.downloadStorageRootMigrationV1,
       'storage.download_root_migration.v1',
     );
+    expect(
+      TechnicalStorageKeys.dailySignInAttemptV1Prefix,
+      'profile.daily_sign_in.attempt.v1.',
+    );
   });
 
   test('typed registry owns scalar, legacy, and snapshot names', () {
@@ -36,6 +40,10 @@ void main() {
       'app.navigation.snapshot.v1',
     );
     expect(PreferenceKeys.forumShellMode.name, 'forum_shell_mode');
+    expect(
+      PreferenceKeys.dailyAutoSignInEnabledForUid('12345').name,
+      'profile.daily_sign_in.auto_enabled.v1.12345',
+    );
     expect(PreferenceKeys.imageReaderSnapshotV1.name, 'reader.image.v1');
     expect(
       PreferenceKeys.libraryShelfComicSnapshotV1.name,

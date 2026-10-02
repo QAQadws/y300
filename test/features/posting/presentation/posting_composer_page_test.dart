@@ -21,12 +21,79 @@ import 'package:y300/features/composer_shared/domain/services/composer_image_upl
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
 import 'package:y300/features/posting/domain/models/posting_target.dart';
+import 'package:y300/features/posting/presentation/posting_composer_controller.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 part 'posting_composer_page_test_fakes.dart';
 
 void main() {
+  for (final typeRequired in <bool?>[false, null]) {
+    testWidgets(
+      'category dropdown stays compact with many types and required=$typeRequired',
+      (tester) async {
+        final args = _args();
+        final types = List.generate(
+          35,
+          (index) =>
+              ThreadCreationType(id: '${111 + index}', name: '分类 $index'),
+        );
+        await tester.pumpWidget(
+          _buildPage(
+            args: args,
+            metadataRepository: _FakeMetadataRepository.success(
+              _metadata(typeRequired: typeRequired, types: types),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(PostingComposerPage)),
+        );
+        final toggle = find.byKey(const Key('posting-composer-type-toggle'));
+        final special = find.byKey(
+          const Key('posting-composer-special-switch'),
+        );
+        final summary = find.byKey(const Key('posting-composer-type-summary'));
+        final firstOption = find.byKey(const Key('posting-composer-type-111'));
+        final noneOption = find.byKey(const Key('posting-composer-type-none'));
+        final editor = find.byKey(const Key('posting-composer-quill-editor'));
+        final editorBefore = tester.getTopLeft(editor);
+        expect(toggle, findsOneWidget);
+        expect(tester.getTopLeft(toggle).dy, tester.getTopLeft(special).dy);
+        expect(tester.widget<Text>(summary).data, l10n.postingTypeNone);
+        expect(firstOption, findsNothing);
+        expect(noneOption, findsNothing);
+
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(firstOption, findsOneWidget);
+        expect(noneOption, findsOneWidget);
+        expect(tester.getTopLeft(editor), editorBefore);
+        await tester.tap(firstOption);
+        await tester.pumpAndSettle();
+        expect(tester.widget<Text>(summary).data, types.first.name);
+        expect(firstOption, findsNothing);
+
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        await tester.tap(noneOption);
+        await tester.pumpAndSettle();
+        expect(tester.widget<Text>(summary).data, l10n.postingTypeNone);
+        expect(tester.getTopLeft(editor), editorBefore);
+        expect(
+          ProviderScope.containerOf(
+            tester.element(find.byType(PostingComposerPage)),
+          ).read(postingComposerControllerProvider(args)).value!.selectedTypeId,
+          isNull,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('PostingComposerPage builds dark theme chrome', (tester) async {
     await tester.pumpWidget(
       _buildPage(

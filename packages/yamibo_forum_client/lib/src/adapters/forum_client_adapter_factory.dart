@@ -5,6 +5,7 @@ import '../contracts/forum_authentication.dart';
 import '../contracts/forum_image_attachments.dart';
 import '../contracts/comic_contracts.dart';
 import '../contracts/forum_directory.dart';
+import '../contracts/forum_daily_sign_in.dart';
 import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_home.dart';
 import '../contracts/forum_tag_directory.dart';
@@ -41,6 +42,7 @@ import 'discuz_image_attachment_adapters.dart';
 import 'discuz_api_client.dart';
 import 'discuz_comic_read_adapters.dart';
 import 'discuz_directory_adapters.dart';
+import 'discuz_daily_sign_in_adapter.dart';
 import 'discuz_favorite_commands.dart';
 import 'discuz_forum_tag_directory_repository.dart';
 import 'discuz_forum_directory_html_repository.dart';
@@ -48,12 +50,14 @@ import 'discuz_forum_home_html_repository.dart';
 import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
+import 'discuz_account_summary_adapter.dart';
 import 'discuz_thread_repositories.dart';
 import 'discuz_thread_interaction_commands.dart';
 import 'discuz_thread_poll_vote_command.dart';
 import 'discuz_thread_composer_commands.dart';
 import 'discuz_thread_post_edit_adapter.dart';
 import 'discuz_supplemental_read_adapters.dart';
+import 'thread_detail_handoff_coordinator.dart';
 import '../session/forum_formhash_provider.dart';
 
 /// Creates the concrete Discuz sources used by the standard client.
@@ -73,6 +77,11 @@ final class ForumClientAdapterFactory {
     this.snapshotStore,
   }) : requestProfiles =
            requestProfiles ?? DefaultForumRequestProfileResolver(config),
+       _handoffCoordinator = ThreadDetailHandoffCoordinator(
+         siteOrigin: config.siteOrigin,
+         cookies: cookieStore,
+         sessions: sessionStore,
+       ),
        _api = DiscuzApiClient(
          config: config,
          network: network,
@@ -90,6 +99,7 @@ final class ForumClientAdapterFactory {
   /// Request profiles.
   final ForumRequestProfileResolver requestProfiles;
   final DiscuzApiClient _api;
+  final ThreadDetailHandoffCoordinator _handoffCoordinator;
 
   /// Optional reproducible session projection store.
   final ForumSessionStore? sessionStore;
@@ -198,6 +208,14 @@ final class ForumClientAdapterFactory {
         requestProfiles: requestProfiles,
       );
 
+  /// Creates the mobile AJAX source for paginated post comments.
+  ThreadPostCommentsRepository createThreadPostComments() =>
+      DiscuzThreadPostCommentsRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
+
   /// Creates a shared preparation/command pair for post ratings.
   ({
     ThreadPostRatingPreparationRepository preparation,
@@ -241,6 +259,8 @@ final class ForumClientAdapterFactory {
   })
   createThreadCreation(ForumFormhashProvider formhash) {
     final adapter = DiscuzThreadCreationAdapter(
+      network: network,
+      requestProfiles: requestProfiles,
       api: _api,
       config: config,
       formhashProvider: formhash,
@@ -268,6 +288,7 @@ final class ForumClientAdapterFactory {
   })
   createThreadPostEdit() {
     final adapter = DiscuzThreadPostEditAdapter(
+      api: _api,
       config: config,
       network: network,
       requestProfiles: requestProfiles,
@@ -323,6 +344,7 @@ final class ForumClientAdapterFactory {
         config: config,
         network: network,
         requestProfiles: requestProfiles,
+        handoffCoordinator: _handoffCoordinator,
       );
 
   /// Creates the fixed-version-1 author-post source used by novel ingestion.
@@ -360,6 +382,29 @@ final class ForumClientAdapterFactory {
   /// Creates the current authenticated user profile source.
   CurrentUserProfileRepository createCurrentUserProfile() =>
       DiscuzCurrentUserProfileRepository(_api);
+
+  /// Creates the verified current account's desktop HTML summary source.
+  CurrentAccountSummaryRepository createCurrentAccountSummary() =>
+      DiscuzCurrentAccountSummaryRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+        snapshotStore: snapshotStore,
+      );
+
+  /// Creates network-only read and command ports for daily sign-in.
+  ({ForumDailySignInRepository repository, ForumDailySignInCommand command})
+  createDailySignIn() {
+    final adapter = DiscuzDailySignInAdapter(
+      config: config,
+      network: network,
+      requestProfiles: requestProfiles,
+    );
+    return (
+      repository: DiscuzDailySignInRepository(adapter),
+      command: DiscuzDailySignInCommandAdapter(adapter),
+    );
+  }
 
   /// Creates the public user-profile HTML source.
   ForumUserProfileRepository createForumUserProfile() =>
@@ -478,6 +523,7 @@ final class ForumClientAdapterFactory {
     requestProfiles: requestProfiles,
     documentStore: documentStore,
     snapshotStore: snapshotStore,
+    handoffCoordinator: _handoffCoordinator,
   );
 
   /// Creates a Discuz thread source fixed to [apiVersion].

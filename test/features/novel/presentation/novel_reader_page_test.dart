@@ -15,19 +15,24 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
+import 'package:y300/features/library_shared/domain/models/reader_corner_dock_side.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/preferences/novel_chapter_interactions_dock_preferences_provider.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
+import 'package:y300/features/novel/domain/models/novel_chapter_interactions_dock_preferences.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_chapter_interactions_dock_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
@@ -37,6 +42,9 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 
 void main() {
   testWidgets('short paged chapter starts preparing during route entrance', (
@@ -1395,13 +1403,373 @@ void main() {
     await tester.pumpAndSettle();
 
     await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-top-action-open-thread')),
+    final openThread = find.byKey(
+      const Key('shared-reader-top-action-open-thread'),
     );
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-open-thread')),
+      findsNothing,
+    );
+    await tester.tap(openThread);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(find.byType(ThreadDetailPage), findsOneWidget);
+  });
+
+  testWidgets('vertical chapter action opens body end and preserves position', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: List.generate(40, (index) => '第 $index 段正文。'),
+    );
+    final locator = _ReaderPostLocator(tid: '100');
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        threadRepository: _FakeThreadRepository(targetPid: '5001'),
+        threadPostLocator: locator,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('novel-reader-paragraph-list')),
+      matching: find.byType(Scrollable),
+    );
+    final position = tester.state<ScrollableState>(scrollable).position;
+    await tester.drag(scrollable, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    final before = position.pixels;
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    final action = find.byKey(
+      const Key('novel-reader-chapter-interactions-button'),
+    );
+    expect(
+      tester.widget<ReaderCornerDock>(find.byType(ReaderCornerDock)).visible,
+      isTrue,
+    );
+    expect(action, findsOneWidget);
+    final atAction = position.pixels;
+    expect(atAction, greaterThanOrEqualTo(before));
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    final detail = tester.widget<ThreadDetailPage>(
+      find.byType(ThreadDetailPage),
+    );
+    expect(
+      (detail.tid, detail.targetPid, detail.landing),
+      ('100', '5001', ThreadPostLanding.bodyEnd),
+    );
+    expect(locator.calls, 1);
+    Navigator.of(tester.element(find.byType(ThreadDetailPage))).pop();
+    await tester.pumpAndSettle();
+    expect(position.pixels, closeTo(atAction, 0.01));
+  });
+
+  testWidgets('paged final-page action returns to the same page', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    final locator = _ReaderPostLocator(tid: '100');
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        threadRepository: _FakeThreadRepository(targetPid: '5001'),
+        threadPostLocator: locator,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final indicator = find.byKey(const Key('novel-reader-page-indicator-text'));
+    final before = tester.widget<Text>(indicator).data;
+    final action = find.byKey(
+      const Key('novel-reader-chapter-interactions-button'),
+    );
+    expect(action, findsOneWidget);
+    expect(
+      tester.getRect(action).bottom,
+      lessThan(tester.getRect(indicator).top),
+    );
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    final detail = tester.widget<ThreadDetailPage>(
+      find.byType(ThreadDetailPage),
+    );
+    expect(
+      (detail.tid, detail.targetPid, detail.landing),
+      ('100', '5001', ThreadPostLanding.bodyEnd),
+    );
+    Navigator.of(tester.element(find.byType(ThreadDetailPage))).pop();
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(indicator).data, before);
+    expect(locator.calls, 1);
+  });
+
+  testWidgets('display switch hides only the dock without rebuilding pages', (
+    tester,
+  ) async {
+    final dockRepository = _FakeNovelChapterDockRepository();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+          ),
+        ),
+        dockRepository: dockRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    const buttonKey = Key('novel-reader-chapter-interactions-button');
+    expect(find.byKey(buttonKey), findsOneWidget);
+    final page = tester.element(
+      find.byKey(const Key('novel-reader-paged-page-session')),
+    );
+    final indicator = tester
+        .widget<Text>(find.byKey(const Key('novel-reader-page-indicator-text')))
+        .data;
+
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+    );
+    await tester.pumpAndSettle();
+    const switchKey = Key('novel-reader-chapter-interactions-dock-switch');
+    await tester.ensureVisible(find.byKey(switchKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(switchKey));
+    await tester.pumpAndSettle();
+    expect(dockRepository.current.enabled, isFalse);
+    Navigator.of(
+      tester.element(
+        find.byKey(const Key('novel-reader-display-settings-sheet')),
+      ),
+    ).pop();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(buttonKey), findsNothing);
+    expect(
+      tester.element(find.byKey(const Key('novel-reader-paged-page-session'))),
+      same(page),
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('novel-reader-page-indicator-text')),
+          )
+          .data,
+      indicator,
+    );
+    await _showReaderMenu(tester);
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-chapter-interactions')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('novel dock long press snaps left without changing thread side', (
+    tester,
+  ) async {
+    final dockRepository = _FakeNovelChapterDockRepository();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+          ),
+        ),
+        dockRepository: dockRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final action = find.byKey(
+      const Key('novel-reader-chapter-interactions-button'),
+    );
+    final initial = tester.getCenter(action);
+    final gesture = await tester.startGesture(initial);
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(const Offset(-650, -50));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(dockRepository.current.side, ReaderCornerDockSide.left);
+    expect(tester.getCenter(action).dx, lessThan(initial.dx));
+  });
+
+  testWidgets('failed novel dock move restores the saved side', (tester) async {
+    final dockRepository = _FakeNovelChapterDockRepository(failSave: true);
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+          ),
+        ),
+        dockRepository: dockRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final action = find.byKey(
+      const Key('novel-reader-chapter-interactions-button'),
+    );
+    final initial = tester.getCenter(action);
+    final gesture = await tester.startGesture(initial);
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(const Offset(-650, -50));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(dockRepository.current.side, ReaderCornerDockSide.right);
+    expect(tester.getCenter(action).dx, initial.dx);
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets(
+    'vertical dock appears only within three quarters of a viewport',
+    (tester) async {
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: _FakeNovelRepository(
+            firstParagraphs: List.generate(40, (i) => '第 $i 段正文。'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final scrollable = find.descendant(
+        of: find.byKey(const Key('novel-reader-paragraph-list')),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scrollable).position;
+      const buttonKey = Key('novel-reader-chapter-interactions-button');
+      expect(find.byKey(buttonKey), findsNothing);
+      position.jumpTo(
+        position.maxScrollExtent - position.viewportDimension * 0.8,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(buttonKey), findsNothing);
+      position.jumpTo(
+        position.maxScrollExtent - position.viewportDimension * 0.7,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(buttonKey), findsOneWidget);
+    },
+  );
+
+  testWidgets('chapter menu action coalesces taps and targets current pid', (
+    tester,
+  ) async {
+    final locator = _ReaderPostLocator(tid: '100', pid: '5002')
+      ..pending = Completer<ApiResult<ThreadPostLocation>>();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository.threeEpisodes(),
+        initialEpisodeId: 'novel:49:100:5002',
+        threadRepository: _FakeThreadRepository(targetPid: '5002'),
+        threadPostLocator: locator,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _showReaderMenu(tester);
+    final action = find.byKey(
+      const Key('shared-reader-bottom-action-chapter-interactions'),
+    );
+    expect(
+      find.byKey(const Key('shared-reader-top-action-chapter-interactions')),
+      findsNothing,
+    );
+    expect(
+      tester.getCenter(action).dx,
+      lessThan(
+        tester
+            .getCenter(
+              find.byKey(const Key('shared-reader-bottom-action-catalog')),
+            )
+            .dx,
+      ),
+    );
+    final onPressed = tester.widget<ReaderToolButton>(action).onPressed;
+    onPressed();
+    onPressed();
+    await tester.pump();
+    expect(locator.calls, 1);
+    locator.pending!.complete(locator.location);
+    await tester.pumpAndSettle();
+    final detail = tester.widget<ThreadDetailPage>(
+      find.byType(ThreadDetailPage),
+    );
+    expect(
+      (detail.tid, detail.targetPid, detail.landing),
+      ('100', '5002', ThreadPostLanding.bodyEnd),
+    );
+  });
+
+  testWidgets('chapter change discards late interactions location', (
+    tester,
+  ) async {
+    final locator = _ReaderPostLocator(tid: '100')
+      ..pending = Completer<ApiResult<ThreadPostLocation>>();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository.threeEpisodes(),
+        threadPostLocator: locator,
+        threadRepository: _FakeThreadRepository(targetPid: '5001'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-chapter-interactions')),
+    );
+    await tester.pump();
+    expect(locator.calls, 1);
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.text('第2章').last);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('第2章').last);
+    await tester.pumpAndSettle();
+    locator.pending!.complete(locator.location);
+    await tester.pumpAndSettle();
+    expect(find.byType(ThreadDetailPage), findsNothing);
+    expect(_readerText('第三段。'), findsOneWidget);
+  });
+
+  testWidgets('invalid chapter pid hides dedicated actions', (tester) async {
+    final original = _FakeNovelRepository();
+    final episode = original.episodes.first;
+    final repository = _FakeNovelRepository(
+      episodes: [
+        NovelEpisodeItem(
+          episodeId: episode.episodeId,
+          novelId: episode.novelId,
+          sourceTid: episode.sourceTid,
+          episodeTitle: episode.episodeTitle,
+          orderIndex: episode.orderIndex,
+        ),
+      ],
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('novel-reader-chapter-interactions-button')),
+      findsNothing,
+    );
+    await _showReaderMenu(tester);
+    expect(
+      find.byKey(const Key('shared-reader-bottom-action-chapter-interactions')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('shared-reader-top-action-open-thread')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('NovelReaderPage back button saves progress before pop', (
@@ -1655,6 +2023,87 @@ void main() {
     expect(find.byType(ThreadDetailPage), findsOneWidget);
   });
 
+  for (final filtered in [false, true]) {
+    testWidgets(
+      'reader floor link preserves identity and return position filtered=$filtered',
+      (tester) async {
+        final locator = _ReaderPostLocator();
+        final repository = _FakeNovelRepository(
+          firstRawHtml:
+              '<p><a href="forum.php?mod=viewthread&amp;tid=200&amp;page=4${filtered ? '&amp;authorid=10&amp;ordertype=1' : ''}#pid5001">Target floor</a></p>'
+              '${List.filled(80, '<p>Chapter body.</p>').join()}',
+          firstParagraphs: const ['Target floor'],
+        );
+        await tester.pumpWidget(
+          _buildReaderApp(
+            repository: repository,
+            threadRepository: _FakeThreadRepository(targetPid: '5001'),
+            threadPostLocator: locator,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final scrollable = find.descendant(
+          of: find.byKey(const Key('novel-reader-paragraph-list')),
+          matching: find.byType(Scrollable),
+        );
+        final position = tester.state<ScrollableState>(scrollable).position;
+        final before = position.pixels;
+        await tester.tapAt(
+          tester.getTopLeft(_readerText('Target floor')) + const Offset(8, 8),
+        );
+        await tester.pumpAndSettle();
+        final page = tester.widget<ThreadDetailPage>(
+          find.byType(ThreadDetailPage),
+        );
+        expect(page.tid, '200');
+        expect(page.targetPid, '5001');
+        expect(page.initialPage, filtered ? 2 : 4);
+        expect(locator.calls, filtered ? 1 : 0);
+        Navigator.of(tester.element(find.byType(ThreadDetailPage))).pop();
+        await tester.pumpAndSettle();
+        expect(position.pixels, closeTo(before, 0.01));
+        expect(find.byType(NovelReaderPage), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets(
+    'reader double click opens once and chapter switch discards late location',
+    (tester) async {
+      final locator = _ReaderPostLocator()
+        ..pending = Completer<ApiResult<ThreadPostLocation>>();
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: _FakeNovelRepository(
+            firstRawHtml:
+                '<p><a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=200&amp;pid=5001">Target floor</a></p>',
+            firstParagraphs: const ['Target floor'],
+          ),
+          threadPostLocator: locator,
+          threadRepository: _FakeThreadRepository(targetPid: '5001'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final point =
+          tester.getTopLeft(_readerText('Target floor')) + const Offset(8, 8);
+      await tester.tapAt(point);
+      await tester.tapAt(point);
+      await tester.pump();
+      expect(locator.calls, 1);
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-catalog')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('第2章').last);
+      await tester.pumpAndSettle();
+      locator.pending!.complete(locator.location);
+      await tester.pumpAndSettle();
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      expect(_readerText('第三段。'), findsOneWidget);
+    },
+  );
+
   testWidgets('NovelReaderPage toggles episode bookmark', (tester) async {
     final repository = _FakeNovelRepository.threeEpisodes();
     await tester.pumpWidget(_buildReaderApp(repository: repository));
@@ -1875,6 +2324,7 @@ Widget _buildReaderApp({
   required _FakeNovelRepository repository,
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
+  ThreadPostLocator? threadPostLocator,
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
   NovelChapterUpdateService? chapterUpdateService,
@@ -1882,9 +2332,13 @@ Widget _buildReaderApp({
   ValueListenable<ThemeData>? themeListenable,
   String initialEpisodeId = 'novel:49:100:5001',
   Widget? home,
+  _FakeNovelChapterDockRepository? dockRepository,
 }) {
+  dockRepository ??= _FakeNovelChapterDockRepository();
   return ProviderScope(
     overrides: [
+      novelChapterInteractionsDockPreferencesRepositoryProvider
+          .overrideWithValue(dockRepository),
       novelRepositoryProvider.overrideWithValue(repository),
       novelReaderPreferencesRepositoryProvider.overrideWithValue(
         _FakeNovelReaderPreferencesRepository(repository),
@@ -1910,6 +2364,8 @@ Widget _buildReaderApp({
       ),
       if (threadRepository != null)
         threadRepositoryProvider.overrideWithValue(threadRepository),
+      if (threadPostLocator != null)
+        threadPostLocatorProvider.overrideWithValue(threadPostLocator),
     ],
     child: themeListenable == null
         ? LocalizedTestApp(
@@ -1936,6 +2392,24 @@ Widget _buildReaderApp({
             },
           ),
   );
+}
+
+final class _FakeNovelChapterDockRepository
+    implements NovelChapterInteractionsDockPreferencesRepository {
+  _FakeNovelChapterDockRepository({this.failSave = false});
+
+  final bool failSave;
+  NovelChapterInteractionsDockPreferences current =
+      const NovelChapterInteractionsDockPreferences();
+
+  @override
+  Future<NovelChapterInteractionsDockPreferences> load() async => current;
+
+  @override
+  Future<void> save(NovelChapterInteractionsDockPreferences preferences) async {
+    if (failSave) throw StateError('save failed');
+    current = preferences;
+  }
 }
 
 class _NovelReaderRoundTripHost extends StatelessWidget {
@@ -2051,7 +2525,29 @@ class _NoopImageCacheService implements ImageCacheService {
   Future<void> clearUnprotected() async {}
 }
 
+class _ReaderPostLocator implements ThreadPostLocator {
+  _ReaderPostLocator({this.tid = '200', this.pid = '5001'});
+
+  final String tid;
+  final String pid;
+  var calls = 0;
+  Completer<ApiResult<ThreadPostLocation>>? pending;
+  ApiResult<ThreadPostLocation> get location =>
+      ApiSuccess(ThreadPostLocation(tid: tid, pid: pid, page: 2, url: ''));
+  @override
+  Future<ApiResult<ThreadPostLocation>> locate({
+    required String tid,
+    required String pid,
+    required Uri sourceUri,
+  }) async {
+    calls++;
+    return pending == null ? location : await pending!.future;
+  }
+}
+
 class _FakeThreadRepository implements ThreadRepository {
+  _FakeThreadRepository({this.targetPid});
+  final String? targetPid;
   @override
   ThreadDetailSourceCapabilities get capabilities =>
       ThreadDetailSourceCapabilities.full;
@@ -2073,7 +2569,18 @@ class _FakeThreadRepository implements ThreadRepository {
         views: 1,
         currentPage: page,
         perPage: 20,
-        posts: const <ThreadPost>[],
+        posts: [
+          if (targetPid != null)
+            ThreadPost(
+              pid: targetPid!,
+              author: 'Author',
+              authorId: '10',
+              message: '<p>Target body</p>',
+              number: 21,
+              isFirst: false,
+              dateline: '',
+            ),
+        ],
       ),
       capabilities: capabilities.toReadCapabilities(),
       metadata: const DataReadMetadata.network(),

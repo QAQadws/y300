@@ -98,13 +98,6 @@ class NewThreadPollDraft {
 abstract class NewThreadPollValidation {
   /// Discuz 投票最少 2 个选项，少于 2 个发不了。
   static const int minOptions = 2;
-
-  /// 上限 20 是 Discuz 默认配置，不同站点可能允许更多；本地兜底防误传，
-  /// 真发出去超过站点上限时由服务端报 `post_pollinvalid` 接管。
-  static const int maxOptions = 20;
-
-  /// 单选项最大字符数；过长服务端会截断，本地兜底校验给用户更清晰的反馈。
-  static const int maxOptionLength = 80;
 }
 
 bool _listEquals<T>(List<T> a, List<T> b) {

@@ -3,6 +3,7 @@ import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/thread/domain/services/thread_post_route_resolver.dart';
 
 /// Native thread details remain HTML-first in production.
 final threadRepositoryProvider = Provider<ThreadRepository>((ref) {
@@ -32,4 +33,10 @@ final threadPostLocatorProvider = Provider<ThreadPostLocator>((ref) {
   return PackageThreadPostLocator(
     ref.watch(yamiboForumClientProvider).postLocator!,
   );
+});
+
+final threadPostRouteResolverProvider = Provider<ThreadPostRouteResolver>((
+  ref,
+) {
+  return ThreadPostRouteResolver(ref.watch(threadPostLocatorProvider));
 });

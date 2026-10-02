@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
@@ -14,7 +13,9 @@ import 'package:y300/features/messages/presentation/private_conversation_page.da
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
-import 'package:y300/features/thread/data/services/thread_post_locator.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
+import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -59,8 +60,36 @@ final privateConversationRouteFactoryProvider =
     );
 
 final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
+  final postSessions = <ModalRoute<dynamic>?, ThreadPostNavigationSession>{};
+  var active = true;
+  ref.onDispose(() {
+    active = false;
+    for (final session in postSessions.values) {
+      session.dispose();
+    }
+    postSessions.clear();
+  });
+
+  ThreadPostNavigationSession postSession(ModalRoute<dynamic>? route) {
+    return postSessions.putIfAbsent(route, () {
+      final session = ThreadPostNavigationSession();
+      if (route != null) {
+        // Keep single-flight navigation scoped to the originating message page.
+        unawaited(
+          route.completed.then((_) {
+            if (identical(postSessions[route], session)) {
+              postSessions.remove(route);
+            }
+            session.dispose();
+          }),
+        );
+      }
+      return session;
+    });
+  }
+
   Future<void> open(BuildContext context, String url) async {
-    if (!context.mounted) return;
+    if (!active || !context.mounted) return;
     final sourceRoute = ModalRoute.of(context);
     if (sourceRoute != null && !sourceRoute.isCurrent) return;
     try {
@@ -71,6 +100,9 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
       }
       final uri = destination.uri;
       final query = uri.queryParameters;
+      if (destination.kind != YamiboForumLinkKind.threadPost) {
+        postSessions[sourceRoute]?.invalidate();
+      }
       Widget? page;
       switch (destination.kind) {
         case YamiboForumLinkKind.thread:
@@ -79,36 +111,19 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
             initialPage: destination.page ?? 1,
           );
         case YamiboForumLinkKind.threadPost:
-          var tid = destination.tid!;
-          var pid = destination.pid!;
-          var targetPage = destination.page;
-          if (targetPage == null) {
-            final result = await ref
-                .read(threadPostLocatorProvider)
-                .locate(tid: tid, pid: pid, sourceUri: uri);
-            if (!context.mounted ||
-                (sourceRoute != null && !sourceRoute.isCurrent)) {
-              return;
-            }
-            if (result case ApiSuccess<ThreadPostLocation>(:final data)) {
-              tid = data.tid;
-              pid = data.pid;
-              targetPage = data.page;
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    AppLocalizations.of(context).threadDetailFloorLocatorFailed,
-                  ),
-                ),
-              );
-            }
-          }
-          page = ThreadDetailPage(
-            tid: tid,
-            initialPage: targetPage ?? 1,
-            targetPid: pid,
+          await launchThreadPostRoute(
+            context: context,
+            session: postSession(sourceRoute),
+            resolver: ref.read(threadPostRouteResolverProvider),
+            target: ThreadPostTarget.fromLink(
+              tid: destination.tid!,
+              pid: destination.pid!,
+              sourceUri: uri,
+              pageHint: destination.page,
+            ),
+            isCurrent: () => active,
           );
+          return;
         case YamiboForumLinkKind.tagThreadPage:
           page = YamiboTagThreadPage(
             tagId: destination.tagId!,
