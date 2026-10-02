@@ -183,34 +183,19 @@ class MyThreadCard extends ConsumerWidget {
                           onTap: () => onOpenReply(reply),
                           child: Padding(
                             padding: const EdgeInsets.all(10),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.reply,
-                                  size: 18,
-                                  color: palette.accent,
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: Text(
+                                reply.excerpt.trim().isEmpty
+                                    ? l10n.profileMyRepliesTab
+                                    : reply.excerpt,
+                                maxLines: 5,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: palette.bodyText,
+                                  height: 1.5,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    reply.excerpt.trim().isEmpty
-                                        ? l10n.profileMyRepliesTab
-                                        : reply.excerpt,
-                                    maxLines: 5,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: palette.bodyText,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.chevron_right,
-                                  size: 18,
-                                  color: palette.muted,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),

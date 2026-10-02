@@ -119,7 +119,10 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
   Future<void> selectType(UserThreadDirectoryType type) {
     if (_disposed || type == value.query.type) return Future.value();
     _cancel();
-    _retained[value.query.type] = value.waiting(MyThreadReadOperation.idle);
+    // Returning to a failed tab must not silently resume automatic paging.
+    _retained[value.query.type] = value.isBusy
+        ? value.waiting(MyThreadReadOperation.idle)
+        : value;
     value = stateForType(type);
     return setActive(_active);
   }

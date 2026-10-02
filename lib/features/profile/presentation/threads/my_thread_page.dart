@@ -196,7 +196,7 @@ class _MyThreadReadViewState extends State<_MyThreadReadView> {
   );
 }
 
-class _MyThreadFeed extends StatelessWidget {
+class _MyThreadFeed extends StatefulWidget {
   const _MyThreadFeed({
     required this.controller,
     required this.state,
@@ -211,15 +211,66 @@ class _MyThreadFeed extends StatelessWidget {
   final PageStorageKey<String> listKey;
   final void Function(UserThreadSummary, UserThreadReplyPreview?) onOpen;
 
+  @override
+  State<_MyThreadFeed> createState() => _MyThreadFeedState();
+}
+
+class _MyThreadFeedState extends State<_MyThreadFeed> {
+  static const _autoLoadMoreThreshold = 300.0;
+  final _scrollController = ScrollController();
+  bool _loadMoreCheckScheduled = false;
+
   // The outgoing tab may still receive a gesture during the swipe animation.
   // Its actions must stay bound to the tab it displays.
-  bool get _current => isActive && controller.value.query == state.query;
+  bool get _current =>
+      widget.isActive &&
+      widget.controller.value.query == widget.state.query &&
+      (ModalRoute.isCurrentOf(context) ?? true);
 
-  Future<void> _refresh() => _current ? controller.refresh() : Future.value();
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_scheduleAutoLoadMoreCheck);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() =>
+      _current ? widget.controller.refresh() : Future.value();
+
+  void _scheduleAutoLoadMoreCheck() {
+    if (_loadMoreCheckScheduled) return;
+    _loadMoreCheckScheduled = true;
+    // Reads notify the page synchronously. Check after layout so neither a
+    // scroll notification nor a short-page fill can update it during build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMoreCheckScheduled = false;
+      if (!mounted || !_current || !_scrollController.hasClients) return;
+      final state = widget.controller.value;
+      if (state.isBusy || state.failure != null || !state.hasMore) return;
+      final position = _scrollController.position;
+      if (!position.hasContentDimensions ||
+          position.pixels < position.minScrollExtent ||
+          position.extentAfter > _autoLoadMoreThreshold) {
+        return;
+      }
+      unawaited(widget.controller.loadMore());
+    });
+    // Metrics can arrive after the frame, without another scroll or rebuild.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
 
   @override
   Widget build(BuildContext context) {
+    _scheduleAutoLoadMoreCheck();
     final l10n = AppLocalizations.of(context);
+    final state = widget.state;
+    final controller = widget.controller;
+    final isActive = widget.isActive;
     final data = state.data;
     final type = state.query.type;
     return TickerMode(
@@ -227,113 +278,110 @@ class _MyThreadFeed extends StatelessWidget {
       child: ForumPullToRefresh(
         key: ValueKey('my-thread-refresh-${type.name}'),
         onRefresh: _refresh,
-        child: CustomScrollView(
-          key: listKey,
-          physics: ForumPullToRefresh.scrollPhysics,
-          slivers: [
-            if (data == null)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: !isActive
-                    ? const SizedBox.shrink()
-                    : state.isBusy
-                    ? const Center(child: CircularProgressIndicator())
-                    : _MyThreadFailure(
-                        failure: state.failure,
-                        onRetry: () {
-                          if (_current) unawaited(controller.retry());
-                        },
-                      ),
-              )
-            else if (data.items.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          type == UserThreadDirectoryType.threads
-                              ? Icons.article_outlined
-                              : Icons.reply,
-                          size: 40,
-                          color: Theme.of(context).y300NativeContent.muted,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          type == UserThreadDirectoryType.threads
-                              ? l10n.profileNoThreads
-                              : l10n.profileNoReplies,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).y300NativeContent.supportingText,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  ForumContentSpacing.pageHorizontal,
-                  ForumContentSpacing.listTop,
-                  ForumContentSpacing.pageHorizontal,
-                  0,
-                ),
-                sliver: SliverList.separated(
-                  itemCount: data.items.length,
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(height: ForumContentSpacing.postCardGap),
-                  itemBuilder: (context, index) {
-                    final item = data.items[index];
-                    return MyThreadCard(
-                      key: ValueKey('my-thread-${item.threadId}'),
-                      item: item,
-                      type: type,
-                      onOpenThread: () {
-                        if (_current) onOpen(item, null);
-                      },
-                      onOpenReply: (reply) {
-                        if (_current) onOpen(item, reply);
-                      },
-                    );
-                  },
-                ),
-              ),
-            if (data != null)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: state.failure != null
-                      ? _MyThreadFailure(
+        child: NotificationListener<ScrollMetricsNotification>(
+          onNotification: (notification) {
+            if (notification.depth == 0) _scheduleAutoLoadMoreCheck();
+            return false;
+          },
+          child: CustomScrollView(
+            key: widget.listKey,
+            controller: _scrollController,
+            physics: ForumPullToRefresh.scrollPhysics,
+            slivers: [
+              if (data == null)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: !isActive
+                      ? const SizedBox.shrink()
+                      : state.isBusy
+                      ? const Center(child: CircularProgressIndicator())
+                      : _MyThreadFailure(
                           failure: state.failure,
                           onRetry: () {
                             if (_current) unawaited(controller.retry());
                           },
-                        )
-                      : state.operation == MyThreadReadOperation.more
-                      ? const Center(child: CircularProgressIndicator())
-                      : state.hasMore
-                      ? Center(
-                          child: TextButton(
-                            key: const Key('my-thread-load-more'),
-                            onPressed: state.isBusy || !_current
-                                ? null
-                                : controller.loadMore,
-                            child: Text(l10n.messageLoadMore),
+                        ),
+                )
+              else if (data.items.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            type == UserThreadDirectoryType.threads
+                                ? Icons.article_outlined
+                                : Icons.reply,
+                            size: 40,
+                            color: Theme.of(context).y300NativeContent.muted,
                           ),
-                        )
-                      : const SizedBox.shrink(),
+                          const SizedBox(height: 12),
+                          Text(
+                            type == UserThreadDirectoryType.threads
+                                ? l10n.profileNoThreads
+                                : l10n.profileNoReplies,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).y300NativeContent.supportingText,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    ForumContentSpacing.pageHorizontal,
+                    ForumContentSpacing.listTop,
+                    ForumContentSpacing.pageHorizontal,
+                    0,
+                  ),
+                  sliver: SliverList.separated(
+                    itemCount: data.items.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: ForumContentSpacing.postCardGap),
+                    itemBuilder: (context, index) {
+                      final item = data.items[index];
+                      return MyThreadCard(
+                        key: ValueKey('my-thread-${item.threadId}'),
+                        item: item,
+                        type: type,
+                        onOpenThread: () {
+                          if (_current) widget.onOpen(item, null);
+                        },
+                        onOpenReply: (reply) {
+                          if (_current) widget.onOpen(item, reply);
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-          ],
+              if (data != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: state.failure != null
+                        ? _MyThreadFailure(
+                            failure: state.failure,
+                            onRetry: () {
+                              if (_current) unawaited(controller.retry());
+                            },
+                          )
+                        : state.operation == MyThreadReadOperation.more
+                        ? const Center(child: CircularProgressIndicator())
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
