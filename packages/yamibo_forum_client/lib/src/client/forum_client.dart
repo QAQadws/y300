@@ -192,7 +192,7 @@ final class YamiboForumClient {
   UserBlogDirectoryRepository? get userBlogDirectory =>
       sourcePlan.userBlogDirectory;
 
-  /// Configured personal topic and reply directory source.
+  /// Configured user topic and reply directory source.
   UserThreadDirectoryRepository? get userThreadDirectory =>
       sourcePlan.userThreadDirectory;
 
@@ -723,7 +723,7 @@ final class YamiboForumClient {
       sourcePlan.forumUserProfile?.load(query, cachePolicy: cachePolicy) ??
       unsupported<ForumUserProfileData, ForumUserProfileReadCapabilities>();
 
-  /// Loads the verified account's topics or replies.
+  /// Loads a target user's topics or replies for the verified viewer.
   Future<
     DataReadResult<UserThreadDirectoryData, UserThreadDirectoryReadCapabilities>
   >

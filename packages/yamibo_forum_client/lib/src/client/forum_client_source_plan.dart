@@ -266,7 +266,7 @@ final class ForumClientSourcePlan {
   /// Source for a user's blog directory.
   final UserBlogDirectoryRepository? userBlogDirectory;
 
-  /// Source for the verified account's topics and replies.
+  /// Source for user topics and replies under the viewer's permissions.
   final UserThreadDirectoryRepository? userThreadDirectory;
 
   /// Source for an individual blog entry.

@@ -13,6 +13,8 @@ import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
@@ -36,6 +38,10 @@ void main() {
     web = [];
     container = ProviderContainer.test(
       overrides: [
+        verifiedProfileOwnerProvider.overrideWithValue((
+          uid: '101',
+          revision: 0,
+        )),
         threadPostLocatorProvider.overrideWithValue(locator),
         forumWebViewExternalLauncherProvider.overrideWithValue(launcher),
         forumWebViewRouteFactoryProvider.overrideWithValue((config) {
@@ -79,6 +85,30 @@ void main() {
     Navigator.of(source).removeRoute(route);
     return page;
   }
+
+  testWidgets('topic and reply directory URLs open the shared native page', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    await open(
+      tester,
+      'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2',
+    );
+    final topics = takeDestination() as UserThreadPage;
+    expect(topics.userId, '260328');
+    expect(topics.initialType, UserThreadDirectoryType.threads);
+    expect(topics.initialPage, 1);
+    await open(
+      tester,
+      'home.php?mod=space&uid=260328&do=thread&type=reply&page=3',
+    );
+    final replies = takeDestination() as UserThreadPage;
+    expect(replies.userId, '260328');
+    expect(replies.initialType, UserThreadDirectoryType.replies);
+    expect(replies.initialPage, 3);
+    expect(web, isEmpty);
+    expect(locator.requests, isEmpty);
+  });
 
   testWidgets('native thread, explicit floor and tag retain page coordinates', (
     tester,

@@ -40,6 +40,9 @@ import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -429,6 +432,36 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     }
     if (_isPostEditTargetRedirect(uri)) {
       _completePostEditWebView(ForumWebViewRouteOutcome.observedTargetRedirect);
+      return ForumWebViewNavigationDecision.prevent;
+    }
+    const resolver = YamiboForumLinkResolver();
+    final candidate = resolver.resolve(url);
+    final destination =
+        candidate?.kind == YamiboForumLinkKind.userThreadDirectory
+        ? resolver.resolve(
+            url,
+            viewerUserId: ref.read(verifiedProfileOwnerProvider)?.uid,
+          )
+        : candidate;
+    if (destination?.kind == YamiboForumLinkKind.userThreadDirectory &&
+        ref.read(forumWebViewHostPurposeProvider) !=
+            ForumWebViewHostPurpose.postEditFallback) {
+      if (mounted &&
+          widget.isAccountCurrent?.call() != false &&
+          ModalRoute.of(context)?.isCurrent != false) {
+        _postRouteSession.invalidate();
+        unawaited(
+          Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => UserThreadPage(
+                userId: destination!.userId,
+                initialType: destination.userThreadType!,
+                initialPage: destination.page ?? 1,
+              ),
+            ),
+          ),
+        );
+      }
       return ForumWebViewNavigationDecision.prevent;
     }
     final postReplyRequest = ref

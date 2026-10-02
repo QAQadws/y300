@@ -1,9 +1,106 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 
 void main() {
   group('YamiboForumLinkResolver', () {
     const resolver = YamiboForumLinkResolver();
+
+    test('resolves the mobile target-user URL without a view parameter', () {
+      final destination = resolver.resolve(
+        'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2',
+      );
+      expect(destination?.kind, YamiboForumLinkKind.userThreadDirectory);
+      expect(destination?.userId, '260328');
+      expect(destination?.userThreadType, UserThreadDirectoryType.threads);
+      expect(destination?.page, 1);
+    });
+
+    test('reply references retain target, tab and page across URL forms', () {
+      for (final prefix in ['', '/', 'https://bbs.yamibo.com/']) {
+        final destination = resolver.resolve(
+          '${prefix}home.php?mod=space&amp;uid=260328&amp;do=thread&amp;view=me&amp;type=reply&amp;page=3&amp;order=dateline',
+        );
+        expect(destination?.kind, YamiboForumLinkKind.userThreadDirectory);
+        expect(destination?.userId, '260328');
+        expect(destination?.userThreadType, UserThreadDirectoryType.replies);
+        expect(destination?.page, 3);
+      }
+    });
+
+    test('own-space omitted view preserves the source friends view', () {
+      final omitted = resolver.resolve(
+        'home.php?mod=space&uid=101&do=thread&mobile=2',
+        viewerUserId: '101',
+      );
+      expect(omitted?.kind, YamiboForumLinkKind.managedWebView);
+      final personal = resolver.resolve(
+        'home.php?mod=space&uid=101&do=thread&view=me&mobile=2',
+        viewerUserId: '101',
+      );
+      expect(personal?.kind, YamiboForumLinkKind.userThreadDirectory);
+      final other = resolver.resolve(
+        'home.php?mod=space&uid=260328&do=thread&mobile=2',
+        viewerUserId: '101',
+      );
+      expect(other?.kind, YamiboForumLinkKind.userThreadDirectory);
+    });
+
+    test('an explicit personal view can use the verified current user', () {
+      final destination = resolver.resolve(
+        'home.php?mod=space&do=thread&view=me&type=thread',
+      );
+      expect(destination?.kind, YamiboForumLinkKind.userThreadDirectory);
+      expect(destination?.userId, isNull);
+      expect(destination?.userThreadType, UserThreadDirectoryType.threads);
+    });
+
+    test('unsupported directory semantics retain source browser behavior', () {
+      for (final query in [
+        'uid=260328&view=all',
+        'uid=260328&view=we',
+        'uid=260328&type=postcomment',
+        'uid=260328&type=unknown',
+        'uid=260328&order=lastpost',
+        'uid=260328&searchkey=query',
+        'uid=260328&fuid=3',
+        'uid=260328&page=0',
+        'uid=260328&page=bad',
+        'uid=0',
+        'uid=-1',
+        'uid=not-a-user',
+        'uid=260328&uid=123',
+        'view=all',
+        '',
+      ]) {
+        expect(
+          resolver.resolve('home.php?mod=space&do=thread&$query')?.kind,
+          YamiboForumLinkKind.managedWebView,
+          reason: query,
+        );
+      }
+    });
+
+    test(
+      'other origins and ambiguous origin credentials never map natively',
+      () {
+        for (final origin in [
+          'https://example.com',
+          'https://bbs.yamibo.com.example.com',
+          'https://bbs.yamibo.com:8443',
+          'https://someone@bbs.yamibo.com',
+          'ftp://bbs.yamibo.com',
+        ]) {
+          expect(
+            resolver
+                .resolve('$origin/home.php?mod=space&uid=260328&do=thread')
+                ?.kind,
+            isNot(YamiboForumLinkKind.userThreadDirectory),
+            reason: origin,
+          );
+        }
+      },
+    );
 
     test('preserves page numbers for native thread and tag entry points', () {
       expect(resolver.resolve('thread-572514-4-1.html')?.page, 4);

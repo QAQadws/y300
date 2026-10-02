@@ -19,6 +19,8 @@ import 'package:y300/features/thread/domain/services/thread_floor_link_builder.d
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
@@ -150,7 +152,16 @@ class ThreadPostNavigation {
   }
 
   void openLink(String url) {
-    final destination = const YamiboForumLinkResolver().resolve(url);
+    if (!mounted) return;
+    const resolver = YamiboForumLinkResolver();
+    final candidate = resolver.resolve(url);
+    final destination =
+        candidate?.kind == YamiboForumLinkKind.userThreadDirectory
+        ? resolver.resolve(
+            url,
+            viewerUserId: ref.read(verifiedProfileOwnerProvider)?.uid,
+          )
+        : candidate;
     if (destination?.kind != YamiboForumLinkKind.threadPost) {
       routeSession.invalidate();
     }
@@ -188,6 +199,17 @@ class ThreadPostNavigation {
           MaterialPageRoute<void>(
             builder: (_) =>
                 YamiboTagThreadPage(tagId: tagId, page: destination.page ?? 1),
+          ),
+        );
+        return;
+      case YamiboForumLinkKind.userThreadDirectory:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => UserThreadPage(
+              userId: destination.userId,
+              initialType: destination.userThreadType!,
+              initialPage: destination.page ?? 1,
+            ),
           ),
         );
         return;

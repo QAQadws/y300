@@ -14,7 +14,7 @@ import '../network/forum_transport.dart';
 import 'discuz_profile_html_parsers.dart';
 import 'discuz_user_thread_directory_parser.dart';
 
-/// Network-only personal reads on the shared Host transport and session.
+/// Network-only user-directory reads on the shared Host transport and session.
 final class DiscuzUserThreadDirectoryRepository
     implements UserThreadDirectoryRepository {
   DiscuzUserThreadDirectoryRepository({
@@ -55,7 +55,10 @@ final class DiscuzUserThreadDirectoryRepository
         'user_thread_directory_cancelled',
       );
     }
-    if (!RegExp(r'^[1-9]\d*$').hasMatch(query.userId) || query.page < 1) {
+    if (!RegExp(r'^[1-9]\d*$').hasMatch(query.userId) ||
+        (query.viewerUserId != null &&
+            !RegExp(r'^[1-9]\d*$').hasMatch(query.viewerUserId!)) ||
+        query.page < 1) {
       return _failure(
         DataReadFailureKind.business,
         'user_thread_directory_query_invalid',

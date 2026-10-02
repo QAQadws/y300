@@ -4345,6 +4345,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileMyThreadsTitle => '我的主题';
 
   @override
+  String get profileUserThreadsTitle => 'Ta 的主题';
+
+  @override
+  String get profileUserThreadsLoginRequired => '登录后查看主题和回复';
+
+  @override
   String get profileMyThreadsTab => '主题';
 
   @override
@@ -9617,6 +9623,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileMyThreadsTitle => '我的主題';
+
+  @override
+  String get profileUserThreadsTitle => 'Ta 的主題';
+
+  @override
+  String get profileUserThreadsLoginRequired => '登入後查看主題和回覆';
 
   @override
   String get profileMyThreadsTab => '主題';

@@ -18,7 +18,7 @@ final class DiscuzUserThreadDirectoryParser {
   final Uri siteOrigin;
 
   bool isExpectedResponseUri(Uri uri, UserThreadDirectoryQuery query) =>
-      _matchesContext(uri, query) &&
+      _matchesContext(uri, query, allowOmittedView: _isOtherUser(query)) &&
       _value(uri, 'mobile') == '2' &&
       _page(uri) == query.page;
 
@@ -27,7 +27,7 @@ final class DiscuzUserThreadDirectoryParser {
     required UserThreadDirectoryQuery query,
   }) {
     final document = html.parse(source);
-    _verifyViewer(document, query.userId);
+    _verifyViewer(document, query.viewerUserId ?? query.userId);
     _verifyDirectory(document, query);
     final items = <UserThreadSummary>[];
     final ids = <String>{};
@@ -68,13 +68,29 @@ final class DiscuzUserThreadDirectoryParser {
     final tabs = document.querySelector('.dhnv');
     if (tabs != null) {
       final active = tabs.querySelectorAll('a.mon, .mon a');
-      if (active.length != 1 || !_matchesContext(_link(active.single), query)) {
+      if (active.length != 1 ||
+          !_matchesContext(
+            _link(active.single),
+            query,
+            allowOmittedView: _isOtherUser(query),
+          )) {
         throw const FormatException('user_thread_directory_context_invalid');
       }
       return;
     }
     // The stock touch template has no tabs, including on a valid empty page.
     final heading = _text(document.querySelector('.header h2')?.text);
+    if (_isOtherUser(query)) {
+      // The stock template identifies kind by heading; response URI proof
+      // separately binds its numeric owner before the repository parses it.
+      final suffix = query.type == UserThreadDirectoryType.replies
+          ? r'(?:回复|回覆)'
+          : r'主题';
+      if (!RegExp('^.+ - Ta的$suffix\$').hasMatch(heading)) {
+        throw const FormatException('user_thread_directory_context_missing');
+      }
+      return;
+    }
     final expected = query.type == UserThreadDirectoryType.replies
         ? '\u6211\u7684\u56de\u590d'
         : '\u6211\u7684\u4e3b\u9898';
@@ -131,7 +147,10 @@ final class DiscuzUserThreadDirectoryParser {
         authorUri?.path == '/home.php' && _value(authorUri!, 'mod') == 'space'
         ? _value(authorUri, 'uid')
         : null;
-    if (author != null && (!_id(authorId) || authorId != query.userId)) {
+    if (author != null &&
+        (!_id(authorId) ||
+            (query.type == UserThreadDirectoryType.threads &&
+                authorId != query.userId))) {
       throw const FormatException('user_thread_author_mismatch');
     }
     final forum = row.querySelector('.threadlist_foot li.mr a');
@@ -214,7 +233,14 @@ final class DiscuzUserThreadDirectoryParser {
     );
   }
 
-  bool _matchesContext(Uri? uri, UserThreadDirectoryQuery query) {
+  bool _isOtherUser(UserThreadDirectoryQuery query) =>
+      query.viewerUserId != null && query.viewerUserId != query.userId;
+
+  bool _matchesContext(
+    Uri? uri,
+    UserThreadDirectoryQuery query, {
+    bool allowOmittedView = false,
+  }) {
     if (uri == null ||
         !_sameOrigin(uri) ||
         uri.path != '/home.php' ||
@@ -223,10 +249,13 @@ final class DiscuzUserThreadDirectoryParser {
     }
     final type = _value(uri, 'type');
     final order = _value(uri, 'order');
+    final view = _value(uri, 'view');
     return _value(uri, 'mod') == 'space' &&
         _value(uri, 'do') == 'thread' &&
         _value(uri, 'uid') == query.userId &&
-        _value(uri, 'view') == 'me' &&
+        // home_space forces view=me for another user's directory; its
+        // touch tabs omit view. Self reads need the explicit me context.
+        (view == 'me' || (allowOmittedView && view == null)) &&
         (order == null || order.isEmpty || order == 'dateline') &&
         (query.type == UserThreadDirectoryType.replies
             ? type == 'reply'

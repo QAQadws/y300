@@ -1378,6 +1378,8 @@
   "profileMessages": "訊息提醒",
   "profileMyThreads": "我的主題",
   "profileMyThreadsTitle": "我的主題",
+  "profileUserThreadsTitle": "Ta 的主題",
+  "profileUserThreadsLoginRequired": "登入後查看主題和回覆",
   "profileMyThreadsTab": "主題",
   "profileMyRepliesTab": "回覆",
   "profileNoThreads": "暫無主題",

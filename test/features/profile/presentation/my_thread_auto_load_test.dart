@@ -7,8 +7,8 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
-import 'package:y300/features/profile/presentation/threads/my_thread_card.dart';
-import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
@@ -317,7 +317,7 @@ void main() {
 
         if (replacement == null) {
           expect(repository.requests, hasLength(2));
-          expect(find.byType(MyThreadCard), findsNothing);
+          expect(find.byType(UserThreadCard), findsNothing);
           expect(
             find.text(_l10n(tester).profileThreadsLoginRequired),
             findsOneWidget,
@@ -370,7 +370,7 @@ Future<_ThreadTestHost> _mount(
         navigatorKey: host.navigator,
         home: ValueListenableBuilder<double>(
           valueListenable: host.viewportHeight,
-          child: MyThreadPage(initialType: initialType),
+          child: UserThreadPage(initialType: initialType),
           builder: (_, height, child) => Align(
             alignment: Alignment.topCenter,
             child: SizedBox(height: height, child: child),
@@ -430,7 +430,7 @@ Future<void> _selectTab(
 }
 
 AppLocalizations _l10n(WidgetTester tester) =>
-    AppLocalizations.of(tester.element(find.byType(MyThreadPage)));
+    AppLocalizations.of(tester.element(find.byType(UserThreadPage)));
 
 ScrollPosition _position(WidgetTester tester, UserThreadDirectoryType type) {
   final refresh = find.byKey(Key('my-thread-refresh-${type.name}'));
@@ -448,7 +448,12 @@ void _expectQuery(
   String uid = '101',
 }) => expect(
   request.query,
-  UserThreadDirectoryQuery(userId: uid, type: type, page: page),
+  UserThreadDirectoryQuery(
+    userId: uid,
+    viewerUserId: uid,
+    type: type,
+    page: page,
+  ),
 );
 
 List<UserThreadSummary> _items(

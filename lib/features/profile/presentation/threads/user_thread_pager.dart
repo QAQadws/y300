@@ -3,8 +3,8 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/native_primary_tab_bar.dart';
 
-class MyThreadPager extends StatefulWidget {
-  const MyThreadPager({
+class UserThreadPager extends StatefulWidget {
+  const UserThreadPager({
     super.key,
     required this.selectedType,
     required this.onSelected,
@@ -16,10 +16,10 @@ class MyThreadPager extends StatefulWidget {
   final Widget Function(BuildContext, UserThreadDirectoryType) pageBuilder;
 
   @override
-  State<MyThreadPager> createState() => _MyThreadPagerState();
+  State<UserThreadPager> createState() => _UserThreadPagerState();
 }
 
-class _MyThreadPagerState extends State<MyThreadPager>
+class _UserThreadPagerState extends State<UserThreadPager>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
 
@@ -39,7 +39,7 @@ class _MyThreadPagerState extends State<MyThreadPager>
   }
 
   @override
-  void didUpdateWidget(covariant MyThreadPager oldWidget) {
+  void didUpdateWidget(covariant UserThreadPager oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_tabs.index != widget.selectedType.index) {
       _tabs.animateTo(widget.selectedType.index);

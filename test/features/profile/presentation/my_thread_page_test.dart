@@ -14,8 +14,8 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
-import 'package:y300/features/profile/presentation/threads/my_thread_card.dart';
-import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -48,13 +48,13 @@ void main() {
             repository,
             theme: theme,
             scale: scale,
-            page: MyThreadPage(
+            page: UserThreadPage(
               initialType: UserThreadDirectoryType.replies,
               onOpenThread: (_, _, reply) => opened.add(reply?.postId),
             ),
           );
           final l10n = AppLocalizations.of(
-            tester.element(find.byType(MyThreadPage)),
+            tester.element(find.byType(UserThreadPage)),
           );
           expect(find.text(l10n.profileMyThreadsTitle), findsOneWidget);
           expect(find.byType(NativePrimaryTabBar), findsOneWidget);
@@ -62,7 +62,7 @@ void main() {
             repository.requests.single.query.type,
             UserThreadDirectoryType.replies,
           );
-          final card = find.byType(MyThreadCard);
+          final card = find.byType(UserThreadCard);
           final material = tester.widget<Material>(
             find.descendant(of: card, matching: find.byType(Material)).first,
           );
@@ -92,7 +92,7 @@ void main() {
       final repository = ThreadDirectoryFixture(autoComplete: true);
       await _pump(tester, repository);
       final l10n = AppLocalizations.of(
-        tester.element(find.byType(MyThreadPage)),
+        tester.element(find.byType(UserThreadPage)),
       );
       expect(repository.requests, hasLength(1));
       await tester.tap(find.text(l10n.profileMyRepliesTab));
@@ -146,7 +146,7 @@ void main() {
           container: container,
           child: LocalizedTestApp(
             theme: AppTheme.light(),
-            home: const MyThreadPage(
+            home: const UserThreadPage(
               initialType: UserThreadDirectoryType.replies,
             ),
           ),
@@ -164,10 +164,10 @@ void main() {
       ]);
       await tester.pumpAndSettle();
       final l10n = AppLocalizations.of(
-        tester.element(find.byType(MyThreadPage)),
+        tester.element(find.byType(UserThreadPage)),
       );
       expect(find.text(l10n.profileThreadsLoginRequired), findsOneWidget);
-      expect(find.byType(MyThreadCard), findsNothing);
+      expect(find.byType(UserThreadCard), findsNothing);
       locator.pending.complete(
         const ApiSuccess(
           ThreadPostLocation(tid: '100', pid: '502', page: 3, url: ''),
@@ -187,7 +187,7 @@ void main() {
       repository.fail(0, DataReadFailureKind.network);
       await tester.pumpAndSettle();
       final l10n = AppLocalizations.of(
-        tester.element(find.byType(MyThreadPage)),
+        tester.element(find.byType(UserThreadPage)),
       );
       expect(find.text(l10n.commonNetworkError), findsOneWidget);
       expect(find.textContaining('raw server diagnostic'), findsNothing);
@@ -227,7 +227,7 @@ void main() {
           home: Scaffold(
             body: Padding(
               padding: const EdgeInsets.all(10),
-              child: MyThreadCard(
+              child: UserThreadCard(
                 item: item,
                 type: UserThreadDirectoryType.threads,
                 onOpenThread: () {},
@@ -257,7 +257,7 @@ void main() {
 Future<void> _pump(
   WidgetTester tester,
   ThreadDirectoryFixture repository, {
-  MyThreadPage page = const MyThreadPage(),
+  UserThreadPage page = const UserThreadPage(),
   ThemeData? theme,
   double scale = 1,
   bool settle = true,

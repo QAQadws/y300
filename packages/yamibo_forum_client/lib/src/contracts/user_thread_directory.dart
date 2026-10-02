@@ -1,11 +1,11 @@
-/// Source-neutral reads for the verified account's topics and replies.
+/// Source-neutral user topic and reply directories for a verified viewer.
 library;
 
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
 import '../network/forum_request.dart' show ForumRequestCancellation;
 
-/// Which personal forum directory to read.
+/// Which user forum directory to read.
 enum UserThreadDirectoryType {
   /// Topics opened by the account.
   threads,
@@ -14,17 +14,22 @@ enum UserThreadDirectoryType {
   replies,
 }
 
-/// Identifies one account and one page without exposing server parameters.
+/// Identifies a directory owner, expected viewer, and one page.
 final class UserThreadDirectoryQuery {
-  /// Creates a personal directory query.
+  /// Creates a user directory query.
   const UserThreadDirectoryQuery({
     required this.userId,
     this.type = UserThreadDirectoryType.threads,
     this.page = 1,
+    this.viewerUserId,
   });
 
-  /// Expected verified account identifier.
+  /// Target directory owner's identifier.
   final String userId;
+
+  /// Expected authenticated viewer, distinct from the directory owner.
+  /// Omission preserves existing self-account reads by using [userId].
+  final String? viewerUserId;
 
   /// Directory kind.
   final UserThreadDirectoryType type;
@@ -36,11 +41,12 @@ final class UserThreadDirectoryQuery {
   bool operator ==(Object other) =>
       other is UserThreadDirectoryQuery &&
       other.userId == userId &&
+      other.viewerUserId == viewerUserId &&
       other.type == type &&
       other.page == page;
 
   @override
-  int get hashCode => Object.hash(userId, type, page);
+  int get hashCode => Object.hash(userId, viewerUserId, type, page);
 }
 
 /// One topic group, retaining every advertised reply destination.
@@ -148,9 +154,9 @@ final class UserThreadDirectoryPagination {
   final int? totalPages;
 }
 
-/// Personal topic groups and pagination evidence.
+/// User topic groups and pagination evidence.
 final class UserThreadDirectoryData {
-  /// Creates a personal directory page.
+  /// Creates a user directory page.
   const UserThreadDirectoryData({
     required this.items,
     required this.pagination,
@@ -163,7 +169,7 @@ final class UserThreadDirectoryData {
   final UserThreadDirectoryPagination pagination;
 }
 
-/// Business capabilities of a personal directory source.
+/// Business capabilities of a user directory source.
 enum UserThreadDirectoryCapability {
   /// Validated topic identifiers and destinations.
   stableIdentity,
@@ -241,13 +247,13 @@ final class UserThreadDirectoryReadCapabilities {
   );
 }
 
-/// Reads the authenticated account's topic or reply directory.
+/// Reads a target user's topics or replies under the viewer's permissions.
 abstract interface class UserThreadDirectoryRepository {
   /// Declared source capabilities.
   UserThreadDirectorySourceCapabilities get capabilities;
 
-  /// Loads one page. The standard private source always reads the network and
-  /// never falls back to another account's cached document.
+  /// Loads one page. The standard source always reads the shared network
+  /// without storing or falling back to another session's cached document.
   Future<
     DataReadResult<UserThreadDirectoryData, UserThreadDirectoryReadCapabilities>
   >

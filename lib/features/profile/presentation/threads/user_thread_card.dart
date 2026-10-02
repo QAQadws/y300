@@ -15,8 +15,8 @@ import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/forum_metric_pill.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
-class MyThreadCard extends ConsumerWidget {
-  const MyThreadCard({
+class UserThreadCard extends ConsumerWidget {
+  const UserThreadCard({
     super.key,
     required this.item,
     required this.type,

@@ -33,6 +33,9 @@ import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
+import '../../profile/test_support/thread_directory_fixture.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
@@ -855,6 +858,251 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705&mobile=2',
     );
   });
+
+  for (final mode in ForumShellMode.values) {
+    for (final type in UserThreadDirectoryType.values) {
+      testWidgets(
+        'ForumWebViewPage opens user $type directory natively in $mode mode',
+        (tester) async {
+          final driver = _FakeForumWebViewDriver();
+          final directory = ThreadDirectoryFixture(autoComplete: true);
+          final pageNumber = type == UserThreadDirectoryType.replies ? 3 : 1;
+          final url = type == UserThreadDirectoryType.replies
+              ? 'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&type=reply&page=3&mobile=2'
+              : 'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2';
+          await tester.pumpWidget(
+            _buildTestApp(
+              driver: driver,
+              forumMode: mode,
+              threadDirectory: directory,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final decision = await driver.dispatchNavigationRequest(url);
+          await tester.pumpAndSettle();
+
+          expect(decision, ForumWebViewNavigationDecision.prevent);
+          final page = tester.widget<UserThreadPage>(
+            find.byType(UserThreadPage),
+          );
+          expect(page.userId, '260328');
+          expect(page.initialType, type);
+          expect(page.initialPage, pageNumber);
+          final request = directory.requests.single.query;
+          expect(request.userId, '260328');
+          expect(request.viewerUserId, '101');
+          expect(request.type, type);
+          expect(request.page, pageNumber);
+          expect(driver.loadedUris, hasLength(1));
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final purpose in [
+    ForumWebViewHostPurpose.selfProfile,
+    ForumWebViewHostPurpose.postEditFallback,
+  ]) {
+    testWidgets('directory callback respects $purpose browser purpose', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final directory = ThreadDirectoryFixture(autoComplete: true);
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          threadDirectory: directory,
+          hostPurpose: purpose,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2',
+      );
+      await tester.pumpAndSettle();
+
+      if (purpose == ForumWebViewHostPurpose.selfProfile) {
+        expect(decision, ForumWebViewNavigationDecision.prevent);
+        expect(find.byType(UserThreadPage), findsOneWidget);
+        expect(directory.requests.single.query.userId, '260328');
+      } else {
+        expect(decision, ForumWebViewNavigationDecision.navigate);
+        expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
+        expect(find.byType(ForumWebViewPage), findsOneWidget);
+        expect(directory.requests, isEmpty);
+      }
+      expect(driver.loadedUris, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('ForumWebViewPage self directory uses the same native page', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final directory = ThreadDirectoryFixture(autoComplete: true);
+    await tester.pumpWidget(
+      _buildTestApp(driver: driver, threadDirectory: directory),
+    );
+    await tester.pumpAndSettle();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'home.php?mod=space&uid=101&do=thread&view=me&type=reply&mobile=2',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    final page = tester.widget<UserThreadPage>(find.byType(UserThreadPage));
+    expect(page.userId, '101');
+    expect(page.initialType, UserThreadDirectoryType.replies);
+    expect(directory.requests.single.query.userId, '101');
+    expect(driver.loadedUris, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('duplicate directory callbacks push only one native route', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final directory = ThreadDirectoryFixture(autoComplete: true);
+    await tester.pumpWidget(
+      _buildTestApp(driver: driver, threadDirectory: directory),
+    );
+    await tester.pumpAndSettle();
+    const url =
+        'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2';
+
+    final decisions = await Future.wait([
+      driver.dispatchNavigationRequest(url),
+      driver.dispatchNavigationRequest(url),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(decisions, everyElement(ForumWebViewNavigationDecision.prevent));
+    expect(find.byType(UserThreadPage), findsOneWidget);
+    expect(directory.requests, hasLength(1));
+    Navigator.of(tester.element(find.byType(UserThreadPage))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
+    expect(find.byType(ForumWebViewPage), findsOneWidget);
+    expect(driver.loadedUris, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('background browser cannot open a user directory route', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final directory = ThreadDirectoryFixture(autoComplete: true);
+    await tester.pumpWidget(
+      _buildTestApp(driver: driver, threadDirectory: directory),
+    );
+    await tester.pumpAndSettle();
+    unawaited(
+      Navigator.of(tester.element(find.byType(ForumWebViewPage))).push<void>(
+        MaterialPageRoute(
+          builder: (_) => const Scaffold(key: Key('browser-cover-route')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(find.byKey(const Key('browser-cover-route')), findsOneWidget);
+    expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
+    expect(directory.requests, isEmpty);
+    expect(driver.loadedUris, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expired account browser cannot open a user directory route', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final directory = ThreadDirectoryFixture(autoComplete: true);
+    var accountCurrent = true;
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        isAccountCurrent: () => accountCurrent,
+        threadDirectory: directory,
+      ),
+    );
+    await tester.pumpAndSettle();
+    accountCurrent = false;
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.prevent);
+    expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
+    expect(directory.requests, isEmpty);
+    expect(driver.loadedUris, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('self directory without view=me keeps its browser semantics', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final directory = ThreadDirectoryFixture(autoComplete: true);
+    await tester.pumpWidget(
+      _buildTestApp(driver: driver, threadDirectory: directory),
+    );
+    await tester.pumpAndSettle();
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://bbs.yamibo.com/home.php?mod=space&uid=101&do=thread&mobile=2',
+    );
+    await tester.pumpAndSettle();
+
+    expect(decision, ForumWebViewNavigationDecision.navigate);
+    expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
+    expect(find.byType(ForumWebViewPage), findsOneWidget);
+    expect(directory.requests, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final query in [
+    'type=postcomment',
+    'type=unknown',
+    'view=we',
+    'view=all',
+    'view=admin',
+    'view=eccredit',
+  ]) {
+    testWidgets('unsupported user directory $query stays in WebView', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final directory = ThreadDirectoryFixture(autoComplete: true);
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, threadDirectory: directory),
+      );
+      await tester.pumpAndSettle();
+
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&$query&mobile=2',
+      );
+      await tester.pumpAndSettle();
+
+      expect(decision, ForumWebViewNavigationDecision.navigate);
+      expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(directory.requests, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('ForumWebViewPage native mode opens direct thread natively', (
     tester,
@@ -2311,11 +2559,24 @@ Widget _buildTestApp({
   ThreadPostLocator? threadPostLocator,
   ForumWebViewRedirectResolver? redirectResolver,
   HistoryVisitRecorder? historyRecorder,
+  UserThreadDirectoryRepository? threadDirectory,
+  ForumWebViewHostPurpose? hostPurpose,
 }) {
   final resolvedFavoriteRepository =
       favoriteRepository ?? _FakeForumFavoriteRepository();
   return ProviderScope(
     overrides: [
+      if (hostPurpose != null)
+        forumWebViewHostPurposeProvider.overrideWithValue(hostPurpose),
+      if (threadDirectory != null) ...[
+        verifiedProfileOwnerProvider.overrideWithValue((
+          uid: '101',
+          revision: 0,
+        )),
+        userThreadDirectoryRepositoryProvider.overrideWithValue(
+          threadDirectory,
+        ),
+      ],
       forumModeSettingsRepositoryProvider.overrideWithValue(
         _FakeForumModeSettingsRepository(forumMode),
       ),

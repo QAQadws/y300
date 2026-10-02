@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
-import 'package:y300/features/profile/presentation/threads/my_thread_controller.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_controller.dart';
 
 import '../test_support/thread_directory_fixture.dart';
 
@@ -91,7 +91,7 @@ void main() {
     await pending;
     expect(controller.value.data!.items, hasLength(1));
     expect(controller.value.query.page, 1);
-    expect(controller.value.failedOperation, MyThreadReadOperation.more);
+    expect(controller.value.failedOperation, UserThreadReadOperation.more);
     pending = controller.retry();
     expect(repository.requests.last.query.page, 2);
     repository.succeed(2, items: [threadSummary('200')]);
@@ -147,10 +147,10 @@ void main() {
 
   test('guest does not access the directory repository', () async {
     final repository = ThreadDirectoryFixture();
-    final controller = MyThreadController(
+    final controller = UserThreadController(
       repository: repository,
-      accountId: null,
-      args: const MyThreadPageArgs(),
+      viewerUserId: null,
+      args: const UserThreadPageArgs(),
     );
     addTearDown(controller.dispose);
     await controller.setActive(true);
@@ -173,7 +173,7 @@ void main() {
       );
       addTearDown(container.dispose);
       final subscription = container.listen(
-        myThreadControllerProvider(const MyThreadPageArgs()),
+        userThreadControllerProvider(const UserThreadPageArgs()),
         (_, _) {},
       );
       addTearDown(subscription.close);
@@ -197,11 +197,11 @@ void main() {
   );
 }
 
-MyThreadController _controller(
+UserThreadController _controller(
   ThreadDirectoryFixture repository, [
   UserThreadDirectoryType type = UserThreadDirectoryType.threads,
-]) => MyThreadController(
+]) => UserThreadController(
   repository: repository,
-  accountId: '101',
-  args: MyThreadPageArgs(initialType: type),
+  viewerUserId: '101',
+  args: UserThreadPageArgs(initialType: type),
 );

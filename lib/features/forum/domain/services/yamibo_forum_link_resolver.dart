@@ -6,6 +6,7 @@ enum YamiboForumLinkKind {
   thread,
   threadPost,
   tagThreadPage,
+  userThreadDirectory,
   managedWebView,
   external,
 }
@@ -18,6 +19,8 @@ class YamiboForumLinkDestination {
     this.pid,
     this.page,
     this.tagId,
+    this.userId,
+    this.userThreadType,
   });
 
   final YamiboForumLinkKind kind;
@@ -26,6 +29,8 @@ class YamiboForumLinkDestination {
   final String? pid;
   final int? page;
   final String? tagId;
+  final String? userId;
+  final UserThreadDirectoryType? userThreadType;
 }
 
 class YamiboForumLinkResolver {
@@ -38,7 +43,7 @@ class YamiboForumLinkResolver {
   final SiteUrlResolver _siteUrlResolver;
   final ForumReferenceResolver _references;
 
-  YamiboForumLinkDestination? resolve(String rawUrl) {
+  YamiboForumLinkDestination? resolve(String rawUrl, {String? viewerUserId}) {
     final normalizedUrl = _siteUrlResolver.resolve(rawUrl);
     if (normalizedUrl == null) {
       return null;
@@ -53,6 +58,9 @@ class YamiboForumLinkResolver {
         uri: uri,
       );
     }
+
+    final userThreads = _extractUserThreadDirectory(uri, viewerUserId);
+    if (userThreads != null) return userThreads;
 
     final postTarget = _extractThreadPostTarget(uri, normalizedUrl);
     if (postTarget != null) {
@@ -96,6 +104,62 @@ class YamiboForumLinkResolver {
     return YamiboForumLinkDestination(
       kind: YamiboForumLinkKind.managedWebView,
       uri: uri,
+    );
+  }
+
+  YamiboForumLinkDestination? _extractUserThreadDirectory(
+    Uri uri,
+    String? viewerUserId,
+  ) {
+    if (uri.path != '/home.php' ||
+        !{'https', 'http'}.contains(uri.scheme) ||
+        uri.userInfo.isNotEmpty ||
+        (uri.hasPort && uri.port != (uri.scheme == 'https' ? 443 : 80))) {
+      return null;
+    }
+    final query = uri.queryParameters;
+    if (query['mod'] != 'space' || query['do'] != 'thread') return null;
+    // Only map the personal/target-user directory. Other views, filters and
+    // comment directories must retain their source behavior in the browser.
+    const supportedKeys = {
+      'mod',
+      'do',
+      'uid',
+      'view',
+      'type',
+      'page',
+      'mobile',
+      'order',
+    };
+    if (query.keys.any((key) => !supportedKeys.contains(key)) ||
+        uri.queryParametersAll.values.any((values) => values.length != 1) ||
+        !{null, '', 'me'}.contains(query['view']) ||
+        !{null, '', 'dateline'}.contains(query['order'])) {
+      return null;
+    }
+    final uid = query['uid'];
+    if (uid == null) {
+      if (query['view'] != 'me') return null;
+    } else if (!RegExp(r'^[1-9]\d*$').hasMatch(uid)) {
+      return null;
+    }
+    // Unlike other-user spaces, Discuz defaults the viewer's own space to
+    // the friends view. Only an explicit view=me identifies their directory.
+    if (uid == viewerUserId && query['view'] != 'me') return null;
+    final type = switch (query['type']) {
+      null || '' || 'thread' => UserThreadDirectoryType.threads,
+      'reply' => UserThreadDirectoryType.replies,
+      _ => null,
+    };
+    if (type == null) return null;
+    final page = _parsePositiveInt(query['page']);
+    if (query.containsKey('page') && page == null) return null;
+    return YamiboForumLinkDestination(
+      kind: YamiboForumLinkKind.userThreadDirectory,
+      uri: uri,
+      userId: uid,
+      userThreadType: type,
+      page: page ?? 1,
     );
   }
 

@@ -1743,6 +1743,8 @@
   "profileMessages": "消息提醒",
   "profileMyThreads": "我的主题",
   "profileMyThreadsTitle": "我的主题",
+  "profileUserThreadsTitle": "Ta 的主题",
+  "profileUserThreadsLoginRequired": "登录后查看主题和回复",
   "profileMyThreadsTab": "主题",
   "profileMyRepliesTab": "回复",
   "profileNoThreads": "暂无主题",

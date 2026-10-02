@@ -13,7 +13,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
-import 'package:y300/features/profile/presentation/threads/my_thread_card.dart';
+import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -52,7 +52,7 @@ void main() {
                   body: SingleChildScrollView(
                     child: Padding(
                       padding: const EdgeInsets.all(6),
-                      child: MyThreadCard(
+                      child: UserThreadCard(
                         item: UserThreadSummary(
                           threadId: '100',
                           title: 'A topic with independently loaded previews',
@@ -85,7 +85,7 @@ void main() {
           // used to arrange them. Transparent reserved slots are already square.
           final initial = _previewRects(tester);
           _expectOneRow(initial);
-          final initialCard = tester.getRect(find.byType(MyThreadCard));
+          final initialCard = tester.getRect(find.byType(UserThreadCard));
           final keys = tester
               .widgetList<CachedLibraryImage>(find.byType(CachedLibraryImage))
               .where(
@@ -186,7 +186,7 @@ void main() {
           overrides: [imageCacheServiceProvider.overrideWithValue(images)],
           child: LocalizedTestApp(
             home: Scaffold(
-              body: MyThreadCard(
+              body: UserThreadCard(
                 item: UserThreadSummary(
                   threadId: '100',
                   title: 'Cached preview',
@@ -249,7 +249,7 @@ void _expectStable(WidgetTester tester, List<Rect> initial, Rect initialCard) {
     expect(current[i].width, closeTo(initial[i].width, 0.01));
     expect(current[i].height, closeTo(initial[i].height, 0.01));
   }
-  expect(tester.getRect(find.byType(MyThreadCard)), initialCard);
+  expect(tester.getRect(find.byType(UserThreadCard)), initialCard);
 }
 
 Future<void> _decodeVisibleImages(

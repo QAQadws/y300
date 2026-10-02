@@ -7203,6 +7203,18 @@ abstract class AppLocalizations {
   /// **'我的主题'**
   String get profileMyThreadsTitle;
 
+  /// No description provided for @profileUserThreadsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Ta 的主题'**
+  String get profileUserThreadsTitle;
+
+  /// No description provided for @profileUserThreadsLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录后查看主题和回复'**
+  String get profileUserThreadsLoginRequired;
+
   /// No description provided for @profileMyThreadsTab.
   ///
   /// In zh, this message translates to:

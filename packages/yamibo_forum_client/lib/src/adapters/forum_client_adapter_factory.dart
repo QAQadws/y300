@@ -425,7 +425,7 @@ final class ForumClientAdapterFactory {
         requestProfiles: requestProfiles,
       );
 
-  /// Creates the verified account's topic and reply HTML source.
+  /// Creates the shared topic and reply HTML source for verified viewers.
   UserThreadDirectoryRepository createUserThreadDirectory() =>
       DiscuzUserThreadDirectoryRepository(
         config: config,

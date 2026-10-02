@@ -9,36 +9,42 @@ typedef UserThreadDirectoryRead =
       UserThreadDirectoryReadCapabilities
     >;
 
-enum MyThreadReadOperation { idle, refresh, more }
+enum UserThreadReadOperation { idle, refresh, more }
 
 @immutable
-final class MyThreadPageArgs {
-  const MyThreadPageArgs({
+final class UserThreadPageArgs {
+  const UserThreadPageArgs({
+    this.userId,
     this.initialType = UserThreadDirectoryType.threads,
+    this.initialPage = 1,
     this.routeOwner,
-  });
+  }) : assert(initialPage >= 1);
 
+  final String? userId;
   final UserThreadDirectoryType initialType;
+  final int initialPage;
   final Object? routeOwner;
 
   @override
   bool operator ==(Object other) =>
-      other is MyThreadPageArgs &&
+      other is UserThreadPageArgs &&
+      userId == other.userId &&
       initialType == other.initialType &&
+      initialPage == other.initialPage &&
       routeOwner == other.routeOwner;
 
   @override
-  int get hashCode => Object.hash(initialType, routeOwner);
+  int get hashCode => Object.hash(userId, initialType, initialPage, routeOwner);
 }
 
 @immutable
-final class MyThreadPageState {
-  const MyThreadPageState({
+final class UserThreadPageState {
+  const UserThreadPageState({
     required this.query,
     this.data,
     this.capabilities,
     this.failure,
-    this.operation = MyThreadReadOperation.idle,
+    this.operation = UserThreadReadOperation.idle,
     this.failedOperation,
   });
 
@@ -50,14 +56,14 @@ final class MyThreadPageState {
     UserThreadDirectoryReadCapabilities
   >?
   failure;
-  final MyThreadReadOperation operation;
-  final MyThreadReadOperation? failedOperation;
+  final UserThreadReadOperation operation;
+  final UserThreadReadOperation? failedOperation;
 
-  bool get isBusy => operation != MyThreadReadOperation.idle;
+  bool get isBusy => operation != UserThreadReadOperation.idle;
   bool get hasMore => data?.pagination.hasNext == true;
 
-  MyThreadPageState waiting(MyThreadReadOperation operation) =>
-      MyThreadPageState(
+  UserThreadPageState waiting(UserThreadReadOperation operation) =>
+      UserThreadPageState(
         query: query,
         data: data,
         capabilities: capabilities,
@@ -67,37 +73,42 @@ final class MyThreadPageState {
 
 /// Owns one route and authenticated session. Only the selected, visible tab
 /// reads; cancelled responses cannot update either retained tab.
-final class MyThreadController extends ValueNotifier<MyThreadPageState> {
-  MyThreadController({
+final class UserThreadController extends ValueNotifier<UserThreadPageState> {
+  UserThreadController({
     required UserThreadDirectoryRepository repository,
-    required this.accountId,
-    required MyThreadPageArgs args,
+    required this.viewerUserId,
+    required UserThreadPageArgs args,
   }) : _repository = repository,
+       userId = args.userId ?? viewerUserId ?? '',
        super(
-         MyThreadPageState(
+         UserThreadPageState(
            query: UserThreadDirectoryQuery(
-             userId: accountId ?? '',
+             userId: args.userId ?? viewerUserId ?? '',
+             viewerUserId: viewerUserId,
              type: args.initialType,
+             page: args.initialPage,
            ),
          ),
        );
 
   final UserThreadDirectoryRepository _repository;
-  final String? accountId;
-  final _retained = <UserThreadDirectoryType, MyThreadPageState>{};
+  final String? viewerUserId;
+  final String userId;
+  final _retained = <UserThreadDirectoryType, UserThreadPageState>{};
   ForumRequestCancellation? _cancellation;
   Future<void>? _pending;
   bool _active = false;
   bool _disposed = false;
   int _generation = 0;
 
-  MyThreadPageState stateForType(UserThreadDirectoryType type) =>
+  UserThreadPageState stateForType(UserThreadDirectoryType type) =>
       type == value.query.type
       ? value
       : _retained[type] ??
-            MyThreadPageState(
+            UserThreadPageState(
               query: UserThreadDirectoryQuery(
-                userId: accountId ?? '',
+                userId: userId,
+                viewerUserId: viewerUserId,
                 type: type,
               ),
             );
@@ -107,12 +118,12 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
     _active = active;
     if (!active) {
       _cancel();
-      if (value.isBusy) value = value.waiting(MyThreadReadOperation.idle);
+      if (value.isBusy) value = value.waiting(UserThreadReadOperation.idle);
       return Future.value();
     }
     if (_pending != null) return _pending!;
     return value.data == null && value.failure == null
-        ? _load(_page(value.query, 1), MyThreadReadOperation.refresh)
+        ? _load(value.query, UserThreadReadOperation.refresh)
         : Future.value();
   }
 
@@ -121,7 +132,7 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
     _cancel();
     // Returning to a failed tab must not silently resume automatic paging.
     _retained[value.query.type] = value.isBusy
-        ? value.waiting(MyThreadReadOperation.idle)
+        ? value.waiting(UserThreadReadOperation.idle)
         : value;
     value = stateForType(type);
     return setActive(_active);
@@ -129,10 +140,10 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
 
   Future<void> refresh() {
     if (_disposed || !_active) return Future.value();
-    if (value.operation == MyThreadReadOperation.refresh) {
+    if (value.operation == UserThreadReadOperation.refresh) {
       return _pending ?? Future.value();
     }
-    return _load(_page(value.query, 1), MyThreadReadOperation.refresh);
+    return _load(_page(value.query, 1), UserThreadReadOperation.refresh);
   }
 
   Future<void> loadMore() {
@@ -141,17 +152,28 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
     }
     return _load(
       _page(value.query, value.data!.pagination.currentPage + 1),
-      MyThreadReadOperation.more,
+      UserThreadReadOperation.more,
     );
   }
 
-  Future<void> retry() => value.failedOperation == MyThreadReadOperation.more
-      ? loadMore()
-      : refresh();
+  Future<void> retry() {
+    if (value.failedOperation == UserThreadReadOperation.more &&
+        value.data != null) {
+      return loadMore();
+    }
+    if (_disposed || !_active || value.isBusy) {
+      return _pending ?? Future.value();
+    }
+    // A failed URL page must retry that page; explicit refresh starts at one.
+    return _load(
+      _page(value.query, value.data == null ? value.query.page : 1),
+      UserThreadReadOperation.refresh,
+    );
+  }
 
   Future<void> _load(
     UserThreadDirectoryQuery query,
-    MyThreadReadOperation operation,
+    UserThreadReadOperation operation,
   ) {
     _cancel();
     final previous = value;
@@ -161,7 +183,12 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
     // Install the future before notifying listeners so refresh remains
     // single-flight even when a listener synchronously requests it again.
     _pending = completion.future;
-    value = previous.waiting(operation);
+    value = UserThreadPageState(
+      query: previous.data == null ? query : previous.query,
+      data: previous.data,
+      capabilities: previous.capabilities,
+      operation: operation,
+    );
     unawaited(
       _run(
         query,
@@ -176,8 +203,8 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
 
   Future<void> _run(
     UserThreadDirectoryQuery query,
-    MyThreadReadOperation operation,
-    MyThreadPageState previous,
+    UserThreadReadOperation operation,
+    UserThreadPageState previous,
     int generation,
     ForumRequestCancellation cancellation,
   ) async {
@@ -188,24 +215,25 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
     _pending = null;
     _cancellation = null;
     if (result case DataReadSuccess(:final data, :final capabilities)) {
-      value = MyThreadPageState(
+      value = UserThreadPageState(
         query: _page(query, data.pagination.currentPage),
-        data: operation == MyThreadReadOperation.more && previous.data != null
+        data: operation == UserThreadReadOperation.more && previous.data != null
             ? _mergeMore(previous.data!, data)
             : data,
-        capabilities: operation == MyThreadReadOperation.more
+        capabilities: operation == UserThreadReadOperation.more
             ? previous.capabilities?.intersect(capabilities) ?? capabilities
             : capabilities,
       );
     } else {
       final failure = result.failureOrNull!;
-      if (failure.kind == DataReadFailureKind.unauthorized) _retained.clear();
       final retain = !{
         DataReadFailureKind.unauthorized,
         DataReadFailureKind.business,
       }.contains(failure.kind);
-      value = MyThreadPageState(
-        query: previous.query,
+      // Access rejection invalidates both tabs, including retained content.
+      if (!retain) _retained.clear();
+      value = UserThreadPageState(
+        query: retain && previous.data != null ? previous.query : query,
         data: retain ? previous.data : null,
         capabilities: retain ? previous.capabilities : null,
         failure: failure,
@@ -218,11 +246,18 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
     UserThreadDirectoryQuery query,
     ForumRequestCancellation cancellation,
   ) async {
-    if (accountId == null) {
+    if (viewerUserId == null) {
       return const DataReadFailure(
         kind: DataReadFailureKind.unauthorized,
         code: 'user_thread_login_required',
         diagnosticMessage: 'user_thread_login_required',
+      );
+    }
+    if (!RegExp(r'^[1-9]\d*$').hasMatch(query.userId)) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        code: 'user_thread_invalid_user',
+        diagnosticMessage: 'user_thread_invalid_user',
       );
     }
     try {
@@ -259,6 +294,7 @@ final class MyThreadController extends ValueNotifier<MyThreadPageState> {
 UserThreadDirectoryQuery _page(UserThreadDirectoryQuery query, int page) =>
     UserThreadDirectoryQuery(
       userId: query.userId,
+      viewerUserId: query.viewerUserId,
       type: query.type,
       page: page,
     );
