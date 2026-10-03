@@ -1,5 +1,6 @@
 import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'package:y300/features/more/presentation/more_account_avatar.dart';
+import 'package:y300/features/more/presentation/more_account_identity_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -262,33 +263,9 @@ class MoreAccountHeader extends ConsumerWidget {
               if (owner == null)
                 identity
               else
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final toggle = DailyAutoSignInToggle(enabled: !busy);
-                    // Preserve space for names and groups when accessibility
-                    // text or a narrow viewport needs a separate control row.
-                    if (constraints.maxWidth < 340 ||
-                        MediaQuery.textScalerOf(context).scale(14) > 18) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          identity,
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: toggle,
-                          ),
-                        ],
-                      );
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(child: identity),
-                        const SizedBox(width: 12),
-                        toggle,
-                      ],
-                    );
-                  },
+                MoreAccountIdentityLayout(
+                  identity: identity,
+                  action: DailyAutoSignInToggle(enabled: !busy),
                 ),
             ],
             if (current && summary.failure != null)

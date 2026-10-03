@@ -16,6 +16,7 @@ import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/more/presentation/more_account_avatar.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
+import 'package:y300/features/more/presentation/more_account_identity_layout.dart';
 import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
@@ -463,6 +464,101 @@ void main() {
     );
   }
 
+  for (final width in [360, 393]) {
+    testWidgets('$width dp header keeps fitting account controls on one row', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width.toDouble(), width * 20 / 9);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _pumpHeader(
+        tester,
+        repository: _Repository(
+          (_) async => _success(name: '283475', group: '百合花蕾'),
+        ),
+      );
+
+      _expectAccountLayout(tester, toggleWraps: false);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('360dp header keeps fitting controls inline at 1.3x text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pumpHeader(
+      tester,
+      repository: _Repository((_) async => _success(name: '2834', group: '花蕾')),
+      textScale: 1.3,
+    );
+
+    _expectAccountLayout(tester, toggleWraps: false);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final direction in TextDirection.values) {
+    testWidgets(
+      'account controls preserve edge alignment across the fit boundary in $direction',
+      (tester) async {
+        for (final (width, wraps) in [(328.0, true), (344.0, false)]) {
+          await tester.pumpWidget(
+            Directionality(
+              textDirection: direction,
+              child: Center(
+                child: SizedBox(
+                  width: width,
+                  child: MoreAccountIdentityLayout(
+                    key: const Key('account-layout-fixture'),
+                    identity: const SizedBox(
+                      key: Key('account-identity-fixture'),
+                      width: 220,
+                      height: 32,
+                    ),
+                    action: const SizedBox(
+                      key: Key('account-action-fixture'),
+                      width: 112,
+                      height: 48,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          final layout = tester.getRect(
+            find.byKey(const Key('account-layout-fixture')),
+          );
+          final identity = tester.getRect(
+            find.byKey(const Key('account-identity-fixture')),
+          );
+          final action = tester.getRect(
+            find.byKey(const Key('account-action-fixture')),
+          );
+          if (direction == TextDirection.ltr) {
+            expect(identity.left, layout.left);
+            expect(action.right, layout.right);
+          } else {
+            expect(identity.right, layout.right);
+            expect(action.left, layout.left);
+          }
+          if (wraps) {
+            expect(action.top, identity.bottom);
+            expect(layout.height, 80);
+          } else {
+            expect(action.bottom, identity.bottom);
+            expect(layout.height, 48);
+          }
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
+
   testWidgets('300dp Traditional header fits 2x text and long account values', (
     tester,
   ) async {
@@ -488,7 +584,7 @@ void main() {
     expect(find.byKey(const Key('more-logout-entry')), findsOneWidget);
     expect(_logoutButton(tester).tooltip, _l10n(tester).moreLogout);
     expect(find.text(_l10n(tester).moreLogout), findsNothing);
-    _expectAccountLayout(tester, groupWraps: true);
+    _expectAccountLayout(tester, groupWraps: true, toggleWraps: true);
     expect(tester.takeException(), isNull);
   });
 }
@@ -582,7 +678,11 @@ Finder _statistic(String name, String value) {
   );
 }
 
-void _expectAccountLayout(WidgetTester tester, {bool groupWraps = false}) {
+void _expectAccountLayout(
+  WidgetTester tester, {
+  bool groupWraps = false,
+  bool? toggleWraps,
+}) {
   final avatar = tester.getRect(find.byKey(const Key('more-account-avatar')));
   final name = tester.getRect(find.byKey(const Key('more-account-name')));
   final group = tester.getRect(find.byKey(const Key('more-account-group')));
@@ -592,6 +692,13 @@ void _expectAccountLayout(WidgetTester tester, {bool groupWraps = false}) {
   expect(toggle.right, closeTo(header.right - 16, 0.1));
   expect(toggle.bottom, greaterThanOrEqualTo(group.bottom));
   expect(toggle.bottom, greaterThanOrEqualTo(name.bottom));
+  if (toggleWraps == true) {
+    expect(toggle.top, greaterThanOrEqualTo(name.bottom));
+    expect(toggle.top, greaterThanOrEqualTo(group.bottom));
+  } else if (toggleWraps == false) {
+    expect(toggle.left - group.right, greaterThanOrEqualTo(11.9));
+    expect(toggle.bottom, closeTo(name.bottom, 0.1));
+  }
 
   expect(name.top, greaterThan(avatar.bottom));
   expect(name.left, avatar.left);
