@@ -187,28 +187,8 @@ class ProfileContent extends StatelessWidget {
                     key: const Key('user-profile-details'),
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final section
-                          in ForumUserProfileDetailSection.values)
-                        if (details.any(
-                          (entry) => entry.section == section,
-                        )) ...[
-                          _SectionHeading(
-                            title: switch (section) {
-                              ForumUserProfileDetailSection.account =>
-                                l10n.profileAccountInfo,
-                              ForumUserProfileDetailSection.activity =>
-                                l10n.profileActivityInfo,
-                              ForumUserProfileDetailSection.personal =>
-                                l10n.profileDetails,
-                            },
-                          ),
-                          _Details(
-                            details: details
-                                .where((entry) => entry.section == section)
-                                .toList(),
-                            onOpenLink: onOpenLink,
-                          ),
-                        ],
+                      _SectionHeading(title: l10n.profileDetails),
+                      _Details(details: details, onOpenLink: onOpenLink),
                     ],
                   ),
                 if (metrics.isEmpty &&
@@ -325,20 +305,30 @@ class _IdentityCard extends StatelessWidget {
                               ],
                             ),
                           ],
+                          const SizedBox(height: 8),
+                          // Reserve one line so an absent title does not move
+                          // the UID or resize the identity card.
+                          Tooltip(
+                            message: profile.customTitle?.trim() ?? '',
+                            excludeFromSemantics: true,
+                            child: Text(
+                              profile.customTitle?.trim().isNotEmpty == true
+                                  ? profile.customTitle!.trim()
+                                  : ' ',
+                              key: const Key('user-profile-custom-title'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.supportingText,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
-                if (profile.customTitle?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    profile.customTitle!,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.supportingText,
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 12),
                 Row(
                   children: [

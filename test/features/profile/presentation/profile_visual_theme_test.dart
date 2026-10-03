@@ -138,6 +138,83 @@ void main() {
     await _save(tester, 'wide-public');
   });
 
+  testWidgets('profile details keep source order in a single surface', (
+    tester,
+  ) async {
+    await _pump(tester, AppThemeFamily.warmPaper, Brightness.light);
+    final details = find.byKey(const Key('user-profile-details'));
+    final l10n = AppLocalizations.of(tester.element(details));
+    expect(find.text(l10n.profileDetails), findsOneWidget);
+    expect(
+      find.descendant(of: details, matching: find.byType(ProfileSurface)),
+      findsOneWidget,
+    );
+    // Source fields deliberately mix semantic sections; their order must stay.
+    var previousY = double.negativeInfinity;
+    for (final entry in _profile(false).details) {
+      final label = find.descendant(
+        of: details,
+        matching: find.text(entry.label),
+      );
+      final currentY = tester.getTopLeft(label).dy;
+      expect(currentY, greaterThan(previousY), reason: entry.label);
+      previousY = currentY;
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final large in [false, true]) {
+    testWidgets(
+      'custom title stays below the group without resizing, large=$large',
+      (tester) async {
+        final profile = _profile(false);
+        await _pump(
+          tester,
+          AppThemeFamily.warmPaper,
+          Brightness.light,
+          large: large,
+          profile: profile,
+        );
+        final identity = find.byKey(const Key('user-profile-identity'));
+        final title = find.byKey(const Key('user-profile-custom-title'));
+        final group = find.descendant(
+          of: identity,
+          matching: find.text(profile.groupName!),
+        );
+        final avatar = find.byKey(const Key('user-profile-avatar'));
+        final withTitleHeight = tester.getSize(identity).height;
+        expect(
+          tester.getTopLeft(title).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(group).dy),
+        );
+        expect(
+          tester.getTopLeft(title).dx,
+          greaterThan(tester.getTopRight(avatar).dx),
+        );
+        await _save(
+          tester,
+          'identity-${large ? 'large' : 'normal'}-with-title',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _pump(
+          tester,
+          AppThemeFamily.warmPaper,
+          Brightness.light,
+          large: large,
+          profile: _profile(false, customTitle: null),
+        );
+        expect(tester.getSize(identity).height, closeTo(withTitleHeight, 0.01));
+        expect(find.text(profile.customTitle!), findsNothing);
+        expect(tester.takeException(), isNull);
+        await _save(
+          tester,
+          'identity-${large ? 'large' : 'normal'}-without-title',
+        );
+      },
+    );
+  }
+
   testWidgets(
     'signature and website links invoke navigation with the original URL',
     (tester) async {
@@ -204,6 +281,7 @@ Future<void> _pump(
   bool large = false,
   double? width,
   Locale locale = const Locale('zh'),
+  ForumUserProfileData? profile,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width ?? (large ? 300 : 390), 844);
@@ -222,7 +300,7 @@ Future<void> _pump(
           revision: 1,
         )),
         forumUserProfileRepositoryProvider.overrideWithValue(
-          _Repository(_profile(self)),
+          _Repository(profile ?? _profile(self)),
         ),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
         imageCacheServiceProvider.overrideWithValue(_Images()),
@@ -251,71 +329,74 @@ final _capabilities = ForumUserProfileReadCapabilities(
   values: DataCapabilitySet.from(supported: ForumUserProfileCapability.values),
 );
 
-ForumUserProfileData _profile(bool self, {String? signatureHtml}) =>
-    ForumUserProfileData(
-      identity: ProfileUserIdentity(
-        userId: self ? '101' : '8',
-        displayName: '夏日回声',
-      ),
-      viewerUserId: '101',
-      groupName: '普通会员',
-      customTitle: '在故事与日常之间',
-      isOnline: true,
-      metrics: const [
-        ForumUserProfileMetric(label: '总积分', value: '2048'),
-        ForumUserProfileMetric(label: '积分', value: '1900 点'),
-        ForumUserProfileMetric(label: '对象', value: '128'),
-      ],
-      signatureHtml: signatureHtml ?? '<p>把喜欢的故事，留在温柔的日常里。</p>',
-      details: [
-        ForumUserProfileDetail(
-          label: 'UID',
-          value: self ? '101' : '8',
-          section: ForumUserProfileDetailSection.account,
-        ),
-        const ForumUserProfileDetail(
-          label: '用户组',
-          value: '普通会员',
-          section: ForumUserProfileDetailSection.account,
-        ),
-        const ForumUserProfileDetail(
-          label: '个人主页',
-          value: 'https://example.test/works',
-        ),
-        const ForumUserProfileDetail(label: '最新记录', value: '正在读一本新书'),
-        const ForumUserProfileDetail(
-          label: '在线时间',
-          value: '4875 小时',
-          section: ForumUserProfileDetailSection.activity,
-        ),
-        const ForumUserProfileDetail(
-          label: '注册时间',
-          value: '2004-10-20 00:00',
-          section: ForumUserProfileDetailSection.activity,
-        ),
-        const ForumUserProfileDetail(
-          label: '最后访问',
-          value: '2026-10-01 22:31',
-          section: ForumUserProfileDetailSection.activity,
-        ),
-      ],
-      actions: self
-          ? [
-              ForumUserProfileActionKind.threads,
-              ForumUserProfileActionKind.blogs,
-              ForumUserProfileActionKind.messages,
-              ForumUserProfileActionKind.settings,
-              ForumUserProfileActionKind.forumFavorites,
-              ForumUserProfileActionKind.friends,
-              ForumUserProfileActionKind.creditHistory,
-            ]
-          : [
-              ForumUserProfileActionKind.threads,
-              ForumUserProfileActionKind.blogs,
-              ForumUserProfileActionKind.sendMessage,
-              ForumUserProfileActionKind.addFriend,
-            ],
-    );
+ForumUserProfileData _profile(
+  bool self, {
+  String? signatureHtml,
+  String? customTitle = '在故事与日常之间',
+}) => ForumUserProfileData(
+  identity: ProfileUserIdentity(
+    userId: self ? '101' : '8',
+    displayName: '夏日回声',
+  ),
+  viewerUserId: '101',
+  groupName: '普通会员',
+  customTitle: customTitle,
+  isOnline: true,
+  metrics: const [
+    ForumUserProfileMetric(label: '总积分', value: '2048'),
+    ForumUserProfileMetric(label: '积分', value: '1900 点'),
+    ForumUserProfileMetric(label: '对象', value: '128'),
+  ],
+  signatureHtml: signatureHtml ?? '<p>把喜欢的故事，留在温柔的日常里。</p>',
+  details: [
+    ForumUserProfileDetail(
+      label: 'UID',
+      value: self ? '101' : '8',
+      section: ForumUserProfileDetailSection.account,
+    ),
+    const ForumUserProfileDetail(
+      label: '用户组',
+      value: '普通会员',
+      section: ForumUserProfileDetailSection.account,
+    ),
+    const ForumUserProfileDetail(
+      label: '个人主页',
+      value: 'https://example.test/works',
+    ),
+    const ForumUserProfileDetail(label: '最新记录', value: '正在读一本新书'),
+    const ForumUserProfileDetail(
+      label: '在线时间',
+      value: '4875 小时',
+      section: ForumUserProfileDetailSection.activity,
+    ),
+    const ForumUserProfileDetail(
+      label: '注册时间',
+      value: '2004-10-20 00:00',
+      section: ForumUserProfileDetailSection.activity,
+    ),
+    const ForumUserProfileDetail(
+      label: '最后访问',
+      value: '2026-10-01 22:31',
+      section: ForumUserProfileDetailSection.activity,
+    ),
+  ],
+  actions: self
+      ? [
+          ForumUserProfileActionKind.threads,
+          ForumUserProfileActionKind.blogs,
+          ForumUserProfileActionKind.messages,
+          ForumUserProfileActionKind.settings,
+          ForumUserProfileActionKind.forumFavorites,
+          ForumUserProfileActionKind.friends,
+          ForumUserProfileActionKind.creditHistory,
+        ]
+      : [
+          ForumUserProfileActionKind.threads,
+          ForumUserProfileActionKind.blogs,
+          ForumUserProfileActionKind.sendMessage,
+          ForumUserProfileActionKind.addFriend,
+        ],
+);
 
 class _Repository implements ForumUserProfileRepository {
   _Repository(this.data);

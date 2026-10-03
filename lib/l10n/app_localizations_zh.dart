@@ -4328,12 +4328,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileCreditOverview => '积分与资产';
 
   @override
-  String get profileAccountInfo => '论坛身份';
-
-  @override
-  String get profileActivityInfo => '活跃记录';
-
-  @override
   String get profileMyReplies => '我的回复';
 
   @override
@@ -9692,12 +9686,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileCreditOverview => '積分與資產';
-
-  @override
-  String get profileAccountInfo => '論壇身分';
-
-  @override
-  String get profileActivityInfo => '活躍紀錄';
 
   @override
   String get profileMyReplies => '我的回覆';

@@ -7173,18 +7173,6 @@ abstract class AppLocalizations {
   /// **'积分与资产'**
   String get profileCreditOverview;
 
-  /// No description provided for @profileAccountInfo.
-  ///
-  /// In zh, this message translates to:
-  /// **'论坛身份'**
-  String get profileAccountInfo;
-
-  /// No description provided for @profileActivityInfo.
-  ///
-  /// In zh, this message translates to:
-  /// **'活跃记录'**
-  String get profileActivityInfo;
-
   /// No description provided for @profileMyReplies.
   ///
   /// In zh, this message translates to:
