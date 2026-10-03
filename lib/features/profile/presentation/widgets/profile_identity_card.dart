@@ -559,12 +559,35 @@ class _Statistic extends StatelessWidget {
         message: description,
         excludeFromSemantics: true,
         child: stacked
-            ? Row(
-                children: [
-                  Expanded(child: label),
-                  const SizedBox(width: 16),
-                  Flexible(child: value),
-                ],
+            ? LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableWidth = (constraints.maxWidth - 16).clamp(
+                    0.0,
+                    double.infinity,
+                  );
+                  final labelWidth =
+                      (_textWidth(
+                                context,
+                                metric.label,
+                                _statisticLabelStyle(theme),
+                              ) +
+                              2)
+                          .clamp(0.0, availableWidth / 2);
+                  // Reserve the label's width instead of halving every balance.
+                  // Long values still ellipsize and expose their full tooltip.
+                  return Row(
+                    children: [
+                      Expanded(child: label),
+                      const SizedBox(width: 16),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: availableWidth - labelWidth,
+                        ),
+                        child: value,
+                      ),
+                    ],
+                  );
+                },
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,
