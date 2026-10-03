@@ -46,3 +46,7 @@ final userBlogMediaOperationsProvider = Provider<UserBlogMediaOperations?>((
 ) {
   return ref.watch(yamiboForumClientProvider).blogMedia;
 });
+
+final forumFriendOperationsProvider = Provider<ForumFriendOperations>((ref) {
+  return ref.watch(yamiboForumClientProvider).friendOperations!;
+});

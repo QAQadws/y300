@@ -9,6 +9,7 @@ final class DiscuzBlogCommandResponse {
     this.commentId,
     this.favoriteId,
     this.itemId,
+    this.userId,
   });
 
   /// Whether the server called the success handler.
@@ -25,6 +26,9 @@ final class DiscuzBlogCommandResponse {
 
   /// Target item identity supplied by the bookmark callback.
   final String? itemId;
+
+  /// Target user identity supplied by a source friendship callback.
+  final String? userId;
 
   /// Accepts one actual callback invocation with literal arguments.
   /// Strings, handler declarations, unrelated scripts, and mixed results are
@@ -71,6 +75,7 @@ final class DiscuzBlogCommandResponse {
             commentId: values['cid'],
             favoriteId: values['favid'],
             itemId: values['id'],
+            userId: values['uid'],
           ),
         );
       } on FormatException {

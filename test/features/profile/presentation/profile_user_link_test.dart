@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/profile_user_link.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -16,11 +17,17 @@ void main() {
   testWidgets(
     'author profile opens that author blog without changing the current account',
     (tester) async {
-      final profiles = ProfileRepositoryFixture();
+      final profiles = ProfileRepositoryFixture(
+        actions: const [ForumUserProfileActionKind.blogs],
+      );
       final blogs = BlogDirectoryFixture();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            verifiedProfileOwnerProvider.overrideWithValue((
+              uid: '202',
+              revision: 1,
+            )),
             blogAccountIdProvider.overrideWithValue('202'),
             forumUserProfileRepositoryProvider.overrideWithValue(profiles),
             userBlogDirectoryRepositoryProvider.overrideWithValue(blogs),
@@ -44,7 +51,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(profiles.queries.single.userId, '101');
       expect(blogs.queries, isEmpty);
-      await tester.tap(find.byKey(const Key('user-profile-blogs')));
+      await tester.tap(find.byKey(const Key('user-profile-action-blogs')));
       await tester.pumpAndSettle();
       expect(find.byType(ProfileBlogPage), findsOneWidget);
       expect(blogs.queries.single.scope, UserBlogFeedScope.self);
@@ -59,6 +66,35 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('rapid author taps open a single profile route', (tester) async {
+    final profiles = ProfileRepositoryFixture();
+    final observer = _RouteObserver();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          verifiedProfileOwnerProvider.overrideWithValue(null),
+          forumUserProfileRepositoryProvider.overrideWithValue(profiles),
+          forumImageRefererProvider.overrideWithValue('https://example.test/'),
+        ],
+        child: LocalizedTestApp(
+          navigatorObservers: [observer],
+          home: const Scaffold(
+            body: ProfileUserLink(userId: '101', child: Text('author link')),
+          ),
+        ),
+      ),
+    );
+    final initialPushes = observer.pushes;
+    final open = tester.widget<InkWell>(find.byType(InkWell)).onTap!;
+    open();
+    open();
+    await tester.pumpAndSettle();
+    expect(observer.pushes, initialPushes + 1);
+    expect(profiles.queries, hasLength(1));
+    expect(find.byType(UserProfilePage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final id in [null, '', '0', '-1', '01', 'display name']) {
     testWidgets(
@@ -77,5 +113,15 @@ void main() {
         expect(find.byType(UserProfilePage), findsNothing);
       },
     );
+  }
+}
+
+class _RouteObserver extends NavigatorObserver {
+  int pushes = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushes++;
+    super.didPush(route, previousRoute);
   }
 }

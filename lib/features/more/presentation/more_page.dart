@@ -18,7 +18,7 @@ import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/navigation_management_page.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/features/profile/presentation/current_account_avatar_controller.dart';
-import 'package:y300/features/profile/presentation/my_profile_action_navigation.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -353,10 +353,8 @@ class _MorePageState extends ConsumerState<MorePage> {
       if (!context.mounted) return;
       final owner = ref.read(verifiedProfileOwnerProvider);
       if (owner == null) return;
-      await openMyProfileForumPage(
-        context: context,
-        ref: ref,
-        userId: owner.uid,
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const MyProfilePage()),
       );
       await _refreshAccountAfterVisit(owner);
     } finally {

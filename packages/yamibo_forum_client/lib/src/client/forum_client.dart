@@ -15,6 +15,7 @@ import '../contracts/forum_search.dart';
 import '../contracts/forum_resource.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/forum_friend_operations.dart';
 import '../contracts/user_thread_directory.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
@@ -201,6 +202,9 @@ final class YamiboForumClient {
 
   /// Account-bound journal publishing, editing, and management.
   UserBlogOperations? get blogOperations => sourcePlan.blogOperations;
+
+  /// Native friendship forms and commands, when configured.
+  ForumFriendOperations? get friendOperations => sourcePlan.friendOperations;
 
   /// Optional journal album uploads; separate from forum attachment IDs.
   UserBlogMediaOperations? get blogMedia => sourcePlan.blogMedia;
@@ -719,9 +723,27 @@ final class YamiboForumClient {
   loadForumUserProfile(
     ForumUserProfileQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) =>
-      sourcePlan.forumUserProfile?.load(query, cachePolicy: cachePolicy) ??
+      sourcePlan.forumUserProfile?.load(
+        query,
+        cachePolicy: cachePolicy,
+        cancellation: cancellation,
+      ) ??
       unsupported<ForumUserProfileData, ForumUserProfileReadCapabilities>();
+
+  /// Prepares a fresh source-advertised friendship form.
+  Future<DataReadResult<ForumFriendPreparation, ForumFriendReadCapabilities>>
+  prepareFriendOperation(ForumFriendQuery query) =>
+      sourcePlan.friendOperations?.prepare(query) ??
+      unsupported<ForumFriendPreparation, ForumFriendReadCapabilities>();
+
+  /// Sends one freshly prepared friendship form.
+  Future<DataCommandResult<ForumFriendReceipt>> submitFriendOperation(
+    ForumFriendSubmission submission,
+  ) =>
+      sourcePlan.friendOperations?.submit(submission) ??
+      Future.value(const DataCommandUnsupported<ForumFriendReceipt>());
 
   /// Loads a target user's topics or replies for the verified viewer.
   Future<

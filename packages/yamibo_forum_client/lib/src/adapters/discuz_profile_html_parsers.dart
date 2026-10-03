@@ -10,6 +10,7 @@ import '../url/forum_uri_resolver.dart';
 import 'discuz_blog_heading_parser.dart';
 import 'discuz_blog_social_links.dart';
 import 'discuz_blog_pagination.dart';
+import 'discuz_profile_action_links.dart';
 
 abstract final class DiscuzProfileAuthPageDetector {
   static bool isLoginPage(String html) {
@@ -50,16 +51,21 @@ final class ForumUserProfileHtmlParser {
     required String html,
     required String expectedUserId,
     ForumUserProfileView view = ForumUserProfileView.public,
+    String? expectedViewerUserId,
   }) {
     final document = html_parser.parse(html);
+    final signedInUserId = _optionalSignedInUserId(document);
     if (view == ForumUserProfileView.self) {
-      final signedInUserId = _signedInUserId(document);
       if (signedInUserId == '0') {
         throw const ForumUserProfileUnauthorized();
       }
       if (signedInUserId != expectedUserId) {
         throw const FormatException('profile_session_identity_mismatch');
       }
+    }
+    if (expectedViewerUserId != null &&
+        signedInUserId != expectedViewerUserId) {
+      throw const FormatException('profile_viewer_identity_mismatch');
     }
     final roots = document.querySelectorAll('.userinfo');
     final scope = document.body;
@@ -83,6 +89,9 @@ final class ForumUserProfileHtmlParser {
       throw const FormatException('profile_identity_mismatch');
     }
     final resolver = ForumUriResolver(siteOrigin: siteOrigin);
+    final actionLinks = DiscuzProfileActionLinks(
+      siteOrigin,
+    ).parse(scope, userId: ids.single, viewerUserId: signedInUserId);
     return ForumUserProfileData(
       identity: ProfileUserIdentity(userId: ids.single, displayName: username),
       avatarUrl: _optionalUri(
@@ -95,13 +104,16 @@ final class ForumUserProfileHtmlParser {
       ),
       metrics: List.unmodifiable(_metrics(scope)),
       details: List.unmodifiable(details),
-      actions: view == ForumUserProfileView.self
-          ? List.unmodifiable(_actions(scope, resolver, expectedUserId))
-          : const [],
+      viewerUserId: signedInUserId == '0' ? null : signedInUserId,
+      groupName: _detailValue(details, _groupLabels),
+      customTitle: _detailValue(details, _customTitleLabels),
+      isOnline: _onlineState(scope),
+      actions: List.unmodifiable(actionLinks.map((link) => link.kind)),
+      actionLinks: actionLinks,
     );
   }
 
-  String _signedInUserId(html_dom.Document document) {
+  String? _optionalSignedInUserId(html_dom.Document document) {
     final matches = document
         .querySelectorAll('script')
         .expand(
@@ -110,12 +122,9 @@ final class ForumUserProfileHtmlParser {
           ).allMatches(script.text),
         )
         .toList(growable: false);
-    if (matches.length != 1) {
-      throw const FormatException(
-        'profile_session_identity_missing_or_repeated',
-      );
-    }
-    return matches.single.group(2)!;
+    if (matches.length != 1) return null;
+    final id = matches.single.group(2)!;
+    return id == '0' || RegExp(r'^[1-9]\d*$').hasMatch(id) ? id : null;
   }
 
   List<ForumUserProfileMetric> _metrics(html_dom.Element root) => root
@@ -157,7 +166,13 @@ final class ForumUserProfileHtmlParser {
         }
         continue;
       }
-      output.add(ForumUserProfileDetail(label: label, value: value));
+      output.add(
+        ForumUserProfileDetail(
+          label: label,
+          value: value,
+          section: _detailSection(label),
+        ),
+      );
     }
     return output;
   }
@@ -167,85 +182,74 @@ final class ForumUserProfileHtmlParser {
     return _clean(
       item.nodes
           .takeWhile((node) => node != valueNode)
+          .where((node) => node is! html_dom.Element || node.localName != 'em')
           .map((node) => node.text)
           .join(),
     );
   }
 
-  List<ForumUserProfileActionKind> _actions(
-    html_dom.Element root,
-    ForumUriResolver resolver,
-    String userId,
-  ) {
-    final actions = <ForumUserProfileActionKind>[];
-    for (final element in root.querySelectorAll(
-      '.user_box, .myinfo_list_ico a[href], .myinfo_list .mtxt a[href]',
-    )) {
-      final href = element.classes.contains('user_box')
-          ? _creditHistoryHref(element.attributes['onclick'])
-          : element.attributes['href'];
-      final action = _actionForHref(href, resolver, userId);
-      if (action != null && !actions.contains(action)) {
-        actions.add(action);
-      }
+  static const _groupLabels = {'用户组', '用戶組', 'user group', 'usergroup'};
+  static const _customTitleLabels = {
+    '自定义头衔',
+    '自定義頭銜',
+    'custom title',
+    'custom status',
+  };
+  static const _accountLabels = {
+    'uid',
+    '用户组',
+    '用戶組',
+    'user group',
+    'usergroup',
+    '管理组',
+    '管理組',
+    'management team',
+    '扩展用户组',
+    '擴展用戶組',
+    'extended user groups',
+  };
+  static const _activityLabels = {
+    '注册时间',
+    '註冊時間',
+    '注册日期',
+    '註冊日期',
+    'registration date',
+    'registered',
+    '最后访问',
+    '最後訪問',
+    'last visit',
+    '在线时间',
+    '在線時間',
+    'online time',
+  };
+
+  ForumUserProfileDetailSection _detailSection(String label) {
+    final normalized = label.toLowerCase();
+    if (_accountLabels.contains(normalized)) {
+      return ForumUserProfileDetailSection.account;
     }
-    return actions;
+    if (_activityLabels.contains(normalized)) {
+      return ForumUserProfileDetailSection.activity;
+    }
+    return ForumUserProfileDetailSection.personal;
   }
 
-  String? _creditHistoryHref(String? onclick) => RegExp(
-    r'''^\s*window\.location\.href\s*=\s*(['"])([^'"]+)\1\s*;?\s*$''',
-  ).firstMatch(onclick ?? '')?.group(2);
-
-  ForumUserProfileActionKind? _actionForHref(
-    String? href,
-    ForumUriResolver resolver,
-    String userId,
+  String? _detailValue(
+    List<ForumUserProfileDetail> details,
+    Set<String> labels,
   ) {
-    if (href == null || href.trim().isEmpty) return null;
-    try {
-      final uri = resolver.resolve(href);
-      if (!_sameOrigin(uri) || uri.path != '/home.php' || uri.hasFragment) {
-        return null;
+    final matches = details.where(
+      (item) => labels.contains(item.label.toLowerCase()),
+    );
+    return matches.length == 1 ? matches.single.value : null;
+  }
+
+  bool? _onlineState(html_dom.Element scope) {
+    for (final status in scope.querySelectorAll('.myinfo_list li .mtxt')) {
+      if (status.querySelector('a') != null) continue;
+      if ({'在线', '在線', 'online'}.contains(_clean(status.text).toLowerCase())) {
+        return true;
       }
-      final selfSpace = <String, String>{
-        'mod': 'space',
-        'uid': userId,
-        'view': 'me',
-        'mobile': '2',
-      };
-      if (_matchesQuery(uri, {...selfSpace, 'do': 'thread'})) {
-        return ForumUserProfileActionKind.threads;
-      }
-      if (_matchesQuery(uri, {...selfSpace, 'do': 'blog'})) {
-        return ForumUserProfileActionKind.blogs;
-      }
-      if (_matchesQuery(uri, {
-        ...selfSpace,
-        'do': 'favorite',
-        'type': 'thread',
-      })) {
-        return ForumUserProfileActionKind.forumFavorites;
-      }
-      if (_matchesQuery(uri, {'mod': 'space', 'do': 'pm', 'mobile': '2'})) {
-        return ForumUserProfileActionKind.messages;
-      }
-      if (_matchesQuery(uri, {'mod': 'space', 'do': 'friend', 'mobile': '2'})) {
-        return ForumUserProfileActionKind.friends;
-      }
-      if (_matchesQuery(uri, {'mod': 'spacecp', 'mobile': '2'})) {
-        return ForumUserProfileActionKind.settings;
-      }
-      if (_matchesQuery(uri, {'mod': 'spacecp', 'ac': 'credit', 'op': 'log'}) ||
-          _matchesQuery(uri, {
-            'mod': 'spacecp',
-            'ac': 'credit',
-            'op': 'log',
-            'mobile': '2',
-          })) {
-        return ForumUserProfileActionKind.creditHistory;
-      }
-    } on FormatException {
-      return null;
     }
     return null;
   }

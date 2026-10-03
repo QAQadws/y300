@@ -184,10 +184,13 @@ enum ForumUserProfileView {
   self,
 }
 
-/// Available actions on a verified user's own forum profile.
+/// Available destinations advertised by a verified forum profile.
 enum ForumUserProfileActionKind {
   /// Topics created by the user.
   threads,
+
+  /// Replies created by the user, when explicitly advertised.
+  replies,
 
   /// Blog entries created by the user.
   blogs,
@@ -198,8 +201,17 @@ enum ForumUserProfileActionKind {
   /// Private messages.
   messages,
 
+  /// A private conversation with this profile's owner.
+  sendMessage,
+
   /// Friends.
   friends,
+
+  /// Request or accept friendship with this profile's owner.
+  addFriend,
+
+  /// Remove friendship with this profile's owner.
+  removeFriend,
 
   /// Forum account settings.
   settings,
@@ -208,12 +220,25 @@ enum ForumUserProfileActionKind {
   creditHistory,
 }
 
+/// A validated, source-advertised destination for one profile action.
+final class ForumUserProfileActionLink {
+  /// Creates a profile destination.
+  const ForumUserProfileActionLink({required this.kind, required this.uri});
+
+  /// Source-neutral action identity.
+  final ForumUserProfileActionKind kind;
+
+  /// Same-origin destination with a validated path and query.
+  final Uri uri;
+}
+
 /// Query parameters for forum user profile.
 final class ForumUserProfileQuery {
   /// Creates a [ForumUserProfileQuery].
   const ForumUserProfileQuery({
     required this.userId,
     this.view = ForumUserProfileView.public,
+    this.viewerUserId,
   });
 
   /// Stable user identifier.
@@ -221,13 +246,17 @@ final class ForumUserProfileQuery {
 
   /// View.
   final ForumUserProfileView view;
+
+  /// Expected signed-in viewer; a mismatch must not expose account actions.
+  final String? viewerUserId;
   @override
   bool operator ==(Object other) =>
       other is ForumUserProfileQuery &&
       other.userId == userId &&
-      other.view == view;
+      other.view == view &&
+      other.viewerUserId == viewerUserId;
   @override
-  int get hashCode => Object.hash(userId, view);
+  int get hashCode => Object.hash(userId, view, viewerUserId);
 }
 
 /// Source-neutral forum user profile data.
@@ -238,9 +267,14 @@ final class ForumUserProfileData {
     required this.metrics,
     required this.details,
     this.actions = const [],
+    this.actionLinks = const [],
     this.avatarUrl,
     this.coverUrl,
     this.signatureHtml,
+    this.viewerUserId,
+    this.groupName,
+    this.customTitle,
+    this.isOnline,
   });
 
   /// Identity.
@@ -255,14 +289,29 @@ final class ForumUserProfileData {
   /// Signature html.
   final String? signatureHtml;
 
+  /// Authenticated viewer identity reported by the source, or unknown.
+  final String? viewerUserId;
+
+  /// Public user group name, when advertised.
+  final String? groupName;
+
+  /// Public custom title, when advertised.
+  final String? customTitle;
+
+  /// Online state, when the source explicitly advertises it.
+  final bool? isOnline;
+
   /// Metrics.
   final List<ForumUserProfileMetric> metrics;
 
   /// Details.
   final List<ForumUserProfileDetail> details;
 
-  /// Actions advertised by the verified self-profile, in server order.
+  /// Actions advertised by the profile, in server order.
   final List<ForumUserProfileActionKind> actions;
+
+  /// Verified source destinations, in the same order as [actions].
+  final List<ForumUserProfileActionLink> actionLinks;
 }
 
 /// Source-neutral forum user profile metric.
@@ -277,16 +326,35 @@ final class ForumUserProfileMetric {
   final String value;
 }
 
+/// Semantic grouping of source-provided profile fields.
+enum ForumUserProfileDetailSection {
+  /// Identity and group membership.
+  account,
+
+  /// Registration, visits and online duration.
+  activity,
+
+  /// Optional personal fields and custom source extensions.
+  personal,
+}
+
 /// Source-neutral forum user profile detail.
 final class ForumUserProfileDetail {
   /// Creates a [ForumUserProfileDetail].
-  const ForumUserProfileDetail({required this.label, required this.value});
+  const ForumUserProfileDetail({
+    required this.label,
+    required this.value,
+    this.section = ForumUserProfileDetailSection.personal,
+  });
 
   /// Label.
   final String label;
 
   /// Value.
   final String value;
+
+  /// Source-level semantic grouping; unknown fields remain personal.
+  final ForumUserProfileDetailSection section;
 }
 
 /// Capabilities exposed by forum user profile.
@@ -312,7 +380,7 @@ enum ForumUserProfileCapability {
   /// Ordered details.
   orderedDetails,
 
-  /// Ordered, validated self-profile actions.
+  /// Ordered, validated profile actions.
   orderedActions,
 }
 
@@ -359,6 +427,7 @@ abstract interface class ForumUserProfileRepository {
   load(
     ForumUserProfileQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   });
 }
 

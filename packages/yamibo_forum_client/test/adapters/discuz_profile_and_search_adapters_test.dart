@@ -183,7 +183,7 @@ void main() {
         success.capabilities.supports(
           ForumUserProfileCapability.orderedActions,
         ),
-        isFalse,
+        isTrue,
       );
     },
   );

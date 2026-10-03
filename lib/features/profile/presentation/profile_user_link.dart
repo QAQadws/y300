@@ -28,9 +28,12 @@ class ProfileUserLink extends StatelessWidget {
         type: MaterialType.transparency,
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
-          onTap: () => Navigator.of(context).push<void>(
-            MaterialPageRoute(builder: (_) => UserProfilePage(uid: id)),
-          ),
+          onTap: () {
+            if (ModalRoute.of(context)?.isCurrent == false) return;
+            Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => UserProfilePage(uid: id)),
+            );
+          },
           child: ConstrainedBox(
             constraints: compact
                 ? const BoxConstraints()

@@ -4316,6 +4316,92 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tagEmpty => '暂无相关帖子';
 
   @override
+  String get profileMyContent => '我的内容';
+
+  @override
+  String get profileUserContent => '发表的内容';
+
+  @override
+  String get profileAccountTools => '账号与工具';
+
+  @override
+  String get profileCreditOverview => '积分与资产';
+
+  @override
+  String get profileAccountInfo => '论坛身份';
+
+  @override
+  String get profileActivityInfo => '活跃记录';
+
+  @override
+  String get profileMyReplies => '我的回复';
+
+  @override
+  String get profileLoginToInteract => '登录后发私信或加好友';
+
+  @override
+  String get profileOnline => '在线';
+
+  @override
+  String profileUid(String uid) {
+    return 'UID $uid';
+  }
+
+  @override
+  String get profileCopyUid => '复制 UID';
+
+  @override
+  String get profileUidCopied => 'UID 已复制';
+
+  @override
+  String get profileSendMessage => '发私信';
+
+  @override
+  String get profileAddFriend => '加好友';
+
+  @override
+  String get profileRemoveFriend => '解除好友';
+
+  @override
+  String get profileFriendRequest => '申请好友';
+
+  @override
+  String get profileFriendApprove => '接受好友申请';
+
+  @override
+  String get profileFriendRemove => '解除好友关系';
+
+  @override
+  String get profileFriendNote => '验证消息';
+
+  @override
+  String get profileFriendNoteHint => '向对方介绍一下自己（可选）';
+
+  @override
+  String get profileFriendGroup => '好友分组';
+
+  @override
+  String get profileFriendRequestExplanation => '发送申请后，等待对方确认。';
+
+  @override
+  String get profileFriendApproveExplanation => '确认接受这位用户的好友申请。';
+
+  @override
+  String get profileFriendRemoveExplanation => '解除后，你们将不再是好友。';
+
+  @override
+  String get profileFriendOperationUnknown => '操作结果暂未确认，请关闭并核对好友状态后再操作。';
+
+  @override
+  String get profileFriendRequestSent => '好友申请已发送，等待对方确认。';
+
+  @override
+  String get profileFriendApproved => '已接受申请，你们现在是好友了。';
+
+  @override
+  String get profileFriendRemoved => '已解除好友关系。';
+
+  @override
   String get profileTitle => '个人资料';
 
   @override
@@ -9594,6 +9680,92 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get tagEmpty => '目前沒有相關帖子';
+
+  @override
+  String get profileMyContent => '我的內容';
+
+  @override
+  String get profileUserContent => '發表的內容';
+
+  @override
+  String get profileAccountTools => '帳號與工具';
+
+  @override
+  String get profileCreditOverview => '積分與資產';
+
+  @override
+  String get profileAccountInfo => '論壇身分';
+
+  @override
+  String get profileActivityInfo => '活躍紀錄';
+
+  @override
+  String get profileMyReplies => '我的回覆';
+
+  @override
+  String get profileLoginToInteract => '登入後發私訊或加好友';
+
+  @override
+  String get profileOnline => '在線';
+
+  @override
+  String profileUid(String uid) {
+    return 'UID $uid';
+  }
+
+  @override
+  String get profileCopyUid => '複製 UID';
+
+  @override
+  String get profileUidCopied => 'UID 已複製';
+
+  @override
+  String get profileSendMessage => '發私訊';
+
+  @override
+  String get profileAddFriend => '加好友';
+
+  @override
+  String get profileRemoveFriend => '解除好友';
+
+  @override
+  String get profileFriendRequest => '申請好友';
+
+  @override
+  String get profileFriendApprove => '接受好友申請';
+
+  @override
+  String get profileFriendRemove => '解除好友關係';
+
+  @override
+  String get profileFriendNote => '驗證訊息';
+
+  @override
+  String get profileFriendNoteHint => '向對方介紹一下自己（可選）';
+
+  @override
+  String get profileFriendGroup => '好友分組';
+
+  @override
+  String get profileFriendRequestExplanation => '送出申請後，等待對方確認。';
+
+  @override
+  String get profileFriendApproveExplanation => '確認接受這位使用者的好友申請。';
+
+  @override
+  String get profileFriendRemoveExplanation => '解除後，你們將不再是好友。';
+
+  @override
+  String get profileFriendOperationUnknown => '操作結果暫未確認，請關閉並核對好友狀態後再操作。';
+
+  @override
+  String get profileFriendRequestSent => '好友申請已送出，等待對方確認。';
+
+  @override
+  String get profileFriendApproved => '已接受申請，你們現在是好友了。';
+
+  @override
+  String get profileFriendRemoved => '已解除好友關係。';
 
   @override
   String get profileTitle => '個人資料';

@@ -7149,6 +7149,174 @@ abstract class AppLocalizations {
   /// **'暂无相关帖子'**
   String get tagEmpty;
 
+  /// No description provided for @profileMyContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的内容'**
+  String get profileMyContent;
+
+  /// No description provided for @profileUserContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'发表的内容'**
+  String get profileUserContent;
+
+  /// No description provided for @profileAccountTools.
+  ///
+  /// In zh, this message translates to:
+  /// **'账号与工具'**
+  String get profileAccountTools;
+
+  /// No description provided for @profileCreditOverview.
+  ///
+  /// In zh, this message translates to:
+  /// **'积分与资产'**
+  String get profileCreditOverview;
+
+  /// No description provided for @profileAccountInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'论坛身份'**
+  String get profileAccountInfo;
+
+  /// No description provided for @profileActivityInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃记录'**
+  String get profileActivityInfo;
+
+  /// No description provided for @profileMyReplies.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的回复'**
+  String get profileMyReplies;
+
+  /// No description provided for @profileLoginToInteract.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录后发私信或加好友'**
+  String get profileLoginToInteract;
+
+  /// No description provided for @profileOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线'**
+  String get profileOnline;
+
+  /// No description provided for @profileUid.
+  ///
+  /// In zh, this message translates to:
+  /// **'UID {uid}'**
+  String profileUid(String uid);
+
+  /// No description provided for @profileCopyUid.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制 UID'**
+  String get profileCopyUid;
+
+  /// No description provided for @profileUidCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'UID 已复制'**
+  String get profileUidCopied;
+
+  /// No description provided for @profileSendMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'发私信'**
+  String get profileSendMessage;
+
+  /// No description provided for @profileAddFriend.
+  ///
+  /// In zh, this message translates to:
+  /// **'加好友'**
+  String get profileAddFriend;
+
+  /// No description provided for @profileRemoveFriend.
+  ///
+  /// In zh, this message translates to:
+  /// **'解除好友'**
+  String get profileRemoveFriend;
+
+  /// No description provided for @profileFriendRequest.
+  ///
+  /// In zh, this message translates to:
+  /// **'申请好友'**
+  String get profileFriendRequest;
+
+  /// No description provided for @profileFriendApprove.
+  ///
+  /// In zh, this message translates to:
+  /// **'接受好友申请'**
+  String get profileFriendApprove;
+
+  /// No description provided for @profileFriendRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'解除好友关系'**
+  String get profileFriendRemove;
+
+  /// No description provided for @profileFriendNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证消息'**
+  String get profileFriendNote;
+
+  /// No description provided for @profileFriendNoteHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'向对方介绍一下自己（可选）'**
+  String get profileFriendNoteHint;
+
+  /// No description provided for @profileFriendGroup.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友分组'**
+  String get profileFriendGroup;
+
+  /// No description provided for @profileFriendRequestExplanation.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送申请后，等待对方确认。'**
+  String get profileFriendRequestExplanation;
+
+  /// No description provided for @profileFriendApproveExplanation.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认接受这位用户的好友申请。'**
+  String get profileFriendApproveExplanation;
+
+  /// No description provided for @profileFriendRemoveExplanation.
+  ///
+  /// In zh, this message translates to:
+  /// **'解除后，你们将不再是好友。'**
+  String get profileFriendRemoveExplanation;
+
+  /// No description provided for @profileFriendOperationUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作结果暂未确认，请关闭并核对好友状态后再操作。'**
+  String get profileFriendOperationUnknown;
+
+  /// No description provided for @profileFriendRequestSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友申请已发送，等待对方确认。'**
+  String get profileFriendRequestSent;
+
+  /// No description provided for @profileFriendApproved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已接受申请，你们现在是好友了。'**
+  String get profileFriendApproved;
+
+  /// No description provided for @profileFriendRemoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已解除好友关系。'**
+  String get profileFriendRemoved;
+
   /// No description provided for @profileTitle.
   ///
   /// In zh, this message translates to:

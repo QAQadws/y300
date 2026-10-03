@@ -10,6 +10,7 @@ import '../contracts/forum_display_repository.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/forum_friend_operations.dart';
 import '../contracts/user_thread_directory.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
@@ -59,6 +60,7 @@ final class ForumClientSourcePlan {
     this.notificationIgnoreCommand,
     this.stickerCatalog,
     this.forumUserProfile,
+    this.friendOperations,
     this.userBlogDirectory,
     this.userThreadDirectory,
     this.userBlogDetail,
@@ -136,6 +138,7 @@ final class ForumClientSourcePlan {
         overrides.notificationIgnoreCommand ?? notificationIgnoreCommand,
     stickerCatalog: overrides.stickerCatalog ?? stickerCatalog,
     forumUserProfile: overrides.forumUserProfile ?? forumUserProfile,
+    friendOperations: overrides.friendOperations ?? friendOperations,
     userBlogDirectory: overrides.userBlogDirectory ?? userBlogDirectory,
     userThreadDirectory: overrides.userThreadDirectory ?? userThreadDirectory,
     userBlogDetail: overrides.userBlogDetail ?? userBlogDetail,
@@ -277,6 +280,9 @@ final class ForumClientSourcePlan {
 
   /// Journal publishing, editing, and management.
   final UserBlogOperations? blogOperations;
+
+  /// Complete native friendship forms and single-use commands.
+  final ForumFriendOperations? friendOperations;
 
   /// Optional album upload capability sharing the journal editor's tickets.
   final UserBlogMediaOperations? blogMedia;
