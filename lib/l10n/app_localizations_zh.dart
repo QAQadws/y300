@@ -2370,6 +2370,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreMyProfile => '我的资料';
 
   @override
+  String get moreMyMessages => '我的消息';
+
+  @override
   String get profileOpenNative => '打开原生资料页';
 
   @override
@@ -7687,6 +7690,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreMyProfile => '我的資料';
+
+  @override
+  String get moreMyMessages => '我的訊息';
 
   @override
   String get profileOpenNative => '開啟原生資料頁';

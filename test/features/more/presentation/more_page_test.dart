@@ -22,6 +22,9 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
+import 'package:y300/features/messages/data/message_repository_provider.dart';
+import 'package:y300/features/messages/presentation/message_center_page.dart';
+import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
@@ -38,6 +41,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 import '../../profile/test_support/blog_directory_fixture.dart';
 import '../../profile/test_support/friend_read_fixture.dart';
+import '../../messages/support/message_test_repository.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
@@ -118,7 +122,7 @@ void main() {
           .widget<IconButton>(find.byKey(const Key('more-logout-entry')))
           .onPressed!;
       final menuTaps = <VoidCallback>[];
-      for (final name in ['threads', 'blogs', 'friends']) {
+      for (final name in ['messages', 'blogs', 'friends']) {
         final entry = find.byKey(Key('more-my-$name-entry'));
         await _scrollUntilVisibleIfNeeded(tester, entry);
         menuTaps.add(tester.widget<ListTile>(entry).onTap!);
@@ -140,7 +144,7 @@ void main() {
   );
 
   for (final action in [
-    ForumUserProfileActionKind.threads,
+    ForumUserProfileActionKind.messages,
     ForumUserProfileActionKind.blogs,
     ForumUserProfileActionKind.friends,
   ]) {
@@ -148,6 +152,7 @@ void main() {
       'my ${action.name} menu opens the native current-account page',
       (tester) async {
         final directory = _ThreadDirectoryRepository();
+        final messages = MessageTestRepository();
         final blogs = BlogDirectoryFixture();
         final friends = _emptyFriends();
         final webLaunches = <ForumWebViewLaunchConfig>[];
@@ -161,6 +166,7 @@ void main() {
           tester,
           isLoggedIn: true,
           directory: directory,
+          messages: messages,
           blogs: blogs,
           friends: friends,
           launches: webLaunches,
@@ -169,22 +175,31 @@ void main() {
         final entry = find.byKey(Key('more-my-${action.name}-entry'));
         await _scrollUntilVisibleIfNeeded(tester, entry);
         await tester.tap(entry);
+        if (action == ForumUserProfileActionKind.messages) {
+          await tester.pump();
+          _completeMessageReads(messages, owner: '100');
+        }
         await tester.pumpAndSettle();
 
         final Finder destination;
         switch (action) {
-          case ForumUserProfileActionKind.threads:
-            destination = find.byType(MyThreadPage);
+          case ForumUserProfileActionKind.messages:
+            destination = find.byType(MessageCenterPage);
             expect(destination, findsOneWidget);
             expect(
-              tester.widget<MyThreadPage>(destination).initialType,
-              UserThreadDirectoryType.threads,
+              tester.widget<MessageCenterPage>(destination).initialTab,
+              MessageCenterTab.messages,
             );
-            expect(directory.queries.single.userId, '100');
             expect(
-              directory.queries.single.type,
-              UserThreadDirectoryType.threads,
+              ProviderScope.containerOf(
+                tester.element(destination),
+              ).read(messageAccountIdProvider),
+              '100',
             );
+            expect(messages.reads.single.query.target, isNull);
+            expect(messages.reads.single.query.page, 1);
+            expect(messages.notificationReads, isEmpty);
+            expect(directory.queries, isEmpty);
             expect(blogs.queries, isEmpty);
             expect(friends.requests, isEmpty);
           case ForumUserProfileActionKind.blogs:
@@ -1377,7 +1392,7 @@ void _expectMyContentEntryOrderAndLabels(
     (child) => child.key == const Key('more-unused-images-entry'),
   );
   for (final (offset, name, label) in [
-    (3, 'threads', l10n.profileMyThreads),
+    (3, 'messages', l10n.moreMyMessages),
     (2, 'blogs', l10n.profileMyBlogs),
     (1, 'friends', l10n.profileMyFriendsTitle),
   ]) {
@@ -1385,6 +1400,9 @@ void _expectMyContentEntryOrderAndLabels(
     expect(tile.key, Key('more-my-$name-entry'));
     expect((tile.title! as Text).data, label);
     expect(tile.onTap, isNotNull);
+    if (name == 'messages') {
+      expect((tile.leading! as Icon).icon, Icons.mail_outline);
+    }
   }
 }
 
@@ -1399,6 +1417,7 @@ Future<void> _pumpMyContentPage(
   required FriendFeedFixture friends,
   required List<ForumWebViewLaunchConfig> launches,
   _ThreadDirectoryRepository? directory,
+  MessageTestRepository? messages,
   BlogDirectoryFixture? blogs,
   _AccountSummaryRepository? summary,
   _RouteNameObserver? observer,
@@ -1413,6 +1432,8 @@ Future<void> _pumpMyContentPage(
         userThreadDirectoryRepositoryProvider.overrideWithValue(
           directory ?? _ThreadDirectoryRepository(),
         ),
+        if (messages != null)
+          messageRepositoryProvider.overrideWithValue(messages),
         userBlogDirectoryRepositoryProvider.overrideWithValue(
           blogs ?? BlogDirectoryFixture(),
         ),
@@ -1434,6 +1455,22 @@ Future<void> _pumpMyContentPage(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+void _completeMessageReads(
+  MessageTestRepository repository, {
+  required String owner,
+}) {
+  for (final read in repository.reads) {
+    if (!read.result.isCompleted) {
+      read.result.complete(messageTestPage([], owner: owner));
+    }
+  }
+  for (final read in repository.notificationReads) {
+    if (!read.result.isCompleted) {
+      read.result.complete(notificationTestPage([]));
+    }
+  }
 }
 
 Future<void> _pumpCreditPage(

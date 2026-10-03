@@ -110,11 +110,12 @@ class _MorePageState extends ConsumerState<MorePage> {
               endIndent: 0,
             ),
             ListTile(
-              key: const Key('more-my-threads-entry'),
-              leading: const Icon(Icons.forum_outlined),
-              title: Text(l10n.profileMyThreads),
+              key: const Key('more-my-messages-entry'),
+              leading: const Icon(Icons.mail_outline),
+              title: Text(l10n.moreMyMessages),
               onTap: canOpenMyContent
-                  ? () => _openMyContentPage(ForumUserProfileActionKind.threads)
+                  ? () =>
+                        _openMyContentPage(ForumUserProfileActionKind.messages)
                   : null,
             ),
             ListTile(

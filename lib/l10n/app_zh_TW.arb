@@ -495,6 +495,7 @@
 
   "moreTitle": "更多",
   "moreMyProfile": "我的資料",
+  "moreMyMessages": "我的訊息",
   "profileOpenNative": "開啟原生資料頁",
   "moreMyProfileSignedOutSubtitle": "登入後查看個人資料、訊息提醒",
   "moreMyProfileSubtitle": "{username} 的資料與訊息提醒",

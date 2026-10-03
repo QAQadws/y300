@@ -3900,6 +3900,12 @@ abstract class AppLocalizations {
   /// **'我的资料'**
   String get moreMyProfile;
 
+  /// No description provided for @moreMyMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的消息'**
+  String get moreMyMessages;
+
   /// No description provided for @profileOpenNative.
   ///
   /// In zh, this message translates to:

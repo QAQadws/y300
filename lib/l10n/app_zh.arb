@@ -965,6 +965,7 @@
 
   "moreTitle": "更多",
   "moreMyProfile": "我的资料",
+  "moreMyMessages": "我的消息",
   "profileOpenNative": "打开原生资料页",
   "moreMyProfileSignedOutSubtitle": "登录后查看个人资料、消息提醒",
   "moreMyProfileSubtitle": "{username} 的资料与消息提醒",
