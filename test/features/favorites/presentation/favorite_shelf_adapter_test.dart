@@ -28,6 +28,11 @@ void main() {
       expect(adapter.moduleKey, LibraryModuleKey.favorite);
       expect(adapter.defaultDisplayMode, LibraryDisplayMode.list);
       final capabilities = resolveShelfModuleCapabilities(adapter);
+      expect(capabilities.supportsReadState, isFalse);
+      expect(
+        capabilities.availableSortFields,
+        isNot(contains(LibraryShelfSortField.unreadCount)),
+      );
       expect(
         capabilities.defaultSortOption.field,
         LibraryShelfSortField.favoriteAddedAt,
@@ -67,34 +72,37 @@ void main() {
     },
   );
 
-  test('FavoriteShelfAdapter cover reads do not resolve route targets', () async {
-    final local = _FakeLocalFavoriteRepository(
-      items: <LibraryWorkItem>[
-        LibraryWorkItem(
-          workId: FavoriteShelfWorkId.fromTid('100'),
-          categoryId: favoriteComicCategoryId,
-          title: 'Favorite Comic',
-          coverImageUrl: 'https://img.test/cover.jpg',
-          unreadCount: 0,
-          totalChapterCount: 1,
-          readChapterCount: 0,
-          addedAt: DateTime(2026, 1, 1),
-        ),
-      ],
-    );
-    final adapter = FavoriteShelfAdapter(
-      local,
-      syncService: _FakeFavoriteSyncService(),
-    );
+  test(
+    'FavoriteShelfAdapter cover reads do not resolve route targets',
+    () async {
+      final local = _FakeLocalFavoriteRepository(
+        items: <LibraryWorkItem>[
+          LibraryWorkItem(
+            workId: FavoriteShelfWorkId.fromTid('100'),
+            categoryId: favoriteComicCategoryId,
+            title: 'Favorite Comic',
+            coverImageUrl: 'https://img.test/cover.jpg',
+            unreadCount: 0,
+            totalChapterCount: 1,
+            readChapterCount: 0,
+            addedAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+      final adapter = FavoriteShelfAdapter(
+        local,
+        syncService: _FakeFavoriteSyncService(),
+      );
 
-    final items = await adapter.loadCategoryItems(
-      categoryId: favoriteComicCategoryId,
-    );
+      final items = await adapter.loadCategoryItems(
+        categoryId: favoriteComicCategoryId,
+      );
 
-    expect(items.single.coverImageUrl, 'https://img.test/cover.jpg');
-    expect(items.single.coverLocalPath, isNull);
-    expect(local.routeTargetLookupCount, 0);
-  });
+      expect(items.single.coverImageUrl, 'https://img.test/cover.jpg');
+      expect(items.single.coverLocalPath, isNull);
+      expect(local.routeTargetLookupCount, 0);
+    },
+  );
 
   test(
     'FavoriteShelfAdapter exposes favorite progress from task progress hub',
@@ -235,9 +243,7 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
-  _FakeLocalFavoriteRepository({
-    this.items = const <LibraryWorkItem>[],
-  });
+  _FakeLocalFavoriteRepository({this.items = const <LibraryWorkItem>[]});
 
   FavoriteSyncSnapshot? snapshot;
   final List<LibraryWorkItem> items;

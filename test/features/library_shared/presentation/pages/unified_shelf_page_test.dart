@@ -731,6 +731,89 @@ void main() {
     );
   });
 
+  for (final supportsReadState in [true, false]) {
+    testWidgets(
+      'list badge space follows read state capability $supportsReadState',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(360, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final host = ShelfSelectionHostController();
+        addTearDown(host.dispose);
+        const longTitle = '【受祝福的因果律协会汉化组】[中村汚濁]圣少女默示录 DEATHPAIR 第30话';
+        await tester.pumpWidget(
+          ProviderScope(
+            child: LocalizedTestApp(
+              theme: AppTheme.light(),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                child: child!,
+              ),
+              home: UnifiedShelfPage(
+                adapter: _FakeSelectableShelfAdapter(
+                  initialDisplayMode: LibraryDisplayMode.list,
+                  capabilities: ShelfModuleCapabilities(
+                    supportsReadState: supportsReadState,
+                  ),
+                  itemsByCategory: {
+                    'default': [
+                      _item(
+                        workId: 'covered',
+                        title: longTitle,
+                        customCoverLocalPath: 'cache/missing-cover.jpg',
+                        unreadCount: 0,
+                      ),
+                      _item(
+                        workId: 'coverless',
+                        title: longTitle,
+                        unreadCount: 0,
+                      ),
+                    ],
+                  },
+                ),
+                selectionHost: host,
+                onOpenWork: (_, _) async {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        for (final workId in ['covered', 'coverless']) {
+          final tile = find.byKey(
+            ValueKey<String>('unified-shelf-list-tile-$workId'),
+          );
+          final title = find.descendant(
+            of: tile,
+            matching: find.text(longTitle),
+          );
+          // Keep the comic badge column aligned even when fully read. Shelves
+          // without read state should use the entire title width instead.
+          expect(
+            tester.getRect(tile).right - tester.getRect(title).right,
+            closeTo(supportsReadState ? 56 : 24, 0.01),
+          );
+        }
+
+        final coveredTile = find.byKey(
+          const ValueKey<String>('unified-shelf-list-tile-covered'),
+        );
+        final coveredTitle = find.descendant(
+          of: coveredTile,
+          matching: find.text(longTitle),
+        );
+        final titleWidth = tester.getSize(coveredTitle).width;
+        await tester.longPress(coveredTile);
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<ListTile>(coveredTile).selected, isTrue);
+        expect(tester.getSize(coveredTitle).width, titleWidth);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'category pages keep stable PageStorage keys for scroll restoration',
     (tester) async {
@@ -1571,6 +1654,7 @@ class _FakeSelectableShelfAdapter extends _FakeShelfAdapter
     implements ShelfSelectionActionAdapter {
   _FakeSelectableShelfAdapter({
     required super.initialDisplayMode,
+    super.capabilities,
     super.categories,
     super.itemsByCategory,
   });

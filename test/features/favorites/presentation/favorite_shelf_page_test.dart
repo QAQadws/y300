@@ -28,6 +28,7 @@ import 'package:y300/features/library_shared/domain/services/library_task_notifi
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
@@ -73,6 +74,31 @@ void main() {
     expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
     expect(find.text('收藏帖'), findsOneWidget);
     expect(bootstrapper.startCallCount, 1);
+
+    final favoriteTile = find.byKey(
+      ValueKey<String>(
+        'unified-shelf-list-tile-${FavoriteShelfWorkId.fromTid('100')}',
+      ),
+    );
+    expect(
+      tester.getRect(favoriteTile).right -
+          tester.getRect(find.text('收藏帖')).right,
+      closeTo(24, 0.01),
+    );
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(FavoriteShelfPage)),
+    );
+    await tester.tap(find.byKey(const Key('unified-shelf-filter-button')));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.libraryShelfFilterUnread), findsNothing);
+    expect(find.text(l10n.libraryShelfFilterRead), findsNothing);
+    await tester.tap(find.text(l10n.libraryShelfSort));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.libraryShelfSortUnreadCount), findsNothing);
+    expect(find.text(l10n.libraryShelfSortFavoriteAddedAt), findsOneWidget);
+    await tester.tap(find.text(l10n.commonCancel));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('unified-shelf-search-button')));
     await tester.pumpAndSettle();

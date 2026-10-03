@@ -12,6 +12,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
+
 typedef ShelfCategoryAssignUseCaseResolver =
     ShelfCategoryAssignUseCase? Function();
 typedef UnfavoriteThreadUseCaseResolver = UnfavoriteThreadUseCase? Function();
@@ -19,6 +20,7 @@ typedef UnfavoriteThreadUseCaseResolver = UnfavoriteThreadUseCase? Function();
 class FavoriteShelfAdapter
     implements
         ShelfModuleAdapter,
+        ShelfModuleCapabilitiesAdapter,
         ShelfDownloadStatusAdapter,
         ShelfSnapshotAdapter,
         ShelfSelectionActionAdapter {
@@ -91,6 +93,10 @@ class FavoriteShelfAdapter
 
   @override
   LibraryDisplayMode get defaultDisplayMode => LibraryDisplayMode.list;
+
+  @override
+  ShelfModuleCapabilities get capabilities =>
+      const ShelfModuleCapabilities(supportsReadState: false);
 
   @override
   Future<List<LibraryCategory>> loadCategories() async {
@@ -345,5 +351,4 @@ class FavoriteShelfAdapter
       failedCount: failedCount,
     );
   }
-
 }
