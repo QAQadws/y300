@@ -25,15 +25,4 @@ extension NovelRichBlockText on RichBlock {
     }
     return '';
   }
-
-  /// True when this text block is a single standalone link (rendered as a
-  /// tappable link button rather than inline text).
-  bool get isNovelLinkButton {
-    final block = this;
-    return block is RichTextBlock &&
-        !block.isHeading &&
-        block.runs.length == 1 &&
-        block.runs.single.linkUrl != null &&
-        block.runs.single.inlineImage == null;
-  }
 }

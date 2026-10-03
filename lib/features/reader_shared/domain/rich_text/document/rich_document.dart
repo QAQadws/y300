@@ -6,8 +6,8 @@ import 'package:flutter/foundation.dart';
 /// (episode ids, word counts, render settings) stays in the owning feature —
 /// `reader_shared` must not learn those concepts (DIP, plan §7).
 ///
-/// The hierarchy is a sealed value tree: parsers produce it, renderers consume
-/// it, and [RichDocumentCodec] ferries it across isolate boundaries.
+/// The hierarchy is a sealed data-only value tree. Parsers produce it, and
+/// reader services consume it directly, including across isolate boundaries.
 @immutable
 sealed class RichBlock {
   const RichBlock({this.anchorId = '', this.continuesPrevious = false});

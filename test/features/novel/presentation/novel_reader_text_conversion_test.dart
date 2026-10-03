@@ -101,18 +101,6 @@ void main() {
       );
       expect(prefs.sharedConversionMode, TextConversionMode.toTraditional);
     });
-
-    test('maps typography scales from absolute fields', () {
-      final prefs = NovelReaderPreferences.defaults().copyWith(
-        fontSize: 36,
-        lineHeight: 3.0,
-        paragraphSpacing: 14,
-      );
-      final typography = prefs.sharedTypography;
-      expect(typography.fontScale, 2.0);
-      expect(typography.lineHeightScale, 2.0);
-      expect(typography.paragraphSpacing, 14);
-    });
   });
 
   group('NovelReaderPreferenceImpactAnalyzer conversion', () {

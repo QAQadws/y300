@@ -48,7 +48,10 @@ void main() {
     expect(image.altText, '插图');
 
     final link = document.blocks[4] as RichTextBlock;
-    expect(link.isNovelLinkButton, isTrue);
+    expect(
+      link.runs.single.linkUrl,
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123',
+    );
     expect(link.runs.single.linkTid, '123');
   });
 
@@ -89,12 +92,11 @@ void main() {
     );
 
     final block = document.blocks.single as RichTextBlock;
-    expect(block.isNovelLinkButton, isFalse);
     expect(block.novelPlainText, '危险链接');
     expect(block.runs.single.linkUrl, isNull);
   });
 
-  test('keeps paragraph wrapped single link as link block', () {
+  test('preserves paragraph wrapped link text and destination', () {
     final document = parser.parse(
       episodeId: 'ep1',
       rawHtml: '<p><a href="forum.php?mod=viewthread&amp;tid=200">跳转原帖</a></p>',
@@ -102,7 +104,10 @@ void main() {
     );
 
     final block = document.blocks.single as RichTextBlock;
-    expect(block.isNovelLinkButton, isTrue);
+    expect(
+      block.runs.single.linkUrl,
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=200',
+    );
     expect(block.novelPlainText, '跳转原帖');
     expect(block.runs.single.linkTid, '200');
   });

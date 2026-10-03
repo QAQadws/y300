@@ -16,29 +16,6 @@ class NovelReaderDocumentBuildRequest {
   final String episodeId;
   final String rawHtml;
   final List<String> fallbackParagraphs;
-
-  factory NovelReaderDocumentBuildRequest.fromMap(Map<String, Object?> map) {
-    final rawParagraphs =
-        map['fallbackParagraphs'] as List<Object?>? ?? const <Object?>[];
-    return NovelReaderDocumentBuildRequest(
-      episodeId: map['episodeId'] as String? ?? '',
-      rawHtml: map['rawHtml'] as String? ?? '',
-      fallbackParagraphs: rawParagraphs
-          .map((item) => item?.toString() ?? '')
-          .toList(growable: false),
-    );
-  }
-
-  Map<String, Object?> toMap() {
-    return <String, Object?>{
-      'episodeId': episodeId,
-      'rawHtml': rawHtml,
-      'fallbackParagraphs': List<String>.from(
-        fallbackParagraphs,
-        growable: false,
-      ),
-    };
-  }
 }
 
 abstract interface class NovelReaderDocumentBuildExecutor {

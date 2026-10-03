@@ -64,22 +64,6 @@ class ThreadImageOpenRequest {
   }
 }
 
-class ThreadImageOpenContext {
-  const ThreadImageOpenContext({
-    required this.tid,
-    required this.pid,
-    required this.postNumber,
-    required this.referer,
-    required this.cacheKeyForImage,
-  });
-
-  final String tid;
-  final String pid;
-  final int postNumber;
-  final String referer;
-  final String Function(RichImageBlock image) cacheKeyForImage;
-}
-
 class ThreadPostImageOpenRequest {
   const ThreadPostImageOpenRequest({
     required this.document,

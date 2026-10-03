@@ -12,36 +12,40 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/bbcode/forum_bbcode_renderer.dart';
-import 'package:y300/features/composer_shared/presentation/widgets/bbcode_preview_panel.dart';
 
 void main() {
-  testWidgets('BbCodePreviewPanel renders ordinary text', (tester) async {
-    await tester.pumpWidget(_buildPanel(source: '普通文本'));
+  testWidgets('FlutterBbCodeForumRenderer renders ordinary text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPreview(source: '普通文本'));
 
     expect(find.text('普通文本', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('BbCodePreviewPanel renders quote content without crashing', (
+  testWidgets(
+    'FlutterBbCodeForumRenderer renders quote content without crashing',
+    (tester) async {
+      await tester.pumpWidget(_buildPreview(source: '[quote]引用内容[/quote]'));
+
+      expect(find.textContaining('引用内容', findRichText: true), findsOneWidget);
+    },
+  );
+
+  testWidgets('FlutterBbCodeForumRenderer renders color tag without crashing', (
     tester,
   ) async {
-    await tester.pumpWidget(_buildPanel(source: '[quote]引用内容[/quote]'));
-
-    expect(find.textContaining('引用内容', findRichText: true), findsOneWidget);
-  });
-
-  testWidgets('BbCodePreviewPanel renders color tag without crashing', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_buildPanel(source: '[color=#999999]灰色内容[/color]'));
+    await tester.pumpWidget(
+      _buildPreview(source: '[color=#999999]灰色内容[/color]'),
+    );
 
     expect(find.text('灰色内容', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('BbCodePreviewPanel renders Discuz backcolor tag', (
+  testWidgets('FlutterBbCodeForumRenderer renders Discuz backcolor tag', (
     tester,
   ) async {
     await tester.pumpWidget(
-      _buildPanel(source: '[backcolor=#fff3b0]高亮内容[/backcolor]'),
+      _buildPreview(source: '[backcolor=#fff3b0]高亮内容[/backcolor]'),
     );
 
     final span = _findTextSpanWithText(
@@ -51,8 +55,10 @@ void main() {
     expect(span?.style?.backgroundColor, const Color(0xfffff3b0));
   });
 
-  testWidgets('BbCodePreviewPanel renders Discuz size tag', (tester) async {
-    await tester.pumpWidget(_buildPanel(source: '[size=5]大字[/size]'));
+  testWidgets('FlutterBbCodeForumRenderer renders Discuz size tag', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildPreview(source: '[size=5]大字[/size]'));
 
     final span = _findTextSpanWithText(
       tester.widgetList<RichText>(find.byType(RichText)),
@@ -61,10 +67,10 @@ void main() {
     expect(span?.style?.fontSize, 17.5);
   });
 
-  testWidgets('BbCodePreviewPanel renders Discuz size 3 as body size', (
+  testWidgets('FlutterBbCodeForumRenderer renders Discuz size 3 as body size', (
     tester,
   ) async {
-    await tester.pumpWidget(_buildPanel(source: '普通[size=3]默认字[/size]'));
+    await tester.pumpWidget(_buildPreview(source: '普通[size=3]默认字[/size]'));
 
     final richTexts = tester.widgetList<RichText>(find.byType(RichText));
     final ordinaryFontSize = _resolvedFontSizeForText(richTexts, '普通');
@@ -73,20 +79,25 @@ void main() {
     expect(sizeThreeFontSize, ordinaryFontSize);
   });
 
-  testWidgets('BbCodePreviewPanel falls back invalid Discuz size to 3', (
+  testWidgets(
+    'FlutterBbCodeForumRenderer falls back invalid Discuz size to 3',
+    (tester) async {
+      await tester.pumpWidget(_buildPreview(source: '[size=99]默认字[/size]'));
+
+      final span = _findTextSpanWithText(
+        tester.widgetList<RichText>(find.byType(RichText)),
+        '默认字',
+      );
+      expect(span?.style?.fontSize, 14);
+    },
+  );
+
+  testWidgets('FlutterBbCodeForumRenderer renders Discuz align tag', (
     tester,
   ) async {
-    await tester.pumpWidget(_buildPanel(source: '[size=99]默认字[/size]'));
-
-    final span = _findTextSpanWithText(
-      tester.widgetList<RichText>(find.byType(RichText)),
-      '默认字',
+    await tester.pumpWidget(
+      _buildPreview(source: '[align=center]居中内容[/align]'),
     );
-    expect(span?.style?.fontSize, 14);
-  });
-
-  testWidgets('BbCodePreviewPanel renders Discuz align tag', (tester) async {
-    await tester.pumpWidget(_buildPanel(source: '[align=center]居中内容[/align]'));
 
     final alignBox = tester.widget<SizedBox>(
       find.byKey(const Key('reply-bbcode-preview-align-center')),
@@ -102,66 +113,45 @@ void main() {
     expect(find.text('居中内容', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('BbCodePreviewPanel renders Discuz code tag as raw text', (
+  testWidgets(
+    'FlutterBbCodeForumRenderer renders Discuz code tag as raw text',
+    (tester) async {
+      await tester.pumpWidget(_buildPreview(source: '[code][b]raw[/b][/code]'));
+
+      expect(
+        find.byKey(const Key('reply-bbcode-preview-code-block')),
+        findsOneWidget,
+      );
+      expect(find.text('[b]raw[/b]'), findsOneWidget);
+      expect(find.text('raw', findRichText: true), findsNothing);
+    },
+  );
+
+  testWidgets('FlutterBbCodeForumRenderer keeps url label visible', (
     tester,
   ) async {
-    await tester.pumpWidget(_buildPanel(source: '[code][b]raw[/b][/code]'));
-
-    expect(
-      find.byKey(const Key('reply-bbcode-preview-code-block')),
-      findsOneWidget,
-    );
-    expect(find.text('[b]raw[/b]'), findsOneWidget);
-    expect(find.text('raw', findRichText: true), findsNothing);
-  });
-
-  testWidgets('BbCodePreviewPanel keeps url label visible', (tester) async {
     await tester.pumpWidget(
-      _buildPanel(source: '[url=https://example.com]链接文字[/url]'),
+      _buildPreview(source: '[url=https://example.com]链接文字[/url]'),
     );
 
     expect(find.text('链接文字', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('BbCodePreviewPanel renders stable empty state', (tester) async {
-    await tester.pumpWidget(_buildPanel(source: '   '));
+  testWidgets(
+    'FlutterBbCodeForumRenderer falls back to raw source for bad BBCode',
+    (tester) async {
+      const badSource = '[b]hello[/i][/b]';
+      await tester.pumpWidget(_buildPreview(source: badSource));
 
-    expect(
-      find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('reply-composer-bbcode-preview-empty')),
-      findsOneWidget,
-    );
-  });
+      expect(find.text(badSource), findsOneWidget);
+    },
+  );
 
-  testWidgets('BbCodePreviewPanel renders without framed decoration', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_buildPanel(source: '普通文本'));
-
-    final panel = tester.widget<Container>(
-      find.byKey(const Key('reply-composer-bbcode-preview-panel')),
-    );
-    expect(panel.decoration, isNull);
-    expect(panel.padding, isNull);
-  });
-
-  testWidgets('BbCodePreviewPanel falls back to raw source for bad BBCode', (
-    tester,
-  ) async {
-    const badSource = '[b]hello[/i][/b]';
-    await tester.pumpWidget(_buildPanel(source: badSource));
-
-    expect(find.text(badSource), findsOneWidget);
-  });
-
-  testWidgets('BbCodePreviewPanel disables remote image preview', (
+  testWidgets('FlutterBbCodeForumRenderer disables remote image preview', (
     tester,
   ) async {
     await tester.pumpWidget(
-      _buildPanel(source: '[img]https://example.com/a.png[/img]'),
+      _buildPreview(source: '[img]https://example.com/a.png[/img]'),
     );
 
     expect(find.byType(Image), findsNothing);
@@ -171,30 +161,34 @@ void main() {
     );
   });
 
-  testWidgets('BbCodePreviewPanel renders known sticker with preview builder', (
+  testWidgets(
+    'FlutterBbCodeForumRenderer renders known sticker with preview builder',
+    (tester) async {
+      final sticker = _sticker();
+
+      await tester.pumpWidget(
+        _buildPreview(source: '表情{:9_656:}', stickers: [sticker]),
+      );
+
+      expect(
+        find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
+        findsOneWidget,
+      );
+      expect(find.byType(_TestStickerPreviewImage), findsOneWidget);
+      expect(
+        find.textContaining('{:9_656:}', findRichText: true),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('FlutterBbCodeForumRenderer aligns sticker bottom with text', (
     tester,
   ) async {
     final sticker = _sticker();
 
     await tester.pumpWidget(
-      _buildPanel(source: '表情{:9_656:}', stickers: [sticker]),
-    );
-
-    expect(
-      find.byKey(const Key('reply-bbcode-preview-sticker-{:9_656:}')),
-      findsOneWidget,
-    );
-    expect(find.byType(_TestStickerPreviewImage), findsOneWidget);
-    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
-  });
-
-  testWidgets('BbCodePreviewPanel aligns sticker bottom with text', (
-    tester,
-  ) async {
-    final sticker = _sticker();
-
-    await tester.pumpWidget(
-      _buildPanel(source: '文字{:9_656:}', stickers: [sticker]),
+      _buildPreview(source: '文字{:9_656:}', stickers: [sticker]),
     );
 
     final stickerSpan = _findWidgetSpan(
@@ -206,32 +200,36 @@ void main() {
     expect(stickerSpan!.alignment, PlaceholderAlignment.bottom);
   });
 
-  testWidgets('BbCodePreviewPanel hides known sticker code when image fails', (
-    tester,
-  ) async {
-    final sticker = _sticker(imagePath: 'missing/missing.gif');
+  testWidgets(
+    'FlutterBbCodeForumRenderer hides known sticker code when image fails',
+    (tester) async {
+      final sticker = _sticker(imagePath: 'missing/missing.gif');
 
-    await tester.pumpWidget(
-      _buildPanel(
-        source: '{:9_656:}',
-        renderer: FlutterBbCodeForumRenderer(
-          stickerImageBuilder: (_, key) {
-            return Icon(Icons.broken_image_outlined, key: key);
-          },
+      await tester.pumpWidget(
+        _buildPreview(
+          source: '{:9_656:}',
+          renderer: FlutterBbCodeForumRenderer(
+            stickerImageBuilder: (_, key) {
+              return Icon(Icons.broken_image_outlined, key: key);
+            },
+          ),
+          stickers: [sticker],
         ),
-        stickers: [sticker],
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
-    expect(find.textContaining('{:9_656:}', findRichText: true), findsNothing);
-  });
+      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+      expect(
+        find.textContaining('{:9_656:}', findRichText: true),
+        findsNothing,
+      );
+    },
+  );
 
-  testWidgets('BbCodePreviewPanel keeps unknown sticker code as text', (
+  testWidgets('FlutterBbCodeForumRenderer keeps unknown sticker code as text', (
     tester,
   ) async {
-    await tester.pumpWidget(_buildPanel(source: '未知{:9_999:}'));
+    await tester.pumpWidget(_buildPreview(source: '未知{:9_999:}'));
 
     expect(
       find.textContaining('{:9_999:}', findRichText: true),
@@ -239,38 +237,39 @@ void main() {
     );
   });
 
-  testWidgets('BbCodePreviewPanel renders known attach as local image', (
-    tester,
-  ) async {
-    const path = 'E:/test/reply/known.png';
-    final attachment = _uploadedAttachment(aid: '123456', path: path);
+  testWidgets(
+    'FlutterBbCodeForumRenderer renders known attach as local image',
+    (tester) async {
+      const path = 'E:/test/reply/known.png';
+      final attachment = _uploadedAttachment(aid: '123456', path: path);
 
-    await tester.pumpWidget(
-      _buildPanel(
-        source: '正文\n[attach]123456[/attach]',
-        imageAttachments: [attachment],
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _buildPreview(
+          source: '正文\n[attach]123456[/attach]',
+          imageAttachments: [attachment],
+        ),
+      );
+      await tester.pump();
 
-    final previewImage = tester.widget<_TestAttachPreviewImage>(
-      find.byKey(const Key('reply-bbcode-preview-attach-123456')),
-    );
-    expect(previewImage.file.path, path);
-    expect(
-      find.textContaining('[attach]123456[/attach]', findRichText: true),
-      findsNothing,
-    );
-  });
+      final previewImage = tester.widget<_TestAttachPreviewImage>(
+        find.byKey(const Key('reply-bbcode-preview-attach-123456')),
+      );
+      expect(previewImage.file.path, path);
+      expect(
+        find.textContaining('[attach]123456[/attach]', findRichText: true),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets(
-    'BbCodePreviewPanel keeps multiple attach images in source order',
+    'FlutterBbCodeForumRenderer keeps multiple attach images in source order',
     (tester) async {
       const firstPath = 'E:/test/reply/first.png';
       const secondPath = 'E:/test/reply/second.png';
 
       await tester.pumpWidget(
-        _buildPanel(
+        _buildPreview(
           source: '[attach]111[/attach]\n文字\n[attach]222[/attach]',
           imageAttachments: [
             _uploadedAttachment(aid: '222', path: secondPath),
@@ -291,10 +290,10 @@ void main() {
   );
 
   testWidgets(
-    'BbCodePreviewPanel does not show broken image for missing file',
+    'FlutterBbCodeForumRenderer does not show broken image for missing file',
     (tester) async {
       await tester.pumpWidget(
-        _buildPanel(
+        _buildPreview(
           source: '[attach]123456[/attach]',
           renderer: const FlutterBbCodeForumRenderer(
             attachImageBuilder: _buildTestAttachPreviewImage,
@@ -314,41 +313,42 @@ void main() {
     },
   );
 
-  testWidgets('BbCodePreviewPanel keeps invalid attachment statuses as text', (
-    tester,
-  ) async {
-    const path = 'E:/test/reply/failed.png';
+  testWidgets(
+    'FlutterBbCodeForumRenderer keeps invalid attachment statuses as text',
+    (tester) async {
+      const path = 'E:/test/reply/failed.png';
 
-    for (final status in [
-      ComposerImageAttachmentStatus.local,
-      ComposerImageAttachmentStatus.failed,
-      ComposerImageAttachmentStatus.expired,
-    ]) {
-      await tester.pumpWidget(
-        _buildPanel(
-          source: '[attach]123456[/attach]',
-          imageAttachments: [
-            _uploadedAttachment(aid: '123456', path: path, status: status),
-          ],
-        ),
-      );
+      for (final status in [
+        ComposerImageAttachmentStatus.local,
+        ComposerImageAttachmentStatus.failed,
+        ComposerImageAttachmentStatus.expired,
+      ]) {
+        await tester.pumpWidget(
+          _buildPreview(
+            source: '[attach]123456[/attach]',
+            imageAttachments: [
+              _uploadedAttachment(aid: '123456', path: path, status: status),
+            ],
+          ),
+        );
 
-      expect(find.byType(Image), findsNothing);
-      expect(
-        find.textContaining('[attach]123456[/attach]', findRichText: true),
-        findsOneWidget,
-      );
-    }
-  });
+        expect(find.byType(Image), findsNothing);
+        expect(
+          find.textContaining('[attach]123456[/attach]', findRichText: true),
+          findsOneWidget,
+        );
+      }
+    },
+  );
 
   testWidgets(
-    'BbCodePreviewPanel supports stickers and attach images together',
+    'FlutterBbCodeForumRenderer supports stickers and attach images together',
     (tester) async {
       final sticker = _sticker();
       const path = 'E:/test/reply/mixed.png';
 
       await tester.pumpWidget(
-        _buildPanel(
+        _buildPreview(
           source: '{:9_656:}\n[attach]123456[/attach]',
           stickers: [sticker],
           imageAttachments: [_uploadedAttachment(aid: '123456', path: path)],
@@ -368,7 +368,7 @@ void main() {
   );
 }
 
-Widget _buildPanel({
+Widget _buildPreview({
   required String source,
   ForumBbCodeRenderer? renderer,
   List<StickerItem> stickers = const [],
@@ -384,11 +384,13 @@ Widget _buildPanel({
         ),
       ],
       child: Scaffold(
-        body: BbCodePreviewPanel(
-          source: source,
-          renderer: renderer ?? _testRenderer,
-          stickers: stickers,
-          imageAttachments: imageAttachments,
+        body: Builder(
+          builder: (context) => (renderer ?? _testRenderer).buildPreview(
+            context,
+            source,
+            stickers: stickers,
+            imageAttachments: imageAttachments,
+          ),
         ),
       ),
     ),

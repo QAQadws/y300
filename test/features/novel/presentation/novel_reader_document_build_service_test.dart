@@ -10,10 +10,13 @@ void main() {
     () async {
       final request = NovelReaderDocumentBuildRequest(
         episodeId: 'fixture-background',
-        rawHtml: List.filled(
-          180,
-          '<p>正文<b>粗体</b><a href="https://example.org">链接</a></p>',
-        ).join(),
+        rawHtml:
+            '''
+<h2>章节标题</h2>
+<blockquote><b>引用粗体</b><i>引用斜体</i><font color="#ff0000">引用颜色</font><a href="forum.php?mod=viewthread&amp;tid=100">引用链接</a></blockquote>
+<img aid="4567" width="800" height="1200" src="//bbs.yamibo.com/data/attachment/forum/novel.jpg" alt="插图">
+${List.filled(180, '<p>正文<b>粗体</b><a href="https://example.org">链接</a></p>').join()}
+''',
         fallbackParagraphs: const [],
       );
       final background = await const IsolateNovelReaderDocumentBuildExecutor()
@@ -30,6 +33,32 @@ void main() {
         local.blocks.map((block) => block.anchorId),
       );
       expect(background.wordCount, local.wordCount);
+
+      final heading = background.blocks[0] as RichTextBlock;
+      expect(heading.isHeading, isTrue);
+      expect(heading.plainText, '章节标题');
+
+      final quote = background.blocks[1] as RichQuoteBlock;
+      final localQuote = local.blocks[1] as RichQuoteBlock;
+      final quotedText = quote.blocks.single as RichTextBlock;
+      final localQuotedText = localQuote.blocks.single as RichTextBlock;
+      expect(quote.anchorId, localQuote.anchorId);
+      expect(quotedText.anchorId, localQuotedText.anchorId);
+      expect(quotedText.runs.first.isBold, isTrue);
+      expect(quotedText.runs[1].isItalic, isTrue);
+      expect(quotedText.runs[2].color, '#ff0000');
+      expect(quotedText.runs.last.linkTid, '100');
+      expect(quotedText.runs.last.linkUrl, localQuotedText.runs.last.linkUrl);
+
+      final image = background.blocks[2] as RichImageBlock;
+      final localImage = local.blocks[2] as RichImageBlock;
+      expect(image.url, localImage.url);
+      expect(image.rawUrl, localImage.rawUrl);
+      expect(image.index, localImage.index);
+      expect(image.aid, '4567');
+      expect(image.altText, '插图');
+      expect(image.originalWidth, 800);
+      expect(image.originalHeight, 1200);
     },
   );
 
