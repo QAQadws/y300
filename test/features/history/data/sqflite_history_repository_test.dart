@@ -69,6 +69,40 @@ void main() {
     );
 
     test(
+      'v1 reopens persisted WebView visits without a display-mode migration',
+      () async {
+        const mapper = HistoryRowMapper();
+        final row = mapper.toRow(
+          _entry(
+            type: HistoryTargetType.thread,
+            id: '527325',
+            title: 'server subject',
+            at: _time(1),
+            page: 4,
+          ),
+        )..['last_surface'] = 'threadWebView';
+        await db.insert(HistoryLocalDb.entriesTable, row);
+        repository.dispose();
+        await db.close();
+
+        final reopened = HistoryLocalDb.open(databaseName: dbName);
+        db = await reopened;
+        repository = SqfliteHistoryRepository(reopened);
+        final visit = (await repository.query(
+          const HistoryQuery(),
+        )).items.single;
+
+        expect(await db.getVersion(), 1);
+        expect(visit.lastSurface, HistoryVisitSurface.threadWebView);
+        expect(
+          visit.target,
+          const HistoryTargetKey(type: HistoryTargetType.thread, id: '527325'),
+        );
+        expect(visit.lastPage, 4);
+      },
+    );
+
+    test(
       'v1 retains existing entries while round-tripping blog snapshots',
       () async {
         for (final type in [
