@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/profile/presentation/widgets/profile_identity_card.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/l10n/app_localizations.dart';
-import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// Profile composition stays independent of repositories and route ownership.
@@ -85,6 +84,7 @@ class ProfileContent extends StatelessWidget {
     final metrics = supports(ForumUserProfileCapability.orderedMetrics)
         ? profile.metrics
         : <ForumUserProfileMetric>[];
+    final additionalMetrics = metrics.skip(3).toList(growable: false);
 
     return ListView(
       key: const Key('user-profile-page-list'),
@@ -112,8 +112,9 @@ class ProfileContent extends StatelessWidget {
                       style: TextStyle(color: colors.supportingText),
                     ),
                   ),
-                _IdentityCard(
+                ProfileIdentityCard(
                   profile: profile,
+                  metrics: metrics.take(3).toList(growable: false),
                   avatarUrl:
                       supports(ForumUserProfileCapability.avatarReference)
                       ? profile.avatarUrl
@@ -178,9 +179,9 @@ class ProfileContent extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (metrics.isNotEmpty) ...[
+                if (additionalMetrics.isNotEmpty) ...[
                   _SectionHeading(title: l10n.profileCreditOverview),
-                  _Metrics(metrics: metrics),
+                  _Metrics(metrics: additionalMetrics),
                 ],
                 if (details.isNotEmpty)
                   Column(
@@ -208,199 +209,6 @@ class ProfileContent extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _IdentityCard extends StatelessWidget {
-  const _IdentityCard({
-    required this.profile,
-    required this.avatarUrl,
-    required this.imageReferer,
-    required this.onCopyUid,
-  });
-
-  final ForumUserProfileData profile;
-  final String? avatarUrl;
-  final String imageReferer;
-  final VoidCallback onCopyUid;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.y300NativeContent;
-    final l10n = AppLocalizations.of(context);
-    return ProfileSurface(
-      key: const Key('user-profile-identity'),
-      padding: EdgeInsets.zero,
-      child: Stack(
-        children: [
-          Positioned(
-            top: -70,
-            right: -50,
-            child: Container(
-              width: 210,
-              height: 210,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: colors.accent.withValues(alpha: 0.045),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: colors.accent.withValues(alpha: 0.14),
-                        ),
-                      ),
-                      child: ForumCachedAvatar(
-                        key: const Key('user-profile-avatar'),
-                        imageUrl: avatarUrl,
-                        ownerId: profile.identity.userId,
-                        ownerType: ImageCacheOwnerType.profile,
-                        size: 68,
-                        imageReferer: imageReferer,
-                        fallbackPolicy:
-                            ForumAvatarFallbackPolicy.localDefaultAvatar,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            profile.identity.displayName ??
-                                profile.identity.userId,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              color: colors.itemTitle,
-                              fontWeight: FontWeight.w700,
-                              height: 1.25,
-                            ),
-                          ),
-                          if (profile.groupName?.isNotEmpty == true ||
-                              profile.isOnline == true) ...[
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                if (profile.groupName?.isNotEmpty == true)
-                                  _Badge(label: profile.groupName!),
-                                if (profile.isOnline == true)
-                                  _Badge(
-                                    label: l10n.profileOnline,
-                                    online: true,
-                                  ),
-                              ],
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          // Reserve one line so an absent title does not move
-                          // the UID or resize the identity card.
-                          Tooltip(
-                            message: profile.customTitle?.trim() ?? '',
-                            excludeFromSemantics: true,
-                            child: Text(
-                              profile.customTitle?.trim().isNotEmpty == true
-                                  ? profile.customTitle!.trim()
-                                  : ' ',
-                              key: const Key('user-profile-custom-title'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colors.supportingText,
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        l10n.profileUid(profile.identity.userId),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: colors.supportingText,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      key: const Key('user-profile-copy-uid'),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: l10n.profileCopyUid,
-                      onPressed: onCopyUid,
-                      icon: Icon(
-                        Icons.copy_rounded,
-                        size: 16,
-                        color: colors.supportingText,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, this.online = false});
-  final String label;
-  final bool online;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).y300NativeContent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: colors.panelBackground,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (online) ...[
-            Container(
-              width: 5,
-              height: 5,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: colors.accent,
-              ),
-            ),
-            const SizedBox(width: 5),
-          ],
-          Flexible(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colors.body,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -576,7 +384,7 @@ class _Metrics extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).y300NativeContent;
     return ProfileSurface(
-      key: const Key('user-profile-metrics'),
+      key: const Key('user-profile-additional-metrics'),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final scale = MediaQuery.textScalerOf(context).scale(14) / 14;

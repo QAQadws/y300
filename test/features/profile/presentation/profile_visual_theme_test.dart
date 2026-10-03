@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
+import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -55,6 +56,18 @@ void main() {
             );
             expect(
               find.byKey(const Key('user-profile-identity')),
+              findsOneWidget,
+            );
+            final identity = find.byKey(const Key('user-profile-identity'));
+            expect(
+              tester.widget<Card>(identity).color,
+              Theme.of(tester.element(identity)).y300NativeContent.card,
+            );
+            expect(
+              find.descendant(
+                of: find.byKey(const Key('user-profile-identity')),
+                matching: find.byKey(const Key('user-profile-metrics')),
+              ),
               findsOneWidget,
             );
             expect(
@@ -163,11 +176,120 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('header omits the credit unit and leaves extra metrics below', (
+    tester,
+  ) async {
+    const metrics = [
+      ForumUserProfileMetric(label: '总积分', value: '0'),
+      ForumUserProfileMetric(label: '积分', value: '-1 点'),
+      ForumUserProfileMetric(label: '对象', value: '128'),
+      ForumUserProfileMetric(label: '纪念币', value: '9 枚'),
+    ];
+    await _pump(
+      tester,
+      AppThemeFamily.warmPaper,
+      Brightness.light,
+      profile: _profile(false, metrics: metrics),
+    );
+    final identity = find.byKey(const Key('user-profile-identity'));
+    final avatar = tester.getRect(find.byKey(const Key('user-profile-avatar')));
+    var previousX = avatar.right;
+    for (final metric in metrics.take(3)) {
+      final displayValue = metric.label == '积分' ? '-1' : metric.value;
+      final value = find.descendant(
+        of: identity,
+        matching: find.text(displayValue),
+      );
+      final label = find.descendant(
+        of: identity,
+        matching: find.text(metric.label),
+      );
+      expect(value, findsOneWidget);
+      expect(tester.getTopLeft(value).dx, greaterThan(previousX));
+      expect(tester.getBottomLeft(label).dy, closeTo(avatar.bottom, 0.1));
+      previousX = tester.getTopLeft(value).dx;
+      expect(find.text(displayValue), findsOneWidget);
+    }
+    expect(find.text('-1 点'), findsNothing);
+    final extra = find.byKey(const Key('user-profile-additional-metrics'));
+    expect(
+      find.descendant(of: identity, matching: find.text(metrics.last.value)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: extra, matching: find.text(metrics.last.value)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('missing statistics do not invent balances', (tester) async {
+    await _pump(
+      tester,
+      AppThemeFamily.moonWhite,
+      Brightness.light,
+      profile: _profile(false, metrics: []),
+    );
+    expect(find.byKey(const Key('user-profile-metrics')), findsNothing);
+    expect(
+      find.byKey(const Key('user-profile-additional-metrics')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('user-profile-copy-uid')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await _save(tester, 'no-statistics');
+  });
+
+  testWidgets('long balances reflow and expose their full text', (
+    tester,
+  ) async {
+    const displayValue = '123456789012345678901234567890';
+    const longValue = '$displayValue 点';
+    await _pump(
+      tester,
+      AppThemeFamily.warmPaper,
+      Brightness.light,
+      large: true,
+      profile: _profile(
+        false,
+        metrics: const [
+          ForumUserProfileMetric(label: '总积分', value: '2048'),
+          ForumUserProfileMetric(label: '积分', value: longValue),
+          ForumUserProfileMetric(label: '对象', value: '128'),
+        ],
+      ),
+    );
+    final total = find.text('2048');
+    final credits = find.text(displayValue);
+    expect(
+      tester.getTopLeft(credits).dy,
+      greaterThan(tester.getBottomLeft(total).dy),
+    );
+    final text = tester.widget<Text>(total);
+    final rendered = tester.renderObject<RenderParagraph>(total);
+    expect(rendered.didExceedMaxLines, isFalse);
+    expect(text.maxLines, 1);
+    await _save(tester, 'large-long-balances');
+    final l10n = AppLocalizations.of(tester.element(credits));
+    await tester.longPress(credits);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(l10n.moreAccountStatistic('积分', displayValue)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final large in [false, true]) {
     testWidgets(
-      'custom title stays below the group without resizing, large=$large',
+      'title sits below identity without changing height, large=$large',
       (tester) async {
-        final profile = _profile(false);
+        final profile = _profile(
+          false,
+          displayName: '夏日',
+          customTitle: '晴日',
+          isOnline: false,
+        );
         await _pump(
           tester,
           AppThemeFamily.warmPaper,
@@ -181,16 +303,31 @@ void main() {
           of: identity,
           matching: find.text(profile.groupName!),
         );
-        final avatar = find.byKey(const Key('user-profile-avatar'));
+        final name = find.byKey(const Key('user-profile-name'));
+        final copyUid = find.byKey(const Key('user-profile-copy-uid'));
         final withTitleHeight = tester.getSize(identity).height;
+        expect(
+          tester.getTopLeft(title).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(name).dy),
+        );
         expect(
           tester.getTopLeft(title).dy,
           greaterThanOrEqualTo(tester.getBottomLeft(group).dy),
         );
-        expect(
-          tester.getTopLeft(title).dx,
-          greaterThan(tester.getTopRight(avatar).dx),
-        );
+        if (!large) {
+          expect(
+            tester.getCenter(name).dy,
+            closeTo(tester.getCenter(group).dy, 0.5),
+          );
+          expect(
+            tester.getTopLeft(group).dx,
+            greaterThan(tester.getTopRight(name).dx),
+          );
+          expect(
+            tester.getCenter(name).dy,
+            closeTo(tester.getCenter(copyUid).dy, 0.5),
+          );
+        }
         await _save(
           tester,
           'identity-${large ? 'large' : 'normal'}-with-title',
@@ -202,7 +339,12 @@ void main() {
           AppThemeFamily.warmPaper,
           Brightness.light,
           large: large,
-          profile: _profile(false, customTitle: null),
+          profile: _profile(
+            false,
+            displayName: profile.identity.displayName,
+            customTitle: null,
+            isOnline: false,
+          ),
         );
         expect(tester.getSize(identity).height, closeTo(withTitleHeight, 0.01));
         expect(find.text(profile.customTitle!), findsNothing);
@@ -214,6 +356,154 @@ void main() {
       },
     );
   }
+
+  testWidgets('numeric username and group share a row above the title', (
+    tester,
+  ) async {
+    final profile = _profile(
+      false,
+      displayName: '2834758851',
+      userId: '597454',
+      groupName: '百合花蕾',
+      customTitle: '把喜欢的故事留在日常里',
+      isOnline: false,
+    );
+    await _pump(
+      tester,
+      AppThemeFamily.warmPaper,
+      Brightness.light,
+      profile: profile,
+    );
+    final identity = find.byKey(const Key('user-profile-identity'));
+    final name = find.byKey(const Key('user-profile-name'));
+    final group = find.descendant(
+      of: identity,
+      matching: find.text(profile.groupName!),
+    );
+    final title = find.byKey(const Key('user-profile-custom-title'));
+    expect(tester.getCenter(name).dy, closeTo(tester.getCenter(group).dy, 0.5));
+    expect(
+      tester.getTopLeft(group).dx,
+      greaterThan(tester.getTopRight(name).dx),
+    );
+    for (final field in [name, group]) {
+      expect(
+        tester.getTopLeft(title).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(field).dy),
+      );
+    }
+    final l10n = AppLocalizations.of(tester.element(identity));
+    expect(find.text(l10n.profileUid('597454')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await _save(tester, 'identity-numeric-name');
+  });
+
+  testWidgets('long custom title truncates and exposes its full text', (
+    tester,
+  ) async {
+    const customTitle = '把喜欢的故事留在温柔的日常里愿每一次相遇都留下温暖明亮的回声';
+    await _pump(
+      tester,
+      AppThemeFamily.warmPaper,
+      Brightness.light,
+      profile: _profile(false, customTitle: customTitle, isOnline: false),
+    );
+    final title = find.byKey(const Key('user-profile-custom-title'));
+    final text = tester.widget<Text>(title);
+    expect(text.data, customTitle);
+    expect(text.maxLines, 1);
+    expect(text.overflow, TextOverflow.ellipsis);
+    expect(
+      tester.renderObject<RenderParagraph>(title).didExceedMaxLines,
+      isTrue,
+    );
+    await _save(tester, 'identity-long-title');
+    await tester.longPress(title);
+    await tester.pumpAndSettle();
+    expect(find.text(customTitle), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final large in [false, true]) {
+    testWidgets(
+      'long identity fields stay bounded and keep UID accessible, large=$large',
+      (tester) async {
+        const userId = '123456789012345678901234567890';
+        const displayName = '很长的用户名在窄屏下仍应保留可读身份和复制按钮';
+        const groupName = '这是服务器返回的很长用户组名称需要安全显示';
+        await _pump(
+          tester,
+          AppThemeFamily.moonWhite,
+          Brightness.light,
+          large: large,
+          profile: _profile(
+            false,
+            userId: userId,
+            displayName: displayName,
+            groupName: groupName,
+          ),
+        );
+        final identity = find.byKey(const Key('user-profile-identity'));
+        final name = find.byKey(const Key('user-profile-name'));
+        final copyUid = find.byKey(const Key('user-profile-copy-uid'));
+        final group = find.descendant(
+          of: identity,
+          matching: find.text(groupName),
+        );
+        final l10n = AppLocalizations.of(tester.element(identity));
+        expect(tester.widget<Text>(name).data, displayName);
+        expect(find.text(l10n.profileUid(userId)), findsOneWidget);
+        expect(group, findsOneWidget);
+        final card = tester.getRect(identity);
+        for (final field in [name, copyUid, group]) {
+          final bounds = tester.getRect(field);
+          expect(bounds.left, greaterThanOrEqualTo(card.left));
+          expect(bounds.right, lessThanOrEqualTo(card.right));
+          expect(bounds.bottom, lessThanOrEqualTo(card.bottom));
+        }
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(copyUid);
+        await tester.pumpAndSettle();
+        expect(copyUid.hitTestable(), findsOneWidget);
+        expect(tester.widget<TextButton>(copyUid).onPressed, isNotNull);
+        await _save(
+          tester,
+          'identity-long-fields-${large ? 'large' : 'normal'}',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('system bold and text spacing keep identity fields bounded', (
+    tester,
+  ) async {
+    const groupName = '活跃的百合花蕾会员';
+    await _pump(
+      tester,
+      AppThemeFamily.warmPaper,
+      Brightness.light,
+      width: 330,
+      boldText: true,
+      letterSpacing: 8,
+      wordSpacing: 8,
+      profile: _profile(false, groupName: groupName),
+    );
+    final identity = find.byKey(const Key('user-profile-identity'));
+    final card = tester.getRect(identity);
+    for (final field in [
+      find.byKey(const Key('user-profile-name')),
+      find.byKey(const Key('user-profile-copy-uid')),
+      find.descendant(of: identity, matching: find.text(groupName)),
+      find.byKey(const Key('user-profile-custom-title')),
+    ]) {
+      final bounds = tester.getRect(field);
+      expect(bounds.left, greaterThanOrEqualTo(card.left));
+      expect(bounds.right, lessThanOrEqualTo(card.right));
+    }
+    expect(tester.takeException(), isNull);
+    await _save(tester, 'identity-system-text-spacing');
+  });
 
   testWidgets(
     'signature and website links invoke navigation with the original URL',
@@ -282,6 +572,9 @@ Future<void> _pump(
   double? width,
   Locale locale = const Locale('zh'),
   ForumUserProfileData? profile,
+  bool boldText = false,
+  double? letterSpacing,
+  double? wordSpacing,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width ?? (large ? 300 : 390), 844);
@@ -312,12 +605,22 @@ Future<void> _pump(
           debugShowCheckedModeBanner: false,
           locale: locale,
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(large ? 2 : 1)),
+            data: MediaQuery.of(context)
+                .copyWith(
+                  textScaler: TextScaler.linear(large ? 2 : 1),
+                  boldText: boldText,
+                )
+                .applyTextStyleOverrides(
+                  lineHeightScaleFactorOverride: null,
+                  letterSpacingOverride: letterSpacing,
+                  wordSpacingOverride: wordSpacing,
+                  paragraphSpacingOverride: null,
+                ),
             child: child!,
           ),
-          home: self ? const MyProfilePage() : const UserProfilePage(uid: '8'),
+          home: self
+              ? const MyProfilePage()
+              : UserProfilePage(uid: profile?.identity.userId ?? '8'),
         ),
       ),
     ),
@@ -333,32 +636,40 @@ ForumUserProfileData _profile(
   bool self, {
   String? signatureHtml,
   String? customTitle = '在故事与日常之间',
+  String? displayName = '夏日回声',
+  String? groupName = '普通会员',
+  String? userId,
+  bool? isOnline = true,
+  List<ForumUserProfileMetric>? metrics,
 }) => ForumUserProfileData(
   identity: ProfileUserIdentity(
-    userId: self ? '101' : '8',
-    displayName: '夏日回声',
+    userId: userId ?? (self ? '101' : '8'),
+    displayName: displayName,
   ),
   viewerUserId: '101',
-  groupName: '普通会员',
+  groupName: groupName,
   customTitle: customTitle,
-  isOnline: true,
-  metrics: const [
-    ForumUserProfileMetric(label: '总积分', value: '2048'),
-    ForumUserProfileMetric(label: '积分', value: '1900 点'),
-    ForumUserProfileMetric(label: '对象', value: '128'),
-  ],
+  isOnline: isOnline,
+  metrics:
+      metrics ??
+      const [
+        ForumUserProfileMetric(label: '总积分', value: '2048'),
+        ForumUserProfileMetric(label: '积分', value: '1900 点'),
+        ForumUserProfileMetric(label: '对象', value: '128'),
+      ],
   signatureHtml: signatureHtml ?? '<p>把喜欢的故事，留在温柔的日常里。</p>',
   details: [
     ForumUserProfileDetail(
       label: 'UID',
-      value: self ? '101' : '8',
+      value: userId ?? (self ? '101' : '8'),
       section: ForumUserProfileDetailSection.account,
     ),
-    const ForumUserProfileDetail(
-      label: '用户组',
-      value: '普通会员',
-      section: ForumUserProfileDetailSection.account,
-    ),
+    if (groupName != null)
+      ForumUserProfileDetail(
+        label: '用户组',
+        value: groupName,
+        section: ForumUserProfileDetailSection.account,
+      ),
     const ForumUserProfileDetail(
       label: '个人主页',
       value: 'https://example.test/works',
