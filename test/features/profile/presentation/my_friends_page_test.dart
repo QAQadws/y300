@@ -95,61 +95,218 @@ void main() {
     expect(find.byKey(const Key('my-friends-user-202')), findsOneWidget);
   });
 
+  for (final scope in ForumFriendFeedScope.values) {
+    testWidgets(
+      'every card region in $scope dispatches the source profile link exactly once',
+      (tester) async {
+        final repository = _metadataRepository();
+        final removal = FriendRemovalFixture();
+        final links = <String>[];
+        final conversations =
+            <({ForumConversationTarget target, String title})>[];
+        await _pumpPage(
+          tester,
+          repository: repository,
+          removal: removal,
+          page: MyFriendsPage(
+            initialScope: scope,
+            onOpenLink: (_, url) => links.add(url),
+            onOpenConversation: (_, target, title) =>
+                conversations.add((target: target, title: title)),
+          ),
+        );
+        final l10n = _l10n(tester);
+        expect(repository.requests.single.query.scope, scope);
+        expect(find.text(_friendName), findsOneWidget);
+        expect(find.text(_friendNote), findsOneWidget);
+        expect(find.text(l10n.profileFriendsOnlineStatus), findsOneWidget);
+        expect(
+          find.text(l10n.profileFriendsVisitedAt(_friendVisitedAt)),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('my-friends-message-202')), findsNothing);
+        expect(find.byKey(const Key('my-friends-remove-202')), findsNothing);
+
+        for (final region in _friendRegions) {
+          links.clear();
+          await _gestureFriendRegion(tester, region);
+          await tester.pumpAndSettle();
+
+          expect(
+            links,
+            [_friendProfileUrl],
+            reason: '$scope $region must dispatch the source profile link once',
+          );
+          expect(
+            conversations,
+            isEmpty,
+            reason: '$scope $region must not send PM',
+          );
+          expect(removal.requests, isEmpty);
+          expect(
+            find.byKey(const Key('my-friends-actions-sheet')),
+            findsNothing,
+          );
+          expect(repository.requests, hasLength(1));
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
+
   testWidgets(
-    'avatar and name open profiles while note and card padding open private conversations',
+    'a friend without a source profile link can only use its long press actions',
     (tester) async {
-      final repository = FriendFeedFixture(autoComplete: true);
-      repository.items = [
-        friendFeedItem(
-          '202',
-          username: 'Alice',
-          note: 'Server note',
-          visitedAtText: '2026-10-03 10:00',
-          isOnline: true,
-        ),
-      ];
-      final users = <String>[];
-      final conversations =
-          <({ForumConversationTarget target, String title})>[];
+      final repository = FriendFeedFixture(autoComplete: true)
+        ..items = const [
+          ForumFriendFeedItem(
+            userId: '202',
+            username: _friendName,
+            profileUrl: null,
+            note: _friendNote,
+            visitedAtText: _friendVisitedAt,
+            isOnline: true,
+            canRemove: true,
+          ),
+        ];
+      final removal = FriendRemovalFixture();
+      final links = <String>[];
+      final conversations = <ForumConversationTarget>[];
       await _pumpPage(
         tester,
         repository: repository,
+        removal: removal,
         page: MyFriendsPage(
-          onOpenUser: (_, userId) => users.add(userId),
-          onOpenConversation: (_, target, title) =>
-              conversations.add((target: target, title: title)),
+          onOpenLink: (_, url) => links.add(url),
+          onOpenConversation: (_, target, _) => conversations.add(target),
         ),
       );
-      final l10n = _l10n(tester);
-      expect(find.text('Alice'), findsOneWidget);
-      expect(find.text('Server note'), findsOneWidget);
-      expect(find.text(l10n.profileFriendsOnlineStatus), findsOneWidget);
-      expect(
-        find.text(l10n.profileFriendsVisitedAt('2026-10-03 10:00')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('my-friends-message-202')), findsNothing);
-      expect(find.byKey(const Key('my-friends-remove-202')), findsNothing);
-      await tester.tap(find.byKey(const Key('my-friends-avatar-202')));
-      expect(users, ['202']);
-      expect(conversations, isEmpty);
-      await tester.tap(find.byKey(const Key('my-friends-name-202')));
-      expect(users, ['202', '202']);
-      expect(conversations, isEmpty);
-      await tester.tap(find.text('Server note'));
-      expect(users, ['202', '202']);
-      expect(conversations, hasLength(1));
-      final card = find.byKey(const Key('my-friends-user-202'));
-      await tester.tapAt(tester.getBottomRight(card) - const Offset(6, 6));
-      expect(users, ['202', '202']);
-      expect(conversations, hasLength(2));
-      for (final conversation in conversations) {
-        expect(
-          conversation.target,
-          const ForumConversationTarget.direct('202'),
-        );
-        expect(conversation.title, 'Alice');
+
+      for (final region in _friendRegions) {
+        await _gestureFriendRegion(tester, region);
+        await tester.pumpAndSettle();
+        expect(links, isEmpty);
+        expect(conversations, isEmpty);
+        expect(find.byKey(const Key('my-friends-actions-sheet')), findsNothing);
       }
+      await _openActions(tester);
+      expect(find.byKey(const Key('my-friends-message-202')), findsOneWidget);
+      expect(find.byKey(const Key('my-friends-remove-202')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('my-friends-message-202')));
+      await tester.pumpAndSettle();
+      expect(links, isEmpty);
+      expect(conversations, [const ForumConversationTarget.direct('202')]);
+      expect(removal.requests, isEmpty);
+      expect(repository.requests, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('anonymous visitors have no profile or long press actions', (
+    tester,
+  ) async {
+    final repository = FriendFeedFixture(autoComplete: true)
+      ..items = const [
+        ForumFriendFeedItem(userId: '', username: '', profileUrl: null),
+      ];
+    final removal = FriendRemovalFixture();
+    final links = <String>[];
+    final conversations = <ForumConversationTarget>[];
+    await _pumpPage(
+      tester,
+      repository: repository,
+      removal: removal,
+      page: MyFriendsPage(
+        initialScope: ForumFriendFeedScope.visitors,
+        onOpenLink: (_, url) => links.add(url),
+        onOpenConversation: (_, target, _) => conversations.add(target),
+      ),
+    );
+    expect(find.text(_l10n(tester).profileFriendsAnonymous), findsOneWidget);
+    final card = find.byKey(const Key('my-friends-anonymous-0'));
+    await tester.tap(card);
+    await tester.longPress(card);
+    await tester.pumpAndSettle();
+
+    expect(links, isEmpty);
+    expect(conversations, isEmpty);
+    expect(removal.requests, isEmpty);
+    expect(find.byKey(const Key('my-friends-actions-sheet')), findsNothing);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(repository.requests, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'four scopes share a page label while known totals retain distant page selection',
+    (tester) async {
+      final repository = FriendFeedFixture(autoComplete: true)..totalPages = 18;
+      await _pumpPage(tester, repository: repository);
+      final l10n = _l10n(tester);
+
+      for (final scope in ForumFriendFeedScope.values) {
+        final totalPages = scope == ForumFriendFeedScope.friends ? 18 : null;
+        repository.totalPages = totalPages;
+        if (scope != ForumFriendFeedScope.friends) {
+          await tester.tap(find.text(_scopeLabel(l10n, scope)));
+          await tester.pumpAndSettle();
+        }
+        expect(repository.requests.last.query.scope, scope);
+        expect(find.byType(NativePaginationBar), findsOneWidget);
+        final bar = tester.widget<NativePaginationBar>(
+          find.byType(NativePaginationBar),
+        );
+        expect(bar.currentPage, 1);
+        expect(bar.currentLabel, l10n.commonPage(1));
+        expect(bar.lastPage, totalPages);
+        expect(find.text(l10n.commonPage(1)), findsOneWidget);
+        expect(
+          find.byKey(const Key('my-friends-page-previous')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('my-friends-page-current')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('my-friends-page-next')), findsOneWidget);
+      }
+
+      await tester.tap(find.text(l10n.profileFriendsTab));
+      await tester.pumpAndSettle();
+      expect(repository.requests, hasLength(4));
+      repository.totalPages = 18;
+      await tester.tap(find.byKey(const Key('my-friends-page-current')));
+      await tester.pumpAndSettle();
+      final lastPageOption = find.byKey(
+        const Key('my-friends-page-page-option-18'),
+      );
+      final menuScrollable = find.descendant(
+        of: find.byKey(const Key('my-friends-page-page-list')),
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        lastPageOption,
+        200,
+        scrollable: menuScrollable,
+      );
+      await tester.ensureVisible(lastPageOption);
+      await tester.pumpAndSettle();
+      await tester.tap(lastPageOption);
+      await tester.pumpAndSettle();
+
+      expect(repository.requests, hasLength(5));
+      expect(
+        repository.requests.last.query.scope,
+        ForumFriendFeedScope.friends,
+      );
+      expect(repository.requests.last.query.page, 18);
+      final bar = tester.widget<NativePaginationBar>(
+        find.byType(NativePaginationBar),
+      );
+      expect(bar.currentLabel, l10n.commonPage(18));
+      expect(bar.lastPage, 18);
+      expect(bar.hasMore, isFalse);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -180,13 +337,56 @@ void main() {
     },
   );
 
-  for (final target in ['user', 'avatar', 'name']) {
-    testWidgets('long pressing $target opens actions without navigating', (
+  for (final region in _friendRegions) {
+    testWidgets(
+      'friends long press on $region opens actions without navigating',
+      (tester) async {
+        final repository = _metadataRepository();
+        final removal = FriendRemovalFixture();
+        final links = <String>[];
+        final conversations =
+            <({ForumConversationTarget target, String title})>[];
+        await _pumpPage(
+          tester,
+          repository: repository,
+          removal: removal,
+          page: MyFriendsPage(
+            onOpenLink: (_, url) => links.add(url),
+            onOpenConversation: (_, target, title) =>
+                conversations.add((target: target, title: title)),
+          ),
+        );
+        await _openActions(tester, target: region);
+        expect(links, isEmpty);
+        expect(conversations, isEmpty);
+        expect(removal.requests, isEmpty);
+        expect(find.byKey(const Key('my-friends-message-202')), findsOneWidget);
+        expect(find.byKey(const Key('my-friends-remove-202')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('my-friends-message-202')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('my-friends-actions-sheet')), findsNothing);
+        expect(links, isEmpty);
+        expect(conversations, [
+          (
+            target: const ForumConversationTarget.direct('202'),
+            title: _friendName,
+          ),
+        ]);
+        expect(removal.requests, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final scope in ForumFriendFeedScope.values.where(
+    (scope) => scope != ForumFriendFeedScope.friends,
+  )) {
+    testWidgets('$scope long presses offer messaging without removal', (
       tester,
     ) async {
-      final repository = FriendFeedFixture(autoComplete: true);
+      final repository = _metadataRepository();
       final removal = FriendRemovalFixture();
-      final users = <String>[];
+      final links = <String>[];
       final conversations =
           <({ForumConversationTarget target, String title})>[];
       await _pumpPage(
@@ -194,28 +394,45 @@ void main() {
         repository: repository,
         removal: removal,
         page: MyFriendsPage(
-          onOpenUser: (_, id) => users.add(id),
+          initialScope: scope,
+          onOpenLink: (_, url) => links.add(url),
           onOpenConversation: (_, target, title) =>
               conversations.add((target: target, title: title)),
         ),
       );
-      await _openActions(tester, target: target);
-      expect(users, isEmpty);
-      expect(conversations, isEmpty);
-      expect(removal.requests, isEmpty);
-      expect(find.byKey(const Key('my-friends-message-202')), findsOneWidget);
-      expect(find.byKey(const Key('my-friends-remove-202')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('my-friends-message-202')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('my-friends-actions-sheet')), findsNothing);
-      expect(users, isEmpty);
-      expect(conversations, [
-        (
-          target: const ForumConversationTarget.direct('202'),
-          title: 'Member 202',
-        ),
-      ]);
-      expect(removal.requests, isEmpty);
+      expect(repository.requests.single.query.scope, scope);
+      expect(repository.items.single.canRemove, isTrue);
+
+      for (final region in _friendRegions) {
+        conversations.clear();
+        await _openActions(tester, target: region);
+        expect(
+          links,
+          isEmpty,
+          reason: '$scope $region must not open a profile',
+        );
+        expect(conversations, isEmpty);
+        expect(removal.requests, isEmpty);
+        expect(find.byKey(const Key('my-friends-message-202')), findsOneWidget);
+        expect(find.byKey(const Key('my-friends-remove-202')), findsNothing);
+        expect(find.byType(AlertDialog), findsNothing);
+
+        await tester.tap(find.byKey(const Key('my-friends-message-202')));
+        await tester.pumpAndSettle();
+
+        expect(conversations, [
+          (
+            target: const ForumConversationTarget.direct('202'),
+            title: _friendName,
+          ),
+        ]);
+        expect(links, isEmpty);
+        expect(removal.requests, isEmpty);
+        expect(find.byKey(const Key('my-friends-actions-sheet')), findsNothing);
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(repository.requests, hasLength(1));
+        expect(tester.takeException(), isNull);
+      }
     });
   }
 
@@ -259,7 +476,7 @@ void main() {
       (tester) async {
         final repository = FriendFeedFixture(autoComplete: true);
         final removal = FriendRemovalFixture();
-        final users = <String>[];
+        final links = <String>[];
         final conversations = <ForumConversationTarget>[];
         final overrides = _overrides(repository, removal);
         overrides[0] = verifiedProfileOwnerProvider.overrideWith(
@@ -270,7 +487,7 @@ void main() {
             overrides: overrides,
             child: LocalizedTestApp(
               home: MyFriendsPage(
-                onOpenUser: (_, id) => users.add(id),
+                onOpenLink: (_, url) => links.add(url),
                 onOpenConversation: (_, target, _) => conversations.add(target),
               ),
             ),
@@ -291,7 +508,7 @@ void main() {
         expect(find.byKey(const Key('my-friends-actions-sheet')), findsNothing);
         expect(find.byType(AlertDialog), findsNothing);
         expect(removal.requests, isEmpty);
-        expect(users, isEmpty);
+        expect(links, isEmpty);
         expect(conversations, isEmpty);
         expect(tester.takeException(), isNull);
       },
@@ -413,12 +630,12 @@ void main() {
         repository: repository,
         removal: removal,
         page: MyFriendsPage(
-          onOpenUser: (context, userId) => Navigator.of(context).push<void>(
+          onOpenLink: (context, url) => Navigator.of(context).push<void>(
             MaterialPageRoute(
               builder: (_) => Scaffold(
                 key: const Key('friend-test-user-route'),
                 appBar: AppBar(),
-                body: Text('User $userId'),
+                body: Text(url),
               ),
             ),
           ),
@@ -536,7 +753,7 @@ void main() {
 
 MyFriendsPage _page({bool isActive = true}) => MyFriendsPage(
   isActive: isActive,
-  onOpenUser: (_, _) {},
+  onOpenLink: (_, _) {},
   onOpenConversation: (_, _, _) {},
 );
 
@@ -595,8 +812,74 @@ Finder _scopeList(ForumFriendFeedScope scope) => find.byWidgetPredicate(
       ),
 );
 
+String _scopeLabel(AppLocalizations l10n, ForumFriendFeedScope scope) =>
+    switch (scope) {
+      ForumFriendFeedScope.friends => l10n.profileFriendsTab,
+      ForumFriendFeedScope.online => l10n.profileFriendsOnlineTab,
+      ForumFriendFeedScope.visitors => l10n.profileFriendsVisitorsTab,
+      ForumFriendFeedScope.footprints => l10n.profileFriendsFootprintsTab,
+    };
+
+const _friendProfileUrl =
+    'https://bbs.yamibo.com/home.php?mod=space&uid=202&mobile=2&from=friend-list';
+const _friendName = 'Alice';
+const _friendNote = 'Server note';
+const _friendVisitedAt = '2026-10-03 10:00';
+const _friendRegions = [
+  'user',
+  'avatar',
+  'name',
+  'status',
+  'note',
+  'visitedAt',
+  'padding',
+];
+
+FriendFeedFixture _metadataRepository() =>
+    FriendFeedFixture(autoComplete: true)
+      ..items = [
+        friendFeedItem(
+          '202',
+          username: _friendName,
+          profileUrl: _friendProfileUrl,
+          note: _friendNote,
+          visitedAtText: _friendVisitedAt,
+          isOnline: true,
+        ),
+      ];
+
+Future<void> _gestureFriendRegion(
+  WidgetTester tester,
+  String region, {
+  bool longPress = false,
+}) async {
+  if (region == 'padding') {
+    final card = find.byKey(const Key('my-friends-user-202'));
+    final point = tester.getBottomRight(card) - const Offset(6, 6);
+    if (longPress) {
+      await tester.longPressAt(point);
+    } else {
+      await tester.tapAt(point);
+    }
+    return;
+  }
+  final finder = switch (region) {
+    'status' => find.text(_l10n(tester).profileFriendsOnlineStatus),
+    'note' => find.text(_friendNote),
+    'visitedAt' => find.text(
+      _l10n(tester).profileFriendsVisitedAt(_friendVisitedAt),
+    ),
+    _ => find.byKey(Key('my-friends-$region-202')),
+  };
+  if (longPress) {
+    await tester.longPress(finder);
+  } else {
+    await tester.tap(finder);
+  }
+}
+
 Future<void> _openActions(WidgetTester tester, {String target = 'user'}) async {
-  await tester.longPress(find.byKey(Key('my-friends-$target-202')));
+  await _gestureFriendRegion(tester, target, longPress: true);
   await tester.pumpAndSettle();
   expect(find.byKey(const Key('my-friends-actions-sheet')), findsOneWidget);
 }

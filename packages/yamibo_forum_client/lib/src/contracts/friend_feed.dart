@@ -47,6 +47,7 @@ final class ForumFriendFeedItem {
   const ForumFriendFeedItem({
     required this.userId,
     required this.username,
+    this.profileUrl,
     this.avatarUrl,
     this.note,
     this.visitedAtText,
@@ -59,6 +60,12 @@ final class ForumFriendFeedItem {
 
   /// Exact server display name, or empty for an anonymous visitor.
   final String username;
+
+  /// Source-proven member-profile link resolved against the managed origin.
+  ///
+  /// Preserves the original query and fragment. Null for anonymous rows or
+  /// sources without a proved link; Hosts must not synthesize one from [userId].
+  final String? profileUrl;
 
   /// Validated HTTP(S) avatar reference, when provided.
   final String? avatarUrl;

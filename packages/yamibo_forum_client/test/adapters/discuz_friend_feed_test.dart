@@ -31,6 +31,10 @@ void main() {
       expect(page.scope, scope);
       expect(page.items.single.userId, '12');
       expect(page.items.single.username, 'A & 友');
+      expect(
+        page.items.single.profileUrl,
+        'https://forum.example.test/home.php?mod=space&uid=12',
+      );
       expect(page.items.single.note, '最近的近况');
       expect(
         page.items.single.avatarUrl,
@@ -95,9 +99,67 @@ void main() {
       )).dataOrNull!;
       expect(page.items, hasLength(2));
       expect(
-        page.items.every((item) => item.userId.isEmpty && !item.canRemove),
+        page.items.every(
+          (item) =>
+              item.userId.isEmpty && item.profileUrl == null && !item.canRemove,
+        ),
         isTrue,
       );
+    },
+  );
+
+  test('source profile links retain their original query and fragment', () async {
+    network.body = _page(
+      rows: _row().replaceAll(
+        'href="home.php?mod=space&amp;uid=12"',
+        'href="home.php?mod=space&amp;uid=12&amp;do=profile&amp;from=space&amp;mobile=2#details"',
+      ),
+    );
+    final item = (await repository.load(_query)).dataOrNull!.items.single;
+    expect(item.userId, '12');
+    expect(
+      item.profileUrl,
+      'https://forum.example.test/home.php?mod=space&uid=12&do=profile&from=space&mobile=2#details',
+    );
+  });
+
+  test(
+    'the title link is retained after verifying the avatar member',
+    () async {
+      network.body = _page(
+        rows: _row().replaceFirst(
+          'href="home.php?mod=space&amp;uid=12"',
+          'href="/home.php?mod=space&amp;uid=12&amp;do=profile&amp;mobile=2"',
+        ),
+      );
+      final item = (await repository.load(_query)).dataOrNull!.items.single;
+      expect(
+        item.profileUrl,
+        'https://forum.example.test/home.php?mod=space&uid=12',
+      );
+    },
+  );
+
+  test(
+    'ambiguous title links and different avatar members fail closed',
+    () async {
+      for (final rows in [
+        _row().replaceFirst(
+          '</p>',
+          '<a href="home.php?mod=space&amp;uid=12&amp;from=space">another destination</a></p>',
+        ),
+        _row().replaceFirst(
+          'href="home.php?mod=space&amp;uid=12"',
+          'href="home.php?mod=space&amp;uid=13"',
+        ),
+        _row().replaceFirst(
+          'href="home.php?mod=space&amp;uid=12"',
+          'href="https://foreign.test/home.php?mod=space&amp;uid=12"',
+        ),
+      ]) {
+        network.body = _page(rows: rows);
+        expect((await repository.load(_query)).isFailure, isTrue);
+      }
     },
   );
 

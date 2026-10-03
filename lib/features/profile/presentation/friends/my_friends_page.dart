@@ -18,7 +18,7 @@ import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/shared/widgets/native_pagination_bar.dart';
 
-typedef FriendUserOpener = void Function(BuildContext context, String userId);
+typedef FriendLinkOpener = void Function(BuildContext context, String url);
 typedef FriendConversationOpener =
     void Function(
       BuildContext context,
@@ -29,14 +29,14 @@ typedef FriendConversationOpener =
 class MyFriendsPage extends ConsumerStatefulWidget {
   const MyFriendsPage({
     super.key,
-    required this.onOpenUser,
+    required this.onOpenLink,
     required this.onOpenConversation,
     this.isActive = true,
     this.initialScope = ForumFriendFeedScope.friends,
     this.initialPage = 1,
   }) : assert(initialPage >= 1);
 
-  final FriendUserOpener onOpenUser;
+  final FriendLinkOpener onOpenLink;
   final FriendConversationOpener onOpenConversation;
   final bool isActive;
   final ForumFriendFeedScope initialScope;
@@ -187,13 +187,13 @@ class _MyFriendsPageState extends ConsumerState<MyFriendsPage> {
               imageReferer: referer,
               isActive: widget.isActive && state.query.scope == scope,
               listKey: PageStorageKey('my-friends-list-${scope.name}:$owner'),
-              onOpenUser: (item) {
+              onOpenLink: (item) {
                 final current = _boundItem(controller, target(item));
-                if (current != null) {
-                  widget.onOpenUser(context, current.userId);
+                final profileUrl = current?.profileUrl;
+                if (profileUrl != null && profileUrl.isNotEmpty) {
+                  widget.onOpenLink(context, profileUrl);
                 }
               },
-              onMessage: (item) => _openMessage(controller, target(item)),
               onShowActions: (item) => _showActions(controller, target(item)),
             );
           },
@@ -254,8 +254,7 @@ class _FriendsFeed extends StatelessWidget {
     required this.imageReferer,
     required this.isActive,
     required this.listKey,
-    required this.onOpenUser,
-    required this.onMessage,
+    required this.onOpenLink,
     required this.onShowActions,
   });
 
@@ -264,8 +263,7 @@ class _FriendsFeed extends StatelessWidget {
   final String imageReferer;
   final bool isActive;
   final PageStorageKey<String> listKey;
-  final ValueChanged<ForumFriendFeedItem> onOpenUser;
-  final ValueChanged<ForumFriendFeedItem> onMessage;
+  final ValueChanged<ForumFriendFeedItem> onOpenLink;
   final ValueChanged<ForumFriendFeedItem> onShowActions;
 
   // Outgoing tabs can receive gestures while a swipe is still animating.
@@ -347,14 +345,11 @@ class _FriendsFeed extends StatelessWidget {
                             ),
                             item: item,
                             imageReferer: imageReferer,
-                            onOpenUser: hasIdentity
+                            onOpenLink:
+                                hasIdentity &&
+                                    item.profileUrl?.isNotEmpty == true
                                 ? () {
-                                    if (_current(context)) onOpenUser(item);
-                                  }
-                                : null,
-                            onMessage: hasIdentity
-                                ? () {
-                                    if (_current(context)) onMessage(item);
+                                    if (_current(context)) onOpenLink(item);
                                   }
                                 : null,
                             onShowActions: hasIdentity
@@ -405,12 +400,7 @@ class _FriendsFeed extends StatelessWidget {
                                 await controller.loadPageNumber(page);
                               },
                               previousLabel: l10n.commonPreviousPage,
-                              currentLabel: state.lastPage == null
-                                  ? l10n.commonPage(state.currentPage)
-                                  : l10n.commonPageOf(
-                                      state.currentPage,
-                                      state.lastPage!,
-                                    ),
+                              currentLabel: l10n.commonPage(state.currentPage),
                               nextLabel: l10n.commonNextPage,
                               previousButtonKey: const Key(
                                 'my-friends-page-previous',

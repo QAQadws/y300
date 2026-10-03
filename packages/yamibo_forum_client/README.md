@@ -381,9 +381,11 @@ their account generation. Friend data is not persisted in package caches.
 friends, online members, recent visitors, and visited spaces as independent
 member lists. Each query requires an account UID; the response must prove the
 same authenticated header identity, active list, and page context. Anonymous
-visitors retain an empty, non-actionable identity. Avatars, recent notes,
-presence, and pagination are returned only when the source proves them; the
-stock touch template does not supply visit times. These private lists use no
+visitors retain an empty, non-actionable identity. Member rows retain the
+source-proven profile link in `profileUrl`, resolved against the site origin
+with its query preserved; Hosts pass that link to their shared URL router.
+Avatars, recent notes, presence, and pagination are returned only when the
+source proves them; the stock touch template does not supply visit times. These private lists use no
 document/snapshot cache and do not replace the private-message friend selector.
 
 `removeFriend` obtains a fresh desktop confirmation form, validates its actor,

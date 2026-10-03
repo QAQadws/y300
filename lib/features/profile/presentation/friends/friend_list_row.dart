@@ -11,15 +11,13 @@ class FriendListRow extends StatelessWidget {
     super.key,
     required this.item,
     required this.imageReferer,
-    this.onOpenUser,
-    this.onMessage,
+    this.onOpenLink,
     this.onShowActions,
   });
 
   final ForumFriendFeedItem item;
   final String imageReferer;
-  final VoidCallback? onOpenUser;
-  final VoidCallback? onMessage;
+  final VoidCallback? onOpenLink;
   final VoidCallback? onShowActions;
 
   @override
@@ -48,46 +46,56 @@ class FriendListRow extends StatelessWidget {
       ),
     );
     return BlogSurface(
-      onTap: onMessage,
+      onTap: onOpenLink,
       onLongPress: onShowActions,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (onOpenUser == null)
-            avatar
-          else
-            InkWell(
-              key: Key('my-friends-avatar-${item.userId}'),
-              onTap: onOpenUser,
-              borderRadius: BorderRadius.circular(20),
-              child: avatar,
-            ),
+          KeyedSubtree(
+            key: Key('my-friends-avatar-${item.userId}'),
+            child: avatar,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (onOpenUser == null)
-                  name
-                else
-                  InkWell(
-                    key: Key('my-friends-name-${item.userId}'),
-                    onTap: onOpenUser,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: name,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Padding(
+                        key: Key('my-friends-name-${item.userId}'),
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: name,
+                      ),
                     ),
-                  ),
-                if (item.isOnline == true) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    l10n.profileFriendsOnlineStatus,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: palette.accent,
-                    ),
-                  ),
-                ],
+                    if (item.isOnline == true) ...[
+                      const SizedBox(width: 6),
+                      DecoratedBox(
+                        key: Key('my-friends-online-${item.userId}'),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          child: Text(
+                            l10n.profileFriendsOnlineStatus,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 if (note.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(

@@ -130,7 +130,7 @@ final class DiscuzFriendFeedParser {
       if (uri == null ||
           uri.path != '/home.php' ||
           _value(uri, 'mod') != 'space' ||
-          _value(uri, 'do') != null) {
+          !{null, 'profile'}.contains(_value(uri, 'do'))) {
         continue;
       }
       final id = _value(uri, 'uid');
@@ -138,7 +138,12 @@ final class DiscuzFriendFeedParser {
       if (!discuzFriendPositiveId(id)) {
         throw const FormatException('friend_feed_member_invalid');
       }
-      identities[id!] = anchor;
+      final previous = identities[id];
+      if (previous != null && _link(previous) != uri) {
+        throw const FormatException('friend_feed_member_link_ambiguous');
+      }
+      // Exact duplicate links share one destination; retain the first label.
+      identities.putIfAbsent(id!, () => anchor);
     }
     // An anonymous visitor has only a javascript label and no actionable ID.
     if (identities.isEmpty &&
@@ -153,6 +158,19 @@ final class DiscuzFriendFeedParser {
     if (username.isEmpty) {
       throw const FormatException('friend_feed_username_missing');
     }
+    for (final anchor in row.querySelectorAll('.mimg a[href]')) {
+      final uri = _link(anchor);
+      if (uri == null ||
+          uri.path != '/home.php' ||
+          _value(uri, 'mod') != 'space' ||
+          !{null, 'profile'}.contains(_value(uri, 'do')) ||
+          _value(uri, 'uid') != id) {
+        throw const FormatException('friend_feed_avatar_member_mismatch');
+      }
+    }
+    // The title is the card's source destination. The avatar may carry its
+    // own display parameters, but must prove the same member identity.
+    final profileUrl = _link(identities.values.single)!.toString();
     var canRemove = false;
     for (final anchor in title.querySelectorAll('a[href]')) {
       final uri = _link(anchor);
@@ -171,6 +189,7 @@ final class DiscuzFriendFeedParser {
     return ForumFriendFeedItem(
       userId: id,
       username: username,
+      profileUrl: profileUrl,
       avatarUrl: _image(row.querySelector('.mimg img')?.attributes['src']),
       note: _optional(row.querySelector('.mtxt')?.text),
       isOnline:

@@ -88,6 +88,7 @@ final class FriendFeedRequest {
 ForumFriendFeedItem friendFeedItem(
   String userId, {
   String? username,
+  String? profileUrl,
   String? note,
   String? visitedAtText,
   bool? isOnline,
@@ -95,6 +96,11 @@ ForumFriendFeedItem friendFeedItem(
 }) => ForumFriendFeedItem(
   userId: userId,
   username: username ?? 'Member $userId',
+  profileUrl:
+      profileUrl ??
+      (userId.isEmpty
+          ? null
+          : 'https://bbs.yamibo.com/home.php?mod=space&uid=$userId'),
   note: note,
   visitedAtText: visitedAtText,
   isOnline: isOnline,

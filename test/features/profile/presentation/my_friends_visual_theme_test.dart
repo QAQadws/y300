@@ -12,6 +12,7 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 import '../../../test_support/localized_test_app.dart';
@@ -92,7 +93,7 @@ void main() {
                     child: child!,
                   ),
                   home: MyFriendsPage(
-                    onOpenUser: (_, _) {},
+                    onOpenLink: (_, _) {},
                     onOpenConversation: (_, _, _) {},
                   ),
                 ),
@@ -119,6 +120,33 @@ void main() {
             findsOneWidget,
           );
           await _save(tester, '$name-actions');
+          if (brightness == Brightness.light && !compact) {
+            Navigator.of(
+              tester.element(find.byKey(const Key('my-friends-actions-sheet'))),
+            ).pop();
+            await tester.pumpAndSettle();
+            repository
+              ..totalPages = null
+              ..items = repository.items
+                  .map(
+                    (item) => friendFeedItem(
+                      item.userId,
+                      username: item.username,
+                      profileUrl: item.profileUrl,
+                      note: item.note,
+                      isOnline: true,
+                      canRemove: false,
+                    ),
+                  )
+                  .toList();
+            final l10n = AppLocalizations.of(
+              tester.element(find.byType(MyFriendsPage)),
+            );
+            await tester.tap(find.text(l10n.profileFriendsOnlineTab));
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            await _save(tester, '$name-online');
+          }
           await tester.pumpWidget(const SizedBox.shrink());
         }, skip: _output.isEmpty);
       }
