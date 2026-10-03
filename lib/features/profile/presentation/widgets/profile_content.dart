@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/features/profile/presentation/widgets/profile_contact_actions.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_identity_card.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -62,17 +63,15 @@ class ProfileContent extends StatelessWidget {
       ])
         if (isMyProfile && actions.contains(kind)) kind,
     ];
-    final primary = [
-      for (final kind
-          in isMyProfile
-              ? [ForumUserProfileActionKind.settings]
-              : [
-                  ForumUserProfileActionKind.sendMessage,
-                  ForumUserProfileActionKind.addFriend,
-                  ForumUserProfileActionKind.removeFriend,
-                ])
-        if (actions.contains(kind) && (isMyProfile || canInteract)) kind,
-    ];
+    VoidCallback? contactAction(ForumUserProfileActionKind kind) =>
+        !isMyProfile && canInteract && actions.contains(kind)
+        ? () => onAction(kind)
+        : null;
+    final onSendMessage = contactAction(ForumUserProfileActionKind.sendMessage);
+    final onAddFriend = contactAction(ForumUserProfileActionKind.addFriend);
+    final onRemoveFriend = contactAction(
+      ForumUserProfileActionKind.removeFriend,
+    );
     final hasSignature =
         supports(ForumUserProfileCapability.signatureMarkup) &&
         profile.signatureHtml?.trim().isNotEmpty == true;
@@ -121,11 +120,17 @@ class ProfileContent extends StatelessWidget {
                       : null,
                   imageReferer: imageReferer,
                   onCopyUid: onCopyUid,
+                  footer:
+                      onSendMessage != null ||
+                          onAddFriend != null ||
+                          onRemoveFriend != null
+                      ? ProfileContactActions(
+                          onSendMessage: onSendMessage,
+                          onAddFriend: onAddFriend,
+                          onRemoveFriend: onRemoveFriend,
+                        )
+                      : null,
                 ),
-                if (primary.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _PrimaryActions(actions: primary, onAction: onAction),
-                ],
                 if (!isMyProfile && !canInteract && onLogin != null) ...[
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
@@ -211,47 +216,6 @@ class ProfileContent extends StatelessWidget {
       ],
     );
   }
-}
-
-class _PrimaryActions extends StatelessWidget {
-  const _PrimaryActions({required this.actions, required this.onAction});
-  final List<ForumUserProfileActionKind> actions;
-  final ValueChanged<ForumUserProfileActionKind> onAction;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final large = MediaQuery.textScalerOf(context).scale(14) > 20;
-      final width = actions.length > 1 && !large
-          ? (constraints.maxWidth - 10) / 2
-          : constraints.maxWidth;
-      return Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          for (var index = 0; index < actions.length; index++)
-            SizedBox(
-              width: width,
-              child:
-                  index == 0 &&
-                      actions[index] != ForumUserProfileActionKind.removeFriend
-                  ? FilledButton.icon(
-                      key: Key('user-profile-action-${actions[index].name}'),
-                      onPressed: () => onAction(actions[index]),
-                      icon: Icon(profileActionIcon(actions[index]), size: 19),
-                      label: Text(profileActionLabel(context, actions[index])),
-                    )
-                  : OutlinedButton.icon(
-                      key: Key('user-profile-action-${actions[index].name}'),
-                      onPressed: () => onAction(actions[index]),
-                      icon: Icon(profileActionIcon(actions[index]), size: 19),
-                      label: Text(profileActionLabel(context, actions[index])),
-                    ),
-            ),
-        ],
-      );
-    },
-  );
 }
 
 class ProfileActionTiles extends StatelessWidget {

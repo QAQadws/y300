@@ -74,16 +74,64 @@ void main() {
               find.text(l10n.profileUid(self ? '101' : '8')),
               findsOneWidget,
             );
-            expect(
-              find.byKey(
-                Key(
-                  self
-                      ? 'user-profile-action-settings'
-                      : 'user-profile-action-sendMessage',
-                ),
-              ),
-              findsOneWidget,
+            final settings = find.byKey(
+              const Key('user-profile-action-settings'),
             );
+            final contactActions = find.byKey(
+              const Key('user-profile-contact-actions'),
+            );
+            final appBar = find.byType(AppBar);
+            expect(
+              find.descendant(
+                of: appBar,
+                matching: find.byIcon(Icons.home_outlined),
+              ),
+              findsNothing,
+            );
+            if (self) {
+              expect(contactActions, findsNothing);
+              expect(
+                find.descendant(of: appBar, matching: settings),
+                findsOneWidget,
+              );
+              expect(
+                find.descendant(
+                  of: find.byType(ProfileContent),
+                  matching: settings,
+                ),
+                findsNothing,
+              );
+              expect(
+                tester.widget<IconButton>(settings).tooltip,
+                l10n.profileSettings,
+              );
+              expect(settings.hitTestable(), findsOneWidget);
+            } else {
+              expect(settings, findsNothing);
+              expect(
+                find.descendant(of: identity, matching: contactActions),
+                findsOneWidget,
+              );
+              for (final kind in ['sendMessage', 'addFriend']) {
+                final button = find.byKey(Key('user-profile-action-$kind'));
+                expect(button, findsOneWidget);
+                expect(
+                  find.descendant(of: contactActions, matching: button),
+                  findsOneWidget,
+                );
+                expect(tester.widget<TextButton>(button).onPressed, isNotNull);
+              }
+              if (!large) {
+                final message = tester.getRect(
+                  find.byKey(const Key('user-profile-action-sendMessage')),
+                );
+                final friend = tester.getRect(
+                  find.byKey(const Key('user-profile-action-addFriend')),
+                );
+                expect(message.center.dy, closeTo(friend.center.dy, 0.5));
+                expect(message.right, lessThanOrEqualTo(friend.left));
+              }
+            }
             await _save(tester, name);
             for (final kind
                 in self
@@ -96,7 +144,13 @@ void main() {
                         'friends',
                         'creditHistory',
                       ]
-                    : ['addFriend', 'threads', 'replies', 'blogs']) {
+                    : [
+                        'sendMessage',
+                        'addFriend',
+                        'threads',
+                        'replies',
+                        'blogs',
+                      ]) {
               final button = find.byKey(Key('user-profile-action-$kind'));
               await tester.ensureVisible(button);
               await tester.pumpAndSettle();
@@ -129,12 +183,118 @@ void main() {
       );
       expect(find.text(l10n.profileSendMessage), findsOneWidget);
       expect(find.text(l10n.profileAddFriend), findsOneWidget);
+      final contactActions = find.byKey(
+        const Key('user-profile-contact-actions'),
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('user-profile-identity')),
+          matching: contactActions,
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: contactActions,
+          matching: find.text(l10n.profileSendMessage),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: contactActions,
+          matching: find.text(l10n.profileAddFriend),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('夏日回声'), findsOneWidget);
       await tester.ensureVisible(find.text('普通会员').first);
       expect(find.text('普通会员'), findsWidgets);
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('public card exposes only the advertised removal action', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      AppThemeFamily.plumPurple,
+      Brightness.dark,
+      large: true,
+      profile: _profile(
+        false,
+        actions: const [ForumUserProfileActionKind.removeFriend],
+      ),
+    );
+    final contactActions = find.byKey(
+      const Key('user-profile-contact-actions'),
+    );
+    final remove = find.byKey(const Key('user-profile-action-removeFriend'));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('user-profile-identity')),
+        matching: contactActions,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: contactActions, matching: remove),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('user-profile-action-addFriend')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('user-profile-action-sendMessage')),
+      findsNothing,
+    );
+    final l10n = AppLocalizations.of(tester.element(remove));
+    expect(find.text(l10n.profileRemoveFriend), findsOneWidget);
+    await tester.ensureVisible(remove);
+    await tester.pumpAndSettle();
+    expect(remove.hitTestable(), findsOneWidget);
+    expect(tester.widget<TextButton>(remove).onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+    await _save(tester, 'public-remove-friend-only-large');
+  });
+
+  for (final self in [false, true]) {
+    testWidgets(
+      'unverified actions expose no contact or settings, self=$self',
+      (tester) async {
+        await _pump(
+          tester,
+          AppThemeFamily.warmPaper,
+          Brightness.light,
+          self: self,
+          capabilities: ForumUserProfileReadCapabilities(
+            values: DataCapabilitySet.from(
+              supported: ForumUserProfileCapability.values.where(
+                (capability) =>
+                    capability != ForumUserProfileCapability.orderedActions,
+              ),
+            ),
+          ),
+        );
+        expect(find.byKey(const Key('user-profile-identity')), findsOneWidget);
+        expect(
+          find.byKey(const Key('user-profile-contact-actions')),
+          findsNothing,
+        );
+        for (final kind in [
+          'sendMessage',
+          'addFriend',
+          'removeFriend',
+          'settings',
+        ]) {
+          expect(find.byKey(Key('user-profile-action-$kind')), findsNothing);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('wide profile keeps bounded reading width', (tester) async {
     await _pump(
@@ -572,6 +732,7 @@ Future<void> _pump(
   double? width,
   Locale locale = const Locale('zh'),
   ForumUserProfileData? profile,
+  ForumUserProfileReadCapabilities? capabilities,
   bool boldText = false,
   double? letterSpacing,
   double? wordSpacing,
@@ -593,7 +754,7 @@ Future<void> _pump(
           revision: 1,
         )),
         forumUserProfileRepositoryProvider.overrideWithValue(
-          _Repository(profile ?? _profile(self)),
+          _Repository(profile ?? _profile(self), capabilities: capabilities),
         ),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
         imageCacheServiceProvider.overrideWithValue(_Images()),
@@ -641,6 +802,7 @@ ForumUserProfileData _profile(
   String? userId,
   bool? isOnline = true,
   List<ForumUserProfileMetric>? metrics,
+  List<ForumUserProfileActionKind>? actions,
 }) => ForumUserProfileData(
   identity: ProfileUserIdentity(
     userId: userId ?? (self ? '101' : '8'),
@@ -691,30 +853,34 @@ ForumUserProfileData _profile(
       section: ForumUserProfileDetailSection.activity,
     ),
   ],
-  actions: self
-      ? [
-          ForumUserProfileActionKind.threads,
-          ForumUserProfileActionKind.blogs,
-          ForumUserProfileActionKind.messages,
-          ForumUserProfileActionKind.settings,
-          ForumUserProfileActionKind.forumFavorites,
-          ForumUserProfileActionKind.friends,
-          ForumUserProfileActionKind.creditHistory,
-        ]
-      : [
-          ForumUserProfileActionKind.threads,
-          ForumUserProfileActionKind.blogs,
-          ForumUserProfileActionKind.sendMessage,
-          ForumUserProfileActionKind.addFriend,
-        ],
+  actions:
+      actions ??
+      (self
+          ? [
+              ForumUserProfileActionKind.threads,
+              ForumUserProfileActionKind.blogs,
+              ForumUserProfileActionKind.messages,
+              ForumUserProfileActionKind.settings,
+              ForumUserProfileActionKind.forumFavorites,
+              ForumUserProfileActionKind.friends,
+              ForumUserProfileActionKind.creditHistory,
+            ]
+          : [
+              ForumUserProfileActionKind.threads,
+              ForumUserProfileActionKind.blogs,
+              ForumUserProfileActionKind.sendMessage,
+              ForumUserProfileActionKind.addFriend,
+            ]),
 );
 
 class _Repository implements ForumUserProfileRepository {
-  _Repository(this.data);
+  _Repository(this.data, {ForumUserProfileReadCapabilities? capabilities})
+    : readCapabilities = capabilities ?? _capabilities;
   final ForumUserProfileData data;
+  final ForumUserProfileReadCapabilities readCapabilities;
   @override
   ForumUserProfileSourceCapabilities get capabilities =>
-      ForumUserProfileSourceCapabilities(values: _capabilities.values);
+      ForumUserProfileSourceCapabilities(values: readCapabilities.values);
   @override
   Future<DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>>
   load(
@@ -723,7 +889,7 @@ class _Repository implements ForumUserProfileRepository {
     ForumRequestCancellation? cancellation,
   }) async => DataReadSuccess(
     data: data,
-    capabilities: _capabilities,
+    capabilities: readCapabilities,
     metadata: const DataReadMetadata.network(),
   );
 }

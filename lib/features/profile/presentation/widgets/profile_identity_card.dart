@@ -14,6 +14,7 @@ class ProfileIdentityCard extends StatelessWidget {
     required this.avatarUrl,
     required this.imageReferer,
     required this.onCopyUid,
+    this.footer,
   });
 
   final ForumUserProfileData profile;
@@ -21,6 +22,7 @@ class ProfileIdentityCard extends StatelessWidget {
   final String? avatarUrl;
   final String imageReferer;
   final VoidCallback onCopyUid;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +87,7 @@ class ProfileIdentityCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   _Statistics(metrics: metrics),
                 ],
+                if (footer != null) ...[const SizedBox(height: 12), footer!],
               ],
             );
           },

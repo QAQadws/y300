@@ -127,6 +127,8 @@ void main() {
 
     expect(find.text('alice的资料'), findsOneWidget);
     expect(find.text('alice'), findsOneWidget);
+    expect(find.byIcon(Icons.home_outlined), findsNothing);
+    expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
     expect(find.byKey(const Key('user-profile-metrics')), findsOneWidget);
     expect(find.text('2048'), findsOneWidget);
     final l10n = AppLocalizations.of(
@@ -242,6 +244,43 @@ void main() {
     );
     expect(find.text(l10n.profileLoginToInteract), findsOneWidget);
   });
+
+  for (final owner in <VerifiedProfileOwner?>[
+    null,
+    (uid: '654321', revision: 0),
+  ]) {
+    testWidgets(
+      'public profile omits settings even when advertised for $owner',
+      (tester) async {
+        await _pumpPublicProfile(
+          tester,
+          owner: owner,
+          repository: _FakeProfileRepository(
+            data: ForumUserProfileData(
+              identity: const ProfileUserIdentity(userId: '123456'),
+              viewerUserId: owner?.uid,
+              actions: const [ForumUserProfileActionKind.settings],
+              actionLinks: _allActionsProfile.actionLinks
+                  .where(
+                    (link) => link.kind == ForumUserProfileActionKind.settings,
+                  )
+                  .toList(),
+              metrics: const [],
+              details: const [],
+            ),
+          ),
+        );
+
+        expect(
+          find.byKey(const Key('user-profile-action-settings')),
+          findsNothing,
+        );
+        expect(find.byIcon(Icons.settings_outlined), findsNothing);
+        expect(find.byIcon(Icons.home_outlined), findsNothing);
+        expect(find.byKey(const Key('user-profile-open-web')), findsOneWidget);
+      },
+    );
+  }
 
   testWidgets('UserProfilePage gates optional sections by capability', (
     tester,
@@ -360,6 +399,8 @@ void main() {
     expect(find.text('我的日志'), findsOneWidget);
     expect(find.text('消息提醒'), findsOneWidget);
     expect(find.text('论坛收藏'), findsNothing);
+    expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
+    expect(find.byIcon(Icons.home_outlined), findsNothing);
     expect(find.byKey(const Key('daily-sign-in-panel')), findsNothing);
     expect(
       ProviderScope.containerOf(
@@ -414,17 +455,31 @@ void main() {
     tester,
   ) async {
     final store = YamiboSessionStore()..saveExtracted(_sessionFor('654321'));
+    final opened = <ForumWebViewLaunchConfig>[];
     await _pumpMyProfile(
       tester,
-      repository: _FakeProfileRepository(data: _myProfile),
+      repository: _FakeProfileRepository(data: _allActionsProfile),
       store: store,
+      routeFactory: (config) {
+        opened.add(config);
+        return MaterialPageRoute<Object?>(builder: (_) => const SizedBox());
+      },
     );
     expect(find.text('sample-member'), findsOneWidget);
+    final openSettings = tester
+        .widget<IconButton>(
+          find.byKey(const Key('user-profile-action-settings')),
+        )
+        .onPressed!;
 
     store.clear();
     await tester.pumpAndSettle();
+    openSettings();
+    await tester.pumpAndSettle();
 
     expect(find.text('sample-member'), findsNothing);
+    expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
+    expect(opened, isEmpty);
     expect(find.byKey(const Key('daily-sign-in-panel')), findsNothing);
     expect(find.byKey(const Key('my-profile-open-forum-page')), findsNothing);
     expect(
@@ -438,7 +493,7 @@ void main() {
     tester,
   ) async {
     final store = YamiboSessionStore()..saveExtracted(_sessionFor('777777'));
-    final repository = _FakeProfileRepository(data: _myProfile);
+    final repository = _FakeProfileRepository(data: _allActionsProfile);
     await _pumpMyProfile(tester, repository: repository, store: store);
 
     expect(
@@ -446,6 +501,7 @@ void main() {
       findsOneWidget,
     );
     expect(repository.queries, isEmpty);
+    expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
   });
 
   testWidgets('MyProfilePage rejects a late refresh from the old owner', (
@@ -500,20 +556,38 @@ void main() {
   ) async {
     final store = YamiboSessionStore()..saveExtracted(_sessionFor('654321'));
     final newSession = Completer<_ProfileReadResult>();
+    final opened = <ForumWebViewLaunchConfig>[];
     final repository = _ScriptedProfileRepository((query, call) {
-      if (call == 0) return Future.value(_profileSuccess(_myProfile));
+      if (call == 0) return Future.value(_profileSuccess(_allActionsProfile));
       return newSession.future;
     });
-    await _pumpMyProfile(tester, repository: repository, store: store);
+    await _pumpMyProfile(
+      tester,
+      repository: repository,
+      store: store,
+      routeFactory: (config) {
+        opened.add(config);
+        return MaterialPageRoute<Object?>(builder: (_) => const SizedBox());
+      },
+    );
     expect(find.text('sample-member'), findsOneWidget);
+    final openOldSettings = tester
+        .widget<IconButton>(
+          find.byKey(const Key('user-profile-action-settings')),
+        )
+        .onPressed!;
 
     store.clear();
     store.saveExtracted(_sessionFor('654321'));
     await tester.pump();
     expect(find.text('sample-member'), findsNothing);
+    expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
 
     newSession.complete(_profileSuccess(_selfProfile('654321', 'new-session')));
     await tester.pumpAndSettle();
+    openOldSettings();
+    await tester.pumpAndSettle();
+    expect(opened, isEmpty);
     expect(find.text('new-session'), findsOneWidget);
     expect(repository.queries.length, greaterThanOrEqualTo(2));
     final container = ProviderScope.containerOf(
@@ -822,6 +896,27 @@ void main() {
       },
     );
 
+    final settings = find.byKey(const Key('user-profile-action-settings'));
+    expect(settings, findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: settings),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('user-profile-page-list')),
+        matching: settings,
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.widget<IconButton>(settings).tooltip,
+      _profileL10n(tester).profileSettings,
+    );
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.home_outlined), findsNothing);
+    expect(find.byKey(const Key('user-profile-open-web')), findsOneWidget);
+
     const targets = <ForumUserProfileActionKind>[
       ForumUserProfileActionKind.forumFavorites,
       ForumUserProfileActionKind.friends,
@@ -837,6 +932,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(opened.last.initialUri.host, 'bbs.yamibo.com');
       expect(opened.last.initialUri.path, '/home.php');
+      expect(
+        opened.last.initialUri,
+        _allActionsProfile.actionLinks
+            .singleWhere((link) => link.kind == kind)
+            .uri,
+      );
       expect(opened.last.popOnRootBack, isTrue);
       expect(opened.last.expectedAccountId, '654321');
       expect(
@@ -887,6 +988,8 @@ void main() {
     );
 
     expect(find.byKey(const Key('user-profile-actions')), findsNothing);
+    expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
+    expect(find.byIcon(Icons.settings_outlined), findsNothing);
   });
 
   testWidgets('MyProfilePage actions fit 300dp at enlarged text scale', (

@@ -145,6 +145,15 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
     final raw = asyncProfile.asData?.value;
     final state = raw?.belongsToSession(owner) == true ? raw : null;
     final profile = state?.data;
+    final canOpenSettings =
+        widget.isMyProfile &&
+        owner != null &&
+        profile?.identity.userId == owner.uid &&
+        state?.capabilities?.supports(
+              ForumUserProfileCapability.orderedActions,
+            ) ==
+            true &&
+        profile?.actions.contains(ForumUserProfileActionKind.settings) == true;
     final waitingForOwner =
         widget.isMyProfile &&
         owner == null &&
@@ -170,12 +179,25 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
               onPressed: _openForumPage,
               icon: const Icon(Icons.open_in_new_rounded),
             ),
-          IconButton(
-            tooltip: l10n.profileHome,
-            onPressed: () =>
-                Navigator.of(context).popUntil((route) => route.isFirst),
-            icon: const Icon(Icons.home_outlined),
-          ),
+          if (canOpenSettings)
+            IconButton(
+              key: const Key('user-profile-action-settings'),
+              tooltip: l10n.profileSettings,
+              onPressed: () {
+                // A rebuilt session must not reuse the old frame's action source.
+                if (!mounted ||
+                    ref.read(verifiedProfileOwnerProvider) != owner) {
+                  return;
+                }
+                unawaited(
+                  _openAction(
+                    ForumUserProfileActionKind.settings,
+                    profile: profile,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings_outlined),
+            ),
         ],
       ),
       body: widget.isMyProfile && owner == null
