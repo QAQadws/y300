@@ -4,6 +4,7 @@ library;
 import '../network/forum_request.dart' show ForumRequestCancellation;
 import 'data_command_contract.dart';
 import 'data_read_contract.dart';
+import 'profile_and_blog.dart' show UserBlogComment;
 
 /// A comment operation advertised by the current server page.
 enum UserBlogCommentAction {
@@ -63,6 +64,25 @@ final class UserBlogCommentTarget {
 /// Opaque, transient proof of a prepared comment form. Never persist it.
 abstract interface class UserBlogCommentPreparationToken {}
 
+/// One source-code smiley from the journal comment editor's own catalog.
+final class UserBlogCommentSmiley {
+  /// Creates a catalog entry, distinct from a journal HTML image or forum code.
+  const UserBlogCommentSmiley({
+    required this.index,
+    required this.code,
+    required this.imageUri,
+  });
+
+  /// Source-provided ordinal within this catalog, starting at one.
+  final int index;
+
+  /// Exact source text to insert and submit without conversion.
+  final String code;
+
+  /// Absolute resource URI for the editor's inline preview.
+  final Uri imageUri;
+}
+
 /// Server-provided editor values and a single-use submission proof.
 final class UserBlogCommentPreparation {
   /// Creates a prepared form without exposing protocol fields to the Host.
@@ -70,6 +90,8 @@ final class UserBlogCommentPreparation {
     required this.target,
     required this.token,
     this.initialMessage = '',
+    this.smilies = const [],
+    this.replyTo,
   });
 
   /// Proven target and actor.
@@ -77,6 +99,14 @@ final class UserBlogCommentPreparation {
 
   /// Editable source text; empty for add/reply/delete.
   final String initialMessage;
+
+  /// Optional comment-code catalog proved by the source; empty if unavailable.
+  final List<UserBlogCommentSmiley> smilies;
+
+  /// Current server comment being replied to, for a separate editor preview.
+  /// The server builds the quote from its identity; do not prepend this HTML
+  /// to [initialMessage] or the submitted message.
+  final UserBlogComment? replyTo;
 
   /// Adapter-owned form proof.
   final UserBlogCommentPreparationToken token;

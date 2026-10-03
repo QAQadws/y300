@@ -18,11 +18,15 @@ final class BlogCommentState {
     this.phase = BlogCommentPhase.idle,
     this.message = '',
     this.initialMessage = '',
+    this.smilies = const [],
+    this.replyTo,
     this.failure,
   });
   final BlogCommentPhase phase;
   final String message;
   final String initialMessage;
+  final List<UserBlogCommentSmiley> smilies;
+  final UserBlogComment? replyTo;
   final Object? failure;
   bool get busy =>
       phase == BlogCommentPhase.preparing ||
@@ -56,6 +60,7 @@ final class BlogCommentController extends ValueNotifier<BlogCommentState> {
   void updateMessage(String message) {
     if (_disposed ||
         value.busy ||
+        value.phase == BlogCommentPhase.unknown ||
         value.phase == BlogCommentPhase.expired ||
         value.phase == BlogCommentPhase.applied) {
       return;
@@ -65,6 +70,8 @@ final class BlogCommentController extends ValueNotifier<BlogCommentState> {
       phase: value.phase,
       message: message,
       initialMessage: value.initialMessage,
+      smilies: value.smilies,
+      replyTo: value.replyTo,
       failure: value.failure,
     );
   }
@@ -118,6 +125,8 @@ final class BlogCommentController extends ValueNotifier<BlogCommentState> {
         phase: BlogCommentPhase.ready,
         message: message,
         initialMessage: initial,
+        smilies: ready.smilies,
+        replyTo: ready.replyTo,
       );
     } catch (_) {
       if (_accept(generation, cancellation)) {
@@ -209,6 +218,8 @@ final class BlogCommentController extends ValueNotifier<BlogCommentState> {
       phase: phase,
       message: value.message,
       initialMessage: value.initialMessage,
+      smilies: value.smilies,
+      replyTo: value.replyTo,
       failure: failure,
     );
   }

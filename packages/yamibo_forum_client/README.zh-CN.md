@@ -102,6 +102,8 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 
 当前结构化命令覆盖收藏/取消收藏、评分、点评、投票、发帖、回复、普通帖子编辑、图片附件上传和删除，以及单人／已有群组私信发送和按类型／作者屏蔽提醒。服务器原始 JSON、XML/CDATA、HTML、Cookie 和 formhash 不会进入回执。
 
+日志评论 preparation 通过可选的 `smilies` 和 `replyTo` 提供编辑元数据。标准 Discuz adapter 从已验证评论表单的 `STATICURL` 推导 30 个 `UserBlogCommentSmiley`，保留准确的 `[em:N:]` 代码和图片 URI，与论坛表情及日志 HTML 编辑器的图片目录分开。缺失或冲突的资源根仅让目录为空，不阻止文字编辑或新增请求；自定义来源继续使用空目录／空回复上下文的默认值。`replyTo` 复用已读的服务器评论供编辑页预览，提交仍使用已验证 `cid` 和原始正文，由 Discuz 生成引用；已有编辑正文、引用、格式和表情代码不会在 package 中重写。这些元数据和表单 token 仅供当前操作使用，不持久化到草稿或缓存。
+
 `privateMessages` 区分目录与单人／群组对话，支持分页；对话页码 0 表示最新页，历史页码递减。`sendPrivateMessage` 接受单个 UID、用户名或带回复锚点的已有群组。`ignoreNotifications` 只过滤今后同类型和作者的提醒，不删除已有行。消息与提醒读取本身可能更新服务端已读状态，不使用 document/snapshot 磁盘缓存；未知写入结果不得自动重发。
 
 `friendFeed`／`loadFriendFeed` 按 touch 好友页读取我的好友、在线会员、最近访客和我的足迹。查询必须绑定当前账号 UID，响应校验登录身份、激活标签和分页上下文；匿名访客以空身份保留且不可交互。头像、近况、在线标记和分页只按服务器证据投影，默认 touch 模板未提供访问时间，不推断日期。这些账号数据不落 document/snapshot 缓存，也不替换私信收件人选择器使用的 `friendDirectory`。

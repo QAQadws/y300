@@ -25,10 +25,17 @@ UserBlogCommentTarget blogCommentTarget(UserBlogCommentAction action) =>
     );
 
 final class BlogCommentFixture implements UserBlogCommentService {
-  BlogCommentFixture({this.autoPrepare = false, this.initialMessage = ''});
+  BlogCommentFixture({
+    this.autoPrepare = false,
+    this.initialMessage = '',
+    this.smilies = const [],
+    this.replyTo,
+  });
 
   final bool autoPrepare;
   String initialMessage;
+  List<UserBlogCommentSmiley> smilies;
+  UserBlogComment? replyTo;
   final preparations =
       <
         ({
@@ -72,6 +79,8 @@ final class BlogCommentFixture implements UserBlogCommentService {
           target: target ?? request.target,
           token: _CommentToken(),
           initialMessage: initialMessage,
+          smilies: smilies,
+          replyTo: replyTo,
         ),
         capabilities: DataCapabilitySet.supported(
           supported ? [request.target.action] : [],
@@ -103,6 +112,19 @@ final class BlogCommentFixture implements UserBlogCommentService {
     );
   }
 }
+
+final blogCommentFixtureSmilies = [
+  UserBlogCommentSmiley(
+    index: 1,
+    code: '[em:1:]',
+    imageUri: Uri.parse('https://bbs.yamibo.com/image/face/1.gif'),
+  ),
+  UserBlogCommentSmiley(
+    index: 2,
+    code: '[em:2:]',
+    imageUri: Uri.parse('https://bbs.yamibo.com/image/face/2.gif'),
+  ),
+];
 
 final class _CommentToken implements UserBlogCommentPreparationToken {}
 

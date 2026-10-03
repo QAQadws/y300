@@ -7635,6 +7635,18 @@ abstract class AppLocalizations {
   /// **'评论内容'**
   String get profileBlogCommentContent;
 
+  /// No description provided for @profileBlogCommentReplyTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'回复 {author}'**
+  String profileBlogCommentReplyTo(String author);
+
+  /// No description provided for @profileBlogCommentSmileyLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'表情 {index}'**
+  String profileBlogCommentSmileyLabel(int index);
+
   /// No description provided for @profileBlogSubmitComment.
   ///
   /// In zh, this message translates to:

@@ -8,6 +8,8 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
+- Optional journal-comment smiley codes and resource references, plus verified
+  reply context, supplied by the existing preparation read without extra HTTP.
 - Ordered, typed topic badges shared by forum-display and user-topic/reply
   summaries, preserving independent status markers and unknown source labels.
 - Forum-display snapshot v2 with cached-HTML reparse for older single-marker

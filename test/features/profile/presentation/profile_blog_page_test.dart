@@ -388,7 +388,15 @@ void main() {
           ),
         );
         if (action != UserBlogCommentAction.delete) {
-          await tester.enterText(find.byType(TextField), '实际输入内容');
+          final editor = tester.widget<QuillEditor>(
+            find.byKey(const Key('blog-comment-input')),
+          );
+          editor.controller.replaceText(
+            0,
+            editor.controller.document.length - 1,
+            '实际输入内容',
+            const TextSelection.collapsed(offset: 6),
+          );
         }
         await tester.pump();
         await tester.tap(find.byKey(const Key('blog-comment-submit')));

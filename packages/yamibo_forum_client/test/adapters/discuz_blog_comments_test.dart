@@ -45,6 +45,28 @@ void main() {
           ready.dataOrNull!.initialMessage,
           action == UserBlogCommentAction.edit ? '[b]Original[/b] & text' : '',
         );
+        final smilies = ready.dataOrNull!.smilies;
+        if (action == UserBlogCommentAction.delete) {
+          expect(smilies, isEmpty);
+        } else {
+          expect(smilies, hasLength(30));
+          expect(smilies.first.index, 1);
+          expect(smilies.first.code, '[em:1:]');
+          expect(
+            smilies.first.imageUri.toString(),
+            'https://example.test/static/image/smiley/comcom/1.gif',
+          );
+          expect(smilies.last.index, 30);
+          expect(smilies.last.code, '[em:30:]');
+        }
+        final replyTo = ready.dataOrNull!.replyTo;
+        if (action == UserBlogCommentAction.reply) {
+          expect(replyTo!.commentId, '5');
+          expect(replyTo.authorName, 'Reader');
+          expect(replyTo.bodyHtml, 'A <b>comment</b>');
+        } else {
+          expect(replyTo, isNull);
+        }
         final result = await commands.execute(_submission(ready.dataOrNull!));
         expect(result, isA<DataCommandApplied<UserBlogCommentReceipt>>());
         expect(
@@ -80,6 +102,187 @@ void main() {
         if (action == UserBlogCommentAction.delete) {
           expect(fields.containsKey('message'), isFalse);
         }
+      },
+    );
+  }
+
+  test('custom preparations retain empty optional metadata defaults', () async {
+    final network = _Network(UserBlogCommentAction.add);
+    final ready = (await service(
+      network,
+    ).prepare(_target(UserBlogCommentAction.add))).dataOrNull!;
+    final custom = UserBlogCommentPreparation(
+      target: ready.target,
+      token: ready.token,
+    );
+    expect(custom.smilies, isEmpty);
+    expect(custom.replyTo, isNull);
+  });
+
+  for (final action in [
+    UserBlogCommentAction.add,
+    UserBlogCommentAction.reply,
+    UserBlogCommentAction.edit,
+  ]) {
+    test(
+      'submits $action smileys and formatting as unchanged source',
+      () async {
+        const message =
+            '[quote]Earlier [em:1:][/quote]\n[b]bold[/b] & + = [em:30:]';
+        final network = _Network(action);
+        final commands = service(network);
+        final ready = (await commands.prepare(_target(action))).dataOrNull!;
+        expect(
+          ready.initialMessage,
+          action == UserBlogCommentAction.edit ? '[b]Original[/b] & text' : '',
+        );
+        final result = await commands.execute(
+          UserBlogCommentSubmission(
+            preparation: ready,
+            actorUserId: '102',
+            message: message,
+          ),
+        );
+        expect(result, isA<DataCommandApplied<UserBlogCommentReceipt>>());
+        final fields = network.requests.last.body! as Map<String, String>;
+        expect(fields['message'], message);
+        if (action == UserBlogCommentAction.reply) {
+          expect(fields['cid'], ready.replyTo!.commentId);
+        }
+        expect(
+          network.requests,
+          hasLength(action == UserBlogCommentAction.add ? 2 : 3),
+        );
+      },
+    );
+  }
+
+  test('edit source retains existing quotes and comment codes', () async {
+    final network = _Network(UserBlogCommentAction.edit)
+      ..form = _form(UserBlogCommentAction.edit).replaceFirst(
+        '[b]Original[/b] &amp; text',
+        '[quote]Reader: [em:2:][/quote]\n[i]edit[/i] &amp; [em:30:]',
+      );
+    final ready = (await service(
+      network,
+    ).prepare(_target(UserBlogCommentAction.edit))).dataOrNull!;
+    expect(
+      ready.initialMessage,
+      '[quote]Reader: [em:2:][/quote]\n[i]edit[/i] & [em:30:]',
+    );
+    expect(network.requests, hasLength(2));
+  });
+
+  test('comment smileys use the prepared form static resource root', () async {
+    final network = _Network(UserBlogCommentAction.reply)
+      ..form = _form(UserBlogCommentAction.reply).replaceFirst(
+        "STATICURL = 'static/'",
+        "STATICURL = 'https://cdn.example.test/assets/'",
+      );
+    final ready = (await service(
+      network,
+    ).prepare(_target(UserBlogCommentAction.reply))).dataOrNull!;
+    expect(ready.smilies, hasLength(30));
+    expect(
+      ready.smilies.last.imageUri.toString(),
+      'https://cdn.example.test/assets/image/smiley/comcom/30.gif',
+    );
+    expect(network.requests, hasLength(2));
+  });
+
+  for (final ignoredSource in [
+    "<script>/* var STATICURL = 'wrong/' */</script>",
+    "<script>// var STATICURL = 'wrong/'\n</script>",
+    '''<script>var note = "var STATICURL = 'wrong/'";</script>''',
+    "<script type=\"application/json\">var STATICURL = 'wrong/';</script>",
+  ]) {
+    for (final hasHeaderRoot in [false, true]) {
+      test(
+        'ignores nondeclaration evidence with header=$hasHeaderRoot: $ignoredSource',
+        () async {
+          var form = _form(UserBlogCommentAction.edit);
+          if (!hasHeaderRoot) {
+            form = form.replaceFirst("STATICURL = 'static/', ", '');
+          }
+          final network = _Network(UserBlogCommentAction.edit)
+            ..form = '$form$ignoredSource';
+          final ready = await service(
+            network,
+          ).prepare(_target(UserBlogCommentAction.edit));
+          expect(ready.failureOrNull, isNull);
+          expect(ready.dataOrNull!.smilies, hasLength(hasHeaderRoot ? 30 : 0));
+          expect(network.requests, hasLength(2));
+        },
+      );
+    }
+  }
+
+  for (final assignment in [
+    "var STATICURL = 'static/' + 'actual/';",
+    "STATICURL = resolveRoot();",
+    "window.STATICURL = 'static/';",
+    "STATICURL += 'actual/';",
+  ]) {
+    test(
+      'unknown root assignment disables only metadata: $assignment',
+      () async {
+        final network = _Network(UserBlogCommentAction.edit)
+          ..form =
+              '${_form(UserBlogCommentAction.edit)}<script>$assignment</script>';
+        final ready = await service(
+          network,
+        ).prepare(_target(UserBlogCommentAction.edit));
+        expect(ready.failureOrNull, isNull);
+        expect(ready.dataOrNull!.smilies, isEmpty);
+        expect(ready.dataOrNull!.initialMessage, '[b]Original[/b] & text');
+        expect(network.requests, hasLength(2));
+      },
+    );
+  }
+
+  test(
+    'literal escapes, comments and repeated identical roots stay proved',
+    () async {
+      final network = _Network(UserBlogCommentAction.edit)
+        ..form = _form(UserBlogCommentAction.edit).replaceFirst(
+          "STATICURL = 'static/',",
+          r"STATICURL /* metadata */ = '\x73tatic\/' /* boundary */, STATICURL = 'static/',",
+        );
+      final ready = (await service(
+        network,
+      ).prepare(_target(UserBlogCommentAction.edit))).dataOrNull!;
+      expect(ready.smilies, hasLength(30));
+      expect(
+        ready.smilies.first.imageUri.toString(),
+        'https://example.test/static/image/smiley/comcom/1.gif',
+      );
+      expect(network.requests, hasLength(2));
+    },
+  );
+
+  for (final staticEvidence in [
+    '',
+    "STATICURL = 'static/' , STATICURL = 'other/' , ",
+    "STATICURL = 'javascript:unsafe/' , ",
+    "STATICURL = 'https://user:secret@example.test/static/' , ",
+    "STATICURL = 'static/?token=private' , ",
+    "STATICURL = 'static/#fragment' , ",
+    "STATICURL = 'static' , ",
+  ]) {
+    test(
+      'unproved static root disables only the comment picker: $staticEvidence',
+      () async {
+        final network = _Network(UserBlogCommentAction.edit)
+          ..form = _form(
+            UserBlogCommentAction.edit,
+          ).replaceFirst("STATICURL = 'static/', ", staticEvidence);
+        final ready = await service(
+          network,
+        ).prepare(_target(UserBlogCommentAction.edit));
+        expect(ready.failureOrNull, isNull);
+        expect(ready.dataOrNull!.smilies, isEmpty);
+        expect(ready.dataOrNull!.initialMessage, '[b]Original[/b] & text');
+        expect(network.requests, hasLength(2));
       },
     );
   }
@@ -491,7 +694,7 @@ Future<void> _login(MemoryForumSessionStore store, String actor) => store.merge(
   ),
 );
 const _header =
-    "<script>var STYLEID = '1', discuz_uid = '102', SITEURL = 'https://example.test/';</script>";
+    "<script>var STYLEID = '1', STATICURL = 'static/', discuz_uid = '102', SITEURL = 'https://example.test/';</script>";
 String _article({bool actions = true, bool open = true}) =>
     '$_header${blogArticle(commentsOpen: open).replaceFirst('<div class="mtime"><span>Today</span></div>', '''<div class="mtime"><span>Today</span><div class="doing_listgl">
 ${actions ? [

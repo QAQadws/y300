@@ -4567,6 +4567,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogCommentContent => '评论内容';
 
   @override
+  String profileBlogCommentReplyTo(String author) {
+    return '回复 $author';
+  }
+
+  @override
+  String profileBlogCommentSmileyLabel(int index) {
+    return '表情 $index';
+  }
+
+  @override
   String get profileBlogSubmitComment => '发布';
 
   @override
@@ -9915,6 +9925,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogCommentContent => '留言內容';
+
+  @override
+  String profileBlogCommentReplyTo(String author) {
+    return '回覆 $author';
+  }
+
+  @override
+  String profileBlogCommentSmileyLabel(int index) {
+    return '表情 $index';
+  }
 
   @override
   String get profileBlogSubmitComment => '發佈';

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/features/composer_shared/presentation/controllers/composer_sticker_text_controller.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_controller.dart';
+import 'package:y300/features/profile/presentation/blog/blog_comment_editor.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_web_navigation.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -35,8 +37,10 @@ class BlogCommentPage extends ConsumerStatefulWidget {
 
 class _BlogCommentPageState extends ConsumerState<BlogCommentPage> {
   late final BlogCommentController _controller;
-  final _text = TextEditingController();
+  late final ComposerStickerTextController _input;
   bool _confirmingLeave = false;
+  bool _pickerOpen = false;
+  ModalRoute<Object?>? _smileyRoute;
   UserBlogCommentReceipt? _receipt;
 
   @override
@@ -46,6 +50,11 @@ class _BlogCommentPageState extends ConsumerState<BlogCommentPage> {
       target: widget.target,
       service: ref.read(userBlogCommentServiceProvider),
       currentActor: () => ref.read(blogAccountIdProvider),
+    );
+    _input = ComposerStickerTextController(
+      value: '',
+      readOnly: true,
+      onChanged: _controller.updateMessage,
     );
     _controller.addListener(_syncInput);
     ref.listenManual(blogAccountIdProvider, (_, actor) {
@@ -58,20 +67,73 @@ class _BlogCommentPageState extends ConsumerState<BlogCommentPage> {
   }
 
   void _syncInput() {
-    final source = _controller.value.message;
-    if (_text.text != source) {
-      _text.value = TextEditingValue(
-        text: source,
-        selection: TextSelection.collapsed(offset: source.length),
-      );
+    final state = _controller.value;
+    _input.update(
+      value: state.message,
+      readOnly: !_canEdit(state),
+      stickers: state.smilies.map(blogCommentSticker),
+    );
+    if (!_canEdit(state)) {
+      _input.focusNode.unfocus();
+      _closeSmileyPicker();
     }
+  }
+
+  bool _canEdit(BlogCommentState state) =>
+      state.phase == BlogCommentPhase.ready ||
+      state.phase == BlogCommentPhase.failed;
+
+  void _closeSmileyPicker() {
+    final route = _smileyRoute;
+    _smileyRoute = null;
+    if (route != null && route.isActive) route.navigator?.removeRoute(route);
+  }
+
+  Future<void> _pickSmiley() async {
+    final state = _controller.value;
+    if (_pickerOpen || !_canEdit(state) || state.smilies.isEmpty) return;
+    final generation = _input.generation;
+    final selection = _input.selection;
+    _input.focusNode.unfocus();
+    _pickerOpen = true;
+    final smiley = await showModalBottomSheet<UserBlogCommentSmiley>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: false,
+      backgroundColor: Theme.of(context).y300NativeContent.card,
+      builder: (context) {
+        _smileyRoute = ModalRoute.of(context);
+        // Expiry can arrive after push but before the sheet's first frame.
+        // Never render a captured catalog after its editor has been locked.
+        if (!_canEdit(_controller.value) ||
+            ref.read(blogAccountIdProvider) != widget.target.actorUserId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _closeSmileyPicker();
+          });
+          return const SizedBox.shrink();
+        }
+        return BlogCommentSmileySheet(smilies: _controller.value.smilies);
+      },
+    );
+    _smileyRoute = null;
+    if (!mounted) return;
+    _pickerOpen = false;
+    if (smiley == null ||
+        ref.read(blogAccountIdProvider) != widget.target.actorUserId ||
+        !_canEdit(_controller.value) ||
+        !_input.canApplyInsertion(generation, selection)) {
+      return;
+    }
+    _input.insertSticker(blogCommentSticker(smiley));
+    _input.focusNode.requestFocus();
   }
 
   @override
   void dispose() {
     _controller.removeListener(_syncInput);
     _controller.dispose();
-    _text.dispose();
+    _input.dispose();
     super.dispose();
   }
 
@@ -91,110 +153,126 @@ class _BlogCommentPageState extends ConsumerState<BlogCommentPage> {
           if (!didPop) unawaited(_confirmLeave());
         },
         child: Scaffold(
-          backgroundColor: native.background,
+          backgroundColor: native.card,
           appBar: AppBar(
             title: Text(blogCommentActionLabel(l10n, widget.target.action)),
           ),
+          bottomNavigationBar:
+              state.phase == BlogCommentPhase.expired ||
+                  state.phase == BlogCommentPhase.unknown
+              ? null
+              : Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom,
+                  ),
+                  child: BlogCommentToolbar(
+                    showSmiley: !deleting,
+                    onSmiley: _canEdit(state) && state.smilies.isNotEmpty
+                        ? _pickSmiley
+                        : null,
+                    actionKey: Key(
+                      state.phase == BlogCommentPhase.failed
+                          ? 'blog-comment-retry'
+                          : 'blog-comment-submit',
+                    ),
+                    actionLabel: state.phase == BlogCommentPhase.failed
+                        ? l10n.commonRetry
+                        : deleting
+                        ? l10n.commonDelete
+                        : widget.target.action == UserBlogCommentAction.edit
+                        ? l10n.commonSave
+                        : l10n.profileBlogSubmitComment,
+                    actionIcon: state.phase == BlogCommentPhase.failed
+                        ? Icons.refresh
+                        : deleting
+                        ? Icons.delete_outline
+                        : widget.target.action == UserBlogCommentAction.edit
+                        ? Icons.check
+                        : Icons.send_outlined,
+                    onAction: state.phase == BlogCommentPhase.failed
+                        ? _controller.prepare
+                        : state.phase == BlogCommentPhase.ready
+                        ? _submit
+                        : null,
+                    onOpenWeb: state.phase == BlogCommentPhase.failed
+                        ? _openWeb
+                        : null,
+                  ),
+                ),
           body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                if (state.busy) ...[
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      state.phase == BlogCommentPhase.preparing
-                          ? l10n.profileBlogPreparingComment
-                          : l10n.profileBlogSubmittingComment,
-                      style: TextStyle(color: native.supportingText),
+            bottom: false,
+            child: CustomScrollView(
+              key: const Key('blog-comment-scroll'),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (state.busy) ...[
+                          const SizedBox(height: 12),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              state.phase == BlogCommentPhase.preparing
+                                  ? l10n.profileBlogPreparingComment
+                                  : l10n.profileBlogSubmittingComment,
+                              style: TextStyle(color: native.supportingText),
+                            ),
+                          ),
+                          if (!MediaQuery.disableAnimationsOf(context)) ...[
+                            const SizedBox(height: 8),
+                            const LinearProgressIndicator(),
+                          ],
+                          const SizedBox(height: 12),
+                        ],
+                        if (state.phase == BlogCommentPhase.expired) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.profileBlogCommentSessionChanged,
+                            style: TextStyle(color: native.body),
+                          ),
+                        ] else ...[
+                          if (deleting) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.profileBlogDeleteCommentBody,
+                              style: TextStyle(color: native.body),
+                            ),
+                          ],
+                          if (state.phase == BlogCommentPhase.unknown) ...[
+                            const SizedBox(height: 12),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                l10n.profileBlogCommentOutcomeUnknown,
+                                style: TextStyle(color: native.body),
+                              ),
+                            ),
+                          ] else if (state.failure != null) ...[
+                            const SizedBox(height: 12),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                _failureText(l10n, state.failure),
+                                style: TextStyle(color: native.body),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
                     ),
                   ),
-                  if (!MediaQuery.disableAnimationsOf(context)) ...[
-                    const SizedBox(height: 8),
-                    const LinearProgressIndicator(),
-                  ],
-                  const SizedBox(height: 12),
-                ],
-                if (state.phase == BlogCommentPhase.expired)
-                  Text(
-                    l10n.profileBlogCommentSessionChanged,
-                    style: TextStyle(color: native.body),
-                  )
-                else ...[
-                  if (deleting)
-                    Text(
-                      l10n.profileBlogDeleteCommentBody,
-                      style: TextStyle(color: native.body),
-                    )
-                  else
-                    TextField(
-                      key: const Key('blog-comment-input'),
-                      controller: _text,
-                      enabled: !state.busy,
-                      readOnly: state.phase == BlogCommentPhase.unknown,
-                      minLines: 6,
-                      maxLines: null,
-                      keyboardType: TextInputType.multiline,
-                      textCapitalization: TextCapitalization.sentences,
-                      style: TextStyle(color: native.body),
-                      decoration: InputDecoration(
-                        labelText: l10n.profileBlogCommentContent,
-                      ),
-                      onChanged: _controller.updateMessage,
+                ),
+                if (state.phase != BlogCommentPhase.expired && !deleting) ...[
+                  if (state.replyTo case final comment?)
+                    SliverToBoxAdapter(
+                      child: BlogCommentReplyContext(comment: comment),
                     ),
-                  if (state.phase == BlogCommentPhase.unknown) ...[
-                    const SizedBox(height: 12),
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        l10n.profileBlogCommentOutcomeUnknown,
-                        style: TextStyle(color: native.body),
-                      ),
-                    ),
-                  ] else if (state.failure != null) ...[
-                    const SizedBox(height: 12),
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        _failureText(l10n, state.failure),
-                        style: TextStyle(color: native.body),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  if (state.phase == BlogCommentPhase.failed)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        key: const Key('blog-comment-retry'),
-                        onPressed: _controller.prepare,
-                        child: Text(l10n.commonRetry),
-                      ),
-                    )
-                  else if (state.phase != BlogCommentPhase.unknown)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton(
-                        key: const Key('blog-comment-submit'),
-                        onPressed: state.phase == BlogCommentPhase.ready
-                            ? _submit
-                            : null,
-                        child: Text(
-                          deleting
-                              ? l10n.commonDelete
-                              : widget.target.action ==
-                                    UserBlogCommentAction.edit
-                              ? l10n.commonSave
-                              : l10n.profileBlogSubmitComment,
-                        ),
-                      ),
-                    ),
-                  if (state.phase == BlogCommentPhase.failed)
-                    TextButton(
-                      key: const Key('blog-comment-open-web'),
-                      onPressed: _openWeb,
-                      child: Text(l10n.profileBlogOpenWeb),
-                    ),
+                  SliverFillRemaining(
+                    child: BlogCommentInput(controller: _input),
+                  ),
                 ],
               ],
             ),

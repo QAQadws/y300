@@ -327,7 +327,14 @@ void main() {
             keyboard: true,
           );
           final input = find.byKey(const Key('blog-comment-input'));
-          await tester.enterText(input, '这一段评论仍然可以编辑。');
+          final commentEditor = tester.widget<QuillEditor>(input);
+          const commentText = '这一段评论仍然可以编辑。';
+          commentEditor.controller.replaceText(
+            0,
+            commentEditor.controller.document.length - 1,
+            commentText,
+            const TextSelection.collapsed(offset: commentText.length),
+          );
           final submit = find.byKey(const Key('blog-comment-submit'));
           await tester.ensureVisible(submit);
           await tester.pumpAndSettle();
@@ -336,7 +343,10 @@ void main() {
             lessThanOrEqualTo(844 - 260),
           );
           expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
-          expect(tester.widget<TextField>(input).decoration!.border, isNull);
+          expect(
+            commentEditor.config.customStyles!.paragraph!.style.color,
+            host.theme.y300NativeContent.body,
+          );
           await _save(tester, '$name-comment-input');
 
           await host.pump(

@@ -122,6 +122,12 @@ final class DiscuzBlogCommentService implements UserBlogCommentService {
           target: target,
           token: token,
           initialMessage: parsed.message,
+          smilies: parsed.smilies,
+          replyTo: target.action == UserBlogCommentAction.reply
+              ? data.comments.firstWhere(
+                  (comment) => comment.commentId == target.commentId,
+                )
+              : null,
         ),
         capabilities: DataCapabilitySet.supported([target.action]),
         metadata: const DataReadMetadata.network(),
