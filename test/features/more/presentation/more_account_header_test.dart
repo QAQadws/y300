@@ -5,6 +5,7 @@ import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,51 +39,82 @@ final _sessionSource = StateProvider<AuthSessionViewState>((ref) => _session);
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
-  testWidgets('thread and reply statistics open from both number and label', (
-    tester,
-  ) async {
-    var threads = 0;
-    var replies = 0;
-    await _pumpHeader(
-      tester,
-      repository: _Repository((_) async => _success()),
-      onOpenThreads: () => threads++,
-      onOpenReplies: () => replies++,
-    );
-    final l10n = _l10n(tester);
-    for (final (name, label) in [
-      ('threads', l10n.moreAccountThreads),
-      ('replies', l10n.moreAccountReplies),
-    ]) {
-      final statistic = find.byKey(Key('more-account-$name'));
-      await tester.tap(
-        find.descendant(
-          of: statistic,
-          matching: find.byType(AnimatedFlipCounter),
-        ),
-      );
-      await tester.tap(
-        find.descendant(of: statistic, matching: find.text(label)),
-      );
-    }
-    expect(threads, 2);
-    expect(replies, 2);
-  });
+  testWidgets(
+    'thread reply and credit statistics open from number label and accessibility action',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        var threads = 0;
+        var replies = 0;
+        var credits = 0;
+        await _pumpHeader(
+          tester,
+          repository: _Repository((_) async => _success()),
+          onOpenThreads: () => threads++,
+          onOpenReplies: () => replies++,
+          onOpenCredits: () => credits++,
+        );
+        final l10n = _l10n(tester);
+        for (final (name, label) in [
+          ('threads', l10n.moreAccountThreads),
+          ('replies', l10n.moreAccountReplies),
+          ('credits', l10n.moreAccountCreditLabel),
+        ]) {
+          final statistic = find.byKey(Key('more-account-$name'));
+          await tester.tap(
+            find.descendant(
+              of: statistic,
+              matching: find.byType(AnimatedFlipCounter),
+            ),
+          );
+          await tester.tap(
+            find.descendant(of: statistic, matching: find.text(label)),
+          );
+          final node = tester.getSemantics(statistic);
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+          node.owner!.performAction(node.id, SemanticsAction.tap);
+        }
+        expect(threads, 3);
+        expect(replies, 3);
+        expect(credits, 3);
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
 
   testWidgets('statistics remain inactive while an account action is pending', (
     tester,
   ) async {
-    var opens = 0;
-    await _pumpHeader(
-      tester,
-      repository: _Repository((_) async => _success()),
-      pendingAction: true,
-      onOpenThreads: () => opens++,
-      onOpenReplies: () => opens++,
-    );
-    await tester.tap(find.byKey(const Key('more-account-threads')));
-    await tester.tap(find.byKey(const Key('more-account-replies')));
-    expect(opens, 0);
+    final semantics = tester.ensureSemantics();
+    try {
+      var opens = 0;
+      await _pumpHeader(
+        tester,
+        repository: _Repository((_) async => _success()),
+        pendingAction: true,
+        onOpenThreads: () => opens++,
+        onOpenReplies: () => opens++,
+        onOpenCredits: () => opens++,
+      );
+      for (final name in ['threads', 'replies', 'credits']) {
+        final statistic = find.byKey(Key('more-account-$name'));
+        await tester.tap(statistic);
+        expect(
+          tester
+              .getSemantics(statistic)
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isFalse,
+        );
+      }
+      expect(opens, 0);
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets(
@@ -471,6 +503,7 @@ Future<void> _pumpHeader(
   VoidCallback? onOpenProfile,
   VoidCallback? onOpenThreads,
   VoidCallback? onOpenReplies,
+  VoidCallback? onOpenCredits,
   bool pendingAction = false,
   bool settle = true,
   ThemeData? theme,
@@ -516,6 +549,7 @@ Future<void> _pumpHeader(
                 onOpenProfile: onOpenProfile ?? () {},
                 onOpenThreads: onOpenThreads,
                 onOpenReplies: onOpenReplies,
+                onOpenCredits: onOpenCredits,
                 isAccountActionPending: pendingAction,
               ),
             ],

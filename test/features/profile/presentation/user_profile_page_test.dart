@@ -881,34 +881,52 @@ void main() {
     expect(directory.queries.single.type, UserThreadDirectoryType.threads);
   });
 
-  testWidgets(
-    'MyProfilePage opens the native friends page for the verified account',
-    (tester) async {
-      final directory = FriendFeedFixture(autoComplete: true);
-      await _pumpMyProfile(
-        tester,
-        repository: _FakeProfileRepository(data: _allActionsProfile),
-        friendDirectory: directory,
-      );
-      expect(directory.requests, isEmpty);
-      final entry = find.byKey(const Key('user-profile-action-friends'));
-      await _reveal(tester, entry);
-      await tester.tap(entry);
-      await tester.pumpAndSettle();
-      expect(find.byType(MyFriendsPage), findsOneWidget);
-      expect(directory.requests.single.query.accountUserId, '654321');
-      expect(
-        directory.requests.single.query.scope,
-        ForumFriendFeedScope.friends,
-      );
-      expect(find.byType(ForumWebViewPage, skipOffstage: false), findsNothing);
-      Navigator.of(tester.element(find.byType(MyFriendsPage))).pop();
-      await tester.pumpAndSettle();
-      expect(find.byType(MyProfilePage), findsOneWidget);
-      expect(directory.requests, hasLength(1));
-      expect(tester.takeException(), isNull);
-    },
-  );
+  for (final locale in [const Locale('zh'), const Locale('zh', 'TW')]) {
+    testWidgets(
+      'MyProfilePage labels and opens the self friends action for $locale',
+      (tester) async {
+        final directory = FriendFeedFixture(autoComplete: true);
+        await _pumpMyProfile(
+          tester,
+          repository: _FakeProfileRepository(data: _allActionsProfile),
+          friendDirectory: directory,
+          locale: locale,
+        );
+        expect(directory.requests, isEmpty);
+        final entry = find.byKey(const Key('user-profile-action-friends'));
+        await _reveal(tester, entry);
+        final l10n = _profileL10n(tester);
+        expect(
+          find.descendant(
+            of: entry,
+            matching: find.text(l10n.profileMyFriendsTitle),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: entry, matching: find.text(l10n.profileFriends)),
+          findsNothing,
+        );
+        await tester.tap(entry);
+        await tester.pumpAndSettle();
+        expect(find.byType(MyFriendsPage), findsOneWidget);
+        expect(directory.requests.single.query.accountUserId, '654321');
+        expect(
+          directory.requests.single.query.scope,
+          ForumFriendFeedScope.friends,
+        );
+        expect(
+          find.byType(ForumWebViewPage, skipOffstage: false),
+          findsNothing,
+        );
+        Navigator.of(tester.element(find.byType(MyFriendsPage))).pop();
+        await tester.pumpAndSettle();
+        expect(find.byType(MyProfilePage), findsOneWidget);
+        expect(directory.requests, hasLength(1));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('MyProfilePage opens advertised managed WebView action targets', (
     tester,
@@ -1139,6 +1157,7 @@ Future<void> _pumpPublicProfile(
 Future<void> _pumpMyProfile(
   WidgetTester tester, {
   required ForumUserProfileRepository repository,
+  Locale locale = const Locale('zh'),
   YamiboSessionStore? store,
   ForumWebViewRouteFactory? routeFactory,
   UserThreadDirectoryRepository? threadDirectory,
@@ -1165,7 +1184,10 @@ Future<void> _pumpMyProfile(
           forumWebViewRouteFactoryProvider.overrideWithValue(routeFactory),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       ],
-      child: LocalizedTestApp(home: home ?? const MyProfilePage()),
+      child: LocalizedTestApp(
+        locale: locale,
+        home: home ?? const MyProfilePage(),
+      ),
     ),
   );
   await tester.pumpAndSettle();

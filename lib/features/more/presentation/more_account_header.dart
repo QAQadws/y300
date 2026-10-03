@@ -18,12 +18,14 @@ class MoreAccountHeader extends ConsumerWidget {
     required this.onOpenProfile,
     this.onOpenThreads,
     this.onOpenReplies,
+    this.onOpenCredits,
     this.isAccountActionPending = false,
   });
 
   final VoidCallback? onOpenProfile;
   final VoidCallback? onOpenThreads;
   final VoidCallback? onOpenReplies;
+  final VoidCallback? onOpenCredits;
   final bool isAccountActionPending;
 
   @override
@@ -241,6 +243,9 @@ class MoreAccountHeader extends ConsumerWidget {
                             label: l10n.moreAccountCreditLabel,
                             value: credits,
                             accountUid: displayUid,
+                            onTap: owner != null && !busy
+                                ? onOpenCredits
+                                : null,
                           ),
                         ),
                       ],

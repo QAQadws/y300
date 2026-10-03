@@ -503,7 +503,8 @@ String profileActionLabel(
     ForumUserProfileActionKind.addFriend => l10n.profileAddFriend,
     ForumUserProfileActionKind.removeFriend => l10n.profileRemoveFriend,
     ForumUserProfileActionKind.forumFavorites => l10n.profileForumFavorites,
-    ForumUserProfileActionKind.friends => l10n.profileFriends,
+    ForumUserProfileActionKind.friends =>
+      isMyProfile ? l10n.profileMyFriendsTitle : l10n.profileFriends,
     ForumUserProfileActionKind.settings => l10n.profileSettings,
     ForumUserProfileActionKind.creditHistory => l10n.profileCreditHistory,
   };

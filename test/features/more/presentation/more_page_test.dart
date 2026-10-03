@@ -28,12 +28,19 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_route_fac
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
+import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
 import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
+import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
+import '../../profile/test_support/blog_directory_fixture.dart';
+import '../../profile/test_support/friend_read_fixture.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
@@ -110,13 +117,24 @@ void main() {
           .onTap!;
       final threadTap = statisticTap('threads');
       final replyTap = statisticTap('replies');
+      final creditTap = statisticTap('credits');
       final profileTap = tester
           .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
           .onTap!;
       final logoutTap = tester
           .widget<IconButton>(find.byKey(const Key('more-logout-entry')))
           .onPressed!;
+      final menuTaps = <VoidCallback>[];
+      for (final name in ['threads', 'blogs', 'friends']) {
+        final entry = find.byKey(Key('more-my-$name-entry'));
+        await _scrollUntilVisibleIfNeeded(tester, entry);
+        menuTaps.add(tester.widget<ListTile>(entry).onTap!);
+      }
       threadTap();
+      for (final tap in menuTaps) {
+        tap();
+      }
+      creditTap();
       replyTap();
       profileTap();
       logoutTap();
@@ -125,6 +143,318 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(observer.pushedNames.length, 2);
       expect(webLaunches, isEmpty);
+    },
+  );
+
+  for (final action in [
+    ForumUserProfileActionKind.threads,
+    ForumUserProfileActionKind.blogs,
+    ForumUserProfileActionKind.friends,
+  ]) {
+    testWidgets(
+      'my ${action.name} menu opens the native current-account page',
+      (tester) async {
+        final directory = _ThreadDirectoryRepository();
+        final blogs = BlogDirectoryFixture();
+        final friends = _emptyFriends();
+        final webLaunches = <ForumWebViewLaunchConfig>[];
+        final summary = _AccountSummaryRepository(
+          () => const CurrentUserProfileData(
+            identity: ProfileUserIdentity(userId: '100', displayName: 'tester'),
+            creditTotal: 42,
+          ),
+        );
+        await _pumpMyContentPage(
+          tester,
+          isLoggedIn: true,
+          directory: directory,
+          blogs: blogs,
+          friends: friends,
+          launches: webLaunches,
+          summary: summary,
+        );
+        final entry = find.byKey(Key('more-my-${action.name}-entry'));
+        await _scrollUntilVisibleIfNeeded(tester, entry);
+        await tester.tap(entry);
+        await tester.pumpAndSettle();
+
+        final Finder destination;
+        switch (action) {
+          case ForumUserProfileActionKind.threads:
+            destination = find.byType(MyThreadPage);
+            expect(destination, findsOneWidget);
+            expect(
+              tester.widget<MyThreadPage>(destination).initialType,
+              UserThreadDirectoryType.threads,
+            );
+            expect(directory.queries.single.userId, '100');
+            expect(
+              directory.queries.single.type,
+              UserThreadDirectoryType.threads,
+            );
+            expect(blogs.queries, isEmpty);
+            expect(friends.requests, isEmpty);
+          case ForumUserProfileActionKind.blogs:
+            destination = find.byType(ProfileBlogPage);
+            expect(destination, findsOneWidget);
+            expect(
+              tester.widget<ProfileBlogPage>(destination).initialScope,
+              UserBlogFeedScope.self,
+            );
+            expect(
+              tester.widget<ProfileBlogPage>(destination).ownerUserId,
+              isNull,
+            );
+            expect(blogs.queries.single.scope, UserBlogFeedScope.self);
+            expect(blogs.queries.single.ownerUserId, '100');
+            expect(directory.queries, isEmpty);
+            expect(friends.requests, isEmpty);
+          case ForumUserProfileActionKind.friends:
+            destination = find.byType(MyFriendsPage);
+            expect(destination, findsOneWidget);
+            expect(friends.requests.single.query.accountUserId, '100');
+            expect(
+              friends.requests.single.query.scope,
+              ForumFriendFeedScope.friends,
+            );
+            expect(directory.queries, isEmpty);
+            expect(blogs.queries, isEmpty);
+          default:
+            fail('Unexpected content action');
+        }
+        expect(webLaunches, isEmpty);
+        expect(summary.reads, 1);
+        Navigator.of(tester.element(destination)).pop();
+        await tester.pumpAndSettle();
+        expect(find.byType(MorePage), findsOneWidget);
+        expect(summary.reads, 2);
+        expect(tester.widget<ListTile>(entry).onTap, isNotNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final completesLogin in [true, false]) {
+    testWidgets(
+      'guest friends menu ${completesLogin ? 'continues after verified login' : 'stays on More after cancelled login'}',
+      (tester) async {
+        final friends = _emptyFriends();
+        final webLaunches = <ForumWebViewLaunchConfig>[];
+        final observer = _RouteNameObserver();
+        await _pumpMyContentPage(
+          tester,
+          isLoggedIn: false,
+          friends: friends,
+          launches: webLaunches,
+          observer: observer,
+        );
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(MorePage)),
+        );
+        final entry = find.byKey(const Key('more-my-friends-entry'));
+        await _scrollUntilVisibleIfNeeded(tester, entry);
+        final tap = tester.widget<ListTile>(entry).onTap!;
+        tap();
+        tap();
+        expect(observer.pushedNames.last, LoginWebViewPage.routeName);
+        expect(
+          observer.pushedNames.where(
+            (name) => name == LoginWebViewPage.routeName,
+          ),
+          hasLength(1),
+        );
+        expect(friends.requests, isEmpty);
+
+        // Simulate the verified login handoff without building a platform view.
+        if (completesLogin) {
+          container
+              .read(authSessionControllerProvider.notifier)
+              .acceptSession(
+                const ForumSessionIdentity(
+                  userId: '200',
+                  username: 'next-account',
+                ),
+              );
+        }
+        tester
+            .state<NavigatorState>(find.byType(Navigator).first)
+            .pop(completesLogin);
+        await tester.pumpAndSettle();
+
+        expect(webLaunches, isEmpty);
+        if (completesLogin) {
+          expect(find.byType(MyFriendsPage), findsOneWidget);
+          expect(friends.requests.single.query.accountUserId, '200');
+          expect(
+            friends.requests.single.query.scope,
+            ForumFriendFeedScope.friends,
+          );
+          expect(observer.pushedNames, hasLength(3));
+        } else {
+          expect(find.byType(MorePage), findsOneWidget);
+          expect(find.byType(MyFriendsPage), findsNothing);
+          expect(friends.requests, isEmpty);
+          expect(observer.pushedNames, hasLength(2));
+          expect(tester.widget<ListTile>(entry).onTap, isNotNull);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+  testWidgets(
+    'credit statistics open one account-bound route and refresh totals on return',
+    (tester) async {
+      var credits = 12;
+      final summary = _AccountSummaryRepository(
+        () => CurrentUserProfileData(
+          identity: const ProfileUserIdentity(
+            userId: '100',
+            displayName: 'tester',
+          ),
+          creditTotal: credits,
+        ),
+      );
+      final webLaunches = <ForumWebViewLaunchConfig>[];
+      final observer = _RouteNameObserver();
+      await _pumpCreditPage(
+        tester,
+        summary: summary,
+        launches: webLaunches,
+        observer: observer,
+      );
+      expect(summary.reads, 1);
+      final creditsTap = _accountStatisticButton(tester, 'credits').onTap!;
+      final threadsTap = _accountStatisticButton(tester, 'threads').onTap!;
+      final repliesTap = _accountStatisticButton(tester, 'replies').onTap!;
+      final profileTap = tester
+          .widget<InkWell>(find.byKey(const Key('more-account-avatar')))
+          .onTap!;
+      final logoutTap = tester
+          .widget<IconButton>(find.byKey(const Key('more-logout-entry')))
+          .onPressed!;
+
+      creditsTap();
+      creditsTap();
+      threadsTap();
+      repliesTap();
+      profileTap();
+      logoutTap();
+      await tester.pumpAndSettle();
+
+      expect(webLaunches, hasLength(1));
+      expect(
+        webLaunches.single.initialUri,
+        Uri.parse('https://bbs.yamibo.com/plugin.php?id=zqlj_sign&mobile=2'),
+      );
+      expect(webLaunches.single.popOnRootBack, isTrue);
+      expect(webLaunches.single.expectedAccountId, '100');
+      expect(find.byKey(const Key('test-profile-webview')), findsOneWidget);
+      expect(find.byType(MyThreadPage, skipOffstage: false), findsNothing);
+      expect(find.byType(MyProfilePage, skipOffstage: false), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(observer.pushedNames, hasLength(2));
+      expect(summary.reads, 1);
+      for (final name in ['threads', 'replies', 'credits']) {
+        expect(
+          _accountStatisticButton(tester, name, skipOffstage: false).onTap,
+          isNull,
+        );
+      }
+      expect(
+        tester
+            .widget<InkWell>(
+              find.byKey(const Key('more-account-avatar'), skipOffstage: false),
+            )
+            .onTap,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('more-logout-entry'), skipOffstage: false),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      credits = 19;
+      Navigator.of(
+        tester.element(find.byKey(const Key('test-profile-webview'))),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MorePage), findsOneWidget);
+      expect(summary.reads, 2);
+      final counter = find.descendant(
+        of: find.byKey(const Key('more-account-credits')),
+        matching: find.byType(AnimatedFlipCounter),
+      );
+      expect(tester.widget<AnimatedFlipCounter>(counter).value, 19);
+      expect(_accountStatisticButton(tester, 'credits').onTap, isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'returning from old credit details does not refresh a new owner',
+    (tester) async {
+      var uid = '100';
+      final summary = _AccountSummaryRepository(
+        () => CurrentUserProfileData(
+          identity: ProfileUserIdentity(
+            userId: uid,
+            displayName: 'Account $uid',
+          ),
+          creditTotal: uid == '100' ? 12 : 27,
+        ),
+      );
+      final webLaunches = <ForumWebViewLaunchConfig>[];
+      await _pumpCreditPage(tester, summary: summary, launches: webLaunches);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MorePage)),
+      );
+      final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('more-account-credits')),
+          matching: find.text(l10n.moreAccountCreditLabel),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(webLaunches.single.expectedAccountId, '100');
+      expect(summary.reads, 1);
+
+      uid = '200';
+      container
+          .read(authSessionControllerProvider.notifier)
+          .acceptSession(
+            const ForumSessionIdentity(userId: '200', username: 'next-account'),
+          );
+      await tester.pumpAndSettle();
+      expect(container.read(verifiedProfileOwnerProvider)?.uid, '200');
+      // Offstage consumers may pause; observe the new summary before returning.
+      expect(
+        container.read(currentAccountSummaryControllerProvider).owner?.uid,
+        '200',
+      );
+      await tester.pumpAndSettle();
+      expect(summary.reads, 2);
+
+      Navigator.of(
+        tester.element(find.byKey(const Key('test-profile-webview'))),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      expect(summary.reads, 2);
+      expect(webLaunches, hasLength(1));
+      expect(find.text('Account 200'), findsOneWidget);
+      final counter = find.descendant(
+        of: find.byKey(const Key('more-account-credits')),
+        matching: find.byType(AnimatedFlipCounter),
+      );
+      expect(tester.widget<AnimatedFlipCounter>(counter).value, 27);
+      expect(_accountStatisticButton(tester, 'credits').onTap, isNotNull);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -194,6 +524,7 @@ void main() {
     expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
     expect(find.text('数据与存储'), findsOneWidget);
     final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
+    _expectMyContentEntryOrderAndLabels(tester, l10n);
     expect(find.text(l10n.moreMyProfile), findsNothing);
     expect(find.text(l10n.moreDailySignIn), findsNothing);
     expect(find.text(l10n.moreMyProfileSignedOutSubtitle), findsNothing);
@@ -280,6 +611,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    _expectMyContentEntryOrderAndLabels(
+      tester,
+      AppLocalizations.of(tester.element(find.byType(MorePage))),
+    );
     await _scrollUntilVisibleIfNeeded(tester, find.text('快取佇列'));
     expect(find.text('快取佇列'), findsOneWidget);
     final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
@@ -1164,6 +1499,124 @@ void main() {
     expect(find.byIcon(Icons.check), findsNothing);
   });
 }
+
+void _expectMyContentEntryOrderAndLabels(
+  WidgetTester tester,
+  AppLocalizations l10n,
+) {
+  final list = tester.widget<ListView>(find.byKey(const Key('more-page-list')));
+  final children = (list.childrenDelegate as SliverChildListDelegate).children;
+  final unusedIndex = children.indexWhere(
+    (child) => child.key == const Key('more-unused-images-entry'),
+  );
+  for (final (offset, name, label) in [
+    (3, 'threads', l10n.profileMyThreads),
+    (2, 'blogs', l10n.profileMyBlogs),
+    (1, 'friends', l10n.profileMyFriendsTitle),
+  ]) {
+    final tile = children[unusedIndex - offset] as ListTile;
+    expect(tile.key, Key('more-my-$name-entry'));
+    expect((tile.title! as Text).data, label);
+    expect(tile.onTap, isNotNull);
+  }
+}
+
+FriendFeedFixture _emptyFriends() => FriendFeedFixture(autoComplete: true)
+  ..items = []
+  ..hasNext = false
+  ..totalPages = 1;
+
+Future<void> _pumpMyContentPage(
+  WidgetTester tester, {
+  required bool isLoggedIn,
+  required FriendFeedFixture friends,
+  required List<ForumWebViewLaunchConfig> launches,
+  _ThreadDirectoryRepository? directory,
+  BlogDirectoryFixture? blogs,
+  _AccountSummaryRepository? summary,
+  _RouteNameObserver? observer,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ..._moreAuthOverrides(
+          _FakeAuthRepository(isLoggedIn: isLoggedIn),
+          summaryRepository: summary,
+        ),
+        userThreadDirectoryRepositoryProvider.overrideWithValue(
+          directory ?? _ThreadDirectoryRepository(),
+        ),
+        userBlogDirectoryRepositoryProvider.overrideWithValue(
+          blogs ?? BlogDirectoryFixture(),
+        ),
+        friendFeedRepositoryProvider.overrideWithValue(friends),
+        friendRemovalCommandProvider.overrideWithValue(FriendRemovalFixture()),
+        forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
+        forumWebViewRouteFactoryProvider.overrideWithValue(
+          _profileWebRoutes(launches),
+        ),
+        forumModeSettingsRepositoryProvider.overrideWithValue(
+          _FakeForumModeSettingsRepository(),
+        ),
+        appAppearanceControllerProvider.overrideWith(
+          () => _FakeAppAppearanceController(),
+        ),
+      ],
+      child: LocalizedTestApp(
+        home: const MorePage(),
+        navigatorObservers: [?observer],
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pumpCreditPage(
+  WidgetTester tester, {
+  required _AccountSummaryRepository summary,
+  required List<ForumWebViewLaunchConfig> launches,
+  NavigatorObserver? observer,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ..._moreAuthOverrides(
+          _FakeAuthRepository(isLoggedIn: true),
+          summaryRepository: summary,
+        ),
+        userThreadDirectoryRepositoryProvider.overrideWithValue(
+          _ThreadDirectoryRepository(),
+        ),
+        forumWebViewRouteFactoryProvider.overrideWithValue(
+          _profileWebRoutes(launches),
+        ),
+        forumModeSettingsRepositoryProvider.overrideWithValue(
+          _FakeForumModeSettingsRepository(),
+        ),
+        appAppearanceControllerProvider.overrideWith(
+          () => _FakeAppAppearanceController(),
+        ),
+      ],
+      child: LocalizedTestApp(
+        home: const MorePage(),
+        navigatorObservers: [?observer],
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+InkWell _accountStatisticButton(
+  WidgetTester tester,
+  String name, {
+  bool skipOffstage = true,
+}) => tester.widget<InkWell>(
+  find.descendant(
+    of: find.byKey(Key('more-account-$name'), skipOffstage: skipOffstage),
+    matching: find.byType(InkWell, skipOffstage: skipOffstage),
+    skipOffstage: skipOffstage,
+  ),
+);
 
 ForumWebViewRouteFactory _profileWebRoutes(
   List<ForumWebViewLaunchConfig> launches,
