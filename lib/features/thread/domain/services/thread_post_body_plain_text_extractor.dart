@@ -1,4 +1,5 @@
 import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
+import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
 
 enum ThreadPostBlockImageTextPolicy { omit, placeholder, url }
 
@@ -35,6 +36,13 @@ class ThreadPostBodyPlainTextExtractor {
   });
 
   final ThreadPostPlainTextExtractOptions options;
+
+  /// Parses the displayed HTML only when copy is requested. Render-time text
+  /// segmentation must not insert line breaks into the copied paragraphs.
+  String extractHtml(
+    String html, {
+    ThreadPostPlainTextExtractOptions? options,
+  }) => extract(const ThreadPostBodyParser().parse(html), options: options);
 
   String extract(
     RichDocument document, {

@@ -1,4 +1,3 @@
-import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
@@ -62,23 +61,4 @@ class ThreadImageOpenRequest {
     }
     return group.entries[initialIndex];
   }
-}
-
-class ThreadPostImageOpenRequest {
-  const ThreadPostImageOpenRequest({
-    required this.document,
-    required this.images,
-    required this.image,
-    required this.initialIndex,
-    this.readerRequest,
-  });
-
-  final RichDocument document;
-  final List<RichImageBlock> images;
-  final RichImageBlock image;
-  final int initialIndex;
-  final ThreadImageOpenRequest? readerRequest;
-
-  List<String> get imageUrls =>
-      images.map((image) => image.url).toList(growable: false);
 }

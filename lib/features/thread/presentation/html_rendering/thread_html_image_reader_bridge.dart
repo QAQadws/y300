@@ -1,7 +1,5 @@
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -22,7 +20,7 @@ class ThreadHtmlImageReaderBridgeResult {
   const ThreadHtmlImageReaderBridgeResult.fallback(this.failureReason)
     : request = null;
 
-  final ThreadPostImageOpenRequest? request;
+  final ThreadImageOpenRequest? request;
   final ThreadHtmlImageReaderBridgeFailureReason? failureReason;
 
   bool get canOpen => request != null;
@@ -40,7 +38,6 @@ class ThreadHtmlImageReaderBridge {
     required ThreadPost post,
     required String threadId,
     required String imageReferer,
-    required ThreadPostBodyRenderPlan legacyPlan,
     required ForumHtmlReadableImageSequence sequence,
     required ForumHtmlImageRequest imageRequest,
   }) {
@@ -55,18 +52,13 @@ class ThreadHtmlImageReaderBridge {
       );
     }
 
-    final entry = _resolveEntry(
-      sequence: sequence,
-      imageRequest: imageRequest,
-      legacyPlan: legacyPlan,
-    );
+    final entry = _resolveEntry(sequence: sequence, imageRequest: imageRequest);
     if (entry == null) {
       return const ThreadHtmlImageReaderBridgeResult.fallback(
         ThreadHtmlImageReaderBridgeFailureReason.unmatchedImage,
       );
     }
 
-    final images = _imageBlocksFor(sequence);
     final entries = sequence.entries
         .map(_readerEntryFor)
         .toList(growable: false);
@@ -93,20 +85,14 @@ class ThreadHtmlImageReaderBridge {
     );
 
     return ThreadHtmlImageReaderBridgeResult.open(
-      ThreadPostImageOpenRequest(
-        document: RichDocument(blocks: images),
-        images: images,
-        image: images[initialIndex],
-        initialIndex: initialIndex,
-        readerRequest: ThreadImageOpenRequest(
-          tid: readerRequest.tid,
-          pid: readerRequest.pid,
-          postNumber: readerRequest.postNumber,
-          referer: readerRequest.referer,
-          group: readerRequest.group,
-          initialIndex: readerRequest.initialIndex,
-          continuousImages: _readerAdapter.mapRequest(readerRequest),
-        ),
+      ThreadImageOpenRequest(
+        tid: readerRequest.tid,
+        pid: readerRequest.pid,
+        postNumber: readerRequest.postNumber,
+        referer: readerRequest.referer,
+        group: readerRequest.group,
+        initialIndex: readerRequest.initialIndex,
+        continuousImages: _readerAdapter.mapRequest(readerRequest),
       ),
     );
   }
@@ -114,10 +100,11 @@ class ThreadHtmlImageReaderBridge {
   ForumHtmlReadableImageEntry? _resolveEntry({
     required ForumHtmlReadableImageSequence sequence,
     required ForumHtmlImageRequest imageRequest,
-    required ThreadPostBodyRenderPlan legacyPlan,
   }) {
     final readableIndex = imageRequest.readableIndex;
     if (readableIndex != null) {
+      // An explicit DOM index identifies repeated URLs; a stale index must not
+      // silently open a different image through attachment or URL matching.
       return sequence.entryAt(readableIndex);
     }
 
@@ -125,18 +112,6 @@ class ThreadHtmlImageReaderBridge {
     if (attachmentId != null && attachmentId.isNotEmpty) {
       for (final entry in sequence.entries) {
         if (entry.attachmentId?.trim() == attachmentId) {
-          return entry;
-        }
-      }
-    }
-
-    final legacyMatch = _matchLegacyImage(imageRequest, legacyPlan.images);
-    if (legacyMatch != null) {
-      final legacyUrl = _normalizeUrlForMatch(legacyMatch.url);
-      final legacyRawUrl = _normalizeUrlForMatch(legacyMatch.rawUrl);
-      for (final entry in sequence.entries) {
-        final url = _normalizeUrlForMatch(entry.url);
-        if (url == legacyUrl || url == legacyRawUrl) {
           return entry;
         }
       }
@@ -150,47 +125,6 @@ class ThreadHtmlImageReaderBridge {
       }
     }
     return null;
-  }
-
-  RichImageBlock? _matchLegacyImage(
-    ForumHtmlImageRequest request,
-    List<RichImageBlock> images,
-  ) {
-    final attachmentId = request.attachmentId?.trim();
-    if (attachmentId != null && attachmentId.isNotEmpty) {
-      for (final image in images) {
-        if (image.aid?.trim() == attachmentId) {
-          return image;
-        }
-      }
-    }
-    final requestUrl = _normalizeUrlForMatch(request.url);
-    for (final image in images) {
-      if (_normalizeUrlForMatch(image.url) == requestUrl ||
-          _normalizeUrlForMatch(image.rawUrl) == requestUrl) {
-        return image;
-      }
-    }
-    return null;
-  }
-
-  List<RichImageBlock> _imageBlocksFor(
-    ForumHtmlReadableImageSequence sequence,
-  ) {
-    return sequence.entries
-        .map((entry) {
-          return RichImageBlock(
-            anchorId: 'html-first-image-${entry.index}',
-            url: entry.url,
-            rawUrl: entry.rawSrc,
-            index: entry.index,
-            aid: entry.attachmentId,
-            altText: entry.alt,
-            originalWidth: entry.htmlWidth,
-            originalHeight: entry.htmlHeight,
-          );
-        })
-        .toList(growable: false);
   }
 
   ThreadPostImageEntry _readerEntryFor(ForumHtmlReadableImageEntry entry) {

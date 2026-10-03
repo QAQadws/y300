@@ -216,7 +216,16 @@ class _TextBlockBuffer {
       _runs.any((run) => run.inlineImage != null || run.text.trim().isNotEmpty);
 
   void addText(String raw, _InlineStyle style) {
-    final text = _normalizeInlineText(raw);
+    var text = _normalizeInlineText(raw);
+    // HTML collapses whitespace across adjacent text nodes, even when an
+    // inline style separates them. Keep one separator rather than trimming
+    // each node and accidentally joining words.
+    if (_runs.isNotEmpty &&
+        _runs.last.inlineImage == null &&
+        _runs.last.text.endsWith(' ') &&
+        text.startsWith(' ')) {
+      text = text.substring(1);
+    }
     if (text.isEmpty) {
       return;
     }
@@ -249,9 +258,7 @@ class _TextBlockBuffer {
       _runs.clear();
       return null;
     }
-    final normalized = _mergeAdjacentRuns(_runs)
-        .where((run) => run.inlineImage != null || run.text.trim().isNotEmpty)
-        .toList(growable: false);
+    final normalized = _trimBoundaryWhitespace(_mergeAdjacentRuns(_runs));
     _runs.clear();
     if (normalized.isEmpty) {
       return null;
@@ -286,6 +293,42 @@ class _TextBlockBuffer {
     return output;
   }
 
+  List<RichRun> _trimBoundaryWhitespace(List<RichRun> runs) {
+    var start = 0;
+    var end = runs.length;
+    while (start < end &&
+        runs[start].inlineImage == null &&
+        runs[start].text.trim().isEmpty) {
+      start += 1;
+    }
+    while (end > start &&
+        runs[end - 1].inlineImage == null &&
+        runs[end - 1].text.trim().isEmpty) {
+      end -= 1;
+    }
+    return <RichRun>[
+      for (var index = start; index < end; index++)
+        if (runs[index].inlineImage != null)
+          runs[index]
+        else
+          RichRun(
+            text: index == start && index == end - 1
+                ? runs[index].text.trim()
+                : index == start
+                ? runs[index].text.trimLeft()
+                : index == end - 1
+                ? runs[index].text.trimRight()
+                : runs[index].text,
+            linkUrl: runs[index].linkUrl,
+            linkTid: runs[index].linkTid,
+            isBold: runs[index].isBold,
+            isItalic: runs[index].isItalic,
+            isUnderline: runs[index].isUnderline,
+            color: runs[index].color,
+          ),
+    ];
+  }
+
   bool _sameStyle(RichRun a, RichRun b) {
     return a.inlineImage == null &&
         b.inlineImage == null &&
@@ -303,7 +346,7 @@ class _TextBlockBuffer {
   }
 
   String _normalizeInlineText(String raw) {
-    return raw.replaceAll('\u00A0', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return raw.replaceAll('\u00A0', ' ').replaceAll(RegExp(r'\s+'), ' ');
   }
 }
 

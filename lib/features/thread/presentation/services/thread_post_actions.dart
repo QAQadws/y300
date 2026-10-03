@@ -135,7 +135,6 @@ class ThreadPostActions {
                   sourcePost: sourcePost,
                   threadId: target.tid,
                   imageReferer: imageReferer ?? '',
-                  plan: plan,
                   onOpenPostLink: selectionNavigation.openLink,
                   onOpenPostImage: selectionNavigation.openImages,
                   onImageFallback: selectionNavigation.copyImageUrl,
@@ -147,7 +146,7 @@ class ThreadPostActions {
           selectionSession.dispose();
         }
       case ThreadPostAction.copyAll:
-        await navigation.copyPlainText(sourcePost, plan);
+        await navigation.copyPlainText(sourcePost, displayPost.message);
       case ThreadPostAction.copyFloorLink:
         await navigation.copyFloorLink(sourcePost);
     }

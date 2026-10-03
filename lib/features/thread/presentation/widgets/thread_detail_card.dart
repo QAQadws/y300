@@ -126,7 +126,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final String imageReferer;
   final ThreadDetailNativePalette palette;
   final ValueChanged<String> onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
   final void Function(ForumHtmlImageLayoutShift shift)
@@ -177,7 +177,6 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             sourcePost: sourcePost,
             threadId: threadId,
             imageReferer: imageReferer,
-            plan: plan,
             onOpenPostLink: onOpenPostLink,
             onOpenPostImage: onOpenPostImages == null
                 ? null
@@ -412,7 +411,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final ValueChanged<String> onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
   final void Function(ForumHtmlImageLayoutShift shift)
@@ -637,7 +636,7 @@ class ThreadPostCard extends StatelessWidget {
   final ValueChanged<ThreadPost>? onOpenAuthorProfile;
   final void Function(String label, String url)? onCopyActionUrl;
   final ValueChanged<String>? onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPoll poll, ThreadPollOption option)?
   onTogglePollOption;
@@ -765,7 +764,6 @@ class ThreadPostCard extends StatelessWidget {
                 post: post,
                 threadId: threadId,
                 imageReferer: resolvedImageReferer ?? '',
-                plan: plan,
                 onOpenPostLink: linkCallback,
                 onOpenPostImage: imageOpenCallback,
                 theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(

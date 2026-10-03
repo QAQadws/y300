@@ -24,6 +24,8 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ThreadPostRatingsRepository;
@@ -72,8 +74,6 @@ import 'package:y300/features/thread/data/providers/thread_repository_providers.
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
-import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -82,7 +82,6 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_post_htm
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
@@ -2876,7 +2875,7 @@ void main() {
     testWidgets(
       'ThreadDetailContent builds reader image request with thread context',
       (tester) async {
-        ThreadPostImageOpenRequest? opened;
+        ThreadImageOpenRequest? opened;
         final state = ThreadDetailPageState.initial(tid: '100', subject: '测试主题')
             .copyWith(
               currentPage: 1,
@@ -2932,7 +2931,7 @@ void main() {
         );
         await tester.pump();
 
-        final readerRequest = opened?.readerRequest;
+        final readerRequest = opened;
         expect(readerRequest, isNotNull);
         expect(readerRequest!.tid, '100');
         expect(readerRequest.pid, 'p1');
@@ -3897,23 +3896,17 @@ void main() {
         tid: '100',
         subject: '图片定位',
       ).copyWith(posts: [post]);
-      final image = const ThreadPostBodyRenderPlanner()
-          .plan(message)
-          .images
-          .single;
-      final imageKey = ThreadPostResourceLayoutHints.blockImageKey(image);
-      final dimensions = ThreadPostImageDimensionStore();
+      final dimensions = _DelayedForumImageDimensions();
+      final images = _FailedThreadInlineImageCacheService();
       final controller = ScrollController();
-      addTearDown(dimensions.dispose);
       addTearDown(controller.dispose);
       var visibleCount = 0;
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            imageCacheServiceProvider.overrideWithValue(
-              _NoopImageCacheService(),
-            ),
+            imageCacheServiceProvider.overrideWithValue(images),
+            forumImageDimensionIndexProvider.overrideWithValue(dimensions),
           ],
           child: LocalizedTestApp(
             home: Scaffold(
@@ -3923,7 +3916,6 @@ void main() {
                 targetPid: post.pid,
                 landing: ThreadPostLanding.bodyEnd,
                 onTargetVisible: (_) => visibleCount++,
-                imageDimensionStore: dimensions,
                 imageReferer:
                     'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&page=1',
                 onLoadPreviousPage: () {},
@@ -3945,15 +3937,33 @@ void main() {
       final footer = find.byKey(
         const Key('thread-post-footer-entry-image-target'),
       );
+      final body = find.byKey(const Key('thread-post-body-entry-image-target'));
+      final imageLayout = find.descendant(
+        of: body,
+        matching: find.byType(AspectRatio),
+      );
+      expect(imageLayout, findsOneWidget);
+      final initialImageSize = tester.getSize(imageLayout);
+      final initialBodyHeight = tester.getSize(body).height;
       final initialTop = tester.getTopLeft(footer).dy;
+      expect(
+        dimensions.queriedSpecs.map((spec) => spec.sourceUrl),
+        contains('https://bbs.yamibo.com/data/attachment/forum/late.jpg'),
+      );
       expect(visibleCount, 1);
 
-      dimensions.recordAll(
-        blockDimensions: {
-          imageKey: const ThreadPostResourceDimension(width: 100, height: 280),
-        },
+      dimensions.pending.complete(
+        const ForumImageDimensions(
+          width: 100,
+          height: 280,
+          source: ForumImageDimensionSource.cacheMetadata,
+        ),
       );
       await tester.pumpAndSettle();
+      final resizedImage = tester.getSize(imageLayout);
+      expect(resizedImage.height, greaterThan(initialImageSize.height + 100));
+      expect(resizedImage.aspectRatio, closeTo(100 / 280, 0.001));
+      expect(tester.getSize(body).height, greaterThan(initialBodyHeight + 100));
       expect(tester.getTopLeft(footer).dy, closeTo(initialTop, 1));
       expect(controller.offset, closeTo(0, 1));
       expect(visibleCount, 1);
@@ -4395,9 +4405,10 @@ void main() {
       );
       await _pumpThreadUiTransition(tester);
 
-      expect(copiedTexts.single, contains('第一段链接文本'));
+      expect(copiedTexts.single, contains('第一段 链接文本'));
+      expect(copiedTexts.single, contains(longParagraph));
       expect(copiedTexts.single, contains('作者: 引用正文'));
-      expect(copiedTexts.single, contains('尾段[笑]'));
+      expect(copiedTexts.single, contains('尾段 [笑]'));
       expect(copiedTexts.single, isNot(contains('page.jpg')));
       expect(find.text('1# 正文已复制'), findsOneWidget);
 
@@ -6390,6 +6401,27 @@ class _FakeForumHtmlReaderPreferencesRepository
   }
 }
 
+class _DelayedForumImageDimensions implements ForumImageDimensionIndex {
+  final pending = Completer<ForumImageDimensions?>();
+  final queriedSpecs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) {
+    queriedSpecs.add(spec);
+    return pending.future;
+  }
+
+  @override
+  Future<ForumImageDimensions?> getLastKnownBySpec(ForumImageLoadSpec spec) =>
+      getBySpec(spec);
+
+  @override
+  Future<void> recordDecodedDimensions({
+    required ForumImageLoadSpec spec,
+    required Size size,
+  }) async {}
+}
+
 class _NoopImageCacheService implements ImageCacheService {
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
@@ -6450,6 +6482,17 @@ class _RecordingImageCacheService extends _NoopImageCacheService {
       cacheKey: request.cacheKey,
       localPath: io.File('assets/noavatar.png').absolute.path,
     );
+  }
+}
+
+class _FailedThreadInlineImageCacheService extends _NoopImageCacheService {
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) {
+    // This test controls layout metadata separately from image-byte loading.
+    // A finite miss avoids asynchronous file decoding and its loading spinner.
+    return request.role == ImageCacheRole.threadInline
+        ? Future.value(CachedImageResult.failed)
+        : super.ensureCached(request);
   }
 }
 

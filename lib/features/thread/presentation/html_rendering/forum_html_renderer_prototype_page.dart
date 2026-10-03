@@ -810,10 +810,7 @@ class _LoadedThreadDetailSampleViewState
     return '${value.substring(0, 48)}...${value.substring(value.length - 32)}';
   }
 
-  void _handleOpenPostImages(
-    ThreadPost post,
-    ThreadPostImageOpenRequest request,
-  ) {
+  void _handleOpenPostImages(ThreadPost post, ThreadImageOpenRequest request) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         key: const Key('forum-html-prototype-image-reader-snackbar'),

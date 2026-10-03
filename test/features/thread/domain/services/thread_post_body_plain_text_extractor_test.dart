@@ -4,6 +4,40 @@ import 'package:y300/features/thread/domain/services/thread_post_body_plain_text
 
 void main() {
   group('ThreadPostBodyPlainTextExtractor', () {
+    test('copies HTML paragraphs, quote text, links and smileys in order', () {
+      final text = const ThreadPostBodyPlainTextExtractor().extractHtml('''
+<p>前文 <a href="thread-1-1-1.html">链接文字</a><br>第二行</p>
+<blockquote><p>引用 <img src="static/image/smiley/comcom/2.gif" alt="[笑]"></p></blockquote>
+<img src="data/attachment/forum/page.jpg">
+<p>尾文</p>
+<script>不应复制</script>
+''');
+
+      expect(text, '前文 链接文字\n第二行\n\n引用 [笑]\n\n尾文');
+    });
+
+    test('keeps spaces across styling, whitespace runs and smileys', () {
+      final text = const ThreadPostBodyPlainTextExtractor().extractHtml('''
+<p>  Hello <b>  world </b> ! </p>
+<p><b>A</b> <i>B</i> <img src="static/image/smiley/comcom/2.gif" title="[开心]"> C</p>
+''');
+
+      expect(text, 'Hello world !\nA B [开心] C');
+    });
+
+    test(
+      'copies supplied converted display HTML without adding line breaks',
+      () {
+        final paragraph = '${List.filled(500, '傳統😀').join()} 尾段';
+        final text = const ThreadPostBodyPlainTextExtractor().extractHtml(
+          '<p>$paragraph</p>',
+        );
+
+        expect(text, paragraph);
+        expect(text, isNot(contains('\n')));
+      },
+    );
+
     test('extracts text, link text and quote text in order', () {
       const document = RichDocument(
         blocks: <RichBlock>[

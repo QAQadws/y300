@@ -177,7 +177,7 @@ void main() {
             '<img src="/static/image/smiley/face.gif">',
       );
       final projection = _filteredFirstPost(post);
-      ThreadPostImageOpenRequest? opened;
+      ThreadImageOpenRequest? opened;
       await tester.pumpWidget(
         _host(
           Builder(
@@ -203,10 +203,9 @@ void main() {
           readableIndex: 0,
         ),
       );
-      expect(opened!.imageUrls, ['https://example.test/extra.jpg']);
-      expect(opened!.readerRequest!.group.urls, [
-        'https://example.test/extra.jpg',
-      ]);
+      expect(opened, isNotNull);
+      expect(opened!.group.urls, ['https://example.test/extra.jpg']);
+      expect(opened!.initialEntry?.url, 'https://example.test/extra.jpg');
     },
   );
   testWidgets(
@@ -215,8 +214,32 @@ void main() {
       final post = commentPost(
         1,
         message:
-            '<p>comic body</p><img src="https://example.test/comic-page.jpg"><p>after image</p>',
+            '<p>comic body 软件正文</p><img src="https://example.test/comic-page.jpg"><p>after image</p>',
       );
+      final displayedHtml = post.message.replaceAll('软件', '軟體');
+      final readResult = ComicCommentLoadResult.fromRead(
+        commentDetailPage(lastPage: 1, posts: [post]),
+      );
+      final projection =
+          ComicCommentBodyProjector(['https://example.test/comic-page.jpg'])
+              .project(
+                ComicCommentContentProjection(
+                  sourceResult: readResult,
+                  items: [
+                    ComicCommentItemProjection(
+                      sourceItem: readResult.items.single,
+                      displayMessage: displayedHtml,
+                      displayDateline: post.dateline,
+                    ),
+                  ],
+                  mode: TextConversionMode.toTraditional,
+                  converterId: 'fixture',
+                  sourceRevision: 'copy-fixture',
+                  isConverted: true,
+                ),
+              )
+              .items
+              .single;
       final session = ComicCommentSessionController(
         key: const ComicCommentSessionKey(episodeId: 'e', sourceTid: '100'),
         loader: DefaultComicCommentLoader(
@@ -249,7 +272,7 @@ void main() {
       await tester.pumpWidget(
         _host(
           ComicCommentCard(
-            projection: _filteredFirstPost(post),
+            projection: projection,
             sourceTid: '100',
             interactionController: controller,
           ),
@@ -261,8 +284,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('thread-post-copy-all-action')));
       await tester.pumpAndSettle();
-      expect(copied, contains('comic body'));
-      expect(copied, contains('after image'));
+      expect(copied, 'comic body 軟體正文\nafter image');
+      expect(post.message, contains('软件正文'));
       await tester.longPress(find.byKey(const Key('thread-author-avatar-1')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('thread-post-select-copy-action')));
@@ -271,8 +294,17 @@ void main() {
         find.byType(ThreadPostHtmlSelectionCopyPage),
       );
       expect(selection.sourcePost, same(post));
-      expect(selection.post.message, contains('comic-page.jpg'));
-      expect(selection.plan.images, isNotEmpty);
+      expect(selection.post.message, displayedHtml);
+      final selectionRenderer = tester.widget<ForumHtmlWidgetPostRenderer>(
+        find.descendant(
+          of: find.byType(ThreadPostHtmlSelectionCopyPage),
+          matching: find.byType(ForumHtmlWidgetPostRenderer),
+        ),
+      );
+      expect(
+        selectionRenderer.preparedDocument!.sequence.entries,
+        hasLength(1),
+      );
     },
   );
   testWidgets(

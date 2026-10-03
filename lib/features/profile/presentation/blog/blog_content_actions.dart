@@ -8,7 +8,6 @@ import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_selection_copy_page.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_content_action_sheet.dart';
 
@@ -233,11 +232,8 @@ class _BlogContentActionsState extends ConsumerState<BlogContentActions> {
             context,
           ).push<void>(MaterialPageRoute(builder: (_) => page));
         case _BlogContentAction.copyAll:
-          final plan = const ThreadPostBodyRenderPlanner().plan(
+          final text = const ThreadPostBodyPlainTextExtractor().extractHtml(
             widget.displayHtml,
-          );
-          final text = const ThreadPostBodyPlainTextExtractor().extract(
-            plan.document,
           );
           await _copy(text, l10n.threadDetailPostBody, owner, identity);
         case _BlogContentAction.copyLink:

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
@@ -15,7 +14,6 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
     this.sourcePost,
     required this.threadId,
     required this.imageReferer,
-    required this.plan,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     required this.onImageFallback,
@@ -25,9 +23,8 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
   final ThreadPost? sourcePost;
   final String threadId;
   final String imageReferer;
-  final ThreadPostBodyRenderPlan plan;
   final ValueChanged<String> onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImage;
   final ThreadPostHtmlFirstImageFallback onImageFallback;
 
@@ -45,7 +42,6 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
         sourcePost: sourcePost,
         threadId: threadId,
         imageReferer: imageReferer,
-        plan: plan,
         onOpenPostLink: onOpenPostLink,
         onOpenPostImage: onOpenPostImage,
         theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(

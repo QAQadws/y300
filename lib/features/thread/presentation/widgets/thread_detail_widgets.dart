@@ -92,7 +92,7 @@ class ThreadDetailContent extends StatefulWidget {
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
   onOpenPostActions;

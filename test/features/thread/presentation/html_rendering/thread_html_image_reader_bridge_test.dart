@@ -1,18 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
-import 'package:y300/features/thread/domain/models/thread_post_render_cache_key.dart';
+import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
-import 'package:y300/features/thread/domain/models/thread_post_segmentation_config.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'forum_html_test_theme.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
 void main() {
   group('DefaultForumHtmlRenderPreparer', () {
@@ -142,7 +138,6 @@ void main() {
         post: _post,
         threadId: '100',
         imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
-        legacyPlan: _emptyPlan,
         sequence: prepared.sequence,
         imageRequest: ForumHtmlImageRequest(
           url: prepared.sequence.entries[1].url,
@@ -152,9 +147,8 @@ void main() {
 
       expect(result.canOpen, isTrue);
       expect(result.request!.initialIndex, 1);
-      expect(result.request!.image.url, endsWith('/page-2.jpg'));
-      expect(result.request!.readerRequest!.initialIndex, 1);
-      expect(result.request!.readerRequest!.continuousImages, hasLength(2));
+      expect(result.request!.initialEntry!.url, endsWith('/page-2.jpg'));
+      expect(result.request!.continuousImages, hasLength(2));
     });
 
     test('falls back to attachment and URL matching when index is absent', () {
@@ -167,10 +161,6 @@ void main() {
         post: _post,
         threadId: '100',
         imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
-        legacyPlan: _planWithLegacyImage(
-          aid: '99',
-          url: prepared.sequence.entries.first.url,
-        ),
         sequence: prepared.sequence,
         imageRequest: const ForumHtmlImageRequest(
           url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
@@ -191,7 +181,6 @@ void main() {
         post: _post,
         threadId: '100',
         imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
-        legacyPlan: _emptyPlan,
         sequence: prepared.sequence,
         imageRequest: const ForumHtmlImageRequest(
           url: 'https://bbs.yamibo.com/static/image/smiley/comcom/2.gif',
@@ -202,7 +191,6 @@ void main() {
         post: _post,
         threadId: '100',
         imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
-        legacyPlan: _emptyPlan,
         sequence: prepared.sequence,
         imageRequest: const ForumHtmlImageRequest(
           url: 'https://bbs.yamibo.com/data/attachment/forum/missing.jpg',
@@ -216,6 +204,243 @@ void main() {
       expect(
         unmatched.failureReason,
         ThreadHtmlImageReaderBridgeFailureReason.unmatchedImage,
+      );
+    });
+
+    test('keeps repeated URLs distinct by readable index', () {
+      final prepared = _prepared(
+        '<img src="https://example.test/page.jpg">'
+        '<img src="https://example.test/page.jpg">',
+      );
+      final result = bridge.buildOpenRequest(
+        post: _post,
+        threadId: '100',
+        imageReferer: _referer,
+        sequence: prepared.sequence,
+        imageRequest: const ForumHtmlImageRequest(
+          url: 'https://example.test/page.jpg',
+          readableIndex: 1,
+        ),
+      );
+
+      final request = result.request!;
+      expect(request.initialIndex, 1);
+      expect(request.initialEntry!.indexInPost, 1);
+      expect(request.group.urls, <String>[
+        'https://example.test/page.jpg',
+        'https://example.test/page.jpg',
+      ]);
+      expect(
+        request.continuousImages[0].id,
+        isNot(request.continuousImages[1].id),
+      );
+    });
+
+    test(
+      'attachment identity precedes URL fallback without a readable index',
+      () {
+        final prepared = _prepared(
+          '<img src="data/attachment/forum/page-1.jpg">'
+          '<img id="aimg_99" src="data/attachment/forum/page-2.jpg">',
+        );
+        final result = bridge.buildOpenRequest(
+          post: _post,
+          threadId: '100',
+          imageReferer: _referer,
+          sequence: prepared.sequence,
+          imageRequest: ForumHtmlImageRequest(
+            url: prepared.sequence.entries.first.url,
+            attachmentId: ' 99 ',
+          ),
+        );
+
+        expect(result.request!.initialIndex, 1);
+        expect(result.request!.initialEntry!.aid, '99');
+      },
+    );
+
+    test('matches a relative URL after trimming and removing its fragment', () {
+      final prepared = _prepared(
+        '<img src="data/attachment/forum/page-1.jpg">',
+      );
+      final result = bridge.buildOpenRequest(
+        post: _post,
+        threadId: '100',
+        imageReferer: _referer,
+        sequence: prepared.sequence,
+        imageRequest: const ForumHtmlImageRequest(
+          url: ' data/attachment/forum/page-1.jpg#tap ',
+          attachmentId: 'unknown',
+        ),
+      );
+
+      expect(result.request!.initialIndex, 0);
+    });
+
+    test('matches the original source when the readable URL differs', () {
+      final source = _prepared(
+        '<img src="data/attachment/forum/page-1.jpg">',
+      ).sequence.entries.single;
+      final sequence = ForumHtmlReadableImageSequence(
+        sourceId: 'p1',
+        entries: <ForumHtmlReadableImageEntry>[
+          _entryWith(source, url: 'https://cdn.example.test/page-1.jpg'),
+        ],
+      );
+      final result = bridge.buildOpenRequest(
+        post: _post,
+        threadId: '100',
+        imageReferer: _referer,
+        sequence: sequence,
+        imageRequest: const ForumHtmlImageRequest(
+          url: 'data/attachment/forum/page-1.jpg#tap',
+        ),
+      );
+
+      expect(
+        result.request!.initialEntry!.url,
+        'https://cdn.example.test/page-1.jpg',
+      );
+    });
+
+    test(
+      'lazy file sources preserve cache identity, referer, and dimensions',
+      () {
+        final prepared = _prepared(
+          '<img id="aimg_42" src="static/image/common/none.gif" '
+          'file="data/attachment/forum/page-1.jpg" width="640" height="480">',
+        );
+        final source = prepared.sequence.entries.single;
+        final result = bridge.buildOpenRequest(
+          post: _post,
+          threadId: '100',
+          imageReferer: _referer,
+          sequence: prepared.sequence,
+          imageRequest: const ForumHtmlImageRequest(
+            url: 'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+            readableIndex: 0,
+            cacheKey: 'untrusted-tap-cache-key',
+          ),
+        );
+
+        final request = result.request!;
+        final image = request.initialEntry!;
+        final continuousImage = request.continuousImages.single;
+        expect(request.tid, '100');
+        expect(request.pid, 'p1');
+        expect(request.postNumber, 1);
+        expect(request.referer, _referer);
+        expect(request.group.tid, request.tid);
+        expect(request.group.pid, request.pid);
+        expect(request.group.postNumber, request.postNumber);
+        expect(
+          image.url,
+          'https://bbs.yamibo.com/data/attachment/forum/page-1.jpg',
+        );
+        expect(image.rawUrl, 'data/attachment/forum/page-1.jpg');
+        expect(image.aid, '42');
+        expect(image.cacheKey, source.cacheKey);
+        expect(image.layoutHint!.aspectRatio, closeTo(640 / 480, 0.0001));
+        expect(
+          image.layoutHint!.source,
+          ThreadPostResourceLayoutHintSource.htmlAttribute,
+        );
+        expect(continuousImage.cacheKey, source.cacheKey);
+        expect(continuousImage.url, image.url);
+        expect(continuousImage.referer, Uri.parse(_referer));
+        expect(continuousImage.ownerId, 'thread:100:post:p1');
+        expect(continuousImage.id, 'thread:100:post:p1:0:${source.cacheKey}');
+        expect(
+          continuousImage.sourceKind,
+          ContinuousImageSourceKind.threadImageReader,
+        );
+        expect(
+          continuousImage.knownDimensionSource,
+          ContinuousImageDimensionSource.html,
+        );
+        expect(
+          continuousImage.knownWidth! / continuousImage.knownHeight!,
+          closeTo(640 / 480, 0.001),
+        );
+      },
+    );
+
+    for (final index in <int>[-1, 1]) {
+      test(
+        'invalid readable index $index cannot fallback to a matching image',
+        () {
+          final prepared = _prepared(
+            '<img id="aimg_99" src="data/attachment/forum/page-1.jpg">',
+          );
+          final result = bridge.buildOpenRequest(
+            post: _post,
+            threadId: '100',
+            imageReferer: _referer,
+            sequence: prepared.sequence,
+            imageRequest: ForumHtmlImageRequest(
+              url: prepared.sequence.entries.single.url,
+              readableIndex: index,
+              attachmentId: '99',
+            ),
+          );
+
+          expect(result.request, isNull);
+          expect(
+            result.failureReason,
+            ThreadHtmlImageReaderBridgeFailureReason.unmatchedImage,
+          );
+        },
+      );
+    }
+
+    test(
+      'rejects a malformed sequence whose image index is outside its group',
+      () {
+        final source = _prepared(
+          '<img src="data/attachment/forum/page-1.jpg">',
+        ).sequence.entries.single;
+        final result = bridge.buildOpenRequest(
+          post: _post,
+          threadId: '100',
+          imageReferer: _referer,
+          sequence: ForumHtmlReadableImageSequence(
+            sourceId: 'p1',
+            entries: <ForumHtmlReadableImageEntry>[
+              _entryWith(source, index: 2),
+            ],
+          ),
+          imageRequest: ForumHtmlImageRequest(
+            url: source.url,
+            readableIndex: 0,
+          ),
+        );
+
+        expect(result.request, isNull);
+        expect(
+          result.failureReason,
+          ThreadHtmlImageReaderBridgeFailureReason.invalidInitialIndex,
+        );
+      },
+    );
+
+    test('returns empty-sequence fallback when no image can be read', () {
+      final result = bridge.buildOpenRequest(
+        post: _post,
+        threadId: '100',
+        imageReferer: _referer,
+        sequence: const ForumHtmlReadableImageSequence(
+          sourceId: 'p1',
+          entries: <ForumHtmlReadableImageEntry>[],
+        ),
+        imageRequest: const ForumHtmlImageRequest(
+          url: 'https://example.test/page.jpg',
+        ),
+      );
+
+      expect(result.request, isNull);
+      expect(
+        result.failureReason,
+        ThreadHtmlImageReaderBridgeFailureReason.emptySequence,
       );
     });
   });
@@ -232,38 +457,20 @@ ForumHtmlPreparedRenderDocument _prepared(String html) {
   );
 }
 
-ThreadPostBodyRenderPlan get _emptyPlan => const ThreadPostBodyRenderPlan(
-  document: RichDocument(blocks: <RichBlock>[]),
-  displayDocument: RichDocument(blocks: <RichBlock>[]),
-  images: <RichImageBlock>[],
-  segments: <ThreadPostBodySegment>[],
-  usesListSegments: false,
-  renderKey: _renderKey,
-);
-
-ThreadPostBodyRenderPlan _planWithLegacyImage({
-  required String aid,
-  required String url,
+ForumHtmlReadableImageEntry _entryWith(
+  ForumHtmlReadableImageEntry source, {
+  int? index,
+  String? url,
 }) {
-  final image = RichImageBlock(url: url, rawUrl: url, index: 0, aid: aid);
-  return ThreadPostBodyRenderPlan(
-    document: RichDocument(blocks: <RichBlock>[image]),
-    displayDocument: RichDocument(blocks: <RichBlock>[image]),
-    images: <RichImageBlock>[image],
-    segments: const <ThreadPostBodySegment>[],
-    usesListSegments: false,
-    renderKey: _renderKey,
-    resourceLayoutHints: ThreadPostResourceLayoutHints(
-      blockImages: <String, ThreadPostBlockImageLayoutHint>{
-        ThreadPostResourceLayoutHints.blockImageKey(
-          image,
-        ): const ThreadPostBlockImageLayoutHint(
-          aspectRatio: 1.2,
-          source: ThreadPostResourceLayoutHintSource.htmlAttribute,
-          lockForCurrentBuild: false,
-        ),
-      },
-    ),
+  return ForumHtmlReadableImageEntry(
+    index: index ?? source.index,
+    url: url ?? source.url,
+    rawSrc: source.rawSrc,
+    cacheKey: source.cacheKey,
+    spec: source.spec,
+    attachmentId: source.attachmentId,
+    htmlWidth: source.htmlWidth,
+    htmlHeight: source.htmlHeight,
   );
 }
 
@@ -277,9 +484,4 @@ final _post = ThreadPost(
   dateline: 'today',
 );
 
-const _renderKey = ThreadPostRenderCacheKey(
-  renderSettings: ThreadPostBodyRenderSettings.defaults,
-  displayTransformerSignature: 'default',
-  resourceHintResolverSignature: 'default',
-  segmentation: ThreadPostSegmentationConfig.standard,
-);
+const _referer = 'https://bbs.yamibo.com/thread-100-1-1.html';

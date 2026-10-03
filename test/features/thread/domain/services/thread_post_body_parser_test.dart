@@ -21,7 +21,7 @@ void main() {
 
       expect(document.blocks, hasLength(3));
       final firstText = document.blocks[0] as RichTextBlock;
-      expect(firstText.plainText, '第一段重点');
+      expect(firstText.plainText, '第一段 重点');
       expect(firstText.anchorId, startsWith('text-'));
       expect(firstText.runs.last.isBold, isTrue);
 
@@ -46,6 +46,32 @@ void main() {
 
       expect(document.blocks, isEmpty);
       expect(document.images, isEmpty);
+    });
+
+    test('preserves collapsed spaces across inline styles and links', () {
+      final document = parser.parse('''
+<p>  Hello <b>  styled </b> <a href="thread-1-1-1.html"> link </a> ! </p>
+<p><b>A</b> <i>B</i></p>
+''');
+
+      final first = document.blocks.first as RichTextBlock;
+      expect(first.plainText, 'Hello styled link !');
+      expect(first.runs.singleWhere((run) => run.isBold).text, 'styled ');
+      expect(
+        first.runs.singleWhere((run) => run.linkUrl != null).text,
+        'link ',
+      );
+      expect((document.blocks.last as RichTextBlock).plainText, 'A B');
+    });
+
+    test('preserves spaces around an inline smiley', () {
+      final document = parser.parse(
+        '<p> 前文 <img src="static/image/smiley/comcom/2.gif" alt="[笑]"> 后文 </p>',
+      );
+
+      final text = document.blocks.single as RichTextBlock;
+      expect(text.plainText, '前文 [笑] 后文');
+      expect(text.runs[1].inlineImage?.altText, '[笑]');
     });
 
     test('parses smiley dimensions when present', () {

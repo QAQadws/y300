@@ -14,7 +14,6 @@ import 'package:y300/features/thread/domain/services/thread_post_navigation_sess
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_floor_link_builder.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
@@ -48,21 +47,18 @@ class ThreadPostNavigation {
     if (context.mounted && isCurrent()) showTransientSnackBar(context, text);
   }
 
-  void openImages(ThreadPost post, ThreadPostImageOpenRequest request) {
-    final readerRequest = request.readerRequest;
-    if (readerRequest == null || readerRequest.continuousImages.isEmpty) {
+  void openImages(ThreadPost post, ThreadImageOpenRequest request) {
+    if (request.continuousImages.isEmpty) {
       copyUrl(
         '${post.number}# ${AppLocalizations.of(context).threadDetailImageLink}',
-        request.image.url,
+        request.initialEntry?.url ?? '',
       );
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ThreadImageReaderPage(
-          request: readerRequest,
-          imageReferer: imageReferer,
-        ),
+        builder: (_) =>
+            ThreadImageReaderPage(request: request, imageReferer: imageReferer),
       ),
     );
   }
@@ -86,9 +82,9 @@ class ThreadPostNavigation {
     );
   }
 
-  Future<void> copyPlainText(ThreadPost post, ThreadPostBodyRenderPlan plan) {
-    final text = const ThreadPostBodyPlainTextExtractor().extract(
-      plan.document,
+  Future<void> copyPlainText(ThreadPost post, String displayedHtml) {
+    final text = const ThreadPostBodyPlainTextExtractor().extractHtml(
+      displayedHtml,
     );
     return copyUrl(
       '${post.number}# ${AppLocalizations.of(context).threadDetailPostBody}',

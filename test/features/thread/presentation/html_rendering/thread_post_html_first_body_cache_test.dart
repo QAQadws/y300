@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
@@ -57,7 +56,6 @@ void main() {
                 post: post,
                 threadId: tid,
                 imageReferer: '',
-                plan: const ThreadPostBodyRenderPlanner().plan(html),
                 onOpenPostLink: (_) => invokedRevision = callback,
                 onOpenPostImage: null,
                 theme: const ForumHtmlRenderThemeFactory().fromMaterialTheme(

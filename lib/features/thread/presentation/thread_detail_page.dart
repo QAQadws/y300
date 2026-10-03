@@ -672,7 +672,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     imageReferer: _latestImageReferer,
     isCurrent: () => mounted,
   );
-  void _openPostImages(ThreadPost post, ThreadPostImageOpenRequest request) =>
+  void _openPostImages(ThreadPost post, ThreadImageOpenRequest request) =>
       _postNavigation.openImages(post, request);
 
   Future<void> _openPostActions(

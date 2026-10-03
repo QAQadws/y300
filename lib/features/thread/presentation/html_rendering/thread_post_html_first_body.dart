@@ -7,7 +7,6 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
@@ -34,7 +33,6 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.sourcePost,
     required this.threadId,
     required this.imageReferer,
-    required this.plan,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     required this.theme,
@@ -55,9 +53,8 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final ThreadPost? sourcePost;
   final String threadId;
   final String imageReferer;
-  final ThreadPostBodyRenderPlan plan;
   final ValueChanged<String> onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImage;
   final ForumHtmlThemeContext theme;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
@@ -264,7 +261,6 @@ class _ThreadPostHtmlFirstBodyState
       post: sourcePost,
       threadId: widget.threadId,
       imageReferer: widget.imageReferer,
-      legacyPlan: widget.plan,
       sequence: sequence,
       imageRequest: request,
     );
@@ -303,10 +299,8 @@ class _ThreadPostHtmlFirstBodyState
 
 /// Production HTML-first thread body.
 ///
-/// The legacy rich-document renderer is intentionally not used as a runtime
-/// fallback here. Old rendering remains available from diagnostic comparison
-/// surfaces, while the normal thread detail path either renders HTML-first or
-/// shows a small recoverable error block.
+/// Renders prepared HTML and opens images from that document's readable
+/// sequence. Preparation failures show a recoverable error block.
 class ThreadPostHtmlBody extends StatelessWidget {
   const ThreadPostHtmlBody({
     super.key,
@@ -314,7 +308,6 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.sourcePost,
     required this.threadId,
     required this.imageReferer,
-    required this.plan,
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     required this.theme,
@@ -334,9 +327,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ThreadPost? sourcePost;
   final String threadId;
   final String imageReferer;
-  final ThreadPostBodyRenderPlan plan;
   final ValueChanged<String> onOpenPostLink;
-  final void Function(ThreadPost post, ThreadPostImageOpenRequest request)?
+  final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImage;
   final ForumHtmlThemeContext theme;
   final ThreadPostHtmlFirstImageFallback? onImageFallback;
@@ -363,7 +355,6 @@ class ThreadPostHtmlBody extends StatelessWidget {
       sourcePost: sourcePost,
       threadId: threadId,
       imageReferer: imageReferer,
-      plan: plan,
       onOpenPostLink: onOpenPostLink,
       onOpenPostImage: onOpenPostImage,
       theme: theme,
