@@ -103,6 +103,41 @@ final class ForumClientSourcePlan {
     this.logout,
   });
 
+  /// Rejects partial replacements whose preparations or account confirmation
+  /// would otherwise be consumed by a different standard adapter.
+  ///
+  /// Independent reads remain replaceable one at a time. Advanced hosts that
+  /// construct a complete facade directly may still use partial plans.
+  void validateStandardOverrides() {
+    void requireGroup(String name, List<Object?> members) {
+      final installed = members.where((member) => member != null).length;
+      if (installed != 0 && installed != members.length) {
+        throw ArgumentError('incomplete_source_override_group:$name');
+      }
+    }
+
+    requireGroup('post_rating', [postRatingPreparation, postRatingCommand]);
+    requireGroup('post_comment', [postCommentPreparation, postCommentCommand]);
+    requireGroup('thread_creation', [
+      threadCreationPreparation,
+      threadCreationCommand,
+    ]);
+    requireGroup('thread_reply', [threadReplyPreparation, threadReplyCommand]);
+    requireGroup('thread_post_edit', [
+      threadPostEditPreparation,
+      threadPostEditCommand,
+    ]);
+    requireGroup('image_attachment_upload', [
+      imageAttachmentUploadPreparation,
+      imageAttachmentUploadCommand,
+    ]);
+    requireGroup('private_message_batch', [
+      privateMessageBatchPreparation,
+      privateMessageBatchCommand,
+    ]);
+    requireGroup('authentication', [session, passwordLogin, logout]);
+  }
+
   /// Overlays non-null [overrides] on this source plan.
   ///
   /// This supports replacing one business source without introducing a global

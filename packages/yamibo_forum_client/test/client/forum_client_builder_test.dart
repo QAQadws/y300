@@ -181,6 +181,181 @@ void main() {
       expect(client.sourcePlan.threadAuthorPosts, isNotNull);
     });
 
+    test('rejects partial prepared-command and authentication groups', () {
+      final standard = _builder().buildStandardClient().sourcePlan;
+      final incomplete = <ForumClientSourcePlan>[
+        ForumClientSourcePlan(
+          postRatingPreparation: standard.postRatingPreparation,
+        ),
+        ForumClientSourcePlan(postRatingCommand: standard.postRatingCommand),
+        ForumClientSourcePlan(
+          postCommentPreparation: standard.postCommentPreparation,
+        ),
+        ForumClientSourcePlan(postCommentCommand: standard.postCommentCommand),
+        ForumClientSourcePlan(
+          threadCreationPreparation: standard.threadCreationPreparation,
+        ),
+        ForumClientSourcePlan(
+          threadCreationCommand: standard.threadCreationCommand,
+        ),
+        ForumClientSourcePlan(
+          threadReplyPreparation: standard.threadReplyPreparation,
+        ),
+        ForumClientSourcePlan(threadReplyCommand: standard.threadReplyCommand),
+        ForumClientSourcePlan(
+          threadPostEditPreparation: standard.threadPostEditPreparation,
+        ),
+        ForumClientSourcePlan(
+          threadPostEditCommand: standard.threadPostEditCommand,
+        ),
+        ForumClientSourcePlan(
+          imageAttachmentUploadPreparation:
+              standard.imageAttachmentUploadPreparation,
+        ),
+        ForumClientSourcePlan(
+          imageAttachmentUploadCommand: standard.imageAttachmentUploadCommand,
+        ),
+        ForumClientSourcePlan(
+          privateMessageBatchPreparation:
+              standard.privateMessageBatchPreparation,
+        ),
+        ForumClientSourcePlan(
+          privateMessageBatchCommand: standard.privateMessageBatchCommand,
+        ),
+        ForumClientSourcePlan(session: standard.session),
+        ForumClientSourcePlan(
+          passwordLogin: standard.passwordLogin,
+          logout: standard.logout,
+        ),
+      ];
+      for (final overrides in incomplete) {
+        expect(
+          () => _builder().buildStandardClient(sourceOverrides: overrides),
+          throwsArgumentError,
+        );
+      }
+    });
+
+    test('complete prepared-command groups preserve both replacements', () {
+      final replacement = _builder().buildStandardClient().sourcePlan;
+      final composed = _builder()
+          .buildStandardClient(sourceOverrides: replacement)
+          .sourcePlan;
+      expect(
+        composed.threadReplyPreparation,
+        same(replacement.threadReplyPreparation),
+      );
+      expect(composed.threadReplyCommand, same(replacement.threadReplyCommand));
+      expect(
+        composed.imageAttachmentUploadPreparation,
+        same(replacement.imageAttachmentUploadPreparation),
+      );
+      expect(
+        composed.imageAttachmentUploadCommand,
+        same(replacement.imageAttachmentUploadCommand),
+      );
+      expect(composed.session, same(replacement.session));
+      expect(composed.passwordLogin, same(replacement.passwordLogin));
+      expect(composed.logout, same(replacement.logout));
+    });
+
+    test(
+      'standard forum mutation confirms through the selected directory',
+      () async {
+        final mutationNetwork = _QueueNetwork([
+          {
+            'Variables': <String, Object?>{},
+            'Message': {
+              'messageval': 'favorite_do_success',
+              'messagestr': 'fixture',
+            },
+          },
+        ]);
+        final directoryNetwork = _QueueNetwork([
+          {
+            'Variables': {
+              'list': [
+                {'id': '30', 'favid': '701', 'title': 'fixture'},
+              ],
+            },
+          },
+        ]);
+        final directory = ForumClientAdapterFactory(
+          config: _config,
+          network: directoryNetwork,
+          sessionStore: MemoryForumSessionStore(),
+        ).createFavoriteForumDirectory();
+        final client =
+            _builder(
+              network: mutationNetwork,
+              formhashProvider: const _FixtureFormhashProvider(),
+            ).buildStandardClient(
+              sourceOverrides: ForumClientSourcePlan(
+                favoriteForumDirectory: directory,
+              ),
+            );
+        final result = await client.favoriteForumCommand!.execute(
+          const SetForumFavoriteRequest(
+            fid: '30',
+            targetState: FavoriteTargetState.favorited,
+          ),
+        );
+        expect(result, isA<DataCommandApplied<ForumFavoriteReceipt>>());
+        expect(result.receiptOrNull!.remoteFavoriteId, '701');
+        expect(mutationNetwork.modules, ['favforum']);
+        expect(directoryNetwork.modules, ['myfavforum']);
+      },
+    );
+
+    test(
+      'standard thread mutation confirms through the selected directory',
+      () async {
+        final mutationNetwork = _QueueNetwork([
+          {
+            'Variables': <String, Object?>{},
+            'Message': {
+              'messageval': 'favorite_do_success',
+              'messagestr': 'fixture',
+            },
+          },
+        ]);
+        final directoryNetwork = _QueueNetwork([
+          {
+            'Variables': {
+              'list': [
+                {'id': '10001', 'favid': '702', 'title': 'fixture'},
+              ],
+              'perpage': '20',
+              'count': '1',
+            },
+          },
+        ]);
+        final directory = ForumClientAdapterFactory(
+          config: _config,
+          network: directoryNetwork,
+          sessionStore: MemoryForumSessionStore(),
+        ).createFavoriteThreadDirectory();
+        final client =
+            _builder(
+              network: mutationNetwork,
+              formhashProvider: const _FixtureFormhashProvider(),
+            ).buildStandardClient(
+              sourceOverrides: ForumClientSourcePlan(
+                favoriteThreadDirectory: directory,
+              ),
+            );
+        final result = await client.favoriteThreadCommand!.execute(
+          const SetThreadFavoriteRequest(
+            tid: '10001',
+            targetState: FavoriteTargetState.favorited,
+          ),
+        );
+        expect(result, isA<DataCommandApplied<ThreadFavoriteReceipt>>());
+        expect(mutationNetwork.modules, ['favthread']);
+        expect(directoryNetwork.modules, ['myfavthread']);
+      },
+    );
+
     test('uses a resource-capable network for image resources', () {
       final network = _ResourceCapableNetwork();
       final client = _builder(network: network).buildStandardClient();

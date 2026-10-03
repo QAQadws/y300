@@ -120,6 +120,7 @@ final class YamiboForumClientBuilder {
   YamiboForumClient buildStandardClient({
     ForumClientSourcePlan sourceOverrides = const ForumClientSourcePlan(),
   }) {
+    sourceOverrides.validateStandardOverrides();
     final sessions = sessionStore ?? MemoryForumSessionStore();
     final factory = ForumClientAdapterFactory(
       config: config,
@@ -133,8 +134,14 @@ final class YamiboForumClientBuilder {
         formhashProvider ?? factory.createStandardFormhashProvider(sessions);
     final forumHome = factory.createHtmlForumHome();
     final authentication = factory.createAuthentication(formhash, sessions);
-    final favoriteForumDirectory = factory.createFavoriteForumDirectory();
-    final favoriteThreadDirectory = factory.createFavoriteThreadDirectory();
+    // Standard mutations confirm against the selected read source, rather
+    // than capturing an unused standard directory before the overlay.
+    final favoriteForumDirectory =
+        sourceOverrides.favoriteForumDirectory ??
+        factory.createFavoriteForumDirectory();
+    final favoriteThreadDirectory =
+        sourceOverrides.favoriteThreadDirectory ??
+        factory.createFavoriteThreadDirectory();
     final postRating = factory.createThreadPostRatingInteraction();
     final postComment = factory.createThreadPostCommentInteraction();
     final threadCreation = factory.createThreadCreation(formhash);
