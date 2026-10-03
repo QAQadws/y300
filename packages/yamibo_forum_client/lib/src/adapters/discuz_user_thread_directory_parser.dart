@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html;
 
 import '../contracts/user_thread_directory.dart';
 import '../url/forum_uri_resolver.dart';
+import 'discuz_thread_badge_parser.dart';
 
 final class UserThreadDirectoryUnauthorized implements Exception {
   const UserThreadDirectoryUnauthorized();
@@ -188,6 +189,9 @@ final class DiscuzUserThreadDirectoryParser {
             .toSet(),
       ),
       replyPreviews: List.unmodifiable(previews),
+      badges: DiscuzThreadBadgeParser.fromHtml(
+        row.querySelector('.threadlist_tit'),
+      ),
     );
   }
 

@@ -332,6 +332,7 @@ UserThreadDirectoryData _mergeMore(
       views: item.views,
       replies: item.replies,
       images: item.images,
+      badges: item.badges,
       replyPreviews: previews.values.toList(growable: false),
     );
   }

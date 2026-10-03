@@ -5324,6 +5324,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileFriendRemoving => '正在删除…';
+
+  @override
+  String get forumThreadBadgeClosed => '关闭';
+
+  @override
+  String get forumThreadBadgePoll => '投票';
+
+  @override
+  String get forumThreadBadgeTrade => '商品';
+
+  @override
+  String get forumThreadBadgeReward => '悬赏';
+
+  @override
+  String get forumThreadBadgeActivity => '活动';
+
+  @override
+  String get forumThreadBadgeDebate => '辩论';
+
+  @override
+  String get forumThreadBadgeImage => '图';
+
+  @override
+  String get forumThreadBadgeSticky => '置顶';
+
+  @override
+  String get forumThreadBadgeDigest => '精华';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -10648,4 +10675,31 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileFriendRemoving => '正在刪除…';
+
+  @override
+  String get forumThreadBadgeClosed => '關閉';
+
+  @override
+  String get forumThreadBadgePoll => '投票';
+
+  @override
+  String get forumThreadBadgeTrade => '商品';
+
+  @override
+  String get forumThreadBadgeReward => '懸賞';
+
+  @override
+  String get forumThreadBadgeActivity => '活動';
+
+  @override
+  String get forumThreadBadgeDebate => '辯論';
+
+  @override
+  String get forumThreadBadgeImage => '圖';
+
+  @override
+  String get forumThreadBadgeSticky => '置頂';
+
+  @override
+  String get forumThreadBadgeDigest => '精華';
 }

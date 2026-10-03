@@ -6,6 +6,94 @@ import '../test_support/thread_directory_fixture.dart';
 
 void main() {
   test(
+    'paging keeps current badges while merging replies to one topic',
+    () async {
+      final repository = ThreadDirectoryFixture();
+      final controller = UserThreadController(
+        repository: repository,
+        viewerUserId: '101',
+        args: const UserThreadPageArgs(
+          initialType: UserThreadDirectoryType.replies,
+        ),
+      );
+      addTearDown(controller.dispose);
+      UserThreadSummary summary(
+        List<ForumThreadBadge> badges,
+        List<String> replyIds,
+      ) => UserThreadSummary(
+        threadId: '100',
+        title: 'Source topic',
+        uri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+        ),
+        badges: badges,
+        replyPreviews: threadSummary('100', replies: replyIds).replyPreviews,
+      );
+
+      var pending = controller.setActive(true);
+      repository.succeed(
+        0,
+        items: [
+          summary(
+            const [
+              ForumThreadBadge(
+                kind: ForumThreadBadgeKind.poll,
+                sourceLabel: '',
+              ),
+            ],
+            ['501'],
+          ),
+        ],
+        hasMore: true,
+      );
+      await pending;
+      pending = controller.loadMore();
+      repository.succeed(
+        1,
+        items: [
+          summary(
+            const [
+              ForumThreadBadge(
+                kind: ForumThreadBadgeKind.closed,
+                sourceLabel: '',
+              ),
+              ForumThreadBadge(
+                kind: ForumThreadBadgeKind.digest,
+                sourceLabel: '',
+              ),
+            ],
+            ['502'],
+          ),
+        ],
+        hasMore: true,
+      );
+      await pending;
+      final merged = controller.value.data!.items.single;
+      expect(merged.replyPreviews.map((reply) => reply.postId), ['501', '502']);
+      expect(merged.badges.map((badge) => badge.kind), [
+        ForumThreadBadgeKind.closed,
+        ForumThreadBadgeKind.digest,
+      ]);
+
+      pending = controller.loadMore();
+      repository.succeed(
+        2,
+        items: [
+          summary(const [], ['503']),
+        ],
+      );
+      await pending;
+      final current = controller.value.data!.items.single;
+      expect(current.replyPreviews.map((reply) => reply.postId), [
+        '501',
+        '502',
+        '503',
+      ]);
+      expect(current.badges, isEmpty);
+    },
+  );
+
+  test(
     'URL page and actor survive paging, refresh and retained tab changes',
     () async {
       final repository = ThreadDirectoryFixture();

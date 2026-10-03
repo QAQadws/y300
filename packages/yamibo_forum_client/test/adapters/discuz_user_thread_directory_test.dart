@@ -96,6 +96,21 @@ void main() {
     final item = result.dataOrNull!.items.single;
     expect(item.threadId, '42');
     expect(item.title, 'Title & punctuation');
+    expect(item.badges.map((badge) => badge.kind), [
+      ForumThreadBadgeKind.poll,
+      ForumThreadBadgeKind.sticky,
+    ]);
+    expect(item.badges.map((badge) => badge.sourceLabel), ['Poll', 'Pinned']);
+    expect(
+      (result
+              as DataReadSuccess<
+                UserThreadDirectoryData,
+                UserThreadDirectoryReadCapabilities
+              >)
+          .capabilities
+          .supports(UserThreadDirectoryCapability.badges),
+      isTrue,
+    );
     expect(item.authorName, 'Author & name');
     expect(item.authorUserId, '101');
     expect(item.avatarUrl, 'https://example.test/avatar.png');
@@ -138,6 +153,8 @@ void main() {
     expect(result.failureOrNull, isNull);
     final item = result.dataOrNull!.items.single;
     expect(item.authorName, isNull);
+    expect(item.badges.single.kind, ForumThreadBadgeKind.closed);
+    expect(item.badges.single.sourceLabel, 'Locked');
     expect(item.replyPreviews.map((p) => p.postId), ['500', '501']);
     expect(item.replyPreviews.map((p) => p.excerpt), ['0', 'A reply preview']);
     expect(

@@ -128,6 +128,13 @@ Login is considered applied only after a subsequent profile response proves a
 stable non-zero user ID. Logout uses only
 `action=logout&formhash=...`; no `mlogout/hash` fallback is attempted.
 
+Forum-display and user-topic/reply summaries expose ordered `badges` with a
+source-neutral kind and original `sourceLabel`. Hosts localize recognized kinds
+and preserve unknown source wording. Forum summaries retain `badgeLabel` and
+`isLocked` for compatibility through `effectiveBadges`. Forum-display snapshots
+use codec/parser version 2; older snapshots are reparsed from the cached HTML
+document when available, rather than retaining an incomplete single marker.
+
 Command callers must distinguish five outcomes:
 
 - `DataCommandApplied`: the postcondition was proved;

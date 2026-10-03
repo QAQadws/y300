@@ -405,15 +405,6 @@ void main() {
       expect(displayPalette.selectedContainer, isNot(Colors.transparent));
       expect(displayPalette.outlineSoft.a, lessThan(1));
       expect(displayPalette.stateLayer.a, lessThan(1));
-      expect(
-        displayPalette.threadBadgeBackground,
-        theme.appBarTheme.backgroundColor,
-      );
-      expect(
-        displayPalette.threadBadgeForeground,
-        theme.appBarTheme.foregroundColor,
-      );
-      expect(displayPalette.threadBadgeOutline.a, lessThan(1));
     });
 
     test('dark palette remains derived from ColorScheme', () {
@@ -434,9 +425,6 @@ void main() {
         theme.colorScheme.surfaceContainerHighest,
       );
       expect(palette.selectedContainer, theme.colorScheme.secondaryContainer);
-      expect(palette.threadBadgeBackground, theme.appBarTheme.backgroundColor);
-      expect(palette.threadBadgeForeground, theme.appBarTheme.foregroundColor);
-      expect(palette.threadBadgeOutline.a, lessThan(1));
     });
 
     testWidgets('stays buildable first then renders list', (tester) async {

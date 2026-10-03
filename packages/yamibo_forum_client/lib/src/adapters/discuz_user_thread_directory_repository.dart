@@ -194,6 +194,9 @@ final class DiscuzUserThreadDirectoryRepository
       UserThreadDirectoryCapability.replyPreviews: data.items.any(
         (i) => i.replyPreviews.isNotEmpty,
       ),
+      UserThreadDirectoryCapability.badges: data.items.any(
+        (i) => i.badges.isNotEmpty,
+      ),
     };
     for (final entry in optional.entries) {
       if (!entry.value) {

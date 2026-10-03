@@ -3,7 +3,9 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import '../contracts/forum_display_models.dart';
+import '../contracts/forum_thread_badge.dart';
 import '../url/forum_uri_resolver.dart';
+import 'discuz_thread_badge_parser.dart';
 
 class ForumDisplayHtmlParser {
   ForumDisplayHtmlParser({required Uri siteOrigin})
@@ -263,8 +265,8 @@ class ForumDisplayHtmlParser {
         continue;
       }
 
-      final badgeNode = titleBlock?.querySelector('.micon');
-      final badgeLabel = _cleanText(badgeNode?.text ?? '');
+      final badges = DiscuzThreadBadgeParser.fromHtml(titleBlock);
+      final badgeLabel = badges.isEmpty ? null : badges.first.sourceLabel;
       final sourceTagAnchor = item.querySelector('.threadlist_foot li.mr a');
       final sourceTagUrl = _resolve(sourceTagAnchor?.attributes['href']);
       final sourceTagName = _stripPrefix(
@@ -278,7 +280,7 @@ class ForumDisplayHtmlParser {
           typeid: _extractQueryValue(sourceTagUrl, 'typeid') ?? '',
           sourceTagName: sourceTagName.isEmpty ? null : sourceTagName,
           sourceTagUrl: sourceTagUrl,
-          subject: _parseThreadSubject(titleBlock, badgeLabel),
+          subject: _parseThreadSubject(titleBlock),
           author: _cleanText(item.querySelector('.mmc')?.text ?? ''),
           uid:
               _extractQueryValue(
@@ -297,11 +299,12 @@ class ForumDisplayHtmlParser {
           dateline: _cleanText(item.querySelector('.mtime')?.text ?? ''),
           views: _parseThreadMetric(item, 'dm-eye-fill'),
           replies: _parseThreadMetric(item, 'dm-chat-s-fill'),
-          badgeLabel: badgeLabel.isEmpty ? null : badgeLabel,
+          badgeLabel: badgeLabel,
+          badges: badges,
           titleColorHex: _extractStyleColor(titleBlock?.querySelector('em')),
-          isLocked:
-              badgeNode?.classes.contains('lock') == true ||
-              badgeLabel.contains('关闭'),
+          isLocked: badges.any(
+            (badge) => badge.kind == ForumThreadBadgeKind.closed,
+          ),
         ),
       );
     }
@@ -321,12 +324,17 @@ class ForumDisplayHtmlParser {
     return item.querySelector('a[href*="mod=viewthread"], a[href*="thread-"]');
   }
 
-  String _parseThreadSubject(html_dom.Element? titleBlock, String badgeLabel) {
+  String _parseThreadSubject(html_dom.Element? titleBlock) {
     final emphasized = _cleanText(titleBlock?.querySelector('em')?.text ?? '');
     if (emphasized.isNotEmpty) {
       return emphasized;
     }
-    return _stripPrefix(_cleanText(titleBlock?.text ?? ''), badgeLabel);
+    final title = titleBlock?.clone(true);
+    for (final badge
+        in title?.querySelectorAll('.micon') ?? <html_dom.Element>[]) {
+      badge.remove();
+    }
+    return _cleanText(title?.text ?? '');
   }
 
   int _parseThreadMetric(html_dom.Element item, String iconClass) {

@@ -1754,5 +1754,14 @@
   "profileFriendsRemoved": "好友已刪除",
   "profileFriendRemovalUnknown": "刪除結果無法確認，請重新整理好友列表核對後再操作",
   "profileFriendRemovalVerify": "重新整理核對",
-  "profileFriendRemoving": "正在刪除…"
+  "profileFriendRemoving": "正在刪除…",
+  "forumThreadBadgeClosed": "關閉",
+  "forumThreadBadgePoll": "投票",
+  "forumThreadBadgeTrade": "商品",
+  "forumThreadBadgeReward": "懸賞",
+  "forumThreadBadgeActivity": "活動",
+  "forumThreadBadgeDebate": "辯論",
+  "forumThreadBadgeImage": "圖",
+  "forumThreadBadgeSticky": "置頂",
+  "forumThreadBadgeDigest": "精華"
 }

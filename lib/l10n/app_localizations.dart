@@ -8867,6 +8867,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正在删除…'**
   String get profileFriendRemoving;
+
+  /// No description provided for @forumThreadBadgeClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get forumThreadBadgeClosed;
+
+  /// No description provided for @forumThreadBadgePoll.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票'**
+  String get forumThreadBadgePoll;
+
+  /// No description provided for @forumThreadBadgeTrade.
+  ///
+  /// In zh, this message translates to:
+  /// **'商品'**
+  String get forumThreadBadgeTrade;
+
+  /// No description provided for @forumThreadBadgeReward.
+  ///
+  /// In zh, this message translates to:
+  /// **'悬赏'**
+  String get forumThreadBadgeReward;
+
+  /// No description provided for @forumThreadBadgeActivity.
+  ///
+  /// In zh, this message translates to:
+  /// **'活动'**
+  String get forumThreadBadgeActivity;
+
+  /// No description provided for @forumThreadBadgeDebate.
+  ///
+  /// In zh, this message translates to:
+  /// **'辩论'**
+  String get forumThreadBadgeDebate;
+
+  /// No description provided for @forumThreadBadgeImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'图'**
+  String get forumThreadBadgeImage;
+
+  /// No description provided for @forumThreadBadgeSticky.
+  ///
+  /// In zh, this message translates to:
+  /// **'置顶'**
+  String get forumThreadBadgeSticky;
+
+  /// No description provided for @forumThreadBadgeDigest.
+  ///
+  /// In zh, this message translates to:
+  /// **'精华'**
+  String get forumThreadBadgeDigest;
 }
 
 class _AppLocalizationsDelegate

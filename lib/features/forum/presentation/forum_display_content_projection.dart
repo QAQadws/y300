@@ -120,6 +120,11 @@ final class ForumDisplayContentProjection {
         ..add(forumContentNullableTextHash(item.sourceTagName))
         ..add(forumContentNullableTextHash(item.badgeLabel))
         ..add(forumContentTextHash(item.dateline));
+      for (final badge in item.effectiveBadges) {
+        parts
+          ..add(badge.kind)
+          ..add(forumContentTextHash(badge.sourceLabel));
+      }
     }
     return forumContentSourceRevision(parts);
   }
@@ -186,6 +191,7 @@ final class ForumDisplayThreadProjection {
     required this.displayExcerpt,
     required this.displaySourceTagName,
     required this.displayBadgeLabel,
+    required this.displayBadges,
     required this.displayDateline,
   });
 
@@ -196,6 +202,7 @@ final class ForumDisplayThreadProjection {
       displayExcerpt: source.excerpt,
       displaySourceTagName: source.sourceTagName,
       displayBadgeLabel: source.badgeLabel,
+      displayBadges: source.effectiveBadges,
       displayDateline: source.dateline,
     );
   }
@@ -205,5 +212,6 @@ final class ForumDisplayThreadProjection {
   final String displayExcerpt;
   final String? displaySourceTagName;
   final String? displayBadgeLabel;
+  final List<ForumThreadBadge> displayBadges;
   final String displayDateline;
 }

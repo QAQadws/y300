@@ -1,7 +1,9 @@
 // ignore_for_file: public_member_api_docs
 
 import '../contracts/forum_display_models.dart';
+import '../contracts/forum_thread_badge.dart';
 import '../parsing/loose_json.dart';
+import 'discuz_thread_badge_parser.dart';
 
 final class ForumDisplayApiMapper {
   const ForumDisplayApiMapper();
@@ -38,6 +40,7 @@ final class ForumDisplayApiMapper {
   }
 
   ForumThreadSummary _mapThread(JsonMap json) {
+    final badges = DiscuzThreadBadgeParser.fromApi(json);
     return ForumThreadSummary(
       tid: LooseJson.string(json['tid']),
       typeid: LooseJson.string(json['typeid']),
@@ -65,8 +68,11 @@ final class ForumDisplayApiMapper {
       ),
       sourceTagUrl: _nullableString(json['sourceTagUrl']),
       badgeLabel: _nullableString(json['badgeLabel']),
+      badges: badges,
       titleColorHex: _nullableString(json['titleColorHex']),
-      isLocked: LooseJson.boolean(json['closed']),
+      isLocked: badges.any(
+        (badge) => badge.kind == ForumThreadBadgeKind.closed,
+      ),
     );
   }
 

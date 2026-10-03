@@ -36,9 +36,6 @@ class ForumDisplayThemePalette {
     required this.selectedContainer,
     required this.selectedForeground,
     required this.outlineSoft,
-    required this.threadBadgeBackground,
-    required this.threadBadgeForeground,
-    required this.threadBadgeOutline,
   });
 
   final Color background;
@@ -73,17 +70,10 @@ class ForumDisplayThemePalette {
   final Color selectedContainer;
   final Color selectedForeground;
   final Color outlineSoft;
-  final Color threadBadgeBackground;
-  final Color threadBadgeForeground;
-  final Color threadBadgeOutline;
 
   static ForumDisplayThemePalette resolve(ThemeData theme) {
     final scheme = theme.colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
-    final appBarBackground =
-        theme.appBarTheme.backgroundColor ?? scheme.primary;
-    final appBarForeground =
-        theme.appBarTheme.foregroundColor ?? scheme.onPrimary;
     final native = theme.y300NativeContent;
     if (!isDark) {
       return ForumDisplayThemePalette(
@@ -124,9 +114,6 @@ class ForumDisplayThemePalette {
         selectedContainer: native.selectionBackground.withValues(alpha: 0.74),
         selectedForeground: native.selectionForeground,
         outlineSoft: scheme.outlineVariant.withValues(alpha: 0.28),
-        threadBadgeBackground: appBarBackground,
-        threadBadgeForeground: appBarForeground,
-        threadBadgeOutline: appBarBackground.withValues(alpha: 0.72),
       );
     }
     return ForumDisplayThemePalette(
@@ -170,9 +157,6 @@ class ForumDisplayThemePalette {
       selectedContainer: scheme.secondaryContainer,
       selectedForeground: scheme.onSecondaryContainer,
       outlineSoft: scheme.outlineVariant.withValues(alpha: 0.44),
-      threadBadgeBackground: appBarBackground,
-      threadBadgeForeground: appBarForeground,
-      threadBadgeOutline: appBarForeground.withValues(alpha: 0.22),
     );
   }
 }

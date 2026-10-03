@@ -3,6 +3,7 @@
 import '../cache/forum_cache.dart';
 import '../cache/forum_cache_key_canonicalizer.dart';
 import '../contracts/forum_display_models.dart';
+import '../contracts/forum_thread_badge.dart';
 import '../parsing/loose_json.dart';
 
 class ForumDisplaySnapshotCodec
@@ -14,10 +15,10 @@ class ForumDisplaySnapshotCodec
       ForumCacheKeyCanonicalizer.forumDisplaySnapshotType;
 
   @override
-  int get codecVersion => 1;
+  int get codecVersion => 2;
 
   @override
-  int get parserVersion => 1;
+  int get parserVersion => 2;
 
   @override
   bool canDecodeVersion({
@@ -116,6 +117,14 @@ class ForumDisplaySnapshotCodec
       'excerpt': value.excerpt,
       'sourceTagUrl': value.sourceTagUrl,
       'badgeLabel': value.badgeLabel,
+      'badges': value.badges
+          .map(
+            (badge) => <String, Object?>{
+              'kind': badge.kind.name,
+              'sourceLabel': badge.sourceLabel,
+            },
+          )
+          .toList(growable: false),
       'titleColorHex': value.titleColorHex,
       'isLocked': value.isLocked,
     };
@@ -138,6 +147,19 @@ class ForumDisplaySnapshotCodec
       excerpt: LooseJson.string(map['excerpt']),
       sourceTagUrl: _nullableString(map['sourceTagUrl']),
       badgeLabel: _nullableString(map['badgeLabel']),
+      badges: LooseJson.list(map['badges'])
+          .map((value) {
+            final badge = LooseJson.map(value);
+            final kind = LooseJson.string(badge['kind']);
+            return ForumThreadBadge(
+              kind: ForumThreadBadgeKind.values.firstWhere(
+                (value) => value.name == kind,
+                orElse: () => ForumThreadBadgeKind.unknown,
+              ),
+              sourceLabel: LooseJson.string(badge['sourceLabel']),
+            );
+          })
+          .toList(growable: false),
       titleColorHex: _nullableString(map['titleColorHex']),
       isLocked: LooseJson.boolean(map['isLocked']),
     );

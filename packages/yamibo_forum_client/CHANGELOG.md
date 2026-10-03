@@ -8,6 +8,11 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
+- Ordered, typed topic badges shared by forum-display and user-topic/reply
+  summaries, preserving independent status markers and unknown source labels.
+- Forum-display snapshot v2 with cached-HTML reparse for older single-marker
+  snapshots, and API closure handling that distinguishes redirect targets.
+
 - Paginated private-message directories and direct/group conversations with
   cancellation, precise timestamps, reply anchors and stable target identity.
 - Verified private-message sending by user ID, username, or an existing group,

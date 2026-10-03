@@ -84,6 +84,8 @@ final client = builder.buildStandardClient(
 
 不存在全局 HTML/API 开关。
 
+版块列表和用户主题／回复摘要通过 `badges` 保留有序的独立标识；每枚标识提供来源中立的 kind 与服务器原文 `sourceLabel`。Host 对已知 kind 使用本地化文案，未知标识保留原文。版块摘要继续保留 `badgeLabel`、`isLocked`，通过 `effectiveBadges` 兼容旧调用。版块快照使用 codec/parser v2；旧快照在有原始 HTML 缓存时重新解析，避免只留下第一枚标识。
+
 ## 认证与命令
 
 Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。标准客户端支持密码登录、会话解析和标准登出；登录只有在 profile 回读证明稳定非零 uid 后才算 applied。

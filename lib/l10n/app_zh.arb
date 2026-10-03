@@ -2115,5 +2115,14 @@
   "profileFriendsRemoved": "好友已删除",
   "profileFriendRemovalUnknown": "删除结果无法确认，请刷新好友列表核对后再操作",
   "profileFriendRemovalVerify": "刷新核对",
-  "profileFriendRemoving": "正在删除…"
+  "profileFriendRemoving": "正在删除…",
+  "forumThreadBadgeClosed": "关闭",
+  "forumThreadBadgePoll": "投票",
+  "forumThreadBadgeTrade": "商品",
+  "forumThreadBadgeReward": "悬赏",
+  "forumThreadBadgeActivity": "活动",
+  "forumThreadBadgeDebate": "辩论",
+  "forumThreadBadgeImage": "图",
+  "forumThreadBadgeSticky": "置顶",
+  "forumThreadBadgeDigest": "精华"
 }

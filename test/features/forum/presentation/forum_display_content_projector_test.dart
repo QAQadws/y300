@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projector.dart';
+import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_diagnostics.dart';
@@ -9,6 +10,63 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 
 void main() {
   group('ForumDisplayContentProjector', () {
+    test(
+      'converts unknown markers without changing known kinds or source',
+      () async {
+        final original = _source();
+        final source = original.copyWith(
+          threads: [
+            original.threads.first.copyWith(
+              badges: const [
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.closed,
+                  sourceLabel: '关闭的主题',
+                ),
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.unknown,
+                  sourceLabel: '服务器标识',
+                ),
+              ],
+            ),
+          ],
+        );
+        final projection = await ForumDisplayContentProjector(
+          plainTextBatchConversionService: _PrefixBatchConversionService(),
+          diagnosticRecorder: _RecordingDiagnosticRecorder(),
+        ).project(source, converter: const _TestConverter());
+        final displayed = projection.threads.single.displayBadges;
+        expect(displayed.first.kind, ForumThreadBadgeKind.closed);
+        expect(displayed.first.sourceLabel, '关闭的主题');
+        expect(displayed.last.kind, ForumThreadBadgeKind.unknown);
+        expect(displayed.last.sourceLabel, 'T:服务器标识');
+        expect(source.threads.single.badges.last.sourceLabel, '服务器标识');
+      },
+    );
+    test('status changes invalidate an otherwise identical projection', () {
+      final source = _source();
+      final thread = source.threads.first;
+      final previous = source.copyWith(threads: [thread]);
+      final updated = source.copyWith(
+        threads: [
+          thread.copyWith(
+            badges: const [
+              ForumThreadBadge(
+                kind: ForumThreadBadgeKind.closed,
+                sourceLabel: '关闭',
+              ),
+              ForumThreadBadge(
+                kind: ForumThreadBadgeKind.digest,
+                sourceLabel: '精华',
+              ),
+            ],
+          ),
+        ],
+      );
+      expect(
+        ForumDisplayContentProjection.sourceRevisionFor(updated),
+        isNot(ForumDisplayContentProjection.sourceRevisionFor(previous)),
+      );
+    });
     test(
       'converts allowed fields and preserves raw identities in one batch',
       () async {

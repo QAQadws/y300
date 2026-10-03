@@ -14,10 +14,213 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
+import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_content_spacing.dart';
+import 'package:y300/shared/widgets/forum_thread_badges.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
+  for (final type in UserThreadDirectoryType.values) {
+    for (final width in [320.0, 393.0]) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          '$type badges stay above the title and beside the author at $width dp with $scale text',
+          (tester) async {
+            tester.view.physicalSize = Size(width, 800);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            final item = UserThreadSummary(
+              threadId: '100',
+              title: 'Source topic title',
+              uri: Uri.parse(
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+              ),
+              authorName: 'Long source author name',
+              authorUserId: '101',
+              avatarUrl: 'https://bbs.yamibo.com/avatar.php?uid=101',
+              forumName: 'Source forum',
+              publishedAtText: '2026-10-03',
+              badges: const [
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.closed,
+                  sourceLabel: '',
+                ),
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.poll,
+                  sourceLabel: '',
+                ),
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.digest,
+                  sourceLabel: '',
+                ),
+              ],
+            );
+            await _pumpBadgeCard(tester, item: item, type: type, scale: scale);
+            final l10n = AppLocalizations.of(
+              tester.element(find.byType(UserThreadCard)),
+            );
+            final badges = find.byType(ForumThreadBadgeGroup);
+            for (final label in [
+              l10n.forumThreadBadgeClosed,
+              l10n.forumThreadBadgePoll,
+              l10n.forumThreadBadgeDigest,
+            ]) {
+              expect(
+                find.descendant(of: badges, matching: find.text(label)),
+                findsOneWidget,
+              );
+            }
+            final card = tester.getRect(find.byType(UserThreadCard));
+            final badgeRect = tester.getRect(badges);
+            final author = tester.getRect(find.text(item.authorName!));
+            final avatar = tester.getRect(find.byType(ForumCachedAvatar));
+            final title = tester.getRect(find.text(item.title));
+            expect(
+              badgeRect.right,
+              closeTo(card.right - ForumContentSpacing.postBodyHorizontal, .1),
+            );
+            expect(
+              badgeRect.top,
+              closeTo(card.top + ForumContentSpacing.postCardHeaderTop, .1),
+            );
+            expect(author.right, lessThan(badgeRect.left));
+            expect(author.top, closeTo(badgeRect.top, .1));
+            expect(avatar.right, lessThan(author.left));
+            expect(title.top, greaterThan(badgeRect.bottom));
+            expect(title.top, greaterThan(avatar.bottom));
+            expect(
+              title.left,
+              closeTo(card.left + ForumContentSpacing.postBodyHorizontal, .1),
+            );
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
+  for (final type in UserThreadDirectoryType.values) {
+    for (final width in [320.0, 393.0]) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          '$type without identity keeps combined badges beside a long title at $width dp with $scale text',
+          (tester) async {
+            tester.view.physicalSize = Size(width, 800);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            final item = UserThreadSummary(
+              threadId: '100',
+              title:
+                  'A long source topic title that remains beside its status markers even when it needs several lines',
+              uri: Uri.parse(
+                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+              ),
+              badges: const [
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.closed,
+                  sourceLabel: '',
+                ),
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.poll,
+                  sourceLabel: '',
+                ),
+                ForumThreadBadge(
+                  kind: ForumThreadBadgeKind.digest,
+                  sourceLabel: '',
+                ),
+              ],
+            );
+            await _pumpBadgeCard(tester, item: item, type: type, scale: scale);
+            final l10n = AppLocalizations.of(
+              tester.element(find.byType(UserThreadCard)),
+            );
+            final badges = find.byType(ForumThreadBadgeGroup);
+            for (final label in [
+              l10n.forumThreadBadgeClosed,
+              l10n.forumThreadBadgePoll,
+              l10n.forumThreadBadgeDigest,
+            ]) {
+              expect(
+                find.descendant(of: badges, matching: find.text(label)),
+                findsOneWidget,
+              );
+            }
+            final badgeRect = tester.getRect(badges);
+            final title = tester.getRect(find.text(item.title));
+            final card = tester.getRect(find.byType(UserThreadCard));
+            expect(title.top, closeTo(badgeRect.top, .1));
+            expect(
+              title.top,
+              closeTo(card.top + ForumContentSpacing.postCardHeaderTop, .1),
+            );
+            expect(
+              title.left,
+              closeTo(card.left + ForumContentSpacing.postBodyHorizontal, .1),
+            );
+            expect(title.width, greaterThan(0));
+            expect(title.right, lessThan(badgeRect.left));
+            expect(
+              badgeRect.right,
+              closeTo(card.right - ForumContentSpacing.postBodyHorizontal, .1),
+            );
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
+  testWidgets(
+    'a reply without identity keeps its digest beside a short title',
+    (tester) async {
+      tester.view.physicalSize = const Size(393, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final item = UserThreadSummary(
+        threadId: '100',
+        title: 'Short title',
+        uri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+        ),
+        badges: const [
+          ForumThreadBadge(kind: ForumThreadBadgeKind.digest, sourceLabel: ''),
+        ],
+      );
+      await _pumpBadgeCard(
+        tester,
+        item: item,
+        type: UserThreadDirectoryType.replies,
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(UserThreadCard)),
+      );
+      expect(find.text(l10n.forumThreadBadgeDigest), findsOneWidget);
+      final badge = tester.getRect(find.byType(ForumThreadBadgeGroup));
+      final title = tester.getRect(find.text(item.title));
+      final card = tester.getRect(find.byType(UserThreadCard));
+      expect(title.top, closeTo(badge.top, .1));
+      expect(
+        title.top,
+        closeTo(card.top + ForumContentSpacing.postCardHeaderTop, .1),
+      );
+      expect(
+        title.left,
+        closeTo(card.left + ForumContentSpacing.postBodyHorizontal, .1),
+      );
+      expect(title.right, lessThan(badge.left));
+      expect(
+        badge.right,
+        closeTo(card.right - ForumContentSpacing.postBodyHorizontal, .1),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final width in [320.0, 393.0]) {
       testWidgets(
@@ -220,6 +423,45 @@ void main() {
 
 Finder get _loadingHints =>
     find.byKey(const Key('cached-library-image-loading-indicator'));
+
+Future<void> _pumpBadgeCard(
+  WidgetTester tester, {
+  required UserThreadSummary item,
+  required UserThreadDirectoryType type,
+  double scale = 1,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        imageCacheServiceProvider.overrideWithValue(_ControlledImages()),
+        forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
+      ],
+      child: LocalizedTestApp(
+        theme: AppTheme.light(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(ForumContentSpacing.pageHorizontal),
+              child: UserThreadCard(
+                item: item,
+                type: type,
+                onOpenThread: () {},
+                onOpenReply: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
 
 List<Rect> _previewRects(WidgetTester tester) => [
   for (final element in find.byType(CachedLibraryImage).evaluate())

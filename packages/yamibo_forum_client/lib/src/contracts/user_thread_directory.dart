@@ -3,6 +3,7 @@ library;
 
 import 'cache_load_policy.dart';
 import 'data_read_contract.dart';
+import 'forum_thread_badge.dart';
 import '../network/forum_request.dart' show ForumRequestCancellation;
 
 /// Which user forum directory to read.
@@ -67,6 +68,7 @@ final class UserThreadSummary {
     this.replies,
     this.images = const [],
     this.replyPreviews = const [],
+    this.badges = const [],
   });
 
   /// Stable topic identifier.
@@ -110,6 +112,9 @@ final class UserThreadSummary {
 
   /// Individual account replies; topic identity alone cannot deduplicate them.
   final List<UserThreadReplyPreview> replyPreviews;
+
+  /// Independently advertised topic markers in source order.
+  final List<ForumThreadBadge> badges;
 }
 
 /// One reply and its exact server-provided post location.
@@ -203,6 +208,9 @@ enum UserThreadDirectoryCapability {
 
   /// Exact total page count.
   totalPageCount,
+
+  /// Independently advertised topic markers.
+  badges,
 }
 
 /// Declared source capabilities.

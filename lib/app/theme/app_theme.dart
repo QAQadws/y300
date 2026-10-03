@@ -3,6 +3,7 @@ import 'package:y300/app/theme/app_component_theme_builder.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/app/theme/forum_thread_badge_theme.dart';
 
 /// Y300 全局主题入口。
 final class AppTheme {
@@ -68,6 +69,11 @@ final class AppTheme {
       chipTheme: AppComponentThemeBuilder.chipTheme(colorScheme),
       cardTheme: AppComponentThemeBuilder.cardTheme(colorScheme),
       extensions: <ThemeExtension<dynamic>>[
+        ForumThreadBadgeTheme.fromColorScheme(
+          colorScheme,
+          standardBackground: palette.appBarBackground,
+          standardForeground: palette.appBarForeground,
+        ),
         palette.brightness == Brightness.dark
             ? Y300ThemeExtension.dark(palette)
             : Y300ThemeExtension.light(palette),

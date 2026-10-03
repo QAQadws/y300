@@ -17,6 +17,7 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
+import 'package:y300/shared/widgets/forum_thread_badges.dart';
 import 'package:y300/shared/widgets/native_pagination_bar.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -242,6 +243,7 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
           excerpt: item.displayExcerpt,
           sourceTagName: item.displaySourceTagName,
           badgeLabel: item.displayBadgeLabel,
+          badges: item.displayBadges,
           dateline: item.displayDateline,
         ),
     ];
@@ -1478,6 +1480,7 @@ class _ThreadCardState extends State<_ThreadCard> {
   Widget build(BuildContext context) {
     final thread = widget.thread;
     final palette = widget.palette;
+    final badges = thread.effectiveBadges;
     final titleColor = _parseColor(thread.titleColorHex) ?? palette.threadTitle;
     return AnimatedScale(
       duration: const Duration(milliseconds: 110),
@@ -1519,31 +1522,35 @@ class _ThreadCardState extends State<_ThreadCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _Avatar(
-                          url: thread.avatarUrl,
-                          ownerId: thread.uid.trim().isNotEmpty
-                              ? thread.uid
-                              : thread.author,
-                          threadId: thread.tid,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _ThreadAuthorBlock(
-                            thread: thread,
-                            palette: palette,
+                    LayoutBuilder(
+                      builder: (context, constraints) => Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _Avatar(
+                            url: thread.avatarUrl,
+                            ownerId: thread.uid.trim().isNotEmpty
+                                ? thread.uid
+                                : thread.author,
+                            threadId: thread.tid,
                           ),
-                        ),
-                        if (thread.badgeLabel?.isNotEmpty == true) ...[
-                          const SizedBox(width: 6),
-                          _ThreadBadge(
-                            label: thread.badgeLabel!,
-                            palette: palette,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _ThreadAuthorBlock(
+                              thread: thread,
+                              palette: palette,
+                            ),
                           ),
+                          if (badges.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: constraints.maxWidth * 0.45,
+                              ),
+                              child: ForumThreadBadgeGroup(badges: badges),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 7),
                     Text(
@@ -1853,44 +1860,6 @@ class _SmallBadge extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ThreadBadge extends StatelessWidget {
-  const _ThreadBadge({required this.label, required this.palette});
-
-  final String label;
-  final ForumDisplayThemePalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 30, minHeight: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: palette.threadBadgeBackground,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: palette.threadBadgeOutline),
-        boxShadow: [
-          BoxShadow(
-            color: palette.stateLayer.withValues(alpha: 0.05),
-            blurRadius: 7,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: palette.threadBadgeForeground,
-          height: 1.1,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );

@@ -14,6 +14,7 @@ import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/forum_metric_pill.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/forum_thread_badges.dart';
 
 class UserThreadCard extends ConsumerWidget {
   const UserThreadCard({
@@ -39,7 +40,21 @@ class UserThreadCard extends ConsumerWidget {
       item.publishedAtText,
     ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' · ');
     final author = item.authorName?.trim() ?? '';
+    final hasIdentity =
+        author.isNotEmpty ||
+        metadata.isNotEmpty ||
+        item.avatarUrl?.trim().isNotEmpty == true;
     final excerpt = item.excerpt?.trim() ?? '';
+    final title = Text(
+      item.title,
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.titleMedium?.copyWith(
+        color: palette.title,
+        fontWeight: FontWeight.w800,
+        height: 1.24,
+      ),
+    );
     const radius = BorderRadius.all(Radius.circular(12));
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -66,65 +81,64 @@ class UserThreadCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (author.isNotEmpty ||
-                    metadata.isNotEmpty ||
-                    item.avatarUrl?.trim().isNotEmpty == true) ...[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (item.avatarUrl?.trim().isNotEmpty == true) ...[
-                        ForumCachedAvatar(
-                          imageUrl: item.avatarUrl,
-                          ownerId: item.authorUserId ?? item.threadId,
-                          ownerType: ImageCacheOwnerType.profile,
-                          size: 34,
-                          imageReferer: ref.watch(forumImageRefererProvider),
-                        ),
-                        const SizedBox(width: 9),
-                      ],
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (author.isNotEmpty)
-                              Text(
-                                author,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: palette.author,
-                                  fontWeight: FontWeight.w800,
+                if (hasIdentity) ...[
+                  _UserThreadHeadingRow(
+                    threadId: item.threadId,
+                    badges: item.badges,
+                    leading: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (item.avatarUrl?.trim().isNotEmpty == true) ...[
+                          ForumCachedAvatar(
+                            imageUrl: item.avatarUrl,
+                            ownerId: item.authorUserId ?? item.threadId,
+                            ownerType: ImageCacheOwnerType.profile,
+                            size: 34,
+                            imageReferer: ref.watch(forumImageRefererProvider),
+                          ),
+                          const SizedBox(width: 9),
+                        ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (author.isNotEmpty)
+                                Text(
+                                  author,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: palette.author,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
-                              ),
-                            if (metadata.isNotEmpty) ...[
-                              if (author.isNotEmpty) const SizedBox(height: 2),
-                              Text(
-                                metadata,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: palette.softText,
-                                  height: 1.1,
+                              if (metadata.isNotEmpty) ...[
+                                if (author.isNotEmpty)
+                                  const SizedBox(height: 2),
+                                Text(
+                                  metadata,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: palette.softText,
+                                    height: 1.1,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 7),
-                ],
-                Text(
-                  item.title,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: palette.title,
-                    fontWeight: FontWeight.w800,
-                    height: 1.24,
+                  title,
+                ] else
+                  _UserThreadHeadingRow(
+                    threadId: item.threadId,
+                    badges: item.badges,
+                    leading: title,
                   ),
-                ),
                 if (excerpt.isNotEmpty &&
                     (type == UserThreadDirectoryType.threads ||
                         item.replyPreviews.isEmpty)) ...[
@@ -234,6 +248,40 @@ class UserThreadCard extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _UserThreadHeadingRow extends StatelessWidget {
+  const _UserThreadHeadingRow({
+    required this.leading,
+    required this.badges,
+    required this.threadId,
+  });
+
+  final Widget leading;
+  final List<ForumThreadBadge> badges;
+  final String threadId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (badges.isEmpty) return leading;
+    // Without identity metadata, the title shares the first row with badges.
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: leading),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth * .45),
+            child: ForumThreadBadgeGroup(
+              key: ValueKey('my-thread-badges-$threadId'),
+              badges: badges,
+            ),
+          ),
+        ],
       ),
     );
   }

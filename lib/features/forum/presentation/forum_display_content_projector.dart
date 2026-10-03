@@ -43,6 +43,11 @@ final class ForumDisplayContentProjector {
         ..add(item.sourceTagName ?? '')
         ..add(item.badgeLabel ?? '')
         ..add(item.dateline);
+      texts.addAll(
+        item.effectiveBadges
+            .where((badge) => badge.kind == ForumThreadBadgeKind.unknown)
+            .map((badge) => badge.sourceLabel),
+      );
     }
 
     final result = await _executor.convertAll(
@@ -104,6 +109,16 @@ final class ForumDisplayContentProjector {
               : displaySourceTagName,
           displayBadgeLabel: item.badgeLabel == null ? null : displayBadgeLabel,
           displayDateline: displayDateline,
+          displayBadges: List<ForumThreadBadge>.unmodifiable([
+            for (final badge in item.effectiveBadges)
+              if (badge.kind == ForumThreadBadgeKind.unknown)
+                ForumThreadBadge(
+                  kind: badge.kind,
+                  sourceLabel: result.values[index++],
+                )
+              else
+                badge,
+          ]),
         ),
       );
     }

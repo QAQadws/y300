@@ -1,6 +1,8 @@
 /// Models describing a forum display page and its server-provided actions.
 library;
 
+import 'forum_thread_badge.dart';
+
 /// Values describing forum display favorite action.
 enum ForumDisplayFavoriteAction {
   /// Favorite.
@@ -152,6 +154,7 @@ class ForumThreadSummary {
     this.excerpt = '',
     this.sourceTagUrl,
     this.badgeLabel,
+    this.badges = const [],
     this.titleColorHex,
     this.isLocked = false,
   });
@@ -201,6 +204,35 @@ class ForumThreadSummary {
   /// Badge label.
   final String? badgeLabel;
 
+  /// Independently advertised topic markers in source order.
+  final List<ForumThreadBadge> badges;
+
+  /// Typed markers with compatibility for older sources' single label/flag.
+  List<ForumThreadBadge> get effectiveBadges {
+    final label = badgeLabel?.trim() ?? '';
+    final markers = badges.isNotEmpty
+        ? badges
+        : label.isEmpty
+        ? const <ForumThreadBadge>[]
+        : <ForumThreadBadge>[
+            ForumThreadBadge(
+              kind: ForumThreadBadgeKind.fromSourceLabel(label),
+              sourceLabel: label,
+            ),
+          ];
+    if (!isLocked ||
+        markers.any((badge) => badge.kind == ForumThreadBadgeKind.closed)) {
+      return markers;
+    }
+    return List.unmodifiable([
+      const ForumThreadBadge(
+        kind: ForumThreadBadgeKind.closed,
+        sourceLabel: '',
+      ),
+      ...markers,
+    ]);
+  }
+
   /// Title color hex.
   final String? titleColorHex;
 
@@ -224,6 +256,7 @@ class ForumThreadSummary {
     String? excerpt,
     String? sourceTagUrl,
     String? badgeLabel,
+    List<ForumThreadBadge>? badges,
     String? titleColorHex,
     bool? isLocked,
     bool clearSourceTagName = false,
@@ -246,6 +279,7 @@ class ForumThreadSummary {
       excerpt: excerpt ?? this.excerpt,
       sourceTagUrl: sourceTagUrl ?? this.sourceTagUrl,
       badgeLabel: badgeLabel ?? this.badgeLabel,
+      badges: badges ?? this.badges,
       titleColorHex: titleColorHex ?? this.titleColorHex,
       isLocked: isLocked ?? this.isLocked,
     );

@@ -16,6 +16,7 @@ export 'src/contracts/forum_daily_sign_in.dart';
 export 'src/contracts/forum_home.dart';
 export 'src/contracts/forum_authentication.dart';
 export 'src/contracts/forum_display_models.dart';
+export 'src/contracts/forum_thread_badge.dart';
 export 'src/contracts/forum_display_repository.dart';
 export 'src/contracts/forum_resource.dart';
 export 'src/contracts/forum_image_attachments.dart';
