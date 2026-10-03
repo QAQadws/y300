@@ -11,7 +11,8 @@ typedef WafChallengeClearanceProbe =
       required String userAgent,
     });
 
-typedef WafChallengeCookieSync = Future<void> Function(Uri uri);
+typedef WafChallengeCookieSync =
+    Future<void> Function(Uri uri, {bool Function()? isCurrent});
 
 /// Orders the two halves of verification: WebView cookies must reach the
 /// shared native store before the probe is allowed to make its decision.
@@ -28,8 +29,14 @@ final class WafChallengeVerificationService {
   Future<WafChallengeClearance> verify({
     required Uri uri,
     required String userAgent,
+    bool Function()? isCurrent,
   }) async {
-    await _syncCookies(uri);
-    return _probe(uri: uri, userAgent: userAgent);
+    if (isCurrent?.call() == false) return WafChallengeClearance.inconclusive;
+    await _syncCookies(uri, isCurrent: isCurrent);
+    if (isCurrent?.call() == false) return WafChallengeClearance.inconclusive;
+    final result = await _probe(uri: uri, userAgent: userAgent);
+    return isCurrent?.call() == false
+        ? WafChallengeClearance.inconclusive
+        : result;
   }
 }

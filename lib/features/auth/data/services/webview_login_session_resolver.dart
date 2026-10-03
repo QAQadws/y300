@@ -29,14 +29,18 @@ class WebViewLoginSessionResolver {
 
   static final Uri _siteUri = Uri.parse(AppConfig.siteBaseUrl);
 
-  Future<WebViewLoginProgress> evaluate() async {
-    final cookies = await _cookieSyncService.syncToStore(_siteUri);
-    if (!YamiboAuthCookie.isLoggedIn(cookies)) {
+  Future<WebViewLoginProgress> evaluate({bool Function()? isCurrent}) async {
+    final cookies = await _cookieSyncService.syncToStore(
+      _siteUri,
+      isCurrent: isCurrent,
+    );
+    if (isCurrent?.call() == false || !YamiboAuthCookie.isLoggedIn(cookies)) {
       return const WebViewLoginPending();
     }
 
     // auth cookie 已就位且已回灌 dio，profile 校验此刻应能成功并顺带缓存 formhash。
     final result = await _sessionRepository.resolve();
+    if (isCurrent?.call() == false) return const WebViewLoginPending();
     return switch (result) {
       ForumSessionAuthenticated(:final identity) => WebViewLoginSucceeded(
         identity,

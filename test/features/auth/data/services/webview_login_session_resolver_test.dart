@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -11,10 +13,13 @@ class _FakeWebViewCookieJar implements WebViewCookieJar {
   _FakeWebViewCookieJar(this.cookies);
 
   Map<String, String> cookies;
+  Completer<Map<String, String>>? pendingRead;
 
   @override
-  Future<Map<String, String>> readCookies(Uri uri) async =>
-      Map<String, String>.from(cookies);
+  Future<Map<String, String>> readCookies(Uri uri) async {
+    if (pendingRead != null) return pendingRead!.future;
+    return Map<String, String>.from(cookies);
+  }
 
   @override
   Future<void> writeCookies(Uri uri, Map<String, String> values) async {
@@ -148,6 +153,43 @@ void main() {
 
       expect(progress, isA<WebViewLoginFailed>());
       expect((progress as WebViewLoginFailed).message, 'network');
+    },
+  );
+
+  test(
+    'a closed login page cannot commit delayed browser credentials',
+    () async {
+      final authRepository = _FakeAuthRepository(
+        const ApiSuccess<SessionInfo>(
+          SessionInfo(
+            uid: '42',
+            username: 'reader',
+            formhash: 'h',
+            isLoggedIn: true,
+          ),
+        ),
+      );
+      final cookieStore = CookieStore();
+      final jar = _FakeWebViewCookieJar({})
+        ..pendingRead = Completer<Map<String, String>>();
+      final resolver = WebViewLoginSessionResolver(
+        cookieSyncService: WebViewCookieSyncService(
+          cookieJar: jar,
+          cookieStore: cookieStore,
+        ),
+        sessionRepository: forumSessionRepositoryFrom(authRepository),
+      );
+      var active = true;
+      final evaluation = resolver.evaluate(isCurrent: () => active);
+      active = false;
+      jar.pendingRead!.complete({'EeqY_2132_auth': 'old-account'});
+
+      expect(await evaluation, isA<WebViewLoginPending>());
+      expect(authRepository.refreshCallCount, 0);
+      expect(
+        await cookieStore.readCookieMap(Uri.parse('https://bbs.yamibo.com/')),
+        isEmpty,
+      );
     },
   );
 }

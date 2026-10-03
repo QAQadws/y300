@@ -37,6 +37,7 @@ class _WafChallengeBackgroundWebViewState
 
   Timer? _evaluationTimer;
   Timer? _timeoutTimer;
+  StreamSubscription<void>? _identitySubscription;
   bool _isPrepared = false;
   bool _didComplete = false;
   bool _verificationInFlight = false;
@@ -47,6 +48,21 @@ class _WafChallengeBackgroundWebViewState
   @override
   void initState() {
     super.initState();
+    final sessionStore = ref.read(yamiboSessionStoreProvider);
+    String? readActorId() {
+      final session = sessionStore.readCurrent();
+      final uid = int.tryParse(session?.uid.trim() ?? '');
+      return session?.isLoggedIn == true && uid != null && uid > 0
+          ? uid.toString()
+          : null;
+    }
+
+    final actorId = readActorId();
+    _identitySubscription = sessionStore.identityChanges.listen((_) {
+      if (readActorId() != actorId) {
+        _complete(WafChallengeRecoveryResult.unavailable);
+      }
+    });
     _stopwatch.start();
     _timeoutTimer = Timer(
       widget.timeout,
@@ -58,6 +74,8 @@ class _WafChallengeBackgroundWebViewState
   @override
   void dispose() {
     _didComplete = true;
+    unawaited(_identitySubscription?.cancel());
+    _identitySubscription = null;
     _evaluationTimer?.cancel();
     _timeoutTimer?.cancel();
     super.dispose();
@@ -108,7 +126,10 @@ class _WafChallengeBackgroundWebViewState
     try {
       await ref
           .read(webViewCookieSyncServiceProvider)
-          .seedFromStore(widget.initialUri);
+          .seedFromStore(
+            widget.initialUri,
+            isCurrent: () => mounted && !_didComplete,
+          );
     } catch (_) {
       // Match the proven foreground flow: cookie seeding is best-effort and
       // the site's own JavaScript may still establish a fresh clearance.
@@ -144,7 +165,14 @@ class _WafChallengeBackgroundWebViewState
     try {
       clearance = await ref
           .read(wafChallengeVerificationServiceProvider)
-          .verify(uri: widget.initialUri, userAgent: _effectiveUserAgent);
+          .verify(
+            uri: widget.initialUri,
+            userAgent: _effectiveUserAgent,
+            isCurrent: () =>
+                mounted &&
+                !_didComplete &&
+                navigationGeneration == _navigationGeneration,
+          );
     } catch (_) {
       // Cookie and transport races are retried while the same WebView stays
       // mounted. The independent deadline always completes the host future.

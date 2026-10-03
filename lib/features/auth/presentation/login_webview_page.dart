@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/data/services/webview_login_progress.dart';
 import 'package:y300/features/auth/data/services/webview_login_session_resolver.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
@@ -34,7 +37,29 @@ class _LoginWebViewPageState extends ConsumerState<LoginWebViewPage> {
   int _loadProgress = 0;
   bool _isVerifying = false;
   bool _didComplete = false;
+  bool _isPrepared = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prepare());
+  }
+
+  Future<void> _prepare() async {
+    try {
+      await ref
+          .read(webViewCookieSyncServiceProvider)
+          .seedFromStore(
+            LoginWebViewPage.loginUri,
+            isCurrent: () => mounted && !_didComplete,
+          );
+    } catch (_) {
+      // A platform cookie failure must not prevent the site's login flow.
+    }
+    if (!mounted || _didComplete) return;
+    setState(() => _isPrepared = true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,23 +89,25 @@ class _LoginWebViewPageState extends ConsumerState<LoginWebViewPage> {
               ),
             ),
           Expanded(
-            child: inapp.InAppWebView(
-              initialUrlRequest: inapp.URLRequest(
-                url: inapp.WebUri(LoginWebViewPage.loginUri.toString()),
-              ),
-              initialSettings: inapp.InAppWebViewSettings(
-                javaScriptEnabled: true,
-                userAgent: BrowserUserAgents.mobile,
-                transparentBackground: true,
-              ),
-              onProgressChanged: (controller, progress) {
-                if (!mounted) {
-                  return;
-                }
-                setState(() => _loadProgress = progress);
-              },
-              onLoadStop: (controller, url) => _handlePageFinished(),
-            ),
+            child: !_isPrepared
+                ? const Center(child: CircularProgressIndicator())
+                : inapp.InAppWebView(
+                    initialUrlRequest: inapp.URLRequest(
+                      url: inapp.WebUri(LoginWebViewPage.loginUri.toString()),
+                    ),
+                    initialSettings: inapp.InAppWebViewSettings(
+                      javaScriptEnabled: true,
+                      userAgent: BrowserUserAgents.mobile,
+                      transparentBackground: true,
+                    ),
+                    onProgressChanged: (controller, progress) {
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() => _loadProgress = progress);
+                    },
+                    onLoadStop: (controller, url) => _handlePageFinished(),
+                  ),
           ),
         ],
       ),
@@ -90,13 +117,15 @@ class _LoginWebViewPageState extends ConsumerState<LoginWebViewPage> {
   /// 页面加载完成回调：同步 cookie 并判定登录态。加了并发/一次性守卫，避免
   /// 登录成功后仍在途的页面加载重复触发校验或重复 pop。
   Future<void> _handlePageFinished() async {
-    if (_didComplete || _isVerifying) {
+    if (!mounted || _didComplete || _isVerifying) {
       return;
     }
     _isVerifying = true;
     try {
       final resolver = ref.read(webViewLoginSessionResolverProvider);
-      final progress = await resolver.evaluate();
+      final progress = await resolver.evaluate(
+        isCurrent: () => mounted && !_didComplete,
+      );
       if (!mounted) {
         return;
       }

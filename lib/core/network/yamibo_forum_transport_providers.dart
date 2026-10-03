@@ -60,8 +60,10 @@ final wafChallengeClearanceProbeProvider = Provider<WafChallengeClearanceProbe>(
 final wafChallengeVerificationServiceProvider =
     Provider<WafChallengeVerificationService>((ref) {
       return WafChallengeVerificationService(
-        syncCookies: (uri) async {
-          await ref.read(webViewCookieSyncServiceProvider).syncToStore(uri);
+        syncCookies: (uri, {isCurrent}) async {
+          await ref
+              .read(webViewCookieSyncServiceProvider)
+              .syncToStore(uri, isCurrent: isCurrent);
         },
         probe: ref.watch(wafChallengeClearanceProbeProvider),
       );
