@@ -86,11 +86,11 @@ class _RenderMoreAccountIdentityLayout extends RenderBox
     final isLtr = _textDirection == TextDirection.ltr;
     (identity.parentData! as _AccountIdentityParentData).offset = Offset(
       isLtr ? 0 : size.width - identity.size.width,
-      fits ? size.height - identity.size.height : 0,
+      fits ? (size.height - identity.size.height) / 2 : 0,
     );
     (action.parentData! as _AccountIdentityParentData).offset = Offset(
       isLtr ? size.width - action.size.width : 0,
-      fits ? size.height - action.size.height : identity.size.height,
+      fits ? (size.height - action.size.height) / 2 : identity.size.height,
     );
   }
 

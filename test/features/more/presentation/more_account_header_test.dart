@@ -550,7 +550,7 @@ void main() {
             expect(action.top, identity.bottom);
             expect(layout.height, 80);
           } else {
-            expect(action.bottom, identity.bottom);
+            expect(action.center.dy, identity.center.dy);
             expect(layout.height, 48);
           }
           expect(tester.takeException(), isNull);
@@ -690,14 +690,24 @@ void _expectAccountLayout(
   final header = tester.getRect(find.byKey(const Key('more-account-header')));
 
   expect(toggle.right, closeTo(header.right - 16, 0.1));
-  expect(toggle.bottom, greaterThanOrEqualTo(group.bottom));
-  expect(toggle.bottom, greaterThanOrEqualTo(name.bottom));
   if (toggleWraps == true) {
     expect(toggle.top, greaterThanOrEqualTo(name.bottom));
     expect(toggle.top, greaterThanOrEqualTo(group.bottom));
   } else if (toggleWraps == false) {
+    final toggleLabel = tester.getRect(
+      find.descendant(
+        of: find.byType(DailyAutoSignInToggle),
+        matching: find.text(_l10n(tester).dailyAutoSignInToggle),
+      ),
+    );
+    final toggleSwitch = tester.getRect(
+      find.byKey(const Key('daily-auto-sign-in-toggle')),
+    );
     expect(toggle.left - group.right, greaterThanOrEqualTo(11.9));
-    expect(toggle.bottom, closeTo(name.bottom, 0.1));
+    expect(toggle.center.dy, closeTo(name.center.dy, 0.1));
+    expect(toggleLabel.center.dy, closeTo(name.center.dy, 0.1));
+    expect(toggleSwitch.center.dy, closeTo(name.center.dy, 0.1));
+    expect(group.center.dy, closeTo(name.center.dy, 0.1));
   }
 
   expect(name.top, greaterThan(avatar.bottom));
