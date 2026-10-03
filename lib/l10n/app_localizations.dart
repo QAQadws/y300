@@ -8783,6 +8783,132 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'今日签到记录与论坛当前状态不一致，自动提交已暂停。请先核验状态。'**
   String get dailyAutoSignInBlockedToday;
+
+  /// No description provided for @profileMyFriendsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的好友'**
+  String get profileMyFriendsTitle;
+
+  /// No description provided for @profileFriendsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友'**
+  String get profileFriendsTab;
+
+  /// No description provided for @profileFriendsOnlineTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线会员'**
+  String get profileFriendsOnlineTab;
+
+  /// No description provided for @profileFriendsVisitorsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近访客'**
+  String get profileFriendsVisitorsTab;
+
+  /// No description provided for @profileFriendsFootprintsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的足迹'**
+  String get profileFriendsFootprintsTab;
+
+  /// No description provided for @profileFriendsLoginRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后查看我的好友'**
+  String get profileFriendsLoginRequired;
+
+  /// No description provided for @profileFriendsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无好友'**
+  String get profileFriendsEmpty;
+
+  /// No description provided for @profileFriendsOnlineEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无在线会员'**
+  String get profileFriendsOnlineEmpty;
+
+  /// No description provided for @profileFriendsVisitorsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无最近访客'**
+  String get profileFriendsVisitorsEmpty;
+
+  /// No description provided for @profileFriendsFootprintsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无访问足迹'**
+  String get profileFriendsFootprintsEmpty;
+
+  /// No description provided for @profileFriendsLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友列表暂时无法加载，请稍后重试。'**
+  String get profileFriendsLoadFailed;
+
+  /// No description provided for @profileFriendsAnonymous.
+  ///
+  /// In zh, this message translates to:
+  /// **'匿名访客'**
+  String get profileFriendsAnonymous;
+
+  /// No description provided for @profileFriendsOnlineStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线'**
+  String get profileFriendsOnlineStatus;
+
+  /// 好友页面显示的访问时间；time 保留服务器原文
+  ///
+  /// In zh, this message translates to:
+  /// **'访问于 {time}'**
+  String profileFriendsVisitedAt(String time);
+
+  /// No description provided for @profileFriendRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除好友'**
+  String get profileFriendRemove;
+
+  /// No description provided for @profileFriendRemoveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认删除好友？'**
+  String get profileFriendRemoveTitle;
+
+  /// No description provided for @profileFriendRemoveBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除 {username} 后，对方将从你的好友列表中移除。'**
+  String profileFriendRemoveBody(String username);
+
+  /// No description provided for @profileFriendRemoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'好友已删除'**
+  String get profileFriendRemoved;
+
+  /// No description provided for @profileFriendRemovalUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除结果无法确认，请刷新好友列表核对后再操作。'**
+  String get profileFriendRemovalUnknown;
+
+  /// No description provided for @profileFriendRemovalVerify.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新核对'**
+  String get profileFriendRemovalVerify;
+
+  /// No description provided for @profileFriendRemoving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在删除…'**
+  String get profileFriendRemoving;
 }
 
 class _AppLocalizationsDelegate

@@ -19,8 +19,10 @@ import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_repository.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
 import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
+import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
@@ -32,6 +34,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import '../../../support/forum_auth_test_support.dart';
 import '../../../test_support/localized_test_app.dart';
 import '../../messages/support/message_test_repository.dart';
+import '../test_support/friend_read_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -715,6 +718,42 @@ void main() {
     expect(directory.queries.single.type, UserThreadDirectoryType.threads);
   });
 
+  testWidgets(
+    'MyProfilePage opens the native friends page for the verified account',
+    (tester) async {
+      final directory = FriendFeedFixture(autoComplete: true);
+      final openedWebViews = <ForumWebViewLaunchConfig>[];
+      await _pumpMyProfile(
+        tester,
+        repository: _FakeProfileRepository(data: _allActionsProfile),
+        friendDirectory: directory,
+        routeFactory: (config) {
+          openedWebViews.add(config);
+          return MaterialPageRoute<Object?>(
+            builder: (_) => const SizedBox.shrink(),
+          );
+        },
+      );
+      expect(directory.requests, isEmpty);
+      final entry = find.byKey(const Key('user-profile-action-friends'));
+      await tester.ensureVisible(entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      expect(find.byType(MyFriendsPage), findsOneWidget);
+      expect(directory.requests.single.query.accountUserId, '654321');
+      expect(
+        directory.requests.single.query.scope,
+        ForumFriendFeedScope.friends,
+      );
+      expect(openedWebViews, isEmpty);
+      Navigator.of(tester.element(find.byType(MyFriendsPage))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(MyProfilePage), findsOneWidget);
+      expect(directory.requests, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('MyProfilePage opens fixed managed WebView action targets', (
     tester,
   ) async {
@@ -735,7 +774,6 @@ void main() {
 
     const targets = <ForumUserProfileActionKind>[
       ForumUserProfileActionKind.forumFavorites,
-      ForumUserProfileActionKind.friends,
       ForumUserProfileActionKind.settings,
       ForumUserProfileActionKind.creditHistory,
     ];
@@ -766,7 +804,6 @@ void main() {
           'type': 'thread',
           'mobile': '2',
         },
-        {'mod': 'space', 'do': 'friend', 'mobile': '2'},
         {'mod': 'spacecp', 'mobile': '2'},
         {'mod': 'spacecp', 'ac': 'credit', 'op': 'log'},
       ],
@@ -905,6 +942,7 @@ Future<void> _pumpMyProfile(
   YamiboSessionStore? store,
   ForumWebViewRouteFactory? routeFactory,
   UserThreadDirectoryRepository? threadDirectory,
+  ForumFriendFeedRepository? friendDirectory,
   Widget? home,
 }) async {
   await tester.pumpWidget(
@@ -916,6 +954,12 @@ Future<void> _pumpMyProfile(
           userThreadDirectoryRepositoryProvider.overrideWithValue(
             threadDirectory,
           ),
+        if (friendDirectory != null) ...[
+          friendFeedRepositoryProvider.overrideWithValue(friendDirectory),
+          friendRemovalCommandProvider.overrideWithValue(
+            FriendRemovalFixture(),
+          ),
+        ],
         if (store != null) yamiboSessionStoreProvider.overrideWithValue(store),
         if (routeFactory != null)
           forumWebViewRouteFactoryProvider.overrideWithValue(routeFactory),

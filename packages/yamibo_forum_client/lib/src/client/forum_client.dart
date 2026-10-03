@@ -25,6 +25,7 @@ import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
 import '../contracts/private_message_batch_command.dart';
 import '../contracts/friend_directory.dart';
+import '../contracts/friend_feed.dart';
 import '../contracts/notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
@@ -354,6 +355,29 @@ final class YamiboForumClient {
   /// Configured friend selector source, if installed.
   ForumFriendDirectoryRepository? get friendDirectory =>
       sourcePlan.friendDirectory;
+
+  /// Configured account-bound native friend-page member lists.
+  ForumFriendFeedRepository? get friendFeed => sourcePlan.friendFeed;
+
+  /// Configured fresh-form friend-removal command.
+  ForumFriendRemovalCommand? get friendRemovalCommand =>
+      sourcePlan.friendRemovalCommand;
+
+  /// Reads one authenticated friend-page list without persisting account data.
+  Future<DataReadResult<ForumFriendFeedPage, ForumFriendFeedReadCapabilities>>
+  loadFriendFeed(
+    ForumFriendFeedQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+  }) =>
+      sourcePlan.friendFeed?.load(query, cachePolicy: cachePolicy) ??
+      unsupported<ForumFriendFeedPage, ForumFriendFeedReadCapabilities>();
+
+  /// Removes one friend only through the configured single-submission command.
+  Future<DataCommandResult<ForumFriendRemovalReceipt>> removeFriend(
+    ForumFriendRemovalSubmission submission,
+  ) =>
+      sourcePlan.friendRemovalCommand?.execute(submission) ??
+      Future.value(const DataCommandUnsupported<ForumFriendRemovalReceipt>());
 
   /// Configured desktop batch preparation source, if installed.
   ForumPrivateMessageBatchPreparationRepository?

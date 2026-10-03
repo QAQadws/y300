@@ -39,6 +39,7 @@ export 'src/contracts/message_directories.dart';
 export 'src/contracts/private_message_command.dart';
 export 'src/contracts/notification_ignore_command.dart';
 export 'src/contracts/friend_directory.dart';
+export 'src/contracts/friend_feed.dart';
 export 'src/contracts/private_message_batch_command.dart';
 export 'src/contracts/sticker_catalog.dart';
 export 'src/contracts/thread_detail_models.dart';

@@ -120,6 +120,8 @@ void main() {
         'lib/src/adapters/discuz_supplemental_read_adapters.dart',
         'lib/src/adapters/discuz_tag_directory_html_parser.dart',
         'lib/src/adapters/discuz_thread_repositories.dart',
+        'lib/src/adapters/discuz_user_thread_directory_parser.dart',
+        'lib/src/adapters/discuz_user_thread_directory_repository.dart',
         'lib/src/adapters/forum_directory_html_parser.dart',
         'lib/src/adapters/forum_directory_snapshot_codec.dart',
         'lib/src/adapters/forum_display_api_mapper.dart',

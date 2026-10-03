@@ -179,6 +179,8 @@ final class YamiboForumClientBuilder {
       privateMessages: factory.createPrivateMessages(),
       privateMessageCommand: factory.createPrivateMessageCommand(formhash),
       friendDirectory: factory.createFriendDirectory(),
+      friendFeed: factory.createFriendFeed(),
+      friendRemovalCommand: factory.createFriendRemovalCommand(),
       privateMessageBatchPreparation: privateMessageBatch.preparation,
       privateMessageBatchCommand: privateMessageBatch.command,
       notificationIgnoreCommand: factory.createNotificationIgnoreCommand(

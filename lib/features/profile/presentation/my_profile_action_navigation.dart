@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -39,8 +40,12 @@ void openMyProfileAction({
         context,
       ).push(MaterialPageRoute<void>(builder: (_) => const MyThreadPage()));
       return;
-    case ForumUserProfileActionKind.forumFavorites:
     case ForumUserProfileActionKind.friends:
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const MyFriendsDestination()),
+      );
+      return;
+    case ForumUserProfileActionKind.forumFavorites:
     case ForumUserProfileActionKind.settings:
     case ForumUserProfileActionKind.creditHistory:
       Navigator.of(context).push(
@@ -93,11 +98,6 @@ Uri _myProfileWebUri(ForumUserProfileActionKind action, String uid) {
       'type': 'thread',
       'mobile': '2',
     },
-    ForumUserProfileActionKind.friends => <String, String>{
-      'mod': 'space',
-      'do': 'friend',
-      'mobile': '2',
-    },
     ForumUserProfileActionKind.settings => <String, String>{
       'mod': 'spacecp',
       'mobile': '2',
@@ -107,6 +107,7 @@ Uri _myProfileWebUri(ForumUserProfileActionKind action, String uid) {
       'ac': 'credit',
       'op': 'log',
     },
+    ForumUserProfileActionKind.friends ||
     ForumUserProfileActionKind.threads ||
     ForumUserProfileActionKind.blogs ||
     ForumUserProfileActionKind.messages => throw ArgumentError.value(

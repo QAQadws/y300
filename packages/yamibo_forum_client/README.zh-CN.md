@@ -102,6 +102,10 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 
 `privateMessages` 区分目录与单人／群组对话，支持分页；对话页码 0 表示最新页，历史页码递减。`sendPrivateMessage` 接受单个 UID、用户名或带回复锚点的已有群组。`ignoreNotifications` 只过滤今后同类型和作者的提醒，不删除已有行。消息与提醒读取本身可能更新服务端已读状态，不使用 document/snapshot 磁盘缓存；未知写入结果不得自动重发。
 
+`friendFeed`／`loadFriendFeed` 按 touch 好友页读取我的好友、在线会员、最近访客和我的足迹。查询必须绑定当前账号 UID，响应校验登录身份、激活标签和分页上下文；匿名访客以空身份保留且不可交互。头像、近况、在线标记和分页只按服务器证据投影，默认 touch 模板未提供访问时间，不推断日期。这些账号数据不落 document/snapshot 缓存，也不替换私信收件人选择器使用的 `friendDirectory`。
+
+`removeFriend` 每次重新读取桌面确认表单，验证账号、目标及 formhash 后只提交一次，精确成功回调和目标 UID 才能得到 `applied`。Host 仅在 `applied` 后刷新好友关系；`outcomeUnknown` 禁止自动重发。资料和私信路由由 Host 负责，好友请求、接受申请、搜索和分组管理不属于此好友页契约。
+
 ## 受保护图片与 WAF
 
 标准 Dio runtime 同时实现 `ForumResourceClient`。成功结果提供只能订阅一次的字节流，调用方应完整消费或取消订阅，并自行负责原子落盘和图片解码。Package 不提供 Flutter `ImageProvider`、图片磁盘缓存、预加载、CBZ 或阅读器恢复。

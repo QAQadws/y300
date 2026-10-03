@@ -5281,6 +5281,73 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dailyAutoSignInBlockedToday => '今日签到记录与论坛当前状态不一致，自动提交已暂停。请先核验状态。';
+
+  @override
+  String get profileMyFriendsTitle => '我的好友';
+
+  @override
+  String get profileFriendsTab => '好友';
+
+  @override
+  String get profileFriendsOnlineTab => '在线会员';
+
+  @override
+  String get profileFriendsVisitorsTab => '最近访客';
+
+  @override
+  String get profileFriendsFootprintsTab => '我的足迹';
+
+  @override
+  String get profileFriendsLoginRequired => '请先登录后查看我的好友';
+
+  @override
+  String get profileFriendsEmpty => '暂无好友';
+
+  @override
+  String get profileFriendsOnlineEmpty => '暂无在线会员';
+
+  @override
+  String get profileFriendsVisitorsEmpty => '暂无最近访客';
+
+  @override
+  String get profileFriendsFootprintsEmpty => '暂无访问足迹';
+
+  @override
+  String get profileFriendsLoadFailed => '好友列表暂时无法加载，请稍后重试。';
+
+  @override
+  String get profileFriendsAnonymous => '匿名访客';
+
+  @override
+  String get profileFriendsOnlineStatus => '在线';
+
+  @override
+  String profileFriendsVisitedAt(String time) {
+    return '访问于 $time';
+  }
+
+  @override
+  String get profileFriendRemove => '删除好友';
+
+  @override
+  String get profileFriendRemoveTitle => '确认删除好友？';
+
+  @override
+  String profileFriendRemoveBody(String username) {
+    return '删除 $username 后，对方将从你的好友列表中移除。';
+  }
+
+  @override
+  String get profileFriendRemoved => '好友已删除';
+
+  @override
+  String get profileFriendRemovalUnknown => '删除结果无法确认，请刷新好友列表核对后再操作。';
+
+  @override
+  String get profileFriendRemovalVerify => '刷新核对';
+
+  @override
+  String get profileFriendRemoving => '正在删除…';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -10562,4 +10629,71 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get dailyAutoSignInBlockedToday => '今日簽到記錄與論壇目前狀態不一致，自動提交已暫停。請先核對狀態。';
+
+  @override
+  String get profileMyFriendsTitle => '我的好友';
+
+  @override
+  String get profileFriendsTab => '好友';
+
+  @override
+  String get profileFriendsOnlineTab => '線上會員';
+
+  @override
+  String get profileFriendsVisitorsTab => '最近訪客';
+
+  @override
+  String get profileFriendsFootprintsTab => '我的足跡';
+
+  @override
+  String get profileFriendsLoginRequired => '請先登入後查看我的好友';
+
+  @override
+  String get profileFriendsEmpty => '暫無好友';
+
+  @override
+  String get profileFriendsOnlineEmpty => '暫無線上會員';
+
+  @override
+  String get profileFriendsVisitorsEmpty => '暫無最近訪客';
+
+  @override
+  String get profileFriendsFootprintsEmpty => '暫無造訪足跡';
+
+  @override
+  String get profileFriendsLoadFailed => '好友列表暫時無法載入，請稍後重試。';
+
+  @override
+  String get profileFriendsAnonymous => '匿名訪客';
+
+  @override
+  String get profileFriendsOnlineStatus => '線上';
+
+  @override
+  String profileFriendsVisitedAt(String time) {
+    return '造訪於 $time';
+  }
+
+  @override
+  String get profileFriendRemove => '刪除好友';
+
+  @override
+  String get profileFriendRemoveTitle => '確認刪除好友？';
+
+  @override
+  String profileFriendRemoveBody(String username) {
+    return '刪除 $username 後，對方將從你的好友列表中移除。';
+  }
+
+  @override
+  String get profileFriendRemoved => '好友已刪除';
+
+  @override
+  String get profileFriendRemovalUnknown => '刪除結果無法確認，請重新整理好友列表核對後再操作。';
+
+  @override
+  String get profileFriendRemovalVerify => '重新整理核對';
+
+  @override
+  String get profileFriendRemoving => '正在刪除…';
 }

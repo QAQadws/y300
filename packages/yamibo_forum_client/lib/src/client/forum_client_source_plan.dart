@@ -20,6 +20,7 @@ import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
 import '../contracts/private_message_batch_command.dart';
 import '../contracts/friend_directory.dart';
+import '../contracts/friend_feed.dart';
 import '../contracts/notification_ignore_command.dart';
 import '../contracts/sticker_catalog.dart';
 import '../contracts/thread_reply_page.dart';
@@ -54,6 +55,8 @@ final class ForumClientSourcePlan {
     this.privateMessages,
     this.privateMessageCommand,
     this.friendDirectory,
+    this.friendFeed,
+    this.friendRemovalCommand,
     this.privateMessageBatchPreparation,
     this.privateMessageBatchCommand,
     this.notificationIgnoreCommand,
@@ -127,6 +130,9 @@ final class ForumClientSourcePlan {
     privateMessageCommand:
         overrides.privateMessageCommand ?? privateMessageCommand,
     friendDirectory: overrides.friendDirectory ?? friendDirectory,
+    friendFeed: overrides.friendFeed ?? friendFeed,
+    friendRemovalCommand:
+        overrides.friendRemovalCommand ?? friendRemovalCommand,
     privateMessageBatchPreparation:
         overrides.privateMessageBatchPreparation ??
         privateMessageBatchPreparation,
@@ -246,6 +252,12 @@ final class ForumClientSourcePlan {
 
   /// Source for the current account's friend selector.
   final ForumFriendDirectoryRepository? friendDirectory;
+
+  /// Source for the current account's native friend-page member lists.
+  final ForumFriendFeedRepository? friendFeed;
+
+  /// Command for removing an existing friend through a fresh server form.
+  final ForumFriendRemovalCommand? friendRemovalCommand;
 
   /// Fresh desktop batch-form preparation source.
   final ForumPrivateMessageBatchPreparationRepository?

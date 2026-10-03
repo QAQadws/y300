@@ -21,8 +21,11 @@ import '../contracts/message_directories.dart';
 import '../contracts/private_message_command.dart';
 import '../contracts/private_message_batch_command.dart';
 import '../contracts/friend_directory.dart';
+import '../contracts/friend_feed.dart';
 import 'discuz_private_message_batch_command.dart';
 import 'discuz_friend_directory_repository.dart';
+import 'discuz_friend_feed_repository.dart';
+import 'discuz_friend_removal_command.dart';
 import 'discuz_private_message_command.dart';
 import '../contracts/notification_ignore_command.dart';
 import 'discuz_notification_ignore_command.dart';
@@ -176,6 +179,23 @@ final class ForumClientAdapterFactory {
         config: config,
         network: network,
         profiles: requestProfiles,
+      );
+
+  /// Creates the account-bound touch friend-page source without disk caching.
+  ForumFriendFeedRepository createFriendFeed() => DiscuzFriendFeedRepository(
+    config: config,
+    network: network,
+    profiles: requestProfiles,
+    sessions: sessionStore,
+  );
+
+  /// Creates a fresh-form friend-removal command on the shared Host session.
+  ForumFriendRemovalCommand createFriendRemovalCommand() =>
+      DiscuzFriendRemovalCommand(
+        config: config,
+        network: network,
+        profiles: requestProfiles,
+        sessions: sessionStore,
       );
 
   /// Creates shared fresh preparation and single-request batch roles.

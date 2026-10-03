@@ -377,6 +377,23 @@ optional avatar references and the server's total count. The endpoint omits
 the account UID, so `currentUserId` is nullable; Hosts must isolate loads by
 their account generation. Friend data is not persisted in package caches.
 
+`friendFeed` / `loadFriendFeed` expose the authenticated touch friend page's
+friends, online members, recent visitors, and visited spaces as independent
+member lists. Each query requires an account UID; the response must prove the
+same authenticated header identity, active list, and page context. Anonymous
+visitors retain an empty, non-actionable identity. Avatars, recent notes,
+presence, and pagination are returned only when the source proves them; the
+stock touch template does not supply visit times. These private lists use no
+document/snapshot cache and do not replace the private-message friend selector.
+
+`removeFriend` obtains a fresh desktop confirmation form, validates its actor,
+target and formhash, and submits once. Only the exact friend-removal success
+callback and requested target produce `applied`. Hosts refresh relationships
+only after `applied`; an ambiguous result is `outcomeUnknown` and must never
+be automatically resubmitted. Profile navigation and private-message compose
+remain Host concerns. Requests, acceptance, search, and group management are
+outside this friend-page contract.
+
 `preparePrivateMessageBatch` exposes a validated desktop compose capability
 and opaque preparation token without raw form fields. `sendPrivateMessageBatch`
 always obtains a fresh form itself and accepts no reused caller token. It
