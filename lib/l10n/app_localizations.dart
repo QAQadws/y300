@@ -7461,6 +7461,12 @@ abstract class AppLocalizations {
   /// **'个人资料'**
   String get profileDetails;
 
+  /// No description provided for @profileLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取资料'**
+  String get profileLoading;
+
   /// No description provided for @profileLoadFailed.
   ///
   /// In zh, this message translates to:

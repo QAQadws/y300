@@ -12,6 +12,8 @@ import 'package:y300/features/profile/presentation/profile_action_navigation.dar
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_controller.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_content.dart';
+import 'package:y300/features/profile/presentation/widgets/profile_identity_card.dart';
+import 'package:y300/features/profile/presentation/widgets/profile_page_body.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -54,6 +56,34 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
   Future<void> _refresh() => widget.isMyProfile
       ? ref.read(myUserProfileProvider.notifier).refresh()
       : ref.read(userProfileProvider(widget.userId!).notifier).refresh();
+
+  void _onProfileChanged(
+    AsyncValue<ForumUserProfilePageState>? previous,
+    AsyncValue<ForumUserProfilePageState> next,
+  ) {
+    final owner = ref.read(verifiedProfileOwnerProvider);
+    final before = previous?.asData?.value;
+    final current = next.asData?.value;
+    if (!mounted ||
+        before?.isRefreshing != true ||
+        before?.belongsToSession(owner) != true ||
+        current?.belongsToSession(owner) != true ||
+        current?.isRefreshing != false ||
+        current?.data == null ||
+        current?.data?.identity.userId != widget.userId ||
+        current?.failure == null ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    // A transient failure must be visible without inserting height into the list.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _errorText(AppLocalizations.of(context), current!.failure),
+        ),
+      ),
+    );
+  }
 
   Future<void> _openAction(
     ForumUserProfileActionKind action, {
@@ -138,6 +168,12 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
     final l10n = AppLocalizations.of(context);
     final colors = Theme.of(context).y300NativeContent;
     final owner = ref.watch(verifiedProfileOwnerProvider);
+    ref.listen(
+      widget.isMyProfile
+          ? myUserProfileProvider
+          : userProfileProvider(widget.userId!),
+      _onProfileChanged,
+    );
     final asyncProfile = widget.isMyProfile
         ? ref.watch(myUserProfileProvider)
         : ref.watch(userProfileProvider(widget.userId!));
@@ -200,98 +236,96 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
             ),
         ],
       ),
-      body: widget.isMyProfile && owner == null
-          ? waitingForOwner
-                ? const Center(child: CircularProgressIndicator())
-                : _ProfileStatus(
-                    message: l10n.profileLoginRequired,
-                    icon: Icons.person_outline_rounded,
-                    actionLabel: l10n.moreLogin,
-                    onAction: () => Navigator.of(context).push<void>(
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                    ),
-                  )
-          : profile != null
-          ? RefreshIndicator(
-              onRefresh: _refresh,
-              child: ProfileContent(
-                profile: profile,
-                capabilities: state?.capabilities,
-                imageReferer: ref.watch(forumImageRefererProvider),
-                isMyProfile: widget.isMyProfile,
-                canInteract: owner != null,
-                onLogin: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                ),
-                isRefreshing: state?.isRefreshing == true,
-                failureText: state?.failure == null
-                    ? null
-                    : _errorText(l10n, state!.failure),
-                onAction: (action) =>
-                    unawaited(_openAction(action, profile: profile)),
-                onOpenLink: _openLink,
-                onCopyUid: () => unawaited(_copyUid(profile.identity.userId)),
+      body: widget.isMyProfile && owner == null && !waitingForOwner
+          ? _ProfileStatus(
+              message: l10n.profileLoginRequired,
+              icon: Icons.person_outline_rounded,
+              actionLabel: l10n.moreLogin,
+              onAction: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(builder: (_) => const LoginPage()),
               ),
             )
-          : ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              children: [
-                if (asyncProfile.isLoading ||
-                    (state == null && !asyncProfile.hasError))
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else
-                  _ProfileStatus(
-                    message: unauthorized
-                        ? l10n.profileLoginRequired
-                        : _errorText(
-                            l10n,
-                            state?.failure ?? asyncProfile.error,
-                          ),
-                    icon: Icons.person_search_outlined,
-                    actionLabel: l10n.commonRetry,
-                    onAction: () async {
-                      if (unauthorized) {
-                        await ref
-                            .read(authSessionControllerProvider.notifier)
-                            .refresh();
-                        if (mounted) ref.invalidate(myUserProfileProvider);
-                      } else {
-                        await _refresh();
-                      }
-                    },
-                    onOpenForumPage:
-                        state?.failure?.kind == DataReadFailureKind.parse ||
-                            state?.failure?.kind ==
-                                DataReadFailureKind.unsupported
-                        ? _openForumPage
-                        : null,
-                    isMyProfile: widget.isMyProfile,
-                  ),
-                if (widget.isMyProfile && owner != null) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    l10n.profileMyContent,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 12),
-                  ProfileActionTiles(
-                    key: const Key('my-profile-native-shortcuts'),
-                    actions: const [
-                      ForumUserProfileActionKind.threads,
-                      ForumUserProfileActionKind.replies,
-                      ForumUserProfileActionKind.blogs,
-                      ForumUserProfileActionKind.messages,
-                    ],
-                    isMyProfile: true,
-                    compact: true,
-                    onAction: (action) => unawaited(_openAction(action)),
-                  ),
-                ],
-              ],
+          : RefreshIndicator(
+              // Scroll and gesture state belong to this target and verified session.
+              key: ValueKey((widget.userId, owner)),
+              onRefresh: waitingForOwner ? () async {} : _refresh,
+              child: ProfilePageBody(
+                isRefreshing: profile != null && state?.isRefreshing == true,
+                child: profile != null
+                    ? ProfileContent(
+                        key: ValueKey((profile.identity.userId, owner)),
+                        profile: profile,
+                        capabilities: state?.capabilities,
+                        imageReferer: ref.watch(forumImageRefererProvider),
+                        isMyProfile: widget.isMyProfile,
+                        canInteract: owner != null,
+                        onLogin: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute(builder: (_) => const LoginPage()),
+                        ),
+                        onAction: (action) =>
+                            unawaited(_openAction(action, profile: profile)),
+                        onOpenLink: _openLink,
+                        onCopyUid: () =>
+                            unawaited(_copyUid(profile.identity.userId)),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (waitingForOwner ||
+                              asyncProfile.isLoading ||
+                              (state == null && !asyncProfile.hasError))
+                            ProfileIdentitySkeleton(userId: widget.userId)
+                          else
+                            _ProfileStatus(
+                              message: unauthorized
+                                  ? l10n.profileLoginRequired
+                                  : _errorText(
+                                      l10n,
+                                      state?.failure ?? asyncProfile.error,
+                                    ),
+                              icon: Icons.person_search_outlined,
+                              actionLabel: l10n.commonRetry,
+                              onAction: () async {
+                                if (unauthorized) {
+                                  await ref
+                                      .read(
+                                        authSessionControllerProvider.notifier,
+                                      )
+                                      .refresh();
+                                  if (mounted) {
+                                    ref.invalidate(myUserProfileProvider);
+                                  }
+                                } else {
+                                  await _refresh();
+                                }
+                              },
+                              onOpenForumPage:
+                                  state?.failure?.kind ==
+                                          DataReadFailureKind.parse ||
+                                      state?.failure?.kind ==
+                                          DataReadFailureKind.unsupported
+                                  ? _openForumPage
+                                  : null,
+                              isMyProfile: widget.isMyProfile,
+                            ),
+                          if (widget.isMyProfile && owner != null)
+                            ProfileActionSections(
+                              key: const Key('my-profile-native-shortcuts'),
+                              contentActions: const [
+                                ForumUserProfileActionKind.threads,
+                                ForumUserProfileActionKind.replies,
+                                ForumUserProfileActionKind.blogs,
+                              ],
+                              tools: const [
+                                ForumUserProfileActionKind.messages,
+                              ],
+                              isMyProfile: true,
+                              onAction: (action) =>
+                                  unawaited(_openAction(action)),
+                            ),
+                        ],
+                      ),
+              ),
             ),
     );
   }

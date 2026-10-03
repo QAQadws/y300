@@ -1426,6 +1426,7 @@
   "profileNoAdditionalDetails": "暫無其他資料",
   "profileSignature": "個人簽名",
   "profileDetails": "個人資料",
+  "profileLoading": "正在讀取資料",
   "profileLoadFailed": "資料載入失敗：{error}",
   "@profileLoadFailed": {"placeholders": {"error": {"type": "String"}}},
   "forumWebViewAccountChanged": "帳號已變更，請關閉此頁面後重新開啟。",

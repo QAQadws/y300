@@ -1791,6 +1791,7 @@
   "profileNoAdditionalDetails": "暂无其他资料",
   "profileSignature": "个人签名",
   "profileDetails": "个人资料",
+  "profileLoading": "正在读取资料",
   "profileLoadFailed": "资料加载失败：{error}",
   "@profileLoadFailed": {"placeholders": {"error": {"type": "String"}}},
   "forumWebViewAccountChanged": "账号已变更，请关闭此页面后重新打开。",

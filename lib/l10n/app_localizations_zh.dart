@@ -4480,6 +4480,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileDetails => '个人资料';
 
   @override
+  String get profileLoading => '正在读取资料';
+
+  @override
   String profileLoadFailed(String error) {
     return '资料加载失败：$error';
   }
@@ -9905,6 +9908,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileDetails => '個人資料';
+
+  @override
+  String get profileLoading => '正在讀取資料';
 
   @override
   String profileLoadFailed(String error) {

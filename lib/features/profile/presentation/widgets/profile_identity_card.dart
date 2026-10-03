@@ -26,75 +26,317 @@ class ProfileIdentityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    return Card(
-      key: const Key('user-profile-identity'),
-      margin: EdgeInsets.zero,
-      color: theme.y300NativeContent.card,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final avatar = Semantics(
-              image: true,
-              label: l10n.moreAccountAvatar(
-                profile.identity.displayName ?? profile.identity.userId,
-              ),
-              excludeSemantics: true,
-              child: ForumCachedAvatar(
-                key: const Key('user-profile-avatar'),
-                imageUrl: avatarUrl,
-                ownerId: profile.identity.userId,
-                ownerType: ImageCacheOwnerType.profile,
-                size: 72,
-                imageReferer: imageReferer,
-                fallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
-              ),
-            );
-            final heading = _IdentityHeading(
-              profile: profile,
-              onCopyUid: onCopyUid,
-            );
-            final customTitle = profile.customTitle?.trim() ?? '';
-            final inline =
-                metrics.isNotEmpty &&
-                constraints.maxWidth >= 280 &&
-                MediaQuery.textScalerOf(context).scale(14) <= 20 &&
-                _statisticsFit(context, metrics, constraints.maxWidth - 88);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    avatar,
-                    if (inline) ...[
-                      const SizedBox(width: 16),
-                      Expanded(child: _Statistics(metrics: metrics)),
-                    ],
-                  ],
+    return _IdentityCardFrame(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final avatar = Semantics(
+            image: true,
+            label: l10n.moreAccountAvatar(
+              profile.identity.displayName ?? profile.identity.userId,
+            ),
+            excludeSemantics: true,
+            child: ForumCachedAvatar(
+              key: const Key('user-profile-avatar'),
+              imageUrl: avatarUrl,
+              ownerId: profile.identity.userId,
+              ownerType: ImageCacheOwnerType.profile,
+              size: 72,
+              imageReferer: imageReferer,
+              fallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
+            ),
+          );
+          final heading = _IdentityHeading(
+            profile: profile,
+            onCopyUid: onCopyUid,
+          );
+          final customTitle = profile.customTitle?.trim() ?? '';
+          final inline =
+              metrics.isNotEmpty &&
+              constraints.maxWidth >= 280 &&
+              MediaQuery.textScalerOf(context).scale(14) <= 20 &&
+              _statisticsFit(context, metrics, constraints.maxWidth - 88);
+          return _IdentityCardLayout(
+            avatar: avatar,
+            heading: heading,
+            customTitle: _CustomTitle(title: customTitle),
+            statistics: metrics.isEmpty ? null : _Statistics(metrics: metrics),
+            inlineStatistics: inline,
+            footer: footer,
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Only geometry is shared with loaded content; no provisional profile is created.
+class ProfileIdentitySkeleton extends StatelessWidget {
+  const ProfileIdentitySkeleton({super.key, this.userId});
+  final String? userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      key: const Key('user-profile-identity-skeleton'),
+      label: AppLocalizations.of(context).profileLoading,
+      liveRegion: true,
+      child: ExcludeSemantics(
+        child: _IdentityCardFrame(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final inline =
+                  constraints.maxWidth >= 280 &&
+                  MediaQuery.textScalerOf(context).scale(14) <= 20 &&
+                  _skeletonStatisticsFit(context, constraints.maxWidth - 88);
+              return _IdentityCardLayout(
+                avatar: Container(
+                  key: const Key('user-profile-avatar-skeleton'),
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _skeletonColor(context),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                heading,
-                const SizedBox(height: 4),
-                _CustomTitle(title: customTitle),
-                if (!inline && metrics.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _Statistics(metrics: metrics),
-                ],
-                if (footer != null) ...[const SizedBox(height: 12), footer!],
-              ],
-            );
-          },
+                heading: _SkeletonHeading(userId: userId),
+                customTitle: _SkeletonLine(
+                  width: 100,
+                  style: theme.textTheme.bodySmall,
+                ),
+                statistics: const _SkeletonStatistics(),
+                inlineStatistics: inline,
+              );
+            },
+          ),
         ),
       ),
     );
   }
+}
+
+class _IdentityCardFrame extends StatelessWidget {
+  const _IdentityCardFrame({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    key: const Key('user-profile-identity'),
+    margin: EdgeInsets.zero,
+    color: Theme.of(context).y300NativeContent.card,
+    surfaceTintColor: Colors.transparent,
+    elevation: 0,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    clipBehavior: Clip.antiAlias,
+    child: Padding(padding: const EdgeInsets.all(16), child: child),
+  );
+}
+
+class _IdentityCardLayout extends StatelessWidget {
+  const _IdentityCardLayout({
+    required this.avatar,
+    required this.heading,
+    required this.customTitle,
+    required this.statistics,
+    required this.inlineStatistics,
+    this.footer,
+  });
+  final Widget avatar;
+  final Widget heading;
+  final Widget customTitle;
+  final Widget? statistics;
+  final bool inlineStatistics;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          avatar,
+          if (inlineStatistics && statistics != null) ...[
+            const SizedBox(width: 16),
+            Expanded(child: statistics!),
+          ],
+        ],
+      ),
+      const SizedBox(height: 12),
+      heading,
+      const SizedBox(height: 4),
+      customTitle,
+      if (!inlineStatistics && statistics != null) ...[
+        const SizedBox(height: 12),
+        statistics!,
+      ],
+      if (footer != null) ...[const SizedBox(height: 12), footer!],
+    ],
+  );
+}
+
+class _SkeletonHeading extends StatelessWidget {
+  const _SkeletonHeading({this.userId});
+  final String? userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final nameStyle = theme.textTheme.titleMedium?.copyWith(
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
+    );
+    final nameWidth = 120 * scaler.scale(20) / 20;
+    final groupWidth = 44 * scaler.scale(11) / 11;
+    final uidWidth = userId == null
+        ? 88 * scaler.scale(12) / 12
+        : _textWidth(
+                context,
+                AppLocalizations.of(context).profileUid(userId!),
+                theme.textTheme.bodySmall,
+              ) +
+              16;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final identity = Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _SkeletonLine(
+              width: nameWidth.clamp(0, constraints.maxWidth),
+              style: nameStyle,
+            ),
+            _SkeletonLine(
+              width: groupWidth.clamp(0, constraints.maxWidth),
+              style: theme.textTheme.labelSmall,
+            ),
+          ],
+        );
+        final uid = ConstrainedBox(
+          constraints: BoxConstraints(
+            // TextButton also reserves its padded accessibility tap target.
+            minHeight:
+                (theme.textButtonTheme.style?.tapTargetSize ??
+                        theme.materialTapTargetSize) ==
+                    MaterialTapTargetSize.padded
+                ? 48
+                : 40,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: _SkeletonLine(
+              width: (uidWidth - 16).clamp(0, constraints.maxWidth - 16),
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        );
+        if (scaler.scale(14) <= 20 &&
+            nameWidth + groupWidth + 16 + uidWidth <= constraints.maxWidth) {
+          return Row(
+            children: [
+              Expanded(child: identity),
+              const SizedBox(width: 8),
+              uid,
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            identity,
+            Align(alignment: Alignment.centerRight, child: uid),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SkeletonStatistics extends StatelessWidget {
+  const _SkeletonStatistics();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    Widget value() =>
+        _SkeletonLine(width: 42 * scale, style: _statisticValueStyle(theme));
+    Widget label() =>
+        _SkeletonLine(width: 36 * scale, style: _statisticLabelStyle(theme));
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!_skeletonStatisticsFit(context, constraints.maxWidth)) {
+          return Column(
+            children: [
+              for (var index = 0; index < 3; index++) ...[
+                if (index > 0) const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: label()),
+                    const SizedBox(width: 16),
+                    Flexible(child: value()),
+                  ],
+                ),
+              ],
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (var index = 0; index < 3; index++) ...[
+              if (index > 0)
+                const SizedBox(
+                  height: 32,
+                  width: 16,
+                  child: VerticalDivider(indent: 5, endIndent: 5),
+                ),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [value(), const SizedBox(height: 2), label()],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+bool _skeletonStatisticsFit(BuildContext context, double width) =>
+    (width - 32) / 3 >= 42 * MediaQuery.textScalerOf(context).scale(14) / 14;
+
+Color _skeletonColor(BuildContext context) =>
+    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08);
+
+class _SkeletonLine extends StatelessWidget {
+  const _SkeletonLine({required this.width, required this.style});
+  final double width;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    widthFactor: 1,
+    child: SizedBox(
+      width: width,
+      height: _measureText(context, ' ', style).height,
+      child: FractionallySizedBox(
+        heightFactor: 0.6,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _skeletonColor(context),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _IdentityHeading extends StatelessWidget {
@@ -371,7 +613,10 @@ bool _statisticsFit(
   return true;
 }
 
-double _textWidth(BuildContext context, String text, TextStyle? style) {
+double _textWidth(BuildContext context, String text, TextStyle? style) =>
+    _measureText(context, text, style).width;
+
+Size _measureText(BuildContext context, String text, TextStyle? style) {
   // Match Text's inherited style and accessibility overrides before deciding to reflow.
   var effectiveStyle = style == null || style.inherit
       ? DefaultTextStyle.of(context).style.merge(style)
@@ -391,7 +636,7 @@ double _textWidth(BuildContext context, String text, TextStyle? style) {
     textScaler: MediaQuery.textScalerOf(context),
     locale: Localizations.maybeLocaleOf(context),
   )..layout();
-  final width = measurement.width;
+  final size = measurement.size;
   measurement.dispose();
-  return width;
+  return size;
 }

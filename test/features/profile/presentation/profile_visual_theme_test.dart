@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -18,6 +20,7 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_content.dart';
+import 'package:y300/features/profile/presentation/widgets/profile_page_body.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
@@ -26,6 +29,10 @@ import '../../../test_support/localized_test_app.dart';
 const _output = String.fromEnvironment('PROFILE_VISUAL_OUTPUT');
 const _font = String.fromEnvironment('PROFILE_VISUAL_FONT');
 const _capture = Key('profile-visual-capture');
+
+final _ownerSource = StateProvider<VerifiedProfileOwner>(
+  (ref) => (uid: '101', revision: 1),
+);
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -47,6 +54,50 @@ void main() {
         for (final large in [false, true]) {
           final name =
               '${family.name}-${brightness.name}-${self ? 'self' : 'public'}-${large ? 'large' : 'normal'}';
+          testWidgets('$name shows a bounded identity skeleton while loading', (
+            tester,
+          ) async {
+            final repository = _ControlledRepository();
+            await _pump(
+              tester,
+              family,
+              brightness,
+              self: self,
+              large: large,
+              repository: repository,
+              settle: false,
+            );
+            expect(repository.requests, hasLength(1));
+            expect(
+              find.byKey(const Key('user-profile-identity-skeleton')),
+              findsOneWidget,
+            );
+            final identity = find.byKey(const Key('user-profile-identity'));
+            final card = tester.getRect(identity);
+            final avatar = tester.getRect(
+              find.byKey(const Key('user-profile-avatar-skeleton')),
+            );
+            expect(card.left, greaterThanOrEqualTo(20));
+            expect(
+              card.right,
+              lessThanOrEqualTo(tester.view.physicalSize.width - 20),
+            );
+            expect(card.width, lessThanOrEqualTo(760));
+            expect(avatar.size, const Size(72, 72));
+            expect(card.contains(avatar.topLeft), isTrue);
+            expect(card.contains(avatar.bottomRight), isTrue);
+            expect(find.byType(CircularProgressIndicator), findsNothing);
+            expect(find.byType(ProfileContent), findsNothing);
+            for (final kind in ['addFriend', 'removeFriend', 'settings']) {
+              expect(
+                find.byKey(Key('user-profile-action-$kind')),
+                findsNothing,
+              );
+            }
+            expect(tester.takeException(), isNull);
+            await _save(tester, '$name-loading');
+          });
+
           testWidgets('$name keeps identity and all operations accessible', (
             tester,
           ) async {
@@ -168,6 +219,196 @@ void main() {
       }
     }
   }
+
+  testWidgets('self skeleton keeps card height and content heading in place', (
+    tester,
+  ) async {
+    final repository = _ControlledRepository();
+    await _pump(
+      tester,
+      AppThemeFamily.warmPaper,
+      Brightness.light,
+      self: true,
+      repository: repository,
+      settle: false,
+    );
+    final identity = find.byKey(const Key('user-profile-identity'));
+    final l10n = AppLocalizations.of(tester.element(identity));
+    final heading = find.text(l10n.profileMyContent);
+    final loadingHeight = tester.getSize(identity).height;
+    final loadingHeadingTop = tester.getTopLeft(heading).dy;
+    await _save(tester, 'profile-self-height-loading');
+
+    repository.complete(_profile(true));
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(identity).height, closeTo(loadingHeight, 0.01));
+    expect(tester.getTopLeft(heading).dy, closeTo(loadingHeadingTop, 0.01));
+    expect(
+      find.byKey(const Key('user-profile-identity-skeleton')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+    await _save(tester, 'profile-self-height-loaded');
+  });
+
+  testWidgets(
+    'reduced motion reveals only the newly verified owner immediately',
+    (tester) async {
+      final repository = _ControlledRepository();
+      await _pump(
+        tester,
+        AppThemeFamily.warmPaper,
+        Brightness.light,
+        self: true,
+        repository: repository,
+        settle: false,
+        disableAnimations: true,
+      );
+      repository.complete(_profile(true, displayName: 'old-owner'));
+      await tester.pump();
+      await tester.pump();
+
+      double contentOpacity() => tester
+          .widget<Opacity>(
+            find
+                .descendant(
+                  of: find.byType(ProfileContent),
+                  matching: find.byType(Opacity),
+                )
+                .first,
+          )
+          .opacity;
+      expect(contentOpacity(), 1);
+      expect(
+        find.byKey(const Key('user-profile-identity-skeleton')),
+        findsNothing,
+      );
+      expect(find.text('old-owner'), findsOneWidget);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProfileContent)),
+      );
+
+      ScrollableState scrollable() => tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byKey(const Key('user-profile-page-list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      final oldScrollable = scrollable();
+      oldScrollable.position.jumpTo(40);
+      await tester.pump();
+
+      container.read(_ownerSource.notifier).state = (uid: '101', revision: 2);
+      await tester.pump();
+      expect(scrollable(), isNot(same(oldScrollable)));
+      expect(scrollable().position.pixels, 0);
+      expect(repository.requests, hasLength(2));
+      expect(find.byType(ProfileContent, skipOffstage: false), findsNothing);
+      expect(find.text('old-owner', skipOffstage: false), findsNothing);
+      expect(
+        find.byKey(const Key('user-profile-identity-skeleton')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('user-profile-action-settings')),
+        findsNothing,
+      );
+
+      repository.complete(_profile(true, displayName: 'current-owner'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(contentOpacity(), 1);
+      expect(find.text('current-owner'), findsOneWidget);
+      expect(find.text('old-owner', skipOffstage: false), findsNothing);
+      expect(
+        find.byKey(const Key('user-profile-identity-skeleton')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('loading then refreshing preserves the profile viewport', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final repository = _ControlledRepository();
+      await _pump(
+        tester,
+        AppThemeFamily.moonWhite,
+        Brightness.light,
+        repository: repository,
+        settle: false,
+      );
+      final identity = find.byKey(const Key('user-profile-identity'));
+      final loadingTop = tester.getTopLeft(identity);
+      final loadingAvatar = tester.getRect(
+        find.byKey(const Key('user-profile-avatar-skeleton')),
+      );
+      final l10n = AppLocalizations.of(tester.element(identity));
+      expect(find.bySemanticsLabel(l10n.profileLoading), findsOneWidget);
+      await _save(tester, 'profile-transition-loading');
+
+      repository.complete(_profile(false));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('user-profile-identity-skeleton')),
+        findsNothing,
+      );
+      expect(tester.getTopLeft(identity), loadingTop);
+      final avatar = find.byKey(const Key('user-profile-avatar'));
+      expect(tester.getRect(avatar), loadingAvatar);
+      final friend = find.byKey(const Key('user-profile-action-addFriend'));
+      expect(tester.widget<TextButton>(friend).onPressed, isNotNull);
+      await _save(tester, 'profile-transition-loaded');
+
+      final list = find.byKey(const Key('user-profile-page-list'));
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(of: list, matching: find.byType(Scrollable)).first,
+      );
+      scrollable.position.jumpTo(40);
+      await tester.pump();
+      final previousOffset = scrollable.position.pixels;
+      final previousCard = tester.getRect(identity);
+      final previousAvatar = tester.getRect(avatar);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProfileContent)),
+      );
+      final refresh = container
+          .read(userProfileProvider('8').notifier)
+          .refresh();
+      await tester.pump();
+      expect(repository.requests, hasLength(2));
+      expect(
+        find.byKey(const Key('user-profile-refresh-progress')),
+        findsOneWidget,
+      );
+      expect(tester.getRect(identity), previousCard);
+      expect(tester.getRect(avatar), previousAvatar);
+      expect(scrollable.position.pixels, previousOffset);
+      expect(tester.widget<TextButton>(friend).onPressed, isNotNull);
+      await _save(tester, 'profile-transition-refresh');
+
+      repository.complete(_profile(false));
+      await tester.pumpAndSettle();
+      await refresh;
+      expect(
+        find.byKey(const Key('user-profile-refresh-progress')),
+        findsNothing,
+      );
+      expect(tester.getRect(identity), previousCard);
+      expect(tester.getRect(avatar), previousAvatar);
+      expect(scrollable.position.pixels, previousOffset);
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
+  });
 
   testWidgets(
     'traditional Chinese profile uses translated controls and preserves server text',
@@ -675,18 +916,20 @@ void main() {
           child: LocalizedTestApp(
             debugShowCheckedModeBanner: false,
             home: Scaffold(
-              body: ProfileContent(
-                profile: _profile(
-                  false,
-                  signatureHtml:
-                      '<p><a href="https://example.test/story">故事链接</a></p>',
+              body: ProfilePageBody(
+                child: ProfileContent(
+                  profile: _profile(
+                    false,
+                    signatureHtml:
+                        '<p><a href="https://example.test/story">故事链接</a></p>',
+                  ),
+                  capabilities: _capabilities,
+                  imageReferer: 'https://bbs.yamibo.com/',
+                  isMyProfile: false,
+                  onAction: (_) {},
+                  onOpenLink: links.add,
+                  onCopyUid: () {},
                 ),
-                capabilities: _capabilities,
-                imageReferer: 'https://bbs.yamibo.com/',
-                isMyProfile: false,
-                onAction: (_) {},
-                onOpenLink: links.add,
-                onCopyUid: () {},
               ),
             ),
           ),
@@ -733,6 +976,9 @@ Future<void> _pump(
   Locale locale = const Locale('zh'),
   ForumUserProfileData? profile,
   ForumUserProfileReadCapabilities? capabilities,
+  ForumUserProfileRepository? repository,
+  bool settle = true,
+  bool disableAnimations = false,
   bool boldText = false,
   double? letterSpacing,
   double? wordSpacing,
@@ -749,12 +995,15 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
-          uid: '101',
-          revision: 1,
-        )),
+        verifiedProfileOwnerProvider.overrideWith(
+          (ref) => ref.watch(_ownerSource),
+        ),
         forumUserProfileRepositoryProvider.overrideWithValue(
-          _Repository(profile ?? _profile(self), capabilities: capabilities),
+          repository ??
+              _Repository(
+                profile ?? _profile(self),
+                capabilities: capabilities,
+              ),
         ),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
         imageCacheServiceProvider.overrideWithValue(_Images()),
@@ -770,6 +1019,7 @@ Future<void> _pump(
                 .copyWith(
                   textScaler: TextScaler.linear(large ? 2 : 1),
                   boldText: boldText,
+                  disableAnimations: disableAnimations,
                 )
                 .applyTextStyleOverrides(
                   lineHeightScaleFactorOverride: null,
@@ -786,7 +1036,11 @@ Future<void> _pump(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
 }
 
 final _capabilities = ForumUserProfileReadCapabilities(
@@ -891,6 +1145,36 @@ class _Repository implements ForumUserProfileRepository {
     data: data,
     capabilities: readCapabilities,
     metadata: const DataReadMetadata.network(),
+  );
+}
+
+typedef _ProfileReadResult =
+    DataReadResult<ForumUserProfileData, ForumUserProfileReadCapabilities>;
+
+class _ControlledRepository implements ForumUserProfileRepository {
+  final requests = <Completer<_ProfileReadResult>>[];
+
+  @override
+  ForumUserProfileSourceCapabilities get capabilities =>
+      ForumUserProfileSourceCapabilities(values: _capabilities.values);
+
+  @override
+  Future<_ProfileReadResult> load(
+    ForumUserProfileQuery query, {
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
+  }) {
+    final completion = Completer<_ProfileReadResult>();
+    requests.add(completion);
+    return completion.future;
+  }
+
+  void complete(ForumUserProfileData data) => requests.last.complete(
+    DataReadSuccess(
+      data: data,
+      capabilities: _capabilities,
+      metadata: const DataReadMetadata.network(),
+    ),
   );
 }
 

@@ -17,8 +17,6 @@ class ProfileContent extends StatelessWidget {
     required this.onAction,
     required this.onOpenLink,
     required this.onCopyUid,
-    this.isRefreshing = false,
-    this.failureText,
     this.canInteract = true,
     this.onLogin,
   });
@@ -30,8 +28,6 @@ class ProfileContent extends StatelessWidget {
   final ValueChanged<ForumUserProfileActionKind> onAction;
   final ValueChanged<String> onOpenLink;
   final VoidCallback onCopyUid;
-  final bool isRefreshing;
-  final String? failureText;
   final bool canInteract;
   final VoidCallback? onLogin;
 
@@ -85,134 +81,141 @@ class ProfileContent extends StatelessWidget {
         : <ForumUserProfileMetric>[];
     final additionalMetrics = metrics.skip(3).toList(growable: false);
 
-    return ListView(
-      key: const Key('user-profile-page-list'),
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-      children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Column(
+    return TweenAnimationBuilder<double>(
+      // Fade only the new content; retaining outgoing profiles can expose an old owner.
+      tween: Tween(begin: 0, end: 1),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 160),
+      builder: (context, opacity, child) =>
+          Opacity(opacity: opacity, child: child),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ProfileIdentityCard(
+            profile: profile,
+            metrics: metrics.take(3).toList(growable: false),
+            avatarUrl: supports(ForumUserProfileCapability.avatarReference)
+                ? profile.avatarUrl
+                : null,
+            imageReferer: imageReferer,
+            onCopyUid: onCopyUid,
+            footer:
+                onSendMessage != null ||
+                    onAddFriend != null ||
+                    onRemoveFriend != null
+                ? ProfileContactActions(
+                    onSendMessage: onSendMessage,
+                    onAddFriend: onAddFriend,
+                    onRemoveFriend: onRemoveFriend,
+                  )
+                : null,
+          ),
+          if (!isMyProfile && !canInteract && onLogin != null) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              key: const Key('user-profile-login'),
+              onPressed: onLogin,
+              icon: const Icon(Icons.login_rounded, size: 18),
+              label: Text(l10n.profileLoginToInteract),
+            ),
+          ],
+          if (contentActions.isNotEmpty || tools.isNotEmpty)
+            ProfileActionSections(
+              key: const Key('user-profile-actions'),
+              contentActions: contentActions,
+              tools: tools,
+              isMyProfile: isMyProfile,
+              onAction: onAction,
+            ),
+          if (hasSignature) ...[
+            _SectionHeading(title: l10n.profileSignature),
+            ProfileSurface(
+              key: const Key('user-profile-signature'),
+              child: ForumHtmlContentView(
+                html: profile.signatureHtml!,
+                sourceId: 'user-profile-signature-${profile.identity.userId}',
+                imageCacheOwnerId: profile.identity.userId,
+                imageReferer: imageReferer,
+                surfaceColor: colors.card,
+                foregroundColor: colors.body,
+                onOpenLink: onOpenLink,
+              ),
+            ),
+          ],
+          if (additionalMetrics.isNotEmpty) ...[
+            _SectionHeading(title: l10n.profileCreditOverview),
+            _Metrics(metrics: additionalMetrics),
+          ],
+          if (details.isNotEmpty)
+            Column(
+              key: const Key('user-profile-details'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (isRefreshing)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: LinearProgressIndicator(
-                      key: Key('user-profile-refresh-progress'),
-                    ),
-                  ),
-                if (failureText != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      failureText!,
-                      style: TextStyle(color: colors.supportingText),
-                    ),
-                  ),
-                ProfileIdentityCard(
-                  profile: profile,
-                  metrics: metrics.take(3).toList(growable: false),
-                  avatarUrl:
-                      supports(ForumUserProfileCapability.avatarReference)
-                      ? profile.avatarUrl
-                      : null,
-                  imageReferer: imageReferer,
-                  onCopyUid: onCopyUid,
-                  footer:
-                      onSendMessage != null ||
-                          onAddFriend != null ||
-                          onRemoveFriend != null
-                      ? ProfileContactActions(
-                          onSendMessage: onSendMessage,
-                          onAddFriend: onAddFriend,
-                          onRemoveFriend: onRemoveFriend,
-                        )
-                      : null,
-                ),
-                if (!isMyProfile && !canInteract && onLogin != null) ...[
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    key: const Key('user-profile-login'),
-                    onPressed: onLogin,
-                    icon: const Icon(Icons.login_rounded, size: 18),
-                    label: Text(l10n.profileLoginToInteract),
-                  ),
-                ],
-                if (contentActions.isNotEmpty || tools.isNotEmpty)
-                  Column(
-                    key: const Key('user-profile-actions'),
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (contentActions.isNotEmpty) ...[
-                        _SectionHeading(
-                          title: isMyProfile
-                              ? l10n.profileMyContent
-                              : l10n.profileUserContent,
-                        ),
-                        ProfileActionTiles(
-                          actions: contentActions,
-                          isMyProfile: isMyProfile,
-                          onAction: onAction,
-                          compact: true,
-                        ),
-                      ],
-                      if (tools.isNotEmpty) ...[
-                        _SectionHeading(title: l10n.profileAccountTools),
-                        ProfileActionTiles(
-                          actions: tools,
-                          isMyProfile: isMyProfile,
-                          onAction: onAction,
-                        ),
-                      ],
-                    ],
-                  ),
-                if (hasSignature) ...[
-                  _SectionHeading(title: l10n.profileSignature),
-                  ProfileSurface(
-                    key: const Key('user-profile-signature'),
-                    child: ForumHtmlContentView(
-                      html: profile.signatureHtml!,
-                      sourceId:
-                          'user-profile-signature-${profile.identity.userId}',
-                      imageCacheOwnerId: profile.identity.userId,
-                      imageReferer: imageReferer,
-                      surfaceColor: colors.card,
-                      foregroundColor: colors.body,
-                      onOpenLink: onOpenLink,
-                    ),
-                  ),
-                ],
-                if (additionalMetrics.isNotEmpty) ...[
-                  _SectionHeading(title: l10n.profileCreditOverview),
-                  _Metrics(metrics: additionalMetrics),
-                ],
-                if (details.isNotEmpty)
-                  Column(
-                    key: const Key('user-profile-details'),
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _SectionHeading(title: l10n.profileDetails),
-                      _Details(details: details, onOpenLink: onOpenLink),
-                    ],
-                  ),
-                if (metrics.isEmpty &&
-                    !hasSignature &&
-                    !details.any((entry) => entry.label.toLowerCase() != 'uid'))
-                  Padding(
-                    key: const Key('user-profile-empty-details'),
-                    padding: const EdgeInsets.only(top: 24),
-                    child: Text(
-                      l10n.profileNoAdditionalDetails,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: colors.supportingText),
-                    ),
-                  ),
+                _SectionHeading(title: l10n.profileDetails),
+                _Details(details: details, onOpenLink: onOpenLink),
               ],
             ),
+          if (metrics.isEmpty &&
+              !hasSignature &&
+              !details.any((entry) => entry.label.toLowerCase() != 'uid'))
+            Padding(
+              key: const Key('user-profile-empty-details'),
+              padding: const EdgeInsets.only(top: 24),
+              child: Text(
+                l10n.profileNoAdditionalDetails,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: colors.supportingText),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Native shortcuts use the same sections before and after the profile read.
+class ProfileActionSections extends StatelessWidget {
+  const ProfileActionSections({
+    super.key,
+    required this.contentActions,
+    required this.tools,
+    required this.isMyProfile,
+    required this.onAction,
+  });
+
+  final List<ForumUserProfileActionKind> contentActions;
+  final List<ForumUserProfileActionKind> tools;
+  final bool isMyProfile;
+  final ValueChanged<ForumUserProfileActionKind> onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (contentActions.isNotEmpty) ...[
+          _SectionHeading(
+            title: isMyProfile
+                ? l10n.profileMyContent
+                : l10n.profileUserContent,
           ),
-        ),
+          ProfileActionTiles(
+            actions: contentActions,
+            isMyProfile: isMyProfile,
+            onAction: onAction,
+            compact: true,
+          ),
+        ],
+        if (tools.isNotEmpty) ...[
+          _SectionHeading(title: l10n.profileAccountTools),
+          ProfileActionTiles(
+            actions: tools,
+            isMyProfile: isMyProfile,
+            onAction: onAction,
+          ),
+        ],
       ],
     );
   }

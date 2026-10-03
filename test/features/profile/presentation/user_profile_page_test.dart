@@ -124,6 +124,214 @@ void main() {
     });
   }
 
+  for (final self in [false, true]) {
+    testWidgets(
+      '${self ? 'self' : 'public'} initial placeholder preserves the scrollable and identity anchor',
+      (tester) async {
+        final initialRead = Completer<_ProfileReadResult>();
+        final repository = _ScriptedProfileRepository(
+          (_, _) => initialRead.future,
+        );
+        final directory = _ProfileThreadDirectoryRepository();
+        final profile = self ? _myProfile : _profile;
+        if (self) {
+          await _pumpMyProfile(
+            tester,
+            repository: repository,
+            threadDirectory: directory,
+            settle: false,
+          );
+        } else {
+          await _pumpPublicProfile(
+            tester,
+            repository: repository,
+            settle: false,
+          );
+        }
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(repository.queries, hasLength(1));
+        expect(
+          find.byKey(const Key('user-profile-identity-skeleton')),
+          findsOneWidget,
+        );
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(self ? MyProfilePage : UserProfilePage)),
+        );
+        final loadingSemantics = tester.widget<Semantics>(
+          find.byKey(const Key('user-profile-identity-skeleton')),
+        );
+        expect(loadingSemantics.properties.label, l10n.profileLoading);
+        expect(loadingSemantics.properties.liveRegion, isTrue);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.byKey(const Key('user-profile-name')), findsNothing);
+        expect(find.byKey(const Key('user-profile-copy-uid')), findsNothing);
+        for (final kind in [
+          'settings',
+          'sendMessage',
+          'addFriend',
+          'removeFriend',
+        ]) {
+          expect(find.byKey(Key('user-profile-action-$kind')), findsNothing);
+        }
+
+        final scrollable = _profileScrollable(tester);
+        final identityTop = tester
+            .getTopLeft(find.byKey(const Key('user-profile-identity')))
+            .dy;
+        final avatar = tester.getRect(
+          find.byKey(const Key('user-profile-avatar-skeleton')),
+        );
+        if (self) {
+          final shortcuts = find.byKey(
+            const Key('my-profile-native-shortcuts'),
+          );
+          expect(shortcuts, findsOneWidget);
+          for (final kind in ['threads', 'replies', 'blogs', 'messages']) {
+            final action = find.byKey(Key('user-profile-action-$kind'));
+            expect(
+              find.descendant(of: shortcuts, matching: action),
+              findsOneWidget,
+            );
+            expect(tester.widget<InkWell>(action).onTap, isNotNull);
+          }
+          tester
+              .widget<InkWell>(
+                find.byKey(const Key('user-profile-action-threads')),
+              )
+              .onTap!();
+          await tester.pumpAndSettle();
+          expect(find.byType(MyThreadPage), findsOneWidget);
+          expect(directory.queries.single.userId, '654321');
+          Navigator.of(tester.element(find.byType(MyThreadPage))).pop();
+          await tester.pump();
+          expect(
+            find.byKey(const Key('user-profile-identity-skeleton')),
+            findsOneWidget,
+          );
+        } else {
+          expect(
+            find.byKey(const Key('my-profile-native-shortcuts')),
+            findsNothing,
+          );
+          expect(find.byKey(const Key('user-profile-actions')), findsNothing);
+        }
+
+        initialRead.complete(_profileSuccess(profile));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('user-profile-identity-skeleton')),
+          findsNothing,
+        );
+        expect(_profileScrollable(tester), same(scrollable));
+        expect(
+          tester.getTopLeft(find.byKey(const Key('user-profile-identity'))).dy,
+          closeTo(identityTop, 0.01),
+        );
+        expect(
+          tester.getRect(find.byKey(const Key('user-profile-avatar'))),
+          avatar,
+        );
+        expect(find.text(profile.identity.displayName!), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '${self ? 'self' : 'public'} refresh keeps identity geometry and scroll position through success and network failure',
+      (tester) async {
+        final profile = _scrollableProfile(self: self);
+        final pendingReads = <Completer<_ProfileReadResult>>[];
+        final repository = _ScriptedProfileRepository((_, call) {
+          if (call == 0) return Future.value(_profileSuccess(profile));
+          final read = Completer<_ProfileReadResult>();
+          pendingReads.add(read);
+          return read.future;
+        });
+        if (self) {
+          await _pumpMyProfile(tester, repository: repository);
+        } else {
+          await _pumpPublicProfile(tester, repository: repository);
+        }
+        final page = find.byType(self ? MyProfilePage : UserProfilePage);
+        final container = ProviderScope.containerOf(tester.element(page));
+        final l10n = AppLocalizations.of(tester.element(page));
+        final scrollable = _profileScrollable(tester);
+        expect(scrollable.position.maxScrollExtent, greaterThan(96));
+        scrollable.position.jumpTo(96);
+        await tester.pump();
+        final pixels = scrollable.position.pixels;
+        final identity = tester.getRect(
+          find.byKey(const Key('user-profile-identity')),
+        );
+        void expectUnchangedLayout() {
+          expect(_profileScrollable(tester), same(scrollable));
+          expect(scrollable.position.pixels, closeTo(pixels, 0.01));
+          expect(
+            tester.getRect(find.byKey(const Key('user-profile-identity'))),
+            identity,
+          );
+          expect(find.text(profile.identity.displayName!), findsOneWidget);
+          expect(
+            find.byKey(const Key('user-profile-identity-skeleton')),
+            findsNothing,
+          );
+        }
+
+        for (final fails in [false, true]) {
+          final refresh = self
+              ? container.read(myUserProfileProvider.notifier).refresh()
+              : container
+                    .read(userProfileProvider('123456').notifier)
+                    .refresh();
+          await tester.pump();
+          expect(
+            find.byKey(const Key('user-profile-refresh-progress')),
+            findsOneWidget,
+          );
+          expectUnchangedLayout();
+          pendingReads.last.complete(
+            fails
+                ? const DataReadFailure(
+                    kind: DataReadFailureKind.network,
+                    diagnosticMessage: 'private diagnostic must not be shown',
+                  )
+                : _profileSuccess(profile),
+          );
+          await refresh;
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('user-profile-refresh-progress')),
+            findsNothing,
+          );
+          expectUnchangedLayout();
+          if (fails) {
+            final error = find.text(
+              l10n.profileLoadFailed(l10n.commonNetworkError),
+            );
+            expect(error, findsOneWidget);
+            expect(
+              find.text('private diagnostic must not be shown'),
+              findsNothing,
+            );
+            expect(find.byType(SnackBar), findsOneWidget);
+            expect(error.hitTestable(), findsOneWidget);
+            expectUnchangedLayout();
+
+            await tester.pump(const Duration(seconds: 5));
+            await tester.pump(const Duration(milliseconds: 300));
+            tester.element(page).markNeedsBuild();
+            await tester.pump();
+            expect(find.byType(SnackBar), findsNothing);
+            expect(error, findsNothing);
+            expect(repository.queries, hasLength(3));
+            expectUnchangedLayout();
+          }
+        }
+        expect(repository.queries, hasLength(3));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   testWidgets('UserProfilePage renders source-neutral profile data', (
     tester,
   ) async {
@@ -508,53 +716,72 @@ void main() {
     expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
   });
 
-  testWidgets('MyProfilePage rejects a late refresh from the old owner', (
-    tester,
-  ) async {
-    final store = YamiboSessionStore()..saveExtracted(_sessionFor('654321'));
-    final oldRefresh = Completer<_ProfileReadResult>();
-    final repository = _ScriptedProfileRepository((query, call) {
-      if (call == 1) return oldRefresh.future;
-      return Future.value(
-        _profileSuccess(
-          query.userId == '654321'
-              ? _myProfile
-              : _selfProfile('777777', 'second-member'),
-        ),
-      );
-    });
-    await _pumpMyProfile(tester, repository: repository, store: store);
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(MyProfilePage)),
-    );
-    unawaited(container.read(myUserProfileProvider.notifier).refresh());
-    await tester.pump();
-    expect(
-      find.byKey(const Key('user-profile-refresh-progress')),
-      findsOneWidget,
-    );
-
-    store.saveExtracted(_sessionFor('777777'));
-    container
-        .read(authSessionControllerProvider.notifier)
-        .acceptSession(
-          const ForumSessionIdentity(
-            userId: '777777',
-            username: 'second-member',
-          ),
+  for (final oldResultFails in [false, true]) {
+    testWidgets(
+      'MyProfilePage rejects late old-owner ${oldResultFails ? 'network failure' : 'success'}',
+      (tester) async {
+        final store = YamiboSessionStore()
+          ..saveExtracted(_sessionFor('654321'));
+        final oldRefresh = Completer<_ProfileReadResult>();
+        final repository = _ScriptedProfileRepository((query, call) {
+          if (call == 1) return oldRefresh.future;
+          return Future.value(
+            _profileSuccess(
+              query.userId == '654321'
+                  ? _myProfile
+                  : _selfProfile('777777', 'second-member'),
+            ),
+          );
+        });
+        await _pumpMyProfile(tester, repository: repository, store: store);
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(MyProfilePage)),
         );
-    await tester.pumpAndSettle();
-    expect(find.text('sample-member'), findsNothing);
-    expect(find.text('second-member'), findsOneWidget);
+        unawaited(container.read(myUserProfileProvider.notifier).refresh());
+        await tester.pump();
+        expect(
+          find.byKey(const Key('user-profile-refresh-progress')),
+          findsOneWidget,
+        );
 
-    oldRefresh.complete(_profileSuccess(_myProfile));
-    await tester.pumpAndSettle();
-    expect(find.text('second-member'), findsOneWidget);
-    expect(find.text('sample-member'), findsNothing);
-    expect(find.byKey(const Key('my-profile-open-forum-page')), findsNothing);
-    expect(repository.queries.last.userId, '777777');
-  });
+        store.saveExtracted(_sessionFor('777777'));
+        container
+            .read(authSessionControllerProvider.notifier)
+            .acceptSession(
+              const ForumSessionIdentity(
+                userId: '777777',
+                username: 'second-member',
+              ),
+            );
+        await tester.pumpAndSettle();
+        expect(find.text('sample-member'), findsNothing);
+        expect(find.text('second-member'), findsOneWidget);
 
+        oldRefresh.complete(
+          oldResultFails
+              ? const DataReadFailure(
+                  kind: DataReadFailureKind.network,
+                  diagnosticMessage: 'old owner failure',
+                )
+              : _profileSuccess(_myProfile),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('second-member'), findsOneWidget);
+        expect(find.text('sample-member'), findsNothing);
+        expect(
+          find.byKey(const Key('my-profile-open-forum-page')),
+          findsNothing,
+        );
+        expect(repository.queries.last.userId, '777777');
+        expect(find.byType(SnackBar), findsNothing);
+        final l10n = _profileL10n(tester);
+        expect(
+          find.text(l10n.profileLoadFailed(l10n.commonNetworkError)),
+          findsNothing,
+        );
+      },
+    );
+  }
   testWidgets('same UID signing in again has a fresh profile owner', (
     tester,
   ) async {
@@ -586,6 +813,14 @@ void main() {
     await tester.pump();
     expect(find.text('sample-member'), findsNothing);
     expect(find.byKey(const Key('user-profile-action-settings')), findsNothing);
+    expect(
+      find.byKey(const Key('user-profile-identity-skeleton')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('user-profile-name')), findsNothing);
+    expect(find.byKey(const Key('user-profile-avatar')), findsNothing);
+    expect(find.byKey(const Key('user-profile-copy-uid')), findsNothing);
+    expect(find.byKey(const Key('user-profile-actions')), findsNothing);
 
     newSession.complete(_profileSuccess(_selfProfile('654321', 'new-session')));
     await tester.pumpAndSettle();
@@ -826,6 +1061,7 @@ void main() {
       return _profileSuccess(_myProfile);
     });
     await _pumpMyProfile(tester, repository: repository);
+    expect(find.byType(SnackBar), findsNothing);
     expect(find.text('sample-member'), findsNothing);
     expect(find.byKey(const Key('daily-sign-in-panel')), findsNothing);
     final container = ProviderScope.containerOf(
@@ -1127,6 +1363,7 @@ Future<void> _pumpPublicProfile(
   PrivateConversationRouteFactory? conversationRoute,
   UserBlogDirectoryRepository? blogRepository,
   VerifiedProfileOwner? owner = (uid: '654321', revision: 0),
+  bool settle = true,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -1151,7 +1388,12 @@ Future<void> _pumpPublicProfile(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+    await tester.pump();
+  }
 }
 
 Future<void> _pumpMyProfile(
@@ -1163,6 +1405,7 @@ Future<void> _pumpMyProfile(
   UserThreadDirectoryRepository? threadDirectory,
   ForumFriendFeedRepository? friendDirectory,
   Widget? home,
+  bool settle = true,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -1190,7 +1433,38 @@ Future<void> _pumpMyProfile(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+    await tester.pump();
+  }
+}
+
+ScrollableState _profileScrollable(WidgetTester tester) =>
+    tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byKey(const Key('user-profile-page-list')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+
+ForumUserProfileData _scrollableProfile({required bool self}) {
+  final source = self ? _myProfile : _profile;
+  return ForumUserProfileData(
+    identity: source.identity,
+    viewerUserId: source.viewerUserId,
+    actions: source.actions,
+    signatureHtml: _profile.signatureHtml,
+    metrics: source.metrics,
+    details: [
+      ...source.details,
+      for (var index = 0; index < 20; index++)
+        ForumUserProfileDetail(label: 'Field $index', value: 'Value $index'),
+    ],
+  );
 }
 
 AppLocalizations _profileL10n(WidgetTester tester) =>
