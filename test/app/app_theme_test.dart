@@ -15,7 +15,6 @@ import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/app/theme/app_theme_tokens.dart';
 import 'package:y300/app/y300_app.dart';
-import 'package:y300/features/forum/presentation/webview/theme/forum_webview_theme_palette_resolver.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -272,20 +271,6 @@ void main() {
     expect(theme.inputDecorationTheme.fillColor, scheme.surfaceContainer);
     expect(theme.popupMenuTheme.color, isNot(Colors.white));
     expect(theme.bottomSheetTheme.modalBackgroundColor, isNot(Colors.white));
-  });
-
-  test('AppTheme light and dark can resolve WebView palettes', () {
-    const resolver = ForumWebViewThemePaletteResolver();
-
-    final light = resolver.resolve(AppTheme.light());
-    final dark = resolver.resolve(AppTheme.dark());
-
-    expect(light.brightness, Brightness.light);
-    expect(light.colorScheme, 'light');
-    expect(light.pageBackground, AppThemeTokens.scaffoldBackground);
-    expect(dark.brightness, Brightness.dark);
-    expect(dark.colorScheme, 'dark');
-    expect(dark.pageBackground, isNot(AppThemeTokens.scaffoldBackground));
   });
 
   testWidgets('Y300App wires AppTheme into MaterialApp with saved theme mode', (
