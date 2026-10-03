@@ -165,11 +165,7 @@ class _ComicCommentListSurfaceState extends State<ComicCommentListSurface>
       );
     }
 
-    // The planner is shared by all visible cards. Keep only the current
-    // result's keys so revisiting a recycled long-list item cannot retain
-    // render plans from an older chapter/session.
-    renderContext.prune(projection!.items.map(ComicCommentCard.toThreadPost));
-    _presentation.synchronize(projection);
+    _presentation.synchronize(projection!);
 
     final hasPartialFailure =
         loadResult.status == ComicCommentLoadStatus.partialFailure;

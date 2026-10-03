@@ -1,25 +1,20 @@
 import 'package:flutter/foundation.dart';
 
-/// Canonical rich-text document model shared by the thread post reader and the
-/// novel reader. Both features parse the same Discuz HTML, so the block/run/
-/// image shapes are unified here (see plan §1.5/§6). Feature-specific metadata
-/// (episode ids, word counts, render settings) stays in the owning feature —
-/// `reader_shared` must not learn those concepts (DIP, plan §7).
+/// Semantic document used by novel parsing, search, bookmarks and HTML anchor
+/// matching, and by on-demand plain-text extraction from thread bodies.
+/// Feature-specific episode, progress and display settings stay in their
+/// owning features.
 ///
 /// The hierarchy is a sealed data-only value tree. Parsers produce it, and
 /// reader services consume it directly, including across isolate boundaries.
 @immutable
 sealed class RichBlock {
-  const RichBlock({this.anchorId = '', this.continuesPrevious = false});
+  const RichBlock({this.anchorId = ''});
 
   /// Stable identity used for scroll anchoring, progress restore and search.
   /// Stability across re-parses/conversions matters: persisted anchors must
   /// keep resolving (novel keeps the historical `node-N` scheme).
   final String anchorId;
-
-  /// True when this block visually continues the previous one (no paragraph
-  /// gap). Used by the thread segmenter when a long block is split.
-  final bool continuesPrevious;
 }
 
 /// A run of text-level content (paragraph or heading). [headingLevel] is 0 for
@@ -28,7 +23,6 @@ sealed class RichBlock {
 class RichTextBlock extends RichBlock {
   const RichTextBlock({
     super.anchorId,
-    super.continuesPrevious,
     required this.runs,
     this.headingLevel = 0,
   });
@@ -43,22 +37,16 @@ class RichTextBlock extends RichBlock {
 
 /// A (possibly nested) quoted region.
 class RichQuoteBlock extends RichBlock {
-  const RichQuoteBlock({
-    super.anchorId,
-    super.continuesPrevious,
-    required this.blocks,
-  });
+  const RichQuoteBlock({super.anchorId, required this.blocks});
 
   final List<RichBlock> blocks;
 }
 
-/// A block-level image. [aid] is the Discuz attachment handle and is the only
-/// key that lets a later pass swap a placeholder `<img>` for its real
-/// attachment URL (plan §6 step 3) — it must survive parsing on both sides.
+/// A block-level image. [aid] preserves the Discuz attachment identity alongside
+/// the resolved and original source URLs.
 class RichImageBlock extends RichBlock {
   const RichImageBlock({
     super.anchorId,
-    super.continuesPrevious,
     required this.url,
     required this.rawUrl,
     required this.index,
@@ -79,12 +67,12 @@ class RichImageBlock extends RichBlock {
 
 /// A horizontal rule (`<hr>`).
 class RichDividerBlock extends RichBlock {
-  const RichDividerBlock({super.anchorId, super.continuesPrevious});
+  const RichDividerBlock({super.anchorId});
 }
 
 /// An explicit vertical gap (e.g. a standalone `<br>` between blocks).
 class RichSpacerBlock extends RichBlock {
-  const RichSpacerBlock({super.anchorId, super.continuesPrevious});
+  const RichSpacerBlock({super.anchorId});
 }
 
 /// An inline span inside a [RichTextBlock].

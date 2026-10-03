@@ -7,7 +7,6 @@ import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/thread/domain/services/post_edit_target_parser.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_comment_flow.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
@@ -84,7 +83,6 @@ class ThreadPostActions {
   Future<ThreadPostMutation?> show({
     required ThreadPost sourcePost,
     required ThreadPost displayPost,
-    required ThreadPostBodyRenderPlan plan,
   }) async {
     if (!active) return null;
     final editTarget = _editTarget(sourcePost);

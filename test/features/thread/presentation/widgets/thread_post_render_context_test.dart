@@ -5,7 +5,7 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.da
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 
 void main() {
-  test('caches render plans and isolates comment owners', () {
+  test('isolates comment owners without changing source identity', () {
     final context = ThreadPostRenderContext(
       palette: ThreadDetailNativePalette.resolve(
         ThemeData.light(useMaterial3: true),
@@ -26,7 +26,6 @@ void main() {
       dateline: '刚刚',
     );
 
-    expect(context.planFor(first), same(context.planFor(first)));
     expect(context.renderOwnerFor(first), 'comic-comment-573279-p1');
     final second = ThreadPost(
       pid: 'p2',
@@ -40,6 +39,20 @@ void main() {
     expect(
       context.renderOwnerFor(first),
       isNot(context.renderOwnerFor(second)),
+    );
+  });
+
+  test('normalizes comment owner identity and handles missing ids', () {
+    expect(
+      ThreadPostRenderContext.commentRenderOwner(
+        sourceTid: ' 573279 ',
+        pid: ' p1 ',
+      ),
+      'comic-comment-573279-p1',
+    );
+    expect(
+      ThreadPostRenderContext.commentRenderOwner(sourceTid: ' ', pid: ''),
+      'comic-comment-unknown-thread-unknown-post',
     );
   });
 

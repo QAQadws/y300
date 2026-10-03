@@ -11,7 +11,6 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
@@ -26,9 +25,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_post_comment_projection_provider.dart';
@@ -38,8 +35,6 @@ import 'package:y300/features/thread/presentation/thread_detail_content_projecto
 import 'package:y300/features/thread/presentation/mappers/thread_history_visit_mapper.dart';
 import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_prewarmer.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/domain/models/thread_quick_scroll_dock_side.dart';
@@ -89,11 +84,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   String? _latestImageReferer;
   bool _quickScrollMetricsSyncScheduled = false;
 
-  /// 跨重建保留的图片真实尺寸快照，供 render plan 锁定首帧高度（防上滑回溯）。
-  final ThreadPostImageDimensionStore _imageDimensionStore =
-      ThreadPostImageDimensionStore();
-  ThreadPostImageDimensionPrewarmer? _imageDimensionPrewarmer;
-  String? _prewarmSignature;
   final ThreadHistoryCommitGuard _historyCommitGuard =
       ThreadHistoryCommitGuard();
   bool _didReportHistoryDuplicate = false;
@@ -134,7 +124,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     _highlightClearTimer?.cancel();
     _quickScrollCoordinator.dispose();
     _scrollController.dispose();
-    _imageDimensionStore.dispose();
     super.dispose();
   }
 
@@ -199,7 +188,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     final quickScrollSide =
         ref.watch(threadQuickScrollPreferencesControllerProvider).value ??
         ThreadQuickScrollDockSide.right;
-    _schedulePrewarmImageDimensions(state);
     if (state.posts.isNotEmpty) {
       _scheduleQuickScrollMetricsSync();
     }
@@ -332,7 +320,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                           landing: widget.landing,
                           onTargetVisible: _onTargetVisible,
                           imageReferer: _imageRefererFor(state),
-                          imageDimensionStore: _imageDimensionStore,
                           onLoadPreviousPage: () {
                             unawaited(
                               _runPageActionAndScrollTop(
@@ -359,7 +346,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                           onCopyActionUrl: _copyActionUrl,
                           onOpenPostLink: _openForumLink,
                           onOpenPostImages: _openPostImages,
-                          onOpenPostActions: (post, plan) {
+                          onOpenPostActions: (post) {
                             final postProjection = projection.findByPid(
                               post.pid,
                             );
@@ -369,7 +356,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                               controller,
                               post,
                               postProjection?.displayPost ?? post,
-                              plan,
                             );
                           },
                           htmlImagePrecacheService: htmlFirstPrecacheService,
@@ -482,43 +468,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         );
       }
     });
-  }
-
-  /// 进入阅读态前，用持久化缓存里的真实尺寸预热 [_imageDimensionStore]。
-  ///
-  /// 按 (tid, 当前页, 楼层数) 去重触发，命中后 store 推进 signature，render plan
-  /// 缓存随之失效并以可信尺寸重建——首帧即定高，避免滚动中异步改高造成上滑回溯。
-  /// 缓存键规则与正文图片渲染保持一致（[ForumImageCacheRequests.threadInline]）。
-  void _schedulePrewarmImageDimensions(ThreadDetailPageState state) {
-    if (state.posts.isEmpty) {
-      return;
-    }
-    final tid = state.tid.trim().isNotEmpty ? state.tid.trim() : widget.tid;
-    final signature = '$tid:${state.currentPage}:${state.posts.length}';
-    if (_prewarmSignature == signature) {
-      return;
-    }
-    _prewarmSignature = signature;
-
-    final prewarmer = _imageDimensionPrewarmer ??=
-        ThreadPostImageDimensionPrewarmer(
-          imageCacheService: ref.read(imageCacheServiceProvider),
-          store: _imageDimensionStore,
-        );
-    const planner = ThreadPostBodyRenderPlanner();
-    final documents = state.posts
-        .map((post) => planner.plan(post.message).document)
-        .toList(growable: false);
-    unawaited(
-      prewarmer.prewarmDocuments(
-        documents,
-        cacheKeyResolver: (image) => ForumImageCacheRequests.threadInline(
-          tid: tid,
-          url: image.url,
-          imageIndex: image.index,
-        ).cacheKey,
-      ),
-    );
   }
 
   String _imageRefererFor(ThreadDetailPageState state) {
@@ -681,7 +630,6 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     ThreadDetailController controller,
     ThreadPost sourcePost,
     ThreadPost displayPost,
-    ThreadPostBodyRenderPlan plan,
   ) async {
     if (_postActionActive) return;
     _postActionActive = true;
@@ -700,7 +648,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
         ),
         imageReferer: _imageRefererFor(state),
         isCurrent: () => mounted && widget.tid == args.tid,
-      ).show(sourcePost: sourcePost, displayPost: displayPost, plan: plan);
+      ).show(sourcePost: sourcePost, displayPost: displayPost);
       if (mutation == null) return;
       try {
         await invalidation.invalidateThread(args.tid);

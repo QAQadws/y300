@@ -9,7 +9,6 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
@@ -21,10 +20,7 @@ import 'package:y300/features/thread/presentation/thread_post_rate_form_projecti
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_image_dimension_store.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
-import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
@@ -68,7 +64,6 @@ class ThreadDetailContent extends StatefulWidget {
     required this.onOpenPostActions,
     this.htmlImagePrecacheService,
     this.onPostBuilt,
-    this.imageDimensionStore,
     this.onScrollStabilizerEvent,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -94,14 +89,10 @@ class ThreadDetailContent extends StatefulWidget {
   final ValueChanged<String> onOpenPostLink;
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
-  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostActions;
+  final ValueChanged<ThreadPost> onOpenPostActions;
   final ForumImagePrecacheService? htmlImagePrecacheService;
   final ValueChanged<int>? onPostBuilt;
 
-  /// 持久化图片尺寸快照（来自缓存预热）。提供时 render plan 会用可信尺寸锁定
-  /// 首帧高度，避免滚动中异步改高。为空则退化为既有行为。
-  final ThreadPostImageDimensionStore? imageDimensionStore;
   final ValueChanged<ThreadDetailScrollStabilizerEvent>?
   onScrollStabilizerEvent;
   final void Function(ThreadPoll poll, ThreadPollOption option)
@@ -116,7 +107,7 @@ class ThreadDetailContent extends StatefulWidget {
 }
 
 class _ThreadDetailContentState extends State<ThreadDetailContent> {
-  late ThreadDetailRenderEntryPlanner _entryPlanner;
+  final _entryPlanner = const ThreadDetailRenderEntryPlanner();
   final GlobalKey _viewportKey = GlobalKey(debugLabel: 'thread-detail-list');
   final GlobalKey _targetCenterKey = GlobalKey(
     debugLabel: 'thread-detail-target-center',
@@ -134,7 +125,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   void initState() {
     super.initState();
-    _entryPlanner = _createEntryPlanner();
     _scrollStabilizer = ThreadDetailScrollStabilizer(
       scrollController: widget.scrollController,
       viewportKey: _viewportKey,
@@ -145,7 +135,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       viewportKey: _viewportKey,
     );
     _syncImageViewportCoordinator();
-    widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
   }
 
   @override
@@ -179,13 +168,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     final projectionAnchor = shouldRestoreProjectionAnchor
         ? _projectionAnchorCoordinator.capture(_sourcePidsFor(oldWidget))
         : null;
-    if (!identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
-      oldWidget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
-      widget.imageDimensionStore?.addListener(_onImageDimensionsChanged);
-    }
-    if (!identical(oldWidget.imageDimensionStore, widget.imageDimensionStore)) {
-      _entryPlanner = _createEntryPlanner();
-    }
     if (!identical(oldWidget.scrollController, widget.scrollController) ||
         !identical(
           oldWidget.onScrollStabilizerEvent,
@@ -213,44 +195,16 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         oldWidget.state.currentPage != widget.state.currentPage) {
       _imageViewportCoordinator?.reset();
     }
-    if (!identical(oldWidget.projection?.posts, widget.projection?.posts) ||
-        !identical(oldWidget.state.posts, widget.state.posts)) {
-      _entryPlanner.prune(_displayPosts);
-    }
     _projectionAnchorCoordinator.restoreAfterFrame(projectionAnchor);
   }
 
   @override
   void dispose() {
-    widget.imageDimensionStore?.removeListener(_onImageDimensionsChanged);
     _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
     _imageViewportCoordinator?.dispose();
     _scrollStabilizer.dispose();
     _projectionAnchorCoordinator.dispose();
     super.dispose();
-  }
-
-  /// 构造接入持久化尺寸的 render plan 装配器。
-  ///
-  /// resolver 开启 [ThreadPostResourceLayoutHintResolver.lockTrustedDimensions]：
-  /// 只要 hint 来自 HTML 或缓存即锁定首帧高度；无尺寸图片仍走受 above-viewport
-  /// 保护的 decode 回填。store 的 signature 已并入 resolver 签名，缓存预热到达后
-  /// render plan 缓存自然失效并以可信尺寸重建。
-  ThreadDetailRenderEntryPlanner _createEntryPlanner() {
-    return ThreadDetailRenderEntryPlanner(
-      bodyRenderPlanner: ThreadPostBodyRenderPlanner(
-        resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
-          lockTrustedDimensions: true,
-          dimensionLookup: widget.imageDimensionStore,
-        ),
-      ),
-    );
-  }
-
-  void _onImageDimensionsChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   @override
@@ -316,10 +270,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         ThreadDetailPostProjection(sourcePost: post, displayPost: post),
     ];
   }
-
-  List<ThreadPost> get _displayPosts => [
-    for (final post in _postProjections) post.displayPost,
-  ];
 
   Iterable<String> _sourcePidsFor(ThreadDetailContent target) sync* {
     final projections = target.projection?.posts;
@@ -529,7 +479,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
                 widget.state.ratingsByPostId,
             postIndex: entry.postIndex,
             state: widget.state,
-            plan: entry.requirePlan(),
             highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
             imageReferer: widget.imageReferer,
             palette: palette,
@@ -560,7 +509,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           ),
         );
       case ThreadDetailRenderEntryKind.postHeader:
-        final plan = _entryPlanner.planFor(entry.displayPost!);
         final header = _ThreadPostCardHeaderEntry(
           key: Key(entry.key),
           sourcePost: entry.sourcePost!,
@@ -568,7 +516,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           displaySubject:
               widget.projection?.displaySubject ?? widget.state.subject,
           state: widget.state,
-          plan: plan,
           highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
           palette: palette,
           imageReferer: widget.imageReferer,
@@ -581,13 +528,11 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           child: header,
         );
       case ThreadDetailRenderEntryKind.postBody:
-        final plan = entry.requirePlan();
         return _ThreadPostCardBodyEntry(
           key: Key(entry.key),
           sourcePost: entry.sourcePost!,
           displayPost: entry.displayPost!,
           threadId: widget.state.tid,
-          plan: plan,
           highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
           imageReferer: widget.imageReferer,
           palette: palette,
@@ -605,7 +550,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenPostActions: widget.onOpenPostActions,
         );
       case ThreadDetailRenderEntryKind.postFooter:
-        final plan = _entryPlanner.planFor(entry.displayPost!);
         return KeyedSubtree(
           key: _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardFooterEntry(
@@ -616,7 +560,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
                 widget.projection?.displayRatingsByPostId ??
                 widget.state.ratingsByPostId,
             state: widget.state,
-            plan: plan,
             highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
             imageReferer: widget.imageReferer,
             onOpenPostActions: widget.onOpenPostActions,

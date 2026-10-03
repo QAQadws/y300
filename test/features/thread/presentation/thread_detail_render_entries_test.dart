@@ -1,31 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_settings.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
-import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_display_transformer.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_parser.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
-import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 
 void main() {
+  const planner = ThreadDetailRenderEntryPlanner();
+
   group('ThreadDetailRenderEntryPlanner', () {
     test('splits only the body-end target and retains an empty footer', () {
-      final planner = ThreadDetailRenderEntryPlanner();
-      ThreadPost post(String pid, int number) => ThreadPost(
-        pid: pid,
-        author: 'alice',
-        authorId: '1',
-        message: '<p>正文 $pid</p>',
-        number: number,
-        isFirst: number == 1,
-        dateline: 'today',
-      );
+      final posts = [_post('before', 1), _post('target', 2), _post('after', 3)];
       final entries = planner.buildEntries(
-        posts: [post('before', 1), post('target', 2), post('after', 3)],
+        posts: posts,
         targetPid: 'target',
         landing: ThreadPostLanding.bodyEnd,
       );
@@ -39,420 +25,149 @@ void main() {
         ThreadDetailRenderEntryKind.pagination,
         ThreadDetailRenderEntryKind.targetSpacer,
       ]);
-      expect(entries[3].sourcePost?.pid, 'target');
-      expect(
-        entries[2].requirePlan(),
-        same(planner.planFor(entries[2].displayPost!)),
-      );
-      expect(entries[0].key, 'thread-post-card-entry-before');
-      expect(entries[4].key, 'thread-post-card-entry-after');
-    });
-
-    test('builds one body entry for short text posts', () {
-      final parser = _CountingThreadPostBodyParser();
-      final planner = ThreadDetailRenderEntryPlanner(
-        bodyRenderPlanner: ThreadPostBodyRenderPlanner(parser: parser),
-      );
-
-      final entries = planner.buildEntries(
-        posts: <ThreadPost>[
-          ThreadPost(
-            pid: 'p1',
-            author: 'alice',
-            authorId: '1',
-            message: '<p>普通正文</p>',
-            number: 1,
-            isFirst: true,
-            dateline: 'today',
-          ),
-        ],
-      );
-
-      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postCard,
-        ThreadDetailRenderEntryKind.pagination,
+      expect(entries.map((entry) => entry.key), [
+        'thread-post-card-entry-before',
+        'thread-post-header-entry-target',
+        'thread-post-body-entry-target',
+        'thread-post-footer-entry-target',
+        'thread-post-card-entry-after',
+        'thread-detail-pagination',
+        'thread-detail-target-scroll-spacer',
       ]);
-      expect(entries[0].key, 'thread-post-card-entry-p1');
-      expect(entries[0].requirePlan().usesListSegments, isFalse);
-      expect(parser.parseCount, 1);
+      expect(entries.take(5).map((entry) => entry.postIndex), [0, 1, 1, 1, 2]);
+      for (final entry in entries.sublist(1, 4)) {
+        expect(entry.sourcePost, same(posts[1]));
+        expect(entry.displayPost, same(posts[1]));
+      }
     });
 
-    test('keeps long text posts as one production body entry', () {
-      final parser = _CountingThreadPostBodyParser();
-      final planner = ThreadDetailRenderEntryPlanner(
-        bodyRenderPlanner: ThreadPostBodyRenderPlanner(
-          parser: parser,
-          maxSegmentTextLength: 6,
-        ),
-      );
-
+    test('top landing keeps the target as a single visual card', () {
       final entries = planner.buildEntries(
-        posts: <ThreadPost>[
-          ThreadPost(
-            pid: 'p-long',
-            author: 'alice',
-            authorId: '1',
-            message: '<p>abcdefghijklmnop</p>',
-            number: 1,
-            isFirst: true,
-            dateline: 'today',
-          ),
-        ],
+        posts: [_post('target', 1)],
+        targetPid: 'target',
       );
 
-      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postCard,
-        ThreadDetailRenderEntryKind.pagination,
-      ]);
-      expect(entries[0].key, 'thread-post-card-entry-p-long');
-      expect(entries[0].requirePlan().usesListSegments, isTrue);
-      expect(parser.parseCount, 1);
-    });
-
-    test('production planner keeps each post as one stable entry', () {
-      final planner = ThreadDetailRenderEntryPlanner(
-        bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
-          maxSegmentTextLength: 6,
-        ),
-      );
-
-      final entries = planner.buildEntries(
-        posts: <ThreadPost>[
-          ThreadPost(
-            pid: 'p-html',
-            author: 'alice',
-            authorId: '1',
-            message: '<p>abcdefghijklmnop</p>',
-            number: 1,
-            isFirst: true,
-            dateline: 'today',
-          ),
-        ],
-      );
-
-      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
-        ThreadDetailRenderEntryKind.postCard,
-        ThreadDetailRenderEntryKind.pagination,
-      ]);
-      expect(entries[0].requirePlan().usesListSegments, isTrue);
-    });
-
-    test('keeps image bodies as one production body entry', () {
-      final planner = ThreadDetailRenderEntryPlanner();
-
-      final entries = planner.buildEntries(
-        posts: <ThreadPost>[
-          ThreadPost(
-            pid: 'p2',
-            author: 'alice',
-            authorId: '1',
-            message:
-                '<p>开头</p>'
-                '<img file="data/attachment/forum/1.jpg">'
-                '<img file="data/attachment/forum/2.jpg">'
-                '<p>结尾</p>',
-            number: 1,
-            isFirst: true,
-            dateline: 'today',
-          ),
-        ],
-        targetPid: 'p2',
-      );
-
-      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
+      expect(entries.map((entry) => entry.kind), [
         ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.pagination,
         ThreadDetailRenderEntryKind.targetSpacer,
       ]);
-      expect(entries[0].key, 'thread-post-card-entry-p2');
-      expect(entries[0].requirePlan().usesListSegments, isTrue);
-      expect(entries.last.kind, ThreadDetailRenderEntryKind.targetSpacer);
     });
 
-    test('render plans expose resource layout hints', () {
-      final planner = ThreadDetailRenderEntryPlanner();
-      final post = ThreadPost(
-        pid: 'p-hint',
-        author: 'alice',
-        authorId: '1',
-        message:
-            '<img file="data/attachment/forum/1.jpg" width="120" height="80">',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
-
-      final plan = planner.planFor(post);
-      final image = plan.images.single;
-      final hint = plan.resourceLayoutHints.blockImage(image);
-
-      expect(hint?.aspectRatio, 1.5);
-      expect(hint?.source, ThreadPostResourceLayoutHintSource.htmlAttribute);
-    });
-
-    test('reuses render plans across repeated entry builds', () {
-      final parser = _CountingThreadPostBodyParser();
-      final planner = ThreadDetailRenderEntryPlanner(
-        bodyRenderPlanner: ThreadPostBodyRenderPlanner(parser: parser),
-      );
-      final post = ThreadPost(
-        pid: 'p-cached',
-        author: 'alice',
-        authorId: '1',
-        message: '<p>开头</p><img file="data/attachment/forum/1.jpg">',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
-
-      planner.buildEntries(posts: <ThreadPost>[post]);
-      planner.buildEntries(posts: <ThreadPost>[post]);
-
-      expect(parser.parseCount, 1);
-    });
-
-    test('keeps short smiley-only text in one body entry', () {
-      final parser = _CountingThreadPostBodyParser();
-      final planner = ThreadDetailRenderEntryPlanner(
-        bodyRenderPlanner: ThreadPostBodyRenderPlanner(parser: parser),
-      );
-      final smileys = List.filled(
-        12,
-        '<img src="static/image/smiley/comcom/2.gif" class="vm">',
-      ).join();
-
+    test('normalizes surrounding whitespace in the target pid', () {
       final entries = planner.buildEntries(
-        posts: <ThreadPost>[
-          ThreadPost(
-            pid: 'p-smiley',
-            author: 'alice',
-            authorId: '1',
-            message: '<p>正文 $smileys</p>',
-            number: 1,
-            isFirst: true,
-            dateline: 'today',
-          ),
-        ],
+        posts: [_post('target', 1)],
+        targetPid: ' target ',
+        landing: ThreadPostLanding.bodyEnd,
       );
 
-      expect(entries.map((entry) => entry.kind), <ThreadDetailRenderEntryKind>[
+      expect(entries.map((entry) => entry.kind), [
+        ThreadDetailRenderEntryKind.postHeader,
+        ThreadDetailRenderEntryKind.postBody,
+        ThreadDetailRenderEntryKind.postFooter,
+        ThreadDetailRenderEntryKind.pagination,
+        ThreadDetailRenderEntryKind.targetSpacer,
+      ]);
+    });
+
+    test('an absent target keeps existing cards and the landing spacer', () {
+      final entries = planner.buildEntries(
+        posts: [_post('before', 1), _post('after', 2)],
+        targetPid: 'not-loaded',
+        landing: ThreadPostLanding.bodyEnd,
+      );
+
+      expect(entries.map((entry) => entry.kind), [
+        ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.postCard,
         ThreadDetailRenderEntryKind.pagination,
+        ThreadDetailRenderEntryKind.targetSpacer,
       ]);
-      expect(entries[0].requirePlan().usesListSegments, isFalse);
-      expect(parser.parseCount, 1);
+      expect(entries.take(2).map((entry) => entry.postIndex), [0, 1]);
     });
 
-    test('reuses render plans until the post message changes', () {
-      final planner = ThreadDetailRenderEntryPlanner();
-      final post = ThreadPost(
-        pid: 'p3',
-        author: 'alice',
-        authorId: '1',
-        message: '<p>旧正文</p>',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
+    test('omits the landing spacer when no target is requested', () {
+      for (final targetPid in <String?>[null, '', '  ']) {
+        final entries = planner.buildEntries(
+          posts: [_post('p1', 1)],
+          targetPid: targetPid,
+          landing: ThreadPostLanding.bodyEnd,
+        );
 
-      final firstPlan = planner.planFor(post);
-      final secondPlan = planner.planFor(post);
-      final changedPlan = planner.planFor(
-        ThreadPost(
-          pid: 'p3',
-          author: 'alice',
-          authorId: '1',
-          message: '<p>新正文</p>',
-          number: 1,
-          isFirst: true,
-          dateline: 'today',
-        ),
-      );
-
-      expect(identical(firstPlan, secondPlan), isTrue);
-      expect(identical(firstPlan, changedPlan), isFalse);
+        expect(entries.map((entry) => entry.kind), [
+          ThreadDetailRenderEntryKind.postCard,
+          ThreadDetailRenderEntryKind.pagination,
+        ]);
+      }
     });
 
-    test('cache keys use message hash instead of raw message', () {
-      final planner = ThreadDetailRenderEntryPlanner();
-      final post = ThreadPost(
-        pid: 'p-key',
-        author: 'alice',
-        authorId: '1',
-        message: '<p>非常长的正文内容</p>',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
+    test('keeps long text and image bodies as one visual card', () {
+      for (final message in [
+        '<p>${List.filled(1000, '长正文').join()}</p>',
+        '<p>开头</p><img file="data/attachment/forum/1.jpg"><img file="data/attachment/forum/2.jpg"><p>结尾</p>',
+      ]) {
+        final post = _post('body', 1, message: message);
+        final entries = planner.buildEntries(posts: [post]);
 
-      final key = planner.cacheKeyForPost(post);
-
-      expect(key.pid, 'p-key');
-      expect(key.messageHash, isNot(post.message));
-      expect(key.messageHash.length, 16);
-      expect(
-        key.renderSettingsSignature,
-        ThreadPostBodyRenderSettings.defaults.signature,
-      );
-      expect(
-        key.resourceHintResolverSignature,
-        const ThreadPostResourceLayoutHintResolver().signature,
-      );
-      expect(key.displayTransformerSignature, 'identity');
+        expect(entries.map((entry) => entry.kind), [
+          ThreadDetailRenderEntryKind.postCard,
+          ThreadDetailRenderEntryKind.pagination,
+        ]);
+        expect(entries.first.key, 'thread-post-card-entry-body');
+        expect(entries.first.sourcePost, same(post));
+        expect(entries.first.displayPost, same(post));
+        expect(entries.first.displayPost!.message, message);
+      }
     });
 
-    test('render settings participate in render plan cache keys', () {
-      final post = ThreadPost(
-        pid: 'p-settings',
-        author: 'alice',
-        authorId: '1',
-        message: '<p>正文</p>',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
-      final defaultPlanner = ThreadDetailRenderEntryPlanner();
-      final largeTextPlanner = ThreadDetailRenderEntryPlanner(
-        renderSettings: ThreadPostBodyRenderSettings.defaults.copyWith(
-          fontSize: 20,
-        ),
+    test('keeps source identity and the complete display projection', () {
+      final source = _post('source-pid', 1, message: '<p>原文</p>');
+      final display = _post('display-pid', 1, message: '<p>顯示正文</p>');
+      final entries = planner.buildProjectionEntries(
+        posts: [
+          ThreadDetailPostProjection(sourcePost: source, displayPost: display),
+        ],
+        targetPid: source.pid,
+        landing: ThreadPostLanding.bodyEnd,
       );
 
-      final defaultKey = defaultPlanner.cacheKeyForPost(post);
-      final largeTextKey = largeTextPlanner.cacheKeyForPost(post);
-
-      expect(defaultKey.messageHash, largeTextKey.messageHash);
-      expect(
-        defaultKey.renderSettingsSignature,
-        isNot(largeTextKey.renderSettingsSignature),
-      );
-      expect(defaultKey, isNot(largeTextKey));
+      expect(entries.take(3).map((entry) => entry.key), [
+        'thread-post-header-entry-source-pid',
+        'thread-post-body-entry-source-pid',
+        'thread-post-footer-entry-source-pid',
+      ]);
+      for (final entry in entries.take(3)) {
+        expect(entry.sourcePost, same(source));
+        expect(entry.displayPost, same(display));
+        expect(entry.postIndex, 0);
+      }
     });
 
-    test('resource hint resolver signature participates in cache keys', () {
-      final post = ThreadPost(
-        pid: 'p-resource-hint',
-        author: 'alice',
-        authorId: '1',
-        message: '<img file="data/attachment/forum/1.jpg">',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
-      final defaultPlanner = ThreadDetailRenderEntryPlanner();
-      final alternateHintPlanner = ThreadDetailRenderEntryPlanner(
-        bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
-          resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
-            defaultBlockImageAspectRatio: 1.0,
-          ),
-        ),
-      );
+    test(
+      'empty results still expose pagination and return immutable entries',
+      () {
+        final entries = planner.buildEntries(posts: const []);
 
-      final defaultKey = defaultPlanner.cacheKeyForPost(post);
-      final alternateKey = alternateHintPlanner.cacheKeyForPost(post);
-
-      expect(defaultKey.messageHash, alternateKey.messageHash);
-      expect(
-        defaultKey.resourceHintResolverSignature,
-        isNot(alternateKey.resourceHintResolverSignature),
-      );
-      expect(defaultKey, isNot(alternateKey));
-    });
-
-    test('display transformer signature participates in cache keys', () {
-      final post = ThreadPost(
-        pid: 'p-display',
-        author: 'alice',
-        authorId: '1',
-        message: '<p>正文</p>',
-        number: 1,
-        isFirst: true,
-        dateline: 'today',
-      );
-      final defaultPlanner = ThreadDetailRenderEntryPlanner();
-      final transformedPlanner = ThreadDetailRenderEntryPlanner(
-        bodyRenderPlanner: const ThreadPostBodyRenderPlanner(
-          displayTransformer: ThreadPostBodyDisplayTransformer(
-            textTransformer: _replaceBodyText,
-            signature: 'replace-body-text',
-          ),
-        ),
-      );
-
-      final defaultKey = defaultPlanner.cacheKeyForPost(post);
-      final transformedKey = transformedPlanner.cacheKeyForPost(post);
-      final transformedPlan = transformedPlanner.planFor(post);
-
-      expect(defaultKey.messageHash, transformedKey.messageHash);
-      expect(
-        defaultKey.displayTransformerSignature,
-        isNot(transformedKey.displayTransformerSignature),
-      );
-      expect(defaultKey, isNot(transformedKey));
-      expect(transformedPlan.displayTransformerSignature, 'replace-body-text');
-      expect(
-        (transformedPlan.displayDocument.blocks.single as RichTextBlock)
-            .plainText,
-        '显示正文',
-      );
-      expect(
-        (transformedPlan.document.blocks.single as RichTextBlock).plainText,
-        '正文',
-      );
-    });
-
-    test('uses display HTML for planning and source pid for identity', () {
-      final source = ThreadPost(
-        pid: 'source-pid',
-        author: 'raw-author',
-        authorId: '9',
-        message: '<p>原文</p>',
-        number: 1,
-        isFirst: true,
-        dateline: 'raw-date',
-      );
-      final display = ThreadPost(
-        pid: 'source-pid',
-        author: 'raw-author',
-        authorId: '9',
-        message: '<p>显示正文</p>',
-        number: 1,
-        isFirst: true,
-        dateline: '显示日期',
-      );
-
-      final entry = ThreadDetailRenderEntryPlanner()
-          .buildProjectionEntries(
-            posts: <ThreadDetailPostProjection>[
-              ThreadDetailPostProjection(
-                sourcePost: source,
-                displayPost: display,
-              ),
-            ],
-          )
-          .first;
-
-      expect(entry.key, 'thread-post-card-entry-source-pid');
-      expect(identical(entry.sourcePost, source), isTrue);
-      expect(identical(entry.displayPost, display), isTrue);
-      expect(
-        (entry.requirePlan().document.blocks.single as RichTextBlock).plainText,
-        '显示正文',
-      );
-    });
+        expect(entries.single.kind, ThreadDetailRenderEntryKind.pagination);
+        expect(entries.single.sourcePost, isNull);
+        expect(entries.single.displayPost, isNull);
+        expect(entries.single.postIndex, -1);
+        expect(
+          () => entries.add(const ThreadDetailRenderEntry.targetSpacer()),
+          throwsUnsupportedError,
+        );
+      },
+    );
   });
 }
 
-class _CountingThreadPostBodyParser extends ThreadPostBodyParser {
-  var parseCount = 0;
-
-  @override
-  RichDocument parse(String html) {
-    parseCount += 1;
-    return super.parse(html);
-  }
-}
-
-String _replaceBodyText(String text) {
-  return text.replaceAll('正文', '显示正文');
-}
+ThreadPost _post(String pid, int number, {String message = '<p>正文</p>'}) =>
+    ThreadPost(
+      pid: pid,
+      author: 'alice',
+      authorId: '1',
+      message: message,
+      number: number,
+      isFirst: number == 1,
+      dateline: 'today',
+    );

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/models/thread_image_layout_hint.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_continuous_image_adapter.dart';
 
 void main() {
@@ -21,7 +21,6 @@ void main() {
               layoutHint: ThreadPostBlockImageLayoutHint(
                 aspectRatio: 0.5,
                 source: ThreadPostResourceLayoutHintSource.cachedDimension,
-                lockForCurrentBuild: false,
               ),
             ),
             ThreadPostImageEntry(
@@ -73,7 +72,6 @@ void main() {
               layoutHint: ThreadPostBlockImageLayoutHint(
                 aspectRatio: 1.2,
                 source: ThreadPostResourceLayoutHintSource.contentDefault,
-                lockForCurrentBuild: true,
               ),
             ),
           ],

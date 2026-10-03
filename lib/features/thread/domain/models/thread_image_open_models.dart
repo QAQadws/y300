@@ -1,4 +1,4 @@
-import 'package:y300/features/thread/domain/models/thread_post_resource_layout_hints.dart';
+import 'package:y300/features/thread/domain/models/thread_image_layout_hint.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 
 class ThreadPostImageGroup {

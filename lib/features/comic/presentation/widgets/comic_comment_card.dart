@@ -37,8 +37,8 @@ class ComicCommentCard extends ConsumerStatefulWidget {
 
   /// Converts a comment to the existing parser-mode post-card input.
   ///
-  /// Keeping this adapter public lets list surfaces prune the shared render
-  /// plan cache without duplicating the post mapping rules.
+  /// The display projection keeps reader-only image filtering separate from
+  /// the complete source and display bodies used by post actions.
   static ThreadPost toThreadPost(ComicCommentItemProjection projection) =>
       projection.renderPost;
 
@@ -93,10 +93,7 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
     super.dispose();
   }
 
-  Future<void> _openActions(
-    ThreadPostActions actions,
-    ThreadPostRenderContext renderContext,
-  ) async {
+  Future<void> _openActions(ThreadPostActions actions) async {
     ThreadPostMutation? mutation;
     final source = widget.projection.sourceItem;
     await widget.interactionController?.perform(
@@ -104,9 +101,6 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
         mutation = await actions.show(
           sourcePost: source.post,
           displayPost: widget.projection.displayPost,
-          // Copy/selection use the complete converted body, including images
-          // omitted only from the reader's comment surface.
-          plan: renderContext.planFor(widget.projection.displayPost),
         );
         return mutation != null;
       },
@@ -197,9 +191,7 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
               true
           ? (_) => _loadRatings()
           : null,
-      onOpenPostActions: actions == null
-          ? null
-          : (_, _) => _openActions(actions, renderContext),
+      onOpenPostActions: actions == null ? null : (_) => _openActions(actions),
       avatarFallbackPolicy: ForumAvatarFallbackPolicy.localDefaultAvatar,
       renderContext: renderContext,
     );

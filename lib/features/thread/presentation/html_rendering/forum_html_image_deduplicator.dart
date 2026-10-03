@@ -5,10 +5,9 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 /// Removes duplicated Discuz attachment images from an HTML fragment.
 ///
 /// `ThreadPost.message` can contain the same attachment once from the body and
-/// once from Discuz's attachment gallery. The legacy renderer dedupes through
-/// its render plan; HTML-first renders the fragment directly, so we normalize
-/// obvious attachment image URLs here while leaving repeated stickers/chrome
-/// images untouched.
+/// once from Discuz's attachment gallery. The HTML pipeline normalizes obvious
+/// attachment image URLs here while leaving repeated stickers/chrome images
+/// untouched.
 class ForumHtmlImageDeduplicator {
   const ForumHtmlImageDeduplicator({
     SiteUrlResolver urlResolver = const SiteUrlResolver(),

@@ -4,12 +4,8 @@ import 'package:y300/features/thread/presentation/services/thread_image_viewport
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/domain/models/thread_post_body_render_plan.dart';
-import 'package:y300/features/thread/domain/services/thread_post_body_render_planner.dart';
-import 'package:y300/features/thread/domain/services/thread_post_resource_layout_hint_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
-import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 
 /// Controls which interactions a reusable post card is allowed to expose.
@@ -68,35 +64,24 @@ class ThreadPostCardInteractionPolicy {
   final bool showRating;
 }
 
-/// Shared context for one or more reusable parser-mode post cards.
+/// Immutable context for reusable HTML post cards.
 ///
-/// The context owns the render-plan cache and the layout/resource hooks that
-/// were previously owned by the full thread page. It deliberately does not
-/// own a [ThreadDetailPageState], pagination state or a scroll controller.
+/// Hosts supply image ownership and layout hooks; body presentation and
+/// viewport state remain in their existing owners.
+@immutable
 class ThreadPostRenderContext {
-  ThreadPostRenderContext({
+  const ThreadPostRenderContext({
     required this.palette,
     required this.imageReferer,
     required this.renderOwnerFor,
     this.imageRefererFor = _emptyImageReferer,
-    ThreadDetailRenderEntryPlanner? renderPlanner,
-    ThreadPostImageDimensionLookup? dimensionLookup,
     this.onImageLayoutShift,
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.onImageDiagnostics,
     this.bodyPresentationFor,
     this.imageViewportCoordinator,
-  }) : _renderPlanner =
-           renderPlanner ??
-           ThreadDetailRenderEntryPlanner(
-             bodyRenderPlanner: ThreadPostBodyRenderPlanner(
-               resourceLayoutHintResolver: ThreadPostResourceLayoutHintResolver(
-                 lockTrustedDimensions: true,
-                 dimensionLookup: dimensionLookup,
-               ),
-             ),
-           );
+  });
 
   final ThreadDetailNativePalette palette;
   final String? imageReferer;
@@ -120,16 +105,6 @@ class ThreadPostRenderContext {
   final ThreadPostBodyPresentation? Function(ThreadPost post)?
   bodyPresentationFor;
   final ThreadImageViewportCoordinator? imageViewportCoordinator;
-
-  final ThreadDetailRenderEntryPlanner _renderPlanner;
-
-  ThreadPostBodyRenderPlan planFor(ThreadPost post) {
-    return _renderPlanner.planFor(post);
-  }
-
-  void prune(Iterable<ThreadPost> posts) {
-    _renderPlanner.prune(posts.toList(growable: false));
-  }
 
   static String commentRenderOwner({
     required String sourceTid,

@@ -1,9 +1,7 @@
 part of 'thread_detail_widgets.dart';
 
-// Post card widgets for thread detail: per-entry card segments (header/body/
-// segment/footer), the post-build observer, ThreadPostCard, first-post summary,
-// and post header. Moved verbatim from thread_detail_widgets.dart (Phase 5b
-// file split); keys and logic unchanged.
+// Native post cards share the HTML body and interaction widgets. A body-end
+// landing uses separate header/body/footer entries to keep its target stable.
 
 class _ThreadPostCardHeaderEntry extends StatelessWidget {
   const _ThreadPostCardHeaderEntry({
@@ -12,7 +10,6 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
     required this.displayPost,
     required this.displaySubject,
     required this.state,
-    required this.plan,
     required this.highlighted,
     required this.palette,
     required this.imageReferer,
@@ -24,20 +21,18 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
   final ThreadPost displayPost;
   final String displaySubject;
   final ThreadDetailPageState state;
-  final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final ThreadDetailNativePalette palette;
   final String? imageReferer;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
-  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostActions;
+  final ValueChanged<ThreadPost> onOpenPostActions;
 
   @override
   Widget build(BuildContext context) {
     final post = displayPost;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostActions(sourcePost, plan),
+      onLongPress: () => onOpenPostActions(sourcePost),
       child: Container(
         key: Key('thread-post-card-${post.pid}'),
         padding: const EdgeInsets.fromLTRB(
@@ -103,7 +98,6 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.sourcePost,
     required this.displayPost,
     required this.threadId,
-    required this.plan,
     required this.highlighted,
     required this.imageReferer,
     required this.palette,
@@ -121,7 +115,6 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ThreadPost sourcePost;
   final ThreadPost displayPost;
   final String threadId;
-  final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final String imageReferer;
   final ThreadDetailNativePalette palette;
@@ -146,15 +139,14 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   onHtmlFirstBlockImageResolved;
   final ThreadImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
-  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostActions;
+  final ValueChanged<ThreadPost> onOpenPostActions;
 
   @override
   Widget build(BuildContext context) {
     final post = displayPost;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostActions(sourcePost, plan),
+      onLongPress: () => onOpenPostActions(sourcePost),
       child: Container(
         padding: const EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
@@ -207,7 +199,6 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     required this.displayPost,
     required this.displayRatingsByPostId,
     required this.state,
-    required this.plan,
     required this.highlighted,
     required this.imageReferer,
     required this.onOpenPostActions,
@@ -226,11 +217,9 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   final ThreadPost displayPost;
   final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
   final ThreadDetailPageState state;
-  final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final String? imageReferer;
-  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostActions;
+  final ValueChanged<ThreadPost> onOpenPostActions;
   final ValueChanged<String> onOpenPostLink;
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(ThreadPoll poll, ThreadPollOption option)
@@ -269,7 +258,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
         showEmptyInteractionHint;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => onOpenPostActions(sourcePost, plan),
+      onLongPress: () => onOpenPostActions(sourcePost),
       child: Container(
         margin: const EdgeInsets.only(bottom: ForumContentSpacing.postCardGap),
         padding: EdgeInsets.fromLTRB(
@@ -375,7 +364,6 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.displayRatingsByPostId,
     required this.postIndex,
     required this.state,
-    required this.plan,
     required this.highlighted,
     required this.imageReferer,
     required this.palette,
@@ -405,7 +393,6 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
   final int postIndex;
   final ThreadDetailPageState state;
-  final ThreadPostBodyRenderPlan plan;
   final bool highlighted;
   final String imageReferer;
   final ThreadDetailNativePalette palette;
@@ -429,8 +416,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     Size size,
   )
   onHtmlFirstBlockImageResolved;
-  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)
-  onOpenPostActions;
+  final ValueChanged<ThreadPost> onOpenPostActions;
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
@@ -477,7 +463,6 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           displayPost: widget.displayPost,
           displaySubject: widget.displaySubject,
           state: widget.state,
-          plan: widget.plan,
           highlighted: widget.highlighted,
           palette: widget.palette,
           imageReferer: widget.imageReferer,
@@ -489,7 +474,6 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           sourcePost: widget.sourcePost,
           displayPost: widget.displayPost,
           threadId: widget.state.tid,
-          plan: widget.plan,
           highlighted: widget.highlighted,
           imageReferer: widget.imageReferer,
           palette: widget.palette,
@@ -510,7 +494,6 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           displayPost: widget.displayPost,
           displayRatingsByPostId: widget.displayRatingsByPostId,
           state: widget.state,
-          plan: widget.plan,
           highlighted: widget.highlighted,
           imageReferer: widget.imageReferer,
           onOpenPostActions: widget.onOpenPostActions,
@@ -591,10 +574,10 @@ class _PostBuildObserverState extends State<_PostBuildObserver> {
   }
 }
 
-/// Single-card preview/compat renderer.
+/// Reusable native post card for comment and standalone surfaces.
 ///
-/// The production native thread detail page uses [_ThreadPostCardEntry] so it
-/// can reuse the shared render plan cache and HTML-first image callbacks.
+/// Hosts provide interaction policy and HTML image/layout hooks through
+/// [ThreadPostRenderContext]; no semantic render plan is built for the card.
 class ThreadPostCard extends StatelessWidget {
   const ThreadPostCard({
     super.key,
@@ -644,8 +627,7 @@ class ThreadPostCard extends StatelessWidget {
   final ValueChanged<ThreadPost>? onLoadAllRatings;
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPostCommentEntry>? onOpenCommentAuthorProfile;
-  final void Function(ThreadPost post, ThreadPostBodyRenderPlan plan)?
-  onOpenPostActions;
+  final ValueChanged<ThreadPost>? onOpenPostActions;
   final ThreadPostCardInteractionPolicy interactionPolicy;
   final ForumAvatarFallbackPolicy avatarFallbackPolicy;
   final ThreadPostRenderContext? renderContext;
@@ -666,9 +648,6 @@ class ThreadPostCard extends StatelessWidget {
         : (detailState?.desktopUrl?.trim().isNotEmpty == true
               ? detailState!.desktopUrl!.trim()
               : imageReferer);
-    final plan =
-        renderContext?.planFor(post) ??
-        const ThreadPostBodyRenderPlanner().plan(post.message);
     final authorProfileCallback = interactionPolicy.allowAuthorProfile
         ? onOpenAuthorProfile
         : null;
@@ -852,7 +831,7 @@ class ThreadPostCard extends StatelessWidget {
     }
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => openActions(post, plan),
+      onLongPress: () => openActions(post),
       child: card,
     );
   }

@@ -622,7 +622,7 @@ class _LoadedThreadDetailSampleViewState
             onCopyActionUrl: (_, url) => widget.onTapUrl(url),
             onOpenPostLink: (url) => widget.onTapUrl(url),
             onOpenPostImages: _handleOpenPostImages,
-            onOpenPostActions: (_, _) => _showUnsupportedAction(),
+            onOpenPostActions: (_) => _showUnsupportedAction(),
             onPostBuilt: _recordPostBuilt,
             onScrollStabilizerEvent: _recordScrollStabilizerEvent,
             onTogglePollOption: (_, _) {},

@@ -11,7 +11,6 @@ import 'package:y300/features/comic/presentation/controllers/comic_comment_conte
 import 'package:y300/features/comic/presentation/controllers/comic_comment_session_controller.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_comment_interaction_controller.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_action_bar.dart';
-import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_list_surface.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
@@ -100,7 +99,6 @@ class ComicCommentTailSurface extends ChangeNotifier
   }
 
   Object? _renderContextIdentity;
-  String? _prunedProjectionIdentity;
   bool _disposed = false;
   final _layoutRevision = ComicCommentLayoutRevisionTracker();
 
@@ -382,16 +380,6 @@ class ComicCommentTailSurface extends ChangeNotifier
         ),
       );
     }
-    final result = sessionState.result;
-    if (result != null) {
-      final projection = _projectionFor(result);
-      if (_prunedProjectionIdentity != projection.displayIdentity) {
-        _renderContext!.prune(
-          projection.items.map(ComicCommentCard.toThreadPost),
-        );
-        _prunedProjectionIdentity = projection.displayIdentity;
-      }
-    }
     return _renderContext!;
   }
 
@@ -412,7 +400,6 @@ class ComicCommentTailSurface extends ChangeNotifier
         _presentation.dispose();
         _presentation = ComicCommentPresentationStore();
         _renderContext = null;
-        _prunedProjectionIdentity = null;
         _bodyProjectionSource = null;
         _bodyProjection = null;
       }
