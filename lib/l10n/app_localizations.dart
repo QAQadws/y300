@@ -775,18 +775,6 @@ abstract class AppLocalizations {
   /// **'已复制帖子链接'**
   String get forumDisplayCopiedLink;
 
-  /// No description provided for @forumShellNative.
-  ///
-  /// In zh, this message translates to:
-  /// **'解析模式'**
-  String get forumShellNative;
-
-  /// No description provided for @forumShellWebView.
-  ///
-  /// In zh, this message translates to:
-  /// **'WebView 模式'**
-  String get forumShellWebView;
-
   /// No description provided for @forumWebViewLoading.
   ///
   /// In zh, this message translates to:
@@ -4074,35 +4062,11 @@ abstract class AppLocalizations {
   /// **'退出登录失败：{error}'**
   String moreLogoutFailed(String error);
 
-  /// No description provided for @moreForumDisplayMode.
-  ///
-  /// In zh, this message translates to:
-  /// **'论坛显示模式'**
-  String get moreForumDisplayMode;
-
   /// No description provided for @moreForumCurrentMode.
   ///
   /// In zh, this message translates to:
   /// **'当前：{mode}'**
   String moreForumCurrentMode(String mode);
-
-  /// No description provided for @moreForumModeWebView.
-  ///
-  /// In zh, this message translates to:
-  /// **'WebView 模式'**
-  String get moreForumModeWebView;
-
-  /// No description provided for @moreForumModeNative.
-  ///
-  /// In zh, this message translates to:
-  /// **'解析模式'**
-  String get moreForumModeNative;
-
-  /// 论坛模式切换失败提示；error 是安全的外部错误摘要
-  ///
-  /// In zh, this message translates to:
-  /// **'论坛显示模式切换失败：{error}'**
-  String moreForumModeSwitchFailed(String error);
 
   /// No description provided for @moreAppearance.
   ///

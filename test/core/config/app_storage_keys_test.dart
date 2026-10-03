@@ -9,7 +9,6 @@ void main() {
     expect(AppStorageKeys.cacheMaxBytesV1, 'storage.cache.max_bytes.v1');
     expect(AppStorageKeys.downloadStorageDirectory, 'download_storage_dir');
     expect(AppStorageKeys.appThemePreference, 'app_theme_preference');
-    expect(AppStorageKeys.forumShellMode, 'forum_shell_mode');
     expect(
       AppStorageKeys.replyStickerLastGroupId,
       'reply_sticker_last_group_id',
@@ -39,7 +38,6 @@ void main() {
       PreferenceKeys.appNavigationSnapshotV1.name,
       'app.navigation.snapshot.v1',
     );
-    expect(PreferenceKeys.forumShellMode.name, 'forum_shell_mode');
     expect(
       PreferenceKeys.dailyAutoSignInEnabledForUid('12345').name,
       'profile.daily_sign_in.auto_enabled.v1.12345',

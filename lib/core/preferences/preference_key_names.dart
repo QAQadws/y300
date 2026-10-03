@@ -6,7 +6,6 @@ abstract final class PreferenceKeyNames {
   static const appNavigationSnapshotV1 = 'app.navigation.snapshot.v1';
   static const appUpdateReleaseNotesSnapshotV1 =
       'app.update.release_notes.snapshot.v1';
-  static const forumShellMode = 'forum_shell_mode';
   static const dailyAutoSignInEnabledV1Prefix =
       'profile.daily_sign_in.auto_enabled.v1.';
   static const threadQuickScrollDockSide = 'thread.quick_scroll.dock_side.v1';

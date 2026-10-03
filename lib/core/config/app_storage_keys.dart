@@ -12,7 +12,6 @@ abstract final class AppStorageKeys {
       PreferenceKeyNames.downloadStorageDirectory;
   static const String appThemePreference =
       PreferenceKeyNames.appThemePreference;
-  static const String forumShellMode = PreferenceKeyNames.forumShellMode;
   static const String replyStickerLastGroupId =
       PreferenceKeyNames.replyStickerLastGroupId;
 }

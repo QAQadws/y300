@@ -20,9 +20,6 @@ import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
-import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
-import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
@@ -55,9 +52,7 @@ void main() {
           overrides: [
             ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
             userThreadDirectoryRepositoryProvider.overrideWithValue(directory),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
-            ),
+
             appAppearanceControllerProvider.overrideWith(
               () => _FakeAppAppearanceController(),
             ),
@@ -93,9 +88,7 @@ void main() {
             forumWebViewRouteFactoryProvider.overrideWithValue(
               _profileWebRoutes(webLaunches),
             ),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
-            ),
+
             appAppearanceControllerProvider.overrideWith(
               () => _FakeAppAppearanceController(),
             ),
@@ -463,9 +456,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -485,9 +476,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -511,8 +500,7 @@ void main() {
     expect(find.byKey(const Key('more-daily-sign-in-entry')), findsNothing);
     expect(find.byKey(const Key('more-unused-images-entry')), findsOneWidget);
     expect(find.text('未使用图片管理'), findsOneWidget);
-    expect(find.byKey(const Key('more-forum-mode-entry')), findsOneWidget);
-    expect(find.text('论坛显示模式'), findsOneWidget);
+    expect(find.byKey(const Key('more-forum-mode-entry')), findsNothing);
     expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
     expect(find.text('外观与文字'), findsOneWidget);
     expect(
@@ -590,9 +578,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -630,9 +616,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -680,9 +664,7 @@ void main() {
           forumUserProfileRepositoryProvider.overrideWithValue(
             profileRepository,
           ),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -790,61 +772,6 @@ void main() {
     expect(find.byKey(const Key('more-account-credits')), findsNothing);
   });
 
-  testWidgets('MorePage switches forum shell mode from bottom sheet', (
-    tester,
-  ) async {
-    final modeRepository = _FakeForumModeSettingsRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(modeRepository),
-          appAppearanceControllerProvider.overrideWith(
-            () => _FakeAppAppearanceController(),
-          ),
-        ],
-        child: const LocalizedTestApp(home: MorePage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const Key('more-forum-mode-option-webview')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('more-forum-mode-option-native')),
-      findsOneWidget,
-    );
-    expect(find.text('解析模式'), findsOneWidget);
-    expect(
-      tester
-          .widget<ListTile>(
-            find.byKey(const Key('more-forum-mode-option-webview')),
-          )
-          .trailing,
-      isA<Icon>(),
-    );
-
-    await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
-    await tester.pumpAndSettle();
-
-    expect(modeRepository.mode, ForumShellMode.native);
-    await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<ListTile>(
-            find.byKey(const Key('more-forum-mode-option-native')),
-          )
-          .trailing,
-      isA<Icon>(),
-    );
-  });
-
   testWidgets('MorePage login entry navigates to the WebView login page', (
     tester,
   ) async {
@@ -854,9 +781,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(repository),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -901,9 +826,7 @@ void main() {
           forumWebViewRouteFactoryProvider.overrideWithValue(
             _profileWebRoutes(webLaunches),
           ),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -957,9 +880,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -1000,9 +921,7 @@ void main() {
           forumWebViewRouteFactoryProvider.overrideWithValue(
             _profileWebRoutes(webLaunches),
           ),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -1042,9 +961,7 @@ void main() {
         ProviderScope(
           overrides: [
             ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
-            ),
+
             appAppearanceControllerProvider.overrideWith(
               () => _FakeAppAppearanceController(),
             ),
@@ -1083,9 +1000,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => _FakeAppAppearanceController(),
           ),
@@ -1115,45 +1030,6 @@ void main() {
     );
   });
 
-  testWidgets('MorePage shows snackbar when forum mode save fails', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(failOnSave: true),
-          ),
-          appAppearanceControllerProvider.overrideWith(
-            () => _FakeAppAppearanceController(),
-          ),
-        ],
-        child: const LocalizedTestApp(home: MorePage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('more-forum-mode-entry')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('more-forum-mode-option-native')));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('论坛显示模式切换失败'), findsOneWidget);
-    expect(
-      tester
-          .widget<ListTile>(
-            find.byKey(const Key('more-forum-mode-option-webview')),
-          )
-          .trailing,
-      isA<Icon>(),
-    );
-    expect(
-      find.byKey(const Key('more-forum-mode-option-native')),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('MorePage changes theme family and brightness independently', (
     tester,
   ) async {
@@ -1162,9 +1038,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => appearanceController,
           ),
@@ -1399,9 +1273,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => appearanceController,
           ),
@@ -1467,9 +1339,7 @@ void main() {
       ProviderScope(
         overrides: [
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
-          ),
+
           appAppearanceControllerProvider.overrideWith(
             () => appearanceController,
           ),
@@ -1555,9 +1425,7 @@ Future<void> _pumpMyContentPage(
         forumWebViewRouteFactoryProvider.overrideWithValue(
           _profileWebRoutes(launches),
         ),
-        forumModeSettingsRepositoryProvider.overrideWithValue(
-          _FakeForumModeSettingsRepository(),
-        ),
+
         appAppearanceControllerProvider.overrideWith(
           () => _FakeAppAppearanceController(),
         ),
@@ -1590,9 +1458,7 @@ Future<void> _pumpCreditPage(
         forumWebViewRouteFactoryProvider.overrideWithValue(
           _profileWebRoutes(launches),
         ),
-        forumModeSettingsRepositoryProvider.overrideWithValue(
-          _FakeForumModeSettingsRepository(),
-        ),
+
         appAppearanceControllerProvider.overrideWith(
           () => _FakeAppAppearanceController(),
         ),
@@ -1806,26 +1672,6 @@ class _FakeAuthRepository implements AuthRepository {
       formhash: 'fh',
       isLoggedIn: true,
     );
-  }
-}
-
-class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
-  _FakeForumModeSettingsRepository({this.failOnSave = false});
-
-  ForumShellMode mode = ForumShellMode.webview;
-  final bool failOnSave;
-
-  @override
-  Future<ForumShellMode> loadMode() async {
-    return mode;
-  }
-
-  @override
-  Future<void> saveMode(ForumShellMode nextMode) async {
-    if (failOnSave) {
-      throw StateError('save failed');
-    }
-    mode = nextMode;
   }
 }
 

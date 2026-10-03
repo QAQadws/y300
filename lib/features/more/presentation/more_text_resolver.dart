@@ -3,7 +3,6 @@ import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
 import 'package:y300/features/storage/domain/storage_root_migration.dart';
@@ -62,13 +61,6 @@ final class MoreTextResolver {
       themeFamilyLabel(l10n, family),
       brightnessLabel(l10n, brightness),
     );
-  }
-
-  static String forumModeLabel(AppLocalizations l10n, ForumShellMode mode) {
-    return switch (mode) {
-      ForumShellMode.webview => l10n.moreForumModeWebView,
-      ForumShellMode.native => l10n.moreForumModeNative,
-    };
   }
 
   static String aboutVersion(AppLocalizations l10n, AboutAppInfo? appInfo) {

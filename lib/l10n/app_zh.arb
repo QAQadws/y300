@@ -179,8 +179,6 @@
     "placeholders": {"error": {"type": "String"}}
   },
   "forumDisplayCopiedLink": "已复制帖子链接",
-  "forumShellNative": "解析模式",
-  "forumShellWebView": "WebView 模式",
   "forumWebViewLoading": "正在加载论坛页面",
   "forumWebViewLoadFailed": "论坛页面加载失败：{error}",
   "@forumWebViewLoadFailed": {
@@ -1017,17 +1015,9 @@
       "error": {"type": "String"}
     }
   },
-  "moreForumDisplayMode": "论坛显示模式",
   "moreForumCurrentMode": "当前：{mode}",
   "@moreForumCurrentMode": {
     "placeholders": {"mode": {"type": "String"}}
-  },
-  "moreForumModeWebView": "WebView 模式",
-  "moreForumModeNative": "解析模式",
-  "moreForumModeSwitchFailed": "论坛显示模式切换失败：{error}",
-  "@moreForumModeSwitchFailed": {
-    "description": "论坛模式切换失败提示；error 是安全的外部错误摘要",
-    "placeholders": {"error": {"type": "String"}}
   },
   "moreAppearance": "外观与文字",
   "moreCurrentTheme": "当前：{theme}",

@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import '../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/navigation/history_entry_router.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/history/domain/models/blog_history_target.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 
 void main() {
-  testWidgets('opens thread in the current native forum mode', (tester) async {
+  testWidgets('opens thread identity and saved page in the shared native UI', (
+    tester,
+  ) async {
     String? capturedTid;
     String? capturedSubject;
     int? capturedPage;
     final router = HistoryEntryRouter(
-      loadForumMode: () async => ForumShellMode.native,
       comicWorkExists: _workExists,
       novelWorkExists: _workExists,
       nativeThreadPageBuilder: (tid, subject, page) {
@@ -41,18 +41,22 @@ void main() {
     expect(find.text('native-thread'), findsOneWidget);
   });
 
-  testWidgets('opens thread webview with a minimal normalized URL', (
+  testWidgets('blog history opens natively from its stored identity', (
     tester,
   ) async {
-    Uri? capturedUri;
+    ({String ownerUserId, String blogId, String title})? destination;
     final router = HistoryEntryRouter(
-      loadForumMode: () async => ForumShellMode.webview,
-      comicWorkExists: _workExists,
-      novelWorkExists: _workExists,
-      webViewPageBuilder: (uri) {
-        capturedUri = uri;
-        return const _DestinationPage(label: 'webview-thread');
-      },
+      comicWorkExists: (_) async => throw StateError('unexpected lookup'),
+      novelWorkExists: (_) async => throw StateError('unexpected lookup'),
+      nativeBlogPageBuilder:
+          ({required ownerUserId, required blogId, required title}) {
+            destination = (
+              ownerUserId: ownerUserId,
+              blogId: blogId,
+              title: title,
+            );
+            return const _DestinationPage(label: 'native-blog');
+          },
     );
     late BuildContext context;
     await tester.pumpWidget(
@@ -62,86 +66,28 @@ void main() {
     final result = await router.open(
       context,
       _entry(
-        type: HistoryTargetType.thread,
-        id: '527325',
-        title: '帖子',
-        page: 4,
+        type: HistoryTargetType.blog,
+        id: BlogHistoryTarget(ownerUserId: '101', blogId: '11').encodedId,
+        title: '日志标题',
+        page: 9,
         canonicalUri: Uri.parse(
-          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=527325'
-          '&highlight=%D2%B2%CE%DE&auth=secret',
+          'https://unrelated.test/home.php?mod=space&uid=999&do=blog'
+          '&id=99&cid=777&page=9#comment_777',
         ),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(result, isA<HistoryOpenSuccess>());
-    expect(capturedUri?.path, '/forum.php');
-    expect(capturedUri?.queryParameters, <String, String>{
-      'mod': 'viewthread',
-      'tid': '527325',
-      'page': '4',
-      'mobile': '2',
-    });
-    expect(capturedUri.toString(), isNot(contains('highlight')));
+    expect(destination, (ownerUserId: '101', blogId: '11', title: '日志标题'));
+    expect(find.text('native-blog'), findsOneWidget);
   });
-
-  for (final mode in ForumShellMode.values) {
-    testWidgets('blog history opens natively with $mode forum preference', (
-      tester,
-    ) async {
-      var modeReads = 0;
-      ({String ownerUserId, String blogId, String title})? destination;
-      final router = HistoryEntryRouter(
-        loadForumMode: () async {
-          modeReads += 1;
-          return mode;
-        },
-        comicWorkExists: (_) async => throw StateError('unexpected lookup'),
-        novelWorkExists: (_) async => throw StateError('unexpected lookup'),
-        nativeBlogPageBuilder:
-            ({required ownerUserId, required blogId, required title}) {
-              destination = (
-                ownerUserId: ownerUserId,
-                blogId: blogId,
-                title: title,
-              );
-              return const _DestinationPage(label: 'native-blog');
-            },
-        webViewPageBuilder: (_) => throw StateError('unexpected webview'),
-      );
-      late BuildContext context;
-      await tester.pumpWidget(
-        _routerHarness(onContext: (value) => context = value),
-      );
-
-      final result = await router.open(
-        context,
-        _entry(
-          type: HistoryTargetType.blog,
-          id: BlogHistoryTarget(ownerUserId: '101', blogId: '11').encodedId,
-          title: '日志标题',
-          page: 9,
-          canonicalUri: Uri.parse(
-            'https://unrelated.test/home.php?mod=space&uid=999&do=blog'
-            '&id=99&cid=777&page=9#comment_777',
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(result, isA<HistoryOpenSuccess>());
-      expect(destination, (ownerUserId: '101', blogId: '11', title: '日志标题'));
-      expect(modeReads, 0);
-      expect(find.text('native-blog'), findsOneWidget);
-    });
-  }
 
   testWidgets('default blog destination starts at the article without a URL', (
     tester,
   ) async {
     final observer = _RouteObserver();
     final router = HistoryEntryRouter(
-      loadForumMode: () async => throw StateError('unexpected mode lookup'),
       comicWorkExists: (_) async => throw StateError('unexpected lookup'),
       novelWorkExists: (_) async => throw StateError('unexpected lookup'),
     );
@@ -184,7 +130,6 @@ void main() {
     var destinationsBuilt = 0;
     final observer = _RouteObserver();
     final router = HistoryEntryRouter(
-      loadForumMode: () async => throw StateError('unexpected mode lookup'),
       comicWorkExists: (_) async => throw StateError('unexpected lookup'),
       novelWorkExists: (_) async => throw StateError('unexpected lookup'),
       nativeBlogPageBuilder:
@@ -241,7 +186,6 @@ void main() {
   ) async {
     final opened = <String>[];
     final router = HistoryEntryRouter(
-      loadForumMode: () async => ForumShellMode.native,
       comicWorkExists: _workExists,
       novelWorkExists: _workExists,
       comicPageBuilder: (workId) {
@@ -277,49 +221,46 @@ void main() {
     expect(opened, <String>['comic:comic-work', 'novel:novel-work']);
   });
 
-  testWidgets('old thread records follow forum mode changes', (tester) async {
-    var mode = ForumShellMode.native;
-    final destinations = <String>[];
-    final router = HistoryEntryRouter(
-      loadForumMode: () async => mode,
-      comicWorkExists: _workExists,
-      novelWorkExists: _workExists,
-      nativeThreadPageBuilder: (tid, subject, page) {
-        destinations.add('native:$tid');
-        return const _DestinationPage(label: 'native-thread');
-      },
-      webViewPageBuilder: (uri) {
-        destinations.add('webview:${uri.queryParameters['tid']}');
-        return const _DestinationPage(label: 'webview-thread');
-      },
-    );
-    late BuildContext context;
-    await tester.pumpWidget(
-      _routerHarness(onContext: (value) => context = value),
-    );
-    final entry = _entry(
-      type: HistoryTargetType.thread,
-      id: '527325',
-      title: '帖子',
-    );
-
-    await router.open(context, entry);
-    await tester.pumpAndSettle();
-    Navigator.of(tester.element(find.byType(_DestinationPage))).pop();
-    await tester.pumpAndSettle();
-
-    mode = ForumShellMode.webview;
-    await router.open(context, entry);
-    await tester.pumpAndSettle();
-
-    expect(destinations, <String>['native:527325', 'webview:527325']);
-  });
+  testWidgets(
+    'old WebView thread records reopen natively without losing the page',
+    (tester) async {
+      ({String tid, int? page})? destination;
+      final router = HistoryEntryRouter(
+        comicWorkExists: _workExists,
+        novelWorkExists: _workExists,
+        nativeThreadPageBuilder: (tid, subject, page) {
+          destination = (tid: tid, page: page);
+          return const _DestinationPage(label: 'native-thread');
+        },
+      );
+      late BuildContext context;
+      await tester.pumpWidget(
+        _routerHarness(onContext: (value) => context = value),
+      );
+      final result = await router.open(
+        context,
+        _entry(
+          type: HistoryTargetType.thread,
+          id: '00527325',
+          title: 'server subject',
+          page: 4,
+          surface: HistoryVisitSurface.threadWebView,
+          canonicalUri: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=527325&auth=old',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(result, isA<HistoryOpenSuccess>());
+      expect(destination, (tid: '527325', page: 4));
+      expect(find.text('native-thread'), findsOneWidget);
+    },
+  );
 
   testWidgets('returns stable unavailable codes for invalid history targets', (
     tester,
   ) async {
-    final router = HistoryEntryRouter(
-      loadForumMode: () async => ForumShellMode.native,
+    const router = HistoryEntryRouter(
       comicWorkExists: _workExists,
       novelWorkExists: _workExists,
     );
@@ -359,7 +300,6 @@ void main() {
     tester,
   ) async {
     final router = HistoryEntryRouter(
-      loadForumMode: () async => ForumShellMode.native,
       comicWorkExists: _workExists,
       novelWorkExists: _workExists,
       nativeThreadPageBuilder: (tid, subject, page) {
@@ -392,7 +332,6 @@ void main() {
   ) async {
     final builtWorks = <String>[];
     final router = HistoryEntryRouter(
-      loadForumMode: () async => ForumShellMode.native,
       comicWorkExists: (_) async => false,
       novelWorkExists: (_) async => false,
       comicPageBuilder: (workId) {
@@ -466,7 +405,6 @@ void main() {
     tester,
   ) async {
     final router = HistoryEntryRouter(
-      loadForumMode: () async => ForumShellMode.native,
       comicWorkExists: (_) async => throw StateError('database unavailable'),
       novelWorkExists: _workExists,
     );
@@ -514,6 +452,7 @@ HistoryEntry _entry({
   int? page,
   String? sourceTid,
   Uri? canonicalUri,
+  HistoryVisitSurface? surface,
 }) {
   return HistoryEntry(
     target: HistoryTargetKey(type: type, id: id),
@@ -521,12 +460,14 @@ HistoryEntry _entry({
     contextLabel: '详情',
     sourceTid: sourceTid,
     canonicalUri: canonicalUri,
-    lastSurface: switch (type) {
-      HistoryTargetType.thread => HistoryVisitSurface.threadNative,
-      HistoryTargetType.comic => HistoryVisitSurface.comicDetail,
-      HistoryTargetType.novel => HistoryVisitSurface.novelDetail,
-      HistoryTargetType.blog => HistoryVisitSurface.blogDetail,
-    },
+    lastSurface:
+        surface ??
+        switch (type) {
+          HistoryTargetType.thread => HistoryVisitSurface.threadNative,
+          HistoryTargetType.comic => HistoryVisitSurface.comicDetail,
+          HistoryTargetType.novel => HistoryVisitSurface.novelDetail,
+          HistoryTargetType.blog => HistoryVisitSurface.blogDetail,
+        },
     firstVisitedAt: DateTime.utc(2026, 7, 16),
     lastVisitedAt: DateTime.utc(2026, 7, 16),
     lastPage: page,

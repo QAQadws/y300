@@ -1,4 +1,3 @@
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
@@ -24,16 +23,6 @@ final class ForumTextResolver {
   static String forumDisplayTitle(AppLocalizations l10n, String rawTitle) {
     final title = rawTitle.trim();
     return title.isEmpty ? l10n.forumDisplayTitle : title;
-  }
-
-  static String forumShellModeLabel(
-    AppLocalizations l10n,
-    ForumShellMode mode,
-  ) {
-    return switch (mode) {
-      ForumShellMode.native => l10n.forumShellNative,
-      ForumShellMode.webview => l10n.forumShellWebView,
-    };
   }
 
   static String webViewTitle(AppLocalizations l10n, ForumWebViewState state) {

@@ -1,3 +1,8 @@
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    hide ForumHomeRepository, ForumHomeFavoriteForum;
+import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
+import 'package:y300/features/cache/domain/models/document_cache_models.dart';
+import '../../../support/forum_home_test_support.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter/foundation.dart';
@@ -28,9 +33,6 @@ import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
-import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
-import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
@@ -226,8 +228,8 @@ void main() {
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
+          forumHomeRepositoryProvider.overrideWithValue(
+            _FakeForumHomeRepository(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             () => webViewDriver,
@@ -260,7 +262,7 @@ void main() {
 
     final l10n = AppLocalizationsZh();
 
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
     final initialNavigationBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
@@ -413,8 +415,8 @@ void main() {
                 .overrideWithValue(() async {}),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
             ...forumAuthOverrides(_FakeAuthRepository()),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
+            forumHomeRepositoryProvider.overrideWithValue(
+              _FakeForumHomeRepository(),
             ),
             forumWebViewDriverFactoryProvider.overrideWithValue(
               () => webViewDriver,
@@ -528,8 +530,8 @@ void main() {
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
+          forumHomeRepositoryProvider.overrideWithValue(
+            _FakeForumHomeRepository(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             () => webViewDriver,
@@ -585,8 +587,8 @@ void main() {
             ),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
             ...forumAuthOverrides(_FakeAuthRepository()),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
+            forumHomeRepositoryProvider.overrideWithValue(
+              _FakeForumHomeRepository(),
             ),
             forumWebViewDriverFactoryProvider.overrideWithValue(
               () => webViewDriver,
@@ -647,8 +649,8 @@ void main() {
             ),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
             ...forumAuthOverrides(_FakeAuthRepository()),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
+            forumHomeRepositoryProvider.overrideWithValue(
+              _FakeForumHomeRepository(),
             ),
             forumWebViewDriverFactoryProvider.overrideWithValue(
               () => webViewDriver,
@@ -661,7 +663,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+      expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -702,8 +704,8 @@ void main() {
             warmupCalls += 1;
           }),
           ...forumAuthOverrides(_FakeAuthRepository()),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
+          forumHomeRepositoryProvider.overrideWithValue(
+            _FakeForumHomeRepository(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             () => webViewDriver,
@@ -754,8 +756,8 @@ void main() {
             throw StateError('warmup failed');
           }),
           ...forumAuthOverrides(_FakeAuthRepository()),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
+          forumHomeRepositoryProvider.overrideWithValue(
+            _FakeForumHomeRepository(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             () => webViewDriver,
@@ -768,7 +770,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+    expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -810,8 +812,8 @@ void main() {
             shelfSelectionHostControllerProvider.overrideWithValue(
               selectionHost,
             ),
-            forumModeSettingsRepositoryProvider.overrideWithValue(
-              _FakeForumModeSettingsRepository(),
+            forumHomeRepositoryProvider.overrideWithValue(
+              _FakeForumHomeRepository(),
             ),
             forumWebViewDriverFactoryProvider.overrideWithValue(
               () => webViewDriver,
@@ -888,8 +890,8 @@ void main() {
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
+          forumHomeRepositoryProvider.overrideWithValue(
+            _FakeForumHomeRepository(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             () => webViewDriver,
@@ -1050,8 +1052,8 @@ void main() {
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
-          forumModeSettingsRepositoryProvider.overrideWithValue(
-            _FakeForumModeSettingsRepository(),
+          forumHomeRepositoryProvider.overrideWithValue(
+            _FakeForumHomeRepository(),
           ),
           forumWebViewDriverFactoryProvider.overrideWithValue(
             () => webViewDriver,
@@ -1152,8 +1154,8 @@ Future<void> _pumpSelectionShell(
         mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
         ...forumAuthOverrides(_FakeAuthRepository()),
         shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
-        forumModeSettingsRepositoryProvider.overrideWithValue(
-          _FakeForumModeSettingsRepository(),
+        forumHomeRepositoryProvider.overrideWithValue(
+          _FakeForumHomeRepository(),
         ),
         forumWebViewDriverFactoryProvider.overrideWithValue(
           () => webViewDriver,
@@ -1310,22 +1312,6 @@ class _FakeLibraryTaskNotificationService
 
   void dispose() {
     _permissionState.dispose();
-  }
-}
-
-class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
-  _FakeForumModeSettingsRepository();
-
-  ForumShellMode mode = ForumShellMode.webview;
-
-  @override
-  Future<ForumShellMode> loadMode() async {
-    return mode;
-  }
-
-  @override
-  Future<void> saveMode(ForumShellMode nextMode) async {
-    mode = nextMode;
   }
 }
 
@@ -2104,4 +2090,23 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
     DateTime? fetchedUpdatedAt,
     String? introText,
   }) async {}
+}
+
+class _FakeForumHomeRepository implements ForumHomeRepository {
+  @override
+  Future<ForumHomeCacheEntry?> readCachedPayload({
+    required DocumentRequestProfile requestProfile,
+  }) async => null;
+
+  @override
+  Future<ForumHomeReadResult> getForumHomePayload({
+    CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    DocumentRequestProfile? requestProfileOverride,
+  }) async => forumHomeReadSuccess(
+    ForumHomePayload(
+      directory: const ForumDirectoryData(sections: []),
+      isLoggedIn: false,
+      favoriteForums: [],
+    ),
+  );
 }

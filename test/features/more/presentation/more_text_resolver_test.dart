@@ -3,7 +3,6 @@ import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
 import 'package:y300/features/more/presentation/data_storage_controller.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
@@ -12,7 +11,7 @@ import 'package:y300/l10n/app_localizations_zh.dart';
 void main() {
   final l10n = AppLocalizationsZh();
 
-  test('resolves theme and forum mode labels in the presentation layer', () {
+  test('resolves theme labels in the presentation layer', () {
     expect(
       MoreTextResolver.themeFamilyLabel(l10n, AppThemeFamily.moonWhite),
       '月白',
@@ -43,10 +42,6 @@ void main() {
         AppBrightnessPreference.dark,
       ),
       '暖纸 · 夜间',
-    );
-    expect(
-      MoreTextResolver.forumModeLabel(l10n, ForumShellMode.native),
-      '解析模式',
     );
   });
 

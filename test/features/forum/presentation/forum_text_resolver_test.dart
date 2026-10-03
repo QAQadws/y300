@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
 import 'package:y300/features/forum/presentation/forum_display_state.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
@@ -13,14 +12,6 @@ void main() {
   final AppLocalizations zhTw = AppLocalizationsZhTw();
 
   test('maps stable forum concepts through the active locale', () {
-    expect(
-      ForumTextResolver.forumShellModeLabel(zh, ForumShellMode.native),
-      '解析模式',
-    );
-    expect(
-      ForumTextResolver.forumShellModeLabel(zhTw, ForumShellMode.webview),
-      zhTw.forumShellWebView,
-    );
     expect(ForumTextResolver.forumDisplayTitle(zh, ''), zh.forumDisplayTitle);
     expect(ForumTextResolver.forumDisplayTitle(zh, '服务器版块名称'), '服务器版块名称');
   });

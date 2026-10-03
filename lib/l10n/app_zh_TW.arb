@@ -150,8 +150,6 @@
     "placeholders": {"error": {"type": "String"}}
   },
   "forumDisplayCopiedLink": "已複製帖子連結",
-  "forumShellNative": "解析模式",
-  "forumShellWebView": "WebView 模式",
   "forumWebViewLoading": "正在載入論壇頁面",
   "forumWebViewLoadFailed": "論壇頁面載入失敗：{error}",
   "@forumWebViewLoadFailed": {
@@ -529,11 +527,7 @@
   "moreLogoutConfirmBody": "登出後會清除本地論壇登入狀態。",
   "moreLogoutSuccess": "已登出",
   "moreLogoutFailed": "登出失敗：{error}",
-  "moreForumDisplayMode": "論壇顯示模式",
   "moreForumCurrentMode": "目前：{mode}",
-  "moreForumModeWebView": "WebView 模式",
-  "moreForumModeNative": "解析模式",
-  "moreForumModeSwitchFailed": "論壇顯示模式切換失敗：{error}",
   "moreAppearance": "外觀與文字",
   "moreCurrentTheme": "目前：{theme}",
   "moreColorThemeSectionTitle": "配色主題",

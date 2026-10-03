@@ -368,12 +368,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumDisplayCopiedLink => '已复制帖子链接';
 
   @override
-  String get forumShellNative => '解析模式';
-
-  @override
-  String get forumShellWebView => 'WebView 模式';
-
-  @override
   String get forumWebViewLoading => '正在加载论坛页面';
 
   @override
@@ -2473,22 +2467,8 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get moreForumDisplayMode => '论坛显示模式';
-
-  @override
   String moreForumCurrentMode(String mode) {
     return '当前：$mode';
-  }
-
-  @override
-  String get moreForumModeWebView => 'WebView 模式';
-
-  @override
-  String get moreForumModeNative => '解析模式';
-
-  @override
-  String moreForumModeSwitchFailed(String error) {
-    return '论坛显示模式切换失败：$error';
   }
 
   @override
@@ -5797,12 +5777,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get forumDisplayCopiedLink => '已複製帖子連結';
 
   @override
-  String get forumShellNative => '解析模式';
-
-  @override
-  String get forumShellWebView => 'WebView 模式';
-
-  @override
   String get forumWebViewLoading => '正在載入論壇頁面';
 
   @override
@@ -7902,22 +7876,8 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get moreForumDisplayMode => '論壇顯示模式';
-
-  @override
   String moreForumCurrentMode(String mode) {
     return '目前：$mode';
-  }
-
-  @override
-  String get moreForumModeWebView => 'WebView 模式';
-
-  @override
-  String get moreForumModeNative => '解析模式';
-
-  @override
-  String moreForumModeSwitchFailed(String error) {
-    return '論壇顯示模式切換失敗：$error';
   }
 
   @override

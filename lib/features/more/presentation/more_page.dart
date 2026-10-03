@@ -4,8 +4,6 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
-import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/comic/presentation/comic_download_queue_page.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
@@ -70,9 +68,6 @@ class _MorePageState extends ConsumerState<MorePage> {
         !authSession.verificationInconclusive &&
         !authSession.isLoggingOut &&
         (!authSession.isLoggedIn || owner != null);
-    final forumMode =
-        ref.watch(forumShellModeControllerProvider).asData?.value ??
-        ForumShellMode.defaultMode;
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
@@ -151,12 +146,6 @@ class _MorePageState extends ConsumerState<MorePage> {
               height: 1,
               indent: 0,
               endIndent: 0,
-            ),
-            ListTile(
-              key: const Key('more-forum-mode-entry'),
-              leading: const Icon(Icons.public_outlined),
-              title: Text(l10n.moreForumDisplayMode),
-              onTap: () => _showForumModeSheet(context, ref, forumMode),
             ),
             ListTile(
               key: const Key('more-appearance-entry'),
@@ -285,6 +274,8 @@ class _MorePageState extends ConsumerState<MorePage> {
               queryParameters: {'id': 'zqlj_sign', 'mobile': '2'},
             ),
             popOnRootBack: true,
+            purpose: ForumWebViewHostPurpose.form,
+            navigationPolicy: ForumWebViewNavigationPolicy.keepWebView,
             expectedAccountId: owner.uid,
           ),
         ),
@@ -302,78 +293,6 @@ class _MorePageState extends ConsumerState<MorePage> {
       isScrollControlled: true,
       builder: (_) => const DataStorageSheet(),
     );
-  }
-
-  Future<void> _showForumModeSheet(
-    BuildContext context,
-    WidgetRef ref,
-    ForumShellMode currentMode,
-  ) {
-    final l10n = AppLocalizations.of(context);
-    return showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                key: const Key('more-forum-mode-option-webview'),
-                leading: const Icon(Icons.language_outlined),
-                title: Text(l10n.moreForumModeWebView),
-                trailing: currentMode == ForumShellMode.webview
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () => _setForumMode(
-                  pageContext: context,
-                  sheetContext: sheetContext,
-                  ref: ref,
-                  mode: ForumShellMode.webview,
-                ),
-              ),
-              ListTile(
-                key: const Key('more-forum-mode-option-native'),
-                leading: const Icon(Icons.forum_outlined),
-                title: Text(l10n.moreForumModeNative),
-                trailing: currentMode == ForumShellMode.native
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () => _setForumMode(
-                  pageContext: context,
-                  sheetContext: sheetContext,
-                  ref: ref,
-                  mode: ForumShellMode.native,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _setForumMode({
-    required BuildContext pageContext,
-    required BuildContext sheetContext,
-    required WidgetRef ref,
-    required ForumShellMode mode,
-  }) async {
-    final l10n = AppLocalizations.of(pageContext);
-    try {
-      await ref.read(forumShellModeControllerProvider.notifier).setMode(mode);
-      if (sheetContext.mounted) {
-        Navigator.of(sheetContext).pop();
-      }
-    } catch (error) {
-      if (!pageContext.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(pageContext)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.moreForumModeSwitchFailed('$error'))),
-        );
-    }
   }
 
   Future<bool> _openLoginPage(BuildContext context) async {

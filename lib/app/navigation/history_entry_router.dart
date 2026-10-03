@@ -2,14 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/presentation/comic_detail_page.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
-import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
 import 'package:y300/features/history/domain/models/blog_history_target.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
@@ -17,7 +11,6 @@ import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
-typedef HistoryForumModeLoader = Future<ForumShellMode> Function();
 typedef HistoryWorkAvailabilityLoader = Future<bool> Function(String workId);
 typedef HistoryNativeThreadPageBuilder =
     Widget Function(String tid, String subject, int? initialPage);
@@ -28,15 +21,9 @@ typedef HistoryNativeBlogPageBuilder =
       required String title,
     });
 typedef HistoryWorkPageBuilder = Widget Function(String workId);
-typedef HistoryWebViewPageBuilder = Widget Function(Uri initialUri);
 
 final historyEntryRouterProvider = Provider<HistoryEntryRouter>((ref) {
   return HistoryEntryRouter(
-    loadForumMode: () async {
-      final current = ref.read(forumShellModeControllerProvider).value;
-      return current ??
-          await ref.read(forumModeSettingsRepositoryProvider).loadMode();
-    },
     comicWorkExists: (workId) async {
       final detail = await ref
           .read(comicRepositoryProvider)
@@ -54,7 +41,6 @@ final historyEntryRouterProvider = Provider<HistoryEntryRouter>((ref) {
 
 class HistoryEntryRouter {
   const HistoryEntryRouter({
-    required HistoryForumModeLoader loadForumMode,
     required HistoryWorkAvailabilityLoader comicWorkExists,
     required HistoryWorkAvailabilityLoader novelWorkExists,
     HistoryNativeThreadPageBuilder nativeThreadPageBuilder =
@@ -62,24 +48,19 @@ class HistoryEntryRouter {
     HistoryNativeBlogPageBuilder nativeBlogPageBuilder = _buildNativeBlogPage,
     HistoryWorkPageBuilder comicPageBuilder = _buildComicPage,
     HistoryWorkPageBuilder novelPageBuilder = _buildNovelPage,
-    HistoryWebViewPageBuilder webViewPageBuilder = _buildWebViewPage,
-  }) : _loadForumMode = loadForumMode,
-       _comicWorkExists = comicWorkExists,
+  }) : _comicWorkExists = comicWorkExists,
        _novelWorkExists = novelWorkExists,
        _nativeThreadPageBuilder = nativeThreadPageBuilder,
        _nativeBlogPageBuilder = nativeBlogPageBuilder,
        _comicPageBuilder = comicPageBuilder,
-       _novelPageBuilder = novelPageBuilder,
-       _webViewPageBuilder = webViewPageBuilder;
+       _novelPageBuilder = novelPageBuilder;
 
-  final HistoryForumModeLoader _loadForumMode;
   final HistoryWorkAvailabilityLoader _comicWorkExists;
   final HistoryWorkAvailabilityLoader _novelWorkExists;
   final HistoryNativeThreadPageBuilder _nativeThreadPageBuilder;
   final HistoryNativeBlogPageBuilder _nativeBlogPageBuilder;
   final HistoryWorkPageBuilder _comicPageBuilder;
   final HistoryWorkPageBuilder _novelPageBuilder;
-  final HistoryWebViewPageBuilder _webViewPageBuilder;
 
   Future<HistoryOpenResult> open(
     BuildContext context,
@@ -131,15 +112,11 @@ class HistoryEntryRouter {
         code: HistoryOpenUnavailableCode.threadExpired,
       );
     }
-    final mode = await _loadForumMode();
-    if (mode == ForumShellMode.native) {
-      return _nativeThreadPageBuilder(
-        tid,
-        entry.title,
-        _normalizedPage(entry.lastPage),
-      );
-    }
-    return _webViewPageBuilder(_threadUri(tid, entry.lastPage));
+    return _nativeThreadPageBuilder(
+      tid,
+      entry.title,
+      _normalizedPage(entry.lastPage),
+    );
   }
 
   Future<Object> _buildWorkDestination(
@@ -182,20 +159,6 @@ class HistoryEntryRouter {
     );
   }
 
-  Uri _threadUri(String tid, int? page) {
-    final base = Uri.parse(AppConfig.siteBaseUrl);
-    return base.replace(
-      path: '/forum.php',
-      queryParameters: <String, String>{
-        'mod': 'viewthread',
-        'tid': tid,
-        if (_normalizedPage(page) case final value?) 'page': '$value',
-        'mobile': '2',
-      },
-      fragment: '',
-    );
-  }
-
   int? _normalizedPage(int? value) => value != null && value > 0 ? value : null;
 
   String? _normalizeTid(String? value) {
@@ -225,17 +188,3 @@ Widget _buildNativeBlogPage({
 Widget _buildComicPage(String workId) => ComicDetailPage(comicId: workId);
 
 Widget _buildNovelPage(String workId) => NovelDetailPage(novelId: workId);
-
-Widget _buildWebViewPage(Uri initialUri) {
-  return ProviderScope(
-    overrides: [
-      forumWebViewInitialUriProvider.overrideWithValue(initialUri),
-      forumWebViewPopOnRootBackProvider.overrideWithValue(true),
-      forumWebViewDriverProvider.overrideWith((ref) {
-        return ref.watch(forumWebViewDriverFactoryProvider).call();
-      }),
-      forumWebViewControllerProvider.overrideWith(ForumWebViewController.new),
-    ],
-    child: const ForumWebViewPage(),
-  );
-}
