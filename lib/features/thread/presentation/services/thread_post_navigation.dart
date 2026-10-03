@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
@@ -154,14 +155,10 @@ class ThreadPostNavigation {
   void openLink(String url) {
     if (!mounted) return;
     const resolver = YamiboForumLinkResolver();
-    final candidate = resolver.resolve(url);
-    final destination =
-        candidate?.kind == YamiboForumLinkKind.userThreadDirectory
-        ? resolver.resolve(
-            url,
-            viewerUserId: ref.read(verifiedProfileOwnerProvider)?.uid,
-          )
-        : candidate;
+    final destination = resolver.resolveForViewer(
+      url,
+      readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+    );
     if (destination?.kind != YamiboForumLinkKind.threadPost) {
       routeSession.invalidate();
     }
@@ -208,6 +205,16 @@ class ThreadPostNavigation {
             builder: (_) => UserThreadPage(
               userId: destination.userId,
               initialType: destination.userThreadType!,
+              initialPage: destination.page ?? 1,
+            ),
+          ),
+        );
+        return;
+      case YamiboForumLinkKind.friendFeed:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => MyFriendsDestination(
+              initialScope: destination.friendScope!,
               initialPage: destination.page ?? 1,
             ),
           ),

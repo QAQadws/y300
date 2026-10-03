@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
@@ -110,6 +111,71 @@ void main() {
     expect(locator.requests, isEmpty);
   });
 
+  testWidgets('friend links in messages open the native owner feed', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    for (final (link, scope, page) in [
+      (
+        'home.php?mod=space&do=friend&mobile=2',
+        ForumFriendFeedScope.friends,
+        1,
+      ),
+      (
+        'home.php?mod=space&do=friend&uid=101&mobile=2',
+        ForumFriendFeedScope.friends,
+        1,
+      ),
+      (
+        'https://bbs.yamibo.com/home.php?mod=space&do=friend&view=visitor&page=3&mobile=2',
+        ForumFriendFeedScope.visitors,
+        3,
+      ),
+      (
+        'home.php?mod=space&do=friend&view=trace&page=2',
+        ForumFriendFeedScope.footprints,
+        2,
+      ),
+      (
+        'home.php?mod=space&do=friend&view=online&type=member&page=4&mobile=2',
+        ForumFriendFeedScope.online,
+        4,
+      ),
+    ]) {
+      await open(tester, link);
+      final destination = takeDestination() as MyFriendsDestination;
+      expect(destination.initialScope, scope);
+      expect(destination.initialPage, page);
+      await tester.pumpAndSettle();
+    }
+    expect(web, isEmpty);
+    expect(locator.requests, isEmpty);
+  });
+
+  testWidgets(
+    'other owners and unsupported friend filters use shared webview',
+    (tester) async {
+      await pumpHost(tester);
+      for (final link in [
+        'home.php?mod=space&do=friend&uid=260328&mobile=2',
+        'home.php?mod=space&do=friend&view=online&type=friend',
+        'home.php?mod=space&do=friend&view=blacklist',
+        'home.php?mod=space&do=friend&group=1',
+        'home.php?mod=space&do=friend&searchkey=Alice',
+        'home.php?mod=space&do=friend&order=hot',
+        'home.php?mod=space&do=friend&type=member',
+      ]) {
+        await open(tester, link);
+        expect(takeDestination(), isA<SizedBox>());
+        expect(web.last.initialUri.query, Uri.parse(link).query);
+        expect(web.last.popOnRootBack, isTrue);
+        await tester.pumpAndSettle();
+      }
+      expect(web, hasLength(7));
+      expect(locator.requests, isEmpty);
+      expect(launcher.opened, isEmpty);
+    },
+  );
   testWidgets('native thread, explicit floor and tag retain page coordinates', (
     tester,
   ) async {

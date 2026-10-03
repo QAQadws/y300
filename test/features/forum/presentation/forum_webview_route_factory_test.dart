@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_account_guard.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
@@ -11,6 +12,204 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
+  const friendCases = [
+    (query: '', scope: ForumFriendFeedScope.friends, page: 1),
+    (
+      query: '&uid=101&view=me&page=2',
+      scope: ForumFriendFeedScope.friends,
+      page: 2,
+    ),
+    (
+      query: '&uid=101&view=online&type=member&page=2',
+      scope: ForumFriendFeedScope.online,
+      page: 2,
+    ),
+    (
+      query: '&view=visitor&page=3',
+      scope: ForumFriendFeedScope.visitors,
+      page: 3,
+    ),
+    (
+      query: '&uid=101&view=trace&page=4',
+      scope: ForumFriendFeedScope.footprints,
+      page: 4,
+    ),
+  ];
+  for (final entry in friendCases) {
+    for (final purpose in [
+      ForumWebViewHostPurpose.browse,
+      ForumWebViewHostPurpose.selfProfile,
+    ]) {
+      testWidgets(
+        'initial friend ${entry.scope} page ${entry.page} builds natively for $purpose',
+        (tester) async {
+          var driverFactoryReads = 0;
+          final container = ProviderContainer(
+            overrides: [
+              verifiedProfileOwnerProvider.overrideWithValue((
+                uid: '101',
+                revision: 0,
+              )),
+              forumWebViewDriverFactoryProvider.overrideWith((ref) {
+                driverFactoryReads++;
+                throw StateError(
+                  'A native friend feed must not create a WebView',
+                );
+              }),
+            ],
+          );
+          addTearDown(container.dispose);
+          final route = container.read(forumWebViewRouteFactoryProvider)(
+            ForumWebViewLaunchConfig(
+              initialUri: Uri.parse(
+                'https://bbs.yamibo.com/home.php?mod=space&do=friend${entry.query}&mobile=2',
+              ),
+              purpose: purpose,
+            ),
+          );
+
+          final built = await _inspectRouteBuilder(tester, route);
+
+          expect(built, isA<MyFriendsDestination>());
+          final page = built as MyFriendsDestination;
+          expect(page.initialScope, entry.scope);
+          expect(page.initialPage, entry.page);
+          expect(page.isActive, isTrue);
+          expect(driverFactoryReads, 0);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('account-bound initial friend feed preserves its viewer guard', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        verifiedProfileOwnerProvider.overrideWithValue((
+          uid: '101',
+          revision: 0,
+        )),
+      ],
+    );
+    addTearDown(container.dispose);
+    final route = container.read(forumWebViewRouteFactoryProvider)(
+      ForumWebViewLaunchConfig(
+        initialUri: Uri.parse(
+          'https://bbs.yamibo.com/home.php?mod=space&do=friend&view=visitor&page=3&mobile=2',
+        ),
+        expectedAccountId: '101',
+      ),
+    );
+    final built = await _inspectRouteBuilder(tester, route);
+
+    expect(built, isA<ForumWebViewAccountGuard>());
+    final guard = built as ForumWebViewAccountGuard;
+    expect(guard.accountId, '101');
+    final inactive =
+        guard.builder(
+              tester.element(find.byKey(const Key('route-factory-builder'))),
+              () => false,
+            )
+            as MyFriendsDestination;
+    expect(inactive.initialScope, ForumFriendFeedScope.visitors);
+    expect(inactive.initialPage, 3);
+    expect(inactive.isActive, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('initial friend feed preserves post edit WebView purpose', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        verifiedProfileOwnerProvider.overrideWithValue((
+          uid: '101',
+          revision: 0,
+        )),
+      ],
+    );
+    addTearDown(container.dispose);
+    final route = container.read(forumWebViewRouteFactoryProvider)(
+      ForumWebViewLaunchConfig(
+        initialUri: Uri.parse(
+          'https://bbs.yamibo.com/home.php?mod=space&do=friend&mobile=2',
+        ),
+        purpose: ForumWebViewHostPurpose.postEditFallback,
+      ),
+    );
+
+    final built = await _inspectRouteBuilder(tester, route);
+
+    expect(built, isA<ProviderScope>());
+    expect(built, isNot(isA<MyFriendsDestination>()));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final query in [
+    'uid=260328',
+    'view=all',
+    'view=online&type=group',
+    'view=visitor&type=member',
+    'page=0',
+    'uid=101&uid=101',
+  ]) {
+    testWidgets('unsupported initial friend $query keeps a WebView route', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          verifiedProfileOwnerProvider.overrideWithValue((
+            uid: '101',
+            revision: 0,
+          )),
+        ],
+      );
+      addTearDown(container.dispose);
+      final route = container.read(forumWebViewRouteFactoryProvider)(
+        ForumWebViewLaunchConfig(
+          initialUri: Uri.parse(
+            'https://bbs.yamibo.com/home.php?mod=space&do=friend&$query&mobile=2',
+          ),
+        ),
+      );
+
+      final built = await _inspectRouteBuilder(tester, route);
+
+      expect(built, isA<ProviderScope>());
+      expect(built, isNot(isA<MyFriendsDestination>()));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final explicitUser in [false, true]) {
+    testWidgets(
+      'unverified initial friend explicitUser=$explicitUser is owner-safe',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [verifiedProfileOwnerProvider.overrideWithValue(null)],
+        );
+        addTearDown(container.dispose);
+        final route = container.read(forumWebViewRouteFactoryProvider)(
+          ForumWebViewLaunchConfig(
+            initialUri: Uri.parse(
+              'https://bbs.yamibo.com/home.php?mod=space&do=friend${explicitUser ? '&uid=101' : ''}&mobile=2',
+            ),
+          ),
+        );
+
+        final built = await _inspectRouteBuilder(tester, route);
+
+        expect(
+          built,
+          explicitUser ? isA<ProviderScope>() : isA<MyFriendsDestination>(),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final target in ['101', '260328']) {
     for (final type in UserThreadDirectoryType.values) {
       for (final purpose in [
@@ -195,4 +394,23 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+}
+
+Future<Widget> _inspectRouteBuilder(
+  WidgetTester tester,
+  Route<Object?> route,
+) async {
+  late Widget built;
+  await tester.pumpWidget(
+    LocalizedTestApp(
+      home: Builder(
+        key: const Key('route-factory-builder'),
+        builder: (context) {
+          built = (route as MaterialPageRoute<Object?>).builder(context);
+          return const SizedBox.shrink();
+        },
+      ),
+    ),
+  );
+  return built;
 }

@@ -7,6 +7,7 @@ enum YamiboForumLinkKind {
   threadPost,
   tagThreadPage,
   userThreadDirectory,
+  friendFeed,
   managedWebView,
   external,
 }
@@ -21,6 +22,7 @@ class YamiboForumLinkDestination {
     this.tagId,
     this.userId,
     this.userThreadType,
+    this.friendScope,
   });
 
   final YamiboForumLinkKind kind;
@@ -31,6 +33,7 @@ class YamiboForumLinkDestination {
   final String? tagId;
   final String? userId;
   final UserThreadDirectoryType? userThreadType;
+  final ForumFriendFeedScope? friendScope;
 }
 
 class YamiboForumLinkResolver {
@@ -42,6 +45,27 @@ class YamiboForumLinkResolver {
 
   final SiteUrlResolver _siteUrlResolver;
   final ForumReferenceResolver _references;
+
+  /// Reads the verified viewer only when it can change route classification.
+  /// Account providers may validate sessions remotely; ordinary links must not
+  /// start that work just to choose a browser destination.
+  YamiboForumLinkDestination? resolveForViewer(
+    String rawUrl, {
+    required String? Function() readViewerUserId,
+  }) {
+    final candidate = resolve(rawUrl);
+    if (candidate == null) return null;
+    if (candidate.kind == YamiboForumLinkKind.userThreadDirectory ||
+        (candidate.kind == YamiboForumLinkKind.managedWebView &&
+            _extractFriendFeed(
+                  candidate.uri,
+                  candidate.uri.queryParameters['uid'],
+                ) !=
+                null)) {
+      return resolve(rawUrl, viewerUserId: readViewerUserId());
+    }
+    return candidate;
+  }
 
   YamiboForumLinkDestination? resolve(String rawUrl, {String? viewerUserId}) {
     final normalizedUrl = _siteUrlResolver.resolve(rawUrl);
@@ -58,6 +82,9 @@ class YamiboForumLinkResolver {
         uri: uri,
       );
     }
+
+    final friends = _extractFriendFeed(uri, viewerUserId);
+    if (friends != null) return friends;
 
     final userThreads = _extractUserThreadDirectory(uri, viewerUserId);
     if (userThreads != null) return userThreads;
@@ -104,6 +131,67 @@ class YamiboForumLinkResolver {
     return YamiboForumLinkDestination(
       kind: YamiboForumLinkKind.managedWebView,
       uri: uri,
+    );
+  }
+
+  YamiboForumLinkDestination? _extractFriendFeed(
+    Uri uri,
+    String? viewerUserId,
+  ) {
+    if (uri.path != '/home.php' ||
+        !{'https', 'http'}.contains(uri.scheme) ||
+        uri.userInfo.isNotEmpty ||
+        (uri.hasPort && uri.port != (uri.scheme == 'https' ? 443 : 80)) ||
+        uri.fragment.isNotEmpty) {
+      return null;
+    }
+    final query = uri.queryParameters;
+    if (query['mod'] != 'space' || query['do'] != 'friend') return null;
+    const supportedKeys = {
+      'mod',
+      'do',
+      'uid',
+      'view',
+      'type',
+      'page',
+      'mobile',
+      'order',
+    };
+    if (query.keys.any((key) => !supportedKeys.contains(key)) ||
+        uri.queryParametersAll.values.any((values) => values.length != 1) ||
+        !{null, '', 'dateline'}.contains(query['order'])) {
+      return null;
+    }
+    final uid = query['uid'];
+    // The native feed is account-bound. Another user's public friend list
+    // must never silently become the current account's private directory.
+    if (uid != null &&
+        (!RegExp(r'^[1-9]\d*$').hasMatch(uid) || uid != viewerUserId)) {
+      return null;
+    }
+    final scope = switch (query['view']) {
+      null || '' || 'me' => ForumFriendFeedScope.friends,
+      'online' => ForumFriendFeedScope.online,
+      'visitor' => ForumFriendFeedScope.visitors,
+      'trace' => ForumFriendFeedScope.footprints,
+      _ => null,
+    };
+    if (scope == null) return null;
+    // Online's omitted type includes guests; the native tab shows members.
+    if (scope == ForumFriendFeedScope.online
+        ? query['type'] != 'member'
+        : !{null, ''}.contains(query['type'])) {
+      return null;
+    }
+    final rawPage = query['page'];
+    final page = rawPage == null ? 1 : _parsePositiveInt(rawPage);
+    if (page == null) return null;
+    return YamiboForumLinkDestination(
+      kind: YamiboForumLinkKind.friendFeed,
+      uri: uri,
+      userId: uid,
+      friendScope: scope,
+      page: page,
     );
   }
 

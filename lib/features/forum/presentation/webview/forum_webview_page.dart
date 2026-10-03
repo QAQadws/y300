@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
@@ -435,15 +436,14 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return ForumWebViewNavigationDecision.prevent;
     }
     const resolver = YamiboForumLinkResolver();
-    final candidate = resolver.resolve(url);
-    final destination =
-        candidate?.kind == YamiboForumLinkKind.userThreadDirectory
-        ? resolver.resolve(
-            url,
-            viewerUserId: ref.read(verifiedProfileOwnerProvider)?.uid,
-          )
-        : candidate;
-    if (destination?.kind == YamiboForumLinkKind.userThreadDirectory &&
+    final destination = resolver.resolveForViewer(
+      url,
+      readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+    );
+    if ({
+          YamiboForumLinkKind.userThreadDirectory,
+          YamiboForumLinkKind.friendFeed,
+        }.contains(destination?.kind) &&
         ref.read(forumWebViewHostPurposeProvider) !=
             ForumWebViewHostPurpose.postEditFallback) {
       if (mounted &&
@@ -453,11 +453,17 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         unawaited(
           Navigator.of(context).push<void>(
             MaterialPageRoute(
-              builder: (_) => UserThreadPage(
-                userId: destination!.userId,
-                initialType: destination.userThreadType!,
-                initialPage: destination.page ?? 1,
-              ),
+              builder: (_) =>
+                  destination!.kind == YamiboForumLinkKind.friendFeed
+                  ? MyFriendsDestination(
+                      initialScope: destination.friendScope!,
+                      initialPage: destination.page ?? 1,
+                    )
+                  : UserThreadPage(
+                      userId: destination.userId,
+                      initialType: destination.userThreadType!,
+                      initialPage: destination.page ?? 1,
+                    ),
             ),
           ),
         );

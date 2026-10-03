@@ -34,8 +34,11 @@ import 'package:y300/features/history/domain/services/history_visit_recorder.dar
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
+import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
+import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import '../../profile/test_support/thread_directory_fixture.dart';
+import '../../profile/test_support/friend_read_fixture.dart';
 import 'package:y300/features/reply/data/providers/reply_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
@@ -858,6 +861,250 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705&mobile=2',
     );
   });
+
+  const friendCases = [
+    (
+      url: 'home.php?mod=space&do=friend&mobile=2',
+      scope: ForumFriendFeedScope.friends,
+      page: 1,
+    ),
+    (
+      url: 'home.php?mod=space&do=friend&uid=101&view=me&page=2&mobile=2',
+      scope: ForumFriendFeedScope.friends,
+      page: 2,
+    ),
+    (
+      url:
+          'https://bbs.yamibo.com/home.php?mod=space&do=friend&uid=101&view=online&type=member&page=2&mobile=2',
+      scope: ForumFriendFeedScope.online,
+      page: 2,
+    ),
+    (
+      url: 'home.php?mod=space&do=friend&view=visitor&page=3&mobile=2',
+      scope: ForumFriendFeedScope.visitors,
+      page: 3,
+    ),
+    (
+      url: 'home.php?mod=space&do=friend&uid=101&view=trace&page=2&mobile=2',
+      scope: ForumFriendFeedScope.footprints,
+      page: 2,
+    ),
+  ];
+  for (final mode in ForumShellMode.values) {
+    for (final entry in friendCases) {
+      testWidgets(
+        'friend callback opens ${entry.scope} page ${entry.page} natively in $mode mode',
+        (tester) async {
+          final driver = _FakeForumWebViewDriver();
+          final feed = FriendFeedFixture(autoComplete: true);
+          await tester.pumpWidget(
+            _buildTestApp(driver: driver, forumMode: mode, friendFeed: feed),
+          );
+          await tester.pumpAndSettle();
+
+          final decision = await driver.dispatchNavigationRequest(entry.url);
+          await tester.pumpAndSettle();
+
+          expect(decision, ForumWebViewNavigationDecision.prevent);
+          final page = tester.widget<MyFriendsPage>(find.byType(MyFriendsPage));
+          expect(page.initialScope, entry.scope);
+          expect(page.initialPage, entry.page);
+          final query = feed.requests.single.query;
+          expect(query.accountUserId, '101');
+          expect(query.scope, entry.scope);
+          expect(query.page, entry.page);
+          expect(driver.loadedUris, hasLength(1));
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final purpose in [
+    ForumWebViewHostPurpose.selfProfile,
+    ForumWebViewHostPurpose.postEditFallback,
+  ]) {
+    testWidgets('friend callback respects $purpose browser purpose', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final feed = FriendFeedFixture(autoComplete: true);
+      await tester.pumpWidget(
+        _buildTestApp(driver: driver, friendFeed: feed, hostPurpose: purpose),
+      );
+      await tester.pumpAndSettle();
+
+      final decision = await driver.dispatchNavigationRequest(
+        'home.php?mod=space&do=friend&mobile=2',
+      );
+      await tester.pumpAndSettle();
+
+      if (purpose == ForumWebViewHostPurpose.selfProfile) {
+        expect(decision, ForumWebViewNavigationDecision.prevent);
+        expect(find.byType(MyFriendsPage), findsOneWidget);
+        expect(feed.requests.single.query.accountUserId, '101');
+      } else {
+        expect(decision, ForumWebViewNavigationDecision.navigate);
+        expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
+        expect(find.byType(ForumWebViewPage), findsOneWidget);
+        expect(feed.requests, isEmpty);
+      }
+      expect(driver.loadedUris, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('duplicate friend callbacks push only one native route', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final feed = FriendFeedFixture(autoComplete: true);
+    await tester.pumpWidget(_buildTestApp(driver: driver, friendFeed: feed));
+    await tester.pumpAndSettle();
+    const url = 'home.php?mod=space&do=friend&mobile=2';
+
+    final decisions = await Future.wait([
+      driver.dispatchNavigationRequest(url),
+      driver.dispatchNavigationRequest(url),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(decisions, everyElement(ForumWebViewNavigationDecision.prevent));
+    expect(find.byType(MyFriendsPage), findsOneWidget);
+    expect(feed.requests, hasLength(1));
+    Navigator.of(tester.element(find.byType(MyFriendsPage))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
+    expect(find.byType(ForumWebViewPage), findsOneWidget);
+    expect(driver.loadedUris, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final boundary in ['background', 'accountExpired']) {
+    testWidgets('$boundary browser cannot open a friend feed route', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final feed = FriendFeedFixture(autoComplete: true);
+      var accountCurrent = true;
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          friendFeed: feed,
+          isAccountCurrent: () => accountCurrent,
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (boundary == 'background') {
+        unawaited(
+          Navigator.of(
+            tester.element(find.byType(ForumWebViewPage)),
+          ).push<void>(
+            MaterialPageRoute(
+              builder: (_) => const Scaffold(key: Key('friend-browser-cover')),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      } else {
+        accountCurrent = false;
+      }
+
+      final decision = await driver.dispatchNavigationRequest(
+        'home.php?mod=space&do=friend&mobile=2',
+      );
+      await tester.pumpAndSettle();
+
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
+      expect(feed.requests, isEmpty);
+      if (boundary == 'background') {
+        expect(find.byKey(const Key('friend-browser-cover')), findsOneWidget);
+      }
+      expect(driver.loadedUris, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final query in [
+    'uid=260328',
+    'view=all',
+    'view=online&type=group',
+    'view=visitor&type=member',
+    'page=0',
+    'uid=101&uid=101',
+  ]) {
+    testWidgets('unsupported friend callback $query stays in WebView', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final feed = FriendFeedFixture(autoComplete: true);
+      await tester.pumpWidget(_buildTestApp(driver: driver, friendFeed: feed));
+      await tester.pumpAndSettle();
+
+      final decision = await driver.dispatchNavigationRequest(
+        'home.php?mod=space&do=friend&$query&mobile=2',
+      );
+      await tester.pumpAndSettle();
+
+      final normalizedDuplicate = query == 'uid=101&uid=101';
+      expect(
+        decision,
+        normalizedDuplicate
+            ? ForumWebViewNavigationDecision.prevent
+            : ForumWebViewNavigationDecision.navigate,
+      );
+      expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(feed.requests, isEmpty);
+      expect(driver.loadedUris, hasLength(normalizedDuplicate ? 2 : 1));
+      if (normalizedDuplicate) {
+        // The existing WebView router reloads a normalized URL after flattening
+        // repeated parameters; it must still keep this request in the browser.
+        expect(
+          driver.loadedUris.last,
+          Uri.parse(
+            'https://bbs.yamibo.com/home.php?mod=space&do=friend&uid=101&mobile=2',
+          ),
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final explicitUser in [false, true]) {
+    testWidgets(
+      'unverified friend callback explicitUser=$explicitUser is owner-safe',
+      (tester) async {
+        final driver = _FakeForumWebViewDriver();
+        final feed = FriendFeedFixture(autoComplete: true);
+        await tester.pumpWidget(
+          _buildTestApp(driver: driver, friendFeed: feed, profileOwner: null),
+        );
+        await tester.pumpAndSettle();
+
+        final decision = await driver.dispatchNavigationRequest(
+          'home.php?mod=space&do=friend${explicitUser ? '&uid=101' : ''}&mobile=2',
+        );
+        await tester.pumpAndSettle();
+
+        if (explicitUser) {
+          expect(decision, ForumWebViewNavigationDecision.navigate);
+          expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
+        } else {
+          expect(decision, ForumWebViewNavigationDecision.prevent);
+          expect(find.byType(MyFriendsPage), findsOneWidget);
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(MyFriendsPage)),
+          );
+          expect(find.text(l10n.profileFriendsLoginRequired), findsOneWidget);
+        }
+        expect(feed.requests, isEmpty);
+        expect(driver.loadedUris, hasLength(1));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   for (final mode in ForumShellMode.values) {
     for (final type in UserThreadDirectoryType.values) {
@@ -2560,6 +2807,8 @@ Widget _buildTestApp({
   ForumWebViewRedirectResolver? redirectResolver,
   HistoryVisitRecorder? historyRecorder,
   UserThreadDirectoryRepository? threadDirectory,
+  ForumFriendFeedRepository? friendFeed,
+  VerifiedProfileOwner? profileOwner = (uid: '101', revision: 0),
   ForumWebViewHostPurpose? hostPurpose,
 }) {
   final resolvedFavoriteRepository =
@@ -2568,14 +2817,15 @@ Widget _buildTestApp({
     overrides: [
       if (hostPurpose != null)
         forumWebViewHostPurposeProvider.overrideWithValue(hostPurpose),
-      if (threadDirectory != null) ...[
-        verifiedProfileOwnerProvider.overrideWithValue((
-          uid: '101',
-          revision: 0,
-        )),
+      if (threadDirectory != null || friendFeed != null)
+        verifiedProfileOwnerProvider.overrideWithValue(profileOwner),
+      if (threadDirectory != null)
         userThreadDirectoryRepositoryProvider.overrideWithValue(
           threadDirectory,
         ),
+      if (friendFeed != null) ...[
+        friendFeedRepositoryProvider.overrideWithValue(friendFeed),
+        friendRemovalCommandProvider.overrideWithValue(FriendRemovalFixture()),
       ],
       forumModeSettingsRepositoryProvider.overrideWithValue(
         _FakeForumModeSettingsRepository(forumMode),

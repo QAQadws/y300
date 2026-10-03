@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
@@ -16,22 +17,28 @@ final forumWebViewRouteFactoryProvider = Provider<ForumWebViewRouteFactory>((
 ) {
   return (config) {
     const resolver = YamiboForumLinkResolver();
-    final candidate = resolver.resolve(config.initialUri.toString());
-    final destination =
-        candidate?.kind == YamiboForumLinkKind.userThreadDirectory
-        ? resolver.resolve(
-            config.initialUri.toString(),
-            viewerUserId: ref.read(verifiedProfileOwnerProvider)?.uid,
-          )
-        : candidate;
+    final destination = resolver.resolveForViewer(
+      config.initialUri.toString(),
+      readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+    );
     if (config.purpose != ForumWebViewHostPurpose.postEditFallback &&
-        destination?.kind == YamiboForumLinkKind.userThreadDirectory) {
-      Widget page({bool isActive = true}) => UserThreadPage(
-        userId: destination!.userId,
-        initialType: destination.userThreadType!,
-        initialPage: destination.page ?? 1,
-        isActive: isActive,
-      );
+        {
+          YamiboForumLinkKind.userThreadDirectory,
+          YamiboForumLinkKind.friendFeed,
+        }.contains(destination?.kind)) {
+      Widget page({bool isActive = true}) =>
+          destination!.kind == YamiboForumLinkKind.friendFeed
+          ? MyFriendsDestination(
+              initialScope: destination.friendScope!,
+              initialPage: destination.page ?? 1,
+              isActive: isActive,
+            )
+          : UserThreadPage(
+              userId: destination.userId,
+              initialType: destination.userThreadType!,
+              initialPage: destination.page ?? 1,
+              isActive: isActive,
+            );
       return MaterialPageRoute<Object?>(
         builder: (_) => config.expectedAccountId == null
             ? page()
