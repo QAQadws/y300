@@ -196,7 +196,7 @@ abstract class AppLocalizations {
   /// No description provided for @messageRecipientInvalid.
   ///
   /// In zh, this message translates to:
-  /// **'请填写一位用户的完整用户名，不支持逗号分隔的多个收件人。'**
+  /// **'请填写一位用户的完整用户名，不支持逗号分隔的多个收件人'**
   String get messageRecipientInvalid;
 
   /// No description provided for @messageRecipientAdd.
@@ -220,13 +220,13 @@ abstract class AppLocalizations {
   /// No description provided for @messageRecipientAlreadySelected.
   ///
   /// In zh, this message translates to:
-  /// **'该收件人已添加。'**
+  /// **'该收件人已添加'**
   String get messageRecipientAlreadySelected;
 
   /// No description provided for @messageRecipientLimitReached.
   ///
   /// In zh, this message translates to:
-  /// **'最多选择 20 位收件人。'**
+  /// **'最多选择 20 位收件人'**
   String get messageRecipientLimitReached;
 
   /// No description provided for @messageFriendSearch.
@@ -250,7 +250,7 @@ abstract class AppLocalizations {
   /// No description provided for @messageFriendLoadFailed.
   ///
   /// In zh, this message translates to:
-  /// **'暂时无法加载好友，可重试或手动添加用户名。'**
+  /// **'暂时无法加载好友，可重试或手动添加用户名'**
   String get messageFriendLoadFailed;
 
   /// No description provided for @messageBatchResultTitle.
@@ -262,13 +262,13 @@ abstract class AppLocalizations {
   /// No description provided for @messageBatchOnlyFriends.
   ///
   /// In zh, this message translates to:
-  /// **'当前账号只能向好友群发私信，请从好友中选择收件人。'**
+  /// **'当前账号只能向好友群发私信，请从好友中选择收件人'**
   String get messageBatchOnlyFriends;
 
   /// No description provided for @messageBatchReportedAccepted.
   ///
   /// In zh, this message translates to:
-  /// **'论坛报告已受理 {count} 位收件人。'**
+  /// **'论坛报告已受理 {count} 位收件人'**
   String messageBatchReportedAccepted(int count);
 
   /// No description provided for @messageBatchExcluded.
@@ -292,7 +292,7 @@ abstract class AppLocalizations {
   /// No description provided for @messageBatchResultCaution.
   ///
   /// In zh, this message translates to:
-  /// **'群发回执不能证明每位收件人都已收到。请到对应对话核实。'**
+  /// **'群发回执不能证明每位收件人都已收到。请到对应对话核实'**
   String get messageBatchResultCaution;
 
   /// No description provided for @messageBatchSendAgain.
@@ -328,7 +328,7 @@ abstract class AppLocalizations {
   /// No description provided for @messageUnknownOutcome.
   ///
   /// In zh, this message translates to:
-  /// **'暂时无法确认消息是否送达。请先查看对话，确认未送达后再发送，避免重复。'**
+  /// **'暂时无法确认消息是否送达。请先查看对话，确认未送达后再发送，避免重复'**
   String get messageUnknownOutcome;
 
   /// No description provided for @messageSendAgain.
@@ -406,7 +406,7 @@ abstract class AppLocalizations {
   /// No description provided for @messageHistoryChanged.
   ///
   /// In zh, this message translates to:
-  /// **'对话历史发生变化，请刷新后继续查看。'**
+  /// **'对话历史发生变化，请刷新后继续查看'**
   String get messageHistoryChanged;
 
   /// No description provided for @messageGroup.
@@ -430,43 +430,43 @@ abstract class AppLocalizations {
   /// No description provided for @messageOnlyFriends.
   ///
   /// In zh, this message translates to:
-  /// **'对方只接收好友发送的私信。'**
+  /// **'对方只接收好友发送的私信'**
   String get messageOnlyFriends;
 
   /// No description provided for @messageRecipientUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'收件人不存在或暂时不可用，请检查收件人信息。'**
+  /// **'收件人不存在或暂时不可用，请检查收件人信息'**
   String get messageRecipientUnavailable;
 
   /// No description provided for @messageCannotSendToSelf.
   ///
   /// In zh, this message translates to:
-  /// **'不能给自己发送私信。'**
+  /// **'不能给自己发送私信'**
   String get messageCannotSendToSelf;
 
   /// No description provided for @messageSendDenied.
   ///
   /// In zh, this message translates to:
-  /// **'当前账号或对方的隐私设置不允许发送这条私信。'**
+  /// **'当前账号或对方的隐私设置不允许发送这条私信'**
   String get messageSendDenied;
 
   /// No description provided for @messageSendTooFast.
   ///
   /// In zh, this message translates to:
-  /// **'发送过于频繁，请稍后再试。'**
+  /// **'发送过于频繁，请稍后再试'**
   String get messageSendTooFast;
 
   /// No description provided for @messageDailyLimit.
   ///
   /// In zh, this message translates to:
-  /// **'已达到论坛 24 小时内的消息或会话上限，请稍后再试。'**
+  /// **'已达到论坛 24 小时内的消息或会话上限，请稍后再试'**
   String get messageDailyLimit;
 
   /// No description provided for @messageConversationUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'这段对话已不可用，请刷新消息列表后重试。'**
+  /// **'这段对话已不可用，请刷新消息列表后重试'**
   String get messageConversationUnavailable;
 
   /// No description provided for @appNavigationMessages.
@@ -526,7 +526,7 @@ abstract class AppLocalizations {
   /// No description provided for @messageIgnoreUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'暂时无法确认屏蔽设置是否已生效，未自动重试。'**
+  /// **'暂时无法确认屏蔽设置是否已生效，未自动重试'**
   String get messageIgnoreUnknown;
 
   /// No description provided for @messageIgnoreSaving.
@@ -4436,31 +4436,31 @@ abstract class AppLocalizations {
   /// No description provided for @moreStorageMigrationInsufficientSpace.
   ///
   /// In zh, this message translates to:
-  /// **'默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试。'**
+  /// **'默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试'**
   String get moreStorageMigrationInsufficientSpace;
 
   /// No description provided for @moreStorageMigrationLocationUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试。'**
+  /// **'无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试'**
   String get moreStorageMigrationLocationUnavailable;
 
   /// No description provided for @moreStorageMigrationConflict.
   ///
   /// In zh, this message translates to:
-  /// **'默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试。'**
+  /// **'默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试'**
   String get moreStorageMigrationConflict;
 
   /// No description provided for @moreStorageMigrationFailed.
   ///
   /// In zh, this message translates to:
-  /// **'存储位置迁移未完成。原位置的数据仍然可用，请稍后重试。'**
+  /// **'存储位置迁移未完成。原位置的数据仍然可用，请稍后重试'**
   String get moreStorageMigrationFailed;
 
   /// No description provided for @moreStorageMigrationCleanupPending.
   ///
   /// In zh, this message translates to:
-  /// **'默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用。'**
+  /// **'默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用'**
   String get moreStorageMigrationCleanupPending;
 
   /// No description provided for @moreStorageMigrationRetry.
@@ -5582,7 +5582,7 @@ abstract class AppLocalizations {
   /// No description provided for @threadHtmlRenderFailed.
   ///
   /// In zh, this message translates to:
-  /// **'正文渲染失败，可长按楼层复制正文或打开原帖查看。'**
+  /// **'正文渲染失败，可长按楼层复制正文或打开原帖查看'**
   String get threadHtmlRenderFailed;
 
   /// No description provided for @threadSelectionCopyTitle.
@@ -5774,7 +5774,7 @@ abstract class AppLocalizations {
   /// No description provided for @composerCollapseConflict.
   ///
   /// In zh, this message translates to:
-  /// **'帖子正文已更新，无法应用本次折叠修改。请复制内容后重新打开。'**
+  /// **'帖子正文已更新，无法应用本次折叠修改。请复制内容后重新打开'**
   String get composerCollapseConflict;
 
   /// No description provided for @composerFormat.
@@ -6044,7 +6044,7 @@ abstract class AppLocalizations {
   /// No description provided for @composerDraftImageVerificationFailed.
   ///
   /// In zh, this message translates to:
-  /// **'草稿图片校验失败，图片预览已暂时隐藏。你仍可编辑和发送，联网后可重试。'**
+  /// **'草稿图片校验失败，图片预览已暂时隐藏。你仍可编辑和发送，联网后可重试'**
   String get composerDraftImageVerificationFailed;
 
   /// No description provided for @composerDraftImagesInvalidated.
@@ -7254,25 +7254,25 @@ abstract class AppLocalizations {
   /// No description provided for @profileFriendOperationUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'操作结果暂未确认，请关闭并核对好友状态后再操作。'**
+  /// **'操作结果暂未确认，请关闭并核对好友状态后再操作'**
   String get profileFriendOperationUnknown;
 
   /// No description provided for @profileFriendRequestSent.
   ///
   /// In zh, this message translates to:
-  /// **'好友申请已发送，等待对方确认。'**
+  /// **'好友申请已发送，等待对方确认'**
   String get profileFriendRequestSent;
 
   /// No description provided for @profileFriendApproved.
   ///
   /// In zh, this message translates to:
-  /// **'已接受申请，你们现在是好友了。'**
+  /// **'已接受申请，你们现在是好友了'**
   String get profileFriendApproved;
 
   /// No description provided for @profileFriendRemoved.
   ///
   /// In zh, this message translates to:
-  /// **'已解除好友关系。'**
+  /// **'已解除好友关系'**
   String get profileFriendRemoved;
 
   /// No description provided for @profileTitle.
@@ -7446,7 +7446,7 @@ abstract class AppLocalizations {
   /// No description provided for @forumWebViewAccountChanged.
   ///
   /// In zh, this message translates to:
-  /// **'账号已变更，请关闭此页面后重新打开。'**
+  /// **'账号已变更，请关闭此页面后重新打开'**
   String get forumWebViewAccountChanged;
 
   /// No description provided for @profileBlogOpenWeb.
@@ -7464,19 +7464,19 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogReadPasswordRequired.
   ///
   /// In zh, this message translates to:
-  /// **'这篇日志需要密码，可在网页中输入后阅读。'**
+  /// **'这篇日志需要密码，可在网页中输入后阅读'**
   String get profileBlogReadPasswordRequired;
 
   /// No description provided for @profileBlogPrivate.
   ///
   /// In zh, this message translates to:
-  /// **'作者限制了这篇日志的访问范围。'**
+  /// **'作者限制了这篇日志的访问范围'**
   String get profileBlogPrivate;
 
   /// No description provided for @profileBlogUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'日志暂时无法访问，可能已删除、尚未审核或没有查看权限。'**
+  /// **'日志暂时无法访问，可能已删除、尚未审核或没有查看权限'**
   String get profileBlogUnavailable;
 
   /// No description provided for @profileOpenForumPage.
@@ -7602,19 +7602,19 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogCommentInputRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请填写评论内容。'**
+  /// **'请填写评论内容'**
   String get profileBlogCommentInputRequired;
 
   /// No description provided for @profileBlogCommentTooShort.
   ///
   /// In zh, this message translates to:
-  /// **'评论内容太短，请补充后再提交。'**
+  /// **'评论内容太短，请补充后再提交'**
   String get profileBlogCommentTooShort;
 
   /// No description provided for @profileBlogCommentSubmitted.
   ///
   /// In zh, this message translates to:
-  /// **'评论已提交；如需审核，显示可能延迟。'**
+  /// **'评论已提交；如需审核，显示可能延迟'**
   String get profileBlogCommentSubmitted;
 
   /// No description provided for @profileBlogCommentSaved.
@@ -7656,13 +7656,13 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogCommentSessionChanged.
   ///
   /// In zh, this message translates to:
-  /// **'账号已变更，请返回日志后重新操作。'**
+  /// **'账号已变更，请返回日志后重新操作'**
   String get profileBlogCommentSessionChanged;
 
   /// No description provided for @profileBlogCommentOutcomeUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'无法确认这次操作是否成功，请先返回日志核对。为避免重复提交，本页不会再次发送；输入内容可以复制。'**
+  /// **'无法确认这次操作是否成功，请先返回日志核对。为避免重复提交，本页不会再次发送；输入内容可以复制'**
   String get profileBlogCommentOutcomeUnknown;
 
   /// No description provided for @profileBlogLeaveCommentTitle.
@@ -8001,7 +8001,7 @@ abstract class AppLocalizations {
   /// No description provided for @postEditConflictBody.
   ///
   /// In zh, this message translates to:
-  /// **'网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本。'**
+  /// **'网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本'**
   String get postEditConflictBody;
 
   /// No description provided for @postEditUseServer.
@@ -8019,7 +8019,7 @@ abstract class AppLocalizations {
   /// No description provided for @postEditVerificationFailed.
   ///
   /// In zh, this message translates to:
-  /// **'无法确认网页编辑后的服务器状态，原生保存暂不可用。'**
+  /// **'无法确认网页编辑后的服务器状态，原生保存暂不可用'**
   String get postEditVerificationFailed;
 
   /// No description provided for @postEditNativeSubmitUnavailable.
@@ -8067,13 +8067,13 @@ abstract class AppLocalizations {
   /// No description provided for @postEditDeleteImageFailed.
   ///
   /// In zh, this message translates to:
-  /// **'图片删除未成功，图片仍保留。'**
+  /// **'图片删除未成功，图片仍保留'**
   String get postEditDeleteImageFailed;
 
   /// No description provided for @postEditDeleteImageUnconfirmed.
   ///
   /// In zh, this message translates to:
-  /// **'无法确认图片删除状态，请稍后重试。'**
+  /// **'无法确认图片删除状态，请稍后重试'**
   String get postEditDeleteImageUnconfirmed;
 
   /// No description provided for @postEditAttachmentDeleting.
@@ -8085,7 +8085,7 @@ abstract class AppLocalizations {
   /// No description provided for @postEditDeletedImageReferenceWarning.
   ///
   /// In zh, this message translates to:
-  /// **'正文仍包含已删除图片代码。'**
+  /// **'正文仍包含已删除图片代码'**
   String get postEditDeletedImageReferenceWarning;
 
   /// No description provided for @postEditSubmitInProgress.
@@ -8115,13 +8115,13 @@ abstract class AppLocalizations {
   /// No description provided for @postEditPartialSuccess.
   ///
   /// In zh, this message translates to:
-  /// **'正文已保存，但部分新图片未能确认关联，请检查后再试。'**
+  /// **'正文已保存，但部分新图片未能确认关联，请检查后再试'**
   String get postEditPartialSuccess;
 
   /// No description provided for @postEditSubmitUnconfirmed.
   ///
   /// In zh, this message translates to:
-  /// **'保存结果未确认，已暂时停用原生保存。请重新验证服务器版本。'**
+  /// **'保存结果未确认，已暂时停用原生保存。请重新验证服务器版本'**
   String get postEditSubmitUnconfirmed;
 
   /// No description provided for @postEditRetryVerification.
@@ -8133,25 +8133,25 @@ abstract class AppLocalizations {
   /// No description provided for @postEditFormExpired.
   ///
   /// In zh, this message translates to:
-  /// **'编辑表单已过期，正在重新获取后重试一次。'**
+  /// **'编辑表单已过期，正在重新获取后重试一次'**
   String get postEditFormExpired;
 
   /// No description provided for @postEditPermissionDenied.
   ///
   /// In zh, this message translates to:
-  /// **'没有权限保存此帖子。'**
+  /// **'没有权限保存此帖子'**
   String get postEditPermissionDenied;
 
   /// No description provided for @postEditAuthenticationRequired.
   ///
   /// In zh, this message translates to:
-  /// **'登录状态已失效，请重新登录后再试。'**
+  /// **'登录状态已失效，请重新登录后再试'**
   String get postEditAuthenticationRequired;
 
   /// No description provided for @postEditSubmitFailed.
   ///
   /// In zh, this message translates to:
-  /// **'帖子保存失败，当前内容已保留。'**
+  /// **'帖子保存失败，当前内容已保留'**
   String get postEditSubmitFailed;
 
   /// No description provided for @postEditLoadFailed.
@@ -8223,13 +8223,13 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogSubmittingAction.
   ///
   /// In zh, this message translates to:
-  /// **'正在提交，离开不会撤回操作。离开后请刷新日志核对结果。'**
+  /// **'正在提交，离开不会撤回操作。离开后请刷新日志核对结果'**
   String get profileBlogSubmittingAction;
 
   /// No description provided for @profileBlogActionOutcomeUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。'**
+  /// **'暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交'**
   String get profileBlogActionOutcomeUnknown;
 
   /// No description provided for @profileBlogBody.
@@ -8241,7 +8241,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogImageUploadUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'无法确认图片是否上传成功，已停止本次上传。请在网页相册中核实。'**
+  /// **'无法确认图片是否上传成功，已停止本次上传。请在网页相册中核实'**
   String get profileBlogImageUploadUnknown;
 
   /// No description provided for @profileBlogStartWriting.
@@ -8283,7 +8283,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogNewCategoryNameRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请填写新分类名称。'**
+  /// **'请填写新分类名称'**
   String get profileBlogNewCategoryNameRequired;
 
   /// No description provided for @profileBlogTags.
@@ -8337,7 +8337,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogPasswordRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请设置访问密码。'**
+  /// **'请设置访问密码'**
   String get profileBlogPasswordRequired;
 
   /// No description provided for @profileBlogTargetNames.
@@ -8355,19 +8355,19 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogTargetNamesRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请填写至少一个用户名。'**
+  /// **'请填写至少一个用户名'**
   String get profileBlogTargetNamesRequired;
 
   /// No description provided for @profileBlogVisibilityUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'当前访问范围不可用，请重新选择。'**
+  /// **'当前访问范围不可用，请重新选择'**
   String get profileBlogVisibilityUnavailable;
 
   /// No description provided for @profileBlogCommentsUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'当前无法更改评论设置，请重新进入编辑。'**
+  /// **'当前无法更改评论设置，请重新进入编辑'**
   String get profileBlogCommentsUnavailable;
 
   /// No description provided for @profileBlogNoCategory.
@@ -8457,7 +8457,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogEditorOutcomeUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'暂时无法确认是否保存成功。请返回核对，避免重复提交。当前输入可以复制。'**
+  /// **'暂时无法确认是否保存成功。请返回核对，避免重复提交。当前输入可以复制'**
   String get profileBlogEditorOutcomeUnknown;
 
   /// No description provided for @profileBlogLeaveEditorTitle.
@@ -8481,7 +8481,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogServerChanged.
   ///
   /// In zh, this message translates to:
-  /// **'服务器上的日志内容或设置已变化。请查看服务器版本，再选择保留修改或采用新版本。'**
+  /// **'服务器上的日志内容或设置已变化。请查看服务器版本，再选择保留修改或采用新版本'**
   String get profileBlogServerChanged;
 
   /// No description provided for @profileBlogUseServer.
@@ -8499,67 +8499,67 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogSubjectRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请填写标题。'**
+  /// **'请填写标题'**
   String get profileBlogSubjectRequired;
 
   /// No description provided for @profileBlogBodyRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请填写正文。'**
+  /// **'请填写正文'**
   String get profileBlogBodyRequired;
 
   /// No description provided for @profileBlogSiteCategoryRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请选择站点分类。'**
+  /// **'请选择站点分类'**
   String get profileBlogSiteCategoryRequired;
 
   /// No description provided for @profileBlogCategoryUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'所选分类已不可用，请重新选择。'**
+  /// **'所选分类已不可用，请重新选择'**
   String get profileBlogCategoryUnavailable;
 
   /// No description provided for @profileBlogNewCategoryUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'当前无法创建个人分类，请选择已有分类。'**
+  /// **'当前无法创建个人分类，请选择已有分类'**
   String get profileBlogNewCategoryUnavailable;
 
   /// No description provided for @profileBlogCategoryConflict.
   ///
   /// In zh, this message translates to:
-  /// **'请选择已有分类或新建分类，不能同时使用。'**
+  /// **'请选择已有分类或新建分类，不能同时使用'**
   String get profileBlogCategoryConflict;
 
   /// No description provided for @profileBlogFeedUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'当前无法发布动态，请关闭此选项后重试。'**
+  /// **'当前无法发布动态，请关闭此选项后重试'**
   String get profileBlogFeedUnavailable;
 
   /// No description provided for @profileBlogDraftLoadFailed.
   ///
   /// In zh, this message translates to:
-  /// **'草稿加载失败，已有内容未被覆盖。请重试或重置草稿。'**
+  /// **'草稿加载失败，已有内容未被覆盖。请重试或重置草稿'**
   String get profileBlogDraftLoadFailed;
 
   /// No description provided for @profileBlogDraftSaveFailed.
   ///
   /// In zh, this message translates to:
-  /// **'草稿保存失败，请重试后再离开。'**
+  /// **'草稿保存失败，请重试后再离开'**
   String get profileBlogDraftSaveFailed;
 
   /// No description provided for @profileBlogDraftPasswordRestored.
   ///
   /// In zh, this message translates to:
-  /// **'已恢复日志草稿，请重新输入访问密码。'**
+  /// **'已恢复日志草稿，请重新输入访问密码'**
   String get profileBlogDraftPasswordRestored;
 
   /// No description provided for @profileBlogDraftPending.
   ///
   /// In zh, this message translates to:
-  /// **'上次发布结果尚未确认。请先检查我的日志，避免重复发布。'**
+  /// **'上次发布结果尚未确认。请先检查我的日志，避免重复发布'**
   String get profileBlogDraftPending;
 
   /// No description provided for @profileBlogDraftResume.
@@ -8583,7 +8583,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogDraftImagesUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'部分草稿图片未能确认可用。请重试校验，或移除并替换这些图片后发布。'**
+  /// **'部分草稿图片未能确认可用。请重试校验，或移除并替换这些图片后发布'**
   String get profileBlogDraftImagesUnavailable;
 
   /// No description provided for @moreStorageBlogDraft.
@@ -8595,13 +8595,13 @@ abstract class AppLocalizations {
   /// No description provided for @profileBlogDraftSettingsChanged.
   ///
   /// In zh, this message translates to:
-  /// **'分类或发布权限已变化，请调整发布设置。已保留你的内容和原有选择。'**
+  /// **'分类或发布权限已变化，请调整发布设置。已保留你的内容和原有选择'**
   String get profileBlogDraftSettingsChanged;
 
   /// No description provided for @profileBlogDraftCleanupFailed.
   ///
   /// In zh, this message translates to:
-  /// **'日志已发布，但本地草稿清理失败。再次打开时请先检查“我的日志”，避免重复发布。'**
+  /// **'日志已发布，但本地草稿清理失败。再次打开时请先检查“我的日志”，避免重复发布'**
   String get profileBlogDraftCleanupFailed;
 
   /// No description provided for @composerReadAccess.
@@ -8655,13 +8655,13 @@ abstract class AppLocalizations {
   /// No description provided for @composerReadAccessAdjusted.
   ///
   /// In zh, this message translates to:
-  /// **'已保存，但阅读权限由 {requested} 调整为 {actual}，请检查帖子设置。'**
+  /// **'已保存，但阅读权限由 {requested} 调整为 {actual}，请检查帖子设置'**
   String composerReadAccessAdjusted(int requested, int actual);
 
   /// No description provided for @composerReadAccessUnverified.
   ///
   /// In zh, this message translates to:
-  /// **'已保存，但暂时无法确认阅读权限是否为 {value}，请检查帖子设置。'**
+  /// **'已保存，但暂时无法确认阅读权限是否为 {value}，请检查帖子设置'**
   String composerReadAccessUnverified(int value);
 
   /// No description provided for @postingPollMinimumOptions.
@@ -8703,13 +8703,13 @@ abstract class AppLocalizations {
   /// No description provided for @threadPostTargetUnconfirmed.
   ///
   /// In zh, this message translates to:
-  /// **'无法确认目标楼层。你可以重试，或打开主题首页。'**
+  /// **'无法确认目标楼层。你可以重试，或打开主题首页'**
   String get threadPostTargetUnconfirmed;
 
   /// No description provided for @threadPostLocationNetworkFailed.
   ///
   /// In zh, this message translates to:
-  /// **'读取目标楼层失败，请检查网络后重试。'**
+  /// **'读取目标楼层失败，请检查网络后重试'**
   String get threadPostLocationNetworkFailed;
 
   /// No description provided for @threadPostOpenHome.
@@ -8739,7 +8739,7 @@ abstract class AppLocalizations {
   /// No description provided for @dailyAutoSignInStorageUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'无法安全读取或保存签到记录，当前不能提交签到。请稍后重试。'**
+  /// **'无法安全读取或保存签到记录，当前不能提交签到。请稍后重试'**
   String get dailyAutoSignInStorageUnavailable;
 
   /// No description provided for @profileMyFriendsTitle.
@@ -8805,7 +8805,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileFriendsLoadFailed.
   ///
   /// In zh, this message translates to:
-  /// **'好友列表暂时无法加载，请稍后重试。'**
+  /// **'好友列表暂时无法加载，请稍后重试'**
   String get profileFriendsLoadFailed;
 
   /// No description provided for @profileFriendsAnonymous.
@@ -8853,7 +8853,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileFriendRemovalUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'删除结果无法确认，请刷新好友列表核对后再操作。'**
+  /// **'删除结果无法确认，请刷新好友列表核对后再操作'**
   String get profileFriendRemovalUnknown;
 
   /// No description provided for @profileFriendRemovalVerify.

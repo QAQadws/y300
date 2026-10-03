@@ -59,7 +59,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageRecipientHint => '输入一位用户的完整用户名';
 
   @override
-  String get messageRecipientInvalid => '请填写一位用户的完整用户名，不支持逗号分隔的多个收件人。';
+  String get messageRecipientInvalid => '请填写一位用户的完整用户名，不支持逗号分隔的多个收件人';
 
   @override
   String get messageRecipientAdd => '添加收件人';
@@ -73,10 +73,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get messageRecipientAlreadySelected => '该收件人已添加。';
+  String get messageRecipientAlreadySelected => '该收件人已添加';
 
   @override
-  String get messageRecipientLimitReached => '最多选择 20 位收件人。';
+  String get messageRecipientLimitReached => '最多选择 20 位收件人';
 
   @override
   String get messageFriendSearch => '搜索好友用户名';
@@ -88,17 +88,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageFriendNoMatches => '没有匹配的好友';
 
   @override
-  String get messageFriendLoadFailed => '暂时无法加载好友，可重试或手动添加用户名。';
+  String get messageFriendLoadFailed => '暂时无法加载好友，可重试或手动添加用户名';
 
   @override
   String get messageBatchResultTitle => '发送结果';
 
   @override
-  String get messageBatchOnlyFriends => '当前账号只能向好友群发私信，请从好友中选择收件人。';
+  String get messageBatchOnlyFriends => '当前账号只能向好友群发私信，请从好友中选择收件人';
 
   @override
   String messageBatchReportedAccepted(int count) {
-    return '论坛报告已受理 $count 位收件人。';
+    return '论坛报告已受理 $count 位收件人';
   }
 
   @override
@@ -111,7 +111,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageBatchSubmittedMessage => '已提交的消息';
 
   @override
-  String get messageBatchResultCaution => '群发回执不能证明每位收件人都已收到。请到对应对话核实。';
+  String get messageBatchResultCaution => '群发回执不能证明每位收件人都已收到。请到对应对话核实';
 
   @override
   String get messageBatchSendAgain => '再次发送给这组收件人';
@@ -129,7 +129,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageInput => '输入消息';
 
   @override
-  String get messageUnknownOutcome => '暂时无法确认消息是否送达。请先查看对话，确认未送达后再发送，避免重复。';
+  String get messageUnknownOutcome => '暂时无法确认消息是否送达。请先查看对话，确认未送达后再发送，避免重复';
 
   @override
   String get messageSendAgain => '仍要再次发送？';
@@ -172,7 +172,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get messageHistoryChanged => '对话历史发生变化，请刷新后继续查看。';
+  String get messageHistoryChanged => '对话历史发生变化，请刷新后继续查看';
 
   @override
   String get messageGroup => '群组对话';
@@ -184,25 +184,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageLinkFailed => '暂时无法打开此链接';
 
   @override
-  String get messageOnlyFriends => '对方只接收好友发送的私信。';
+  String get messageOnlyFriends => '对方只接收好友发送的私信';
 
   @override
-  String get messageRecipientUnavailable => '收件人不存在或暂时不可用，请检查收件人信息。';
+  String get messageRecipientUnavailable => '收件人不存在或暂时不可用，请检查收件人信息';
 
   @override
-  String get messageCannotSendToSelf => '不能给自己发送私信。';
+  String get messageCannotSendToSelf => '不能给自己发送私信';
 
   @override
-  String get messageSendDenied => '当前账号或对方的隐私设置不允许发送这条私信。';
+  String get messageSendDenied => '当前账号或对方的隐私设置不允许发送这条私信';
 
   @override
-  String get messageSendTooFast => '发送过于频繁，请稍后再试。';
+  String get messageSendTooFast => '发送过于频繁，请稍后再试';
 
   @override
-  String get messageDailyLimit => '已达到论坛 24 小时内的消息或会话上限，请稍后再试。';
+  String get messageDailyLimit => '已达到论坛 24 小时内的消息或会话上限，请稍后再试';
 
   @override
-  String get messageConversationUnavailable => '这段对话已不可用，请刷新消息列表后重试。';
+  String get messageConversationUnavailable => '这段对话已不可用，请刷新消息列表后重试';
 
   @override
   String get appNavigationMessages => '消息';
@@ -232,7 +232,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageIgnoreApplied => '已屏蔽今后的此类提醒';
 
   @override
-  String get messageIgnoreUnknown => '暂时无法确认屏蔽设置是否已生效，未自动重试。';
+  String get messageIgnoreUnknown => '暂时无法确认屏蔽设置是否已生效，未自动重试';
 
   @override
   String get messageIgnoreSaving => '正在保存…';
@@ -2703,22 +2703,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get moreStorageMigrationInsufficientSpace =>
-      '默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试。';
+      '默认存储位置空间不足。原位置的数据仍然可用，请释放空间后重试';
 
   @override
   String get moreStorageMigrationLocationUnavailable =>
-      '无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试。';
+      '无法访问原位置或默认存储位置。原位置的数据仍然保留，请检查存储权限后重试';
 
   @override
   String get moreStorageMigrationConflict =>
-      '默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试。';
+      '默认存储位置存在冲突内容或目录结构无法安全迁移。原位置的数据仍然可用，请处理冲突后重试';
 
   @override
-  String get moreStorageMigrationFailed => '存储位置迁移未完成。原位置的数据仍然可用，请稍后重试。';
+  String get moreStorageMigrationFailed => '存储位置迁移未完成。原位置的数据仍然可用，请稍后重试';
 
   @override
   String get moreStorageMigrationCleanupPending =>
-      '默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用。';
+      '默认存储位置已经生效，但原位置的已验证副本尚未清理完成。缓存功能可正常使用';
 
   @override
   String get moreStorageMigrationRetry => '重试迁移';
@@ -3347,7 +3347,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadHtmlCollapseCollapsed => '展开折叠内容';
 
   @override
-  String get threadHtmlRenderFailed => '正文渲染失败，可长按楼层复制正文或打开原帖查看。';
+  String get threadHtmlRenderFailed => '正文渲染失败，可长按楼层复制正文或打开原帖查看';
 
   @override
   String get threadSelectionCopyTitle => '选择复制';
@@ -3443,7 +3443,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get composerCollapseDeleteBody => '折叠标题和正文将从帖子内容中删除。';
 
   @override
-  String get composerCollapseConflict => '帖子正文已更新，无法应用本次折叠修改。请复制内容后重新打开。';
+  String get composerCollapseConflict => '帖子正文已更新，无法应用本次折叠修改。请复制内容后重新打开';
 
   @override
   String get composerFormat => '格式';
@@ -3600,7 +3600,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get composerDraftImageVerificationFailed =>
-      '草稿图片校验失败，图片预览已暂时隐藏。你仍可编辑和发送，联网后可重试。';
+      '草稿图片校验失败，图片预览已暂时隐藏。你仍可编辑和发送，联网后可重试';
 
   @override
   String composerDraftImagesInvalidated(int count) {
@@ -4367,16 +4367,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileFriendRemoveExplanation => '解除后，你们将不再是好友。';
 
   @override
-  String get profileFriendOperationUnknown => '操作结果暂未确认，请关闭并核对好友状态后再操作。';
+  String get profileFriendOperationUnknown => '操作结果暂未确认，请关闭并核对好友状态后再操作';
 
   @override
-  String get profileFriendRequestSent => '好友申请已发送，等待对方确认。';
+  String get profileFriendRequestSent => '好友申请已发送，等待对方确认';
 
   @override
-  String get profileFriendApproved => '已接受申请，你们现在是好友了。';
+  String get profileFriendApproved => '已接受申请，你们现在是好友了';
 
   @override
-  String get profileFriendRemoved => '已解除好友关系。';
+  String get profileFriendRemoved => '已解除好友关系';
 
   @override
   String get profileTitle => '个人资料';
@@ -4471,7 +4471,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get forumWebViewAccountChanged => '账号已变更，请关闭此页面后重新打开。';
+  String get forumWebViewAccountChanged => '账号已变更，请关闭此页面后重新打开';
 
   @override
   String get profileBlogOpenWeb => '在网页中打开';
@@ -4480,13 +4480,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogWebInputNotice => '当前输入不会自动带入网页。你可以取消并先复制内容，再打开网页继续操作。';
 
   @override
-  String get profileBlogReadPasswordRequired => '这篇日志需要密码，可在网页中输入后阅读。';
+  String get profileBlogReadPasswordRequired => '这篇日志需要密码，可在网页中输入后阅读';
 
   @override
-  String get profileBlogPrivate => '作者限制了这篇日志的访问范围。';
+  String get profileBlogPrivate => '作者限制了这篇日志的访问范围';
 
   @override
-  String get profileBlogUnavailable => '日志暂时无法访问，可能已删除、尚未审核或没有查看权限。';
+  String get profileBlogUnavailable => '日志暂时无法访问，可能已删除、尚未审核或没有查看权限';
 
   @override
   String get profileOpenForumPage => '打开论坛资料页';
@@ -4549,13 +4549,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogDeleteCommentBody => '确定删除这条评论吗？删除后无法恢复。';
 
   @override
-  String get profileBlogCommentInputRequired => '请填写评论内容。';
+  String get profileBlogCommentInputRequired => '请填写评论内容';
 
   @override
-  String get profileBlogCommentTooShort => '评论内容太短，请补充后再提交。';
+  String get profileBlogCommentTooShort => '评论内容太短，请补充后再提交';
 
   @override
-  String get profileBlogCommentSubmitted => '评论已提交；如需审核，显示可能延迟。';
+  String get profileBlogCommentSubmitted => '评论已提交；如需审核，显示可能延迟';
 
   @override
   String get profileBlogCommentSaved => '评论已保存';
@@ -4576,11 +4576,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogSubmittingComment => '正在提交…';
 
   @override
-  String get profileBlogCommentSessionChanged => '账号已变更，请返回日志后重新操作。';
+  String get profileBlogCommentSessionChanged => '账号已变更，请返回日志后重新操作';
 
   @override
   String get profileBlogCommentOutcomeUnknown =>
-      '无法确认这次操作是否成功，请先返回日志核对。为避免重复提交，本页不会再次发送；输入内容可以复制。';
+      '无法确认这次操作是否成功，请先返回日志核对。为避免重复提交，本页不会再次发送；输入内容可以复制';
 
   @override
   String get profileBlogLeaveCommentTitle => '离开评论页面？';
@@ -4852,7 +4852,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postEditConflictTitle => '服务器内容已变化';
 
   @override
-  String get postEditConflictBody => '网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本。';
+  String get postEditConflictBody => '网页编辑或其他设备已经修改了这条帖子，请选择要保留的版本';
 
   @override
   String get postEditUseServer => '使用服务器版本';
@@ -4861,7 +4861,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postEditKeepLocal => '保留本地版本';
 
   @override
-  String get postEditVerificationFailed => '无法确认网页编辑后的服务器状态，原生保存暂不可用。';
+  String get postEditVerificationFailed => '无法确认网页编辑后的服务器状态，原生保存暂不可用';
 
   @override
   String get postEditNativeSubmitUnavailable => '原生保存将在后续版本开放';
@@ -4885,16 +4885,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postEditDeleteImageConfirm => '确认删除';
 
   @override
-  String get postEditDeleteImageFailed => '图片删除未成功，图片仍保留。';
+  String get postEditDeleteImageFailed => '图片删除未成功，图片仍保留';
 
   @override
-  String get postEditDeleteImageUnconfirmed => '无法确认图片删除状态，请稍后重试。';
+  String get postEditDeleteImageUnconfirmed => '无法确认图片删除状态，请稍后重试';
 
   @override
   String get postEditAttachmentDeleting => '正在删除图片';
 
   @override
-  String get postEditDeletedImageReferenceWarning => '正文仍包含已删除图片代码。';
+  String get postEditDeletedImageReferenceWarning => '正文仍包含已删除图片代码';
 
   @override
   String get postEditSubmitInProgress => '正在保存帖子内容…';
@@ -4910,25 +4910,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postEditDanglingAttachmentConfirm => '继续保存';
 
   @override
-  String get postEditPartialSuccess => '正文已保存，但部分新图片未能确认关联，请检查后再试。';
+  String get postEditPartialSuccess => '正文已保存，但部分新图片未能确认关联，请检查后再试';
 
   @override
-  String get postEditSubmitUnconfirmed => '保存结果未确认，已暂时停用原生保存。请重新验证服务器版本。';
+  String get postEditSubmitUnconfirmed => '保存结果未确认，已暂时停用原生保存。请重新验证服务器版本';
 
   @override
   String get postEditRetryVerification => '重新验证';
 
   @override
-  String get postEditFormExpired => '编辑表单已过期，正在重新获取后重试一次。';
+  String get postEditFormExpired => '编辑表单已过期，正在重新获取后重试一次';
 
   @override
-  String get postEditPermissionDenied => '没有权限保存此帖子。';
+  String get postEditPermissionDenied => '没有权限保存此帖子';
 
   @override
-  String get postEditAuthenticationRequired => '登录状态已失效，请重新登录后再试。';
+  String get postEditAuthenticationRequired => '登录状态已失效，请重新登录后再试';
 
   @override
-  String get postEditSubmitFailed => '帖子保存失败，当前内容已保留。';
+  String get postEditSubmitFailed => '帖子保存失败，当前内容已保留';
 
   @override
   String postEditLoadFailed(String error) {
@@ -4966,16 +4966,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogPreparingAction => '正在读取确认信息…';
 
   @override
-  String get profileBlogSubmittingAction => '正在提交，离开不会撤回操作。离开后请刷新日志核对结果。';
+  String get profileBlogSubmittingAction => '正在提交，离开不会撤回操作。离开后请刷新日志核对结果';
 
   @override
-  String get profileBlogActionOutcomeUnknown => '暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交。';
+  String get profileBlogActionOutcomeUnknown => '暂时无法确认操作结果。请返回并刷新日志核对，避免重复提交';
 
   @override
   String get profileBlogBody => '正文';
 
   @override
-  String get profileBlogImageUploadUnknown => '无法确认图片是否上传成功，已停止本次上传。请在网页相册中核实。';
+  String get profileBlogImageUploadUnknown => '无法确认图片是否上传成功，已停止本次上传。请在网页相册中核实';
 
   @override
   String get profileBlogStartWriting => '写下想记录的事…';
@@ -4996,7 +4996,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogNewCategoryName => '新分类名称';
 
   @override
-  String get profileBlogNewCategoryNameRequired => '请填写新分类名称。';
+  String get profileBlogNewCategoryNameRequired => '请填写新分类名称';
 
   @override
   String get profileBlogTags => '标签';
@@ -5025,7 +5025,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogKeepPassword => '留空保留原密码';
 
   @override
-  String get profileBlogPasswordRequired => '请设置访问密码。';
+  String get profileBlogPasswordRequired => '请设置访问密码';
 
   @override
   String get profileBlogTargetNames => '指定好友';
@@ -5034,13 +5034,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogTargetNamesHint => '填写用户名，用空格或换行分隔。';
 
   @override
-  String get profileBlogTargetNamesRequired => '请填写至少一个用户名。';
+  String get profileBlogTargetNamesRequired => '请填写至少一个用户名';
 
   @override
-  String get profileBlogVisibilityUnavailable => '当前访问范围不可用，请重新选择。';
+  String get profileBlogVisibilityUnavailable => '当前访问范围不可用，请重新选择';
 
   @override
-  String get profileBlogCommentsUnavailable => '当前无法更改评论设置，请重新进入编辑。';
+  String get profileBlogCommentsUnavailable => '当前无法更改评论设置，请重新进入编辑';
 
   @override
   String get profileBlogNoCategory => '未分类';
@@ -5090,7 +5090,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogEditorOutcomeUnknown =>
-      '暂时无法确认是否保存成功。请返回核对，避免重复提交。当前输入可以复制。';
+      '暂时无法确认是否保存成功。请返回核对，避免重复提交。当前输入可以复制';
 
   @override
   String get profileBlogLeaveEditorTitle => '离开编辑？';
@@ -5104,7 +5104,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogServerChanged =>
-      '服务器上的日志内容或设置已变化。请查看服务器版本，再选择保留修改或采用新版本。';
+      '服务器上的日志内容或设置已变化。请查看服务器版本，再选择保留修改或采用新版本';
 
   @override
   String get profileBlogUseServer => '采用服务器版本';
@@ -5113,37 +5113,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileBlogKeepLocal => '保留我的修改';
 
   @override
-  String get profileBlogSubjectRequired => '请填写标题。';
+  String get profileBlogSubjectRequired => '请填写标题';
 
   @override
-  String get profileBlogBodyRequired => '请填写正文。';
+  String get profileBlogBodyRequired => '请填写正文';
 
   @override
-  String get profileBlogSiteCategoryRequired => '请选择站点分类。';
+  String get profileBlogSiteCategoryRequired => '请选择站点分类';
 
   @override
-  String get profileBlogCategoryUnavailable => '所选分类已不可用，请重新选择。';
+  String get profileBlogCategoryUnavailable => '所选分类已不可用，请重新选择';
 
   @override
-  String get profileBlogNewCategoryUnavailable => '当前无法创建个人分类，请选择已有分类。';
+  String get profileBlogNewCategoryUnavailable => '当前无法创建个人分类，请选择已有分类';
 
   @override
-  String get profileBlogCategoryConflict => '请选择已有分类或新建分类，不能同时使用。';
+  String get profileBlogCategoryConflict => '请选择已有分类或新建分类，不能同时使用';
 
   @override
-  String get profileBlogFeedUnavailable => '当前无法发布动态，请关闭此选项后重试。';
+  String get profileBlogFeedUnavailable => '当前无法发布动态，请关闭此选项后重试';
 
   @override
-  String get profileBlogDraftLoadFailed => '草稿加载失败，已有内容未被覆盖。请重试或重置草稿。';
+  String get profileBlogDraftLoadFailed => '草稿加载失败，已有内容未被覆盖。请重试或重置草稿';
 
   @override
-  String get profileBlogDraftSaveFailed => '草稿保存失败，请重试后再离开。';
+  String get profileBlogDraftSaveFailed => '草稿保存失败，请重试后再离开';
 
   @override
-  String get profileBlogDraftPasswordRestored => '已恢复日志草稿，请重新输入访问密码。';
+  String get profileBlogDraftPasswordRestored => '已恢复日志草稿，请重新输入访问密码';
 
   @override
-  String get profileBlogDraftPending => '上次发布结果尚未确认。请先检查我的日志，避免重复发布。';
+  String get profileBlogDraftPending => '上次发布结果尚未确认。请先检查我的日志，避免重复发布';
 
   @override
   String get profileBlogDraftResume => '确认未发布，继续编辑';
@@ -5156,7 +5156,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogDraftImagesUnavailable =>
-      '部分草稿图片未能确认可用。请重试校验，或移除并替换这些图片后发布。';
+      '部分草稿图片未能确认可用。请重试校验，或移除并替换这些图片后发布';
 
   @override
   String moreStorageBlogDraft(int count) {
@@ -5165,11 +5165,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileBlogDraftSettingsChanged =>
-      '分类或发布权限已变化，请调整发布设置。已保留你的内容和原有选择。';
+      '分类或发布权限已变化，请调整发布设置。已保留你的内容和原有选择';
 
   @override
   String get profileBlogDraftCleanupFailed =>
-      '日志已发布，但本地草稿清理失败。再次打开时请先检查“我的日志”，避免重复发布。';
+      '日志已发布，但本地草稿清理失败。再次打开时请先检查“我的日志”，避免重复发布';
 
   @override
   String get composerReadAccess => '阅读权限';
@@ -5201,12 +5201,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String composerReadAccessAdjusted(int requested, int actual) {
-    return '已保存，但阅读权限由 $requested 调整为 $actual，请检查帖子设置。';
+    return '已保存，但阅读权限由 $requested 调整为 $actual，请检查帖子设置';
   }
 
   @override
   String composerReadAccessUnverified(int value) {
-    return '已保存，但暂时无法确认阅读权限是否为 $value，请检查帖子设置。';
+    return '已保存，但暂时无法确认阅读权限是否为 $value，请检查帖子设置';
   }
 
   @override
@@ -5236,10 +5236,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadPostLocationFailedTitle => '无法定位楼层';
 
   @override
-  String get threadPostTargetUnconfirmed => '无法确认目标楼层。你可以重试，或打开主题首页。';
+  String get threadPostTargetUnconfirmed => '无法确认目标楼层。你可以重试，或打开主题首页';
 
   @override
-  String get threadPostLocationNetworkFailed => '读取目标楼层失败，请检查网络后重试。';
+  String get threadPostLocationNetworkFailed => '读取目标楼层失败，请检查网络后重试';
 
   @override
   String get threadPostOpenHome => '打开主题首页';
@@ -5256,7 +5256,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dailyAutoSignInStorageUnavailable =>
-      '无法安全读取或保存签到记录，当前不能提交签到。请稍后重试。';
+      '无法安全读取或保存签到记录，当前不能提交签到。请稍后重试';
 
   @override
   String get profileMyFriendsTitle => '我的好友';
@@ -5289,7 +5289,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileFriendsFootprintsEmpty => '暂无访问足迹';
 
   @override
-  String get profileFriendsLoadFailed => '好友列表暂时无法加载，请稍后重试。';
+  String get profileFriendsLoadFailed => '好友列表暂时无法加载，请稍后重试';
 
   @override
   String get profileFriendsAnonymous => '匿名访客';
@@ -5317,7 +5317,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileFriendsRemoved => '好友已删除';
 
   @override
-  String get profileFriendRemovalUnknown => '删除结果无法确认，请刷新好友列表核对后再操作。';
+  String get profileFriendRemovalUnknown => '删除结果无法确认，请刷新好友列表核对后再操作';
 
   @override
   String get profileFriendRemovalVerify => '刷新核对';
@@ -5381,7 +5381,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageRecipientHint => '輸入一位使用者的完整使用者名稱';
 
   @override
-  String get messageRecipientInvalid => '請填寫一位使用者的完整使用者名稱，不支援逗號分隔的多個收件人。';
+  String get messageRecipientInvalid => '請填寫一位使用者的完整使用者名稱，不支援逗號分隔的多個收件人';
 
   @override
   String get messageRecipientAdd => '新增收件人';
@@ -5395,10 +5395,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get messageRecipientAlreadySelected => '此收件人已新增。';
+  String get messageRecipientAlreadySelected => '此收件人已新增';
 
   @override
-  String get messageRecipientLimitReached => '最多選擇 20 位收件人。';
+  String get messageRecipientLimitReached => '最多選擇 20 位收件人';
 
   @override
   String get messageFriendSearch => '搜尋好友使用者名稱';
@@ -5410,17 +5410,17 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageFriendNoMatches => '沒有符合的好友';
 
   @override
-  String get messageFriendLoadFailed => '暫時無法載入好友，可重試或手動新增使用者名稱。';
+  String get messageFriendLoadFailed => '暫時無法載入好友，可重試或手動新增使用者名稱';
 
   @override
   String get messageBatchResultTitle => '傳送結果';
 
   @override
-  String get messageBatchOnlyFriends => '目前帳號只能向好友群發私訊，請從好友中選擇收件人。';
+  String get messageBatchOnlyFriends => '目前帳號只能向好友群發私訊，請從好友中選擇收件人';
 
   @override
   String messageBatchReportedAccepted(int count) {
-    return '論壇回報已受理 $count 位收件人。';
+    return '論壇回報已受理 $count 位收件人';
   }
 
   @override
@@ -5433,7 +5433,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageBatchSubmittedMessage => '已提交的訊息';
 
   @override
-  String get messageBatchResultCaution => '群發回執不能證明每位收件人都已收到。請到對應對話確認。';
+  String get messageBatchResultCaution => '群發回執不能證明每位收件人都已收到。請到對應對話確認';
 
   @override
   String get messageBatchSendAgain => '再次傳送給這組收件人';
@@ -5451,7 +5451,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageInput => '輸入訊息';
 
   @override
-  String get messageUnknownOutcome => '暫時無法確認訊息是否送達。請先查看對話，確認未送達後再傳送，避免重複。';
+  String get messageUnknownOutcome => '暫時無法確認訊息是否送達。請先查看對話，確認未送達後再傳送，避免重複';
 
   @override
   String get messageSendAgain => '仍要再次傳送？';
@@ -5494,7 +5494,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get messageHistoryChanged => '對話歷史發生變化，請重新整理後繼續查看。';
+  String get messageHistoryChanged => '對話歷史發生變化，請重新整理後繼續查看';
 
   @override
   String get messageGroup => '群組對話';
@@ -5506,25 +5506,25 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageLinkFailed => '暫時無法開啟此連結';
 
   @override
-  String get messageOnlyFriends => '對方只接收好友傳送的私訊。';
+  String get messageOnlyFriends => '對方只接收好友傳送的私訊';
 
   @override
-  String get messageRecipientUnavailable => '收件人不存在或暫時無法使用，請檢查收件人資訊。';
+  String get messageRecipientUnavailable => '收件人不存在或暫時無法使用，請檢查收件人資訊';
 
   @override
-  String get messageCannotSendToSelf => '不能傳送私訊給自己。';
+  String get messageCannotSendToSelf => '不能傳送私訊給自己';
 
   @override
-  String get messageSendDenied => '目前帳號或對方的隱私設定不允許傳送這則私訊。';
+  String get messageSendDenied => '目前帳號或對方的隱私設定不允許傳送這則私訊';
 
   @override
-  String get messageSendTooFast => '傳送過於頻繁，請稍後再試。';
+  String get messageSendTooFast => '傳送過於頻繁，請稍後再試';
 
   @override
-  String get messageDailyLimit => '已達到論壇 24 小時內的訊息或對話上限，請稍後再試。';
+  String get messageDailyLimit => '已達到論壇 24 小時內的訊息或對話上限，請稍後再試';
 
   @override
-  String get messageConversationUnavailable => '這段對話已無法使用，請重新整理訊息列表後再試。';
+  String get messageConversationUnavailable => '這段對話已無法使用，請重新整理訊息列表後再試';
 
   @override
   String get appNavigationMessages => '訊息';
@@ -5554,7 +5554,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageIgnoreApplied => '已屏蔽今後的此類提醒';
 
   @override
-  String get messageIgnoreUnknown => '暫時無法確認屏蔽設定是否已生效，未自動重試。';
+  String get messageIgnoreUnknown => '暫時無法確認屏蔽設定是否已生效，未自動重試';
 
   @override
   String get messageIgnoreSaving => '正在儲存…';
@@ -8025,22 +8025,22 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreStorageMigrationInsufficientSpace =>
-      '預設儲存位置空間不足。原位置的資料仍然可用，請釋放空間後重試。';
+      '預設儲存位置空間不足。原位置的資料仍然可用，請釋放空間後重試';
 
   @override
   String get moreStorageMigrationLocationUnavailable =>
-      '無法存取原位置或預設儲存位置。原位置的資料仍然保留，請檢查儲存權限後重試。';
+      '無法存取原位置或預設儲存位置。原位置的資料仍然保留，請檢查儲存權限後重試';
 
   @override
   String get moreStorageMigrationConflict =>
-      '預設儲存位置存在衝突內容或目錄結構無法安全遷移。原位置的資料仍然可用，請處理衝突後重試。';
+      '預設儲存位置存在衝突內容或目錄結構無法安全遷移。原位置的資料仍然可用，請處理衝突後重試';
 
   @override
-  String get moreStorageMigrationFailed => '儲存位置遷移尚未完成。原位置的資料仍然可用，請稍後重試。';
+  String get moreStorageMigrationFailed => '儲存位置遷移尚未完成。原位置的資料仍然可用，請稍後重試';
 
   @override
   String get moreStorageMigrationCleanupPending =>
-      '預設儲存位置已經生效，但原位置的已驗證副本尚未清理完成。快取功能可正常使用。';
+      '預設儲存位置已經生效，但原位置的已驗證副本尚未清理完成。快取功能可正常使用';
 
   @override
   String get moreStorageMigrationRetry => '重試遷移';
@@ -8669,7 +8669,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get threadHtmlCollapseCollapsed => '展開摺疊內容';
 
   @override
-  String get threadHtmlRenderFailed => '正文渲染失敗，可長按樓層複製正文或開啟原帖查看。';
+  String get threadHtmlRenderFailed => '正文渲染失敗，可長按樓層複製正文或開啟原帖查看';
 
   @override
   String get threadSelectionCopyTitle => '選擇複製';
@@ -8765,7 +8765,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get composerCollapseDeleteBody => '摺疊標題和正文將從帖子內容中刪除。';
 
   @override
-  String get composerCollapseConflict => '帖子正文已更新，無法套用本次摺疊修改。請複製內容後重新開啟。';
+  String get composerCollapseConflict => '帖子正文已更新，無法套用本次摺疊修改。請複製內容後重新開啟';
 
   @override
   String get composerFormat => '格式';
@@ -8923,7 +8923,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get composerDraftImageVerificationFailed =>
-      '草稿圖片驗證失敗，圖片預覽已暫時隱藏。你仍可編輯和送出，連線後可重試。';
+      '草稿圖片驗證失敗，圖片預覽已暫時隱藏。你仍可編輯和送出，連線後可重試';
 
   @override
   String composerDraftImagesInvalidated(int count) {
@@ -9690,16 +9690,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileFriendRemoveExplanation => '解除後，你們將不再是好友。';
 
   @override
-  String get profileFriendOperationUnknown => '操作結果暫未確認，請關閉並核對好友狀態後再操作。';
+  String get profileFriendOperationUnknown => '操作結果暫未確認，請關閉並核對好友狀態後再操作';
 
   @override
-  String get profileFriendRequestSent => '好友申請已送出，等待對方確認。';
+  String get profileFriendRequestSent => '好友申請已送出，等待對方確認';
 
   @override
-  String get profileFriendApproved => '已接受申請，你們現在是好友了。';
+  String get profileFriendApproved => '已接受申請，你們現在是好友了';
 
   @override
-  String get profileFriendRemoved => '已解除好友關係。';
+  String get profileFriendRemoved => '已解除好友關係';
 
   @override
   String get profileTitle => '個人資料';
@@ -9794,7 +9794,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get forumWebViewAccountChanged => '帳號已變更，請關閉此頁面後重新開啟。';
+  String get forumWebViewAccountChanged => '帳號已變更，請關閉此頁面後重新開啟';
 
   @override
   String get profileBlogOpenWeb => '在網頁中開啟';
@@ -9803,13 +9803,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogWebInputNotice => '目前輸入不會自動帶入網頁。你可以取消並先複製內容，再開啟網頁繼續操作。';
 
   @override
-  String get profileBlogReadPasswordRequired => '這篇日誌需要密碼，可在網頁中輸入後閱讀。';
+  String get profileBlogReadPasswordRequired => '這篇日誌需要密碼，可在網頁中輸入後閱讀';
 
   @override
-  String get profileBlogPrivate => '作者限制了這篇日誌的存取範圍。';
+  String get profileBlogPrivate => '作者限制了這篇日誌的存取範圍';
 
   @override
-  String get profileBlogUnavailable => '日誌暫時無法存取，可能已刪除、尚未審核或沒有查看權限。';
+  String get profileBlogUnavailable => '日誌暫時無法存取，可能已刪除、尚未審核或沒有查看權限';
 
   @override
   String get profileOpenForumPage => '開啟論壇資料頁';
@@ -9872,13 +9872,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogDeleteCommentBody => '確定刪除這則留言嗎？刪除後無法復原。';
 
   @override
-  String get profileBlogCommentInputRequired => '請填寫留言內容。';
+  String get profileBlogCommentInputRequired => '請填寫留言內容';
 
   @override
-  String get profileBlogCommentTooShort => '留言內容太短，請補充後再提交。';
+  String get profileBlogCommentTooShort => '留言內容太短，請補充後再提交';
 
   @override
-  String get profileBlogCommentSubmitted => '留言已提交；如需審核，顯示可能延遲。';
+  String get profileBlogCommentSubmitted => '留言已提交；如需審核，顯示可能延遲';
 
   @override
   String get profileBlogCommentSaved => '留言已儲存';
@@ -9899,11 +9899,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogSubmittingComment => '正在提交…';
 
   @override
-  String get profileBlogCommentSessionChanged => '帳號已變更，請返回日誌後重新操作。';
+  String get profileBlogCommentSessionChanged => '帳號已變更，請返回日誌後重新操作';
 
   @override
   String get profileBlogCommentOutcomeUnknown =>
-      '無法確認這次操作是否成功，請先返回日誌核對。為避免重複提交，本頁不會再次傳送；輸入內容可以複製。';
+      '無法確認這次操作是否成功，請先返回日誌核對。為避免重複提交，本頁不會再次傳送；輸入內容可以複製';
 
   @override
   String get profileBlogLeaveCommentTitle => '離開留言頁面？';
@@ -10175,7 +10175,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get postEditConflictTitle => '伺服器內容已變更';
 
   @override
-  String get postEditConflictBody => '網頁編輯或其他裝置已修改這則帖子，請選擇要保留的版本。';
+  String get postEditConflictBody => '網頁編輯或其他裝置已修改這則帖子，請選擇要保留的版本';
 
   @override
   String get postEditUseServer => '使用伺服器版本';
@@ -10184,7 +10184,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get postEditKeepLocal => '保留本地版本';
 
   @override
-  String get postEditVerificationFailed => '無法確認網頁編輯後的伺服器狀態，原生儲存暫不可用。';
+  String get postEditVerificationFailed => '無法確認網頁編輯後的伺服器狀態，原生儲存暫不可用';
 
   @override
   String get postEditNativeSubmitUnavailable => '原生儲存將在後續版本開放';
@@ -10208,16 +10208,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get postEditDeleteImageConfirm => '確認刪除';
 
   @override
-  String get postEditDeleteImageFailed => '圖片刪除未成功，圖片仍保留。';
+  String get postEditDeleteImageFailed => '圖片刪除未成功，圖片仍保留';
 
   @override
-  String get postEditDeleteImageUnconfirmed => '無法確認圖片刪除狀態，請稍後重試。';
+  String get postEditDeleteImageUnconfirmed => '無法確認圖片刪除狀態，請稍後重試';
 
   @override
   String get postEditAttachmentDeleting => '正在刪除圖片';
 
   @override
-  String get postEditDeletedImageReferenceWarning => '正文仍包含已刪除圖片代碼。';
+  String get postEditDeletedImageReferenceWarning => '正文仍包含已刪除圖片代碼';
 
   @override
   String get postEditSubmitInProgress => '正在儲存帖子內容…';
@@ -10233,25 +10233,25 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get postEditDanglingAttachmentConfirm => '繼續儲存';
 
   @override
-  String get postEditPartialSuccess => '正文已儲存，但部分新圖片未能確認關聯，請檢查後再試。';
+  String get postEditPartialSuccess => '正文已儲存，但部分新圖片未能確認關聯，請檢查後再試';
 
   @override
-  String get postEditSubmitUnconfirmed => '儲存結果未確認，已暫時停用原生儲存。請重新驗證伺服器版本。';
+  String get postEditSubmitUnconfirmed => '儲存結果未確認，已暫時停用原生儲存。請重新驗證伺服器版本';
 
   @override
   String get postEditRetryVerification => '重新驗證';
 
   @override
-  String get postEditFormExpired => '編輯表單已過期，正在重新取得後重試一次。';
+  String get postEditFormExpired => '編輯表單已過期，正在重新取得後重試一次';
 
   @override
-  String get postEditPermissionDenied => '沒有權限儲存此帖子。';
+  String get postEditPermissionDenied => '沒有權限儲存此帖子';
 
   @override
-  String get postEditAuthenticationRequired => '登入狀態已失效，請重新登入後再試。';
+  String get postEditAuthenticationRequired => '登入狀態已失效，請重新登入後再試';
 
   @override
-  String get postEditSubmitFailed => '帖子儲存失敗，目前內容已保留。';
+  String get postEditSubmitFailed => '帖子儲存失敗，目前內容已保留';
 
   @override
   String postEditLoadFailed(String error) {
@@ -10289,17 +10289,17 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogPreparingAction => '正在讀取確認資訊…';
 
   @override
-  String get profileBlogSubmittingAction => '正在提交，離開不會撤回操作。離開後請重新整理日誌核對結果。';
+  String get profileBlogSubmittingAction => '正在提交，離開不會撤回操作。離開後請重新整理日誌核對結果';
 
   @override
   String get profileBlogActionOutcomeUnknown =>
-      '暫時無法確認操作結果。請返回並重新整理日誌核對，避免重複提交。';
+      '暫時無法確認操作結果。請返回並重新整理日誌核對，避免重複提交';
 
   @override
   String get profileBlogBody => '內文';
 
   @override
-  String get profileBlogImageUploadUnknown => '無法確認圖片是否上傳成功，已停止本次上傳。請在網頁相簿中確認。';
+  String get profileBlogImageUploadUnknown => '無法確認圖片是否上傳成功，已停止本次上傳。請在網頁相簿中確認';
 
   @override
   String get profileBlogStartWriting => '寫下想記錄的事…';
@@ -10320,7 +10320,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogNewCategoryName => '新分類名稱';
 
   @override
-  String get profileBlogNewCategoryNameRequired => '請填寫新分類名稱。';
+  String get profileBlogNewCategoryNameRequired => '請填寫新分類名稱';
 
   @override
   String get profileBlogTags => '標籤';
@@ -10349,7 +10349,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogKeepPassword => '留空保留原密碼';
 
   @override
-  String get profileBlogPasswordRequired => '請設定存取密碼。';
+  String get profileBlogPasswordRequired => '請設定存取密碼';
 
   @override
   String get profileBlogTargetNames => '指定好友';
@@ -10358,13 +10358,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogTargetNamesHint => '填寫使用者名稱，以空格或換行分隔。';
 
   @override
-  String get profileBlogTargetNamesRequired => '請填寫至少一個使用者名稱。';
+  String get profileBlogTargetNamesRequired => '請填寫至少一個使用者名稱';
 
   @override
-  String get profileBlogVisibilityUnavailable => '目前存取範圍無法使用，請重新選擇。';
+  String get profileBlogVisibilityUnavailable => '目前存取範圍無法使用，請重新選擇';
 
   @override
-  String get profileBlogCommentsUnavailable => '目前無法更改評論設定，請重新進入編輯。';
+  String get profileBlogCommentsUnavailable => '目前無法更改評論設定，請重新進入編輯';
 
   @override
   String get profileBlogNoCategory => '未分類';
@@ -10414,7 +10414,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogEditorOutcomeUnknown =>
-      '暫時無法確認是否儲存成功。請返回核對，避免重複提交。目前輸入可以複製。';
+      '暫時無法確認是否儲存成功。請返回核對，避免重複提交。目前輸入可以複製';
 
   @override
   String get profileBlogLeaveEditorTitle => '離開編輯？';
@@ -10428,7 +10428,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogServerChanged =>
-      '伺服器上的日誌內容或設定已變化。請查看伺服器版本，再選擇保留修改或採用新版本。';
+      '伺服器上的日誌內容或設定已變化。請查看伺服器版本，再選擇保留修改或採用新版本';
 
   @override
   String get profileBlogUseServer => '採用伺服器版本';
@@ -10437,37 +10437,37 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileBlogKeepLocal => '保留我的修改';
 
   @override
-  String get profileBlogSubjectRequired => '請填寫標題。';
+  String get profileBlogSubjectRequired => '請填寫標題';
 
   @override
-  String get profileBlogBodyRequired => '請填寫內文。';
+  String get profileBlogBodyRequired => '請填寫內文';
 
   @override
-  String get profileBlogSiteCategoryRequired => '請選擇網站分類。';
+  String get profileBlogSiteCategoryRequired => '請選擇網站分類';
 
   @override
-  String get profileBlogCategoryUnavailable => '所選分類已無法使用，請重新選擇。';
+  String get profileBlogCategoryUnavailable => '所選分類已無法使用，請重新選擇';
 
   @override
-  String get profileBlogNewCategoryUnavailable => '目前無法新增個人分類，請選擇既有分類。';
+  String get profileBlogNewCategoryUnavailable => '目前無法新增個人分類，請選擇既有分類';
 
   @override
-  String get profileBlogCategoryConflict => '請選擇既有分類或新增分類，不能同時使用。';
+  String get profileBlogCategoryConflict => '請選擇既有分類或新增分類，不能同時使用';
 
   @override
-  String get profileBlogFeedUnavailable => '目前無法發佈動態，請關閉此選項後重試。';
+  String get profileBlogFeedUnavailable => '目前無法發佈動態，請關閉此選項後重試';
 
   @override
-  String get profileBlogDraftLoadFailed => '草稿載入失敗，已有內容未被覆蓋。請重試或重設草稿。';
+  String get profileBlogDraftLoadFailed => '草稿載入失敗，已有內容未被覆蓋。請重試或重設草稿';
 
   @override
-  String get profileBlogDraftSaveFailed => '草稿儲存失敗，請重試後再離開。';
+  String get profileBlogDraftSaveFailed => '草稿儲存失敗，請重試後再離開';
 
   @override
-  String get profileBlogDraftPasswordRestored => '已恢復日誌草稿，請重新輸入存取密碼。';
+  String get profileBlogDraftPasswordRestored => '已恢復日誌草稿，請重新輸入存取密碼';
 
   @override
-  String get profileBlogDraftPending => '上次發佈結果尚未確認。請先檢查我的日誌，避免重複發佈。';
+  String get profileBlogDraftPending => '上次發佈結果尚未確認。請先檢查我的日誌，避免重複發佈';
 
   @override
   String get profileBlogDraftResume => '確認未發佈，繼續編輯';
@@ -10480,7 +10480,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogDraftImagesUnavailable =>
-      '部分草稿圖片未能確認可用。請重試驗證，或移除並替換這些圖片後發佈。';
+      '部分草稿圖片未能確認可用。請重試驗證，或移除並替換這些圖片後發佈';
 
   @override
   String moreStorageBlogDraft(int count) {
@@ -10489,11 +10489,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get profileBlogDraftSettingsChanged =>
-      '分類或發佈權限已變化，請調整發佈設定。已保留你的內容和原有選擇。';
+      '分類或發佈權限已變化，請調整發佈設定。已保留你的內容和原有選擇';
 
   @override
   String get profileBlogDraftCleanupFailed =>
-      '日誌已發佈，但本機草稿清理失敗。再次開啟時請先檢查「我的日誌」，避免重複發佈。';
+      '日誌已發佈，但本機草稿清理失敗。再次開啟時請先檢查「我的日誌」，避免重複發佈';
 
   @override
   String get composerReadAccess => '閱讀權限';
@@ -10525,12 +10525,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String composerReadAccessAdjusted(int requested, int actual) {
-    return '已儲存，但閱讀權限由 $requested 調整為 $actual，請檢查帖子設定。';
+    return '已儲存，但閱讀權限由 $requested 調整為 $actual，請檢查帖子設定';
   }
 
   @override
   String composerReadAccessUnverified(int value) {
-    return '已儲存，但暫時無法確認閱讀權限是否為 $value，請檢查帖子設定。';
+    return '已儲存，但暫時無法確認閱讀權限是否為 $value，請檢查帖子設定';
   }
 
   @override
@@ -10560,10 +10560,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get threadPostLocationFailedTitle => '無法定位樓層';
 
   @override
-  String get threadPostTargetUnconfirmed => '無法確認目標樓層。你可以重試，或開啟主題首頁。';
+  String get threadPostTargetUnconfirmed => '無法確認目標樓層。你可以重試，或開啟主題首頁';
 
   @override
-  String get threadPostLocationNetworkFailed => '讀取目標樓層失敗，請檢查網路後重試。';
+  String get threadPostLocationNetworkFailed => '讀取目標樓層失敗，請檢查網路後重試';
 
   @override
   String get threadPostOpenHome => '開啟主題首頁';
@@ -10580,7 +10580,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get dailyAutoSignInStorageUnavailable =>
-      '無法安全讀取或儲存簽到記錄，目前無法提交簽到。請稍後重試。';
+      '無法安全讀取或儲存簽到記錄，目前無法提交簽到。請稍後重試';
 
   @override
   String get profileMyFriendsTitle => '我的好友';
@@ -10613,7 +10613,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileFriendsFootprintsEmpty => '暫無造訪足跡';
 
   @override
-  String get profileFriendsLoadFailed => '好友列表暫時無法載入，請稍後重試。';
+  String get profileFriendsLoadFailed => '好友列表暫時無法載入，請稍後重試';
 
   @override
   String get profileFriendsAnonymous => '匿名訪客';
@@ -10641,7 +10641,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get profileFriendsRemoved => '好友已刪除';
 
   @override
-  String get profileFriendRemovalUnknown => '刪除結果無法確認，請重新整理好友列表核對後再操作。';
+  String get profileFriendRemovalUnknown => '刪除結果無法確認，請重新整理好友列表核對後再操作';
 
   @override
   String get profileFriendRemovalVerify => '重新整理核對';

@@ -22,6 +22,9 @@ void showTransientSnackBar(
       SnackBar(
         key: snackBarKey,
         content: Text(trimmed),
+        duration: const Duration(seconds: 4),
+        // Flutter otherwise keeps snackbars with an action visible indefinitely.
+        persist: false,
         action: action,
         actionOverflowThreshold: actionOverflowThreshold,
       ),

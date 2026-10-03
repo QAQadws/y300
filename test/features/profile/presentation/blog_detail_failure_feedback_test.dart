@@ -90,6 +90,48 @@ void main() {
     });
   }
 
+  for (final locale in AppLocalizations.supportedLocales) {
+    for (final hasBrowserAction in [true, false]) {
+      testWidgets(
+        '$locale private entry feedback expires with browser action=$hasBrowserAction',
+        (tester) async {
+          final host = _Host();
+          if (!hasBrowserAction) host.navigation = null;
+          await host.pump(tester, locale: locale);
+          host.open();
+          await tester.pump();
+          host.details.requests.single.complete(_failure('user_blog_private'));
+          await tester.pumpAndSettle();
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(ProfileBlogPage)),
+          );
+          final feedback = find.widgetWithText(
+            SnackBar,
+            l10n.profileBlogPrivate,
+          );
+          expect(feedback, findsOneWidget);
+          expect(l10n.profileBlogPrivate.endsWith('。'), isFalse);
+          expect(
+            find.byType(SnackBarAction),
+            hasBrowserAction ? findsOneWidget : findsNothing,
+          );
+          await tester.pump(const Duration(seconds: 3));
+          expect(feedback, findsOneWidget);
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pumpAndSettle();
+          expect(find.byType(SnackBar), findsNothing);
+          // Expiry must not report the same failed request again on a rebuild.
+          host.switchAccount('303');
+          await tester.pumpAndSettle();
+          expect(find.byType(SnackBar), findsNothing);
+          expect(host.launches, isEmpty);
+          expect(host.details.requests, hasLength(1));
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets('comment links keep their source-owned browser destination', (
     tester,
   ) async {
@@ -349,6 +391,7 @@ class _Host {
     WidgetTester tester, {
     bool largeText = false,
     ThemeData? theme,
+    Locale locale = const Locale('zh'),
   }) async {
     container = ProviderContainer(overrides: overrides('101'));
     addTearDown(container.dispose);
@@ -356,6 +399,7 @@ class _Host {
       UncontrolledProviderScope(
         container: container,
         child: LocalizedTestApp(
+          locale: locale,
           navigatorKey: navigator,
           theme: theme ?? AppTheme.light(),
           builder: largeText
