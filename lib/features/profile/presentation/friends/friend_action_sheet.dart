@@ -88,7 +88,7 @@ class _FriendActionSheetState extends ConsumerState<FriendActionSheet> {
               ForumContentAction(
                 key: Key('my-friends-remove-${item.userId}'),
                 value: FriendAction.remove,
-                label: l10n.profileFriendRemove,
+                label: l10n.profileFriendsRemove,
                 icon: Icons.person_remove_outlined,
               ),
           ],

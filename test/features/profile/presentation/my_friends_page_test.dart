@@ -539,7 +539,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(repository.requests, hasLength(2));
       expect(find.byKey(const Key('my-friends-user-202')), findsNothing);
-      expect(find.text(_l10n(tester).profileFriendRemoved), findsOneWidget);
+      expect(find.text(_l10n(tester).profileFriendsRemoved), findsOneWidget);
     },
   );
 

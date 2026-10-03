@@ -11,6 +11,7 @@ import '../contracts/forum_home.dart';
 import '../contracts/forum_tag_directory.dart';
 import '../contracts/forum_search.dart';
 import '../contracts/profile_and_blog.dart';
+import '../contracts/forum_friend_operations.dart';
 import '../contracts/user_thread_directory.dart';
 import '../contracts/user_blog_comments.dart';
 import '../contracts/user_blog_operations.dart';
@@ -59,6 +60,7 @@ import 'discuz_forum_home_html_repository.dart';
 import 'discuz_forum_search_repository.dart';
 import 'discuz_forum_display_repositories.dart';
 import 'discuz_profile_html_adapters.dart';
+import 'discuz_friend_operations.dart';
 import 'discuz_user_thread_directory_repository.dart';
 import 'discuz_blog_comment_service.dart';
 import 'discuz_blog_operations.dart';
@@ -464,6 +466,14 @@ final class ForumClientAdapterFactory {
   /// Creates journal publishing and management operations.
   UserBlogOperations createUserBlogOperations() =>
       createUserBlogEditor().operations;
+
+  /// Creates native friendship operations against the shared session.
+  ForumFriendOperations createFriendOperations() => DiscuzFriendOperations(
+    config: config,
+    network: network,
+    profiles: requestProfiles,
+    sessions: sessionStore,
+  );
 
   /// Shares form tickets and image ownership between journal capabilities.
   ({UserBlogOperations operations, UserBlogMediaOperations media})

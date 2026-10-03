@@ -14,6 +14,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import '../../profile/test_support/profile_repository_fixture.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -5499,6 +5503,12 @@ void main() {
         _buildTestApp(
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
+          additionalOverrides: [
+            verifiedProfileOwnerProvider.overrideWithValue(null),
+            forumUserProfileRepositoryProvider.overrideWithValue(
+              ProfileRepositoryFixture(),
+            ),
+          ],
         ),
       );
       await tester.pumpAndSettle();
@@ -5506,17 +5516,13 @@ void main() {
       await tester.tap(find.text('alice').first);
       await tester.pumpAndSettle();
 
-      expect(find.byType(ForumWebViewPage), findsOneWidget);
-      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+      expect(find.byType(UserProfilePage), findsOneWidget);
       expect(
-        webViewDriver.bootstrapConfig?.initialUri.toString(),
-        'https://bbs.yamibo.com/home.php?mod=space&uid=509957&mobile=2',
+        tester.widget<UserProfilePage>(find.byType(UserProfilePage)).uid,
+        '509957',
       );
-      expect(webViewDriver.loadedUris, <Uri>[
-        Uri.parse(
-          'https://bbs.yamibo.com/home.php?mod=space&uid=509957&mobile=2',
-        ),
-      ]);
+      expect(webViewDriver.bootstrapConfig, isNull);
+      expect(webViewDriver.loadedUris, isEmpty);
     });
 
     testWidgets('opens user profile from post author avatar', (tester) async {
@@ -5551,6 +5557,12 @@ void main() {
         _buildTestApp(
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
+          additionalOverrides: [
+            verifiedProfileOwnerProvider.overrideWithValue(null),
+            forumUserProfileRepositoryProvider.overrideWithValue(
+              ProfileRepositoryFixture(),
+            ),
+          ],
         ),
       );
       await tester.pumpAndSettle();
@@ -5558,12 +5570,12 @@ void main() {
       await tester.tap(find.byKey(const Key('thread-author-avatar-p1')));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ForumWebViewPage), findsOneWidget);
-      expect(find.byKey(const Key('forum-webview-page')), findsOneWidget);
+      expect(find.byType(UserProfilePage), findsOneWidget);
       expect(
-        webViewDriver.bootstrapConfig?.initialUri.toString(),
-        'https://bbs.yamibo.com/home.php?mod=space&uid=509957&mobile=2',
+        tester.widget<UserProfilePage>(find.byType(UserProfilePage)).uid,
+        '509957',
       );
+      expect(webViewDriver.bootstrapConfig, isNull);
     });
 
     testWidgets('opens user profile from comment author name', (tester) async {
@@ -5610,6 +5622,12 @@ void main() {
         _buildTestApp(
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
+          additionalOverrides: [
+            verifiedProfileOwnerProvider.overrideWithValue(null),
+            forumUserProfileRepositoryProvider.overrideWithValue(
+              ProfileRepositoryFixture(),
+            ),
+          ],
         ),
       );
       await tester.pumpAndSettle();
@@ -5617,14 +5635,13 @@ void main() {
       await tester.tap(find.byKey(const Key('thread-comment-author-name-777')));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(find.byType(UserProfilePage), findsOneWidget);
       expect(
-        webViewDriver.bootstrapConfig?.initialUri.toString(),
-        'https://bbs.yamibo.com/home.php?mod=space&uid=777&mobile=2',
+        tester.widget<UserProfilePage>(find.byType(UserProfilePage)).uid,
+        '777',
       );
-      expect(webViewDriver.loadedUris, <Uri>[
-        Uri.parse('https://bbs.yamibo.com/home.php?mod=space&uid=777&mobile=2'),
-      ]);
+      expect(webViewDriver.bootstrapConfig, isNull);
+      expect(webViewDriver.loadedUris, isEmpty);
     });
 
     testWidgets('opens user profile from comment author avatar', (
@@ -5671,6 +5688,12 @@ void main() {
         _buildTestApp(
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
+          additionalOverrides: [
+            verifiedProfileOwnerProvider.overrideWithValue(null),
+            forumUserProfileRepositoryProvider.overrideWithValue(
+              ProfileRepositoryFixture(),
+            ),
+          ],
         ),
       );
       await tester.pumpAndSettle();
@@ -5680,11 +5703,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(find.byType(UserProfilePage), findsOneWidget);
       expect(
-        webViewDriver.bootstrapConfig?.initialUri.toString(),
-        'https://bbs.yamibo.com/home.php?mod=space&uid=778&mobile=2',
+        tester.widget<UserProfilePage>(find.byType(UserProfilePage)).uid,
+        '778',
       );
+      expect(webViewDriver.bootstrapConfig, isNull);
     });
 
     testWidgets('opens comment profile from author url uid when id is empty', (
@@ -5730,6 +5754,12 @@ void main() {
         _buildTestApp(
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
+          additionalOverrides: [
+            verifiedProfileOwnerProvider.overrideWithValue(null),
+            forumUserProfileRepositoryProvider.overrideWithValue(
+              ProfileRepositoryFixture(),
+            ),
+          ],
         ),
       );
       await tester.pumpAndSettle();
@@ -5737,11 +5767,12 @@ void main() {
       await tester.tap(find.text('url-user'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(find.byType(UserProfilePage), findsOneWidget);
       expect(
-        webViewDriver.bootstrapConfig?.initialUri.toString(),
-        'https://bbs.yamibo.com/home.php?mod=space&uid=888&mobile=2',
+        tester.widget<UserProfilePage>(find.byType(UserProfilePage)).uid,
+        '888',
       );
+      expect(webViewDriver.bootstrapConfig, isNull);
     });
 
     testWidgets('shows snackbar when comment author uid is missing', (

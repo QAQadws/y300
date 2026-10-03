@@ -43,7 +43,7 @@
 - `more`：更多页、关于页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/手动导出和 Debug 原型工具。
 - `novel`：小说数据、书架、详情和阅读器。作者帖正文经 forum client `threadAuthorPosts` 契约以 `version=1` 读取；负责来源元数据与章节同步/恢复、帖子章节网关、正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
 - `posting`：新主题发布流程。发帖准备与提交经 forum client preparation/command 契约；负责版块/类型/标签/特殊主题与投票建模、提交结果映射，并在 `composer_shared` 之上提供发帖 controller/page。
-- `profile`：当前用户与指定用户资料、账号摘要、每日签到、好友列表、日志列表/详情及原生 HTML 日志编辑器。当前用户资料、账号摘要、公开资料/日志、好友目录/删除和签到经 forum client 契约；好友页包含我的好友、在线会员、最近访客和我的足迹，按已验证账号与会话 revision 隔离路由状态，不持久化目录。只提供消息中心与单人对话入口，完整消息工作流归 `messages`，好友卡片按协议返回的资料链接复用既有 URL 路由，资料链接/私信路由由 `app/navigation/friend_routes.dart` 装配。原生日志详情在成功内容可见后经 history 的 recorder 保存浏览记录。新建日志由独立领域快照/repository 和保存协调组件接入账号草稿，SQLite `blog_drafts.db` v1 每账号一份、不自动过期；编辑已有日志和评论不保存草稿。资料修改尚未实现，不得凭空补造请求。
+- `profile`：当前用户与指定用户资料、账号摘要、每日签到、好友列表、日志列表/详情及原生 HTML 日志编辑器。当前用户资料、账号摘要、公开资料/日志、好友目录/删除和签到经 forum client 契约；好友页包含我的好友、在线会员、最近访客和我的足迹，按已验证账号与会话 revision 隔离路由状态，不持久化目录。提供原生主题／回复、日志、好友目录、消息中心与单人对话入口，完整消息工作流归 `messages`；好友卡片按协议返回的资料链接复用既有 URL 路由，资料链接/私信路由由 `app/navigation/friend_routes.dart` 装配。资料页读取和好友申请／接受／解除经 forum client 契约，并按 viewer、会话代次、取消与请求 generation 隔离。原生日志详情在成功内容可见后经 history 的 recorder 保存浏览记录。新建日志由独立领域快照/repository 和保存协调组件接入账号草稿，SQLite `blog_drafts.db` v1 每账号一份、不自动过期；编辑已有日志和评论不保存草稿。本人资料设置按已验证的服务器目的地址进入绑定账号的受管 WebView。好友操作只在 `applied` 后更新页面，未知结果不重发，临时表单与输入不持久化。
 - `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。
 - `reply`：帖子回复与楼层回复。回复准备与提交经 forum client preparation/command 契约（楼层回复动态字段封装在包内 opaque token）；负责草稿校验，并在 `composer_shared` 之上提供回复 controller/page。
 - `search`：搜索读取经 forum client `forumSearch` 契约（formhash、POST、redirect 校验与结果页解析在包内）；负责搜索调度器、限流、查询 generation 隔离、自动分页搜索页和漫画 fallback 编排。

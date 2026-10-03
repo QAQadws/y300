@@ -181,6 +181,7 @@ final class DiscuzFriendRemovalCommand implements ForumFriendRemovalCommand {
             'handlekey': _handle,
           },
           followRedirects: false,
+          allowWafReplay: false,
           cancellation: submission.cancellation,
         ),
       );

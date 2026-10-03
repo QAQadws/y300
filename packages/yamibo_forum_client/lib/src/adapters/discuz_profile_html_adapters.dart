@@ -36,11 +36,19 @@ final class DiscuzForumUserProfileRepository
   load(
     ForumUserProfileQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
+    if (cancellation?.isCancelled ?? false) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.cancelled,
+        code: 'forum_user_profile_cancelled',
+        diagnosticMessage: 'forum_user_profile_cancelled',
+      );
+    }
     final userId = query.userId.trim();
-    if (userId.isEmpty ||
-        (query.view == ForumUserProfileView.self &&
-            !RegExp(r'^[1-9]\d*$').hasMatch(userId))) {
+    if (!RegExp(r'^[1-9]\d*$').hasMatch(userId) ||
+        (query.viewerUserId != null &&
+            !RegExp(r'^[1-9]\d*$').hasMatch(query.viewerUserId!))) {
       return const DataReadFailure(
         kind: DataReadFailureKind.business,
         code: 'forum_user_profile_query_invalid',
@@ -61,6 +69,7 @@ final class DiscuzForumUserProfileRepository
       ForumRequest(
         method: ForumRequestMethod.get,
         uri: uri,
+        cancellation: cancellation,
         context: ForumRequestContext(
           operation: query.view == ForumUserProfileView.self
               ? 'profile.user.self.html'
@@ -73,6 +82,13 @@ final class DiscuzForumUserProfileRepository
             .headers,
       ),
     );
+    if (cancellation?.isCancelled ?? false) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.cancelled,
+        code: 'forum_user_profile_cancelled',
+        diagnosticMessage: 'forum_user_profile_cancelled',
+      );
+    }
     final body =
         _textOrFailure<ForumUserProfileData, ForumUserProfileReadCapabilities>(
           result,
@@ -108,10 +124,11 @@ final class DiscuzForumUserProfileRepository
         html: html,
         expectedUserId: userId,
         view: query.view,
+        expectedViewerUserId: query.viewerUserId,
       );
       return DataReadSuccess(
         data: data,
-        capabilities: _profileReadCapabilities(data, query.view),
+        capabilities: _profileReadCapabilities(data),
         metadata: const DataReadMetadata.network(),
       );
     } on ForumUserProfileUnauthorized {
@@ -391,7 +408,6 @@ DataCapabilitySet<T> _optional<T extends Enum>(
 
 ForumUserProfileReadCapabilities _profileReadCapabilities(
   ForumUserProfileData data,
-  ForumUserProfileView view,
 ) {
   var values = _profileCapabilities.values;
   values = _optional(
@@ -408,11 +424,6 @@ ForumUserProfileReadCapabilities _profileReadCapabilities(
     values,
     ForumUserProfileCapability.signatureMarkup,
     data.signatureHtml != null,
-  );
-  values = _optional(
-    values,
-    ForumUserProfileCapability.orderedActions,
-    view == ForumUserProfileView.self,
   );
   return ForumUserProfileReadCapabilities(values: values);
 }

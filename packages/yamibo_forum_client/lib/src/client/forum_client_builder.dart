@@ -188,6 +188,7 @@ final class YamiboForumClientBuilder {
       ),
       stickerCatalog: factory.createStickerCatalog(store: stickerCatalogStore),
       forumUserProfile: factory.createForumUserProfile(),
+      friendOperations: factory.createFriendOperations(),
       userBlogDirectory: factory.createUserBlogDirectory(),
       userThreadDirectory: factory.createUserThreadDirectory(),
       userBlogDetail: factory.createUserBlogDetail(),

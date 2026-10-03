@@ -40,6 +40,7 @@ void main() {
       expect(submit.method, ForumRequestMethod.post);
       expect(submit.headers['User-Agent'], 'desktop');
       expect(submit.followRedirects, isFalse);
+      expect(submit.allowWafReplay, isFalse);
       expect(submit.uri.queryParameters['uid'], '12');
       expect(submit.uri.queryParameters['confirm'], '1');
       expect(submit.uri.queryParameters['inajax'], '1');

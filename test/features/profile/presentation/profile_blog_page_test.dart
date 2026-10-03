@@ -9,6 +9,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
@@ -36,6 +37,10 @@ void main() {
             ProviderScope(
               overrides: [
                 blogAccountIdProvider.overrideWithValue('101'),
+                verifiedProfileOwnerProvider.overrideWithValue((
+                  uid: '101',
+                  revision: 0,
+                )),
                 forumUserProfileRepositoryProvider.overrideWithValue(profiles),
                 userBlogDirectoryRepositoryProvider.overrideWithValue(
                   directory,

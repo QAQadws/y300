@@ -239,7 +239,7 @@ class _MyFriendsPageState extends ConsumerState<MyFriendsPage> {
     if (result is DataCommandOutcomeUnknown<ForumFriendRemovalReceipt>) return;
     final l10n = AppLocalizations.of(context);
     final message = result is DataCommandApplied<ForumFriendRemovalReceipt>
-        ? l10n.profileFriendRemoved
+        ? l10n.profileFriendsRemoved
         : LocalizedErrorSummary.resolve(l10n, result);
     ScaffoldMessenger.of(
       context,
@@ -467,7 +467,7 @@ class _RemoveFriendDialogState extends ConsumerState<_RemoveFriendDialog> {
         FilledButton(
           key: const Key('my-friends-remove-confirm'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: Text(l10n.profileFriendRemove),
+          child: Text(l10n.profileFriendsRemove),
         ),
       ],
     );

@@ -11,7 +11,6 @@ import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -418,27 +417,14 @@ void main() {
     await tester.tap(find.byKey(const Key('more-account-name')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MyProfilePage), findsNothing);
-    expect(find.byKey(const Key('test-profile-webview')), findsOneWidget);
-    expect(profileRepository.queries, isEmpty);
-    expect(
-      webLaunches.single.initialUri.origin,
-      Uri.parse(AppConfig.siteBaseUrl).origin,
-    );
-    expect(webLaunches.single.initialUri.path, '/home.php');
-    expect(webLaunches.single.initialUri.queryParameters, {
-      'mod': 'space',
-      'uid': '100',
-      'do': 'profile',
-      'mycenter': '1',
-      'mobile': '2',
-    });
-    expect(webLaunches.single.popOnRootBack, isTrue);
-    expect(webLaunches.single.purpose, ForumWebViewHostPurpose.selfProfile);
+    expect(find.byType(MyProfilePage), findsOneWidget);
+    expect(find.byKey(const Key('test-profile-webview')), findsNothing);
+    expect(profileRepository.queries.single.userId, '100');
+    expect(profileRepository.queries.single.view, ForumUserProfileView.self);
+    expect(profileRepository.queries.single.viewerUserId, '100');
+    expect(webLaunches, isEmpty);
 
-    Navigator.of(
-      tester.element(find.byKey(const Key('test-profile-webview'))),
-    ).pop();
+    Navigator.of(tester.element(find.byType(MyProfilePage))).pop();
     await tester.pumpAndSettle();
     expect(summaryRepository.reads, 2);
 
@@ -621,10 +607,11 @@ void main() {
     await tester.tap(find.byKey(const Key('more-account-avatar')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MyProfilePage), findsNothing);
-    expect(find.byKey(const Key('test-profile-webview')), findsOneWidget);
-    expect(webLaunches.single.initialUri.queryParameters['uid'], '200');
-    expect(profileRepository.queries, isEmpty);
+    expect(find.byType(MyProfilePage), findsOneWidget);
+    expect(find.byKey(const Key('test-profile-webview')), findsNothing);
+    expect(profileRepository.queries.single.userId, '200');
+    expect(profileRepository.queries.single.view, ForumUserProfileView.self);
+    expect(webLaunches, isEmpty);
   });
 
   testWidgets('account avatar stays disabled when login is cancelled', (
@@ -706,9 +693,9 @@ void main() {
     tap();
     await tester.pumpAndSettle();
 
-    expect(find.byType(MyProfilePage), findsNothing);
-    expect(find.byKey(const Key('test-profile-webview')), findsOneWidget);
-    expect(webLaunches, hasLength(1));
+    expect(find.byType(MyProfilePage), findsOneWidget);
+    expect(find.byKey(const Key('test-profile-webview')), findsNothing);
+    expect(webLaunches, isEmpty);
     expect(routeObserver.pushedNames.length, 2);
   });
 
@@ -1513,6 +1500,7 @@ class _SignedProfileRepository implements ForumUserProfileRepository {
   load(
     ForumUserProfileQuery query, {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
+    ForumRequestCancellation? cancellation,
   }) async {
     queries.add(query);
     policies.add(cachePolicy);

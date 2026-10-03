@@ -19,6 +19,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_route_fac
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_link_navigation.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -855,6 +856,9 @@ class _Host {
   late final container = ProviderContainer(overrides: _overrides('101'));
   List<Override> _overrides(String? actor) => [
     blogAccountIdProvider.overrideWithValue(actor),
+    verifiedProfileOwnerProvider.overrideWithValue(
+      actor == null ? null : (uid: actor, revision: 0),
+    ),
     userBlogNavigationProvider.overrideWithValue(navigation),
     userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
     userBlogDetailRepositoryProvider.overrideWithValue(details),

@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/friend_routes.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
@@ -22,6 +21,7 @@ import 'package:y300/features/thread/presentation/thread_image_reader_page.dart'
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
@@ -103,21 +103,23 @@ class ThreadPostNavigation {
   }
 
   void openAuthor(ThreadPost post) {
-    final uid = post.authorId.trim();
-    if (uid.isEmpty) {
-      _showSnackBar(AppLocalizations.of(context).threadDetailUidMissing);
-      return;
-    }
-    openManagedWebView(_authorProfileUri(uid));
+    _openProfile(post.authorId.trim());
   }
 
   void openCommentAuthor(ThreadPostCommentEntry comment) {
     final uid = _commentAuthorUid(comment);
-    if (uid == null || uid.isEmpty) {
+    _openProfile(uid);
+  }
+
+  void _openProfile(String? uid) {
+    if (!mounted) return;
+    if (uid == null || !RegExp(r'^[1-9]\d*$').hasMatch(uid)) {
       _showSnackBar(AppLocalizations.of(context).threadDetailUidMissing);
       return;
     }
-    openManagedWebView(_authorProfileUri(uid));
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => UserProfilePage(uid: uid)),
+    );
   }
 
   String? _commentAuthorUid(ThreadPostCommentEntry comment) {
@@ -139,17 +141,6 @@ class ThreadPostNavigation {
       caseSensitive: false,
     ).firstMatch(authorUrl);
     return match?.group(1);
-  }
-
-  Uri _authorProfileUri(String uid) {
-    return Uri.parse(AppConfig.siteBaseUrl).replace(
-      path: '/home.php',
-      queryParameters: <String, String>{
-        'mod': 'space',
-        'uid': uid,
-        'mobile': '2',
-      },
-    );
   }
 
   void openLink(String url) {
