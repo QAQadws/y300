@@ -96,6 +96,36 @@ void main() {
     expect(harness.command.requests.last.expectedForumDay, '20260926');
   });
 
+  test('failed explicit retry keeps the earlier unknown guard', () async {
+    final harness = _Harness();
+    final container = harness.container();
+    addTearDown(container.dispose);
+    final controller = container.read(dailySignInControllerProvider.notifier);
+
+    await controller.triggerAutomatic();
+    harness.repository.forumDay = '20260926';
+    await controller.triggerAutomatic();
+    harness.command.response = _notSent;
+    await controller.submit(explicitlyRetryUnknown: true);
+
+    expect(harness.command.sends, 2);
+    expect(
+      (await harness.ledger.readCheckpoint('42'))?.state,
+      DailySignInAttemptState.unknown,
+    );
+    expect(
+      container.read(dailySignInControllerProvider).commandResult,
+      isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>(),
+    );
+    expect(
+      container.read(dailySignInControllerProvider).needsExplicitRetry,
+      isTrue,
+    );
+    await controller.submit();
+    expect(harness.command.requests, hasLength(2));
+    expect(harness.command.sends, 2);
+  });
+
   test('signed fresh page records status without sending', () async {
     final harness = _Harness();
     harness.repository.status = ForumDailySignInStatus.signed;
@@ -240,6 +270,48 @@ void main() {
     await Future.wait([automatic, manual]);
     expect(harness.command.sends, 1);
   });
+
+  test(
+    'same account relogin waits for prior command and keeps guard',
+    () async {
+      final harness = _Harness();
+      final pending = Completer<DataCommandResult<ForumDailySignInReceipt>>();
+      harness.command.onAuthorized = () => pending.future;
+      final container = harness.container();
+      addTearDown(container.dispose);
+      final controller = container.read(dailySignInControllerProvider.notifier);
+
+      await controller.refresh();
+      final priorCommand = controller.submit();
+      await _until(() => harness.command.sends == 1);
+      container.read(_ownerProvider.notifier).state = null;
+      expect(container.read(dailySignInControllerProvider).owner, isNull);
+      container.read(_ownerProvider.notifier).state = (uid: '42', revision: 1);
+      expect(
+        container.read(dailySignInControllerProvider).isSubmitting,
+        isTrue,
+      );
+
+      final joinedCommand = controller.submit();
+      expect(harness.command.requests, hasLength(1));
+      pending.complete(_unknown);
+      await Future.wait([priorCommand, joinedCommand]);
+      await _until(
+        () => container.read(dailySignInControllerProvider).needsExplicitRetry,
+      );
+      expect(
+        container.read(dailySignInControllerProvider).isSubmitting,
+        isFalse,
+      );
+      expect(
+        container.read(dailySignInControllerProvider).snapshot?.userId,
+        '42',
+      );
+      await controller.submit();
+      expect(harness.command.requests, hasLength(1));
+      expect(harness.command.sends, 1);
+    },
+  );
 
   test('late old-owner command cannot change a new owner view', () async {
     final harness = _Harness();

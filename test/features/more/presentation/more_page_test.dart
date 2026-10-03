@@ -514,9 +514,7 @@ void main() {
     final l10n = AppLocalizations.of(tester.element(find.byType(MorePage)));
     _expectMyContentEntryOrderAndLabels(tester, l10n);
     expect(find.text(l10n.moreMyProfile), findsNothing);
-    expect(find.text(l10n.moreDailySignIn), findsNothing);
     expect(find.text(l10n.moreMyProfileSignedOutSubtitle), findsNothing);
-    expect(find.text(l10n.moreDailySignInSubtitle), findsNothing);
     expect(find.text(l10n.moreUnusedImagesSubtitle), findsNothing);
     expect(find.text(l10n.moreDataAndStorageSubtitle), findsNothing);
     expect(find.text(l10n.moreVisibleNavigationCount(5)), findsNothing);
@@ -727,7 +725,6 @@ void main() {
     expect(summaryRepository.reads, 1);
 
     expect(find.byKey(const Key('more-daily-sign-in-entry')), findsNothing);
-    expect(find.text(l10n.moreDailySignIn), findsNothing);
     expect(find.byKey(const Key('daily-auto-sign-in-toggle')), findsOneWidget);
     expect(signInRepository.reads, 0);
 
