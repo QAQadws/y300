@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ForumHomeFavoriteForum, ForumHomeRepository;
@@ -24,8 +25,12 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
 
   @override
   Future<ForumHomePageState> build() async {
+    final scope = ref.watch(yamiboForumSourceScopeProvider);
+    final repository = ref.watch(forumHomeRepositoryProvider);
+    final generation = ++_backgroundRefreshGeneration;
+    ref.onDispose(() => _backgroundRefreshGeneration++);
     final requestProfile = await _resolveRequestProfile();
-    final repository = ref.read(forumHomeRepositoryProvider);
+    _ensureCurrent(scope);
     ForumHomeCacheEntry? cached;
     try {
       cached = await repository.readCachedPayload(
@@ -34,18 +39,22 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
     } catch (_) {
       // Cache corruption/unavailability is a miss, not a startup failure.
     }
+    _ensureCurrent(scope);
     if (cached == null) {
       return _fetchForumHome(
         cachePolicy: CacheLoadPolicy.cacheFirst,
         requestProfile: requestProfile,
+        repository: repository,
+        scope: scope,
       );
     }
 
-    final generation = ++_backgroundRefreshGeneration;
     unawaited(
       _refreshCachedHomeAfterPublish(
         requestProfile: requestProfile,
         generation: generation,
+        repository: repository,
+        scope: scope,
       ),
     );
     return _stateFromPayload(
@@ -59,6 +68,8 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   }
 
   Future<void> refresh({bool forceNetwork = false}) async {
+    final scope = ref.read(yamiboForumSourceScopeProvider);
+    final repository = ref.read(forumHomeRepositoryProvider);
     final current = state.asData?.value;
     final cachePolicy = forceNetwork
         ? CacheLoadPolicy.networkFirst
@@ -67,13 +78,16 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       final generation = ++_backgroundRefreshGeneration;
       state = const AsyncLoading();
       final requestProfile = await _resolveRequestProfile();
+      if (!_isCurrent(scope, generation)) return;
       final next = await AsyncValue.guard(
         () => _fetchForumHome(
           cachePolicy: cachePolicy,
           requestProfile: requestProfile,
+          repository: repository,
+          scope: scope,
         ),
       );
-      if (ref.mounted && generation == _backgroundRefreshGeneration) {
+      if (_isCurrent(scope, generation)) {
         state = next;
       }
       return;
@@ -88,15 +102,17 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       final nextState = await _fetchForumHome(
         cachePolicy: cachePolicy,
         requestProfile: current.requestProfile,
+        repository: repository,
+        scope: scope,
       );
-      if (!ref.mounted || generation != _backgroundRefreshGeneration) {
+      if (!_isCurrent(scope, generation)) {
         return;
       }
       state = AsyncData(
         nextState.copyWith(isRefreshing: false, clearHint: true),
       );
     } catch (error) {
-      if (!ref.mounted || generation != _backgroundRefreshGeneration) {
+      if (!_isCurrent(scope, generation)) {
         return;
       }
       state = AsyncData(
@@ -114,13 +130,16 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   Future<ForumHomePageState> _fetchForumHome({
     required CacheLoadPolicy cachePolicy,
     required DocumentRequestProfile requestProfile,
+    required ForumHomeRepository repository,
+    required Y300ForumSourceScope scope,
   }) async {
-    final repository = ref.read(forumHomeRepositoryProvider);
+    _ensureCurrent(scope);
     final now = ref.read(forumHomeNowProvider).call();
     final result = await repository.getForumHomePayload(
       cachePolicy: cachePolicy,
       requestProfileOverride: requestProfile,
     );
+    _ensureCurrent(scope);
 
     return result.when(
       success: (payload, capabilities, metadata) => _stateFromPayload(
@@ -180,11 +199,13 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   Future<void> _refreshCachedHomeAfterPublish({
     required DocumentRequestProfile requestProfile,
     required int generation,
+    required ForumHomeRepository repository,
+    required Y300ForumSourceScope scope,
   }) async {
     // Let AsyncNotifier publish the cached build result before starting work
     // that may complete synchronously in tests or on a very fast connection.
     await Future<void>.delayed(Duration.zero);
-    if (!ref.mounted || generation != _backgroundRefreshGeneration) {
+    if (!_isCurrent(scope, generation)) {
       return;
     }
     final current = state.asData?.value;
@@ -195,13 +216,15 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       final next = await _fetchForumHome(
         cachePolicy: CacheLoadPolicy.networkFirst,
         requestProfile: requestProfile,
+        repository: repository,
+        scope: scope,
       );
-      if (!ref.mounted || generation != _backgroundRefreshGeneration) {
+      if (!_isCurrent(scope, generation)) {
         return;
       }
       state = AsyncData(next.copyWith(isRefreshing: false, clearHint: true));
     } catch (error) {
-      if (!ref.mounted || generation != _backgroundRefreshGeneration) {
+      if (!_isCurrent(scope, generation)) {
         return;
       }
       final latest = state.asData?.value;
@@ -217,6 +240,17 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
           ),
         ),
       );
+    }
+  }
+
+  bool _isCurrent(Y300ForumSourceScope scope, int generation) =>
+      ref.mounted &&
+      scope.isCurrent &&
+      generation == _backgroundRefreshGeneration;
+
+  void _ensureCurrent(Y300ForumSourceScope scope) {
+    if (!ref.mounted || !scope.isCurrent) {
+      throw StateError('forum_source_scope_expired');
     }
   }
 

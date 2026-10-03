@@ -11,6 +11,42 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
+    'expired guarded replacement rolls back and keeps the current snapshot',
+    () async {
+      final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);
+      addTearDown(db.close);
+      final reporter = _RecordingMutationReporter();
+      final service = LocalParsedSnapshotCacheService(
+        Future.value(db),
+        mutationReporter: reporter,
+      );
+      const descriptor = SnapshotCacheDescriptor(
+        cacheKey: 'guarded',
+        ownerType: CacheOwnerType.thread,
+        ownerId: 'tid=1&page=1',
+        snapshotType: 'test.snapshot',
+      );
+      const codec = _StringSnapshotCodec();
+      const policy = SnapshotCachePolicy(
+        freshFor: Duration(minutes: 5),
+        keepStaleFor: Duration(days: 1),
+      );
+      await service.put(descriptor, 'current', codec, policy: policy);
+      var checks = 0;
+      final applied = await service.putIfCurrent(
+        descriptor,
+        'expired',
+        codec,
+        policy: policy,
+        isCurrent: () => ++checks < 4,
+      );
+      expect(applied, isFalse);
+      expect((await service.get(descriptor, codec))?.value, 'current');
+      expect(reporter.namespaces, [CacheNamespace.snapshot]);
+    },
+  );
+
+  test(
     'long-term snapshots survive clearing, expiry and stale eviction candidates',
     () async {
       final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);

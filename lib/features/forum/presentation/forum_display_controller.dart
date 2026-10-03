@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -46,26 +47,39 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
   ForumDisplayController(this._args);
 
   final ForumDisplayArgs _args;
+  int _requestGeneration = 0;
 
   @override
   FutureOr<ForumDisplayPageState> build() async {
+    final scope = ref.watch(yamiboForumSourceScopeProvider);
+    final repository = ref.watch(forumDisplayRepositoryProvider);
+    _requestGeneration++;
+    ref.onDispose(() => _requestGeneration++);
     return _loadQuery(
       ForumDisplayQuery.initial(fid: _args.fid).copyWithPage(_args.initialPage),
+      scope: scope,
+      repository: repository,
     );
   }
 
   Future<void> refresh({bool forceNetwork = false}) async {
+    final scope = ref.read(yamiboForumSourceScopeProvider);
+    final repository = ref.read(forumDisplayRepositoryProvider);
+    final generation = ++_requestGeneration;
     final query =
         state.value?.query ?? ForumDisplayQuery.initial(fid: _args.fid);
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final next = await AsyncValue.guard(
       () => _loadQuery(
         query,
+        scope: scope,
+        repository: repository,
         cachePolicy: forceNetwork
             ? CacheLoadPolicy.networkFirst
             : CacheLoadPolicy.cacheFirst,
       ),
     );
+    if (_isCurrent(scope, generation)) state = next;
   }
 
   Future<void> loadMore() async {
@@ -131,6 +145,9 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
     ForumDisplayQuery query, {
     required ForumDisplayPageState? current,
   }) async {
+    final scope = ref.read(yamiboForumSourceScopeProvider);
+    final repository = ref.read(forumDisplayRepositoryProvider);
+    final generation = ++_requestGeneration;
     if (current == null) {
       state = const AsyncLoading();
     } else {
@@ -138,17 +155,24 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
         current.copyWith(isLoadingMore: true, clearError: true),
       );
     }
-    state = await AsyncValue.guard(() => _loadQuery(query));
+    final next = await AsyncValue.guard(
+      () => _loadQuery(query, scope: scope, repository: repository),
+    );
+    if (_isCurrent(scope, generation)) state = next;
   }
 
   Future<ForumDisplayPageState> _loadQuery(
     ForumDisplayQuery query, {
+    required Y300ForumSourceScope scope,
+    required ForumDisplayRepository repository,
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
-    final result = await _readRepository().getForumDisplayByQuery(
+    _ensureCurrent(scope);
+    final result = await repository.getForumDisplayByQuery(
       query,
       cachePolicy: cachePolicy,
     );
+    _ensureCurrent(scope);
     if (result
         case DataReadSuccess<ForumDisplayData, ForumDisplayReadCapabilities>(
           :final data,
@@ -156,12 +180,14 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
           :final metadata,
         )) {
       final mappedThreads = await _attachSourceTagNames(data);
+      _ensureCurrent(scope);
       final effectiveQuery = query.copyWithPage(data.currentPage);
       final effectiveFid = data.fid.isNotEmpty ? data.fid : query.fid;
       final headImageDimensions = await _readHeadImageDimensions(
         fid: effectiveFid,
         imageUrl: data.headImageUrl,
       );
+      _ensureCurrent(scope);
       return ForumDisplayPageState(
         fid: effectiveFid,
         title: data.forumName.isNotEmpty ? data.forumName : _args.title,
@@ -306,7 +332,12 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
     }
   }
 
-  ForumDisplayRepository _readRepository() {
-    return ref.read(forumDisplayRepositoryProvider);
+  bool _isCurrent(Y300ForumSourceScope scope, int generation) =>
+      ref.mounted && scope.isCurrent && generation == _requestGeneration;
+
+  void _ensureCurrent(Y300ForumSourceScope scope) {
+    if (!ref.mounted || !scope.isCurrent) {
+      throw StateError('forum_source_scope_expired');
+    }
   }
 }

@@ -14,7 +14,8 @@ class YamiboSessionStore {
   final StreamController<void> _identityChanges =
       StreamController<void>.broadcast(sync: true);
 
-  /// Emits only when the authenticated identity changes or is cleared.
+  /// Includes the first local confirmation (anonymous or authenticated) and
+  /// its clearing, but excludes formhash-only updates to an existing identity.
   Stream<void> get identityChanges => _identityChanges.stream;
 
   YamiboSessionSnapshot? readCurrent() => _current;
@@ -37,16 +38,15 @@ class YamiboSessionStore {
     final current = _current;
     final next = current == null ? extracted : _merge(current, extracted);
     _current = next;
-    if ((current?.uid ?? '', current?.isLoggedIn ?? false) !=
-        (next.uid, next.isLoggedIn)) {
+    if ((current != null, current?.uid ?? '', current?.isLoggedIn ?? false) !=
+        (true, next.uid, next.isLoggedIn)) {
       _identityChanges.add(null);
     }
     return next;
   }
 
   void clear() {
-    final hadIdentity =
-        _current?.isLoggedIn == true || (_current?.uid.isNotEmpty ?? false);
+    final hadIdentity = _current != null;
     _current = null;
     if (hadIdentity) _identityChanges.add(null);
   }

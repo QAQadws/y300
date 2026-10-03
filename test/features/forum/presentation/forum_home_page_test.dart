@@ -9,6 +9,7 @@ import 'package:y300/app/localization/app_server_content_conversion_provider.dar
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/core/network/yamibo_forum_source.dart';
 import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -944,6 +945,60 @@ void main() {
         authRepository.complete();
         refreshCompleter.complete(forumHomeReadSuccess(_loggedOutPayload()));
         await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'source invalidation discards the old home background refresh',
+      (tester) async {
+        final pending = Completer<ForumHomeReadResult>();
+        var calls = 0;
+        final repository = _FakeForumHomeRepository(
+          () => ++calls == 1
+              ? pending.future
+              : Future.value(
+                  forumHomeReadSuccess(_loggedOutPayloadWithTodayCount(12)),
+                ),
+          cachedEntry: ForumHomeCacheEntry(
+            payload: _loggedOutPayload(),
+            capabilities: forumHomeTestCapabilities,
+            metadata: const DataReadMetadata.network(),
+            updatedAt: DateTime(2026),
+          ),
+        );
+        var profile = const Y300ForumSourceProfile(
+          id: 'old_fixture',
+          revision: 1,
+        );
+        final container = ProviderContainer(
+          overrides: [
+            ..._overrides(repository),
+            yamiboForumSourceProfileProvider.overrideWith((ref) => profile),
+          ],
+        );
+        addTearDown(container.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const LocalizedTestApp(home: ForumHomePage()),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(calls, 1);
+        final oldScope = container.read(yamiboForumSourceScopeProvider);
+        profile = const Y300ForumSourceProfile(id: 'new_fixture', revision: 1);
+        container.invalidate(yamiboForumSourceProfileProvider);
+        await tester.pumpAndSettle();
+        expect(calls, 2);
+        expect(oldScope.isCurrent, isFalse);
+        pending.complete(
+          forumHomeReadSuccess(_loggedOutPayloadWithTodayCount(1)),
+        );
+        await tester.pumpAndSettle();
+        final value = container.read(forumHomeControllerProvider).requireValue;
+        expect(value.viewData.sections.single.items.single.todayPosts, 12);
+        expect(value.isRefreshing, isFalse);
+        expect(tester.takeException(), isNull);
       },
     );
 

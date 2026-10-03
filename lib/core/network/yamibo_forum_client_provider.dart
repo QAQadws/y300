@@ -3,10 +3,13 @@ import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
+import 'package:y300/core/network/yamibo_forum_source.dart';
+import 'package:y300/core/network/yamibo_forum_source_cache.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 
 export 'yamibo_forum_transport_providers.dart';
+export 'yamibo_forum_source.dart';
 
 typedef Y300ThreadDetailHtmlDecoder =
     ThreadDetailData Function(
@@ -59,15 +62,18 @@ final yamiboThreadDetailApiDecoderProvider =
 /// transport so reads, commands, Cookie state, and WAF recovery stay on one
 /// application-owned session path.
 final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
-  return YamiboForumClientBuilder(
-    config: ref.watch(yamiboForumClientConfigProvider),
-    network: ref.watch(yamiboForumClientNetworkProvider),
-    sessionStore: ref.watch(yamiboForumSessionStoreProvider),
-    documentStore: ref.watch(yamiboForumDocumentStoreProvider),
-    snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
-    cookieStore: ref.watch(yamiboForumCookieStoreProvider),
-    stickerCatalogStore: ref.watch(yamiboForumStickerCatalogStoreProvider),
-  ).buildStandardClient();
+  final scope = ref.watch(yamiboForumSourceScopeProvider);
+  return scope.profile.build(
+    YamiboForumClientBuilder(
+      config: ref.watch(yamiboForumClientConfigProvider),
+      network: ref.watch(yamiboForumClientNetworkProvider),
+      sessionStore: ref.watch(yamiboForumSessionStoreProvider),
+      documentStore: ref.watch(yamiboForumDocumentStoreProvider),
+      snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
+      cookieStore: ref.watch(yamiboForumCookieStoreProvider),
+      stickerCatalogStore: ref.watch(yamiboForumStickerCatalogStoreProvider),
+    ),
+  );
 });
 
 final yamiboForumCookieStoreProvider = Provider<ForumCookieStore>((ref) {
@@ -75,16 +81,37 @@ final yamiboForumCookieStoreProvider = Provider<ForumCookieStore>((ref) {
 });
 
 final yamiboForumSessionStoreProvider = Provider<ForumSessionStore>((ref) {
-  return Y300ForumSessionAdapter(ref.watch(yamiboSessionStoreProvider));
+  var scope = ref.watch(yamiboForumSourceScopeProvider);
+  final runtime = ref.watch(yamiboForumSourceRuntimeProvider);
+  return Y300ForumSessionAdapter(
+    ref.watch(yamiboSessionStoreProvider),
+    isCurrent: () => scope.isCurrent,
+    // Authentication can legitimately change identity during its own
+    // preflight and confirmation. External identity changes still invalidate
+    // this adapter; only its own successful mutation advances its owner.
+    didMutate: () => scope = runtime.current,
+  );
 });
 
 final yamiboForumDocumentStoreProvider = Provider<ForumDocumentStore>((ref) {
-  return Y300ForumDocumentStoreAdapter(ref.watch(documentCacheServiceProvider));
+  final scope = ref.watch(yamiboForumSourceScopeProvider);
+  return Y300ScopedForumDocumentStore(
+    Y300ForumDocumentStoreAdapter(
+      ref.watch(documentCacheServiceProvider),
+      isCurrent: () => scope.isCurrent,
+    ),
+    scope,
+  );
 });
 
 final yamiboForumSnapshotStoreProvider = Provider<ForumSnapshotStore>((ref) {
-  return Y300ForumSnapshotStoreAdapter(
-    ref.watch(parsedSnapshotCacheServiceProvider),
+  final scope = ref.watch(yamiboForumSourceScopeProvider);
+  return Y300ScopedForumSnapshotStore(
+    Y300ForumSnapshotStoreAdapter(
+      ref.watch(parsedSnapshotCacheServiceProvider),
+      isCurrent: () => scope.isCurrent,
+    ),
+    scope,
   );
 });
 

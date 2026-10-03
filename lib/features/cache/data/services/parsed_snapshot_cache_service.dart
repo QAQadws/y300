@@ -7,7 +7,10 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
 class LocalParsedSnapshotCacheService
-    implements ParsedSnapshotCacheService, CacheBudgetParticipant {
+    implements
+        ParsedSnapshotCacheService,
+        GuardedSnapshotCacheWriter,
+        CacheBudgetParticipant {
   LocalParsedSnapshotCacheService(
     Future<Database> dbFuture, {
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
@@ -83,38 +86,68 @@ class LocalParsedSnapshotCacheService
     SnapshotCodec<T> codec, {
     required SnapshotCachePolicy policy,
   }) async {
-    final db = await _db;
-    final existing = await _getRawByKey(db, descriptor.cacheKey);
-    final now = _now();
-    final createdAt =
-        _toDateTime(existing?['created_at']) ??
-        _toDateTime(existing?['updated_at']) ??
-        now;
-    final payloadJson = jsonEncode(codec.encode(value));
-    await db.insert(
-      ComicLocalDb.cachedSnapshotsTable,
-      <String, Object?>{
-        'cache_key': descriptor.cacheKey,
-        'owner_type': descriptor.ownerType.id,
-        'owner_id': descriptor.ownerId,
-        'snapshot_type': codec.snapshotType,
-        'codec_version': codec.codecVersion,
-        'parser_version': codec.parserVersion,
-        'source_document_key': _normalizeNullable(descriptor.sourceDocumentKey),
-        'payload_json': payloadJson,
-        'payload_bytes': utf8.encode(payloadJson).length,
-        'created_at': createdAt.millisecondsSinceEpoch,
-        'updated_at': now.millisecondsSinceEpoch,
-        'last_accessed_at': now.millisecondsSinceEpoch,
-        'stale_at': now.add(policy.freshFor).millisecondsSinceEpoch,
-        'retain_long_term': policy.retainLongTerm ? 1 : 0,
-        'expires_at': policy.retainLongTerm
-            ? null
-            : now.add(policy.keepStaleFor).millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    await putIfCurrent(
+      descriptor,
+      value,
+      codec,
+      policy: policy,
+      isCurrent: () => true,
     );
+  }
+
+  @override
+  Future<bool> putIfCurrent<T>(
+    SnapshotCacheDescriptor descriptor,
+    T value,
+    SnapshotCodec<T> codec, {
+    required SnapshotCachePolicy policy,
+    required bool Function() isCurrent,
+  }) async {
+    if (!isCurrent()) return false;
+    final db = await _db;
+    try {
+      await db.transaction((transaction) async {
+        if (!isCurrent()) throw const _ExpiredSnapshotWrite();
+        final existing = await _getRawByKey(transaction, descriptor.cacheKey);
+        if (!isCurrent()) throw const _ExpiredSnapshotWrite();
+        final now = _now();
+        final createdAt =
+            _toDateTime(existing?['created_at']) ??
+            _toDateTime(existing?['updated_at']) ??
+            now;
+        final payloadJson = jsonEncode(codec.encode(value));
+        await transaction.insert(
+          ComicLocalDb.cachedSnapshotsTable,
+          <String, Object?>{
+            'cache_key': descriptor.cacheKey,
+            'owner_type': descriptor.ownerType.id,
+            'owner_id': descriptor.ownerId,
+            'snapshot_type': codec.snapshotType,
+            'codec_version': codec.codecVersion,
+            'parser_version': codec.parserVersion,
+            'source_document_key': _normalizeNullable(
+              descriptor.sourceDocumentKey,
+            ),
+            'payload_json': payloadJson,
+            'payload_bytes': utf8.encode(payloadJson).length,
+            'created_at': createdAt.millisecondsSinceEpoch,
+            'updated_at': now.millisecondsSinceEpoch,
+            'last_accessed_at': now.millisecondsSinceEpoch,
+            'stale_at': now.add(policy.freshFor).millisecondsSinceEpoch,
+            'retain_long_term': policy.retainLongTerm ? 1 : 0,
+            'expires_at': policy.retainLongTerm
+                ? null
+                : now.add(policy.keepStaleFor).millisecondsSinceEpoch,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        if (!isCurrent()) throw const _ExpiredSnapshotWrite();
+      });
+    } on _ExpiredSnapshotWrite {
+      return false;
+    }
     _mutationReporter.reportMutation(CacheNamespace.snapshot);
+    return true;
   }
 
   @override
@@ -282,7 +315,7 @@ class LocalParsedSnapshotCacheService
   }
 
   Future<Map<String, Object?>?> _getRawByKey(
-    Database db,
+    DatabaseExecutor db,
     String cacheKey,
   ) async {
     final rows = await db.query(
@@ -336,4 +369,8 @@ class LocalParsedSnapshotCacheService
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
+}
+
+final class _ExpiredSnapshotWrite implements Exception {
+  const _ExpiredSnapshotWrite();
 }

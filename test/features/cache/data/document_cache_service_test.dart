@@ -11,6 +11,37 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
+    'expired guarded replacement rolls back and keeps the current document',
+    () async {
+      final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);
+      addTearDown(db.close);
+      final reporter = _RecordingMutationReporter();
+      final service = LocalDocumentCacheService(
+        Future.value(db),
+        mutationReporter: reporter,
+      );
+      CachedDocument document(String body) => CachedDocument(
+        cacheKey: 'guarded',
+        ownerType: CacheOwnerType.thread,
+        ownerId: 'tid=1&page=1',
+        sourceUrl: 'https://bbs.example.invalid/forum.php?mod=viewthread&tid=1',
+        body: body,
+        fetchedAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      );
+      await service.put(document('current'));
+      var checks = 0;
+      final applied = await service.putIfCurrent(
+        document('expired'),
+        isCurrent: () => ++checks < 3,
+      );
+      expect(applied, isFalse);
+      expect((await service.getByKey('guarded'))?.body, 'current');
+      expect(reporter.namespaces, [CacheNamespace.document]);
+    },
+  );
+
+  test(
     'LocalDocumentCacheService stores, touches, and deletes documents',
     () async {
       const dbName = 'document_cache_service_test.db';

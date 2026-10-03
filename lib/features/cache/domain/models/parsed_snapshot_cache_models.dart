@@ -123,3 +123,14 @@ abstract class ParsedSnapshotCacheService {
 
   Future<StorageUsageSection> calculateUsage();
 }
+
+/// Optional commit guard used by account/source-bound asynchronous reads.
+abstract interface class GuardedSnapshotCacheWriter {
+  Future<bool> putIfCurrent<T>(
+    SnapshotCacheDescriptor descriptor,
+    T value,
+    SnapshotCodec<T> codec, {
+    required SnapshotCachePolicy policy,
+    required bool Function() isCurrent,
+  });
+}

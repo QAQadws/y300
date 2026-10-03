@@ -421,21 +421,31 @@ final class Y300ForumCookieStoreAdapter implements forum.ForumCookieStore {
 }
 
 final class Y300ForumSessionAdapter implements forum.ForumSessionStore {
-  const Y300ForumSessionAdapter(this._delegate);
+  const Y300ForumSessionAdapter(
+    this._delegate, {
+    bool Function()? isCurrent,
+    void Function()? didMutate,
+  }) : _isCurrent = isCurrent,
+       _didMutate = didMutate;
 
   final YamiboSessionStore _delegate;
+  final bool Function()? _isCurrent;
+  final void Function()? _didMutate;
 
   @override
   forum.ForumSessionSnapshot? readCurrent() {
+    if (_isCurrent?.call() == false) return null;
     final value = _delegate.readCurrent();
     return value == null ? null : _toPackageSession(value);
   }
 
   @override
-  String? readFreshFormhash() => _delegate.readFreshFormhash();
+  String? readFreshFormhash() =>
+      _isCurrent?.call() == false ? null : _delegate.readFreshFormhash();
 
   @override
   Future<void> merge(forum.ForumSessionSnapshot snapshot) async {
+    if (_isCurrent?.call() == false) return;
     _delegate.saveExtracted(
       YamiboSessionSnapshot(
         isLoggedIn: snapshot.isLoggedIn,
@@ -447,10 +457,15 @@ final class Y300ForumSessionAdapter implements forum.ForumSessionStore {
         formhashUpdatedAt: snapshot.formhashUpdatedAt,
       ),
     );
+    _didMutate?.call();
   }
 
   @override
-  Future<void> clear() async => _delegate.clear();
+  Future<void> clear() async {
+    if (_isCurrent?.call() == false) return;
+    _delegate.clear();
+    _didMutate?.call();
+  }
 }
 
 forum.ForumSessionSnapshot _toPackageSession(YamiboSessionSnapshot value) =>
@@ -465,8 +480,12 @@ forum.ForumSessionSnapshot _toPackageSession(YamiboSessionSnapshot value) =>
     );
 
 final class Y300ForumDocumentStoreAdapter implements forum.ForumDocumentStore {
-  const Y300ForumDocumentStoreAdapter(this._delegate);
+  const Y300ForumDocumentStoreAdapter(
+    this._delegate, {
+    bool Function()? isCurrent,
+  }) : _isCurrent = isCurrent;
   final DocumentCacheService _delegate;
+  final bool Function()? _isCurrent;
 
   @override
   Future<forum.ForumCachedDocument?> get(
@@ -477,8 +496,21 @@ final class Y300ForumDocumentStoreAdapter implements forum.ForumDocumentStore {
   }
 
   @override
-  Future<void> put(forum.ForumCachedDocument document) =>
-      _delegate.put(_toAppDocument(document));
+  Future<void> put(forum.ForumCachedDocument document) async {
+    final guard = _isCurrent;
+    if (guard == null) {
+      await _delegate.put(_toAppDocument(document));
+      return;
+    }
+    final writer = _delegate;
+    // A custom store without a guarded commit remains readable, but cannot
+    // persist account-bound responses using a weaker entry-only check.
+    if (writer is! GuardedDocumentCacheWriter) return;
+    await (writer as GuardedDocumentCacheWriter).putIfCurrent(
+      _toAppDocument(document),
+      isCurrent: guard,
+    );
+  }
 
   @override
   Future<void> touch(
@@ -488,8 +520,12 @@ final class Y300ForumDocumentStoreAdapter implements forum.ForumDocumentStore {
 }
 
 final class Y300ForumSnapshotStoreAdapter implements forum.ForumSnapshotStore {
-  const Y300ForumSnapshotStoreAdapter(this._delegate);
+  const Y300ForumSnapshotStoreAdapter(
+    this._delegate, {
+    bool Function()? isCurrent,
+  }) : _isCurrent = isCurrent;
   final ParsedSnapshotCacheService _delegate;
+  final bool Function()? _isCurrent;
 
   @override
   Future<forum.ForumCachedSnapshot<T>?> get<T>(
@@ -520,16 +556,29 @@ final class Y300ForumSnapshotStoreAdapter implements forum.ForumSnapshotStore {
     T value,
     forum.ForumSnapshotCodec<T> codec, {
     required forum.ForumSnapshotPolicy policy,
-  }) => _delegate.put<T>(
-    _toAppSnapshotDescriptor(descriptor),
-    value,
-    _Y300SnapshotCodec<T>(codec),
-    policy: SnapshotCachePolicy(
+  }) async {
+    final appDescriptor = _toAppSnapshotDescriptor(descriptor);
+    final appCodec = _Y300SnapshotCodec<T>(codec);
+    final appPolicy = SnapshotCachePolicy(
       freshFor: policy.freshFor,
       keepStaleFor: policy.keepStaleFor,
       retainLongTerm: policy.retainLongTerm,
-    ),
-  );
+    );
+    final guard = _isCurrent;
+    if (guard == null) {
+      await _delegate.put(appDescriptor, value, appCodec, policy: appPolicy);
+      return;
+    }
+    final writer = _delegate;
+    if (writer is! GuardedSnapshotCacheWriter) return;
+    await (writer as GuardedSnapshotCacheWriter).putIfCurrent(
+      appDescriptor,
+      value,
+      appCodec,
+      policy: appPolicy,
+      isCurrent: guard,
+    );
+  }
 
   @override
   Future<void> touch(

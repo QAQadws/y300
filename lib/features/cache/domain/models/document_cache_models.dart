@@ -93,3 +93,11 @@ abstract class DocumentCacheService {
 
   Future<StorageUsageSection> calculateUsage();
 }
+
+/// Optional commit guard used by account/source-bound asynchronous reads.
+abstract interface class GuardedDocumentCacheWriter {
+  Future<bool> putIfCurrent(
+    CachedDocument document, {
+    required bool Function() isCurrent,
+  });
+}

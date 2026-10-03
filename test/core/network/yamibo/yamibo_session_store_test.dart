@@ -4,6 +4,26 @@ import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 
 void main() {
   group('YamiboSessionStore', () {
+    test(
+      'initial anonymous confirmation and clearing notify listeners',
+      () async {
+        final store = YamiboSessionStore();
+        var changes = 0;
+        final subscription = store.identityChanges.listen((_) => changes++);
+        final guest = _snapshot(
+          formhash: 'guest',
+          uid: '',
+          username: '',
+          updatedAt: DateTime(2026),
+        );
+        store.saveExtracted(guest);
+        store.saveExtracted(guest);
+        store.clear();
+        store.clear();
+        expect(changes, 2);
+        await subscription.cancel();
+      },
+    );
     test('notifies only when account identity changes', () async {
       final now = DateTime(2026, 6, 19, 12);
       final store = YamiboSessionStore();

@@ -7,7 +7,10 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 
 class LocalDocumentCacheService
-    implements DocumentCacheService, CacheBudgetParticipant {
+    implements
+        DocumentCacheService,
+        GuardedDocumentCacheWriter,
+        CacheBudgetParticipant {
   LocalDocumentCacheService(
     Future<Database> dbFuture, {
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
@@ -44,27 +47,47 @@ class LocalDocumentCacheService
 
   @override
   Future<void> put(CachedDocument document) async {
+    await putIfCurrent(document, isCurrent: () => true);
+  }
+
+  @override
+  Future<bool> putIfCurrent(
+    CachedDocument document, {
+    required bool Function() isCurrent,
+  }) async {
+    if (!isCurrent()) return false;
     final db = await _db;
-    await db.insert(
-      ComicLocalDb.cachedDocumentsTable,
-      <String, Object?>{
-        'cache_key': document.cacheKey,
-        'namespace': document.namespace.id,
-        'owner_type': document.ownerType.id,
-        'owner_id': document.ownerId,
-        'source_url': document.sourceUrl,
-        'request_profile': document.requestProfile.id,
-        'body': document.body,
-        'content_type': _normalizeNullable(document.contentType),
-        'status_code': document.statusCode,
-        'body_bytes': utf8.encode(document.body).length,
-        'fetched_at': document.fetchedAt.millisecondsSinceEpoch,
-        'updated_at': document.updatedAt.millisecondsSinceEpoch,
-        'last_accessed_at': document.lastAccessedAt?.millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      await db.transaction((transaction) async {
+        if (!isCurrent()) throw const _ExpiredDocumentWrite();
+        await transaction.insert(
+          ComicLocalDb.cachedDocumentsTable,
+          <String, Object?>{
+            'cache_key': document.cacheKey,
+            'namespace': document.namespace.id,
+            'owner_type': document.ownerType.id,
+            'owner_id': document.ownerId,
+            'source_url': document.sourceUrl,
+            'request_profile': document.requestProfile.id,
+            'body': document.body,
+            'content_type': _normalizeNullable(document.contentType),
+            'status_code': document.statusCode,
+            'body_bytes': utf8.encode(document.body).length,
+            'fetched_at': document.fetchedAt.millisecondsSinceEpoch,
+            'updated_at': document.updatedAt.millisecondsSinceEpoch,
+            'last_accessed_at': document.lastAccessedAt?.millisecondsSinceEpoch,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        // A cancelled writer must roll back, including cancellation while
+        // SQLite was applying the replacement inside this transaction.
+        if (!isCurrent()) throw const _ExpiredDocumentWrite();
+      });
+    } on _ExpiredDocumentWrite {
+      return false;
+    }
     _mutationReporter.reportMutation(CacheNamespace.document);
+    return true;
   }
 
   @override
@@ -281,4 +304,8 @@ class LocalDocumentCacheService
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
+}
+
+final class _ExpiredDocumentWrite implements Exception {
+  const _ExpiredDocumentWrite();
 }
