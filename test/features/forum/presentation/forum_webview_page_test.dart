@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
+import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,18 +14,17 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
-import 'package:y300/features/forum/data/repositories/forum_mode_settings_repository.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
 import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
-import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
@@ -63,6 +64,165 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
+  for (final entry in [
+    (url: 'index.php?mobile=2', kind: YamiboForumLinkKind.home),
+    (
+      url: 'forum.php?mod=forumdisplay&fid=42&page=3',
+      kind: YamiboForumLinkKind.forumDisplay,
+    ),
+    (
+      url: 'search.php?mod=curforum&srhfid=42',
+      kind: YamiboForumLinkKind.search,
+    ),
+    (url: 'thread-572514-4-1.html', kind: YamiboForumLinkKind.thread),
+  ]) {
+    testWidgets('ordinary browser link opens ${entry.kind} natively', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      YamiboForumLinkDestination? opened;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            nativeForumLinkPageFactoryProvider.overrideWithValue((
+              destination, {
+              isActive = true,
+            }) {
+              opened = destination;
+              return const Scaffold(key: Key('test-native-forum-link'));
+            }),
+          ],
+          child: _buildTestApp(
+            driver: driver,
+            navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final decision = await driver.dispatchNavigationRequest(entry.url);
+      await tester.pumpAndSettle();
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(opened?.kind, entry.kind);
+      expect(find.byKey(const Key('test-native-forum-link')), findsOneWidget);
+      expect(driver.loadedUris, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final purpose in ForumWebViewHostPurpose.values) {
+    for (final policy in ForumWebViewNavigationPolicy.values) {
+      if (prefersNativeForumNavigation(purpose: purpose, policy: policy)) {
+        continue;
+      }
+      testWidgets('$purpose with $policy keeps supported links in browser', (
+        tester,
+      ) async {
+        final driver = _FakeForumWebViewDriver();
+        await tester.pumpWidget(
+          _buildTestApp(
+            driver: driver,
+            hostPurpose: purpose,
+            navigationPolicy: policy,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final decision = await driver.dispatchNavigationRequest(
+          'forum.php?mod=viewthread&tid=572514&mobile=2',
+        );
+        await tester.pumpAndSettle();
+        expect(decision, ForumWebViewNavigationDecision.navigate);
+        expect(
+          find.byType(ThreadDetailPage, skipOffstage: false),
+          findsNothing,
+        );
+        expect(driver.loadedUris, hasLength(1));
+      });
+    }
+  }
+
+  for (final action in ['login', 'logout', 'confirmAnonymous']) {
+    testWidgets('unbound browser cookie return respects session $action', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final sessions = YamiboSessionStore();
+      YamiboSessionSnapshot snapshot(bool loggedIn) => YamiboSessionSnapshot(
+        isLoggedIn: loggedIn,
+        uid: loggedIn ? '101' : '0',
+        username: loggedIn ? 'actor' : '',
+        formhash: 'proof',
+        updatedAt: DateTime(2026),
+        source: 'test',
+      );
+      if (action == 'logout') sessions.saveExtracted(snapshot(true));
+      final jar = _PendingWebViewCookieJar();
+      final store = CookieStore();
+      final uri = Uri.parse(
+        'https://bbs.yamibo.com/home.php?mod=space&do=blog',
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            yamiboSessionStoreProvider.overrideWithValue(sessions),
+            webViewCookieSyncServiceProvider.overrideWithValue(
+              WebViewCookieSyncService(cookieJar: jar, cookieStore: store),
+            ),
+          ],
+          child: _buildTestApp(driver: driver),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await driver.dispatchPageFinished(uri.toString());
+      expect(jar.readCount, 1);
+      if (action == 'logout') {
+        sessions.clear();
+      } else {
+        sessions.saveExtracted(snapshot(action == 'login'));
+      }
+      jar.pending.complete({'auth': 'previous-browser'});
+      await tester.pumpAndSettle();
+      expect(
+        await store.readCookieMap(uri),
+        action == 'confirmAnonymous' ? {'auth': 'previous-browser'} : isEmpty,
+      );
+      expect(
+        find.byKey(const Key('forum-webview-surface')),
+        action == 'confirmAnonymous' ? findsOneWidget : findsNothing,
+      );
+      if (action != 'confirmAnonymous') {
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ForumWebViewPage)),
+        );
+        expect(find.text(l10n.forumWebViewAccountChanged), findsOneWidget);
+        expect(
+          await driver.dispatchNavigationRequest('index.php?mobile=2'),
+          ForumWebViewNavigationDecision.prevent,
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('unknown thread filters preserve browser URL semantics', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final decision = await driver.dispatchNavigationRequest(
+      'forum.php?mod=viewthread&tid=572514&authorid=101',
+    );
+    await tester.pumpAndSettle();
+    expect(decision, ForumWebViewNavigationDecision.navigate);
+    expect(find.byType(ThreadDetailPage, skipOffstage: false), findsNothing);
+    expect(driver.loadedUris, hasLength(1));
   });
 
   for (final action in ['stay', 'navigate', 'dispose', 'accountChange']) {
@@ -244,8 +404,16 @@ void main() {
         },
       );
 
+      final jar = _MemoryWebViewCookieJar()..cookies['waf'] = 'live-flow';
       await tester.pumpWidget(
-        _buildTestApp(driver: driver, cookieStore: cookieStore),
+        _buildTestApp(
+          driver: driver,
+          cookieStore: cookieStore,
+          cookieSyncService: WebViewCookieSyncService(
+            cookieJar: jar,
+            cookieStore: cookieStore,
+          ),
+        ),
       );
       await tester.pump();
 
@@ -265,8 +433,6 @@ void main() {
       expect(driver.events, <String>[
         'probeCapabilities',
         'initialize',
-        'clearCookies',
-        'seedCookies',
         'load',
       ]);
       expect(driver.probeCapabilitiesCallCount, 1);
@@ -298,8 +464,10 @@ void main() {
       );
       expect(bootstrapConfig.networkPolicy.customUserAgent, isNull);
       expect(bootstrapConfig.networkPolicy.preferAppLocale, isTrue);
-      expect(driver.seededCookies.single.domain, 'bbs.yamibo.com');
-      expect(driver.seededCookies.single.cookies, <String, String>{
+      expect(driver.seededCookies, isEmpty);
+      expect(jar.clearCount, 0);
+      expect(jar.cookies, <String, String>{
+        'waf': 'live-flow',
         'auth': 'token%2B123',
         'saltkey': 'abc%7Cxyz',
       });
@@ -761,7 +929,7 @@ void main() {
   });
 
   testWidgets(
-    'ForumWebViewPage webview mode normalizes thread links in webview',
+    'ForumWebViewPage keepWebView policy normalizes thread links in webview',
     (tester) async {
       final driver = _FakeForumWebViewDriver();
 
@@ -842,25 +1010,26 @@ void main() {
     },
   );
 
-  testWidgets('ForumWebViewPage webview mode loads normalized findpost redirect', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
+  testWidgets(
+    'ForumWebViewPage keepWebView policy loads normalized findpost redirect',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
 
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
+      await tester.pumpWidget(_buildTestApp(driver: driver));
+      await tester.pump();
 
-    final decision = await driver.dispatchNavigationRequest(
-      'forum.php?mod=redirect&amp;goto=findpost&amp;ptid=570388&amp;pid=41575705',
-    );
-    await tester.pump();
+      final decision = await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&amp;goto=findpost&amp;ptid=570388&amp;pid=41575705',
+      );
+      await tester.pump();
 
-    expect(decision, ForumWebViewNavigationDecision.prevent);
-    expect(
-      driver.loadedUris.last.toString(),
-      'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705&mobile=2',
-    );
-  });
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(
+        driver.loadedUris.last.toString(),
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705&mobile=2',
+      );
+    },
+  );
 
   const friendCases = [
     (
@@ -890,15 +1059,19 @@ void main() {
       page: 2,
     ),
   ];
-  for (final mode in ForumShellMode.values) {
+  for (final policy in [ForumWebViewNavigationPolicy.preferNative]) {
     for (final entry in friendCases) {
       testWidgets(
-        'friend callback opens ${entry.scope} page ${entry.page} natively in $mode mode',
+        'friend callback opens ${entry.scope} page ${entry.page} natively with $policy',
         (tester) async {
           final driver = _FakeForumWebViewDriver();
           final feed = FriendFeedFixture(autoComplete: true);
           await tester.pumpWidget(
-            _buildTestApp(driver: driver, forumMode: mode, friendFeed: feed),
+            _buildTestApp(
+              driver: driver,
+              navigationPolicy: policy,
+              friendFeed: feed,
+            ),
           );
           await tester.pumpAndSettle();
 
@@ -939,16 +1112,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      if (purpose == ForumWebViewHostPurpose.selfProfile) {
-        expect(decision, ForumWebViewNavigationDecision.prevent);
-        expect(find.byType(MyFriendsPage), findsOneWidget);
-        expect(feed.requests.single.query.accountUserId, '101');
-      } else {
-        expect(decision, ForumWebViewNavigationDecision.navigate);
-        expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
-        expect(find.byType(ForumWebViewPage), findsOneWidget);
-        expect(feed.requests, isEmpty);
-      }
+      expect(decision, ForumWebViewNavigationDecision.navigate);
+      expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(feed.requests, isEmpty);
       expect(driver.loadedUris, hasLength(1));
       expect(tester.takeException(), isNull);
     });
@@ -959,7 +1126,13 @@ void main() {
   ) async {
     final driver = _FakeForumWebViewDriver();
     final feed = FriendFeedFixture(autoComplete: true);
-    await tester.pumpWidget(_buildTestApp(driver: driver, friendFeed: feed));
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        friendFeed: feed,
+        navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+      ),
+    );
     await tester.pumpAndSettle();
     const url = 'home.php?mod=space&do=friend&mobile=2';
 
@@ -991,6 +1164,7 @@ void main() {
         _buildTestApp(
           driver: driver,
           friendFeed: feed,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
           isAccountCurrent: () => accountCurrent,
         ),
       );
@@ -1039,7 +1213,13 @@ void main() {
     ) async {
       final driver = _FakeForumWebViewDriver();
       final feed = FriendFeedFixture(autoComplete: true);
-      await tester.pumpWidget(_buildTestApp(driver: driver, friendFeed: feed));
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          friendFeed: feed,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+        ),
+      );
       await tester.pumpAndSettle();
 
       final decision = await driver.dispatchNavigationRequest(
@@ -1047,27 +1227,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final normalizedDuplicate = query == 'uid=101&uid=101';
-      expect(
-        decision,
-        normalizedDuplicate
-            ? ForumWebViewNavigationDecision.prevent
-            : ForumWebViewNavigationDecision.navigate,
-      );
+      expect(decision, ForumWebViewNavigationDecision.navigate);
       expect(find.byType(MyFriendsPage, skipOffstage: false), findsNothing);
       expect(find.byType(ForumWebViewPage), findsOneWidget);
       expect(feed.requests, isEmpty);
-      expect(driver.loadedUris, hasLength(normalizedDuplicate ? 2 : 1));
-      if (normalizedDuplicate) {
-        // The existing WebView router reloads a normalized URL after flattening
-        // repeated parameters; it must still keep this request in the browser.
-        expect(
-          driver.loadedUris.last,
-          Uri.parse(
-            'https://bbs.yamibo.com/home.php?mod=space&do=friend&uid=101&mobile=2',
-          ),
-        );
-      }
+      expect(driver.loadedUris, hasLength(1));
       expect(tester.takeException(), isNull);
     });
   }
@@ -1079,7 +1243,12 @@ void main() {
         final driver = _FakeForumWebViewDriver();
         final feed = FriendFeedFixture(autoComplete: true);
         await tester.pumpWidget(
-          _buildTestApp(driver: driver, friendFeed: feed, profileOwner: null),
+          _buildTestApp(
+            driver: driver,
+            friendFeed: feed,
+            profileOwner: null,
+            navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+          ),
         );
         await tester.pumpAndSettle();
 
@@ -1106,10 +1275,10 @@ void main() {
     );
   }
 
-  for (final mode in ForumShellMode.values) {
+  for (final policy in [ForumWebViewNavigationPolicy.preferNative]) {
     for (final type in UserThreadDirectoryType.values) {
       testWidgets(
-        'ForumWebViewPage opens user $type directory natively in $mode mode',
+        'ForumWebViewPage opens user $type directory natively with $policy',
         (tester) async {
           final driver = _FakeForumWebViewDriver();
           final directory = ThreadDirectoryFixture(autoComplete: true);
@@ -1120,7 +1289,7 @@ void main() {
           await tester.pumpWidget(
             _buildTestApp(
               driver: driver,
-              forumMode: mode,
+              navigationPolicy: policy,
               threadDirectory: directory,
             ),
           );
@@ -1161,6 +1330,7 @@ void main() {
         _buildTestApp(
           driver: driver,
           threadDirectory: directory,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
           hostPurpose: purpose,
         ),
       );
@@ -1171,16 +1341,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      if (purpose == ForumWebViewHostPurpose.selfProfile) {
-        expect(decision, ForumWebViewNavigationDecision.prevent);
-        expect(find.byType(UserThreadPage), findsOneWidget);
-        expect(directory.requests.single.query.userId, '260328');
-      } else {
-        expect(decision, ForumWebViewNavigationDecision.navigate);
-        expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
-        expect(find.byType(ForumWebViewPage), findsOneWidget);
-        expect(directory.requests, isEmpty);
-      }
+      expect(decision, ForumWebViewNavigationDecision.navigate);
+      expect(find.byType(UserThreadPage, skipOffstage: false), findsNothing);
+      expect(find.byType(ForumWebViewPage), findsOneWidget);
+      expect(directory.requests, isEmpty);
       expect(driver.loadedUris, hasLength(1));
       expect(tester.takeException(), isNull);
     });
@@ -1192,7 +1356,11 @@ void main() {
     final driver = _FakeForumWebViewDriver();
     final directory = ThreadDirectoryFixture(autoComplete: true);
     await tester.pumpWidget(
-      _buildTestApp(driver: driver, threadDirectory: directory),
+      _buildTestApp(
+        driver: driver,
+        threadDirectory: directory,
+        navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -1216,7 +1384,11 @@ void main() {
     final driver = _FakeForumWebViewDriver();
     final directory = ThreadDirectoryFixture(autoComplete: true);
     await tester.pumpWidget(
-      _buildTestApp(driver: driver, threadDirectory: directory),
+      _buildTestApp(
+        driver: driver,
+        threadDirectory: directory,
+        navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+      ),
     );
     await tester.pumpAndSettle();
     const url =
@@ -1245,7 +1417,11 @@ void main() {
     final driver = _FakeForumWebViewDriver();
     final directory = ThreadDirectoryFixture(autoComplete: true);
     await tester.pumpWidget(
-      _buildTestApp(driver: driver, threadDirectory: directory),
+      _buildTestApp(
+        driver: driver,
+        threadDirectory: directory,
+        navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+      ),
     );
     await tester.pumpAndSettle();
     unawaited(
@@ -1281,6 +1457,7 @@ void main() {
         driver: driver,
         isAccountCurrent: () => accountCurrent,
         threadDirectory: directory,
+        navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
       ),
     );
     await tester.pumpAndSettle();
@@ -1304,7 +1481,11 @@ void main() {
     final driver = _FakeForumWebViewDriver();
     final directory = ThreadDirectoryFixture(autoComplete: true);
     await tester.pumpWidget(
-      _buildTestApp(driver: driver, threadDirectory: directory),
+      _buildTestApp(
+        driver: driver,
+        threadDirectory: directory,
+        navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -1334,7 +1515,11 @@ void main() {
       final driver = _FakeForumWebViewDriver();
       final directory = ThreadDirectoryFixture(autoComplete: true);
       await tester.pumpWidget(
-        _buildTestApp(driver: driver, threadDirectory: directory),
+        _buildTestApp(
+          driver: driver,
+          threadDirectory: directory,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1351,91 +1536,100 @@ void main() {
     });
   }
 
-  testWidgets('ForumWebViewPage native mode opens direct thread natively', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
+  testWidgets(
+    'ForumWebViewPage preferNative policy opens direct thread natively',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
 
-    await tester.pumpWidget(
-      _buildTestApp(driver: driver, forumMode: ForumShellMode.native),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final decision = await driver.dispatchNavigationRequest(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&extra=',
-    );
-    await tester.pumpAndSettle();
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=573279&extra=',
+      );
+      await tester.pumpAndSettle();
 
-    expect(decision, ForumWebViewNavigationDecision.prevent);
-    expect(find.byType(ThreadDetailPage), findsOneWidget);
-    expect(driver.loadedUris.length, 1);
-  });
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+      expect(driver.loadedUris.length, 1);
+    },
+  );
 
-  testWidgets('ForumWebViewPage native mode opens fragment post natively', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
+  testWidgets(
+    'ForumWebViewPage preferNative policy opens fragment post natively',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
 
-    await tester.pumpWidget(
-      _buildTestApp(driver: driver, forumMode: ForumShellMode.native),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final decision = await driver.dispatchNavigationRequest(
-      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570388&page=2#pid41575705',
-    );
-    await tester.pumpAndSettle();
+      final decision = await driver.dispatchNavigationRequest(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570388&page=2#pid41575705',
+      );
+      await tester.pumpAndSettle();
 
-    expect(decision, ForumWebViewNavigationDecision.prevent);
-    expect(find.byType(ThreadDetailPage), findsOneWidget);
-    expect(
-      find.byKey(const Key('thread-detail-target-scroll-spacer')),
-      findsOneWidget,
-    );
-  });
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-detail-target-scroll-spacer')),
+        findsOneWidget,
+      );
+    },
+  );
 
-  testWidgets('ForumWebViewPage native mode locates findpost before opening', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
-    final locator = _FakeThreadPostLocator(
-      const ThreadPostLocation(
-        tid: '570388',
-        pid: '41575705',
-        page: 2,
-        url:
-            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570388&page=2#pid41575705',
-      ),
-    );
+  testWidgets(
+    'ForumWebViewPage preferNative policy locates findpost before opening',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final locator = _FakeThreadPostLocator(
+        const ThreadPostLocation(
+          tid: '570388',
+          pid: '41575705',
+          page: 2,
+          url:
+              'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=570388&page=2#pid41575705',
+        ),
+      );
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        forumMode: ForumShellMode.native,
-        threadPostLocator: locator,
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+          threadPostLocator: locator,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final decision = await driver.dispatchNavigationRequest(
-      'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705',
-    );
-    await tester.pumpAndSettle();
+      final decision = await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=41575705',
+      );
+      await tester.pumpAndSettle();
 
-    expect(decision, ForumWebViewNavigationDecision.prevent);
-    expect(locator.lastTid, '570388');
-    expect(locator.lastPid, '41575705');
-    expect(locator.lastSourceUri?.queryParameters['ptid'], '570388');
-    expect(
-      locator.lastSourceUri?.queryParameters.containsKey('authorid'),
-      isFalse,
-    );
-    expect(find.byType(ThreadDetailPage), findsOneWidget);
-    expect(
-      find.byKey(const Key('thread-detail-target-scroll-spacer')),
-      findsOneWidget,
-    );
-  });
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(locator.lastTid, '570388');
+      expect(locator.lastPid, '41575705');
+      expect(locator.lastSourceUri?.queryParameters['ptid'], '570388');
+      expect(
+        locator.lastSourceUri?.queryParameters.containsKey('authorid'),
+        isFalse,
+      );
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+      expect(
+        find.byKey(const Key('thread-detail-target-scroll-spacer')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'pending findpost result cannot navigate after its account expires before disposal',
@@ -1448,7 +1642,7 @@ void main() {
         _buildTestApp(
           driver: driver,
           isAccountCurrent: () => accountCurrent,
-          forumMode: ForumShellMode.native,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
           threadPostLocator: locator,
         ),
       );
@@ -1496,7 +1690,7 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(
           driver: driver,
-          forumMode: ForumShellMode.native,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
           threadPostLocator: locator,
         ),
       );
@@ -1522,7 +1716,7 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(
           driver: driver,
-          forumMode: ForumShellMode.native,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
           threadPostLocator: locator,
         ),
       );
@@ -1552,34 +1746,35 @@ void main() {
     },
   );
 
-  testWidgets('ForumWebViewPage native mode resolves empty findpost redirect', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
-    final redirectResolver = _FakeForumWebViewRedirectResolver(
-      finalUri: Uri.parse(
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572051',
-      ),
-    );
+  testWidgets(
+    'ForumWebViewPage preferNative policy resolves empty findpost redirect',
+    (tester) async {
+      final driver = _FakeForumWebViewDriver();
+      final redirectResolver = _FakeForumWebViewRedirectResolver(
+        finalUri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572051',
+        ),
+      );
 
-    await tester.pumpWidget(
-      _buildTestApp(
-        driver: driver,
-        forumMode: ForumShellMode.native,
-        redirectResolver: redirectResolver,
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+          redirectResolver: redirectResolver,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final decision = await driver.dispatchNavigationRequest(
-      'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=',
-    );
-    await tester.pumpAndSettle();
+      final decision = await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=',
+      );
+      await tester.pumpAndSettle();
 
-    expect(decision, ForumWebViewNavigationDecision.prevent);
-    expect(redirectResolver.lastSourceUri?.queryParameters['mobile'], '2');
-    expect(find.byType(ThreadDetailPage), findsOneWidget);
-  });
+      expect(decision, ForumWebViewNavigationDecision.prevent);
+      expect(redirectResolver.lastSourceUri?.queryParameters['mobile'], '2');
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'ForumWebViewPage falls back to webview when empty redirect fails',
@@ -1594,7 +1789,7 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(
           driver: driver,
-          forumMode: ForumShellMode.native,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
           redirectResolver: redirectResolver,
         ),
       );
@@ -1611,8 +1806,66 @@ void main() {
         driver.loadedUris.last.toString(),
         'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=570388&mobile=2',
       );
+      final repeated = await driver.dispatchNavigationRequest(
+        driver.loadedUris.last.toString(),
+      );
+      final thread = await driver.dispatchNavigationRequest(
+        'forum.php?mod=viewthread&tid=570388&mobile=2',
+      );
+      await tester.pumpAndSettle();
+      expect(repeated, ForumWebViewNavigationDecision.navigate);
+      expect(thread, ForumWebViewNavigationDecision.navigate);
+      expect(redirectResolver.resolveCount, 1);
+      expect(find.byType(ThreadDetailPage, skipOffstage: false), findsNothing);
     },
   );
+
+  for (final boundary in ['navigation', 'account', 'dispose']) {
+    testWidgets('pending empty redirect respects $boundary expiry', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final pending = Completer<ApiResult<ForumWebViewRedirectResolution>>();
+      final resolver = _FakeForumWebViewRedirectResolver(pending: pending);
+      var currentAccount = true;
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          navigationPolicy: ForumWebViewNavigationPolicy.preferNative,
+          redirectResolver: resolver,
+          isAccountCurrent: () => currentAccount,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final first = await driver.dispatchNavigationRequest(
+        'forum.php?mod=redirect&goto=findpost&ptid=570388&pid=',
+      );
+      await tester.pump();
+      expect(first, ForumWebViewNavigationDecision.prevent);
+      expect(resolver.resolveCount, 1);
+      switch (boundary) {
+        case 'navigation':
+          await driver.dispatchPageStarted('home.php?mod=space&uid=102');
+        case 'account':
+          currentAccount = false;
+        case 'dispose':
+          await tester.pumpWidget(const SizedBox());
+      }
+      pending.complete(
+        ApiSuccess(
+          ForumWebViewRedirectResolution(
+            finalUri: Uri.parse(
+              'https://bbs.yamibo.com/thread-570388-2-1.html',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ThreadDetailPage, skipOffstage: false), findsNothing);
+      expect(driver.loadedUris, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('ForumWebViewPage opens external links in system browser', (
     tester,
@@ -2801,7 +3054,9 @@ Widget _buildTestApp({
   ComposerDraftRepository? replyDraftRepository,
   ThreadCreationPreparationRepository? postingFormMetadataRepository,
   ThreadCreationCommand? newThreadRepository,
-  ForumShellMode forumMode = ForumShellMode.webview,
+  ForumWebViewNavigationPolicy navigationPolicy =
+      ForumWebViewNavigationPolicy.keepWebView,
+  WebViewCookieSyncService? cookieSyncService,
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
   ForumWebViewRedirectResolver? redirectResolver,
@@ -2827,9 +3082,9 @@ Widget _buildTestApp({
         friendFeedRepositoryProvider.overrideWithValue(friendFeed),
         friendRemovalCommandProvider.overrideWithValue(FriendRemovalFixture()),
       ],
-      forumModeSettingsRepositoryProvider.overrideWithValue(
-        _FakeForumModeSettingsRepository(forumMode),
-      ),
+      forumWebViewNavigationPolicyProvider.overrideWithValue(navigationPolicy),
+      if (cookieSyncService != null)
+        webViewCookieSyncServiceProvider.overrideWithValue(cookieSyncService),
       forumWebViewDriverProvider.overrideWith((ref) => driver),
       forumWebViewExternalLauncherProvider.overrideWithValue(
         launcher ?? _FakeForumWebViewExternalLauncher(),
@@ -2890,7 +3145,9 @@ Widget _buildRoutedTestApp({
   ComposerDraftRepository? replyDraftRepository,
   ThreadCreationPreparationRepository? postingFormMetadataRepository,
   ThreadCreationCommand? newThreadRepository,
-  ForumShellMode forumMode = ForumShellMode.webview,
+  ForumWebViewNavigationPolicy navigationPolicy =
+      ForumWebViewNavigationPolicy.keepWebView,
+  WebViewCookieSyncService? cookieSyncService,
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
   ForumWebViewRedirectResolver? redirectResolver,
@@ -2900,9 +3157,9 @@ Widget _buildRoutedTestApp({
       favoriteRepository ?? _FakeForumFavoriteRepository();
   return ProviderScope(
     overrides: [
-      forumModeSettingsRepositoryProvider.overrideWithValue(
-        _FakeForumModeSettingsRepository(forumMode),
-      ),
+      forumWebViewNavigationPolicyProvider.overrideWithValue(navigationPolicy),
+      if (cookieSyncService != null)
+        webViewCookieSyncServiceProvider.overrideWithValue(cookieSyncService),
       forumWebViewDriverProvider.overrideWith((ref) => driver),
       forumWebViewExternalLauncherProvider.overrideWithValue(
         launcher ?? _FakeForumWebViewExternalLauncher(),
@@ -3153,20 +3410,6 @@ class _FakeForumWebViewDriver implements ForumWebViewDriver {
   }
 }
 
-class _FakeForumModeSettingsRepository implements ForumModeSettingsRepository {
-  _FakeForumModeSettingsRepository(this.mode);
-
-  ForumShellMode mode;
-
-  @override
-  Future<ForumShellMode> loadMode() async => mode;
-
-  @override
-  Future<void> saveMode(ForumShellMode mode) async {
-    this.mode = mode;
-  }
-}
-
 class _FakeThreadRepository implements ThreadRepository {
   @override
   ThreadDetailSourceCapabilities get capabilities =>
@@ -3242,6 +3485,7 @@ class _FakeForumWebViewRedirectResolver
   _FakeForumWebViewRedirectResolver({
     Uri? finalUri,
     ApiResult<ForumWebViewRedirectResolution>? result,
+    this.pending,
   }) : result =
            result ??
            ApiSuccess<ForumWebViewRedirectResolution>(
@@ -3255,6 +3499,8 @@ class _FakeForumWebViewRedirectResolver
            );
 
   final ApiResult<ForumWebViewRedirectResolution> result;
+  final Completer<ApiResult<ForumWebViewRedirectResolution>>? pending;
+  int resolveCount = 0;
   Uri? lastSourceUri;
 
   @override
@@ -3262,6 +3508,8 @@ class _FakeForumWebViewRedirectResolver
     Uri sourceUri,
   ) async {
     lastSourceUri = sourceUri;
+    resolveCount++;
+    if (pending != null) return pending!.future;
     return result;
   }
 }
@@ -3727,5 +3975,20 @@ class _FakeThreadCreationCommand implements ThreadCreationCommand {
   ) async {
     submittedPayloads.add(submission);
     return _result;
+  }
+}
+
+class _MemoryWebViewCookieJar implements WebViewCookieJar {
+  final cookies = <String, String>{};
+  int clearCount = 0;
+  @override
+  Future<Map<String, String>> readCookies(Uri uri) async => Map.of(cookies);
+  @override
+  Future<void> writeCookies(Uri uri, Map<String, String> values) async =>
+      cookies.addAll(values);
+  @override
+  Future<void> clear() async {
+    clearCount++;
+    cookies.clear();
   }
 }

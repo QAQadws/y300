@@ -3,6 +3,9 @@ import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 enum YamiboForumLinkKind {
+  home,
+  forumDisplay,
+  search,
   thread,
   threadPost,
   tagThreadPage,
@@ -23,6 +26,8 @@ class YamiboForumLinkDestination {
     this.userId,
     this.userThreadType,
     this.friendScope,
+    this.forumId,
+    this.searchScope,
   });
 
   final YamiboForumLinkKind kind;
@@ -34,6 +39,8 @@ class YamiboForumLinkDestination {
   final String? userId;
   final UserThreadDirectoryType? userThreadType;
   final ForumFriendFeedScope? friendScope;
+  final String? forumId;
+  final ForumSearchScope? searchScope;
 }
 
 class YamiboForumLinkResolver {
@@ -83,13 +90,26 @@ class YamiboForumLinkResolver {
       );
     }
 
+    // Native pages must be able to retain the URL's full meaning. Ambiguous
+    // origins, duplicate fields and unknown filters remain browser-owned.
+    if (!_isNativeOrigin(uri) ||
+        uri.queryParametersAll.values.any((values) => values.length != 1)) {
+      return _browserDestination(uri);
+    }
+
+    final browsing = _extractBrowsingDestination(uri);
+    if (browsing != null) return browsing;
+
     final friends = _extractFriendFeed(uri, viewerUserId);
     if (friends != null) return friends;
 
     final userThreads = _extractUserThreadDirectory(uri, viewerUserId);
     if (userThreads != null) return userThreads;
 
-    final postTarget = _extractThreadPostTarget(uri, normalizedUrl);
+    final supportsThread = _supportsNativeThread(uri);
+    final postTarget = supportsThread
+        ? _extractThreadPostTarget(uri, normalizedUrl)
+        : null;
     if (postTarget != null) {
       return YamiboForumLinkDestination(
         kind: YamiboForumLinkKind.threadPost,
@@ -100,7 +120,9 @@ class YamiboForumLinkResolver {
       );
     }
 
-    final threadTid = _references.extractTid(normalizedUrl);
+    final threadTid = supportsThread
+        ? _references.extractTid(normalizedUrl)
+        : null;
     if (threadTid != null && threadTid.isNotEmpty) {
       return YamiboForumLinkDestination(
         kind: YamiboForumLinkKind.thread,
@@ -128,10 +150,142 @@ class YamiboForumLinkResolver {
       );
     }
 
-    return YamiboForumLinkDestination(
-      kind: YamiboForumLinkKind.managedWebView,
-      uri: uri,
-    );
+    return _browserDestination(uri);
+  }
+
+  YamiboForumLinkDestination _browserDestination(Uri uri) =>
+      YamiboForumLinkDestination(
+        kind: YamiboForumLinkKind.managedWebView,
+        uri: uri,
+      );
+
+  bool _isNativeOrigin(Uri uri) =>
+      {'https', 'http'}.contains(uri.scheme) &&
+      uri.userInfo.isEmpty &&
+      (!uri.hasPort || uri.port == (uri.scheme == 'https' ? 443 : 80));
+
+  bool _hasOnly(Uri uri, Set<String> keys) =>
+      uri.queryParameters.keys.every(keys.contains);
+
+  YamiboForumLinkDestination? _extractBrowsingDestination(Uri uri) {
+    final query = uri.queryParameters;
+    if (uri.fragment.isNotEmpty) return null;
+    if (((uri.path == '/' || uri.path == '/index.php') &&
+            _hasOnly(uri, {'mobile'})) ||
+        (uri.path == '/forum.php' &&
+            query['mod'] == 'index' &&
+            _hasOnly(uri, {'mod', 'mobile'}))) {
+      return YamiboForumLinkDestination(
+        kind: YamiboForumLinkKind.home,
+        uri: uri,
+      );
+    }
+    final prettyForum = RegExp(
+      r'^/forum-([1-9]\d*)-([1-9]\d*)\.html$',
+    ).firstMatch(uri.path);
+    final isForum =
+        uri.path == '/forum.php' &&
+        query['mod'] == 'forumdisplay' &&
+        _hasOnly(uri, {'mod', 'fid', 'page', 'mobile'});
+    final fid = isForum ? query['fid'] : prettyForum?.group(1);
+    final page = isForum
+        ? (query.containsKey('page') ? _parsePositiveInt(query['page']) : 1)
+        : _parsePositiveInt(prettyForum?.group(2));
+    if (fid != null &&
+        RegExp(r'^[1-9]\d*$').hasMatch(fid) &&
+        page != null &&
+        (isForum || (prettyForum != null && _hasOnly(uri, {'mobile'})))) {
+      return YamiboForumLinkDestination(
+        kind: YamiboForumLinkKind.forumDisplay,
+        uri: uri,
+        forumId: fid,
+        page: page,
+      );
+    }
+    if (uri.path == '/search.php' &&
+        {'forum', 'curforum'}.contains(query['mod']) &&
+        _hasOnly(uri, {'mod', 'srhfid', 'mobile'})) {
+      final fid = query['srhfid'];
+      if (fid != null && !RegExp(r'^[1-9]\d*$').hasMatch(fid)) return null;
+      if (query['mod'] == 'curforum' && fid == null) return null;
+      return YamiboForumLinkDestination(
+        kind: YamiboForumLinkKind.search,
+        uri: uri,
+        forumId: fid,
+        searchScope: fid == null
+            ? ForumSearchScope.allForums
+            : ForumSearchScope.currentForum,
+      );
+    }
+    return null;
+  }
+
+  bool _supportsNativeThread(Uri uri) {
+    if (!_hasOnly(uri, {
+      'mod',
+      'tid',
+      'page',
+      'mobile',
+      'extra',
+      'fromuid',
+      'goto',
+      'ptid',
+      'pid',
+      'authorid',
+      'ordertype',
+      'viewpid',
+      'ppp',
+    })) {
+      return false;
+    }
+    final query = uri.queryParameters;
+    if (const [
+      'authorid',
+      'ordertype',
+      'viewpid',
+      'ppp',
+    ].any(query.containsKey)) {
+      // An explicit floor identity is re-located through the shared locator;
+      // view filters and page hints are never mistaken for proof of location.
+      if (_extractFragmentPid(uri) == null ||
+          (query.containsKey('authorid') &&
+              !RegExp(r'^[1-9]\d*$').hasMatch(query['authorid'] ?? '')) ||
+          (query.containsKey('viewpid') &&
+              !RegExp(r'^[1-9]\d*$').hasMatch(query['viewpid'] ?? '')) ||
+          (query.containsKey('ppp') &&
+              _parsePositiveInt(query['ppp']) == null) ||
+          !{null, '1', '2'}.contains(query['ordertype'])) {
+        return false;
+      }
+    }
+    if (query.containsKey('page') && _parsePositiveInt(query['page']) == null) {
+      return false;
+    }
+    if (uri.fragment.isNotEmpty &&
+        !RegExp(
+          r'^pid[1-9]\d*$',
+          caseSensitive: false,
+        ).hasMatch(uri.fragment)) {
+      return false;
+    }
+    if (uri.path == '/forum.php') {
+      if (query['mod'] == 'viewthread') {
+        return RegExp(r'^[1-9]\d*$').hasMatch(query['tid'] ?? '') &&
+            !query.containsKey('goto') &&
+            !query.containsKey('ptid') &&
+            !query.containsKey('pid');
+      }
+      return query['mod'] == 'redirect' &&
+          query['goto'] == 'findpost' &&
+          RegExp(r'^[1-9]\d*$').hasMatch(query['ptid'] ?? '') &&
+          RegExp(r'^[1-9]\d*$').hasMatch(query['pid'] ?? '') &&
+          !query.containsKey('tid');
+    }
+    return RegExp(
+          r'^/thread-[1-9]\d*-[1-9]\d*-\d+\.html$',
+          caseSensitive: false,
+        ).hasMatch(uri.path) &&
+        _hasOnly(uri, {'mobile', 'fromuid'});
   }
 
   YamiboForumLinkDestination? _extractFriendFeed(
@@ -320,7 +474,12 @@ class YamiboForumLinkResolver {
   }
 
   String? _extractTagId(Uri uri) {
-    if (!uri.path.toLowerCase().endsWith('misc.php')) {
+    if (uri.path != '/misc.php' ||
+        !_hasOnly(uri, {'mod', 'id', 'type', 'page', 'mobile'}) ||
+        !{null, '', 'thread'}.contains(uri.queryParameters['type']) ||
+        uri.fragment.isNotEmpty ||
+        (uri.queryParameters.containsKey('page') &&
+            _parsePositiveInt(uri.queryParameters['page']) == null)) {
       return null;
     }
     if (uri.queryParameters['mod']?.toLowerCase() != 'tag') {

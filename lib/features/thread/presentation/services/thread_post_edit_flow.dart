@@ -95,6 +95,7 @@ class ThreadPostEditFlow {
           initialUri: target.editUri,
           popOnRootBack: true,
           purpose: ForumWebViewHostPurpose.postEditFallback,
+          navigationPolicy: ForumWebViewNavigationPolicy.keepWebView,
           completionTarget: ForumWebViewCompletionTarget(
             tid: target.tid,
             pid: target.pid,

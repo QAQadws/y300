@@ -23,6 +23,11 @@ final forumWebViewHostPurposeProvider = Provider<ForumWebViewHostPurpose>(
   (ref) => ForumWebViewHostPurpose.browse,
 );
 
+final forumWebViewNavigationPolicyProvider =
+    Provider<ForumWebViewNavigationPolicy>(
+      (ref) => ForumWebViewNavigationPolicy.preferNative,
+    );
+
 final forumWebViewCompletionTargetProvider =
     Provider<ForumWebViewCompletionTarget?>((ref) => null);
 

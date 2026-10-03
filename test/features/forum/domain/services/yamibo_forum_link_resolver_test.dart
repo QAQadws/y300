@@ -7,6 +7,108 @@ void main() {
     const resolver = YamiboForumLinkResolver();
 
     test(
+      'known view filters retain explicit floor identity for relocation',
+      () {
+        for (final filter in [
+          'authorid=2',
+          'ordertype=1',
+          'viewpid=90',
+          'ppp=20',
+        ]) {
+          final destination = resolver.resolve(
+            'forum.php?mod=viewthread&tid=42&page=8&$filter#pid90',
+          );
+          expect(
+            destination?.kind,
+            YamiboForumLinkKind.threadPost,
+            reason: filter,
+          );
+          expect(destination?.tid, '42');
+          expect(destination?.pid, '90');
+          expect(
+            destination?.uri.queryParameters,
+            containsPair(filter.split('=').first, filter.split('=').last),
+          );
+          expect(
+            resolver
+                .resolve('forum.php?mod=viewthread&tid=42&page=8&$filter')
+                ?.kind,
+            YamiboForumLinkKind.managedWebView,
+          );
+        }
+        for (final filter in ['unknown=1', 'ppp=0', 'viewpid=invalid']) {
+          expect(
+            resolver
+                .resolve('forum.php?mod=viewthread&tid=42&page=8&$filter#pid90')
+                ?.kind,
+            YamiboForumLinkKind.managedWebView,
+            reason: filter,
+          );
+        }
+      },
+    );
+
+    test('common browsing routes retain native identities and scope', () {
+      for (final reference in [
+        '/',
+        'index.php?mobile=2',
+        'forum.php?mod=index',
+      ]) {
+        expect(resolver.resolve(reference)?.kind, YamiboForumLinkKind.home);
+      }
+      for (final reference in [
+        'forum.php?mod=forumdisplay&fid=42&page=3&mobile=2',
+        'forum-42-3.html',
+      ]) {
+        final destination = resolver.resolve(reference);
+        expect(destination?.kind, YamiboForumLinkKind.forumDisplay);
+        expect(destination?.forumId, '42');
+        expect(destination?.page, 3);
+      }
+      final global = resolver.resolve('search.php?mod=forum&mobile=2');
+      expect(global?.kind, YamiboForumLinkKind.search);
+      expect(global?.searchScope, ForumSearchScope.allForums);
+      for (final mod in ['forum', 'curforum']) {
+        final destination = resolver.resolve('search.php?mod=$mod&srhfid=42');
+        expect(destination?.kind, YamiboForumLinkKind.search);
+        expect(destination?.searchScope, ForumSearchScope.currentForum);
+        expect(destination?.forumId, '42');
+      }
+    });
+
+    test('unexpressed browsing semantics retain the original browser URI', () {
+      for (final reference in [
+        'index.php?gid=4',
+        'forum.php?mod=forumdisplay&fid=42&filter=author',
+        'forum.php?mod=forumdisplay&fid=42&page=0',
+        'forum.php?mod=forumdisplay&fid=42&fid=43',
+        'forum-42-3.html?filter=typeid&typeid=2',
+        'search.php?mod=forum&searchid=42&page=2',
+        'search.php?mod=forum&srchtxt=title',
+        'search.php?mod=curforum',
+        'search.php?mod=forum&srhfid=0',
+        'forum.php?mod=viewthread&tid=572514&authorid=101',
+        'forum.php?mod=viewthread&tid=572514&ordertype=1',
+        'forum.php?mod=viewthread&tid=572514&action=printable',
+        'forum.php?mod=viewthread&tid=572514&tid=123',
+        'thread-572514-1-1.html?unknown=1',
+        'forum.php?mod=post&action=edit&tid=572514&pid=42',
+        'misc.php?mod=tag&id=28&type=blog',
+      ]) {
+        final destination = resolver.resolve(reference);
+        expect(
+          destination?.kind,
+          YamiboForumLinkKind.managedWebView,
+          reason: reference,
+        );
+        expect(
+          destination?.uri.toString(),
+          'https://bbs.yamibo.com/$reference',
+        );
+      }
+    });
+
+    test(
       'viewer lookup stays lazy for owner-independent or unsupported links',
       () {
         for (final reference in [

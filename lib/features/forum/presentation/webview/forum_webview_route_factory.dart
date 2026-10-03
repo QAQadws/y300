@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/app/navigation/friend_routes.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
-import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
@@ -17,28 +16,20 @@ final forumWebViewRouteFactoryProvider = Provider<ForumWebViewRouteFactory>((
 ) {
   return (config) {
     const resolver = YamiboForumLinkResolver();
-    final destination = resolver.resolveForViewer(
-      config.initialUri.toString(),
-      readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
-    );
-    if (config.purpose != ForumWebViewHostPurpose.postEditFallback &&
-        {
-          YamiboForumLinkKind.userThreadDirectory,
-          YamiboForumLinkKind.friendFeed,
-        }.contains(destination?.kind)) {
+    final destination =
+        prefersNativeForumNavigation(
+          purpose: config.purpose,
+          policy: config.navigationPolicy,
+        )
+        ? resolver.resolveForViewer(
+            config.initialUri.toString(),
+            readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+          )
+        : null;
+    final nativePage = ref.read(nativeForumLinkPageFactoryProvider);
+    if (destination != null && nativePage(destination) != null) {
       Widget page({bool isActive = true}) =>
-          destination!.kind == YamiboForumLinkKind.friendFeed
-          ? MyFriendsDestination(
-              initialScope: destination.friendScope!,
-              initialPage: destination.page ?? 1,
-              isActive: isActive,
-            )
-          : UserThreadPage(
-              userId: destination.userId,
-              initialType: destination.userThreadType!,
-              initialPage: destination.page ?? 1,
-              isActive: isActive,
-            );
+          nativePage(destination, isActive: isActive)!;
       return MaterialPageRoute<Object?>(
         builder: (_) => config.expectedAccountId == null
             ? page()
@@ -56,6 +47,9 @@ final forumWebViewRouteFactoryProvider = Provider<ForumWebViewRouteFactory>((
             config.popOnRootBack,
           ),
           forumWebViewHostPurposeProvider.overrideWithValue(config.purpose),
+          forumWebViewNavigationPolicyProvider.overrideWithValue(
+            config.navigationPolicy,
+          ),
           forumWebViewCompletionTargetProvider.overrideWithValue(
             config.completionTarget,
           ),

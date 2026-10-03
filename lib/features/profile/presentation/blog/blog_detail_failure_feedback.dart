@@ -133,6 +133,8 @@ class _BlogDetailFailureFeedbackState
                         ForumWebViewLaunchConfig(
                           initialUri: uri,
                           popOnRootBack: true,
+                          navigationPolicy:
+                              ForumWebViewNavigationPolicy.keepWebView,
                           expectedAccountId: actor,
                         ),
                       ),

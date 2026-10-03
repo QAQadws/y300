@@ -136,6 +136,12 @@ Future<Object?> openProfileAction({
           ForumWebViewLaunchConfig(
             initialUri: actionLink.uri,
             popOnRootBack: true,
+            purpose: action == ForumUserProfileActionKind.settings
+                ? ForumWebViewHostPurpose.selfProfile
+                : ForumWebViewHostPurpose.browse,
+            navigationPolicy: action == ForumUserProfileActionKind.settings
+                ? ForumWebViewNavigationPolicy.keepWebView
+                : ForumWebViewNavigationPolicy.preferNative,
             expectedAccountId: owner.uid,
           ),
         ),
@@ -172,6 +178,7 @@ Future<Object?> openProfileForumPage({
       ForumWebViewLaunchConfig(
         initialUri: uri,
         popOnRootBack: true,
+        navigationPolicy: ForumWebViewNavigationPolicy.keepWebView,
         purpose: isMyProfile
             ? ForumWebViewHostPurpose.selfProfile
             : ForumWebViewHostPurpose.browse,

@@ -30,10 +30,16 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
 
 class ForumDisplayPage extends ConsumerStatefulWidget {
-  const ForumDisplayPage({super.key, required this.fid, this.title = ''});
+  const ForumDisplayPage({
+    super.key,
+    required this.fid,
+    this.title = '',
+    this.initialPage = 1,
+  });
 
   final String fid;
   final String title;
+  final int initialPage;
 
   @override
   ConsumerState<ForumDisplayPage> createState() => _ForumDisplayPageState();
@@ -60,7 +66,11 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final args = ForumDisplayArgs(fid: widget.fid, title: widget.title);
+    final args = ForumDisplayArgs(
+      fid: widget.fid,
+      title: widget.title,
+      initialPage: widget.initialPage,
+    );
     final asyncState = ref.watch(forumDisplayControllerProvider(args));
     final controller = ref.read(forumDisplayControllerProvider(args).notifier);
     final state =

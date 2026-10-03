@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/friend_routes.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/features/auth/presentation/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
@@ -158,6 +159,15 @@ class ThreadPostNavigation {
       return;
     }
     switch (destination.kind) {
+      case YamiboForumLinkKind.home:
+      case YamiboForumLinkKind.forumDisplay:
+      case YamiboForumLinkKind.search:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => nativeForumLinkPage(destination)!,
+          ),
+        );
+        return;
       case YamiboForumLinkKind.thread:
         final tid = destination.tid;
         if (tid == null || tid.isEmpty) {
@@ -168,7 +178,10 @@ class ThreadPostNavigation {
           return;
         }
         Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => ThreadDetailPage(tid: tid)),
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                ThreadDetailPage(tid: tid, initialPage: destination.page ?? 1),
+          ),
         );
         return;
       case YamiboForumLinkKind.threadPost:
@@ -251,7 +264,11 @@ class ThreadPostNavigation {
     final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
     Navigator.of(context).push(
       routeFactory(
-        ForumWebViewLaunchConfig(initialUri: uri, popOnRootBack: true),
+        ForumWebViewLaunchConfig(
+          initialUri: uri,
+          popOnRootBack: true,
+          navigationPolicy: ForumWebViewNavigationPolicy.keepWebView,
+        ),
       ),
     );
   }

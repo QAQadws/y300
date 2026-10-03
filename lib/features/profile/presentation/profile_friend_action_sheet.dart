@@ -125,6 +125,8 @@ class _ProfileFriendActionSheetState
         ForumWebViewLaunchConfig(
           initialUri: widget.actionLink.uri,
           popOnRootBack: true,
+          purpose: ForumWebViewHostPurpose.form,
+          navigationPolicy: ForumWebViewNavigationPolicy.keepWebView,
           expectedAccountId: widget.owner.uid,
         ),
       ),

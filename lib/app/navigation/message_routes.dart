@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/friend_routes.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
@@ -112,6 +113,10 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
       }
       Widget? page;
       switch (destination.kind) {
+        case YamiboForumLinkKind.home:
+        case YamiboForumLinkKind.forumDisplay:
+        case YamiboForumLinkKind.search:
+          page = nativeForumLinkPage(destination);
         case YamiboForumLinkKind.thread:
           page = ThreadDetailPage(
             tid: destination.tid!,

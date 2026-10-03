@@ -32,6 +32,8 @@ Future<void> openBlogWebPage(
     ForumWebViewLaunchConfig(
       initialUri: uri,
       popOnRootBack: true,
+      purpose: ForumWebViewHostPurpose.form,
+      navigationPolicy: ForumWebViewNavigationPolicy.keepWebView,
       expectedAccountId: expectedActor,
     ),
   );

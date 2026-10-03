@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:y300/app/navigation/friend_routes.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
@@ -12,9 +12,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/forum/domain/models/forum_shell_mode.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_models.dart';
-import 'package:y300/features/forum/data/services/forum_webview_cookie_bootstrapper.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_early_script_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigation_header_builder.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
@@ -25,7 +23,6 @@ import 'package:y300/features/forum/domain/services/forum_webview_script_injecto
 import 'package:y300/features/forum/domain/services/forum_webview_thread_document_bridge.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_thread_link_router.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_visual_policy_resolver.dart';
-import 'package:y300/features/forum/presentation/forum_shell_mode_controller.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/mappers/forum_webview_history_visit_mapper.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
@@ -34,6 +31,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_external_
 import 'package:y300/features/forum/presentation/webview/forum_webview_history_coordinator.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_session_owner.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_favorite_forum_picker.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
@@ -41,7 +39,6 @@ import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
-import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/profile/presentation/profile_session_owner.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
@@ -50,7 +47,6 @@ import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_kind.dart';
 import 'package:y300/features/composer_shared/presentation/services/composer_text_resolver.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
-import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
 
@@ -66,6 +62,7 @@ class ForumWebViewPage extends ConsumerStatefulWidget {
 
 class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   final _postRouteSession = ThreadPostNavigationSession();
+  final _redirectRouteSession = ThreadPostNavigationSession();
   static const String _refreshPageAction = 'refresh-page';
   static const String _homeUnfavoriteAction = 'home-unfavorite';
   static const String _forumFavoriteAction = 'forum-favorite';
@@ -85,7 +82,9 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         ForumWebViewPageKind.other,
       ];
 
+  late final ForumWebViewSessionOwner _sessionOwner;
   bool _didScheduleInitialization = false;
+  bool _keepBrowserAfterFallback = false;
   int _navigationGeneration = 0;
   Timer? _delayedCleanupTimer;
   ForumWebViewBootstrapConfig? _bootstrapConfig;
@@ -110,11 +109,31 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         );
       },
     );
+    _sessionOwner = ForumWebViewSessionOwner(
+      sessions: ref.read(yamiboSessionStoreProvider),
+      onExpired: () {
+        _navigationGeneration++;
+        _postRouteSession.invalidate();
+        _redirectRouteSession.invalidate();
+        _delayedCleanupTimer?.cancel();
+        _historyCoordinator.dispose();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      },
+    );
   }
+
+  bool get _isCurrent =>
+      mounted &&
+      _sessionOwner.isCurrent &&
+      widget.isAccountCurrent?.call() != false;
 
   @override
   void dispose() {
+    _sessionOwner.dispose();
     _postRouteSession.dispose();
+    _redirectRouteSession.dispose();
     _delayedCleanupTimer?.cancel();
     _historyCoordinator.dispose();
     super.dispose();
@@ -122,6 +141,27 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_sessionOwner.isCurrent) {
+      final l10n = AppLocalizations.of(context);
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.forumWebViewAccountChanged,
+                textAlign: TextAlign.center,
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                child: Text(l10n.commonClose),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final navigator = ref.watch(forumWebViewNavigatorProvider);
     final asyncState = ref.watch(forumWebViewControllerProvider);
     final initialUri = ref.watch(forumWebViewInitialUriProvider);
@@ -154,7 +194,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     if (!_didScheduleInitialization) {
       _didScheduleInitialization = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
+        if (!_isCurrent) {
           return;
         }
         unawaited(_initialize(driver));
@@ -191,7 +231,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
   Future<void> _initialize(ForumWebViewDriver driver) async {
     final navigator = ref.read(forumWebViewNavigatorProvider);
-    final bootstrapper = ref.read(forumWebViewCookieBootstrapperProvider);
     final visualPolicyResolver = ref.read(
       forumWebViewVisualPolicyResolverProvider,
     );
@@ -200,7 +239,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       forumWebViewNetworkPolicyResolverProvider,
     );
     final capabilityProfile = await driver.probeCapabilities();
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     _historyCoordinator.configure(
@@ -243,7 +282,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       ),
       bootstrapConfig: bootstrapConfig,
     );
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
 
@@ -251,36 +290,23 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       _bootstrapConfig = bootstrapConfig;
     });
 
-    // API 登录/退出会通过 auth-scoped ProviderScope 重建整个 WebView 壳；
-    // 每次重建都先清空平台 cookie jar，再从 CookieStore 单向 bootstrap 到 WebView。
-    try {
-      await driver.clearCookies();
-    } catch (_) {
-      // 清空失败时继续 seed，避免阻断论坛首页加载。
-    }
-    if (!mounted) {
-      return;
-    }
-
-    final cookies = await bootstrapper.buildSeedCookies(uri: initialUri);
-    if (!mounted) {
-      return;
-    }
-
-    await driver.seedCookies(domain: initialUri.host, cookies: cookies);
-    if (!mounted) {
-      return;
-    }
+    // Platform cookies are shared by login, local browser routes and WAF.
+    // Seeding through the shared service never clears another live flow.
+    await ref
+        .read(webViewCookieSyncServiceProvider)
+        .seedFromStore(initialUri, isCurrent: () => _isCurrent);
+    if (!_isCurrent) return;
 
     await _loadManagedUri(driver, initialUri);
   }
 
   void _handlePageStarted(String url) {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     _delayedCleanupTimer?.cancel();
     _postRouteSession.invalidate();
+    _redirectRouteSession.invalidate();
     _delayedCleanupTimer = null;
     _navigationGeneration += 1;
     final uri = ref.read(forumWebViewNavigatorProvider).resolve(url);
@@ -292,7 +318,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   void _handlePageCommitVisible(String url) {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     final uri = ref.read(forumWebViewNavigatorProvider).resolve(url);
@@ -305,7 +331,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   Future<void> _handlePageFinished(String url) async {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     final navigator = ref.read(forumWebViewNavigatorProvider);
@@ -328,7 +354,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
     final pageTitle = await _readPageTitle(driver);
     final canGoBack = await _readCanGoBack(driver);
-    if (!mounted || generation != _navigationGeneration) {
+    if (!_isCurrent || generation != _navigationGeneration) {
       return;
     }
     final threadDocumentSnapshot = pageKind == ForumWebViewPageKind.threadDetail
@@ -338,7 +364,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
             threadDocumentBridge: threadDocumentBridge,
           )
         : null;
-    if (!mounted || generation != _navigationGeneration) {
+    if (!_isCurrent || generation != _navigationGeneration) {
       return;
     }
     await ref
@@ -349,7 +375,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           canGoBack: canGoBack,
           threadMenuSnapshot: threadDocumentSnapshot?.menu,
         );
-    if (!mounted || generation != _navigationGeneration) {
+    if (!_isCurrent || generation != _navigationGeneration) {
       return;
     }
     final completedState = ref
@@ -380,7 +406,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
 
     _delayedCleanupTimer?.cancel();
     _delayedCleanupTimer = Timer(const Duration(milliseconds: 300), () async {
-      if (!mounted || generation != _navigationGeneration) {
+      if (!_isCurrent || generation != _navigationGeneration) {
         return;
       }
       final currentUri = ref
@@ -402,10 +428,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           .read(webViewCookieSyncServiceProvider)
           .syncToStore(
             uri,
-            isCurrent: () =>
-                mounted &&
-                generation == _navigationGeneration &&
-                widget.isAccountCurrent?.call() != false,
+            isCurrent: () => _isCurrent && generation == _navigationGeneration,
           );
     } catch (_) {
       // 同步失败不影响浏览体验，下次 pageFinished 会再次尝试。
@@ -413,19 +436,21 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   void _handleProgress(int progress) {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     ref.read(forumWebViewControllerProvider.notifier).onProgress(progress);
   }
 
   void _handleResourceDiagnostic(ForumWebViewResourceDiagnosticEvent event) {
+    if (!_isCurrent) return;
     ref.read(forumWebViewResourceDiagnosticRecorderProvider).record(event);
   }
 
   FutureOr<ForumWebViewNavigationDecision> _handleNavigationRequest(
     String url,
   ) {
+    if (!_isCurrent) return ForumWebViewNavigationDecision.prevent;
     final navigator = ref.read(forumWebViewNavigatorProvider);
     final uri = navigator.resolve(url);
     if (uri.scheme.toLowerCase() == 'javascript') {
@@ -435,40 +460,55 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       _completePostEditWebView(ForumWebViewRouteOutcome.observedTargetRedirect);
       return ForumWebViewNavigationDecision.prevent;
     }
-    const resolver = YamiboForumLinkResolver();
-    final destination = resolver.resolveForViewer(
-      url,
-      readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
-    );
-    if ({
-          YamiboForumLinkKind.userThreadDirectory,
-          YamiboForumLinkKind.friendFeed,
-        }.contains(destination?.kind) &&
-        ref.read(forumWebViewHostPurposeProvider) !=
-            ForumWebViewHostPurpose.postEditFallback) {
-      if (mounted &&
-          widget.isAccountCurrent?.call() != false &&
-          ModalRoute.of(context)?.isCurrent != false) {
-        _postRouteSession.invalidate();
-        unawaited(
-          Navigator.of(context).push<void>(
-            MaterialPageRoute(
-              builder: (_) =>
-                  destination!.kind == YamiboForumLinkKind.friendFeed
-                  ? MyFriendsDestination(
-                      initialScope: destination.friendScope!,
-                      initialPage: destination.page ?? 1,
-                    )
-                  : UserThreadPage(
-                      userId: destination.userId,
-                      initialType: destination.userThreadType!,
-                      initialPage: destination.page ?? 1,
-                    ),
-            ),
-          ),
-        );
+    if (ref.read(forumWebViewHostPurposeProvider) !=
+        ForumWebViewHostPurpose.browse) {
+      if (navigator.isManagedSite(uri)) {
+        return _navigateInWebView(url);
       }
+      unawaited(_launchExternalUri(uri));
       return ForumWebViewNavigationDecision.prevent;
+    }
+    const resolver = YamiboForumLinkResolver();
+    final destination = _prefersNativeNavigation
+        ? resolver.resolveForViewer(
+            url,
+            readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+          )
+        : null;
+    if (destination != null) {
+      final page = ref.read(nativeForumLinkPageFactoryProvider)(destination);
+      if (page != null) {
+        if (_canOpenNativeRoute) {
+          _postRouteSession.invalidate();
+          _redirectRouteSession.invalidate();
+          unawaited(
+            Navigator.of(
+              context,
+            ).push<void>(MaterialPageRoute(builder: (_) => page)),
+          );
+        }
+        return ForumWebViewNavigationDecision.prevent;
+      }
+      if (destination.kind == YamiboForumLinkKind.threadPost) {
+        if (_canOpenNativeRoute) {
+          final resolution = ref
+              .read(forumWebViewThreadLinkRouterProvider)
+              .resolve(url);
+          unawaited(
+            _openNativeFindPostRedirect(
+              ForumWebViewThreadLinkResolution(
+                kind: ForumWebViewThreadLinkKind.threadPost,
+                originalUri: destination.uri,
+                normalizedUri: resolution.normalizedUri,
+                tid: destination.tid,
+                pid: destination.pid,
+                page: destination.page,
+              ),
+            ),
+          );
+        }
+        return ForumWebViewNavigationDecision.prevent;
+      }
     }
     final postReplyRequest = ref
         .read(forumWebViewReplyNavigatorProvider)
@@ -493,44 +533,60 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       final resolution = ref
           .read(forumWebViewThreadLinkRouterProvider)
           .resolve(url);
-      if (resolution.isThreadLink) {
-        unawaited(_openThreadLink(resolution));
+      // Empty findpost links need server resolution. Unknown filters keep
+      // their browser semantics instead of silently opening a different view.
+      if (_prefersNativeNavigation && _isStandardEmptyFindpost(resolution)) {
+        if (_canOpenNativeRoute) {
+          _postRouteSession.invalidate();
+          unawaited(_openNativeEmptyFindPostRedirect(resolution));
+        }
         return ForumWebViewNavigationDecision.prevent;
       }
-      if (resolution.normalizedUri != resolution.originalUri) {
-        final driver = ref.read(forumWebViewDriverProvider);
-        unawaited(
-          _loadManagedUri(
-            driver,
-            resolution.normalizedUri,
-            referrerUri: ref
-                .read(forumWebViewControllerProvider)
-                .asData
-                ?.value
-                .currentUri,
-          ),
-        );
-        return ForumWebViewNavigationDecision.prevent;
-      }
-      return ForumWebViewNavigationDecision.navigate;
+      return _navigateInWebView(url);
     }
 
     unawaited(_launchExternalUri(uri));
     return ForumWebViewNavigationDecision.prevent;
   }
 
-  Future<void> _openThreadLink(
-    ForumWebViewThreadLinkResolution resolution,
-  ) async {
-    final mode = await ref.read(forumShellModeControllerProvider.future);
-    if (!mounted) {
-      return;
+  bool get _prefersNativeNavigation =>
+      !_keepBrowserAfterFallback &&
+      prefersNativeForumNavigation(
+        purpose: ref.read(forumWebViewHostPurposeProvider),
+        policy: ref.read(forumWebViewNavigationPolicyProvider),
+      );
+
+  bool get _canOpenNativeRoute =>
+      _isCurrent && ModalRoute.of(context)?.isCurrent != false;
+
+  ForumWebViewNavigationDecision _navigateInWebView(String url) {
+    final resolution = ref
+        .read(forumWebViewThreadLinkRouterProvider)
+        .resolve(url);
+    final destination = const YamiboForumLinkResolver().resolve(url);
+    if ((destination?.kind == YamiboForumLinkKind.thread ||
+            destination?.kind == YamiboForumLinkKind.threadPost ||
+            _isStandardEmptyFindpost(resolution)) &&
+        resolution.normalizedUri != resolution.originalUri) {
+      unawaited(_openThreadLinkInWebView(resolution));
+      return ForumWebViewNavigationDecision.prevent;
     }
-    if (mode == ForumShellMode.webview) {
-      await _openThreadLinkInWebView(resolution);
-      return;
-    }
-    await _openThreadLinkNatively(resolution);
+    return ForumWebViewNavigationDecision.navigate;
+  }
+
+  bool _isStandardEmptyFindpost(ForumWebViewThreadLinkResolution resolution) {
+    final uri = resolution.originalUri;
+    return resolution.kind ==
+            ForumWebViewThreadLinkKind.emptyFindPostRedirect &&
+        {'http', 'https'}.contains(uri.scheme) &&
+        uri.userInfo.isEmpty &&
+        (!uri.hasPort || uri.port == (uri.scheme == 'https' ? 443 : 80)) &&
+        uri.fragment.isEmpty &&
+        RegExp(r'^[1-9]\d*$').hasMatch(resolution.tid ?? '') &&
+        uri.queryParameters.keys.every(
+          {'mod', 'goto', 'ptid', 'pid', 'fromuid', 'mobile'}.contains,
+        ) &&
+        uri.queryParametersAll.values.every((values) => values.length == 1);
   }
 
   Future<void> _openThreadLinkInWebView(
@@ -547,28 +603,6 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     );
   }
 
-  Future<void> _openThreadLinkNatively(
-    ForumWebViewThreadLinkResolution resolution,
-  ) async {
-    switch (resolution.kind) {
-      case ForumWebViewThreadLinkKind.thread:
-        _postRouteSession.invalidate();
-        _pushNativeThread(tid: resolution.tid!);
-        return;
-      case ForumWebViewThreadLinkKind.threadPost:
-      case ForumWebViewThreadLinkKind.findPostRedirect:
-        await _openNativeFindPostRedirect(resolution);
-        return;
-      case ForumWebViewThreadLinkKind.emptyFindPostRedirect:
-        _postRouteSession.invalidate();
-        await _openNativeEmptyFindPostRedirect(resolution);
-        return;
-      case ForumWebViewThreadLinkKind.none:
-        await _openThreadLinkInWebView(resolution);
-        return;
-    }
-  }
-
   Future<void> _openNativeFindPostRedirect(
     ForumWebViewThreadLinkResolution resolution,
   ) async {
@@ -582,52 +616,61 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         sourceUri: resolution.normalizedUri,
         pageHint: resolution.page,
       ),
-      isCurrent: () => mounted && widget.isAccountCurrent?.call() != false,
+      isCurrent: () => _isCurrent,
     );
   }
 
   Future<void> _openNativeEmptyFindPostRedirect(
     ForumWebViewThreadLinkResolution resolution,
-  ) async {
-    final result = await ref
-        .read(forumWebViewRedirectResolverProvider)
-        .resolve(resolution.normalizedUri);
-    if (!mounted) {
-      return;
-    }
-    if (result case ApiSuccess<ForumWebViewRedirectResolution>(:final data)) {
-      final finalResolution = ref
-          .read(forumWebViewThreadLinkRouterProvider)
-          .resolve(data.finalUri.toString());
-      if (finalResolution.kind == ForumWebViewThreadLinkKind.thread ||
-          finalResolution.kind == ForumWebViewThreadLinkKind.threadPost) {
-        await _openThreadLinkNatively(finalResolution);
-        return;
+  ) => _redirectRouteSession.run(
+    key: resolution.normalizedUri,
+    isCurrent: () => _canOpenNativeRoute,
+    action: (isCurrent) async {
+      final result = await ref
+          .read(forumWebViewRedirectResolverProvider)
+          .resolve(resolution.normalizedUri);
+      if (!mounted || !isCurrent()) return;
+      if (result case ApiSuccess<ForumWebViewRedirectResolution>(:final data)) {
+        final destination = const YamiboForumLinkResolver().resolve(
+          data.finalUri.toString(),
+        );
+        if (destination?.kind == YamiboForumLinkKind.thread ||
+            destination?.kind == YamiboForumLinkKind.threadPost) {
+          if (destination!.kind == YamiboForumLinkKind.thread) {
+            final nativePage = ref.read(nativeForumLinkPageFactoryProvider)(
+              destination,
+            )!;
+            unawaited(
+              Navigator.of(
+                context,
+              ).push<void>(MaterialPageRoute(builder: (_) => nativePage)),
+            );
+          } else {
+            final finalResolution = ref
+                .read(forumWebViewThreadLinkRouterProvider)
+                .resolve(data.finalUri.toString());
+            await _openNativeFindPostRedirect(
+              ForumWebViewThreadLinkResolution(
+                kind: ForumWebViewThreadLinkKind.threadPost,
+                originalUri: destination.uri,
+                normalizedUri: finalResolution.normalizedUri,
+                tid: destination.tid,
+                pid: destination.pid,
+                page: destination.page,
+              ),
+            );
+          }
+          return;
+        }
       }
-    }
-    final messenger = ScaffoldMessenger.of(context);
-    _showSnackBar(
-      messenger,
-      AppLocalizations.of(context).forumWebViewPostLinkFallback,
-    );
-    await _openThreadLinkInWebView(resolution);
-  }
-
-  void _pushNativeThread({
-    required String tid,
-    int? initialPage,
-    String? targetPid,
-  }) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ThreadDetailPage(
-          tid: tid,
-          initialPage: initialPage,
-          targetPid: targetPid,
-        ),
-      ),
-    );
-  }
+      _showSnackBar(
+        ScaffoldMessenger.of(context),
+        AppLocalizations.of(context).forumWebViewPostLinkFallback,
+      );
+      _keepBrowserAfterFallback = true;
+      await _openThreadLinkInWebView(resolution);
+    },
+  );
 
   bool _isPostComposerUrl(Uri uri) {
     if (!ref.read(forumWebViewNavigatorProvider).isManagedSite(uri) ||
@@ -900,7 +943,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         ),
       ),
     );
-    if (!mounted || result == null || !result.sent) {
+    if (!_isCurrent || result == null || !result.sent) {
       return;
     }
     if (messenger != null) {
@@ -920,7 +963,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     BuildContext context,
     ForumWebViewPostReplyRequest request,
   ) async {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     final driver = ref.read(forumWebViewDriverProvider);
@@ -942,7 +985,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         ),
       ),
     );
-    if (!mounted || result == null || !result.sent) {
+    if (!_isCurrent || result == null || !result.sent) {
       return;
     }
     if (messenger != null) {
@@ -962,7 +1005,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     BuildContext context,
     ForumWebViewPostRequest request,
   ) async {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     final driver = ref.read(forumWebViewDriverProvider);
@@ -981,7 +1024,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         ),
       ),
     );
-    if (!mounted || result == null || !result.sent) {
+    if (!_isCurrent || result == null || !result.sent) {
       return;
     }
     if (messenger != null) {
@@ -1069,7 +1112,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   void _completePostEditWebView(ForumWebViewRouteOutcome outcome) {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     Navigator.of(context).pop(
@@ -1114,13 +1157,13 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   }
 
   Future<void> _launchExternalUri(Uri uri) async {
-    if (!mounted) {
+    if (!_isCurrent) {
       return;
     }
     final launcher = ref.read(forumWebViewExternalLauncherProvider);
     final messenger = ScaffoldMessenger.maybeOf(context);
     final launched = await launcher.launch(uri);
-    if (!mounted || launched) {
+    if (!mounted || !_isCurrent || launched) {
       return;
     }
     if (messenger != null) {
@@ -1271,7 +1314,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
           loadFavoriteForums: controller.loadFavoriteForums,
           onUnfavorite: (forum) => controller.unfavoriteForum(forum: forum),
           onSuccess: (_, _) async {
-            if (!mounted || !messenger.mounted) {
+            if (!_isCurrent || !messenger.mounted) {
               return;
             }
             _showSnackBar(messenger, l10n.forumUnfavoriteSuccess);
@@ -1303,7 +1346,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final messenger = ScaffoldMessenger.of(context);
     final l10n = AppLocalizations.of(context);
     final result = await action();
-    if (!mounted || !messenger.mounted) {
+    if (!_isCurrent || !messenger.mounted) {
       return;
     }
     if (result case DataCommandApplied<ForumFavoriteReceipt>()) {
@@ -1332,6 +1375,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     Uri? referrerUri,
   }) {
     _postRouteSession.invalidate();
+    _redirectRouteSession.invalidate();
     final navigator = ref.read(forumWebViewNavigatorProvider);
     if (!navigator.isManagedSite(targetUri)) {
       return driver.load(targetUri);

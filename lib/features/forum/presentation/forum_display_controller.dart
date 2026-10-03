@@ -11,10 +11,15 @@ import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 
 class ForumDisplayArgs {
-  const ForumDisplayArgs({required this.fid, this.title = ''});
+  const ForumDisplayArgs({
+    required this.fid,
+    this.title = '',
+    this.initialPage = 1,
+  });
 
   final String fid;
   final String title;
+  final int initialPage;
 
   @override
   bool operator ==(Object other) {
@@ -23,11 +28,12 @@ class ForumDisplayArgs {
     }
     return other is ForumDisplayArgs &&
         other.fid == fid &&
-        other.title == title;
+        other.title == title &&
+        other.initialPage == initialPage;
   }
 
   @override
-  int get hashCode => Object.hash(fid, title);
+  int get hashCode => Object.hash(fid, title, initialPage);
 }
 
 final forumDisplayControllerProvider = AsyncNotifierProvider.autoDispose
@@ -43,7 +49,9 @@ class ForumDisplayController extends AsyncNotifier<ForumDisplayPageState> {
 
   @override
   FutureOr<ForumDisplayPageState> build() async {
-    return _loadQuery(ForumDisplayQuery.initial(fid: _args.fid));
+    return _loadQuery(
+      ForumDisplayQuery.initial(fid: _args.fid).copyWithPage(_args.initialPage),
+    );
   }
 
   Future<void> refresh({bool forceNetwork = false}) async {
