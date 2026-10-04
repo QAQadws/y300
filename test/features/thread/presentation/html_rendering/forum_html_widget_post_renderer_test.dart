@@ -106,6 +106,55 @@ void main() {
     });
   });
 
+  testWidgets(
+    'forwards resolved text layout without applying fontScale again',
+    (tester) async {
+      const style = TextStyle(
+        fontSize: 20,
+        height: 1.4,
+        fontFamily: 'serif',
+        fontWeight: FontWeight.w700,
+      );
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
+              html: '<p>显式排版</p>',
+              sourceId: 'resolved-layout',
+              preferences: ForumHtmlReaderPreferences.defaults().copyWith(
+                typography: const RichTextTypography(
+                  fontScale: 2.5,
+                  lineHeightScale: 2,
+                  paragraphSpacing: 12,
+                ),
+              ),
+              textStyle: style,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final htmlWidget = tester.widget<HtmlWidget>(
+        find.byKey(const Key('forum-html-renderer-resolved-layout')),
+      );
+      expect(htmlWidget.textStyle, style);
+      final paragraph = tester.widget<RichText>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText && widget.text.toPlainText().contains('显式排版'),
+        ),
+      );
+      expect(paragraph.textAlign, TextAlign.center);
+      final renderedStyle = _findTextSpanContaining(tester, '显式排版')!.style;
+      expect(renderedStyle?.fontSize, 20);
+      expect(renderedStyle?.fontFamily, 'serif');
+      expect(renderedStyle?.fontWeight, FontWeight.w700);
+    },
+  );
+
   testWidgets('uses explicit render theme quote colors', (tester) async {
     await tester.pumpWidget(
       const LocalizedTestApp(

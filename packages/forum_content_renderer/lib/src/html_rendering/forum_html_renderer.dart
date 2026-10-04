@@ -26,6 +26,8 @@ class ForumHtmlRenderer extends StatefulWidget {
     required this.options,
     required this.labels,
     this.callbacks = const ForumHtmlRenderCallbacks(),
+    this.textStyle,
+    this.textAlign,
     this.imageHost,
     this.imageHostRevision,
     this.imageViewportCoordinator,
@@ -46,6 +48,11 @@ class ForumHtmlRenderer extends StatefulWidget {
   final ForumHtmlRenderOptions options;
   final ForumHtmlCollapseLabels labels;
   final ForumHtmlRenderCallbacks callbacks;
+
+  /// Resolved unscaled base style; overrides the default fontScale projection.
+  /// Author CSS and block spacing still use the normal style policy.
+  final TextStyle? textStyle;
+  final TextAlign? textAlign;
   final ForumHtmlImageHost? imageHost;
 
   /// Stable identity for a Host assembled on each build. Defaults to the Host.
@@ -123,10 +130,10 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
             .getInheritedWidgetOfExactType<_ForumHtmlInheritedHostBinding>()
             ?.binding ??
         _binding;
-    final baseStyle = stylePolicy.baseTextStyle(context);
+    final baseStyle = widget.textStyle ?? stylePolicy.baseTextStyle(context);
     Widget buildBody(VoidCallback? ready) {
       _onReady = ready;
-      return HtmlWidget(
+      final body = HtmlWidget(
         document.preparedHtml,
         key: Key('forum-html-renderer-${widget.sourceId ?? 'anonymous'}'),
         baseUrl: widget.linkBaseUri,
@@ -140,6 +147,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
             _buildCustomWidget(element, stylePolicy, document, binding),
         factoryBuilder: () => ForumHtmlImageWidgetFactory(
           binding: binding,
+          textAlignFor: () => _configuration.value.textAlign,
           onBodyBuilt: () => _onReady?.call(),
           onTapImageRequest: (request) {
             final callback = widget.callbacks.onTapImage;
@@ -157,6 +165,8 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
         renderMode: widget.renderMode,
         rebuildTriggers: [
           widget.options,
+          widget.textStyle,
+          widget.textAlign,
           widget.theme.signature,
           widget.blockSpacingMode,
           widget.contentLayout,
@@ -170,6 +180,12 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
           return callback(url);
         },
       );
+      // fwfh retains its factory and root properties. An alignment-only change
+      // must invalidate inherited root properties without remounting the body.
+      return DefaultTextStyle.merge(
+        textAlign: widget.textAlign ?? TextAlign.start,
+        child: body,
+      );
     }
 
     final presentation = widget.bodyPresentation;
@@ -179,6 +195,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     final revision = (
       document.preparedHtml,
       baseStyle,
+      widget.textAlign,
       MediaQuery.textScalerOf(context),
       widget.options,
       widget.theme.signature,
@@ -207,7 +224,8 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     if (stylePolicy.isDiscuzEditStatusElement(element)) {
       return _DiscuzEditStatusText(
         text: element.text.trim(),
-        baseStyle: stylePolicy.baseTextStyle,
+        baseStyle: (context) =>
+            widget.textStyle ?? stylePolicy.baseTextStyle(context),
       );
     }
     if (!stylePolicy.isForumCollapseElement(element)) return null;
@@ -239,6 +257,8 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
                 preparedDocument: document.copyWith(preparedHtml: html),
                 theme: configuration.theme,
                 options: configuration.options,
+                textStyle: configuration.textStyle,
+                textAlign: configuration.textAlign,
                 labels: configuration.labels,
                 callbacks: configuration.callbacks,
                 collapseExpansion: configuration.collapseExpansion,

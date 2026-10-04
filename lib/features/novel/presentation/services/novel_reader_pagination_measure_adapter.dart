@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 class NovelReaderPaginationMeasureRequest {
@@ -298,7 +299,19 @@ final class NovelReaderHtmlPaginationMeasureAdapter
     this.imageReferer,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.timeout = const Duration(milliseconds: 800),
-  }) : _hostContext = hostContext;
+    NovelReaderPaginationRenderEnvironment? renderEnvironment,
+  }) : _hostContext = hostContext,
+       renderEnvironment =
+           renderEnvironment ??
+           NovelReaderPaginationRenderEnvironment.capture(
+             hostContext,
+             textStyle: ForumHtmlStylePolicy(
+               preferences,
+               theme: theme,
+               blockSpacingMode: blockSpacingMode,
+             ).baseTextStyle(hostContext),
+             textAlign: TextAlign.start,
+           );
 
   final BuildContext _hostContext;
   final ForumHtmlThemeContext theme;
@@ -309,6 +322,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
   final String? imageReferer;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final Duration timeout;
+  final NovelReaderPaginationRenderEnvironment renderEnvironment;
 
   @override
   NovelReaderPaginationMeasureSession create({
@@ -327,6 +341,7 @@ final class NovelReaderHtmlPaginationMeasureAdapter
       chapter: chapter,
       key: key,
       timeout: timeout,
+      renderEnvironment: renderEnvironment,
     );
   }
 
@@ -372,6 +387,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
     required this.chapter,
     required this.key,
     required this.timeout,
+    required this.renderEnvironment,
   }) : _hostContext = hostContext;
 
   final BuildContext _hostContext;
@@ -385,6 +401,7 @@ final class _NovelReaderHtmlPaginationMeasureSession
   final NovelReaderPreparedChapter chapter;
   final NovelReaderPaginationKey key;
   final Duration timeout;
+  final NovelReaderPaginationRenderEnvironment renderEnvironment;
   final GlobalKey<_NovelReaderPaginationMeasureHostState> _hostKey =
       GlobalKey<_NovelReaderPaginationMeasureHostState>();
 
@@ -523,13 +540,15 @@ final class _NovelReaderHtmlPaginationMeasureSession
               // blocks still require a Material ancestor during measurement.
               child: Material(
                 type: MaterialType.transparency,
-                child: _NovelReaderPaginationMeasureHost(
-                  key: _hostKey,
-                  initialRequest: request,
-                  initialToken: token,
-                  onMeasured: _completeHeight,
-                  onFrameWaited: _recordFrameWait,
-                  childBuilder: _buildCandidate,
+                child: renderEnvironment.wrap(
+                  _NovelReaderPaginationMeasureHost(
+                    key: _hostKey,
+                    initialRequest: request,
+                    initialToken: token,
+                    onMeasured: _completeHeight,
+                    onFrameWaited: _recordFrameWait,
+                    childBuilder: _buildCandidate,
+                  ),
                 ),
               ),
             ),
@@ -549,6 +568,8 @@ final class _NovelReaderHtmlPaginationMeasureSession
       theme: theme,
       preparedDocument: preparedDocument,
       preferences: preferences,
+      textStyle: renderEnvironment.textStyle,
+      textAlign: renderEnvironment.textAlign,
       sourceId: sourceId,
       threadId: threadId,
       imageReferer: imageReferer,

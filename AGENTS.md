@@ -22,6 +22,7 @@
 - 小说作者帖子正文固定通过 `threadAuthorPosts` 使用 `viewthread version=1`，不得改成 `version=4`。
 - 小说横向新锚点使用格式 1 的节点内语义码点与文本身份；DOM 源坐标、UTF-16 和扩展字素通过显式投影转换，不用语义 offset 切 HTML。精确恢复核对格式/文本身份和实际 coverage；旧、未来格式或近似恢复不因首帧、补页完成或退出自动迁移，真实阅读导航才确认新位置。语义文档记录构建时的转换来源，不能用当前预览偏好推断；来源不一致不猜节点对应。
 - 小说分页等待超时、测量失败或后台补页停滞不得自动切换或持久改写阅读模式；只由用户主动选择滚动。保留已可读页与位置，重试核对布局前缀并以独立请求代次隔离迟到结果；退出和取消释放等待 timer 与测量 session。
+- 小说横向 TextPainter、测量 Overlay 和可见 HTML 共用局部解析的字体/字重、对齐、方向及 renderer 有效缩放输入，变化须失效对应布局缓存；已解析 textStyle 不重复 fontScale，作者 CSS 与真实 renderer 校验保留。当前 fwfh 使用单缩放因子，不把它宣称为完整非线性缩放。
 - 小说复杂分页串行等待 chunk 消费，只在封页并完成稳定发布后确认 committed offset；晚失败只回退未发布 DOM 尾部，不重发整块或改动已读前缀。页快照使用只追加存储的固定只读前缀；plan/measure/boundary/prepared 纯缓存归实际阅读会话，模式切换保留，退出或换 owner 永久关闭并隔离迟到回填，不缓存 Context、Overlay 或测量 session。
 - HTML 文字坐标、DOM 索引/切片、合法/受保护边界与有界 fit 搜索位于纯 Dart 包 `packages/html_pagination_core`，只消费 `html_pagination_core.dart` 公开入口。包内范围区分源码点、字素和 UTF-16；论坛保护判定、语义锚点投影、章节/cache identity、Flutter 测量、实际取消生命周期及 composer/hybrid 编排仍归 App。parse 端口不覆盖切片序列化，禁止借抽包启用随机起点或持久检查点。
 - 漫画/小说纯标题策略位于 `packages/content_title_core`，生产消费者统一使用 `content_title_core.dart` 公开入口。两组规则独立，subject 映射、HTML 准备、provider、搜索/同步与持久化仍归应用；生产代码不得依赖包的测试 fixture。

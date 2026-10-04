@@ -31,6 +31,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
@@ -284,6 +285,16 @@ class _NovelReaderHtmlPagedSurfaceState
       style: widget.typography.body,
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final renderEnvironment =
+              NovelReaderPaginationRenderEnvironment.capture(
+                context,
+                textStyle: ForumHtmlStylePolicy(
+                  htmlPreferences,
+                  theme: widget.theme,
+                  blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
+                ).baseTextStyle(context).merge(widget.typography.body),
+                textAlign: widget.typography.textAlign,
+              );
           // Knob lives in NovelReaderSpacing.pagedPagePadding (via prefs
           // defaults). Everything below derives the measured page box and the
           // rendered Padding from this one value on purpose — see that doc.
@@ -377,11 +388,11 @@ class _NovelReaderHtmlPagedSurfaceState
                   widget.preferences,
                   widget.typography,
                   htmlPreferences,
-                  MediaQuery.textScalerOf(context),
+                  renderEnvironment,
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 19,
+                rendererRevision: 20,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),
@@ -394,6 +405,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 prepared: prepared,
                 key: key,
                 htmlPreferences: htmlPreferences,
+                renderEnvironment: renderEnvironment,
               );
               return Builder(
                 builder: (context) {
@@ -570,6 +582,7 @@ class _NovelReaderHtmlPagedSurfaceState
                           theme: widget.theme,
                           htmlPreferences: htmlPreferences,
                           typography: widget.typography,
+                          renderEnvironment: renderEnvironment,
                           renderDocument: prepared.renderDocument,
                           episode: widget.episode,
                           imageReferer: widget.imageReferer,
@@ -622,6 +635,7 @@ class _NovelReaderHtmlPagedSurfaceState
     required NovelReaderPreparedChapter prepared,
     required NovelReaderPaginationKey key,
     required ForumHtmlReaderPreferences htmlPreferences,
+    required NovelReaderPaginationRenderEnvironment renderEnvironment,
   }) {
     if (_planKey == key && _planStream != null) {
       return _planStream!;
@@ -638,6 +652,7 @@ class _NovelReaderHtmlPagedSurfaceState
       imageOwner: widget.episode.sourceTid,
       referer: widget.imageReferer,
       textScale: MediaQuery.textScalerOf(context).scale(1000).round(),
+      renderEnvironment: renderEnvironment.sessionSignature,
       builder: widget.coordinatorBuilder,
       cache: widget.paginationCache,
       measureCache: widget.paginationMeasureCache,
@@ -662,6 +677,7 @@ class _NovelReaderHtmlPagedSurfaceState
           _defaultCoordinator(
             context: context,
             htmlPreferences: htmlPreferences,
+            renderEnvironment: renderEnvironment,
           );
     }
     _planKey = key;
@@ -1092,13 +1108,9 @@ class _NovelReaderHtmlPagedSurfaceState
   NovelReaderPaginationCoordinator _defaultCoordinator({
     required BuildContext context,
     required ForumHtmlReaderPreferences htmlPreferences,
+    required NovelReaderPaginationRenderEnvironment renderEnvironment,
   }) {
     const blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
-    final rendererBaseStyle = ForumHtmlStylePolicy(
-      htmlPreferences,
-      theme: widget.theme,
-      blockSpacingMode: blockSpacingMode,
-    ).baseTextStyle(context);
     final measureAdapter = NovelReaderHtmlPaginationMeasureAdapter(
       hostContext: context,
       theme: widget.theme,
@@ -1108,15 +1120,17 @@ class _NovelReaderHtmlPagedSurfaceState
       imageCacheOwnerId: widget.episode.sourceTid,
       imageReferer: widget.imageReferer,
       blockSpacingMode: blockSpacingMode,
+      renderEnvironment: renderEnvironment,
     );
     return DefaultNovelReaderPaginationCoordinator(
       pageBreaker: DefaultNovelReaderHybridPaginationPlanner(
         measureAdapter: measureAdapter,
         preferences: htmlPreferences,
         theme: widget.theme,
-        baseStyle: rendererBaseStyle,
-        textAlign: widget.typography.textAlign,
-        textScaler: MediaQuery.textScalerOf(context),
+        baseStyle: renderEnvironment.textStyle,
+        textDirection: renderEnvironment.textDirection,
+        textAlign: renderEnvironment.textAlign,
+        textScaler: renderEnvironment.textScaler,
         boundaryCache:
             widget.paginationBoundaryCache ??
             (_ownedBoundaryCache ??= NovelReaderComplexHtmlBoundaryCache()),
@@ -1195,7 +1209,7 @@ class _NovelReaderHtmlPagedSurfaceState
     NovelReaderPreferences preferences,
     NovelReaderTypography typography,
     ForumHtmlReaderPreferences htmlPreferences,
-    TextScaler textScaler,
+    NovelReaderPaginationRenderEnvironment renderEnvironment,
   ) {
     return jsonEncode(<Object?>[
       preferences.fontSize,
@@ -1211,7 +1225,7 @@ class _NovelReaderHtmlPagedSurfaceState
       htmlPreferences.typography.lineHeightScale,
       htmlPreferences.typography.paragraphSpacing,
       typography.textAlign.index,
-      textScaler.scale(1000).round(),
+      renderEnvironment.layoutSignature,
     ]);
   }
 
@@ -1378,6 +1392,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     required this.theme,
     required this.htmlPreferences,
     required this.typography,
+    required this.renderEnvironment,
     required this.renderDocument,
     required this.episode,
     required this.imageReferer,
@@ -1411,6 +1426,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final ForumHtmlThemeContext theme;
   final ForumHtmlReaderPreferences htmlPreferences;
   final NovelReaderTypography typography;
+  final NovelReaderPaginationRenderEnvironment renderEnvironment;
   final ForumHtmlPreparedRenderDocument renderDocument;
   final NovelEpisodeItem episode;
   final String imageReferer;
@@ -1618,6 +1634,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
                     theme: widget.theme,
                     htmlPreferences: widget.htmlPreferences,
                     typography: widget.typography,
+                    renderEnvironment: widget.renderEnvironment,
                     renderDocument: widget.renderDocument,
                     episode: widget.episode,
                     imageReferer: widget.imageReferer,
@@ -1995,6 +2012,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
     required this.theme,
     required this.htmlPreferences,
     required this.typography,
+    required this.renderEnvironment,
     required this.renderDocument,
     required this.episode,
     required this.imageReferer,
@@ -2010,6 +2028,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
   final ForumHtmlThemeContext theme;
   final ForumHtmlReaderPreferences htmlPreferences;
   final NovelReaderTypography typography;
+  final NovelReaderPaginationRenderEnvironment renderEnvironment;
   final ForumHtmlPreparedRenderDocument renderDocument;
   final NovelEpisodeItem episode;
   final String imageReferer;
@@ -2028,6 +2047,8 @@ class _NovelReaderPagedPage extends StatelessWidget {
       theme: theme,
       preparedDocument: preparedDocument,
       preferences: htmlPreferences,
+      textStyle: renderEnvironment.textStyle,
+      textAlign: renderEnvironment.textAlign,
       sourceId: episode.episodeId,
       threadId: episode.sourceTid,
       imageReferer: imageReferer,
@@ -2056,7 +2077,7 @@ class _NovelReaderPagedPage extends StatelessWidget {
       label: AppLocalizations.of(
         context,
       ).novelPageOfTotalSemantics(page.index + 1, plan.pageCount),
-      child: child,
+      child: renderEnvironment.wrap(child),
     );
   }
 

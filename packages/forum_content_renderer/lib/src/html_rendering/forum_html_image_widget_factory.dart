@@ -27,6 +27,7 @@ Widget _clipMedia(Widget child) => ClipRRect(
 class ForumHtmlImageWidgetFactory extends WidgetFactory {
   ForumHtmlImageWidgetFactory({
     required this.binding,
+    this.textAlignFor,
     this.onImageResolved,
     this.onTapImageRequest,
     this.onImageLayoutShift,
@@ -35,12 +36,19 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
   });
 
   final ValueListenable<ForumHtmlImageFactoryBinding> binding;
+  final TextAlign? Function()? textAlignFor;
   final VoidCallback? onBodyBuilt;
   final ValueChanged<Size>? onImageResolved;
   final void Function(ForumHtmlImageRequest request)? onTapImageRequest;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final String? readableImageKeyPrefix;
   var _nextImageIndex = 0;
+
+  @override
+  Iterable<dynamic> getDependencies(BuildContext context) {
+    final alignment = textAlignFor?.call();
+    return [...super.getDependencies(context), ?alignment];
+  }
 
   @override
   Widget buildBodyWidget(BuildContext context, Widget child) {

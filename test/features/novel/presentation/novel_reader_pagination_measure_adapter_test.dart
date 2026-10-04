@@ -11,6 +11,7 @@ import 'package:y300/features/novel/presentation/services/novel_html_reader_pref
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 
@@ -156,6 +157,184 @@ void main() {
     final result = await future;
 
     expect(result.height, greaterThan(0));
+  });
+
+  testWidgets('root overlay uses the captured local reader layout', (
+    tester,
+  ) async {
+    const cases = [
+      (
+        width: 240,
+        style: TextStyle(
+          fontSize: 20,
+          height: 1.7,
+          fontFamily: 'serif',
+          fontWeight: FontWeight.w700,
+        ),
+        alignment: TextAlign.center,
+        scale: 1.5,
+      ),
+      (
+        width: 360,
+        style: TextStyle(
+          fontSize: 22,
+          height: 1.3,
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.w500,
+        ),
+        alignment: TextAlign.justify,
+        scale: 1.2,
+      ),
+    ];
+    final preferences = _preferences(fontScale: 2.5, lineHeight: 1.8);
+    final chapter = await _prepare(
+      preferences: preferences,
+      rawHtml:
+          '<p>local plain <span>across span é 👩‍🚀</span>'
+          '<br>second line mixed 123 with enough words to wrap.</p>'
+          '<p style="text-align:left">author paragraph '
+          '<span style="font-size:26px;font-weight:400">author size</span></p>',
+    );
+
+    for (final testCase in cases) {
+      late BuildContext hostContext;
+      late NovelReaderPaginationRenderEnvironment environment;
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          theme: ThemeData(
+            textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 8)),
+          ),
+          home: Builder(
+            builder: (context) => Theme(
+              data: ThemeData(
+                textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 11)),
+              ),
+              child: MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(testCase.scale)),
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: DefaultTextStyle(
+                    style: const TextStyle(letterSpacing: 0.5),
+                    child: Builder(
+                      builder: (context) {
+                        hostContext = context;
+                        environment =
+                            NovelReaderPaginationRenderEnvironment.capture(
+                              context,
+                              textStyle: testCase.style,
+                              textAlign: testCase.alignment,
+                            );
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final key = NovelReaderPaginationKey(
+        episodeId: chapter.episodeId,
+        contentHash: chapter.contentHash,
+        viewportWidthPx: testCase.width,
+        viewportHeightPx: 800,
+        typographySignature: environment.layoutSignature,
+        themeSignature: chapter.themeSignature,
+        imageDimensionRevision: chapter.imageDimensionRevision,
+        rendererRevision: 20,
+      );
+      final adapter = NovelReaderHtmlPaginationMeasureAdapter(
+        hostContext: hostContext,
+        renderEnvironment: environment,
+        theme: _theme,
+        preferences: preferences,
+        sourceId: chapter.episodeId,
+      );
+      final session = adapter.create(chapter: chapter, key: key);
+      final future = session.measure(
+        NovelReaderPaginationMeasureRequest(
+          html: chapter.html,
+          chapter: chapter,
+          key: key,
+        ),
+      );
+      var completed = false;
+      unawaited(
+        future.then<void>(
+          (_) => completed = true,
+          onError: (Object error, StackTrace stackTrace) => completed = true,
+        ),
+      );
+      for (var frame = 0; frame < 20 && !completed; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(completed, isTrue);
+      final measured = await future;
+      expect(
+        _paragraph(tester, 'local plain').textDirection,
+        TextDirection.rtl,
+      );
+      expect(_paragraph(tester, 'local plain').textAlign, testCase.alignment);
+      await session.dispose();
+      await tester.pump();
+
+      final rendererKey = GlobalKey();
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          theme: ThemeData(
+            textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 8)),
+          ),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: testCase.width.toDouble(),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: environment.wrap(
+                      ForumHtmlWidgetPostRenderer(
+                        key: rendererKey,
+                        html: chapter.html,
+                        preparedDocument: chapter.renderDocument,
+                        preferences: preferences,
+                        theme: _theme,
+                        sourceId: chapter.episodeId,
+                        textStyle: environment.textStyle,
+                        textAlign: environment.textAlign,
+                        buildAsync: false,
+                        enableCaching: false,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        measured.height,
+        closeTo(tester.getSize(find.byKey(rendererKey)).height, 0.01),
+        reason: 'width=${testCase.width}, scale=${testCase.scale}',
+      );
+      final paragraph = _paragraph(tester, 'local plain');
+      expect(paragraph.textDirection, TextDirection.rtl);
+      expect(paragraph.textAlign, testCase.alignment);
+      final renderedStyle = _styleFor(paragraph.text, 'local plain')!;
+      expect(renderedStyle.fontFamily, testCase.style.fontFamily);
+      expect(renderedStyle.fontWeight, testCase.style.fontWeight);
+      expect(
+        renderedStyle.fontSize,
+        closeTo(testCase.style.fontSize! * testCase.scale, 0.001),
+      );
+      expect(_paragraph(tester, 'author paragraph').textAlign, TextAlign.left);
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('matches the production renderer across the layout matrix', (
@@ -330,6 +509,30 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+}
+
+RichText _paragraph(WidgetTester tester, String text) =>
+    tester.widget<RichText>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText && widget.text.toPlainText().contains(text),
+      ),
+    );
+
+TextStyle? _styleFor(
+  InlineSpan span,
+  String text, [
+  TextStyle parent = const TextStyle(),
+]) {
+  final style = parent.merge(span.style);
+  if (span is TextSpan) {
+    if (span.text?.contains(text) ?? false) return style;
+    for (final child in span.children ?? const <InlineSpan>[]) {
+      final found = _styleFor(child, text, style);
+      if (found != null) return found;
+    }
+  }
+  return null;
 }
 
 Future<NovelReaderPreparedChapter> _prepare({

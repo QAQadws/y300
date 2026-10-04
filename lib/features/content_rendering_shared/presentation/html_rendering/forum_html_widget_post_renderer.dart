@@ -21,6 +21,8 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     required this.theme,
     this.callbacks = const ForumHtmlRenderCallbacks(),
     this.preferences,
+    this.textStyle,
+    this.textAlign,
     this.buildAsync,
     this.enableCaching,
     this.renderMode = RenderMode.column,
@@ -51,6 +53,8 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   final ForumHtmlThemeContext theme;
   final ForumHtmlRenderCallbacks callbacks;
   final ForumHtmlReaderPreferences? preferences;
+  final TextStyle? textStyle;
+  final TextAlign? textAlign;
   final bool? buildAsync;
   final bool? enableCaching;
 
@@ -136,6 +140,8 @@ class _ForumHtmlWidgetPostRendererState
       preparedDocument: document,
       theme: widget.theme,
       options: preferences.renderOptions,
+      textStyle: widget.textStyle,
+      textAlign: widget.textAlign,
       labels: ForumHtmlCollapseLabels(
         fallbackTitle: localizations.threadHtmlCollapseContent,
         expandedSemanticsLabel: localizations.threadHtmlCollapseExpanded,
