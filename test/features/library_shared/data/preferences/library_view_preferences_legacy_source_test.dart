@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart' show Database;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' hide Database;
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/preferences/library_view_preferences_legacy_source.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
@@ -15,11 +15,11 @@ void main() {
 
   setUp(() async {
     await deleteDatabase(dbName);
-    final dbFuture = ComicLocalDb.open(databaseName: dbName);
+    final dbFuture = AppDatabase.open(databaseName: dbName);
     db = await dbFuture;
     source = SqliteLibraryViewPreferencesLegacySource(() => dbFuture);
     await db.update(
-      ComicLocalDb.settingsTable,
+      AppDatabase.settingsTable,
       <String, Object>{'value': '5'},
       where: 'key = ?',
       whereArgs: const <Object>['grid_column_count'],
@@ -34,15 +34,12 @@ void main() {
   test(
     'explicit shared three-column row wins over old comic setting',
     () async {
-      await db.insert(
-        ComicLocalDb.libraryDisplaySettingsTable,
-        <String, Object>{
-          'module_key': 'comic',
-          'display_mode': 'list',
-          'grid_columns': 3,
-          'updated_at': 1,
-        },
-      );
+      await db.insert(AppDatabase.libraryDisplaySettingsTable, <String, Object>{
+        'module_key': 'comic',
+        'display_mode': 'list',
+        'grid_columns': 3,
+        'updated_at': 1,
+      });
 
       final loaded = await source.loadDisplayPreferences(
         moduleKey: LibraryModuleKey.comic,

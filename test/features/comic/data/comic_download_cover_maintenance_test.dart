@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/services/comic_download_cover_maintenance.dart';
 import 'package:y300/features/comic/data/services/comic_download_metadata_store.dart';
@@ -47,7 +47,7 @@ void main() {
     root = await io.Directory.systemTemp.createTemp(
       'download-cover-maintenance-',
     );
-    db = await ComicLocalDb.open(databaseName: p.join(root.path, 'fixture.db'));
+    db = await AppDatabase.open(databaseName: p.join(root.path, 'fixture.db'));
     covers = LocalLibraryCoverStore(
       rootPath: Future.value(p.join(root.path, 'originals')),
       downloader: _NoNetwork(),
@@ -75,7 +75,7 @@ void main() {
         {'episodeId': 'one', 'cbzFile': 'chapter.cbz'},
       ],
     });
-    await db.insert(ComicLocalDb.comicsTable, {
+    await db.insert(AppDatabase.comicsTable, {
       'comic_id': id,
       'source_tid': '1',
       'source_fid': '30',
@@ -131,14 +131,14 @@ void main() {
     'per-work local adoption precedes deleting a referenced legacy copy',
     () async {
       await db.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         {'cover_local_path': legacy.path},
         where: 'comic_id = ?',
         whereArgs: [id],
       );
       await maintenance.maintain(id);
       expect(await legacy.exists(), isFalse);
-      final row = (await db.query(ComicLocalDb.comicsTable)).single;
+      final row = (await db.query(AppDatabase.comicsTable)).single;
       expect(row['cover_local_path'], isNull);
       final managed = LibraryCoverAssetRef(
         assetId: asset.assetId,
@@ -169,7 +169,7 @@ void main() {
     'other work references and unknown metadata references prevent deletion',
     () async {
       await install();
-      await db.insert(ComicLocalDb.comicsTable, {
+      await db.insert(AppDatabase.comicsTable, {
         'comic_id': 'other',
         'source_tid': '2',
         'source_fid': '30',
@@ -181,7 +181,7 @@ void main() {
       await maintenance.maintain(id);
       expect(await legacy.exists(), isTrue);
       await db.delete(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         where: 'comic_id = ?',
         whereArgs: ['other'],
       );

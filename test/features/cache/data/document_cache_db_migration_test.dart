@@ -1,17 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
   test(
-    'ComicLocalDb latest schema includes document and snapshot cache tables',
+    'AppDatabase latest schema includes document and snapshot cache tables',
     () async {
       const dbName = 'document_cache_db_migration_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       addTearDown(() async {
         await db.close();
         await deleteDatabase(dbName);
@@ -21,10 +21,10 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type = 'table'",
       );
       final tableNames = tables.map((row) => row['name']).toSet();
-      expect(tableNames.contains(ComicLocalDb.cachedDocumentsTable), isTrue);
+      expect(tableNames.contains(AppDatabase.cachedDocumentsTable), isTrue);
 
       final columns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.cachedDocumentsTable})',
+        'PRAGMA table_info(${AppDatabase.cachedDocumentsTable})',
       );
       final columnNames = columns.map((row) => row['name']).toSet();
       expect(columnNames.contains('cache_key'), isTrue);
@@ -43,10 +43,10 @@ void main() {
       expect(indexNames.contains('idx_cached_documents_namespace'), isTrue);
       expect(indexNames.contains('idx_cached_documents_access'), isTrue);
 
-      expect(tableNames.contains(ComicLocalDb.cachedSnapshotsTable), isTrue);
+      expect(tableNames.contains(AppDatabase.cachedSnapshotsTable), isTrue);
 
       final snapshotColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.cachedSnapshotsTable})',
+        'PRAGMA table_info(${AppDatabase.cachedSnapshotsTable})',
       );
       final snapshotColumnNames = snapshotColumns
           .map((row) => row['name'])

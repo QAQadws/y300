@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
 class LegacyLibraryDisplayPreferences {
@@ -71,7 +71,7 @@ final class SqliteLibraryViewPreferencesLegacySource
   }) async {
     try {
       final rows = await db.query(
-        ComicLocalDb.libraryDisplaySettingsTable,
+        AppDatabase.libraryDisplaySettingsTable,
         columns: const <String>['display_mode', 'grid_columns'],
         where: 'module_key = ?',
         whereArgs: <Object>[_moduleKeyValue(moduleKey)],
@@ -99,7 +99,7 @@ final class SqliteLibraryViewPreferencesLegacySource
   Future<Object?> _loadLegacyComicGridColumns(Database db) async {
     try {
       final rows = await db.query(
-        ComicLocalDb.settingsTable,
+        AppDatabase.settingsTable,
         columns: const <String>['value'],
         where: 'key = ?',
         whereArgs: const <Object>['grid_column_count'],

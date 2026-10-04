@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
@@ -28,7 +28,7 @@ class LocalLibraryStateRepository
     final contentType = _moduleKeyToContentType(moduleKey);
     final old = await getWorkState(moduleKey: moduleKey, workId: workId);
     await db.insert(
-      ComicLocalDb.libraryWorkStateTable,
+      AppDatabase.libraryWorkStateTable,
       <String, Object?>{
         'content_type': contentType,
         'work_id': workId,
@@ -57,7 +57,7 @@ class LocalLibraryStateRepository
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.libraryWorkStateTable,
+      AppDatabase.libraryWorkStateTable,
       where: 'content_type = ? AND work_id = ?',
       whereArgs: <Object>[_moduleKeyToContentType(moduleKey), workId],
       limit: 1,
@@ -111,7 +111,7 @@ class LocalLibraryStateRepository
               old?.downloadedAt?.millisecondsSinceEpoch;
 
     await db.insert(
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       <String, Object?>{
         'content_type': _moduleKeyToContentType(moduleKey),
         'episode_id': episodeId,
@@ -133,7 +133,7 @@ class LocalLibraryStateRepository
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       where: 'content_type = ? AND episode_id = ?',
       whereArgs: <Object>[_moduleKeyToContentType(moduleKey), episodeId],
       limit: 1,
@@ -163,7 +163,7 @@ class LocalLibraryStateRepository
     final rows = await db.rawQuery(
       '''
       SELECT COUNT(*) AS count
-      FROM ${ComicLocalDb.libraryEpisodeStateTable}
+      FROM ${AppDatabase.libraryEpisodeStateTable}
       WHERE content_type = ? AND work_id = ? AND is_read = 0
       ''',
       <Object>[_moduleKeyToContentType(moduleKey), workId],
@@ -180,7 +180,7 @@ class LocalLibraryStateRepository
     final rows = await db.rawQuery(
       '''
       SELECT COUNT(*) AS count
-      FROM ${ComicLocalDb.libraryEpisodeStateTable}
+      FROM ${AppDatabase.libraryEpisodeStateTable}
       WHERE content_type = ? AND work_id = ? AND is_read = 1
       ''',
       <Object>[_moduleKeyToContentType(moduleKey), workId],
@@ -197,7 +197,7 @@ class LocalLibraryStateRepository
     final rows = await db.rawQuery(
       '''
       SELECT COUNT(*) AS count
-      FROM ${ComicLocalDb.libraryEpisodeStateTable}
+      FROM ${AppDatabase.libraryEpisodeStateTable}
       WHERE content_type = ? AND work_id = ? AND is_downloaded = 1
       ''',
       <Object>[_moduleKeyToContentType(moduleKey), workId],
@@ -230,8 +230,8 @@ class LocalLibraryStateRepository
     ).join(', ');
     final workIdArgs = normalizedWorkIds.toList(growable: false);
     final sourceTable = switch (moduleKey) {
-      LibraryModuleKey.comic => ComicLocalDb.episodesTable,
-      LibraryModuleKey.novel => ComicLocalDb.workEpisodesTable,
+      LibraryModuleKey.comic => AppDatabase.episodesTable,
+      LibraryModuleKey.novel => AppDatabase.workEpisodesTable,
       LibraryModuleKey.favorite => null,
     };
     if (sourceTable == null) {
@@ -248,14 +248,14 @@ class LocalLibraryStateRepository
       // or duplicate-work cleanup and otherwise make "clear all read" appear
       // ineffective in aggregate queries.
       await txn.update(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         <String, Object?>{'is_read': isRead ? 1 : 0, 'read_at': readAtMillis},
         where: 'content_type = ? AND work_id IN ($placeholders)',
         whereArgs: <Object>[contentType, ...workIdArgs],
       );
       await txn.rawInsert(
         '''
-        INSERT OR REPLACE INTO ${ComicLocalDb.libraryEpisodeStateTable} (
+        INSERT OR REPLACE INTO ${AppDatabase.libraryEpisodeStateTable} (
           content_type,
           episode_id,
           work_id,
@@ -275,7 +275,7 @@ class LocalLibraryStateRepository
           ?,
           state.downloaded_at
         FROM $sourceTable src
-        LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} state
+        LEFT JOIN ${AppDatabase.libraryEpisodeStateTable} state
           ON state.content_type = ?
          AND state.episode_id = src.episode_id
          AND state.work_id = src.$sourceWorkColumn
@@ -303,17 +303,17 @@ class LocalLibraryStateRepository
     final contentType = _moduleKeyToContentType(moduleKey);
     await db.transaction((txn) async {
       await txn.delete(
-        ComicLocalDb.libraryWorkTagsTable,
+        AppDatabase.libraryWorkTagsTable,
         where: 'content_type = ? AND work_id = ?',
         whereArgs: <Object>[contentType, workId],
       );
       await txn.delete(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         where: 'content_type = ? AND work_id = ?',
         whereArgs: <Object>[contentType, workId],
       );
       await txn.delete(
-        ComicLocalDb.libraryWorkStateTable,
+        AppDatabase.libraryWorkStateTable,
         where: 'content_type = ? AND work_id = ?',
         whereArgs: <Object>[contentType, workId],
       );
@@ -328,7 +328,7 @@ class LocalLibraryStateRepository
   }) async {
     final db = await _dbFuture;
     await db.insert(
-      ComicLocalDb.libraryDisplaySettingsTable,
+      AppDatabase.libraryDisplaySettingsTable,
       <String, Object?>{
         'module_key': _moduleKeyToContentType(moduleKey),
         'display_mode': _displayModeToDbValue(displayMode),
@@ -346,7 +346,7 @@ class LocalLibraryStateRepository
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.libraryDisplaySettingsTable,
+      AppDatabase.libraryDisplaySettingsTable,
       where: 'module_key = ?',
       whereArgs: <Object>[_moduleKeyToContentType(moduleKey)],
       limit: 1,
@@ -379,7 +379,7 @@ class LocalLibraryStateRepository
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
     final tagId = 'tag_$now${Random().nextInt(1000)}';
-    await db.insert(ComicLocalDb.libraryTagsTable, <String, Object?>{
+    await db.insert(AppDatabase.libraryTagsTable, <String, Object?>{
       'tag_id': tagId,
       'name': trimmed,
       'created_at': now,
@@ -391,7 +391,7 @@ class LocalLibraryStateRepository
   Future<List<LibraryTag>> getTags() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.libraryTagsTable,
+      AppDatabase.libraryTagsTable,
       orderBy: 'created_at ASC',
     );
     return rows
@@ -418,7 +418,7 @@ class LocalLibraryStateRepository
     }
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.libraryTagsTable,
+      AppDatabase.libraryTagsTable,
       <String, Object?>{'name': trimmed},
       where: 'tag_id = ?',
       whereArgs: <Object>[tagId],
@@ -430,12 +430,12 @@ class LocalLibraryStateRepository
     final db = await _dbFuture;
     await db.transaction((txn) async {
       await txn.delete(
-        ComicLocalDb.libraryWorkTagsTable,
+        AppDatabase.libraryWorkTagsTable,
         where: 'tag_id = ?',
         whereArgs: <Object>[tagId],
       );
       await txn.delete(
-        ComicLocalDb.libraryTagsTable,
+        AppDatabase.libraryTagsTable,
         where: 'tag_id = ?',
         whereArgs: <Object>[tagId],
       );
@@ -450,7 +450,7 @@ class LocalLibraryStateRepository
   }) async {
     final db = await _dbFuture;
     await db.insert(
-      ComicLocalDb.libraryWorkTagsTable,
+      AppDatabase.libraryWorkTagsTable,
       <String, Object?>{
         'content_type': _moduleKeyToContentType(moduleKey),
         'work_id': workId,
@@ -468,7 +468,7 @@ class LocalLibraryStateRepository
   }) async {
     final db = await _dbFuture;
     await db.delete(
-      ComicLocalDb.libraryWorkTagsTable,
+      AppDatabase.libraryWorkTagsTable,
       where: 'content_type = ? AND work_id = ? AND tag_id = ?',
       whereArgs: <Object>[_moduleKeyToContentType(moduleKey), workId, tagId],
     );
@@ -483,8 +483,8 @@ class LocalLibraryStateRepository
     final rows = await db.rawQuery(
       '''
       SELECT t.tag_id, t.name, t.created_at
-      FROM ${ComicLocalDb.libraryWorkTagsTable} wt
-      INNER JOIN ${ComicLocalDb.libraryTagsTable} t
+      FROM ${AppDatabase.libraryWorkTagsTable} wt
+      INNER JOIN ${AppDatabase.libraryTagsTable} t
         ON t.tag_id = wt.tag_id
       WHERE wt.content_type = ? AND wt.work_id = ?
       ORDER BY t.created_at ASC
@@ -513,7 +513,7 @@ class LocalLibraryStateRepository
     final rows = await db.rawQuery(
       '''
       SELECT 1
-      FROM ${ComicLocalDb.libraryWorkTagsTable}
+      FROM ${AppDatabase.libraryWorkTagsTable}
       WHERE content_type = ? AND work_id = ?
       LIMIT 1
       ''',
@@ -531,7 +531,7 @@ class LocalLibraryStateRepository
     final rows = await db.rawQuery(
       '''
       SELECT 1
-      FROM ${ComicLocalDb.libraryEpisodeStateTable}
+      FROM ${AppDatabase.libraryEpisodeStateTable}
       WHERE content_type = ? AND work_id = ? AND is_bookmarked = 1
       LIMIT 1
       ''',

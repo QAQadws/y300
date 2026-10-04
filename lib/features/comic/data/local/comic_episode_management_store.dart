@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 
@@ -28,7 +28,7 @@ class ComicEpisodeManagementStore {
     final episodeId = '$comicId:$sourceTid';
     return db.transaction<bool>((txn) async {
       final existing = await txn.query(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         columns: <String>['episode_id'],
         where: 'episode_id = ?',
         whereArgs: <Object>[episodeId],
@@ -42,7 +42,7 @@ class ComicEpisodeManagementStore {
       // 决定，这里只保证 order_index 唯一且不与解析章节抢占位置。
       final maxOrderRows = await txn.rawQuery(
         'SELECT MAX(order_index) AS max_order FROM '
-        '${ComicLocalDb.episodesTable} WHERE comic_id = ?',
+        '${AppDatabase.episodesTable} WHERE comic_id = ?',
         <Object>[comicId],
       );
       final maxOrder = maxOrderRows.isEmpty
@@ -50,7 +50,7 @@ class ComicEpisodeManagementStore {
           : maxOrderRows.first['max_order'] as int?;
 
       await txn.insert(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         EpisodeRecord.resolved(
           episodeId: episodeId,
           comicId: comicId,
@@ -81,7 +81,7 @@ class ComicEpisodeManagementStore {
     final db = await _dbFuture;
     return db.transaction<ComicEpisodeRemovalResult>((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         columns: <String>['is_manual', 'is_hidden'],
         where: 'episode_id = ? AND comic_id = ?',
         whereArgs: <Object>[episodeId, comicId],
@@ -100,7 +100,7 @@ class ComicEpisodeManagementStore {
       if ((rows.first['is_hidden'] as int? ?? 0) == 0) {
         final visibleRows = await txn.rawQuery(
           'SELECT COUNT(*) AS visible_count FROM '
-          '${ComicLocalDb.episodesTable} '
+          '${AppDatabase.episodesTable} '
           'WHERE comic_id = ? AND is_hidden = 0',
           <Object>[comicId],
         );
@@ -113,28 +113,28 @@ class ComicEpisodeManagementStore {
       }
 
       await txn.delete(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         where: 'episode_id = ? AND comic_id = ?',
         whereArgs: <Object>[episodeId, comicId],
       );
       await txn.delete(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         where: 'content_type = ? AND episode_id = ?',
         whereArgs: <Object>['comic', episodeId],
       );
       await txn.delete(
-        ComicLocalDb.readingProgressTable,
+        AppDatabase.readingProgressTable,
         where: 'comic_id = ? AND episode_id = ?',
         whereArgs: <Object>[comicId, episodeId],
       );
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{'last_read_episode_id': null},
         where: 'comic_id = ? AND last_read_episode_id = ?',
         whereArgs: <Object>[comicId, episodeId],
       );
       await txn.update(
-        ComicLocalDb.libraryWorkStateTable,
+        AppDatabase.libraryWorkStateTable,
         <String, Object?>{'last_read_episode_id': null},
         where: 'content_type = ? AND work_id = ? AND last_read_episode_id = ?',
         whereArgs: <Object>['comic', comicId, episodeId],
@@ -154,7 +154,7 @@ class ComicEpisodeManagementStore {
     final db = await _dbFuture;
     return db.transaction<ComicEpisodeVisibilityUpdateResult>((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         columns: <String>['is_hidden'],
         where: 'episode_id = ? AND comic_id = ?',
         whereArgs: <Object>[episodeId, comicId],
@@ -169,7 +169,7 @@ class ComicEpisodeManagementStore {
       if (isHidden && !wasHidden) {
         final visibleRows = await txn.rawQuery(
           'SELECT COUNT(*) AS visible_count FROM '
-          '${ComicLocalDb.episodesTable} '
+          '${AppDatabase.episodesTable} '
           'WHERE comic_id = ? AND is_hidden = 0',
           <Object>[comicId],
         );
@@ -181,7 +181,7 @@ class ComicEpisodeManagementStore {
         }
       }
       final affected = await txn.update(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         <String, Object?>{'is_hidden': isHidden ? 1 : 0},
         where: 'episode_id = ? AND comic_id = ?',
         whereArgs: <Object>[episodeId, comicId],
@@ -211,7 +211,7 @@ class ComicEpisodeManagementStore {
     final db = await _dbFuture;
     return db.transaction<bool>((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         columns: <String>['source_episode_title', 'source_tid'],
         where: 'episode_id = ? AND comic_id = ?',
         whereArgs: <Object>[episodeId, comicId],
@@ -223,7 +223,7 @@ class ComicEpisodeManagementStore {
       final normalized = _normalizeTitle(customTitle);
       final sourceTitle = rows.first['source_episode_title'] as String?;
       await txn.update(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         <String, Object?>{
           'custom_episode_title': normalized,
           'episode_title': resolveEpisodeDisplayTitle(
@@ -241,7 +241,7 @@ class ComicEpisodeManagementStore {
 
   Future<void> _touchComic(DatabaseExecutor executor, String comicId) {
     return executor.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{'updated_at': DateTime.now().millisecondsSinceEpoch},
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],

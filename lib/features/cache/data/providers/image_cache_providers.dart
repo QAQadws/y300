@@ -40,7 +40,7 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
@@ -72,7 +72,7 @@ final imageCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
 });
 
 final imageCacheRepositoryProvider = Provider<ImageCacheRepository>((ref) {
-  return LocalImageCacheRepository.lazy(() => ComicLocalDb.open());
+  return LocalImageCacheRepository.lazy(() => AppDatabase.open());
 });
 
 final imageCacheDiagnosticRecorderProvider =
@@ -95,7 +95,7 @@ final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
     // platform database factory is installed. Open the database on first use.
     // The service memoizes the resulting Future, so this remains one DB
     // session rather than a new open attempt per cache operation.
-    () => ComicLocalDb.open(),
+    () => AppDatabase.open(),
     mutationReporter: ref.watch(cacheMutationBusProvider),
   );
 });
@@ -103,7 +103,7 @@ final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
 final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
   (ref) {
     return LocalParsedSnapshotCacheService.lazy(
-      () => ComicLocalDb.open(),
+      () => AppDatabase.open(),
       mutationReporter: ref.watch(cacheMutationBusProvider),
     );
   },

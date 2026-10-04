@@ -1,7 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/protected_cover_cache_maintenance.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 abstract class ImageCacheRepository implements ProtectedCoverCacheStore {
   Future<CachedImageRecord?> getByKey(String cacheKey);
@@ -65,7 +65,7 @@ class LocalImageCacheRepository
   Future<CachedImageRecord?> getByKey(String cacheKey) async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
       limit: 1,
@@ -82,7 +82,7 @@ class LocalImageCacheRepository
     final existing = await getByKey(record.cacheKey);
     final createdAt = existing?.createdAt ?? record.createdAt;
     final retentionClass = _effectiveRetentionClass(record);
-    await db.insert(ComicLocalDb.cachedImagesTable, <String, Object?>{
+    await db.insert(AppDatabase.cachedImagesTable, <String, Object?>{
       'cache_key': record.cacheKey,
       'owner_type': record.ownerType,
       'owner_id': record.ownerId,
@@ -109,7 +109,7 @@ class LocalImageCacheRepository
   Future<void> touch(String cacheKey, DateTime accessedAt) async {
     final db = await _db;
     await db.update(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       <String, Object?>{
         'last_accessed_at': accessedAt.millisecondsSinceEpoch,
         'updated_at': accessedAt.millisecondsSinceEpoch,
@@ -128,7 +128,7 @@ class LocalImageCacheRepository
     final batch = db.batch();
     for (final MapEntry(key: cacheKey, value: accessedAt) in accesses.entries) {
       batch.update(
-        ComicLocalDb.cachedImagesTable,
+        AppDatabase.cachedImagesTable,
         <String, Object?>{
           'last_accessed_at': accessedAt.millisecondsSinceEpoch,
           'updated_at': accessedAt.millisecondsSinceEpoch,
@@ -152,7 +152,7 @@ class LocalImageCacheRepository
     }
     final db = await _db;
     await db.update(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       <String, Object?>{
         'width': width,
         'height': height,
@@ -171,7 +171,7 @@ class LocalImageCacheRepository
   }) async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       where: 'owner_type = ? AND owner_id = ?',
       whereArgs: <Object>[ownerType, ownerId],
       orderBy: 'updated_at ASC, created_at ASC, cache_key ASC',
@@ -184,7 +184,7 @@ class LocalImageCacheRepository
     final db = await _db;
     final rows = await db.rawQuery('''
       SELECT COALESCE(SUM(bytes), 0) AS total
-      FROM ${ComicLocalDb.cachedImagesTable}
+      FROM ${AppDatabase.cachedImagesTable}
       ${includeProtected ? '' : 'WHERE protected = 0'}
       ''');
     return rows.first['total'] as int? ?? 0;
@@ -195,7 +195,7 @@ class LocalImageCacheRepository
     final db = await _db;
     final rows = await db.rawQuery('''
       SELECT owner_type, role, retention_class, protected, COALESCE(SUM(bytes), 0) AS total
-      FROM ${ComicLocalDb.cachedImagesTable}
+      FROM ${AppDatabase.cachedImagesTable}
       GROUP BY owner_type, role, retention_class, protected
       ORDER BY owner_type ASC, role ASC, retention_class ASC, protected ASC
       ''');
@@ -216,7 +216,7 @@ class LocalImageCacheRepository
   Future<List<CachedImageRecord>> listUnprotectedByAccessTime() async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       where: 'protected = 0',
       orderBy: 'COALESCE(last_accessed_at, updated_at, created_at) ASC',
     );
@@ -233,7 +233,7 @@ class LocalImageCacheRepository
     final db = await _db;
     final placeholders = List<String>.filled(roles.length, '?').join(', ');
     final rows = await db.query(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       where: 'protected = 0 AND role IN ($placeholders)',
       whereArgs: <Object>[...roles],
       orderBy: 'COALESCE(last_accessed_at, updated_at, created_at) ASC',
@@ -245,7 +245,7 @@ class LocalImageCacheRepository
   Future<List<CachedImageRecord>> listProtectedCovers() async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       where: 'protected = 1 AND role IN (?, ?)',
       whereArgs: <Object>[
         ImageCacheRole.cover.dbValue,
@@ -260,7 +260,7 @@ class LocalImageCacheRepository
   Future<void> deleteByKey(String cacheKey) async {
     final db = await _db;
     await db.delete(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
     );

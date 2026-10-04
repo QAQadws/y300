@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
@@ -15,7 +15,7 @@ class ComicShelfStore {
   Future<List<ComicShelfCategory>> getCategories() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.categoriesTable,
+      AppDatabase.categoriesTable,
       orderBy: 'sort_order ASC, created_at ASC',
     );
 
@@ -45,11 +45,11 @@ class ComicShelfStore {
 
     await db.transaction((txn) async {
       final countResult = await txn.rawQuery(
-        'SELECT COUNT(*) AS count FROM ${ComicLocalDb.categoriesTable}',
+        'SELECT COUNT(*) AS count FROM ${AppDatabase.categoriesTable}',
       );
       final sortOrder = (countResult.first['count'] as int?) ?? 0;
 
-      await txn.insert(ComicLocalDb.categoriesTable, <String, Object?>{
+      await txn.insert(AppDatabase.categoriesTable, <String, Object?>{
         'category_id': categoryId,
         'name': sanitized,
         'sort_order': sortOrder,
@@ -76,7 +76,7 @@ class ComicShelfStore {
 
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.categoriesTable,
+      AppDatabase.categoriesTable,
       <String, Object?>{'name': sanitized},
       where: 'category_id = ?',
       whereArgs: <Object>[categoryId],
@@ -95,7 +95,7 @@ class ComicShelfStore {
 
     await db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.shelfItemsTable,
+        AppDatabase.shelfItemsTable,
         columns: <String>['comic_id'],
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
@@ -104,7 +104,7 @@ class ComicShelfStore {
       for (final row in rows) {
         final comicId = row['comic_id'] as String;
         final existsInDefault = await txn.query(
-          ComicLocalDb.shelfItemsTable,
+          AppDatabase.shelfItemsTable,
           columns: <String>['id'],
           where: 'category_id = ? AND comic_id = ?',
           whereArgs: <Object>[defaultCategoryId, comicId],
@@ -117,7 +117,7 @@ class ComicShelfStore {
             categoryId: defaultCategoryId,
           );
           await txn.insert(
-            ComicLocalDb.shelfItemsTable,
+            AppDatabase.shelfItemsTable,
             ShelfItemRecord(
               categoryId: defaultCategoryId,
               comicId: comicId,
@@ -129,13 +129,13 @@ class ComicShelfStore {
       }
 
       await txn.delete(
-        ComicLocalDb.shelfItemsTable,
+        AppDatabase.shelfItemsTable,
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
       );
 
       await txn.delete(
-        ComicLocalDb.categoriesTable,
+        AppDatabase.categoriesTable,
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
       );
@@ -156,7 +156,7 @@ class ComicShelfStore {
 
     await db.transaction((txn) async {
       final targetExists = await txn.query(
-        ComicLocalDb.shelfItemsTable,
+        AppDatabase.shelfItemsTable,
         columns: <String>['id'],
         where: 'category_id = ? AND comic_id = ?',
         whereArgs: <Object>[toCategoryId, comicId],
@@ -169,7 +169,7 @@ class ComicShelfStore {
           categoryId: toCategoryId,
         );
         await txn.insert(
-          ComicLocalDb.shelfItemsTable,
+          AppDatabase.shelfItemsTable,
           ShelfItemRecord(
             categoryId: toCategoryId,
             comicId: comicId,
@@ -181,7 +181,7 @@ class ComicShelfStore {
       }
 
       await txn.delete(
-        ComicLocalDb.shelfItemsTable,
+        AppDatabase.shelfItemsTable,
         where: 'category_id = ? AND comic_id = ?',
         whereArgs: <Object>[fromCategoryId, comicId],
       );
@@ -191,7 +191,7 @@ class ComicShelfStore {
   Future<ComicShelfDisplaySettings> getDisplaySettings() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.settingsTable,
+      AppDatabase.settingsTable,
       columns: <String>['value'],
       where: 'key = ?',
       whereArgs: <Object>['grid_column_count'],
@@ -209,7 +209,7 @@ class ComicShelfStore {
     final db = await _dbFuture;
     final normalized = normalizeColumnCount(columnCount);
 
-    await db.insert(ComicLocalDb.settingsTable, <String, Object?>{
+    await db.insert(AppDatabase.settingsTable, <String, Object?>{
       'key': 'grid_column_count',
       'value': normalized.toString(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -218,7 +218,7 @@ class ComicShelfStore {
   Future<bool> isInShelf({required String comicId}) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.shelfItemsTable,
+      AppDatabase.shelfItemsTable,
       columns: <String>['id'],
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
@@ -257,8 +257,8 @@ class ComicShelfStore {
         c.custom_cover_revision,
         c.custom_cover_focus_x,
         c.custom_cover_focus_y
-      FROM ${ComicLocalDb.shelfItemsTable} si
-      INNER JOIN ${ComicLocalDb.comicsTable} c
+      FROM ${AppDatabase.shelfItemsTable} si
+      INNER JOIN ${AppDatabase.comicsTable} c
         ON si.comic_id = c.comic_id
       WHERE si.category_id = ?
       ORDER BY si.sort_order ASC, si.added_at DESC
@@ -304,7 +304,7 @@ class ComicShelfStore {
   Future<void> removeFromShelf({required String comicId}) async {
     final db = await _dbFuture;
     await db.delete(
-      ComicLocalDb.shelfItemsTable,
+      AppDatabase.shelfItemsTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
     );
@@ -317,7 +317,7 @@ class ComicShelfStore {
     required int addedAt,
   }) async {
     final existingShelfRows = await executor.query(
-      ComicLocalDb.shelfItemsTable,
+      AppDatabase.shelfItemsTable,
       columns: <String>['id'],
       where: 'category_id = ? AND comic_id = ?',
       whereArgs: <Object>[categoryId, comicId],
@@ -333,7 +333,7 @@ class ComicShelfStore {
       categoryId: categoryId,
     );
     await executor.insert(
-      ComicLocalDb.shelfItemsTable,
+      AppDatabase.shelfItemsTable,
       ShelfItemRecord(
         categoryId: categoryId,
         comicId: comicId,
@@ -348,7 +348,7 @@ class ComicShelfStore {
     required String categoryId,
   }) async {
     final countResult = await executor.rawQuery(
-      'SELECT COUNT(*) AS count FROM ${ComicLocalDb.shelfItemsTable} '
+      'SELECT COUNT(*) AS count FROM ${AppDatabase.shelfItemsTable} '
       'WHERE category_id = ?',
       <Object>[categoryId],
     );

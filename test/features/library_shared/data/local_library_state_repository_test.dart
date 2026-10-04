@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart' show Database;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' hide Database;
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 
@@ -16,7 +16,7 @@ void main() {
 
     setUp(() async {
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       repository = LocalLibraryStateRepository(dbFuture);
       db = await dbFuture;
     });
@@ -550,7 +550,7 @@ Future<void> _insertComic(
   required String title,
 }) {
   final now = DateTime(2026, 1, 1).millisecondsSinceEpoch;
-  return db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+  return db.insert(AppDatabase.comicsTable, <String, Object?>{
     'comic_id': comicId,
     'source_tid': comicId,
     'source_fid': '30',
@@ -566,7 +566,7 @@ Future<void> _insertComicEpisode(
   required String comicId,
   required int orderIndex,
 }) {
-  return db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+  return db.insert(AppDatabase.episodesTable, <String, Object?>{
     'episode_id': episodeId,
     'comic_id': comicId,
     'episode_title': 'Episode $orderIndex',
@@ -581,7 +581,7 @@ Future<void> _insertNovel(
   required String novelId,
   required String title,
 }) {
-  return db.insert(ComicLocalDb.worksTable, <String, Object?>{
+  return db.insert(AppDatabase.worksTable, <String, Object?>{
     'work_id': novelId,
     'content_type': 'novel',
     'source_tid': novelId,
@@ -598,7 +598,7 @@ Future<void> _insertNovelEpisode(
   required String contentType,
   required int orderIndex,
 }) {
-  return db.insert(ComicLocalDb.workEpisodesTable, <String, Object?>{
+  return db.insert(AppDatabase.workEpisodesTable, <String, Object?>{
     'episode_id': episodeId,
     'work_id': novelId,
     'content_type': contentType,

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_legacy_source.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
@@ -20,7 +20,7 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('y300-novel-reader-legacy-');
     dbPath = p.join(temp.path, 'reader.db');
-    db = await ComicLocalDb.open(databaseName: dbPath);
+    db = await AppDatabase.open(databaseName: dbPath);
     source = SqliteNovelReaderPreferencesLegacySource(
       () => Future<Database>.value(db),
     );
@@ -35,7 +35,7 @@ void main() {
   });
 
   test('reads supported fields and resets obsolete display fields', () async {
-    await db.insert(ComicLocalDb.readerPreferencesTable, <String, Object?>{
+    await db.insert(AppDatabase.readerPreferencesTable, <String, Object?>{
       'content_type': 'novel',
       'font_size': 19.0,
       'line_height': 1.9,
@@ -75,7 +75,7 @@ void main() {
   test(
     'invalid legacy display values preserve the old flow fallback',
     () async {
-      await db.insert(ComicLocalDb.readerPreferencesTable, <String, Object?>{
+      await db.insert(AppDatabase.readerPreferencesTable, <String, Object?>{
         'content_type': 'novel',
         'font_size': 100.0,
         'line_height': 0.5,
@@ -102,8 +102,8 @@ void main() {
       'follow_system',
       'system',
     ]) {
-      await db.delete(ComicLocalDb.readerPreferencesTable);
-      await db.insert(ComicLocalDb.readerPreferencesTable, <String, Object?>{
+      await db.delete(AppDatabase.readerPreferencesTable);
+      await db.insert(AppDatabase.readerPreferencesTable, <String, Object?>{
         'content_type': 'novel',
         'font_size': 18.5,
         'line_height': 1.6,

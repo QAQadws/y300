@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
@@ -25,13 +25,13 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
     final db = await _dbFuture;
     await db.transaction((txn) async {
       await txn.delete(
-        ComicLocalDb.novelEpisodeSyncStagingTable,
+        AppDatabase.novelEpisodeSyncStagingTable,
         where: 'novel_id = ?',
         whereArgs: <Object?>[normalizedNovelId],
       );
       final isInitial = mode == NovelChapterSyncMode.initialFull;
       final updated = await txn.update(
-        ComicLocalDb.novelSourceStateTable,
+        AppDatabase.novelSourceStateTable,
         <String, Object?>{
           if (isInitial)
             'hydration_state':
@@ -79,7 +79,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
     await db.transaction((txn) async {
       for (final draft in episodes) {
         await txn.insert(
-          ComicLocalDb.novelEpisodeSyncStagingTable,
+          AppDatabase.novelEpisodeSyncStagingTable,
           <String, Object?>{
             'run_id': normalizedRunId,
             'novel_id': novelId,
@@ -121,7 +121,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
     final db = await _dbFuture;
     return db.transaction((txn) async {
       final stagedRows = await txn.query(
-        ComicLocalDb.novelEpisodeSyncStagingTable,
+        AppDatabase.novelEpisodeSyncStagingTable,
         where: 'run_id = ? AND novel_id = ?',
         whereArgs: <Object?>[normalizedRunId, normalizedNovelId],
         orderBy: 'order_index ASC',
@@ -131,7 +131,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
       }
 
       final existingRows = await txn.query(
-        ComicLocalDb.workEpisodesTable,
+        AppDatabase.workEpisodesTable,
         columns: const <String>['episode_id', 'order_index'],
         where: 'work_id = ? AND content_type = ?',
         whereArgs: <Object?>[normalizedNovelId, _contentType],
@@ -166,7 +166,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         // perform a delete/insert pair and cascade-delete bookmarks.
         await txn.rawInsert(
           '''
-          INSERT INTO ${ComicLocalDb.workEpisodesTable} (
+          INSERT INTO ${AppDatabase.workEpisodesTable} (
             episode_id,
             work_id,
             content_type,
@@ -201,7 +201,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         );
         await txn.rawInsert(
           '''
-          INSERT INTO ${ComicLocalDb.novelEpisodeContentTable} (
+          INSERT INTO ${AppDatabase.novelEpisodeContentTable} (
             episode_id,
             raw_html,
             plain_text,
@@ -227,7 +227,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
       if (request.mode != NovelChapterSyncMode.incremental) {
         for (final staleId in existingIds.difference(stagedIds)) {
           await txn.delete(
-            ComicLocalDb.workEpisodesTable,
+            AppDatabase.workEpisodesTable,
             where: 'episode_id = ? AND work_id = ? AND content_type = ?',
             whereArgs: <Object?>[staleId, normalizedNovelId, _contentType],
           );
@@ -236,7 +236,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
 
       final sourceStateUpdated = await txn.rawUpdate(
         '''
-        UPDATE ${ComicLocalDb.novelSourceStateTable}
+        UPDATE ${AppDatabase.novelSourceStateTable}
         SET publisher_id = COALESCE(publisher_id, ?),
             hydration_state = ?,
             chapters_hydrated_at = CASE
@@ -273,7 +273,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
       final normalizedSourceTitle = _trimToNull(sourceTitle);
       if (normalizedSourceTitle != null) {
         await txn.update(
-          ComicLocalDb.worksTable,
+          AppDatabase.worksTable,
           <String, Object?>{'title': normalizedSourceTitle},
           where:
               'work_id = ? AND content_type = ? '
@@ -282,13 +282,13 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         );
       }
       await txn.update(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         <String, Object?>{'updated_at': now},
         where: 'work_id = ? AND content_type = ?',
         whereArgs: <Object?>[normalizedNovelId, _contentType],
       );
       await txn.delete(
-        ComicLocalDb.novelEpisodeSyncStagingTable,
+        AppDatabase.novelEpisodeSyncStagingTable,
         where: 'run_id = ?',
         whereArgs: <Object?>[normalizedRunId],
       );
@@ -296,7 +296,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         await txn.rawQuery(
           '''
           SELECT COUNT(*)
-          FROM ${ComicLocalDb.workEpisodesTable}
+          FROM ${AppDatabase.workEpisodesTable}
           WHERE work_id = ? AND content_type = ?
           ''',
           <Object?>[normalizedNovelId, _contentType],
@@ -319,7 +319,7 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
     final normalizedRunId = _requireText(runId, 'runId');
     final db = await _dbFuture;
     await db.delete(
-      ComicLocalDb.novelEpisodeSyncStagingTable,
+      AppDatabase.novelEpisodeSyncStagingTable,
       where: 'run_id = ?',
       whereArgs: <Object?>[normalizedRunId],
     );

@@ -12,7 +12,7 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
 import 'package:y300/features/composer_shared/data/repositories/sqflite_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
@@ -36,7 +36,7 @@ void main() {
       const dbName = 'storage_usage_image_cache_test.db';
       await deleteDatabase(dbName);
       final repository = LocalImageCacheRepository(
-        ComicLocalDb.open(databaseName: dbName),
+        AppDatabase.open(databaseName: dbName),
       );
       final now = DateTime(2026, 1, 1);
 
@@ -161,7 +161,7 @@ void main() {
     () async {
       const dbName = 'storage_usage_page_cache_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final documentCache = LocalDocumentCacheService(Future.value(db));
       final snapshotCache = LocalParsedSnapshotCacheService(Future.value(db));
       final now = DateTime(2026, 1, 1);
@@ -314,7 +314,7 @@ void main() {
     () async {
       const dbName = 'storage_usage_library_metadata_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final dbFile = io.File('${io.Directory.systemTemp.path}/$dbName-file.db');
       await dbFile.writeAsBytes(List<int>.filled(11, 7));
       addTearDown(() async {
@@ -325,7 +325,7 @@ void main() {
         }
       });
       final now = DateTime(2026, 1, 1).millisecondsSinceEpoch;
-      await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+      await db.insert(AppDatabase.comicsTable, <String, Object?>{
         'comic_id': 'comic-1',
         'source_tid': '100',
         'source_fid': '33',

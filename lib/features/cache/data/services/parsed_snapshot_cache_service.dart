@@ -4,7 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 class LocalParsedSnapshotCacheService
     implements
@@ -41,7 +41,7 @@ class LocalParsedSnapshotCacheService
   ) async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       where: 'cache_key = ?',
       whereArgs: <Object>[descriptor.cacheKey],
       limit: 1,
@@ -117,7 +117,7 @@ class LocalParsedSnapshotCacheService
             now;
         final payloadJson = jsonEncode(codec.encode(value));
         await transaction.insert(
-          ComicLocalDb.cachedSnapshotsTable,
+          AppDatabase.cachedSnapshotsTable,
           <String, Object?>{
             'cache_key': descriptor.cacheKey,
             'owner_type': descriptor.ownerType.id,
@@ -154,7 +154,7 @@ class LocalParsedSnapshotCacheService
   Future<void> touch(String cacheKey, DateTime accessedAt) async {
     final db = await _db;
     await db.update(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       <String, Object?>{'last_accessed_at': accessedAt.millisecondsSinceEpoch},
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
@@ -168,7 +168,7 @@ class LocalParsedSnapshotCacheService
   }) async {
     final db = await _db;
     return db.delete(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       where: 'owner_type = ? AND owner_id = ?',
       whereArgs: <Object>[ownerType.id, ownerId],
     );
@@ -181,7 +181,7 @@ class LocalParsedSnapshotCacheService
   }) async {
     final db = await _db;
     return db.delete(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       where: 'owner_type = ? AND owner_id LIKE ?',
       whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
     );
@@ -191,7 +191,7 @@ class LocalParsedSnapshotCacheService
   Future<int> deleteExpired(DateTime now) async {
     final db = await _db;
     return db.delete(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       where:
           'retain_long_term = 0 AND expires_at IS NOT NULL AND expires_at <= ?',
       whereArgs: <Object>[now.millisecondsSinceEpoch],
@@ -203,7 +203,7 @@ class LocalParsedSnapshotCacheService
     final db = await _db;
     final rows = await db.rawQuery('''
       SELECT snapshot_type, retain_long_term, COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS total
-      FROM ${ComicLocalDb.cachedSnapshotsTable}
+      FROM ${AppDatabase.cachedSnapshotsTable}
       GROUP BY snapshot_type, retain_long_term
       ORDER BY snapshot_type ASC
       ''');
@@ -246,7 +246,7 @@ class LocalParsedSnapshotCacheService
     final rows = await db.rawQuery('''
       SELECT COALESCE(SUM(CASE WHEN retain_long_term = 0 THEN payload_bytes ELSE 0 END), 0) AS total,
         COALESCE(SUM(CASE WHEN retain_long_term = 1 THEN payload_bytes ELSE 0 END), 0) AS long_term
-      FROM ${ComicLocalDb.cachedSnapshotsTable}
+      FROM ${AppDatabase.cachedSnapshotsTable}
       ''');
     final bytes = rows.first['total'] as int? ?? 0;
     return CacheParticipantUsage(
@@ -260,7 +260,7 @@ class LocalParsedSnapshotCacheService
   Future<List<CacheEvictionCandidate>> loadEvictionCandidates() async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       columns: const <String>[
         'cache_key',
         'payload_bytes',
@@ -293,7 +293,7 @@ class LocalParsedSnapshotCacheService
     }
     final db = await _db;
     final deleted = await db.delete(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       where: 'cache_key = ? AND retain_long_term = 0',
       whereArgs: <Object>[candidate.cacheKey],
     );
@@ -305,7 +305,7 @@ class LocalParsedSnapshotCacheService
     final usage = await loadUsage();
     final db = await _db;
     final deleted = await db.delete(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       where: 'retain_long_term = 0',
     );
     return CacheParticipantClearResult(
@@ -319,7 +319,7 @@ class LocalParsedSnapshotCacheService
     String cacheKey,
   ) async {
     final rows = await db.query(
-      ComicLocalDb.cachedSnapshotsTable,
+      AppDatabase.cachedSnapshotsTable,
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
       limit: 1,

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
@@ -72,7 +72,7 @@ final novelSourceMetadataParserProvider = Provider<NovelSourceMetadataParser>((
 final novelSourceMetadataRepositoryProvider =
     Provider<NovelSourceMetadataRepository>((ref) {
       return SqfliteNovelSourceMetadataRepository(
-        ComicLocalDb.open(),
+        AppDatabase.open(),
         titleSanitizer: ref.watch(novelTitleSanitizerProvider),
       );
     });
@@ -87,7 +87,7 @@ final novelSourceMetadataIngestServiceProvider =
 
 final novelSourceStateRepositoryProvider = Provider<NovelSourceStateRepository>(
   (ref) {
-    return SqfliteNovelSourceStateRepository(ComicLocalDb.open());
+    return SqfliteNovelSourceStateRepository(AppDatabase.open());
   },
 );
 
@@ -99,9 +99,7 @@ final novelSyncRequestGovernorProvider = Provider<NovelSyncRequestGovernor>((
 
 final novelReaderPreferencesLegacySourceProvider =
     Provider<NovelReaderPreferencesLegacySource>((ref) {
-      return SqliteNovelReaderPreferencesLegacySource(
-        () => ComicLocalDb.open(),
-      );
+      return SqliteNovelReaderPreferencesLegacySource(() => AppDatabase.open());
     });
 
 final novelReaderPreferencesRepositoryProvider =
@@ -115,7 +113,7 @@ final novelReaderPreferencesRepositoryProvider =
 final novelInteractionPreferencesLegacySourceProvider =
     Provider<NovelInteractionPreferencesLegacySource>((ref) {
       return SqliteNovelInteractionPreferencesLegacySource(
-        () => ComicLocalDb.open(),
+        () => AppDatabase.open(),
       );
     });
 
@@ -149,14 +147,14 @@ final novelAuthorPostEpisodeBuilderProvider =
 
 final novelChapterSyncRepositoryProvider = Provider<NovelChapterSyncRepository>(
   (ref) {
-    return SqfliteNovelChapterSyncRepository(ComicLocalDb.open());
+    return SqfliteNovelChapterSyncRepository(AppDatabase.open());
   },
 );
 
 final novelSourceMetadataRecoveryServiceProvider =
     Provider<NovelSourceMetadataRecoveryService>((ref) {
       return DefaultNovelSourceMetadataRecoveryService(
-        database: ComicLocalDb.open(),
+        database: AppDatabase.open(),
         gateway: ref.watch(novelSourceMetadataRecoveryGatewayProvider),
         parser: ref.watch(novelSourceMetadataParserProvider),
         repository: ref.watch(novelSourceMetadataRepositoryProvider),
@@ -233,7 +231,7 @@ final novelReaderProgressCommitterProvider =
 
 final novelRepositoryProvider = Provider<NovelRepository>((ref) {
   return LocalNovelRepository(
-    ComicLocalDb.open(),
+    AppDatabase.open(),
     stateRepository: ref.watch(libraryStateRepositoryProvider),
   );
 });

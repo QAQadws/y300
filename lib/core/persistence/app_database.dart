@@ -1,8 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 
-/// 漫画本地数据库定义与建表逻辑。
-class ComicLocalDb {
-  ComicLocalDb._();
+/// Shared application database lifecycle for library data and caches.
+class AppDatabase {
+  AppDatabase._();
 
   static const String dbName = 'comic_shelf.db';
   static const int dbVersion = 41;

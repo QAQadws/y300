@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_detail_store.dart';
 import 'package:y300/features/comic/data/local/comic_duplicate_merge_store.dart';
@@ -364,7 +364,7 @@ class LocalComicRepository
   Future<void> purgeWork({required String comicId}) async {
     final db = await _dbFuture;
     await db.delete(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
     );

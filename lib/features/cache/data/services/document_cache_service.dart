@@ -4,7 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 class LocalDocumentCacheService
     implements
@@ -33,7 +33,7 @@ class LocalDocumentCacheService
   Future<CachedDocument?> getByKey(String cacheKey) async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedDocumentsTable,
+      AppDatabase.cachedDocumentsTable,
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
       limit: 1,
@@ -61,7 +61,7 @@ class LocalDocumentCacheService
       await db.transaction((transaction) async {
         if (!isCurrent()) throw const _ExpiredDocumentWrite();
         await transaction.insert(
-          ComicLocalDb.cachedDocumentsTable,
+          AppDatabase.cachedDocumentsTable,
           <String, Object?>{
             'cache_key': document.cacheKey,
             'namespace': document.namespace.id,
@@ -94,7 +94,7 @@ class LocalDocumentCacheService
   Future<void> touch(String cacheKey, DateTime accessedAt) async {
     final db = await _db;
     await db.update(
-      ComicLocalDb.cachedDocumentsTable,
+      AppDatabase.cachedDocumentsTable,
       <String, Object?>{'last_accessed_at': accessedAt.millisecondsSinceEpoch},
       where: 'cache_key = ?',
       whereArgs: <Object>[cacheKey],
@@ -108,7 +108,7 @@ class LocalDocumentCacheService
   }) async {
     final db = await _db;
     return db.delete(
-      ComicLocalDb.cachedDocumentsTable,
+      AppDatabase.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id = ?',
       whereArgs: <Object>[ownerType.id, ownerId],
     );
@@ -121,7 +121,7 @@ class LocalDocumentCacheService
   }) async {
     final db = await _db;
     return db.delete(
-      ComicLocalDb.cachedDocumentsTable,
+      AppDatabase.cachedDocumentsTable,
       where: 'owner_type = ? AND owner_id LIKE ?',
       whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
     );
@@ -131,7 +131,7 @@ class LocalDocumentCacheService
   Future<int> deleteOlderThan(DateTime cutoff) async {
     final db = await _db;
     return db.delete(
-      ComicLocalDb.cachedDocumentsTable,
+      AppDatabase.cachedDocumentsTable,
       where: 'updated_at < ?',
       whereArgs: <Object>[cutoff.millisecondsSinceEpoch],
     );
@@ -142,7 +142,7 @@ class LocalDocumentCacheService
     final db = await _db;
     final rows = await db.rawQuery('''
       SELECT owner_type, namespace, COUNT(*) AS count, COALESCE(SUM(body_bytes), 0) AS total
-      FROM ${ComicLocalDb.cachedDocumentsTable}
+      FROM ${AppDatabase.cachedDocumentsTable}
       GROUP BY owner_type, namespace
       ORDER BY owner_type ASC, namespace ASC
       ''');
@@ -185,7 +185,7 @@ class LocalDocumentCacheService
     final db = await _db;
     final rows = await db.rawQuery('''
       SELECT COALESCE(SUM(body_bytes), 0) AS total
-      FROM ${ComicLocalDb.cachedDocumentsTable}
+      FROM ${AppDatabase.cachedDocumentsTable}
       ''');
     final bytes = rows.first['total'] as int? ?? 0;
     return CacheParticipantUsage(clearableBytes: bytes, budgetedBytes: bytes);
@@ -195,7 +195,7 @@ class LocalDocumentCacheService
   Future<List<CacheEvictionCandidate>> loadEvictionCandidates() async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.cachedDocumentsTable,
+      AppDatabase.cachedDocumentsTable,
       columns: const <String>[
         'cache_key',
         'body_bytes',
@@ -227,7 +227,7 @@ class LocalDocumentCacheService
     }
     final db = await _db;
     final deleted = await db.delete(
-      ComicLocalDb.cachedDocumentsTable,
+      AppDatabase.cachedDocumentsTable,
       where: 'cache_key = ?',
       whereArgs: <Object>[candidate.cacheKey],
     );
@@ -238,7 +238,7 @@ class LocalDocumentCacheService
   Future<CacheParticipantClearResult> clearRegular() async {
     final usage = await loadUsage();
     final db = await _db;
-    final deleted = await db.delete(ComicLocalDb.cachedDocumentsTable);
+    final deleted = await db.delete(AppDatabase.cachedDocumentsTable);
     return CacheParticipantClearResult(
       deletedEntries: deleted,
       deletedBytes: usage.clearableBytes,

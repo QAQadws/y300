@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
@@ -18,8 +18,8 @@ void main() {
     late Future<Database> dbFuture;
 
     setUp(() async {
-      await deleteDatabase(ComicLocalDb.dbName);
-      dbFuture = ComicLocalDb.open();
+      await deleteDatabase(AppDatabase.dbName);
+      dbFuture = AppDatabase.open();
       repository = LocalComicRepository(
         dbFuture,
         libraryCoverStore: const UnavailableLibraryCoverStore(),
@@ -30,7 +30,7 @@ void main() {
       'database v27 upgrades through latest schema without rebuilding',
       () async {
         final legacyDb = await dbFuture;
-        await legacyDb.insert(ComicLocalDb.comicsTable, <String, Object?>{
+        await legacyDb.insert(AppDatabase.comicsTable, <String, Object?>{
           'comic_id': 'yamibo:legacy',
           'source_tid': 'legacy',
           'source_fid': '30',
@@ -40,24 +40,24 @@ void main() {
           'updated_at': 1783900800000,
         });
         await legacyDb.execute(
-          'DROP TABLE ${ComicLocalDb.novelEpisodeSyncStagingTable}',
+          'DROP TABLE ${AppDatabase.novelEpisodeSyncStagingTable}',
         );
         await legacyDb.execute(
-          'DROP TABLE ${ComicLocalDb.novelSourceStateTable}',
+          'DROP TABLE ${AppDatabase.novelSourceStateTable}',
         );
         await legacyDb.execute(
-          'ALTER TABLE ${ComicLocalDb.comicsTable} '
+          'ALTER TABLE ${AppDatabase.comicsTable} '
           'DROP COLUMN custom_catalog_url',
         );
         await legacyDb.setVersion(27);
         await legacyDb.close();
 
-        final upgradedDb = await ComicLocalDb.open();
+        final upgradedDb = await AppDatabase.open();
         addTearDown(upgradedDb.close);
         final columns = await upgradedDb.rawQuery(
-          'PRAGMA table_info(${ComicLocalDb.comicsTable})',
+          'PRAGMA table_info(${AppDatabase.comicsTable})',
         );
-        final rows = await upgradedDb.query(ComicLocalDb.comicsTable);
+        final rows = await upgradedDb.query(AppDatabase.comicsTable);
 
         expect(
           columns.map((column) => column['name']),
@@ -72,8 +72,8 @@ void main() {
         final tableNames = (await upgradedDb.rawQuery(
           "SELECT name FROM sqlite_master WHERE type = 'table'",
         )).map((row) => row['name']).toSet();
-        expect(tableNames, contains(ComicLocalDb.novelSourceStateTable));
-        expect(tableNames, contains(ComicLocalDb.novelEpisodeSyncStagingTable));
+        expect(tableNames, contains(AppDatabase.novelSourceStateTable));
+        expect(tableNames, contains(AppDatabase.novelEpisodeSyncStagingTable));
       },
     );
 
@@ -81,7 +81,7 @@ void main() {
       'database v31 keeps legacy progress when enabling per-episode rows',
       () async {
         final legacyDb = await dbFuture;
-        await legacyDb.insert(ComicLocalDb.comicsTable, <String, Object?>{
+        await legacyDb.insert(AppDatabase.comicsTable, <String, Object?>{
           'comic_id': 'yamibo:legacy-progress',
           'source_tid': '300',
           'source_fid': '30',
@@ -89,7 +89,7 @@ void main() {
           'created_at': 1783900800000,
           'updated_at': 1783900800000,
         });
-        await legacyDb.insert(ComicLocalDb.episodesTable, <String, Object?>{
+        await legacyDb.insert(AppDatabase.episodesTable, <String, Object?>{
           'episode_id': 'yamibo:legacy-progress:301',
           'comic_id': 'yamibo:legacy-progress',
           'episode_title': '第一话',
@@ -98,20 +98,20 @@ void main() {
           'order_index': 0,
         });
         await legacyDb.execute(
-          'DROP TABLE ${ComicLocalDb.readingProgressTable}',
+          'DROP TABLE ${AppDatabase.readingProgressTable}',
         );
         await legacyDb.execute('''
-        CREATE TABLE ${ComicLocalDb.readingProgressTable} (
+        CREATE TABLE ${AppDatabase.readingProgressTable} (
           comic_id TEXT PRIMARY KEY,
           episode_id TEXT NOT NULL,
           image_index INTEGER NOT NULL,
           scroll_offset REAL NOT NULL,
           updated_at INTEGER NOT NULL,
-          FOREIGN KEY (comic_id) REFERENCES ${ComicLocalDb.comicsTable}(comic_id) ON DELETE CASCADE
+          FOREIGN KEY (comic_id) REFERENCES ${AppDatabase.comicsTable}(comic_id) ON DELETE CASCADE
         )
       ''');
         await legacyDb
-            .insert(ComicLocalDb.readingProgressTable, <String, Object?>{
+            .insert(AppDatabase.readingProgressTable, <String, Object?>{
               'comic_id': 'yamibo:legacy-progress',
               'episode_id': 'yamibo:legacy-progress:301',
               'image_index': 3,
@@ -121,17 +121,17 @@ void main() {
         await legacyDb.setVersion(31);
         await legacyDb.close();
 
-        final upgradedDb = await ComicLocalDb.open();
+        final upgradedDb = await AppDatabase.open();
         addTearDown(upgradedDb.close);
         final columns = await upgradedDb.rawQuery(
-          'PRAGMA table_info(${ComicLocalDb.readingProgressTable})',
+          'PRAGMA table_info(${AppDatabase.readingProgressTable})',
         );
         final primaryKeyColumns =
             columns
                 .where((column) => (column['pk'] as int? ?? 0) > 0)
                 .toList(growable: false)
               ..sort((a, b) => (a['pk'] as int).compareTo(b['pk'] as int));
-        final rows = await upgradedDb.query(ComicLocalDb.readingProgressTable);
+        final rows = await upgradedDb.query(AppDatabase.readingProgressTable);
 
         expect(primaryKeyColumns.map((column) => column['name']), <Object?>[
           'comic_id',
@@ -147,7 +147,7 @@ void main() {
       () async {
         final legacyDb = await dbFuture;
         await legacyDb
-            .insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+            .insert(AppDatabase.favoriteThreadsTable, <String, Object?>{
               'tid': 'resolved',
               'title': '已补全收藏',
               'detail_loaded_at': 1783900800000,
@@ -155,7 +155,7 @@ void main() {
               'last_seen_at': 1783900800000,
             });
         await legacyDb
-            .insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+            .insert(AppDatabase.favoriteThreadsTable, <String, Object?>{
               'tid': 'pending',
               'title': '待补全收藏',
               'first_seen_at': 1783900800000,
@@ -165,19 +165,19 @@ void main() {
           'DROP INDEX idx_favorite_threads_active_detail_state_order',
         );
         await legacyDb.execute(
-          'ALTER TABLE ${ComicLocalDb.favoriteThreadsTable} '
+          'ALTER TABLE ${AppDatabase.favoriteThreadsTable} '
           'DROP COLUMN detail_state',
         );
         await legacyDb.setVersion(32);
         await legacyDb.close();
 
-        final upgradedDb = await ComicLocalDb.open();
+        final upgradedDb = await AppDatabase.open();
         addTearDown(upgradedDb.close);
         final columns = await upgradedDb.rawQuery(
-          'PRAGMA table_info(${ComicLocalDb.favoriteThreadsTable})',
+          'PRAGMA table_info(${AppDatabase.favoriteThreadsTable})',
         );
         final rows = await upgradedDb.query(
-          ComicLocalDb.favoriteThreadsTable,
+          AppDatabase.favoriteThreadsTable,
           orderBy: 'tid ASC',
         );
         final indexNames = (await upgradedDb.rawQuery(
@@ -579,7 +579,7 @@ void main() {
 
         expect(
           await db.query(
-            ComicLocalDb.comicsTable,
+            AppDatabase.comicsTable,
             where: 'comic_id = ?',
             whereArgs: const <Object>['yamibo:purge-a'],
           ),
@@ -587,7 +587,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.episodesTable,
+            AppDatabase.episodesTable,
             where: 'comic_id = ?',
             whereArgs: const <Object>['yamibo:purge-a'],
           ),
@@ -595,7 +595,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.episodeImagesTable,
+            AppDatabase.episodeImagesTable,
             where: 'episode_id = ?',
             whereArgs: const <Object>[purgeEpisodeId],
           ),
@@ -603,7 +603,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.shelfItemsTable,
+            AppDatabase.shelfItemsTable,
             where: 'comic_id = ?',
             whereArgs: const <Object>['yamibo:purge-a'],
           ),
@@ -611,7 +611,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.readingProgressTable,
+            AppDatabase.readingProgressTable,
             where: 'comic_id = ?',
             whereArgs: const <Object>['yamibo:purge-a'],
           ),
@@ -626,7 +626,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.comicsTable,
+            AppDatabase.comicsTable,
             where: 'comic_id = ?',
             whereArgs: const <Object>['yamibo:purge-b'],
           ),
@@ -1302,7 +1302,7 @@ void main() {
       );
       final db = await dbFuture;
       final comicRow = await db.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         columns: const <String>['last_read_episode_id'],
         where: 'comic_id = ?',
         whereArgs: const <Object>['yamibo:100'],
@@ -1381,13 +1381,13 @@ void main() {
 
         final db = await dbFuture;
         final comicUpdatedAtBeforeReset = (await db.query(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           columns: const <String>['updated_at'],
           where: 'comic_id = ?',
           whereArgs: const <Object>['yamibo:reset'],
         )).single['updated_at'];
         final workUpdatedAtBeforeReset = (await db.query(
-          ComicLocalDb.libraryWorkStateTable,
+          AppDatabase.libraryWorkStateTable,
           columns: const <String>['updated_at'],
           where: 'content_type = ? AND work_id = ?',
           whereArgs: const <Object>['comic', 'yamibo:reset'],
@@ -1396,7 +1396,7 @@ void main() {
         await repository.resetComicReadingState(comicId: 'yamibo:reset');
 
         final stateRows = await db.query(
-          ComicLocalDb.libraryEpisodeStateTable,
+          AppDatabase.libraryEpisodeStateTable,
           where: 'content_type = ? AND work_id = ?',
           whereArgs: const <Object>['comic', 'yamibo:reset'],
           orderBy: 'episode_id ASC',
@@ -1418,7 +1418,7 @@ void main() {
           isEmpty,
         );
         final comicRows = await db.query(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           columns: const <String>['last_read_episode_id', 'updated_at'],
           where: 'comic_id = ?',
           whereArgs: const <Object>['yamibo:reset'],
@@ -1426,7 +1426,7 @@ void main() {
         expect(comicRows.single['last_read_episode_id'], isNull);
         expect(comicRows.single['updated_at'], comicUpdatedAtBeforeReset);
         final workStateRows = await db.query(
-          ComicLocalDb.libraryWorkStateTable,
+          AppDatabase.libraryWorkStateTable,
           columns: const <String>['updated_at'],
           where: 'content_type = ? AND work_id = ?',
           whereArgs: const <Object>['comic', 'yamibo:reset'],
@@ -2110,7 +2110,7 @@ void main() {
           scrollOffset: 84,
         );
         final db = await dbFuture;
-        await db.insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+        await db.insert(AppDatabase.favoriteThreadsTable, <String, Object?>{
           'tid': '3000',
           'title': '来源重复漫画',
           'content_kind': 'comic',
@@ -2133,7 +2133,7 @@ void main() {
           comicId: result.targetComicId,
         );
         final favoriteRows = await db.query(
-          ComicLocalDb.favoriteThreadsTable,
+          AppDatabase.favoriteThreadsTable,
           columns: const <String>['work_id'],
           where: 'tid = ?',
           whereArgs: <Object>['3000'],

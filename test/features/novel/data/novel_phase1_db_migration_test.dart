@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 import '../test_support/novel_phase0_persistence_baseline.dart';
 
@@ -25,10 +25,10 @@ void main() {
         }
       });
 
-      var db = await ComicLocalDb.open(databaseName: dbPath);
+      var db = await AppDatabase.open(databaseName: dbPath);
       await prepareNovelPhase0DatabaseVersion28(db);
       await seedNovelPhase0PersistenceBaseline(db);
-      await db.insert(ComicLocalDb.worksTable, <String, Object?>{
+      await db.insert(AppDatabase.worksTable, <String, Object?>{
         'work_id': 'novel:55:metadata-only',
         'content_type': 'novel',
         'source_tid': 'metadata-only',
@@ -41,9 +41,9 @@ void main() {
       expect(await db.getVersion(), 28);
       await db.close();
 
-      db = await ComicLocalDb.open(databaseName: dbPath);
+      db = await AppDatabase.open(databaseName: dbPath);
       addTearDown(db.close);
-      expect(await db.getVersion(), ComicLocalDb.dbVersion);
+      expect(await db.getVersion(), AppDatabase.dbVersion);
       final after = await readNovelPhase0PersistenceBaseline(db);
 
       // A legacy custom-cover path is an existing user asset. Migration gives
@@ -64,7 +64,7 @@ void main() {
       expect(after.bookmark, before.bookmark);
 
       final workColumns = (await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.worksTable})',
+        'PRAGMA table_info(${AppDatabase.worksTable})',
       )).map((row) => row['name']).toSet();
       expect(
         workColumns,
@@ -76,7 +76,7 @@ void main() {
         }),
       );
       final migratedWork = (await db.query(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         where: 'work_id = ?',
         whereArgs: <Object?>[novelPhase0BaselineNovelId],
         limit: 1,
@@ -102,8 +102,8 @@ void main() {
       final tableNames = (await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table'",
       )).map((row) => row['name']).toSet();
-      expect(tableNames, contains(ComicLocalDb.novelSourceStateTable));
-      expect(tableNames, contains(ComicLocalDb.novelEpisodeSyncStagingTable));
+      expect(tableNames, contains(AppDatabase.novelSourceStateTable));
+      expect(tableNames, contains(AppDatabase.novelEpisodeSyncStagingTable));
 
       final indexNames = (await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'index'",
@@ -115,7 +115,7 @@ void main() {
 
 Future<Map<String, Object?>> _sourceState(Database db, String novelId) async {
   final rows = await db.query(
-    ComicLocalDb.novelSourceStateTable,
+    AppDatabase.novelSourceStateTable,
     where: 'novel_id = ?',
     whereArgs: <Object?>[novelId],
     limit: 1,

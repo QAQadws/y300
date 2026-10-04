@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import '../../../test_support/unavailable_library_cover_store.dart';
 
@@ -19,7 +19,7 @@ void main() {
           version: 37,
           onCreate: (db, version) async {
             await db.execute('''
-            CREATE TABLE ${ComicLocalDb.comicsTable} (
+            CREATE TABLE ${AppDatabase.comicsTable} (
               comic_id TEXT PRIMARY KEY,
               source_tid TEXT NOT NULL,
               source_fid TEXT NOT NULL,
@@ -29,7 +29,7 @@ void main() {
             )
           ''');
             await db.execute('''
-            CREATE TABLE ${ComicLocalDb.episodesTable} (
+            CREATE TABLE ${AppDatabase.episodesTable} (
               episode_id TEXT PRIMARY KEY,
               comic_id TEXT NOT NULL,
               episode_title TEXT,
@@ -41,7 +41,7 @@ void main() {
               is_hidden INTEGER NOT NULL DEFAULT 0
             )
           ''');
-            await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+            await db.insert(AppDatabase.comicsTable, <String, Object?>{
               'comic_id': 'legacy-comic',
               'source_tid': '100',
               'source_fid': '30',
@@ -49,7 +49,7 @@ void main() {
               'created_at': 1,
               'updated_at': 1,
             });
-            await db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+            await db.insert(AppDatabase.episodesTable, <String, Object?>{
               'episode_id': 'legacy-comic:100',
               'comic_id': 'legacy-comic',
               'episode_title': '第一话',
@@ -59,7 +59,7 @@ void main() {
             });
             // 早期解析没拿到标题的存量行：回填后来源名仍然为空，清空重命名时得由
             // 展示层兜底，而不是被回填成空字符串。
-            await db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+            await db.insert(AppDatabase.episodesTable, <String, Object?>{
               'episode_id': 'legacy-comic:101',
               'comic_id': 'legacy-comic',
               'episode_title': null,
@@ -72,14 +72,14 @@ void main() {
       );
       await oldDb.close();
 
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       addTearDown(() async {
         await db.close();
         await deleteDatabase(dbName);
       });
 
       final columns = (await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.episodesTable})',
+        'PRAGMA table_info(${AppDatabase.episodesTable})',
       )).map((row) => row['name'] as String).toSet();
       expect(
         columns,
@@ -123,7 +123,7 @@ void main() {
           version: 37,
           onCreate: (db, version) async {
             await db.execute('''
-            CREATE TABLE ${ComicLocalDb.episodesTable} (
+            CREATE TABLE ${AppDatabase.episodesTable} (
               episode_id TEXT PRIMARY KEY,
               comic_id TEXT NOT NULL
             )
@@ -133,15 +133,15 @@ void main() {
       );
       await oldDb.close();
 
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       addTearDown(() async {
         await db.close();
         await deleteDatabase(dbName);
       });
 
-      expect(await db.getVersion(), ComicLocalDb.dbVersion);
+      expect(await db.getVersion(), AppDatabase.dbVersion);
       final columns = (await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.episodesTable})',
+        'PRAGMA table_info(${AppDatabase.episodesTable})',
       )).map((row) => row['name'] as String).toSet();
       expect(
         columns,

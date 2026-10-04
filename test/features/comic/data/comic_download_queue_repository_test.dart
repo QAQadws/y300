@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_download_queue_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 
@@ -12,7 +12,7 @@ void main() {
     test('latest schema creates the persistent queue and FIFO index', () async {
       const dbName = 'comic_download_queue_schema_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       addTearDown(() async {
         await db.close();
         await deleteDatabase(dbName);
@@ -27,7 +27,7 @@ void main() {
 
       expect(
         tables.map((row) => row['name']),
-        contains(ComicLocalDb.comicDownloadQueueTable),
+        contains(AppDatabase.comicDownloadQueueTable),
       );
       expect(
         indexes.map((row) => row['name']),
@@ -43,12 +43,12 @@ void main() {
         version: 35,
         onCreate: (db, _) async {
           await db.execute('''
-            CREATE TABLE ${ComicLocalDb.comicsTable} (
+            CREATE TABLE ${AppDatabase.comicsTable} (
               comic_id TEXT PRIMARY KEY
             )
           ''');
           await db.execute('''
-            CREATE TABLE ${ComicLocalDb.episodesTable} (
+            CREATE TABLE ${AppDatabase.episodesTable} (
               episode_id TEXT PRIMARY KEY,
               comic_id TEXT NOT NULL
             )
@@ -57,7 +57,7 @@ void main() {
       );
       await legacy.close();
 
-      final upgraded = await ComicLocalDb.open(databaseName: dbName);
+      final upgraded = await AppDatabase.open(databaseName: dbName);
       addTearDown(() async {
         await upgraded.close();
         await deleteDatabase(dbName);
@@ -66,17 +66,17 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type = 'table'",
       );
 
-      expect(await upgraded.getVersion(), ComicLocalDb.dbVersion);
+      expect(await upgraded.getVersion(), AppDatabase.dbVersion);
       expect(
         tables.map((row) => row['name']),
-        contains(ComicLocalDb.comicDownloadQueueTable),
+        contains(AppDatabase.comicDownloadQueueTable),
       );
     });
 
     test('deduplicates active entries and requeues a failed entry', () async {
       const dbName = 'comic_download_queue_dedupe_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final db = await dbFuture;
       addTearDown(() async {
         await db.close();
@@ -143,7 +143,7 @@ void main() {
     test('claims FIFO and recovers interrupted states on startup', () async {
       const dbName = 'comic_download_queue_recovery_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final db = await dbFuture;
       addTearDown(() async {
         await db.close();
@@ -210,7 +210,7 @@ Future<void> _seedEpisode(
   required String episodeId,
 }) async {
   final now = DateTime(2026, 7, 22).millisecondsSinceEpoch;
-  await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+  await db.insert(AppDatabase.comicsTable, <String, Object?>{
     'comic_id': comicId,
     'source_tid': comicId,
     'source_fid': '30',
@@ -218,7 +218,7 @@ Future<void> _seedEpisode(
     'created_at': now,
     'updated_at': now,
   }, conflictAlgorithm: ConflictAlgorithm.ignore);
-  await db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+  await db.insert(AppDatabase.episodesTable, <String, Object?>{
     'episode_id': episodeId,
     'comic_id': comicId,
     'source_tid': episodeId,

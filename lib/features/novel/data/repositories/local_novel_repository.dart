@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -42,7 +42,7 @@ class LocalNovelRepository
   Future<List<NovelShelfCategory>> getCategories() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.novelCategoriesTable,
+      AppDatabase.novelCategoriesTable,
       orderBy: 'sort_order ASC, created_at ASC',
     );
 
@@ -73,10 +73,10 @@ class LocalNovelRepository
 
     await db.transaction((txn) async {
       final countResult = await txn.rawQuery(
-        'SELECT COUNT(*) AS count FROM ${ComicLocalDb.novelCategoriesTable}',
+        'SELECT COUNT(*) AS count FROM ${AppDatabase.novelCategoriesTable}',
       );
       final sortOrder = (countResult.first['count'] as int?) ?? 0;
-      await txn.insert(ComicLocalDb.novelCategoriesTable, <String, Object?>{
+      await txn.insert(AppDatabase.novelCategoriesTable, <String, Object?>{
         'category_id': categoryId,
         'name': sanitized,
         'sort_order': sortOrder,
@@ -104,7 +104,7 @@ class LocalNovelRepository
 
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.novelCategoriesTable,
+      AppDatabase.novelCategoriesTable,
       <String, Object?>{'name': sanitized},
       where: 'category_id = ?',
       whereArgs: <Object>[categoryId],
@@ -124,7 +124,7 @@ class LocalNovelRepository
 
     await db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.novelShelfItemsTable,
+        AppDatabase.novelShelfItemsTable,
         columns: <String>['novel_id'],
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
@@ -133,7 +133,7 @@ class LocalNovelRepository
       for (final row in rows) {
         final novelId = row['novel_id'] as String;
         final existsInDefault = await txn.query(
-          ComicLocalDb.novelShelfItemsTable,
+          AppDatabase.novelShelfItemsTable,
           columns: <String>['id'],
           where: 'category_id = ? AND novel_id = ?',
           whereArgs: <Object>[_defaultCategoryId, novelId],
@@ -144,7 +144,7 @@ class LocalNovelRepository
             txn,
             categoryId: _defaultCategoryId,
           );
-          await txn.insert(ComicLocalDb.novelShelfItemsTable, <String, Object?>{
+          await txn.insert(AppDatabase.novelShelfItemsTable, <String, Object?>{
             'category_id': _defaultCategoryId,
             'novel_id': novelId,
             'added_at': now,
@@ -154,12 +154,12 @@ class LocalNovelRepository
       }
 
       await txn.delete(
-        ComicLocalDb.novelShelfItemsTable,
+        AppDatabase.novelShelfItemsTable,
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
       );
       await txn.delete(
-        ComicLocalDb.novelCategoriesTable,
+        AppDatabase.novelCategoriesTable,
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
       );
@@ -181,7 +181,7 @@ class LocalNovelRepository
 
     await db.transaction((txn) async {
       final targetExists = await txn.query(
-        ComicLocalDb.novelShelfItemsTable,
+        AppDatabase.novelShelfItemsTable,
         columns: <String>['id'],
         where: 'category_id = ? AND novel_id = ?',
         whereArgs: <Object>[toCategoryId, novelId],
@@ -193,7 +193,7 @@ class LocalNovelRepository
           categoryId: toCategoryId,
         );
         await txn.insert(
-          ComicLocalDb.novelShelfItemsTable,
+          AppDatabase.novelShelfItemsTable,
           <String, Object?>{
             'category_id': toCategoryId,
             'novel_id': novelId,
@@ -205,7 +205,7 @@ class LocalNovelRepository
       }
 
       await txn.delete(
-        ComicLocalDb.novelShelfItemsTable,
+        AppDatabase.novelShelfItemsTable,
         where: 'category_id = ? AND novel_id = ?',
         whereArgs: <Object>[fromCategoryId, novelId],
       );
@@ -239,10 +239,10 @@ class LocalNovelRepository
         w.updated_at,
         si.category_id,
         COUNT(e.episode_id) AS episode_count
-      FROM ${ComicLocalDb.novelShelfItemsTable} si
-      INNER JOIN ${ComicLocalDb.worksTable} w
+      FROM ${AppDatabase.novelShelfItemsTable} si
+      INNER JOIN ${AppDatabase.worksTable} w
         ON si.novel_id = w.work_id
-      LEFT JOIN ${ComicLocalDb.workEpisodesTable} e
+      LEFT JOIN ${AppDatabase.workEpisodesTable} e
         ON e.work_id = w.work_id AND e.content_type = ?
       WHERE w.content_type = ? AND si.category_id = ?
       GROUP BY w.work_id, si.category_id
@@ -268,19 +268,19 @@ class LocalNovelRepository
         SELECT
           work_id,
           COUNT(*) AS total_count
-        FROM ${ComicLocalDb.workEpisodesTable}
+        FROM ${AppDatabase.workEpisodesTable}
         WHERE content_type = ?
         GROUP BY work_id
       ),
       bookmark_stats AS (
         SELECT work_id, 1 AS has_bookmarks
-        FROM ${ComicLocalDb.libraryEpisodeStateTable}
+        FROM ${AppDatabase.libraryEpisodeStateTable}
         WHERE content_type = ? AND is_bookmarked = 1
         GROUP BY work_id
       ),
       tag_stats AS (
         SELECT work_id, 1 AS has_tags
-        FROM ${ComicLocalDb.libraryWorkTagsTable}
+        FROM ${AppDatabase.libraryWorkTagsTable}
         WHERE content_type = ?
         GROUP BY work_id
       ),
@@ -290,7 +290,7 @@ class LocalNovelRepository
           last_read_at,
           check_updated_at,
           fetched_updated_at
-        FROM ${ComicLocalDb.libraryWorkStateTable}
+        FROM ${AppDatabase.libraryWorkStateTable}
         WHERE content_type = ?
       )
       SELECT
@@ -320,8 +320,8 @@ class LocalNovelRepository
         ws.last_read_at,
         ws.check_updated_at,
         ws.fetched_updated_at
-      FROM ${ComicLocalDb.novelShelfItemsTable} si
-      INNER JOIN ${ComicLocalDb.worksTable} w
+      FROM ${AppDatabase.novelShelfItemsTable} si
+      INNER JOIN ${AppDatabase.worksTable} w
         ON si.novel_id = w.work_id
       LEFT JOIN episode_stats es
         ON es.work_id = w.work_id
@@ -394,8 +394,8 @@ class LocalNovelRepository
         w.updated_at,
         ? AS category_id,
         COUNT(e.episode_id) AS episode_count
-      FROM ${ComicLocalDb.worksTable} w
-      LEFT JOIN ${ComicLocalDb.workEpisodesTable} e
+      FROM ${AppDatabase.worksTable} w
+      LEFT JOIN ${AppDatabase.workEpisodesTable} e
         ON e.work_id = w.work_id AND e.content_type = ?
       WHERE w.work_id = ? AND w.content_type = ?
       GROUP BY w.work_id
@@ -433,7 +433,7 @@ class LocalNovelRepository
       );
     }
     await db.update(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       values,
       where: 'work_id = ? AND content_type = ?',
       whereArgs: <Object>[novelId, _contentType],
@@ -447,7 +447,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       <String, Object?>{
         'custom_title': _normalizeNullable(customTitle),
         'updated_at': DateTime.now().millisecondsSinceEpoch,
@@ -471,7 +471,7 @@ class LocalNovelRepository
     final db = await _dbFuture;
     await db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         columns: const <String>['custom_cover_revision'],
         where: 'work_id = ? AND content_type = ?',
         whereArgs: <Object>[novelId, _contentType],
@@ -483,7 +483,7 @@ class LocalNovelRepository
               : rows.single['custom_cover_revision'] as int? ?? 0) +
           1;
       await txn.update(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         <String, Object?>{
           'custom_cover_local_path': normalizedPath,
           'custom_cover_revision': nextRevision,
@@ -510,7 +510,7 @@ class LocalNovelRepository
     }
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       <String, Object?>{
         'custom_cover_local_path': null,
         'custom_cover_revision': revision,
@@ -532,7 +532,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       <String, Object?>{
         'custom_cover_focus_x': focusX,
         'custom_cover_focus_y': focusY,
@@ -547,7 +547,7 @@ class LocalNovelRepository
   Future<void> removeCustomCover({required String novelId}) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       <String, Object?>{
         'custom_cover_local_path': null,
         'custom_cover_revision': 0,
@@ -568,7 +568,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.workEpisodesTable,
+      AppDatabase.workEpisodesTable,
       where: 'work_id = ? AND content_type = ?',
       whereArgs: <Object>[novelId, _contentType],
       orderBy: 'order_index ${descending ? 'DESC' : 'ASC'}',
@@ -596,7 +596,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.novelEpisodeContentTable,
+      AppDatabase.novelEpisodeContentTable,
       where: 'episode_id = ?',
       whereArgs: <Object>[episodeId],
       limit: 1,
@@ -623,7 +623,7 @@ class LocalNovelRepository
   Future<void> removeFromShelf({required String novelId}) async {
     final db = await _dbFuture;
     await db.delete(
-      ComicLocalDb.novelShelfItemsTable,
+      AppDatabase.novelShelfItemsTable,
       where: 'novel_id = ?',
       whereArgs: <Object>[novelId],
     );
@@ -634,17 +634,17 @@ class LocalNovelRepository
     final db = await _dbFuture;
     await db.transaction((txn) async {
       await txn.delete(
-        ComicLocalDb.readerBookmarksTable,
+        AppDatabase.readerBookmarksTable,
         where: 'novel_id = ?',
         whereArgs: <Object>[novelId],
       );
       await txn.delete(
-        ComicLocalDb.novelReadingProgressTable,
+        AppDatabase.novelReadingProgressTable,
         where: 'novel_id = ?',
         whereArgs: <Object>[novelId],
       );
       await txn.delete(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         where: 'work_id = ? AND content_type = ?',
         whereArgs: <Object>[novelId, _contentType],
       );
@@ -666,7 +666,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     await db.insert(
-      ComicLocalDb.novelReadingProgressTable,
+      AppDatabase.novelReadingProgressTable,
       <String, Object?>{
         'novel_id': novelId,
         'episode_id': episodeId,
@@ -702,7 +702,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.novelReadingProgressTable,
+      AppDatabase.novelReadingProgressTable,
       where: 'novel_id = ?',
       whereArgs: <Object>[novelId],
       limit: 1,
@@ -772,7 +772,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     final readerRows = await db.query(
-      ComicLocalDb.readerBookmarksTable,
+      AppDatabase.readerBookmarksTable,
       where: 'novel_id = ?',
       whereArgs: <Object>[novelId],
       orderBy: 'created_at ASC',
@@ -780,8 +780,8 @@ class LocalNovelRepository
     final episodeRows = await db.rawQuery(
       '''
       SELECT e.episode_id, e.episode_title
-      FROM ${ComicLocalDb.workEpisodesTable} e
-      INNER JOIN ${ComicLocalDb.libraryEpisodeStateTable} state
+      FROM ${AppDatabase.workEpisodesTable} e
+      INNER JOIN ${AppDatabase.libraryEpisodeStateTable} state
         ON state.episode_id = e.episode_id
        AND state.content_type = ?
        AND state.work_id = e.work_id
@@ -809,7 +809,7 @@ class LocalNovelRepository
   }) async {
     final db = await _dbFuture;
     await db.insert(
-      ComicLocalDb.readerBookmarksTable,
+      AppDatabase.readerBookmarksTable,
       <String, Object?>{
         'bookmark_id': bookmark.bookmarkId,
         'novel_id': bookmark.novelId,
@@ -841,7 +841,7 @@ class LocalNovelRepository
   Future<void> removeReaderBookmark({required String bookmarkId}) async {
     final db = await _dbFuture;
     await db.delete(
-      ComicLocalDb.readerBookmarksTable,
+      AppDatabase.readerBookmarksTable,
       where: 'bookmark_id = ?',
       whereArgs: <Object>[bookmarkId],
     );
@@ -890,7 +890,7 @@ class LocalNovelRepository
 
   Future<List<LibraryCategory>> _loadLibraryCategories(Database db) async {
     final rows = await db.query(
-      ComicLocalDb.novelCategoriesTable,
+      AppDatabase.novelCategoriesTable,
       orderBy: 'sort_order ASC, created_at ASC',
     );
     return rows
@@ -1016,7 +1016,7 @@ class LocalNovelRepository
     required String categoryId,
   }) async {
     final countResult = await txn.rawQuery(
-      'SELECT COUNT(*) AS count FROM ${ComicLocalDb.novelShelfItemsTable} WHERE category_id = ?',
+      'SELECT COUNT(*) AS count FROM ${AppDatabase.novelShelfItemsTable} WHERE category_id = ?',
       <Object>[categoryId],
     );
     return (countResult.first['count'] as int?) ?? 0;

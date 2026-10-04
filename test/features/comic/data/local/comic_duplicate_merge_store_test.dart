@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_duplicate_merge_store.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -28,7 +28,7 @@ void main() {
 
     setUp(() async {
       await deleteDatabase(databaseName);
-      dbFuture = ComicLocalDb.open(databaseName: databaseName);
+      dbFuture = AppDatabase.open(databaseName: databaseName);
       coverRoot = await io.Directory.systemTemp.createTemp(
         'y300-duplicate-cover-',
       );
@@ -151,7 +151,7 @@ void main() {
         await _seedDuplicatePair(repository);
         final db = await dbFuture;
         await db.update(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           <String, Object?>{
             'cover_image_url': 'https://img.test/source.jpg',
             'metadata_updated_at': 20,
@@ -195,7 +195,7 @@ void main() {
         expect(detail?.coverRevision, 1);
         expect(detail?.coverImageUrl, 'https://img.test/source.jpg');
         expect(
-          await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+          await db.query(AppDatabase.comicCoverMergeOperationsTable),
           isEmpty,
         );
       },
@@ -205,7 +205,7 @@ void main() {
       await _seedDuplicatePair(repository);
       final db = await dbFuture;
       await db.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{
           'cover_image_url': 'https://img.test/target.jpg',
           'metadata_updated_at': 10,
@@ -214,7 +214,7 @@ void main() {
         whereArgs: const <Object>['yamibo:target'],
       );
       await db.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{
           'cover_image_url': 'https://img.test/newer-source.jpg',
           'metadata_updated_at': 99,
@@ -223,7 +223,7 @@ void main() {
         whereArgs: const <Object>['yamibo:source'],
       );
       await db.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         const <String, Object?>{'cover_revision': 3},
         where: 'comic_id = ?',
         whereArgs: const <Object>['yamibo:target'],
@@ -249,7 +249,7 @@ void main() {
         sourcePath: targetImage.path,
       );
       await db.insert(
-        ComicLocalDb.libraryCoverMigrationsTable,
+        AppDatabase.libraryCoverMigrationsTable,
         const <String, Object?>{
           'asset_id': 'comic/yamibo:target/source',
           'revision': 2,
@@ -275,7 +275,7 @@ void main() {
       );
       expect(
         await db.query(
-          ComicLocalDb.libraryCoverMigrationsTable,
+          AppDatabase.libraryCoverMigrationsTable,
           where: 'asset_id = ? AND revision = ?',
           whereArgs: const <Object>['comic/yamibo:target/source', 2],
         ),
@@ -302,7 +302,7 @@ void main() {
           ),
         );
         await db.update(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           <String, Object?>{
             'cover_image_url': 'https://img.test/source-bundle.jpg',
             'metadata_updated_at': 30,
@@ -311,7 +311,7 @@ void main() {
           whereArgs: const <Object>['yamibo:source'],
         );
         await db.update(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           <String, Object?>{
             'custom_cover_image_url': 'https://img.test/custom-bundle.jpg',
             'custom_cover_revision': 4,
@@ -350,7 +350,7 @@ void main() {
           comicId: 'yamibo:target',
         );
         final coverColumns = (await db.query(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           columns: const <String>[
             'cover_image_url',
             'cover_revision',
@@ -398,7 +398,7 @@ void main() {
       await _seedDuplicatePair(repository);
       final db = await dbFuture;
       await db.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{
           'cover_image_url': 'https://img.test/remote-only.jpg',
           'metadata_updated_at': 30,
@@ -424,7 +424,7 @@ void main() {
         isFalse,
       );
       final marker = (await db.query(
-        ComicLocalDb.libraryCoverMigrationsTable,
+        AppDatabase.libraryCoverMigrationsTable,
         where: 'asset_id = ?',
         whereArgs: const <Object>['comic/yamibo:target/source'],
       )).single;
@@ -435,7 +435,7 @@ void main() {
       await _seedDuplicatePair(repository);
       final db = await dbFuture;
       await db.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{'custom_cover_revision': 3},
         where: 'comic_id = ?',
         whereArgs: const <Object>['yamibo:source'],
@@ -449,14 +449,14 @@ void main() {
       );
 
       final rows = await db.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         columns: const <String>['comic_id'],
         where: 'comic_id IN (?, ?)',
         whereArgs: const <Object>['yamibo:source', 'yamibo:target'],
       );
       expect(rows, hasLength(2));
       expect(
-        await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+        await db.query(AppDatabase.comicCoverMergeOperationsTable),
         isEmpty,
       );
     });
@@ -489,7 +489,7 @@ void main() {
         isFalse,
       );
       expect(
-        await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+        await db.query(AppDatabase.comicCoverMergeOperationsTable),
         isEmpty,
       );
     });
@@ -520,7 +520,7 @@ void main() {
           sourcePath: image.path,
         );
         await db.update(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           <String, Object?>{'cover_revision': 1},
           where: 'comic_id = ?',
           whereArgs: const <Object>['yamibo:target'],
@@ -543,7 +543,7 @@ void main() {
           isTrue,
         );
         expect(
-          await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+          await db.query(AppDatabase.comicCoverMergeOperationsTable),
           isEmpty,
         );
       },
@@ -555,7 +555,7 @@ void main() {
         await _seedDuplicatePair(repository);
         final db = await dbFuture;
         await db.update(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           <String, Object?>{
             'cover_image_url': 'https://img.test/retry.jpg',
             'metadata_updated_at': 20,
@@ -587,7 +587,7 @@ void main() {
 
         expect(result.targetComicId, 'yamibo:target');
         final pending = await db.query(
-          ComicLocalDb.comicCoverMergeOperationsTable,
+          AppDatabase.comicCoverMergeOperationsTable,
         );
         expect(pending.single['state'], 'database_committed');
         expect(
@@ -598,7 +598,7 @@ void main() {
         await retryingMergeStore.recoverPendingCoverMerges();
 
         expect(
-          await db.query(ComicLocalDb.comicCoverMergeOperationsTable),
+          await db.query(AppDatabase.comicCoverMergeOperationsTable),
           isEmpty,
         );
         expect(
@@ -686,7 +686,7 @@ void main() {
         );
 
         final db = await dbFuture;
-        await db.insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+        await db.insert(AppDatabase.favoriteThreadsTable, <String, Object?>{
           'tid': '3000',
           'title': 'Source Duplicate Comic',
           'content_kind': 'comic',
@@ -694,7 +694,7 @@ void main() {
           'first_seen_at': 1,
           'last_seen_at': 1,
         });
-        await db.insert(ComicLocalDb.cachedImagesTable, <String, Object?>{
+        await db.insert(AppDatabase.cachedImagesTable, <String, Object?>{
           'cache_key': 'comic-cover-source',
           'owner_type': 'comic',
           'owner_id': 'yamibo:source',
@@ -706,20 +706,18 @@ void main() {
           'created_at': 1,
           'updated_at': 1,
         });
-        await db.insert(
-          ComicLocalDb.comicSearchRefreshQueueTable,
-          <String, Object?>{
-            'comic_id': 'yamibo:source',
-            'source_tid': '3000',
-            'title': 'Source Duplicate Comic',
-            'origin': 'favorite_sync',
-            'status': 'pending',
-            'attempts': 0,
-            'available_at': 1,
-            'created_at': 1,
-            'updated_at': 1,
-          },
-        );
+        await db
+            .insert(AppDatabase.comicSearchRefreshQueueTable, <String, Object?>{
+              'comic_id': 'yamibo:source',
+              'source_tid': '3000',
+              'title': 'Source Duplicate Comic',
+              'origin': 'favorite_sync',
+              'status': 'pending',
+              'attempts': 0,
+              'available_at': 1,
+              'created_at': 1,
+              'updated_at': 1,
+            });
 
         final result = await store.mergeDuplicateGroup(
           comicIds: const <String>{'yamibo:source', 'yamibo:target'},
@@ -741,19 +739,19 @@ void main() {
           workId: result.targetComicId,
         );
         final favoriteRows = await db.query(
-          ComicLocalDb.favoriteThreadsTable,
+          AppDatabase.favoriteThreadsTable,
           columns: const <String>['work_id'],
           where: 'tid = ?',
           whereArgs: const <Object>['3000'],
         );
         final cachedRows = await db.query(
-          ComicLocalDb.cachedImagesTable,
+          AppDatabase.cachedImagesTable,
           columns: const <String>['owner_id'],
           where: 'cache_key = ?',
           whereArgs: const <Object>['comic-cover-source'],
         );
         final queueRows = await db.query(
-          ComicLocalDb.comicSearchRefreshQueueTable,
+          AppDatabase.comicSearchRefreshQueueTable,
           columns: const <String>['comic_id'],
           where: 'source_tid = ?',
           whereArgs: const <Object>['3000'],
@@ -813,7 +811,7 @@ void main() {
 
         final db = await dbFuture;
         final images = await db.query(
-          ComicLocalDb.episodeImagesTable,
+          AppDatabase.episodeImagesTable,
           where: 'episode_id = ?',
           whereArgs: <Object>['${result.targetComicId}:6000'],
           orderBy: 'image_index ASC',
@@ -993,19 +991,18 @@ Future<void> _insertJournal(
   required String state,
   required LibraryCoverAssetRef targetAsset,
 }) async {
-  await db
-      .insert(ComicLocalDb.comicCoverMergeOperationsTable, <String, Object?>{
-        'operation_id': operationId,
-        'target_comic_id': 'yamibo:target',
-        'state': state,
-        'created_at': 1,
-        'updated_at': 1,
-      });
-  await db.insert(ComicLocalDb.comicCoverMergeMembersTable, <String, Object?>{
+  await db.insert(AppDatabase.comicCoverMergeOperationsTable, <String, Object?>{
+    'operation_id': operationId,
+    'target_comic_id': 'yamibo:target',
+    'state': state,
+    'created_at': 1,
+    'updated_at': 1,
+  });
+  await db.insert(AppDatabase.comicCoverMergeMembersTable, <String, Object?>{
     'operation_id': operationId,
     'source_comic_id': 'yamibo:source',
   });
-  await db.insert(ComicLocalDb.comicCoverMergeAssetsTable, <String, Object?>{
+  await db.insert(AppDatabase.comicCoverMergeAssetsTable, <String, Object?>{
     'operation_id': operationId,
     'kind': 'source',
     'source_comic_id': 'yamibo:source',

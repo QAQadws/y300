@@ -1,35 +1,32 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
   test(
-    'ComicLocalDb phase0 migration creates novel infrastructure tables',
+    'AppDatabase phase0 migration creates novel infrastructure tables',
     () async {
       const dbName = 'comic_shelf_test_phase0.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
 
       final tableRows = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table'",
       );
       final tableNames = tableRows.map((row) => row['name'] as String).toSet();
 
-      expect(tableNames.contains(ComicLocalDb.worksTable), isTrue);
-      expect(tableNames.contains(ComicLocalDb.workEpisodesTable), isTrue);
+      expect(tableNames.contains(AppDatabase.worksTable), isTrue);
+      expect(tableNames.contains(AppDatabase.workEpisodesTable), isTrue);
+      expect(tableNames.contains(AppDatabase.novelEpisodeContentTable), isTrue);
+      expect(tableNames.contains(AppDatabase.readerPreferencesTable), isTrue);
       expect(
-        tableNames.contains(ComicLocalDb.novelEpisodeContentTable),
+        tableNames.contains(AppDatabase.novelReadingProgressTable),
         isTrue,
       );
-      expect(tableNames.contains(ComicLocalDb.readerPreferencesTable), isTrue);
-      expect(
-        tableNames.contains(ComicLocalDb.novelReadingProgressTable),
-        isTrue,
-      );
-      expect(tableNames.contains(ComicLocalDb.readerBookmarksTable), isTrue);
+      expect(tableNames.contains(AppDatabase.readerBookmarksTable), isTrue);
 
       final indexRows = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='index'",
@@ -42,7 +39,7 @@ void main() {
       expect(indexNames.contains('idx_reader_bookmarks_novel_episode'), isTrue);
 
       final progressColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.novelReadingProgressTable})',
+        'PRAGMA table_info(${AppDatabase.novelReadingProgressTable})',
       );
       final progressColumnNames = progressColumns
           .map((row) => row['name'] as String)

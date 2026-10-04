@@ -1,28 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
   test(
-    'ComicLocalDb phase3 migration creates favorite tables and indexes',
+    'AppDatabase phase3 migration creates favorite tables and indexes',
     () async {
       const dbName = 'comic_shelf_test_favorite_phase3.db';
       await deleteDatabase(dbName);
 
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final tables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table'",
       );
       final tableNames = tables.map((row) => row['name']).toSet();
 
-      expect(tableNames.contains(ComicLocalDb.favoriteSyncStateTable), isTrue);
-      expect(tableNames.contains(ComicLocalDb.favoriteThreadsTable), isTrue);
-      expect(tableNames.contains(ComicLocalDb.favoriteCategoriesTable), isTrue);
+      expect(tableNames.contains(AppDatabase.favoriteSyncStateTable), isTrue);
+      expect(tableNames.contains(AppDatabase.favoriteThreadsTable), isTrue);
+      expect(tableNames.contains(AppDatabase.favoriteCategoriesTable), isTrue);
       expect(
-        tableNames.contains(ComicLocalDb.favoriteThreadCategoryTable),
+        tableNames.contains(AppDatabase.favoriteThreadCategoryTable),
         isTrue,
       );
 

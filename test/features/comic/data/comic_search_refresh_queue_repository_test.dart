@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_search_refresh_queue_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
@@ -16,13 +16,13 @@ void main() {
         const dbName = 'comic_search_refresh_queue_schema_test.db';
         await deleteDatabase(dbName);
 
-        final db = await ComicLocalDb.open(databaseName: dbName);
+        final db = await AppDatabase.open(databaseName: dbName);
         final tables = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type = 'table'",
         );
         final tableNames = tables.map((row) => row['name']).toSet();
         expect(
-          tableNames.contains(ComicLocalDb.comicSearchRefreshQueueTable),
+          tableNames.contains(AppDatabase.comicSearchRefreshQueueTable),
           isTrue,
         );
 
@@ -47,7 +47,7 @@ void main() {
     test('deduplicates active task for same comic', () async {
       const dbName = 'comic_search_refresh_queue_dedupe_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final repository = LocalComicSearchRefreshQueueRepository(dbFuture);
       final now = DateTime(2026, 5, 16, 12, 0, 0);
 
@@ -72,7 +72,7 @@ void main() {
     test('start recovery can reset running task to pending', () async {
       const dbName = 'comic_search_refresh_queue_recover_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final repository = LocalComicSearchRefreshQueueRepository(dbFuture);
       final now = DateTime(2026, 5, 16, 12, 0, 0);
 
@@ -98,7 +98,7 @@ void main() {
       () async {
         const dbName = 'comic_search_refresh_queue_delete_test.db';
         await deleteDatabase(dbName);
-        final dbFuture = ComicLocalDb.open(databaseName: dbName);
+        final dbFuture = AppDatabase.open(databaseName: dbName);
         final repository = LocalComicSearchRefreshQueueRepository(dbFuture);
         final now = DateTime(2026, 5, 16, 12, 0, 0);
 
@@ -129,7 +129,7 @@ void main() {
         final db = await dbFuture;
         expect(
           await db.query(
-            ComicLocalDb.comicSearchRefreshQueueTable,
+            AppDatabase.comicSearchRefreshQueueTable,
             where: 'comic_id = ?',
             whereArgs: const <Object>['comic:1'],
           ),
@@ -137,7 +137,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.comicSearchRefreshQueueTable,
+            AppDatabase.comicSearchRefreshQueueTable,
             where: 'comic_id = ?',
             whereArgs: const <Object>['comic:2'],
           ),

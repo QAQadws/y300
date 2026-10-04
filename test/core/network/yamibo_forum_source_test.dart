@@ -11,7 +11,7 @@ import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo_forum_source_cache.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   setUpAll(() {
@@ -319,7 +319,7 @@ void main() {
   test(
     'writes awaiting local DB readiness cannot overwrite a returning account',
     () async {
-      final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);
+      final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
       addTearDown(db.close);
       final ready = Completer<Database>();
       final sessions = YamiboSessionStore()..saveExtracted(_identity('42'));

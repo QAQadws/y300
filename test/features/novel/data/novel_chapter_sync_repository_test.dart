@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
@@ -23,7 +23,7 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('y300-novel-chapter-sync-');
     dbPath = p.join(temp.path, 'chapter-sync.db');
-    db = await ComicLocalDb.open(databaseName: dbPath);
+    db = await AppDatabase.open(databaseName: dbPath);
     await SqfliteNovelSourceMetadataRepository(
       Future<Database>.value(db),
     ).saveFromFavoriteDetail(
@@ -45,7 +45,7 @@ void main() {
   test('initial promotion preserves matching episode bookmarks', () async {
     await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:2');
     await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:stale');
-    await db.insert(ComicLocalDb.readerBookmarksTable, <String, Object?>{
+    await db.insert(AppDatabase.readerBookmarksTable, <String, Object?>{
       'bookmark_id': 'bookmark-1',
       'novel_id': 'novel:55:521519',
       'episode_id': 'novel:55:521519:2',
@@ -88,7 +88,7 @@ void main() {
     );
 
     final episodes = await db.query(
-      ComicLocalDb.workEpisodesTable,
+      AppDatabase.workEpisodesTable,
       where: 'work_id = ?',
       whereArgs: const <Object?>['novel:55:521519'],
       orderBy: 'order_index ASC',
@@ -100,7 +100,7 @@ void main() {
     expect(episodes.first['episode_title'], '更新后的第一章');
     expect(
       await db.query(
-        ComicLocalDb.readerBookmarksTable,
+        AppDatabase.readerBookmarksTable,
         where: 'bookmark_id = ?',
         whereArgs: const <Object?>['bookmark-1'],
       ),
@@ -110,7 +110,7 @@ void main() {
     expect(result.insertedCount, 1);
     expect(result.updatedCount, 1);
     expect(result.totalCount, 2);
-    expect(await db.query(ComicLocalDb.novelEpisodeSyncStagingTable), isEmpty);
+    expect(await db.query(AppDatabase.novelEpisodeSyncStagingTable), isEmpty);
     final sourceState = await SqfliteNovelSourceStateRepository(
       Future<Database>.value(db),
     ).getSourceState(novelId: 'novel:55:521519');
@@ -134,7 +134,7 @@ void main() {
     );
     await db.execute('''
       CREATE TRIGGER fail_novel_chapter_promote
-      BEFORE UPDATE ON ${ComicLocalDb.novelSourceStateTable}
+      BEFORE UPDATE ON ${AppDatabase.novelSourceStateTable}
       WHEN NEW.hydration_state = 'ready'
       BEGIN
         SELECT RAISE(ABORT, 'forced promotion failure');
@@ -159,7 +159,7 @@ void main() {
     );
 
     final officialRows = await db.query(
-      ComicLocalDb.workEpisodesTable,
+      AppDatabase.workEpisodesTable,
       where: 'work_id = ?',
       whereArgs: const <Object?>['novel:55:521519'],
     );
@@ -167,7 +167,7 @@ void main() {
       'novel:55:521519:old',
     ]);
     final workRows = await db.query(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       columns: const <String>['title'],
       where: 'work_id = ?',
       whereArgs: const <Object?>['novel:55:521519'],
@@ -175,14 +175,14 @@ void main() {
     expect(workRows.single['title'], '测试小说');
     expect(
       await db.query(
-        ComicLocalDb.novelEpisodeSyncStagingTable,
+        AppDatabase.novelEpisodeSyncStagingTable,
         where: 'run_id = ?',
         whereArgs: const <Object?>['run-failure'],
       ),
       hasLength(1),
     );
     await repository.discardRun('run-failure');
-    expect(await db.query(ComicLocalDb.novelEpisodeSyncStagingTable), isEmpty);
+    expect(await db.query(AppDatabase.novelEpisodeSyncStagingTable), isEmpty);
   });
 
   test(
@@ -203,7 +203,7 @@ void main() {
         episodeId: 'novel:55:521519:absent',
         orderIndex: 2,
       );
-      await db.insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+      await db.insert(AppDatabase.libraryEpisodeStateTable, <String, Object?>{
         'content_type': 'novel',
         'episode_id': 'novel:55:521519:2',
         'work_id': 'novel:55:521519',
@@ -251,7 +251,7 @@ void main() {
       );
 
       final episodes = await db.query(
-        ComicLocalDb.workEpisodesTable,
+        AppDatabase.workEpisodesTable,
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
         orderBy: 'order_index ASC',
@@ -266,13 +266,13 @@ void main() {
       expect(episodes[1]['episode_title'], '重叠页修订标题');
       expect(episodes.last['order_index'], 3);
       final content = await db.query(
-        ComicLocalDb.novelEpisodeContentTable,
+        AppDatabase.novelEpisodeContentTable,
         where: 'episode_id = ?',
         whereArgs: const <Object?>['novel:55:521519:2'],
       );
       expect(content.single['plain_text'], '重叠页修订标题 正文');
       final userState = await db.query(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         where: 'content_type = ? AND episode_id = ?',
         whereArgs: const <Object?>['novel', 'novel:55:521519:2'],
       );
@@ -302,7 +302,7 @@ void main() {
         episodeId: staleEpisodeId,
         orderIndex: 1,
       );
-      await db.insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+      await db.insert(AppDatabase.libraryEpisodeStateTable, <String, Object?>{
         'content_type': 'novel',
         'episode_id': keptEpisodeId,
         'work_id': 'novel:55:521519',
@@ -311,7 +311,7 @@ void main() {
         'is_bookmarked': 1,
         'read_at': 10,
       });
-      await db.insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+      await db.insert(AppDatabase.libraryEpisodeStateTable, <String, Object?>{
         'content_type': 'novel',
         'episode_id': staleEpisodeId,
         'work_id': 'novel:55:521519',
@@ -319,7 +319,7 @@ void main() {
         'is_downloaded': 0,
         'is_bookmarked': 1,
       });
-      await db.insert(ComicLocalDb.readerBookmarksTable, <String, Object?>{
+      await db.insert(AppDatabase.readerBookmarksTable, <String, Object?>{
         'bookmark_id': 'reader-bookmark-2',
         'novel_id': 'novel:55:521519',
         'episode_id': keptEpisodeId,
@@ -333,7 +333,7 @@ void main() {
         'created_at': 1,
         'updated_at': 1,
       });
-      await db.insert(ComicLocalDb.novelReadingProgressTable, <String, Object?>{
+      await db.insert(AppDatabase.novelReadingProgressTable, <String, Object?>{
         'novel_id': 'novel:55:521519',
         'episode_id': staleEpisodeId,
         'scroll_offset': 120.0,
@@ -346,7 +346,7 @@ void main() {
         'progress_percent': 0.625,
         'updated_at': 1,
       });
-      await db.insert(ComicLocalDb.libraryWorkStateTable, <String, Object?>{
+      await db.insert(AppDatabase.libraryWorkStateTable, <String, Object?>{
         'content_type': 'novel',
         'work_id': 'novel:55:521519',
         'last_read_episode_id': staleEpisodeId,
@@ -393,7 +393,7 @@ void main() {
       );
 
       final episodes = await db.query(
-        ComicLocalDb.workEpisodesTable,
+        AppDatabase.workEpisodesTable,
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
         orderBy: 'order_index ASC',
@@ -404,7 +404,7 @@ void main() {
       ]);
       expect(episodes.first['episode_title'], '修订后的第一章');
       final stateRows = await db.query(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         where: 'content_type = ? AND work_id = ?',
         whereArgs: const <Object?>['novel', 'novel:55:521519'],
         orderBy: 'episode_id ASC',
@@ -416,27 +416,27 @@ void main() {
       expect(stateRows.first['is_bookmarked'], 1);
       expect(
         await db.query(
-          ComicLocalDb.readerBookmarksTable,
+          AppDatabase.readerBookmarksTable,
           where: 'bookmark_id = ?',
           whereArgs: const <Object?>['reader-bookmark-2'],
         ),
         hasLength(1),
       );
       final progress = await db.query(
-        ComicLocalDb.novelReadingProgressTable,
+        AppDatabase.novelReadingProgressTable,
         where: 'novel_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
       );
       expect(progress.single['episode_id'], staleEpisodeId);
       expect(progress.single['progress_percent'], 0.625);
       final workState = await db.query(
-        ComicLocalDb.libraryWorkStateTable,
+        AppDatabase.libraryWorkStateTable,
         where: 'content_type = ? AND work_id = ?',
         whereArgs: const <Object?>['novel', 'novel:55:521519'],
       );
       expect(workState.single['last_read_episode_id'], staleEpisodeId);
       final work = await db.query(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         columns: const <String>['title'],
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
@@ -454,7 +454,7 @@ void main() {
     'source title respects and can resume after a manual title override',
     () async {
       await db.update(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         <String, Object?>{'title': '旧解析标题', 'custom_title': '手动标题'},
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
@@ -489,7 +489,7 @@ void main() {
 
       await promoteTitle('run-manual-title', '不应覆盖的解析标题');
       var work = await db.query(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         columns: const <String>['title', 'custom_title'],
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
@@ -498,14 +498,14 @@ void main() {
       expect(work.single['custom_title'], '手动标题');
 
       await db.update(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         <String, Object?>{'custom_title': null},
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
       );
       await promoteTitle('run-resumed-title', '恢复自动更新的标题');
       work = await db.query(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         columns: const <String>['title', 'custom_title'],
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
@@ -515,7 +515,7 @@ void main() {
 
       await promoteTitle('run-empty-source-title', '   ');
       work = await db.query(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         columns: const <String>['title'],
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
@@ -581,7 +581,7 @@ Future<void> _insertOfficialEpisode(
   required String episodeId,
   int orderIndex = 0,
 }) async {
-  await db.insert(ComicLocalDb.workEpisodesTable, <String, Object?>{
+  await db.insert(AppDatabase.workEpisodesTable, <String, Object?>{
     'episode_id': episodeId,
     'work_id': 'novel:55:521519',
     'content_type': 'novel',
@@ -592,7 +592,7 @@ Future<void> _insertOfficialEpisode(
     'order_index': orderIndex,
     'dateline_text': '2026-07-12',
   });
-  await db.insert(ComicLocalDb.novelEpisodeContentTable, <String, Object?>{
+  await db.insert(AppDatabase.novelEpisodeContentTable, <String, Object?>{
     'episode_id': episodeId,
     'raw_html': '<p>旧正文</p>',
     'plain_text': '旧正文',

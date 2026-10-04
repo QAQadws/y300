@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_search_refresh_queue_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
@@ -20,7 +20,7 @@ void main() {
     test('worker applies search/current result and completes task', () async {
       const dbName = 'comic_search_refresh_queue_worker_success_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
       final refreshService = _FakeRefreshService(
         outcome: const ComicEpisodeRefreshOutcome(
@@ -67,7 +67,7 @@ void main() {
     test('worker forwards discovered catalogUrl to refresh applier', () async {
       const dbName = 'comic_search_refresh_queue_catalog_url_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
       final refreshService = _FakeRefreshService(
         outcome: const ComicEpisodeRefreshOutcome(
@@ -109,7 +109,7 @@ void main() {
     test('worker skips applier when no links are found', () async {
       const dbName = 'comic_search_refresh_queue_worker_empty_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
       final refreshService = _FakeRefreshService(
         outcome: const ComicEpisodeRefreshOutcome(
@@ -146,7 +146,7 @@ void main() {
       () async {
         const dbName = 'comic_search_refresh_queue_preloaded_test.db';
         await deleteDatabase(dbName);
-        final dbFuture = ComicLocalDb.open(databaseName: dbName);
+        final dbFuture = AppDatabase.open(databaseName: dbName);
         final queueRepository = LocalComicSearchRefreshQueueRepository(
           dbFuture,
         );
@@ -204,7 +204,7 @@ void main() {
       () async {
         const dbName = 'comic_search_refresh_queue_preloaded_mismatch_test.db';
         await deleteDatabase(dbName);
-        final dbFuture = ComicLocalDb.open(databaseName: dbName);
+        final dbFuture = AppDatabase.open(databaseName: dbName);
         final queueRepository = LocalComicSearchRefreshQueueRepository(
           dbFuture,
         );
@@ -256,7 +256,7 @@ void main() {
     test('worker stores last_error and delays retry after failure', () async {
       const dbName = 'comic_search_refresh_queue_worker_retry_test.db';
       await deleteDatabase(dbName);
-      final dbFuture = ComicLocalDb.open(databaseName: dbName);
+      final dbFuture = AppDatabase.open(databaseName: dbName);
       final queueRepository = LocalComicSearchRefreshQueueRepository(dbFuture);
       final now = DateTime(2026, 5, 16, 12, 0, 0);
       final service = ComicSearchRefreshQueueService(

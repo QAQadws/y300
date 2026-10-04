@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
@@ -20,7 +20,7 @@ void main() {
     setUp(() async {
       await deleteDatabase(dbName);
       repository = SqfliteLocalFavoriteRepository(
-        ComicLocalDb.open(databaseName: dbName),
+        AppDatabase.open(databaseName: dbName),
       );
     });
 
@@ -339,7 +339,7 @@ void main() {
     test(
       'comic auto refresh backfill selects active comics with empty or current-only episodes',
       () async {
-        final db = await ComicLocalDb.open(databaseName: dbName);
+        final db = await AppDatabase.open(databaseName: dbName);
         await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
           _thread(tid: '100', title: '空章节漫画'),
           _thread(tid: '200', title: '当前帖漫画'),
@@ -354,7 +354,7 @@ void main() {
             contentKind: ThreadContentKind.comic,
             workId: 'yamibo:$tid',
           );
-          await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+          await db.insert(AppDatabase.comicsTable, <String, Object?>{
             'comic_id': 'yamibo:$tid',
             'source_tid': tid,
             'source_fid': '30',
@@ -363,7 +363,7 @@ void main() {
             'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
           });
         }
-        await db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+        await db.insert(AppDatabase.episodesTable, <String, Object?>{
           'episode_id': 'yamibo:200:200',
           'comic_id': 'yamibo:200',
           'episode_title': '当前帖',
@@ -371,7 +371,7 @@ void main() {
           'source_url': 'thread-200-1-1.html',
           'order_index': 0,
         });
-        await db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+        await db.insert(AppDatabase.episodesTable, <String, Object?>{
           'episode_id': 'yamibo:300:301',
           'comic_id': 'yamibo:300',
           'episode_title': '第1话',
@@ -379,7 +379,7 @@ void main() {
           'source_url': 'thread-301-1-1.html',
           'order_index': 0,
         });
-        await db.insert(ComicLocalDb.episodesTable, <String, Object?>{
+        await db.insert(AppDatabase.episodesTable, <String, Object?>{
           'episode_id': 'yamibo:300:302',
           'comic_id': 'yamibo:300',
           'episode_title': '第2话',
@@ -404,8 +404,8 @@ void main() {
     );
 
     test('favorite shelf item reuses comic and novel module covers', () async {
-      final db = await ComicLocalDb.open(databaseName: dbName);
-      await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+      final db = await AppDatabase.open(databaseName: dbName);
+      await db.insert(AppDatabase.comicsTable, <String, Object?>{
         'comic_id': 'yamibo:100',
         'source_tid': '100',
         'source_fid': '30',
@@ -417,7 +417,7 @@ void main() {
         'created_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
         'updated_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
       });
-      await db.insert(ComicLocalDb.worksTable, <String, Object?>{
+      await db.insert(AppDatabase.worksTable, <String, Object?>{
         'work_id': 'novel:49:200',
         'content_type': 'novel',
         'source_tid': '200',
@@ -471,7 +471,7 @@ void main() {
       expect(novelItems.single.customCoverLocalPath, '/cache/novel-custom.jpg');
 
       await db.update(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         <String, Object?>{'cover_hidden': 1},
         where: 'work_id = ?',
         whereArgs: <Object?>['novel:49:200'],
@@ -498,8 +498,8 @@ void main() {
     test(
       'queryShelfSnapshot batches category counts, tags, and module covers',
       () async {
-        final db = await ComicLocalDb.open(databaseName: dbName);
-        await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+        final db = await AppDatabase.open(databaseName: dbName);
+        await db.insert(AppDatabase.comicsTable, <String, Object?>{
           'comic_id': 'yamibo:100',
           'source_tid': '100',
           'source_fid': '30',
@@ -523,7 +523,7 @@ void main() {
           workId: 'yamibo:100',
         );
         final stateRepository = LocalLibraryStateRepository(
-          ComicLocalDb.open(databaseName: dbName),
+          AppDatabase.open(databaseName: dbName),
         );
         final tagId = await stateRepository.createTag(name: '收藏标签');
         await stateRepository.bindTagToWork(
@@ -564,7 +564,102 @@ void main() {
         expect(comicItems.single.hasTags, isTrue);
       },
     );
+    test('snapshot query count stays constant as the shelf grows', () async {
+      final db = await AppDatabase.open(databaseName: dbName);
+      final counted = _QueryCountingDatabase(db);
+      final snapshotRepository = SqfliteLocalFavoriteRepository(
+        Future<Database>.value(counted),
+      );
+      Future<int> queryCountFor(int expectedPerModule) async {
+        counted.queryCount = 0;
+        final snapshot = await snapshotRepository.queryShelfSnapshot(
+          filters: LibraryFilterSet.defaults,
+          sortOption: LibraryShelfSortOption.defaults,
+          keyword: '',
+        );
+        for (final categoryId in [
+          favoriteComicCategoryId,
+          favoriteNovelCategoryId,
+        ]) {
+          final items = snapshot.itemsByCategory[categoryId]!;
+          expect(items, hasLength(expectedPerModule));
+          expect(items.every((item) => item.coverImageUrl != null), isTrue);
+          expect(items.every((item) => item.hasTags), isTrue);
+        }
+        return counted.queryCount;
+      }
+
+      await _seedSnapshotRange(db, 0, 10);
+      final smallShelfQueries = await queryCountFor(5);
+      await _seedSnapshotRange(db, 10, 100);
+      final largeShelfQueries = await queryCountFor(50);
+
+      expect(smallShelfQueries, greaterThan(0));
+      expect(largeShelfQueries, smallShelfQueries);
+    });
   });
+}
+
+class _QueryCountingDatabase implements Database {
+  _QueryCountingDatabase(this.delegate);
+
+  final Database delegate;
+  int queryCount = 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #query || invocation.memberName == #rawQuery) {
+      queryCount++;
+      return Function.apply(
+        invocation.memberName == #query ? delegate.query : delegate.rawQuery,
+        invocation.positionalArguments,
+        invocation.namedArguments,
+      );
+    }
+    return super.noSuchMethod(invocation);
+  }
+}
+
+Future<void> _seedSnapshotRange(Database db, int start, int end) async {
+  final batch = db.batch();
+  batch.insert(AppDatabase.libraryTagsTable, <String, Object?>{
+    'tag_id': 'snapshot-tag',
+    'name': 'tag',
+    'created_at': 1,
+  }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  for (var index = start; index < end; index++) {
+    final comic = index.isEven;
+    final tid = '${1000 + index}';
+    final workId = '${comic ? 'comic' : 'novel'}:$tid';
+    final module = comic ? 'comic' : 'novel';
+    batch.insert(
+      comic ? AppDatabase.comicsTable : AppDatabase.worksTable,
+      <String, Object?>{
+        if (comic) 'comic_id': workId else 'work_id': workId,
+        if (!comic) 'content_type': 'novel',
+        'source_tid': tid,
+        'source_fid': comic ? '30' : '49',
+        'title': '$module $tid',
+        'cover_image_url': 'https://img.test/$tid.jpg',
+        if (comic) 'created_at': 1,
+        'updated_at': 1,
+      },
+    );
+    batch.insert(AppDatabase.favoriteThreadsTable, <String, Object?>{
+      'tid': tid,
+      'title': 'favorite $tid',
+      'content_kind': module,
+      'work_id': workId,
+      'first_seen_at': 1,
+      'last_seen_at': 1,
+    });
+    batch.insert(AppDatabase.libraryWorkTagsTable, <String, Object?>{
+      'content_type': 'favorite',
+      'work_id': FavoriteShelfWorkId.fromTid(tid),
+      'tag_id': 'snapshot-tag',
+    });
+  }
+  await batch.commit(noResult: true);
 }
 
 FavoriteThreadCacheUpsert _thread({

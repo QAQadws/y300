@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/models/novel_source_catalog_json_codec.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
@@ -19,7 +19,7 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
   Future<NovelSourceState?> getSourceState({required String novelId}) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.novelSourceStateTable,
+      AppDatabase.novelSourceStateTable,
       where: 'novel_id = ?',
       whereArgs: <Object?>[novelId],
       limit: 1,
@@ -40,7 +40,7 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
     final db = await _dbFuture;
     await db.rawInsert(
       '''
-      INSERT INTO ${ComicLocalDb.novelSourceStateTable} (
+      INSERT INTO ${AppDatabase.novelSourceStateTable} (
         novel_id,
         publisher_id,
         publisher_name,
@@ -55,17 +55,17 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
         publisher_id = excluded.publisher_id,
         publisher_name = COALESCE(
           excluded.publisher_name,
-          ${ComicLocalDb.novelSourceStateTable}.publisher_name
+          ${AppDatabase.novelSourceStateTable}.publisher_name
         ),
         first_post_pid = excluded.first_post_pid,
         source_intro = COALESCE(
           excluded.source_intro,
-          ${ComicLocalDb.novelSourceStateTable}.source_intro
+          ${AppDatabase.novelSourceStateTable}.source_intro
         ),
         source_catalog_json = CASE
           WHEN excluded.source_catalog_json <> '[]'
             THEN excluded.source_catalog_json
-          ELSE ${ComicLocalDb.novelSourceStateTable}.source_catalog_json
+          ELSE ${AppDatabase.novelSourceStateTable}.source_catalog_json
         END,
         metadata_source_version = excluded.metadata_source_version,
         metadata_ingested_at = excluded.metadata_ingested_at
@@ -99,7 +99,7 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
         'chapters_hydrated_at': chaptersHydratedAt.millisecondsSinceEpoch,
     };
     final updated = await db.update(
-      ComicLocalDb.novelSourceStateTable,
+      AppDatabase.novelSourceStateTable,
       values,
       where: 'novel_id = ?',
       whereArgs: <Object?>[novelId],
@@ -127,7 +127,7 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
     final db = await _dbFuture;
     final updated = await db.rawUpdate(
       '''
-      UPDATE ${ComicLocalDb.novelSourceStateTable}
+      UPDATE ${AppDatabase.novelSourceStateTable}
       SET publisher_id = COALESCE(publisher_id, ?),
           hydration_state = ?,
           chapters_hydrated_at = COALESCE(chapters_hydrated_at, ?),

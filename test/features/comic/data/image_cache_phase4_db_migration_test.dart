@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -32,7 +32,7 @@ void main() {
         },
       );
       await old.close();
-      final db = await ComicLocalDb.open(databaseName: name);
+      final db = await AppDatabase.open(databaseName: name);
       addTearDown(() async {
         await db.close();
         await deleteDatabase(name);
@@ -48,29 +48,29 @@ void main() {
   );
 
   test(
-    'ComicLocalDb latest schema includes image cache table and local cover columns',
+    'AppDatabase latest schema includes image cache table and local cover columns',
     () async {
       const dbName = 'comic_shelf_test_image_cache_phase4.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
 
       final tables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table'",
       );
       final tableNames = tables.map((row) => row['name']).toSet();
-      expect(tableNames.contains(ComicLocalDb.cachedImagesTable), isTrue);
+      expect(tableNames.contains(AppDatabase.cachedImagesTable), isTrue);
 
       final comicColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.comicsTable})',
+        'PRAGMA table_info(${AppDatabase.comicsTable})',
       );
       final workColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.worksTable})',
+        'PRAGMA table_info(${AppDatabase.worksTable})',
       );
       final imageColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.episodeImagesTable})',
+        'PRAGMA table_info(${AppDatabase.episodeImagesTable})',
       );
       final cachedImageColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.cachedImagesTable})',
+        'PRAGMA table_info(${AppDatabase.cachedImagesTable})',
       );
       final comicNames = comicColumns.map((row) => row['name']).toSet();
       final workNames = workColumns.map((row) => row['name']).toSet();
@@ -108,7 +108,7 @@ void main() {
   );
 
   test(
-    'ComicLocalDb rebuilds outdated image cache schema instead of preserving legacy rows',
+    'AppDatabase rebuilds outdated image cache schema instead of preserving legacy rows',
     () async {
       const dbName = 'comic_shelf_test_image_cache_phase4_rebuild.db';
       await deleteDatabase(dbName);
@@ -118,7 +118,7 @@ void main() {
           version: 11,
           onCreate: (db, version) async {
             await db.execute('''
-            CREATE TABLE ${ComicLocalDb.episodeImagesTable} (
+            CREATE TABLE ${AppDatabase.episodeImagesTable} (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               episode_id TEXT NOT NULL,
               image_url TEXT NOT NULL,
@@ -127,7 +127,7 @@ void main() {
               cache_status TEXT NOT NULL DEFAULT 'none'
             )
           ''');
-            await db.insert(ComicLocalDb.episodeImagesTable, <String, Object?>{
+            await db.insert(AppDatabase.episodeImagesTable, <String, Object?>{
               'episode_id': 'old-episode',
               'image_url': 'https://example.invalid/old.jpg',
               'image_index': 0,
@@ -139,13 +139,13 @@ void main() {
       );
       await oldDb.close();
 
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final imageColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.episodeImagesTable})',
+        'PRAGMA table_info(${AppDatabase.episodeImagesTable})',
       );
       final imageNames = imageColumns.map((row) => row['name']).toSet();
       final oldRows = await db.query(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         where: 'episode_id = ?',
         whereArgs: <Object>['old-episode'],
       );

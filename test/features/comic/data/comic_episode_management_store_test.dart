@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import '../../../test_support/unavailable_library_cover_store.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
@@ -17,12 +17,12 @@ void main() {
   setUp(() async {
     databaseName =
         'comic_episode_management_${DateTime.now().microsecondsSinceEpoch}.db';
-    database = await ComicLocalDb.open(databaseName: databaseName);
+    database = await AppDatabase.open(databaseName: databaseName);
     repository = LocalComicRepository(
       Future<Database>.value(database),
       libraryCoverStore: const UnavailableLibraryCoverStore(),
     );
-    await database.insert(ComicLocalDb.comicsTable, <String, Object?>{
+    await database.insert(AppDatabase.comicsTable, <String, Object?>{
       'comic_id': 'comic-management',
       'source_tid': '100',
       'source_fid': '5',
@@ -124,7 +124,7 @@ void main() {
   });
 
   test('parsed episodes cannot be removed', () async {
-    await database.insert(ComicLocalDb.episodesTable, <String, Object?>{
+    await database.insert(AppDatabase.episodesTable, <String, Object?>{
       'episode_id': 'comic-management:200',
       'comic_id': 'comic-management',
       'episode_title': '解析章节',
@@ -333,7 +333,7 @@ void main() {
 
   test('removing a manual episode clears reading and library state', () async {
     const episodeId = 'comic-management:300';
-    await database.insert(ComicLocalDb.episodesTable, <String, Object?>{
+    await database.insert(AppDatabase.episodesTable, <String, Object?>{
       'episode_id': episodeId,
       'comic_id': 'comic-management',
       'episode_title': '手动章节',
@@ -344,7 +344,7 @@ void main() {
       'is_manual': 1,
       'is_hidden': 0,
     });
-    await database.insert(ComicLocalDb.episodesTable, <String, Object?>{
+    await database.insert(AppDatabase.episodesTable, <String, Object?>{
       'episode_id': 'comic-management:301',
       'comic_id': 'comic-management',
       'episode_title': '另一章',
@@ -355,14 +355,14 @@ void main() {
       'is_manual': 0,
       'is_hidden': 0,
     });
-    await database.insert(ComicLocalDb.episodeImagesTable, <String, Object?>{
+    await database.insert(AppDatabase.episodeImagesTable, <String, Object?>{
       'episode_id': episodeId,
       'image_url': 'https://img.example/300.jpg',
       'image_index': 0,
       'bytes': 0,
       'protected': 0,
     });
-    await database.insert(ComicLocalDb.readingProgressTable, <String, Object?>{
+    await database.insert(AppDatabase.readingProgressTable, <String, Object?>{
       'comic_id': 'comic-management',
       'episode_id': episodeId,
       'image_index': 2,
@@ -370,7 +370,7 @@ void main() {
       'updated_at': 1,
     });
     await database
-        .insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+        .insert(AppDatabase.libraryEpisodeStateTable, <String, Object?>{
           'content_type': 'comic',
           'episode_id': episodeId,
           'work_id': 'comic-management',
@@ -379,7 +379,7 @@ void main() {
           'is_bookmarked': 1,
         });
     await database.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{'last_read_episode_id': episodeId},
       where: 'comic_id = ?',
       whereArgs: const <Object>['comic-management'],
@@ -393,7 +393,7 @@ void main() {
     expect(removed.code, ComicEpisodeRemovalCode.removed);
     expect(
       await database.query(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         where: 'episode_id = ?',
         whereArgs: const <Object>[episodeId],
       ),
@@ -401,7 +401,7 @@ void main() {
     );
     expect(
       await database.query(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         where: 'episode_id = ?',
         whereArgs: const <Object>[episodeId],
       ),
@@ -409,7 +409,7 @@ void main() {
     );
     expect(
       await database.query(
-        ComicLocalDb.readingProgressTable,
+        AppDatabase.readingProgressTable,
         where: 'episode_id = ?',
         whereArgs: const <Object>[episodeId],
       ),
@@ -417,14 +417,14 @@ void main() {
     );
     expect(
       await database.query(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         where: 'episode_id = ?',
         whereArgs: const <Object>[episodeId],
       ),
       isEmpty,
     );
     final comic = await database.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       columns: const <String>['last_read_episode_id'],
       where: 'comic_id = ?',
       whereArgs: const <Object>['comic-management'],

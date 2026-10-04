@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 
 class ComicReadingProgressStore {
@@ -17,7 +17,7 @@ class ComicReadingProgressStore {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       await txn.insert(
-        ComicLocalDb.readingProgressTable,
+        AppDatabase.readingProgressTable,
         <String, Object?>{
           'comic_id': comicId,
           'episode_id': episodeId,
@@ -28,7 +28,7 @@ class ComicReadingProgressStore {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{'last_read_episode_id': episodeId, 'updated_at': now},
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
@@ -41,7 +41,7 @@ class ComicReadingProgressStore {
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.readingProgressTable,
+      AppDatabase.readingProgressTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
       orderBy: 'updated_at DESC, rowid DESC',
@@ -57,7 +57,7 @@ class ComicReadingProgressStore {
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.readingProgressTable,
+      AppDatabase.readingProgressTable,
       where: 'comic_id = ? AND episode_id = ?',
       whereArgs: <Object>[comicId, episodeId],
       limit: 1,
@@ -73,7 +73,7 @@ class ComicReadingProgressStore {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       final comicRows = await txn.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         columns: <String>['last_read_episode_id'],
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
@@ -84,7 +84,7 @@ class ComicReadingProgressStore {
           comicRows.first['last_read_episode_id'] == episodeId;
 
       await txn.delete(
-        ComicLocalDb.readingProgressTable,
+        AppDatabase.readingProgressTable,
         where: 'comic_id = ? AND episode_id = ?',
         whereArgs: <Object>[comicId, episodeId],
       );
@@ -94,7 +94,7 @@ class ComicReadingProgressStore {
       }
 
       final latestProgressRows = await txn.query(
-        ComicLocalDb.readingProgressTable,
+        AppDatabase.readingProgressTable,
         columns: <String>['episode_id'],
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
@@ -105,7 +105,7 @@ class ComicReadingProgressStore {
           ? null
           : latestProgressRows.first['episode_id'] as String?;
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{
           'last_read_episode_id': replacementEpisodeId,
           'updated_at': now,
@@ -120,14 +120,14 @@ class ComicReadingProgressStore {
     final db = await _dbFuture;
     await db.transaction((txn) async {
       await txn.update(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         <String, Object?>{'is_read': 0, 'read_at': null},
         where: 'content_type = ? AND work_id = ?',
         whereArgs: <Object>['comic', comicId],
       );
       await txn.rawInsert(
         '''
-        INSERT OR REPLACE INTO ${ComicLocalDb.libraryEpisodeStateTable} (
+        INSERT OR REPLACE INTO ${AppDatabase.libraryEpisodeStateTable} (
           content_type,
           episode_id,
           work_id,
@@ -146,8 +146,8 @@ class ComicReadingProgressStore {
           COALESCE(state.is_bookmarked, 0),
           NULL,
           state.downloaded_at
-        FROM ${ComicLocalDb.episodesTable} episode
-        LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} state
+        FROM ${AppDatabase.episodesTable} episode
+        LEFT JOIN ${AppDatabase.libraryEpisodeStateTable} state
           ON state.content_type = 'comic'
          AND state.episode_id = episode.episode_id
         WHERE episode.comic_id = ?
@@ -155,18 +155,18 @@ class ComicReadingProgressStore {
         <Object>[comicId],
       );
       await txn.delete(
-        ComicLocalDb.readingProgressTable,
+        AppDatabase.readingProgressTable,
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
       );
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{'last_read_episode_id': null},
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
       );
       await txn.update(
-        ComicLocalDb.libraryWorkStateTable,
+        AppDatabase.libraryWorkStateTable,
         <String, Object?>{'last_read_episode_id': null, 'last_read_at': null},
         where: 'content_type = ? AND work_id = ?',
         whereArgs: <Object>['comic', comicId],
@@ -179,7 +179,7 @@ class ComicReadingProgressStore {
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.readingProgressTable,
+      AppDatabase.readingProgressTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
       orderBy: 'updated_at DESC, rowid DESC',

@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -27,8 +27,8 @@ class ComicSnapshotStore {
           SUM(CASE WHEN COALESCE(s.is_read, 0) = 0 THEN 1 ELSE 0 END) AS unread_count,
           SUM(CASE WHEN COALESCE(s.is_read, 0) = 1 THEN 1 ELSE 0 END) AS read_count,
           SUM(CASE WHEN COALESCE(s.is_downloaded, 0) = 1 THEN 1 ELSE 0 END) AS downloaded_count
-        FROM ${ComicLocalDb.episodesTable} e
-        LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
+        FROM ${AppDatabase.episodesTable} e
+        LEFT JOIN ${AppDatabase.libraryEpisodeStateTable} s
           ON s.content_type = 'comic'
          AND s.episode_id = e.episode_id
         WHERE e.is_hidden = 0
@@ -36,7 +36,7 @@ class ComicSnapshotStore {
       ),
       tag_stats AS (
         SELECT work_id, 1 AS has_tags
-        FROM ${ComicLocalDb.libraryWorkTagsTable}
+        FROM ${AppDatabase.libraryWorkTagsTable}
         WHERE content_type = 'comic'
         GROUP BY work_id
       ),
@@ -46,7 +46,7 @@ class ComicSnapshotStore {
           last_read_at,
           check_updated_at,
           fetched_updated_at
-        FROM ${ComicLocalDb.libraryWorkStateTable}
+        FROM ${AppDatabase.libraryWorkStateTable}
         WHERE content_type = 'comic'
       )
       SELECT
@@ -83,8 +83,8 @@ class ComicSnapshotStore {
         ws.last_read_at,
         ws.check_updated_at,
         ws.fetched_updated_at
-      FROM ${ComicLocalDb.shelfItemsTable} si
-      INNER JOIN ${ComicLocalDb.comicsTable} c
+      FROM ${AppDatabase.shelfItemsTable} si
+      INNER JOIN ${AppDatabase.comicsTable} c
         ON si.comic_id = c.comic_id
       LEFT JOIN chapter_stats cs
         ON cs.work_id = c.comic_id
@@ -132,8 +132,8 @@ class ComicSnapshotStore {
         SUM(CASE WHEN COALESCE(s.is_read, 0) = 0 THEN 1 ELSE 0 END) AS unread_count,
         SUM(CASE WHEN COALESCE(s.is_read, 0) = 1 THEN 1 ELSE 0 END) AS read_count,
         SUM(CASE WHEN COALESCE(s.is_downloaded, 0) = 1 THEN 1 ELSE 0 END) AS downloaded_count
-      FROM ${ComicLocalDb.episodesTable} e
-      LEFT JOIN ${ComicLocalDb.libraryEpisodeStateTable} s
+      FROM ${AppDatabase.episodesTable} e
+      LEFT JOIN ${AppDatabase.libraryEpisodeStateTable} s
         ON s.content_type = 'comic'
        AND s.episode_id = e.episode_id
       WHERE e.comic_id = ? AND e.is_hidden = 0
@@ -152,7 +152,7 @@ class ComicSnapshotStore {
 
   Future<List<LibraryCategory>> _loadLibraryCategories(Database db) async {
     final rows = await db.query(
-      ComicLocalDb.categoriesTable,
+      AppDatabase.categoriesTable,
       orderBy: 'sort_order ASC, created_at ASC',
     );
     return rows

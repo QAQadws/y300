@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
@@ -29,7 +29,7 @@ void main() {
 
     setUp(() async {
       await deleteDatabase(databaseName);
-      db = await ComicLocalDb.open(databaseName: databaseName);
+      db = await AppDatabase.open(databaseName: databaseName);
       repository = LocalComicRepository(
         Future.value(db),
         libraryCoverStore: const UnavailableLibraryCoverStore(),
@@ -89,8 +89,8 @@ void main() {
       () async {
         await seed('100', comicDuplicateMetadataBase);
         await seed('200', comicDuplicateMetadataBase);
-        await db.delete(ComicLocalDb.episodesTable);
-        await db.update(ComicLocalDb.comicsTable, {'source_tid': ''});
+        await db.delete(AppDatabase.episodesTable);
+        await db.update(AppDatabase.comicsTable, {'source_tid': ''});
 
         final groups = await repository.findDuplicateGroups(
           comicId: 'yamibo:200',
@@ -214,7 +214,7 @@ void main() {
           workId: 'yamibo:200',
           tagId: tagId,
         );
-        await db.insert(ComicLocalDb.favoriteThreadsTable, {
+        await db.insert(AppDatabase.favoriteThreadsTable, {
           'tid': '200',
           'title': comicDuplicateMetadataFormatted.title,
           'content_kind': 'comic',
@@ -271,7 +271,7 @@ void main() {
           categoryId: categoryId,
         );
         expect(categoryItems.map((item) => item.comicId), ['yamibo:100']);
-        final favorites = await db.query(ComicLocalDb.favoriteThreadsTable);
+        final favorites = await db.query(AppDatabase.favoriteThreadsTable);
         expect(favorites.single['work_id'], 'yamibo:100');
         expect(bus.signal.value?.source, LibraryMutationSource.duplicateMerge);
         expect(

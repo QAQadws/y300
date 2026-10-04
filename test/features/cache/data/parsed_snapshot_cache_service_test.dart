@@ -4,7 +4,7 @@ import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -13,7 +13,7 @@ void main() {
   test(
     'expired guarded replacement rolls back and keeps the current snapshot',
     () async {
-      final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);
+      final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
       addTearDown(db.close);
       final reporter = _RecordingMutationReporter();
       final service = LocalParsedSnapshotCacheService(
@@ -49,7 +49,7 @@ void main() {
   test(
     'long-term snapshots survive clearing, expiry and stale eviction candidates',
     () async {
-      final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);
+      final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
       addTearDown(db.close);
       final service = LocalParsedSnapshotCacheService(Future.value(db));
       const descriptor = SnapshotCacheDescriptor(
@@ -88,7 +88,7 @@ void main() {
       expect(await service.deleteExpired(DateTime(9999)), 0);
       final restoredService = LocalParsedSnapshotCacheService(Future.value(db));
       expect((await restoredService.get(descriptor, codec))?.value, 'durable');
-      await db.update(ComicLocalDb.cachedSnapshotsTable, {
+      await db.update(AppDatabase.cachedSnapshotsTable, {
         'payload_json': 'invalid',
       });
       expect(await restoredService.get(descriptor, codec), isNull);
@@ -102,7 +102,7 @@ void main() {
       await deleteDatabase(dbName);
       final now = DateTime(2026, 1, 1, 10);
       var currentTime = now;
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final service = LocalParsedSnapshotCacheService(
         Future.value(db),
         now: () => currentTime,
@@ -144,7 +144,7 @@ void main() {
     () async {
       const dbName = 'parsed_snapshot_cache_version_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final service = LocalParsedSnapshotCacheService(Future.value(db));
       addTearDown(() async {
         await db.close();
@@ -181,7 +181,7 @@ void main() {
     () async {
       const dbName = 'parsed_snapshot_cache_legacy_version_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final service = LocalParsedSnapshotCacheService(Future.value(db));
       addTearDown(() async {
         await db.close();
@@ -220,7 +220,7 @@ void main() {
     await deleteDatabase(dbName);
     final now = DateTime(2026, 1, 1, 10);
     var currentTime = now;
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
     final service = LocalParsedSnapshotCacheService(
       Future.value(db),
       now: () => currentTime,
@@ -253,7 +253,7 @@ void main() {
   test('LocalParsedSnapshotCacheService calculates page cache usage', () async {
     const dbName = 'parsed_snapshot_cache_usage_test.db';
     await deleteDatabase(dbName);
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
     final service = LocalParsedSnapshotCacheService(Future.value(db));
     addTearDown(() async {
       await db.close();
@@ -294,7 +294,7 @@ void main() {
     () async {
       const dbName = 'parsed_snapshot_cache_owner_prefix_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final service = LocalParsedSnapshotCacheService(Future.value(db));
       addTearDown(() async {
         await db.close();
@@ -365,7 +365,7 @@ void main() {
     await deleteDatabase(dbName);
     final now = DateTime(2026, 1, 1, 10);
     var currentTime = now;
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
     final service = LocalParsedSnapshotCacheService(
       Future.value(db),
       now: () => currentTime,
@@ -429,7 +429,7 @@ void main() {
   test('snapshot cache participates in unified capacity cleanup', () async {
     const dbName = 'parsed_snapshot_cache_budget_test.db';
     await deleteDatabase(dbName);
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
     final reporter = _RecordingMutationReporter();
     final service = LocalParsedSnapshotCacheService(
       Future.value(db),

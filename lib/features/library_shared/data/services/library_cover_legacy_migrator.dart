@@ -5,7 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 
@@ -26,7 +26,7 @@ class LibraryCoverLegacyMigrator {
   Future<void> migrateComicAssets(String comicId) async {
     final db = await _database;
     final rows = await db.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       where: 'comic_id = ?',
       whereArgs: [comicId],
       limit: 1,
@@ -46,7 +46,7 @@ class LibraryCoverLegacyMigrator {
   Future<List<LibraryCoverAssetRef>> comicAssets(String comicId) async {
     final db = await _database;
     final rows = await db.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       where: 'comic_id = ?',
       whereArgs: [comicId],
       limit: 1,
@@ -74,7 +74,7 @@ class LibraryCoverLegacyMigrator {
     final db = await _database;
     await db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         where: 'comic_id = ?',
         whereArgs: [comicId],
         limit: 1,
@@ -91,7 +91,7 @@ class LibraryCoverLegacyMigrator {
           current.legacyLocalPath != asset.legacyLocalPath) {
         return;
       }
-      for (final table in [ComicLocalDb.comicsTable, ComicLocalDb.worksTable]) {
+      for (final table in [AppDatabase.comicsTable, AppDatabase.worksTable]) {
         final references = await txn.query(
           table,
           columns: ['cover_local_path'],
@@ -102,7 +102,7 @@ class LibraryCoverLegacyMigrator {
         if (references.isNotEmpty) return;
       }
       final references = await txn.query(
-        ComicLocalDb.cachedImagesTable,
+        AppDatabase.cachedImagesTable,
         columns: ['local_path'],
         where: 'local_path = ?',
         whereArgs: [path],
@@ -110,7 +110,7 @@ class LibraryCoverLegacyMigrator {
       );
       if (references.isNotEmpty) return;
       final pageReferences = await txn.query(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         columns: ['local_path'],
         where: 'local_path = ? OR cache_local_path = ?',
         whereArgs: [path, path],
@@ -152,7 +152,7 @@ class LibraryCoverLegacyMigrator {
   }) async {
     final db = await _database;
     final comics = await db.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       columns: const <String>[
         'comic_id',
         'cover_image_url',
@@ -164,7 +164,7 @@ class LibraryCoverLegacyMigrator {
       ],
     );
     final novels = await db.query(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       columns: const <String>[
         'work_id',
         'cover_image_url',
@@ -309,7 +309,7 @@ class LibraryCoverLegacyMigrator {
   Future<bool> _isCompleted(_LegacyCoverCandidate candidate) async {
     final db = await _database;
     final rows = await db.query(
-      ComicLocalDb.libraryCoverMigrationsTable,
+      AppDatabase.libraryCoverMigrationsTable,
       columns: const <String>['asset_id'],
       where: 'asset_id = ? AND revision = ?',
       whereArgs: <Object>[candidate.asset.assetId, candidate.asset.revision],
@@ -324,7 +324,7 @@ class LibraryCoverLegacyMigrator {
       return true;
     }
     await db.delete(
-      ComicLocalDb.libraryCoverMigrationsTable,
+      AppDatabase.libraryCoverMigrationsTable,
       where: 'asset_id = ? AND revision = ?',
       whereArgs: <Object>[candidate.asset.assetId, candidate.asset.revision],
     );
@@ -338,8 +338,8 @@ class LibraryCoverLegacyMigrator {
     final db = await _database;
     final isCustom = candidate.asset.kind == LibraryCoverAssetKind.custom;
     final table = candidate.ownerType == 'comic'
-        ? ComicLocalDb.comicsTable
-        : ComicLocalDb.worksTable;
+        ? AppDatabase.comicsTable
+        : AppDatabase.worksTable;
     final idColumn = candidate.ownerType == 'comic' ? 'comic_id' : 'work_id';
     final completed = await db.transaction((txn) async {
       final revisionColumn = isCustom
@@ -384,7 +384,7 @@ class LibraryCoverLegacyMigrator {
       );
       if (updated == 0) return false;
       await txn.insert(
-        ComicLocalDb.libraryCoverMigrationsTable,
+        AppDatabase.libraryCoverMigrationsTable,
         <String, Object?>{
           'asset_id': candidate.asset.assetId,
           'revision': candidate.asset.revision,

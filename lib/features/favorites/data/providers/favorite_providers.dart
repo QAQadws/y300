@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/providers/favorite_ingest_providers.dart';
@@ -26,7 +26,7 @@ export 'package:y300/features/favorites/data/use_cases/unfavorite_use_case_provi
 final localFavoriteRepositoryProvider = Provider<LocalFavoriteRepository>((
   ref,
 ) {
-  return SqfliteLocalFavoriteRepository(ComicLocalDb.open());
+  return SqfliteLocalFavoriteRepository(AppDatabase.open());
 });
 
 final favoriteDetailContextLoaderProvider =

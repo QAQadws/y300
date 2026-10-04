@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 class ComicCoverStore {
   ComicCoverStore(this._dbFuture);
@@ -28,7 +28,7 @@ class ComicCoverStore {
       values['metadata_updated_at'] = now;
     }
     await db.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       values,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
@@ -79,7 +79,7 @@ class ComicCoverStore {
       return false;
     }
     final comics = await executor.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       columns: const <String>[
         'cover_image_url',
         'cover_local_path',
@@ -104,7 +104,7 @@ class ComicCoverStore {
     }
 
     final episodes = await executor.query(
-      ComicLocalDb.episodesTable,
+      AppDatabase.episodesTable,
       columns: const <String>['episode_id', 'source_tid', 'order_index'],
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
@@ -129,7 +129,7 @@ class ComicCoverStore {
     }
 
     await executor.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'cover_image_url': normalizedImageUrl,
         'cover_local_path': null,

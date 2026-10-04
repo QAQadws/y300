@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -146,7 +146,7 @@ class SqfliteLocalFavoriteRepository
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.favoriteSyncStateTable,
+      AppDatabase.favoriteSyncStateTable,
       where: 'sync_key = ?',
       whereArgs: <Object>[favoriteSyncKey],
       limit: 1,
@@ -162,7 +162,7 @@ class SqfliteLocalFavoriteRepository
     final db = await _dbFuture;
     final rows = await db.rawQuery('''
       SELECT COUNT(*) AS count
-      FROM ${ComicLocalDb.favoriteThreadsTable}
+      FROM ${AppDatabase.favoriteThreadsTable}
       WHERE removed_at IS NULL
       ''');
     return rows.first['count'] as int? ?? 0;
@@ -173,7 +173,7 @@ class SqfliteLocalFavoriteRepository
     final db = await _dbFuture;
     final rows = await db.rawQuery('''
       SELECT COUNT(*) AS count
-      FROM ${ComicLocalDb.favoriteThreadsTable}
+      FROM ${AppDatabase.favoriteThreadsTable}
       WHERE removed_at IS NULL
         AND detail_state = 'pending'
       ''');
@@ -184,7 +184,7 @@ class SqfliteLocalFavoriteRepository
   Future<Set<String>> getActiveTids() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.favoriteThreadsTable,
+      AppDatabase.favoriteThreadsTable,
       columns: <String>['tid'],
       where: 'removed_at IS NULL',
     );
@@ -195,7 +195,7 @@ class SqfliteLocalFavoriteRepository
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsForSnapshot() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.favoriteThreadsTable,
+      AppDatabase.favoriteThreadsTable,
       where: 'removed_at IS NULL',
       orderBy: 'remote_order ASC, last_seen_at DESC',
     );
@@ -206,7 +206,7 @@ class SqfliteLocalFavoriteRepository
   Future<bool> hasCompletedComicAutoRefreshBackfill() async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.favoriteSyncStateTable,
+      AppDatabase.favoriteSyncStateTable,
       columns: const <String>['status'],
       where: 'sync_key = ?',
       whereArgs: const <Object>[favoriteComicAutoRefreshBackfillSyncKey],
@@ -223,7 +223,7 @@ class SqfliteLocalFavoriteRepository
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.insert(
-      ComicLocalDb.favoriteSyncStateTable,
+      AppDatabase.favoriteSyncStateTable,
       <String, Object?>{
         'sync_key': favoriteComicAutoRefreshBackfillSyncKey,
         'remote_count': checkedCount,
@@ -250,7 +250,7 @@ class SqfliteLocalFavoriteRepository
     final old = await getSyncSnapshot();
 
     await db.insert(
-      ComicLocalDb.favoriteSyncStateTable,
+      AppDatabase.favoriteSyncStateTable,
       <String, Object?>{
         'sync_key': favoriteSyncKey,
         'remote_count': remoteCount,
@@ -272,7 +272,7 @@ class SqfliteLocalFavoriteRepository
     final now = DateTime.now().millisecondsSinceEpoch;
     final old = await getSyncSnapshot();
     await db.insert(
-      ComicLocalDb.favoriteSyncStateTable,
+      AppDatabase.favoriteSyncStateTable,
       <String, Object?>{
         'sync_key': favoriteSyncKey,
         'remote_count': old?.remoteCount ?? 0,
@@ -285,7 +285,7 @@ class SqfliteLocalFavoriteRepository
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     await db.update(
-      ComicLocalDb.favoriteSyncStateTable,
+      AppDatabase.favoriteSyncStateTable,
       <String, Object?>{'last_synced_at': now},
       where: 'sync_key = ?',
       whereArgs: <Object>[favoriteSyncKey],
@@ -306,7 +306,7 @@ class SqfliteLocalFavoriteRepository
         }
 
         final oldRows = await txn.query(
-          ComicLocalDb.favoriteThreadsTable,
+          AppDatabase.favoriteThreadsTable,
           where: 'tid = ?',
           whereArgs: <Object>[tid],
           limit: 1,
@@ -333,7 +333,7 @@ class SqfliteLocalFavoriteRepository
         };
 
         if (old == null) {
-          await txn.insert(ComicLocalDb.favoriteThreadsTable, <String, Object?>{
+          await txn.insert(AppDatabase.favoriteThreadsTable, <String, Object?>{
             ...values,
             'source_fid': null,
             'source_typeid': null,
@@ -347,7 +347,7 @@ class SqfliteLocalFavoriteRepository
           });
         } else {
           await txn.update(
-            ComicLocalDb.favoriteThreadsTable,
+            AppDatabase.favoriteThreadsTable,
             values,
             where: 'tid = ?',
             whereArgs: <Object>[tid],
@@ -370,8 +370,8 @@ class SqfliteLocalFavoriteRepository
     final rows = await db.rawQuery(
       '''
       SELECT ft.*, fc.category_id AS custom_category_id
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
         AND ft.detail_state = 'pending'
@@ -402,10 +402,10 @@ class SqfliteLocalFavoriteRepository
         fc.category_id AS custom_category_id,
         COUNT(e.episode_id) AS episode_count,
         SUM(CASE WHEN e.source_tid = ft.tid THEN 1 ELSE 0 END) AS current_tid_count
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
-      LEFT JOIN ${ComicLocalDb.episodesTable} e
+      LEFT JOIN ${AppDatabase.episodesTable} e
         ON e.comic_id = ft.work_id
       WHERE ft.removed_at IS NULL
         AND ft.content_kind = 'comic'
@@ -437,7 +437,7 @@ class SqfliteLocalFavoriteRepository
   }) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.favoriteThreadsTable,
+      AppDatabase.favoriteThreadsTable,
       <String, Object?>{
         'source_fid': _normalizeNullable(fid),
         'source_typeid': _normalizeNullable(typeid),
@@ -456,7 +456,7 @@ class SqfliteLocalFavoriteRepository
   Future<void> markThreadDetailInvalid({required String tid}) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.favoriteThreadsTable,
+      AppDatabase.favoriteThreadsTable,
       <String, Object?>{
         'source_fid': null,
         'source_typeid': null,
@@ -478,8 +478,8 @@ class SqfliteLocalFavoriteRepository
     final db = await _dbFuture;
     final activeRows = await db.rawQuery('''
       SELECT ft.*, fc.category_id AS custom_category_id
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
       ''');
@@ -495,7 +495,7 @@ class SqfliteLocalFavoriteRepository
     await db.transaction((txn) async {
       for (final record in removed) {
         await txn.update(
-          ComicLocalDb.favoriteThreadsTable,
+          AppDatabase.favoriteThreadsTable,
           <String, Object?>{'removed_at': now},
           where: 'tid = ?',
           whereArgs: <Object>[record.tid],
@@ -511,8 +511,8 @@ class SqfliteLocalFavoriteRepository
     final rows = await db.rawQuery(
       '''
       SELECT ft.*, fc.category_id AS custom_category_id
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.tid = ? AND ft.removed_at IS NULL
       LIMIT 1
@@ -537,8 +537,8 @@ class SqfliteLocalFavoriteRepository
     final rows = await db.rawQuery(
       '''
       SELECT ft.*, fc.category_id AS custom_category_id
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.work_id = ? AND ft.removed_at IS NULL
       ORDER BY ft.remote_order IS NULL, ft.remote_order, ft.tid
@@ -558,7 +558,7 @@ class SqfliteLocalFavoriteRepository
     final rows = await db.rawQuery(
       '''
       SELECT 1
-      FROM ${ComicLocalDb.favoriteThreadsTable}
+      FROM ${AppDatabase.favoriteThreadsTable}
       WHERE work_id = ? AND removed_at IS NULL
       LIMIT 1
       ''',
@@ -576,7 +576,7 @@ class SqfliteLocalFavoriteRepository
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
     return db.update(
-      ComicLocalDb.favoriteThreadsTable,
+      AppDatabase.favoriteThreadsTable,
       <String, Object?>{'removed_at': now},
       where: 'work_id = ? AND removed_at IS NULL',
       whereArgs: <Object>[normalized],
@@ -597,7 +597,7 @@ class SqfliteLocalFavoriteRepository
     final now = DateTime.now().millisecondsSinceEpoch;
     final placeholders = List<String>.filled(normalized.length, '?').join(', ');
     return db.update(
-      ComicLocalDb.favoriteThreadsTable,
+      AppDatabase.favoriteThreadsTable,
       <String, Object?>{'removed_at': now},
       where: 'tid IN ($placeholders) AND removed_at IS NULL',
       whereArgs: normalized.toList(growable: false),
@@ -689,7 +689,7 @@ class SqfliteLocalFavoriteRepository
     }
 
     final customRows = await db.query(
-      ComicLocalDb.favoriteCategoriesTable,
+      AppDatabase.favoriteCategoriesTable,
       orderBy: 'sort_order ASC, created_at ASC',
     );
     for (final row in customRows) {
@@ -754,7 +754,7 @@ class SqfliteLocalFavoriteRepository
     final rows = await db.rawQuery('''
       WITH favorite_tag_stats AS (
         SELECT work_id, 1 AS has_tags
-        FROM ${ComicLocalDb.libraryWorkTagsTable}
+        FROM ${AppDatabase.libraryWorkTagsTable}
         WHERE content_type = 'favorite'
         GROUP BY work_id
       )
@@ -791,12 +791,12 @@ class SqfliteLocalFavoriteRepository
           ELSE 0
         END AS module_custom_cover_revision,
         COALESCE(tags.has_tags, 0) AS has_tags
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
-      LEFT JOIN ${ComicLocalDb.comicsTable} c
+      LEFT JOIN ${AppDatabase.comicsTable} c
         ON ft.content_kind = 'comic' AND c.comic_id = ft.work_id
-      LEFT JOIN ${ComicLocalDb.worksTable} w
+      LEFT JOIN ${AppDatabase.worksTable} w
         ON ft.content_kind = 'novel' AND w.work_id = ft.work_id AND w.content_type = 'novel'
       LEFT JOIN favorite_tag_stats tags
         ON tags.work_id = 'favorite:' || ft.tid
@@ -851,10 +851,10 @@ class SqfliteLocalFavoriteRepository
     final now = DateTime.now().millisecondsSinceEpoch;
     final categoryId = 'fav_$now${Random().nextInt(1000)}';
     final countRows = await db.rawQuery(
-      'SELECT COUNT(*) AS count FROM ${ComicLocalDb.favoriteCategoriesTable}',
+      'SELECT COUNT(*) AS count FROM ${AppDatabase.favoriteCategoriesTable}',
     );
     final sortOrder = countRows.first['count'] as int? ?? 0;
-    await db.insert(ComicLocalDb.favoriteCategoriesTable, <String, Object?>{
+    await db.insert(AppDatabase.favoriteCategoriesTable, <String, Object?>{
       'category_id': categoryId,
       'name': trimmed,
       'sort_order': sortOrder,
@@ -877,7 +877,7 @@ class SqfliteLocalFavoriteRepository
     }
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.favoriteCategoriesTable,
+      AppDatabase.favoriteCategoriesTable,
       <String, Object?>{'name': trimmed},
       where: 'category_id = ?',
       whereArgs: <Object>[categoryId],
@@ -892,12 +892,12 @@ class SqfliteLocalFavoriteRepository
     final db = await _dbFuture;
     await db.transaction((txn) async {
       await txn.delete(
-        ComicLocalDb.favoriteThreadCategoryTable,
+        AppDatabase.favoriteThreadCategoryTable,
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
       );
       await txn.delete(
-        ComicLocalDb.favoriteCategoriesTable,
+        AppDatabase.favoriteCategoriesTable,
         where: 'category_id = ?',
         whereArgs: <Object>[categoryId],
       );
@@ -913,7 +913,7 @@ class SqfliteLocalFavoriteRepository
     final normalizedTid = tid.trim();
     if (_systemCategoryIds.contains(toCategoryId)) {
       await db.delete(
-        ComicLocalDb.favoriteThreadCategoryTable,
+        AppDatabase.favoriteThreadCategoryTable,
         where: 'tid = ?',
         whereArgs: <Object>[normalizedTid],
       );
@@ -921,7 +921,7 @@ class SqfliteLocalFavoriteRepository
     }
 
     await db.insert(
-      ComicLocalDb.favoriteThreadCategoryTable,
+      AppDatabase.favoriteThreadCategoryTable,
       <String, Object?>{
         'tid': normalizedTid,
         'category_id': toCategoryId,
@@ -944,8 +944,8 @@ class SqfliteLocalFavoriteRepository
   Future<int> _countSystemCategory(Database db, String categoryId) async {
     final rows = await db.rawQuery('''
       SELECT COUNT(*) AS count
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
         AND ${_systemCategoryAssignmentSqlCondition(categoryId)}
@@ -958,8 +958,8 @@ class SqfliteLocalFavoriteRepository
     final rows = await db.rawQuery(
       '''
       SELECT COUNT(*) AS count
-      FROM ${ComicLocalDb.favoriteThreadsTable} ft
-      INNER JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      INNER JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
         AND fc.category_id = ?
@@ -978,8 +978,8 @@ class SqfliteLocalFavoriteRepository
     if (_systemCategoryIds.contains(categoryId)) {
       rows = await db.rawQuery('''
         SELECT ft.*, fc.category_id AS custom_category_id
-        FROM ${ComicLocalDb.favoriteThreadsTable} ft
-        LEFT JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+        FROM ${AppDatabase.favoriteThreadsTable} ft
+        LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
           ON fc.tid = ft.tid
         WHERE ft.removed_at IS NULL
           AND ${_systemCategoryAssignmentSqlCondition(categoryId)}
@@ -990,8 +990,8 @@ class SqfliteLocalFavoriteRepository
       rows = await db.rawQuery(
         '''
         SELECT ft.*, fc.category_id AS custom_category_id
-        FROM ${ComicLocalDb.favoriteThreadsTable} ft
-        INNER JOIN ${ComicLocalDb.favoriteThreadCategoryTable} fc
+        FROM ${AppDatabase.favoriteThreadsTable} ft
+        INNER JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
           ON fc.tid = ft.tid
         WHERE ft.removed_at IS NULL
           AND fc.category_id = ?
@@ -1064,7 +1064,7 @@ class SqfliteLocalFavoriteRepository
     }
 
     final customRows = await db.query(
-      ComicLocalDb.favoriteCategoriesTable,
+      AppDatabase.favoriteCategoriesTable,
       orderBy: 'sort_order ASC, created_at ASC',
     );
     for (final row in customRows) {
@@ -1111,7 +1111,7 @@ class SqfliteLocalFavoriteRepository
     final tagRows = await db.rawQuery(
       '''
       SELECT 1
-      FROM ${ComicLocalDb.libraryWorkTagsTable}
+      FROM ${AppDatabase.libraryWorkTagsTable}
       WHERE content_type = ? AND work_id = ?
       LIMIT 1
       ''',
@@ -1231,7 +1231,7 @@ class SqfliteLocalFavoriteRepository
     switch (record.contentKind) {
       case ThreadContentKind.comic:
         final rows = await db.query(
-          ComicLocalDb.comicsTable,
+          AppDatabase.comicsTable,
           columns: const <String>[
             'cover_image_url',
             'custom_cover_image_url',
@@ -1247,7 +1247,7 @@ class SqfliteLocalFavoriteRepository
         return _coverSnapshotFromRows(rows);
       case ThreadContentKind.novel:
         final rows = await db.query(
-          ComicLocalDb.worksTable,
+          AppDatabase.worksTable,
           columns: const <String>[
             'cover_image_url',
             'cover_local_path',

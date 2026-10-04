@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
 import 'package:y300/features/novel/data/services/default_novel_source_metadata_recovery_service.dart';
@@ -23,7 +23,7 @@ void main() {
         'y300-novel-recovery-',
       );
       final dbPath = p.join(temp.path, 'recovery.db');
-      final db = await ComicLocalDb.open(databaseName: dbPath);
+      final db = await AppDatabase.open(databaseName: dbPath);
       addTearDown(() async {
         await db.close();
         await deleteDatabase(dbPath);
@@ -31,7 +31,7 @@ void main() {
           await temp.delete(recursive: true);
         }
       });
-      await db.insert(ComicLocalDb.worksTable, <String, Object?>{
+      await db.insert(AppDatabase.worksTable, <String, Object?>{
         'work_id': 'novel:55:521519',
         'content_type': 'novel',
         'source_tid': '521519',
@@ -42,20 +42,20 @@ void main() {
         'author': '旧发布者',
         'updated_at': 1,
       });
-      await db.insert(ComicLocalDb.novelSourceStateTable, <String, Object?>{
+      await db.insert(AppDatabase.novelSourceStateTable, <String, Object?>{
         'novel_id': 'novel:55:521519',
         'publisher_name': '旧发布者',
         'source_catalog_json': '[]',
         'hydration_state': NovelChapterHydrationState.legacyNeedsRebuild.name,
         'last_completed_author_page': 0,
       });
-      await db.insert(ComicLocalDb.novelCategoriesTable, <String, Object?>{
+      await db.insert(AppDatabase.novelCategoriesTable, <String, Object?>{
         'category_id': 'custom',
         'name': '自定义分类',
         'sort_order': 1,
         'created_at': 1,
       });
-      await db.insert(ComicLocalDb.novelShelfItemsTable, <String, Object?>{
+      await db.insert(AppDatabase.novelShelfItemsTable, <String, Object?>{
         'category_id': 'custom',
         'novel_id': 'novel:55:521519',
         'added_at': 1,
@@ -87,14 +87,14 @@ void main() {
       );
       expect(
         await db.query(
-          ComicLocalDb.workEpisodesTable,
+          AppDatabase.workEpisodesTable,
           where: 'work_id = ?',
           whereArgs: const <Object?>['novel:55:521519'],
         ),
         isEmpty,
       );
       final shelfRows = await db.query(
-        ComicLocalDb.novelShelfItemsTable,
+        AppDatabase.novelShelfItemsTable,
         where: 'novel_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
       );

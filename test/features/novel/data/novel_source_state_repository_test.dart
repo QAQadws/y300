@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
@@ -17,7 +17,7 @@ void main() {
       'y300-novel-source-state-',
     );
     final dbPath = p.join(temp.path, 'source-state.db');
-    final db = await ComicLocalDb.open(databaseName: dbPath);
+    final db = await AppDatabase.open(databaseName: dbPath);
     addTearDown(() async {
       await db.close();
       await deleteDatabase(dbPath);
@@ -25,7 +25,7 @@ void main() {
         await temp.delete(recursive: true);
       }
     });
-    await db.insert(ComicLocalDb.worksTable, <String, Object?>{
+    await db.insert(AppDatabase.worksTable, <String, Object?>{
       'work_id': 'novel:55:521519',
       'content_type': 'novel',
       'source_tid': '521519',

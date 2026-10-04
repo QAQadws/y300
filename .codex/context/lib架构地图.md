@@ -14,6 +14,7 @@
 - `lib/core/media`：封面裁剪/焦点、图片降采样、显示 provider 和 Flutter 图片内存缓存调优。
 - `lib/core/network`：共享网络基础设施与 forum client Host 边界。包括 `ApiResult`、`YamiboHttpGateway`（唯一 Host 传输：Cookie、会话与 formhash 存储、WAF 挑战检测/恢复协调、敏感 URI 日志脱敏）、WebView Cookie 同步、图片请求头和 URL 解析；`yamibo_forum_client_provider.dart`、`yamibo_forum_transport_providers.dart`、`yamibo_forum_client_host_adapters.dart` 负责把 Host 传输、Cookie、会话、document/snapshot 缓存和表情目录存储注入 `YamiboForumClient`。
 - `lib/core/preferences`：类型化偏好 key、SharedPreferences 访问、provider 和旧偏好迁移。
+- `lib/core/persistence`：共享 SQLite 入口 `AppDatabase`，统一管理连接配置与 schema 生命周期。漫画、小说、收藏、共享书架和缓存消费同一入口；物理数据库仍为 `comic_shelf.db` v41，业务查询和事务继续归各 repository，跨模块批量 read model 保留 SQL join。
 - `lib/core/utils`：跨模块使用的小型解析工具和通用工具。
 - `lib/features`：按业务能力拆分的 feature；跨漫画/小说/收藏的书架能力位于 `library_shared`，跨图片阅读器能力位于 `reader_shared`，发帖/回复/帖子编辑共用编辑器能力位于 `composer_shared`。
 - `lib/shared/widgets`：不属于单一 feature 的轻量可复用 UI，包括论坛原生 surface、头像、瞬时反馈、书架视觉组件和帖子正文/编辑器共享的折叠视觉壳。

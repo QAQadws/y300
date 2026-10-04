@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/domain/repositories/comic_download_queue_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 
@@ -23,7 +23,7 @@ final class LocalComicDownloadQueueRepository
       var deduplicated = 0;
       for (final target in targets) {
         final existing = await txn.query(
-          ComicLocalDb.comicDownloadQueueTable,
+          AppDatabase.comicDownloadQueueTable,
           where: 'comic_id = ? AND episode_id = ?',
           whereArgs: <Object>[target.comicId, target.episodeId],
           orderBy: 'created_at ASC, id ASC',
@@ -33,7 +33,7 @@ final class LocalComicDownloadQueueRepository
           final current = _entryFromRow(existing.first);
           if (current.status == ComicDownloadQueueStatus.failed) {
             await txn.update(
-              ComicLocalDb.comicDownloadQueueTable,
+              AppDatabase.comicDownloadQueueTable,
               <String, Object?>{
                 'comic_title': target.comicTitle,
                 'episode_title': target.episodeTitle,
@@ -52,17 +52,16 @@ final class LocalComicDownloadQueueRepository
           }
           continue;
         }
-        await txn
-            .insert(ComicLocalDb.comicDownloadQueueTable, <String, Object?>{
-              'comic_id': target.comicId,
-              'episode_id': target.episodeId,
-              'comic_title': target.comicTitle,
-              'episode_title': target.episodeTitle,
-              'status': ComicDownloadQueueStatus.pending.dbValue,
-              'completed_images': 0,
-              'created_at': _ms(now),
-              'updated_at': _ms(now),
-            });
+        await txn.insert(AppDatabase.comicDownloadQueueTable, <String, Object?>{
+          'comic_id': target.comicId,
+          'episode_id': target.episodeId,
+          'comic_title': target.comicTitle,
+          'episode_title': target.episodeTitle,
+          'status': ComicDownloadQueueStatus.pending.dbValue,
+          'completed_images': 0,
+          'created_at': _ms(now),
+          'updated_at': _ms(now),
+        });
         enqueued += 1;
       }
       return ComicDownloadRepositoryEnqueueResult(
@@ -77,12 +76,12 @@ final class LocalComicDownloadQueueRepository
     final db = await _db;
     await db.transaction((txn) async {
       await txn.delete(
-        ComicLocalDb.comicDownloadQueueTable,
+        AppDatabase.comicDownloadQueueTable,
         where: 'status = ?',
         whereArgs: <Object>[ComicDownloadQueueStatus.cancelRequested.dbValue],
       );
       await txn.update(
-        ComicLocalDb.comicDownloadQueueTable,
+        AppDatabase.comicDownloadQueueTable,
         <String, Object?>{
           'status': ComicDownloadQueueStatus.pending.dbValue,
           'updated_at': _ms(now),
@@ -98,7 +97,7 @@ final class LocalComicDownloadQueueRepository
     final db = await _db;
     return db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.comicDownloadQueueTable,
+        AppDatabase.comicDownloadQueueTable,
         where: 'status = ?',
         whereArgs: <Object>[ComicDownloadQueueStatus.pending.dbValue],
         orderBy: 'created_at ASC, id ASC',
@@ -109,7 +108,7 @@ final class LocalComicDownloadQueueRepository
       }
       final id = rows.first['id'] as int;
       await txn.update(
-        ComicLocalDb.comicDownloadQueueTable,
+        AppDatabase.comicDownloadQueueTable,
         <String, Object?>{
           'status': ComicDownloadQueueStatus.running.dbValue,
           'updated_at': _ms(now),
@@ -118,7 +117,7 @@ final class LocalComicDownloadQueueRepository
         whereArgs: <Object>[id],
       );
       final claimed = await txn.query(
-        ComicLocalDb.comicDownloadQueueTable,
+        AppDatabase.comicDownloadQueueTable,
         where: 'id = ?',
         whereArgs: <Object>[id],
         limit: 1,
@@ -131,7 +130,7 @@ final class LocalComicDownloadQueueRepository
   Future<List<ComicDownloadQueueEntry>> loadVisibleEntries() async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       orderBy:
           "CASE status WHEN 'running' THEN 0 WHEN 'cancel_requested' THEN 0 "
           "WHEN 'pending' THEN 1 ELSE 2 END, created_at ASC, id ASC",
@@ -143,7 +142,7 @@ final class LocalComicDownloadQueueRepository
   Future<ComicDownloadQueueEntry?> getById(int id) async {
     final db = await _db;
     final rows = await db.query(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       where: 'id = ?',
       whereArgs: <Object>[id],
       limit: 1,
@@ -160,7 +159,7 @@ final class LocalComicDownloadQueueRepository
   }) async {
     final db = await _db;
     await db.update(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       <String, Object?>{
         'completed_images': completedImages,
         'total_images': totalImages,
@@ -179,7 +178,7 @@ final class LocalComicDownloadQueueRepository
   }) async {
     final db = await _db;
     await db.update(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       <String, Object?>{
         'status': ComicDownloadQueueStatus.failed.dbValue,
         'last_error': error,
@@ -194,7 +193,7 @@ final class LocalComicDownloadQueueRepository
   Future<void> requestCancel({required int id, required DateTime now}) async {
     final db = await _db;
     await db.update(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       <String, Object?>{
         'status': ComicDownloadQueueStatus.cancelRequested.dbValue,
         'updated_at': _ms(now),
@@ -208,7 +207,7 @@ final class LocalComicDownloadQueueRepository
   Future<void> retry({required int id, required DateTime now}) async {
     final db = await _db;
     await db.update(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       <String, Object?>{
         'status': ComicDownloadQueueStatus.pending.dbValue,
         'completed_images': 0,
@@ -225,7 +224,7 @@ final class LocalComicDownloadQueueRepository
   Future<void> delete(int id) async {
     final db = await _db;
     await db.delete(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       where: 'id = ?',
       whereArgs: <Object>[id],
     );
@@ -235,7 +234,7 @@ final class LocalComicDownloadQueueRepository
   Future<bool> deleteIfNotRunning(int id) async {
     final db = await _db;
     final deleted = await db.delete(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       where: 'id = ? AND status NOT IN (?, ?)',
       whereArgs: <Object>[
         id,
@@ -250,7 +249,7 @@ final class LocalComicDownloadQueueRepository
   Future<void> deleteByEpisode(String comicId, String episodeId) async {
     final db = await _db;
     await db.delete(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       where: 'comic_id = ? AND episode_id = ?',
       whereArgs: <Object>[comicId, episodeId],
     );
@@ -260,7 +259,7 @@ final class LocalComicDownloadQueueRepository
   Future<void> deleteByComic(String comicId) async {
     final db = await _db;
     await db.delete(
-      ComicLocalDb.comicDownloadQueueTable,
+      AppDatabase.comicDownloadQueueTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
     );

@@ -1,27 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  test('ComicLocalDb phase1 migration creates library state tables', () async {
+  test('AppDatabase phase1 migration creates library state tables', () async {
     const dbName = 'comic_shelf_test_phase1_state.db';
     await deleteDatabase(dbName);
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
 
     final tableRows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table'",
     );
     final tableNames = tableRows.map((row) => row['name'] as String).toSet();
 
-    expect(tableNames.contains(ComicLocalDb.libraryWorkStateTable), isTrue);
-    expect(tableNames.contains(ComicLocalDb.libraryEpisodeStateTable), isTrue);
-    expect(tableNames.contains(ComicLocalDb.libraryTagsTable), isTrue);
-    expect(tableNames.contains(ComicLocalDb.libraryWorkTagsTable), isTrue);
+    expect(tableNames.contains(AppDatabase.libraryWorkStateTable), isTrue);
+    expect(tableNames.contains(AppDatabase.libraryEpisodeStateTable), isTrue);
+    expect(tableNames.contains(AppDatabase.libraryTagsTable), isTrue);
+    expect(tableNames.contains(AppDatabase.libraryWorkTagsTable), isTrue);
     expect(
-      tableNames.contains(ComicLocalDb.libraryDisplaySettingsTable),
+      tableNames.contains(AppDatabase.libraryDisplaySettingsTable),
       isTrue,
     );
 

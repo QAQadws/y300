@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
 
 abstract interface class NovelInteractionPreferencesLegacySource {
@@ -19,7 +19,7 @@ final class SqliteNovelInteractionPreferencesLegacySource
     try {
       final db = await _dbFutureFactory();
       final rows = await db.query(
-        ComicLocalDb.settingsTable,
+        AppDatabase.settingsTable,
         columns: const <String>['value'],
         where: 'key = ?',
         whereArgs: const <Object?>[chapterOpenModeKey],

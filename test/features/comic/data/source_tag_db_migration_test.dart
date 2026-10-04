@@ -1,21 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  test('ComicLocalDb latest schema includes source tag columns', () async {
+  test('AppDatabase latest schema includes source tag columns', () async {
     const dbName = 'comic_shelf_test_source_tag_columns.db';
     await deleteDatabase(dbName);
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
 
     final comicColumns = await db.rawQuery(
-      'PRAGMA table_info(${ComicLocalDb.comicsTable})',
+      'PRAGMA table_info(${AppDatabase.comicsTable})',
     );
     final workColumns = await db.rawQuery(
-      'PRAGMA table_info(${ComicLocalDb.worksTable})',
+      'PRAGMA table_info(${AppDatabase.worksTable})',
     );
     final comicNames = comicColumns.map((row) => row['name'] as String).toSet();
     final workNames = workColumns.map((row) => row['name'] as String).toSet();
@@ -30,7 +30,7 @@ void main() {
   });
 
   test(
-    'ComicLocalDb rebuilds outdated development database to latest schema',
+    'AppDatabase rebuilds outdated development database to latest schema',
     () async {
       const dbName = 'comic_shelf_test_source_tag_columns_rebuild.db';
       await deleteDatabase(dbName);
@@ -40,7 +40,7 @@ void main() {
           version: 9,
           onCreate: (db, version) async {
             await db.execute('''
-            CREATE TABLE ${ComicLocalDb.comicsTable} (
+            CREATE TABLE ${AppDatabase.comicsTable} (
               comic_id TEXT PRIMARY KEY,
               source_tid TEXT NOT NULL,
               source_fid TEXT NOT NULL,
@@ -49,7 +49,7 @@ void main() {
               updated_at INTEGER NOT NULL
             )
           ''');
-            await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+            await db.insert(AppDatabase.comicsTable, <String, Object?>{
               'comic_id': 'old-comic',
               'source_tid': '1',
               'source_fid': '30',
@@ -62,19 +62,19 @@ void main() {
       );
       await oldDb.close();
 
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final comicColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.comicsTable})',
+        'PRAGMA table_info(${AppDatabase.comicsTable})',
       );
       final workColumns = await db.rawQuery(
-        'PRAGMA table_info(${ComicLocalDb.worksTable})',
+        'PRAGMA table_info(${AppDatabase.worksTable})',
       );
       final comicNames = comicColumns
           .map((row) => row['name'] as String)
           .toSet();
       final workNames = workColumns.map((row) => row['name'] as String).toSet();
       final oldRows = await db.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         where: 'comic_id = ?',
         whereArgs: <Object>['old-comic'],
       );

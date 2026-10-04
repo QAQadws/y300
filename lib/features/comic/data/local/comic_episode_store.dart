@@ -1,7 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -35,7 +35,7 @@ class ComicEpisodeStore {
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.episodesTable,
+      AppDatabase.episodesTable,
       where: includeHidden ? 'comic_id = ?' : 'comic_id = ? AND is_hidden = 0',
       whereArgs: <Object>[comicId],
       orderBy: 'order_index ${descending ? 'DESC' : 'ASC'}',
@@ -65,7 +65,7 @@ class ComicEpisodeStore {
   }) async {
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.episodeImagesTable,
+      AppDatabase.episodeImagesTable,
       where: 'episode_id = ?',
       whereArgs: <Object>[episodeId],
       orderBy: 'image_index ASC',
@@ -100,13 +100,13 @@ class ComicEpisodeStore {
     final db = await _dbFuture;
     await db.transaction((txn) async {
       await txn.delete(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         where: 'episode_id = ?',
         whereArgs: <Object>[episodeId],
       );
       for (var index = 0; index < imageUrls.length; index++) {
         await txn.insert(
-          ComicLocalDb.episodeImagesTable,
+          AppDatabase.episodeImagesTable,
           EpisodeImageRecord(
             episodeId: episodeId,
             imageUrl: imageUrls[index],
@@ -142,7 +142,7 @@ class ComicEpisodeStore {
     final db = await _dbFuture;
     await db.transaction((txn) async {
       final existingRows = await txn.query(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         where: 'episode_id = ?',
         whereArgs: <Object>[episodeId],
         orderBy: 'image_index ASC',
@@ -151,7 +151,7 @@ class ComicEpisodeStore {
         for (final row in existingRows) row['image_index'] as int: row,
       };
       await txn.delete(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         where: 'episode_id = ?',
         whereArgs: <Object>[episodeId],
       );
@@ -197,7 +197,7 @@ class ComicEpisodeStore {
               ? (existing?['cache_status'] as String? ?? 'none')
               : 'none',
         );
-        await txn.insert(ComicLocalDb.episodeImagesTable, record.toMap());
+        await txn.insert(AppDatabase.episodeImagesTable, record.toMap());
       }
       final comicId = extractComicIdFromEpisodeId(episodeId);
       if (comicId != null) {
@@ -219,7 +219,7 @@ class ComicEpisodeStore {
   }) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.episodeImagesTable,
+      AppDatabase.episodeImagesTable,
       <String, Object?>{
         'cache_status': cacheStatus,
         'cache_local_path': cacheLocalPath,
@@ -234,7 +234,7 @@ class ComicEpisodeStore {
   Future<void> clearEpisodeImageCache({required String episodeId}) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.episodeImagesTable,
+      AppDatabase.episodeImagesTable,
       <String, Object?>{
         'cache_status': 'none',
         'cache_local_path': null,
@@ -295,7 +295,7 @@ class ComicEpisodeStore {
       return;
     }
     await db.update(
-      ComicLocalDb.episodeImagesTable,
+      AppDatabase.episodeImagesTable,
       values,
       where: 'episode_id = ? AND image_url = ?',
       whereArgs: <Object>[episodeId, imageUrl],
@@ -319,7 +319,7 @@ class ComicEpisodeStore {
         final episodeId = '$comicId:$sourceTid';
 
         final existing = await txn.query(
-          ComicLocalDb.episodesTable,
+          AppDatabase.episodesTable,
           columns: <String>['episode_id'],
           where: 'episode_id = ?',
           whereArgs: <Object>[episodeId],
@@ -343,7 +343,7 @@ class ComicEpisodeStore {
         );
 
         await txn.insert(
-          ComicLocalDb.episodesTable,
+          AppDatabase.episodesTable,
           record.toMap(),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -356,7 +356,7 @@ class ComicEpisodeStore {
       }
 
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{'updated_at': DateTime.now().millisecondsSinceEpoch},
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
@@ -400,7 +400,7 @@ class ComicEpisodeStore {
       );
 
       await executor.insert(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         episode.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -426,7 +426,7 @@ class ComicEpisodeStore {
 
     final defaultEpisodeId = '$comicId:$sourceTid';
     await executor.insert(
-      ComicLocalDb.episodesTable,
+      AppDatabase.episodesTable,
       EpisodeRecord.resolved(
         episodeId: defaultEpisodeId,
         comicId: comicId,
@@ -452,7 +452,7 @@ class ComicEpisodeStore {
         lastSourceUrl: imageUrls[imageIndex],
       );
       await executor.insert(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         image.toMap(),
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
@@ -469,7 +469,7 @@ class ComicEpisodeStore {
     String comicId,
   ) async {
     final rows = await executor.query(
-      ComicLocalDb.episodesTable,
+      AppDatabase.episodesTable,
       columns: <String>['episode_id', 'is_hidden', 'custom_episode_title'],
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],

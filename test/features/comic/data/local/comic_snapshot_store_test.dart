@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_snapshot_store.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import '../../../../test_support/unavailable_library_cover_store.dart';
@@ -23,7 +23,7 @@ void main() {
 
     setUp(() async {
       await deleteDatabase(databaseName);
-      dbFuture = ComicLocalDb.open(databaseName: databaseName);
+      dbFuture = AppDatabase.open(databaseName: databaseName);
       repository = LocalComicRepository(
         dbFuture,
         libraryCoverStore: const UnavailableLibraryCoverStore(),

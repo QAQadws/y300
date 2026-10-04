@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_snapshot_codec.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 
@@ -19,7 +19,7 @@ final class SqliteNovelReaderPreferencesLegacySource
     try {
       final db = await _dbFutureFactory();
       final rows = await db.query(
-        ComicLocalDb.readerPreferencesTable,
+        AppDatabase.readerPreferencesTable,
         where: 'content_type = ?',
         whereArgs: const <Object>['novel'],
         limit: 1,

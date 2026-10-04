@@ -5,7 +5,7 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart'
     as image_cache;
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/use_cases/comic_shelf_category_assign_use_case_impl.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_merge_service.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
@@ -20,7 +20,7 @@ import 'package:y300/features/thread/data/providers/thread_repository_providers.
 
 final comicRepositoryProvider = Provider<ComicRepository>((ref) {
   return LocalComicRepository(
-    ComicLocalDb.open(),
+    AppDatabase.open(),
     libraryCoverStore: ref.watch(libraryCoverStoreProvider),
   );
 });

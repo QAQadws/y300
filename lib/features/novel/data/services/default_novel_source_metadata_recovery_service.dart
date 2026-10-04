@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
@@ -33,7 +33,7 @@ class DefaultNovelSourceMetadataRecoveryService
     final normalizedNovelId = novelId.trim();
     final db = await _database;
     final rows = await db.query(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       columns: const <String>[
         'source_tid',
         'source_fid',

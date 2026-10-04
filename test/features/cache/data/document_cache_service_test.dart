@@ -4,7 +4,7 @@ import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -13,7 +13,7 @@ void main() {
   test(
     'expired guarded replacement rolls back and keeps the current document',
     () async {
-      final db = await ComicLocalDb.open(databaseName: inMemoryDatabasePath);
+      final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
       addTearDown(db.close);
       final reporter = _RecordingMutationReporter();
       final service = LocalDocumentCacheService(
@@ -46,7 +46,7 @@ void main() {
     () async {
       const dbName = 'document_cache_service_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final service = LocalDocumentCacheService(Future.value(db));
       final fetchedAt = DateTime(2026, 1, 1, 10);
       final touchedAt = DateTime(2026, 1, 1, 11);
@@ -91,7 +91,7 @@ void main() {
   test('LocalDocumentCacheService calculates page cache usage', () async {
     const dbName = 'document_cache_usage_test.db';
     await deleteDatabase(dbName);
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
     final service = LocalDocumentCacheService(Future.value(db));
     final now = DateTime(2026, 1, 1);
 
@@ -127,7 +127,7 @@ void main() {
   test('LocalDocumentCacheService deletes documents by owner prefix', () async {
     const dbName = 'document_cache_owner_prefix_test.db';
     await deleteDatabase(dbName);
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
     final service = LocalDocumentCacheService(Future.value(db));
     final now = DateTime(2026, 1, 1);
     addTearDown(() async {
@@ -176,7 +176,7 @@ void main() {
     () async {
       const dbName = 'document_cache_prune_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final service = LocalDocumentCacheService(Future.value(db));
       addTearDown(() async {
         await db.close();
@@ -214,7 +214,7 @@ void main() {
     () async {
       const dbName = 'document_cache_budget_test.db';
       await deleteDatabase(dbName);
-      final db = await ComicLocalDb.open(databaseName: dbName);
+      final db = await AppDatabase.open(databaseName: dbName);
       final reporter = _RecordingMutationReporter();
       final service = LocalDocumentCacheService(
         Future.value(db),

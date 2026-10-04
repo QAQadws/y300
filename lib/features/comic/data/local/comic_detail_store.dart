@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -17,7 +17,7 @@ class ComicDetailStore {
     final db = await _dbFuture;
     await db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         columns: const <String>[
           'custom_cover_image_url',
           'custom_cover_local_path',
@@ -49,7 +49,7 @@ class ComicDetailStore {
           : currentRevision;
       final now = DateTime.now().millisecondsSinceEpoch;
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{
           'custom_cover_image_url': normalizedUrl,
           'custom_cover_local_path': null,
@@ -84,7 +84,7 @@ class ComicDetailStore {
 
     final db = await _dbFuture;
     final rows = await db.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       columns: const <String>['custom_cover_revision'],
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
@@ -94,7 +94,7 @@ class ComicDetailStore {
         (rows.isEmpty ? 0 : rows.single['custom_cover_revision'] as int? ?? 0) +
         1;
     await db.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'custom_cover_image_url': normalizeNullable(sourceImageUrl),
         'custom_cover_local_path': normalizedPath,
@@ -124,7 +124,7 @@ class ComicDetailStore {
     final now = DateTime.now().millisecondsSinceEpoch;
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'custom_cover_image_url': null,
         'custom_cover_local_path': null,
@@ -150,7 +150,7 @@ class ComicDetailStore {
   }) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'custom_cover_focus_x': focusX,
         'custom_cover_focus_y': focusY,
@@ -172,7 +172,7 @@ class ComicDetailStore {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         columns: const <String>[
           'source_title',
           'title',
@@ -193,7 +193,7 @@ class ComicDetailStore {
       final normalizedAuthor = normalizeNullable(customAuthor);
       final normalizedGroup = normalizeNullable(customTranslationGroup);
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         <String, Object?>{
           'custom_title': normalizedTitle,
           'custom_author': normalizedAuthor,
@@ -239,7 +239,7 @@ class ComicDetailStore {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       final rows = await txn.query(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         columns: const <String>[
           'source_title',
           'title',
@@ -293,7 +293,7 @@ class ComicDetailStore {
         'updated_at': now,
       };
       await txn.update(
-        ComicLocalDb.comicsTable,
+        AppDatabase.comicsTable,
         values,
         where: 'comic_id = ?',
         whereArgs: <Object>[comicId],
@@ -336,8 +336,8 @@ class ComicDetailStore {
         c.custom_catalog_url,
         c.updated_at,
         COUNT(e.episode_id) AS episode_count
-      FROM ${ComicLocalDb.comicsTable} c
-      LEFT JOIN ${ComicLocalDb.episodesTable} e
+      FROM ${AppDatabase.comicsTable} c
+      LEFT JOIN ${AppDatabase.episodesTable} e
         ON c.comic_id = e.comic_id AND e.is_hidden = 0
       WHERE c.comic_id = ?
       GROUP BY c.comic_id
@@ -400,7 +400,7 @@ class ComicDetailStore {
     required int now,
   }) async {
     final existingRows = await executor.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
       limit: 1,
@@ -468,13 +468,13 @@ class ComicDetailStore {
     );
 
     if (existing == null) {
-      await executor.insert(ComicLocalDb.comicsTable, comic.toMap());
+      await executor.insert(AppDatabase.comicsTable, comic.toMap());
       return;
     }
 
     final values = comic.toMap()..remove('comic_id');
     await executor.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       values,
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
@@ -539,7 +539,7 @@ class ComicDetailStore {
   }) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'catalog_url': catalogUrl,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
@@ -555,7 +555,7 @@ class ComicDetailStore {
   }) async {
     final db = await _dbFuture;
     await db.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'custom_catalog_url': normalizeNullable(catalogUrl),
         'updated_at': DateTime.now().millisecondsSinceEpoch,

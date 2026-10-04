@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 import '../test_support/novel_phase0_persistence_baseline.dart';
 
@@ -23,7 +23,7 @@ void main() {
       }
     });
 
-    var db = await ComicLocalDb.open(databaseName: dbPath);
+    var db = await AppDatabase.open(databaseName: dbPath);
     await prepareNovelPhase0DatabaseVersion28(db);
     expect(await db.getVersion(), 28);
     await seedNovelPhase0PersistenceBaseline(db);

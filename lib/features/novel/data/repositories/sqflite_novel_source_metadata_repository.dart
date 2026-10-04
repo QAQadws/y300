@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/models/novel_source_catalog_json_codec.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
@@ -54,7 +54,7 @@ class SqfliteNovelSourceMetadataRepository
     await db.transaction((txn) async {
       await txn.rawInsert(
         '''
-        INSERT INTO ${ComicLocalDb.worksTable} (
+        INSERT INTO ${AppDatabase.worksTable} (
           work_id,
           content_type,
           source_tid,
@@ -72,20 +72,20 @@ class SqfliteNovelSourceMetadataRepository
           source_fid = excluded.source_fid,
           source_typeid = COALESCE(
             excluded.source_typeid,
-            ${ComicLocalDb.worksTable}.source_typeid
+            ${AppDatabase.worksTable}.source_typeid
           ),
           source_tag_name = COALESCE(
             excluded.source_tag_name,
-            ${ComicLocalDb.worksTable}.source_tag_name
+            ${AppDatabase.worksTable}.source_tag_name
           ),
           title = CASE
             WHEN ? IS NOT NULL THEN excluded.title
-            ELSE ${ComicLocalDb.worksTable}.title
+            ELSE ${AppDatabase.worksTable}.title
           END,
-          author = COALESCE(excluded.author, ${ComicLocalDb.worksTable}.author),
+          author = COALESCE(excluded.author, ${AppDatabase.worksTable}.author),
           cover_image_url = COALESCE(
             excluded.cover_image_url,
-            ${ComicLocalDb.worksTable}.cover_image_url
+            ${AppDatabase.worksTable}.cover_image_url
           ),
           updated_at = excluded.updated_at
         ''',
@@ -105,7 +105,7 @@ class SqfliteNovelSourceMetadataRepository
       );
 
       final existingShelfRows = await txn.query(
-        ComicLocalDb.novelShelfItemsTable,
+        AppDatabase.novelShelfItemsTable,
         columns: const <String>['id'],
         where: 'novel_id = ?',
         whereArgs: <Object?>[novelId],
@@ -115,7 +115,7 @@ class SqfliteNovelSourceMetadataRepository
         final orderRows = await txn.rawQuery(
           '''
           SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order
-          FROM ${ComicLocalDb.novelShelfItemsTable}
+          FROM ${AppDatabase.novelShelfItemsTable}
           WHERE category_id = ?
           ''',
           <Object?>[_defaultCategoryId],
@@ -123,7 +123,7 @@ class SqfliteNovelSourceMetadataRepository
         final sortOrder = orderRows.isEmpty
             ? 0
             : (orderRows.first['next_order'] as num?)?.toInt() ?? 0;
-        await txn.insert(ComicLocalDb.novelShelfItemsTable, <String, Object?>{
+        await txn.insert(AppDatabase.novelShelfItemsTable, <String, Object?>{
           'category_id': _defaultCategoryId,
           'novel_id': novelId,
           'added_at': favoriteAddedAt.millisecondsSinceEpoch,
@@ -133,7 +133,7 @@ class SqfliteNovelSourceMetadataRepository
 
       await txn.rawInsert(
         '''
-        INSERT INTO ${ComicLocalDb.novelSourceStateTable} (
+        INSERT INTO ${AppDatabase.novelSourceStateTable} (
           novel_id,
           publisher_id,
           publisher_name,
@@ -148,17 +148,17 @@ class SqfliteNovelSourceMetadataRepository
           publisher_id = excluded.publisher_id,
           publisher_name = COALESCE(
             excluded.publisher_name,
-            ${ComicLocalDb.novelSourceStateTable}.publisher_name
+            ${AppDatabase.novelSourceStateTable}.publisher_name
           ),
           first_post_pid = excluded.first_post_pid,
           source_intro = COALESCE(
             excluded.source_intro,
-            ${ComicLocalDb.novelSourceStateTable}.source_intro
+            ${AppDatabase.novelSourceStateTable}.source_intro
           ),
           source_catalog_json = CASE
             WHEN excluded.source_catalog_json <> '[]'
               THEN excluded.source_catalog_json
-            ELSE ${ComicLocalDb.novelSourceStateTable}.source_catalog_json
+            ELSE ${AppDatabase.novelSourceStateTable}.source_catalog_json
           END,
           metadata_source_version = excluded.metadata_source_version,
           metadata_ingested_at = excluded.metadata_ingested_at

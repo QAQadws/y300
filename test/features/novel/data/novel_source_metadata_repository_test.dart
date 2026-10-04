@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
@@ -20,7 +20,7 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('y300-novel-metadata-');
     dbPath = p.join(temp.path, 'metadata.db');
-    db = await ComicLocalDb.open(databaseName: dbPath);
+    db = await AppDatabase.open(databaseName: dbPath);
     repository = SqfliteNovelSourceMetadataRepository(Future.value(db));
   });
 
@@ -47,7 +47,7 @@ void main() {
       );
 
       final works = await db.query(
-        ComicLocalDb.worksTable,
+        AppDatabase.worksTable,
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
       );
@@ -62,7 +62,7 @@ void main() {
       );
 
       final shelfRows = await db.query(
-        ComicLocalDb.novelShelfItemsTable,
+        AppDatabase.novelShelfItemsTable,
         where: 'novel_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
       );
@@ -74,7 +74,7 @@ void main() {
       );
 
       final episodes = await db.query(
-        ComicLocalDb.workEpisodesTable,
+        AppDatabase.workEpisodesTable,
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
       );
@@ -107,7 +107,7 @@ void main() {
       favoriteAddedAt: DateTime(2026, 7, 1),
     );
     await db.update(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       <String, Object?>{
         'cover_local_path': 'cached/cover.jpg',
         'custom_cover_local_path': 'custom/cover.jpg',
@@ -115,7 +115,7 @@ void main() {
       where: 'work_id = ?',
       whereArgs: const <Object?>['novel:55:521519'],
     );
-    await db.insert(ComicLocalDb.workEpisodesTable, <String, Object?>{
+    await db.insert(AppDatabase.workEpisodesTable, <String, Object?>{
       'episode_id': 'novel:55:521519:40213902',
       'work_id': 'novel:55:521519',
       'content_type': 'novel',
@@ -140,7 +140,7 @@ void main() {
     );
 
     final work = (await db.query(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       where: 'work_id = ?',
       whereArgs: const <Object?>['novel:55:521519'],
     )).single;
@@ -152,7 +152,7 @@ void main() {
     expect(work['custom_cover_local_path'], 'custom/cover.jpg');
     expect(
       await db.query(
-        ComicLocalDb.workEpisodesTable,
+        AppDatabase.workEpisodesTable,
         where: 'work_id = ?',
         whereArgs: const <Object?>['novel:55:521519'],
       ),
@@ -166,7 +166,7 @@ void main() {
     expect(sourceState?.sourceIntro, '来源简介');
     expect(sourceState?.catalogEntries.single.pid, '40213902');
     final shelfAddedAt = (await db.query(
-      ComicLocalDb.novelShelfItemsTable,
+      AppDatabase.novelShelfItemsTable,
       columns: const <String>['added_at'],
       where: 'novel_id = ?',
       whereArgs: const <Object?>['novel:55:521519'],
@@ -185,7 +185,7 @@ void main() {
       favoriteAddedAt: DateTime(2026, 7, 15),
     );
     final titleAfterMissingSource = (await db.query(
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       columns: const <String>['title'],
       where: 'work_id = ?',
       whereArgs: const <Object?>['novel:55:521519'],
@@ -198,7 +198,7 @@ void main() {
     () async {
       await db.execute('''
       CREATE TRIGGER fail_novel_source_metadata
-      BEFORE INSERT ON ${ComicLocalDb.novelSourceStateTable}
+      BEFORE INSERT ON ${AppDatabase.novelSourceStateTable}
       WHEN NEW.publisher_id = '406769'
       BEGIN
         SELECT RAISE(ABORT, 'forced metadata failure');
@@ -216,7 +216,7 @@ void main() {
 
       expect(
         await db.query(
-          ComicLocalDb.worksTable,
+          AppDatabase.worksTable,
           where: 'work_id = ?',
           whereArgs: const <Object?>['novel:55:521519'],
         ),
@@ -224,7 +224,7 @@ void main() {
       );
       expect(
         await db.query(
-          ComicLocalDb.novelShelfItemsTable,
+          AppDatabase.novelShelfItemsTable,
           where: 'novel_id = ?',
           whereArgs: const <Object?>['novel:55:521519'],
         ),

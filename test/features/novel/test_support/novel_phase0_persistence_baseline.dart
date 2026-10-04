@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 const novelPhase0BaselineNovelId = 'novel:55:521519';
 const novelPhase0BaselineEpisodeId = 'novel:55:521519:40692958';
@@ -7,18 +7,16 @@ const novelPhase0BaselineBookmarkId = 'bookmark:novel:55:521519:40692958';
 
 Future<void> prepareNovelPhase0DatabaseVersion28(Database db) async {
   await db.execute(
-    'DROP TABLE IF EXISTS ${ComicLocalDb.novelEpisodeSyncStagingTable}',
+    'DROP TABLE IF EXISTS ${AppDatabase.novelEpisodeSyncStagingTable}',
   );
-  await db.execute(
-    'DROP TABLE IF EXISTS ${ComicLocalDb.novelSourceStateTable}',
-  );
+  await db.execute('DROP TABLE IF EXISTS ${AppDatabase.novelSourceStateTable}');
   await db.setVersion(28);
 }
 
 Future<void> seedNovelPhase0PersistenceBaseline(Database db) async {
   const timestamp = 1783900800000;
   await db.transaction((txn) async {
-    await txn.insert(ComicLocalDb.worksTable, <String, Object?>{
+    await txn.insert(AppDatabase.worksTable, <String, Object?>{
       'work_id': novelPhase0BaselineNovelId,
       'content_type': 'novel',
       'source_tid': '521519',
@@ -32,7 +30,7 @@ Future<void> seedNovelPhase0PersistenceBaseline(Database db) async {
       'custom_cover_local_path': 'covers/custom-novel-cover.jpg',
       'updated_at': timestamp,
     });
-    await txn.insert(ComicLocalDb.workEpisodesTable, <String, Object?>{
+    await txn.insert(AppDatabase.workEpisodesTable, <String, Object?>{
       'episode_id': novelPhase0BaselineEpisodeId,
       'work_id': novelPhase0BaselineNovelId,
       'content_type': 'novel',
@@ -43,20 +41,20 @@ Future<void> seedNovelPhase0PersistenceBaseline(Database db) async {
       'order_index': 200,
       'dateline_text': '2024-01-02',
     });
-    await txn.insert(ComicLocalDb.novelEpisodeContentTable, <String, Object?>{
+    await txn.insert(AppDatabase.novelEpisodeContentTable, <String, Object?>{
       'episode_id': novelPhase0BaselineEpisodeId,
       'raw_html': '<p>迁移前正文。</p>',
       'plain_text': '迁移前正文。',
       'paragraph_json': '["迁移前正文。"]',
       'updated_at': timestamp,
     });
-    await txn.insert(ComicLocalDb.novelShelfItemsTable, <String, Object?>{
+    await txn.insert(AppDatabase.novelShelfItemsTable, <String, Object?>{
       'category_id': 'default',
       'novel_id': novelPhase0BaselineNovelId,
       'added_at': timestamp,
       'sort_order': 7,
     });
-    await txn.insert(ComicLocalDb.libraryWorkStateTable, <String, Object?>{
+    await txn.insert(AppDatabase.libraryWorkStateTable, <String, Object?>{
       'content_type': 'novel',
       'work_id': novelPhase0BaselineNovelId,
       'last_read_episode_id': novelPhase0BaselineEpisodeId,
@@ -67,7 +65,7 @@ Future<void> seedNovelPhase0PersistenceBaseline(Database db) async {
       'created_at': timestamp,
       'updated_at': timestamp,
     });
-    await txn.insert(ComicLocalDb.libraryEpisodeStateTable, <String, Object?>{
+    await txn.insert(AppDatabase.libraryEpisodeStateTable, <String, Object?>{
       'content_type': 'novel',
       'episode_id': novelPhase0BaselineEpisodeId,
       'work_id': novelPhase0BaselineNovelId,
@@ -77,7 +75,7 @@ Future<void> seedNovelPhase0PersistenceBaseline(Database db) async {
       'read_at': timestamp,
       'downloaded_at': timestamp,
     });
-    await txn.insert(ComicLocalDb.novelReadingProgressTable, <String, Object?>{
+    await txn.insert(AppDatabase.novelReadingProgressTable, <String, Object?>{
       'novel_id': novelPhase0BaselineNovelId,
       'episode_id': novelPhase0BaselineEpisodeId,
       'scroll_offset': 345.5,
@@ -87,7 +85,7 @@ Future<void> seedNovelPhase0PersistenceBaseline(Database db) async {
       'progress_percent': 0.625,
       'updated_at': timestamp,
     });
-    await txn.insert(ComicLocalDb.readerBookmarksTable, <String, Object?>{
+    await txn.insert(AppDatabase.readerBookmarksTable, <String, Object?>{
       'bookmark_id': novelPhase0BaselineBookmarkId,
       'novel_id': novelPhase0BaselineNovelId,
       'episode_id': novelPhase0BaselineEpisodeId,
@@ -111,49 +109,49 @@ Future<NovelPhase0PersistenceSnapshot> readNovelPhase0PersistenceBaseline(
   return NovelPhase0PersistenceSnapshot(
     work: await _singleBy(
       db,
-      ComicLocalDb.worksTable,
+      AppDatabase.worksTable,
       'work_id',
       novelPhase0BaselineNovelId,
     ),
     episode: await _singleBy(
       db,
-      ComicLocalDb.workEpisodesTable,
+      AppDatabase.workEpisodesTable,
       'episode_id',
       novelPhase0BaselineEpisodeId,
     ),
     content: await _singleBy(
       db,
-      ComicLocalDb.novelEpisodeContentTable,
+      AppDatabase.novelEpisodeContentTable,
       'episode_id',
       novelPhase0BaselineEpisodeId,
     ),
     shelfItem: await _singleBy(
       db,
-      ComicLocalDb.novelShelfItemsTable,
+      AppDatabase.novelShelfItemsTable,
       'novel_id',
       novelPhase0BaselineNovelId,
     ),
     workState: await _singleBy(
       db,
-      ComicLocalDb.libraryWorkStateTable,
+      AppDatabase.libraryWorkStateTable,
       'work_id',
       novelPhase0BaselineNovelId,
     ),
     episodeState: await _singleBy(
       db,
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       'episode_id',
       novelPhase0BaselineEpisodeId,
     ),
     readingProgress: await _singleBy(
       db,
-      ComicLocalDb.novelReadingProgressTable,
+      AppDatabase.novelReadingProgressTable,
       'novel_id',
       novelPhase0BaselineNovelId,
     ),
     bookmark: await _singleBy(
       db,
-      ComicLocalDb.readerBookmarksTable,
+      AppDatabase.readerBookmarksTable,
       'bookmark_id',
       novelPhase0BaselineBookmarkId,
     ),

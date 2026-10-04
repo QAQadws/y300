@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -27,7 +27,7 @@ void main() {
         version: 33,
         onCreate: (db, _) async {
           await db.execute('''
-            CREATE TABLE ${ComicLocalDb.novelReadingProgressTable} (
+            CREATE TABLE ${AppDatabase.novelReadingProgressTable} (
               novel_id TEXT PRIMARY KEY,
               episode_id TEXT NOT NULL,
               scroll_offset REAL NOT NULL,
@@ -38,7 +38,7 @@ void main() {
               updated_at INTEGER NOT NULL
             )
           ''');
-          await db.insert(ComicLocalDb.novelReadingProgressTable, {
+          await db.insert(AppDatabase.novelReadingProgressTable, {
             'novel_id': 'novel:legacy',
             'episode_id': 'episode:legacy',
             'scroll_offset': 10.0,
@@ -52,12 +52,12 @@ void main() {
     );
     await db.close();
 
-    db = await ComicLocalDb.open(databaseName: dbPath);
+    db = await AppDatabase.open(databaseName: dbPath);
     addTearDown(db.close);
-    expect(await db.getVersion(), ComicLocalDb.dbVersion);
+    expect(await db.getVersion(), AppDatabase.dbVersion);
 
     final columns = (await db.rawQuery(
-      'PRAGMA table_info(${ComicLocalDb.novelReadingProgressTable})',
+      'PRAGMA table_info(${AppDatabase.novelReadingProgressTable})',
     )).map((row) => row['name']).toSet();
     expect(
       columns,
@@ -68,7 +68,7 @@ void main() {
       }),
     );
     final row = (await db.query(
-      ComicLocalDb.novelReadingProgressTable,
+      AppDatabase.novelReadingProgressTable,
       where: 'novel_id = ?',
       whereArgs: <Object?>['novel:legacy'],
       limit: 1,

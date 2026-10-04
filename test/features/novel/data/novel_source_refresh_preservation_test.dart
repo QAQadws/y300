@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
@@ -40,7 +40,7 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('y300-novel-preservation-');
     dbPath = p.join(temp.path, 'novel.db');
-    db = await ComicLocalDb.open(databaseName: dbPath);
+    db = await AppDatabase.open(databaseName: dbPath);
     await seedNovelRepository(db, seed: _seed);
     final dbFuture = Future<Database>.value(db);
     novels = LocalNovelRepository(dbFuture);

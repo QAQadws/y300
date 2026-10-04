@@ -7,7 +7,7 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
 import 'package:y300/features/profile/domain/repositories/blog_draft_repository.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
@@ -376,15 +376,15 @@ class LibraryMetadataStorageAccountingAdapter
   }
 
   Future<Map<String, int>> _loadCounts() async {
-    final db = await (_databaseFuture ?? ComicLocalDb.open());
+    final db = await (_databaseFuture ?? AppDatabase.open());
     final tables = <String, String>{
-      'comics': ComicLocalDb.comicsTable,
-      'comic_episodes': ComicLocalDb.episodesTable,
-      'novels': ComicLocalDb.worksTable,
-      'novel_episodes': ComicLocalDb.workEpisodesTable,
-      'favorites': ComicLocalDb.favoriteThreadsTable,
-      'library_work_state': ComicLocalDb.libraryWorkStateTable,
-      'library_episode_state': ComicLocalDb.libraryEpisodeStateTable,
+      'comics': AppDatabase.comicsTable,
+      'comic_episodes': AppDatabase.episodesTable,
+      'novels': AppDatabase.worksTable,
+      'novel_episodes': AppDatabase.workEpisodesTable,
+      'favorites': AppDatabase.favoriteThreadsTable,
+      'library_work_state': AppDatabase.libraryWorkStateTable,
+      'library_episode_state': AppDatabase.libraryEpisodeStateTable,
     };
     final result = <String, int>{};
     for (final entry in tables.entries) {
@@ -404,7 +404,7 @@ class LibraryMetadataStorageAccountingAdapter
     final path =
         await (_databasePathFuture ??
             (() async =>
-                p.join(await getDatabasesPath(), ComicLocalDb.dbName))());
+                p.join(await getDatabasesPath(), AppDatabase.dbName))());
     final file = io.File(path);
     if (!await file.exists()) {
       return 0;

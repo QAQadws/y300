@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -14,7 +14,7 @@ void main() {
       const dbName = 'comic_shelf_test_image_cache_repo.db';
       await deleteDatabase(dbName);
       final repository = LocalImageCacheRepository(
-        ComicLocalDb.open(databaseName: dbName),
+        AppDatabase.open(databaseName: dbName),
       );
       final now = DateTime(2026, 1, 1);
 

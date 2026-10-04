@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/core/preferences/preference_keys.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/preferences/novel_interaction_preferences_legacy_source.dart';
 import 'package:y300/features/novel/data/preferences/shared_preferences_novel_interaction_preferences_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
@@ -24,7 +24,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     temp = await Directory.systemTemp.createTemp('y300-novel-interaction-');
     dbPath = p.join(temp.path, 'interaction.db');
-    db = await ComicLocalDb.open(databaseName: dbPath);
+    db = await AppDatabase.open(databaseName: dbPath);
   });
 
   tearDown(() async {
@@ -45,7 +45,7 @@ void main() {
   }
 
   test('migrates a valid global SQLite chapter mode once', () async {
-    await db.insert(ComicLocalDb.settingsTable, <String, Object?>{
+    await db.insert(AppDatabase.settingsTable, <String, Object?>{
       'key': SqliteNovelInteractionPreferencesLegacySource.chapterOpenModeKey,
       'value': NovelChapterOpenMode.sourcePost.storageValue,
     });
@@ -73,7 +73,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       PreferenceKeys.novelChapterOpenModeV1.name: 'reader',
     });
-    await db.insert(ComicLocalDb.settingsTable, <String, Object?>{
+    await db.insert(AppDatabase.settingsTable, <String, Object?>{
       'key': SqliteNovelInteractionPreferencesLegacySource.chapterOpenModeKey,
       'value': 'sourcePost',
     });
@@ -94,7 +94,7 @@ void main() {
       NovelChapterOpenMode.sourcePost,
     );
     final rows = await db.query(
-      ComicLocalDb.settingsTable,
+      AppDatabase.settingsTable,
       where: 'key = ?',
       whereArgs: const <Object?>[
         SqliteNovelInteractionPreferencesLegacySource.chapterOpenModeKey,
@@ -107,7 +107,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       PreferenceKeys.novelChapterOpenModeMigrationVersion.name: 1,
     });
-    await db.insert(ComicLocalDb.settingsTable, <String, Object?>{
+    await db.insert(AppDatabase.settingsTable, <String, Object?>{
       'key': SqliteNovelInteractionPreferencesLegacySource.chapterOpenModeKey,
       'value': 'sourcePost',
     });

@@ -4,7 +4,7 @@ import 'dart:io' as io;
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';
 import 'package:y300/features/comic/domain/services/comic_duplicate_metadata_matcher.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
@@ -32,10 +32,10 @@ class ComicDuplicateMergeStore {
     final normalizedComicId = _normalizeNullable(comicId);
     final rows = await db.rawQuery('''
       SELECT comic_id, source_tid, NULL AS title, NULL AS author
-      FROM ${ComicLocalDb.episodesTable}
+      FROM ${AppDatabase.episodesTable}
       UNION ALL
       SELECT comic_id, source_tid, title, author
-      FROM ${ComicLocalDb.comicsTable}
+      FROM ${AppDatabase.comicsTable}
       ''');
     if (rows.isEmpty) {
       return const <ComicDuplicateGroup>[];
@@ -243,14 +243,14 @@ class ComicDuplicateMergeStore {
       targetComicId: target.comicId,
     );
     await txn.delete(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       where: _whereIn('comic_id', sourceIds.length),
       whereArgs: sourceIds.toList(growable: false),
     );
 
     await _updateCoverMigrationMarkers(txn, plan);
     await txn.update(
-      ComicLocalDb.comicCoverMergeOperationsTable,
+      AppDatabase.comicCoverMergeOperationsTable,
       <String, Object?>{
         'state': _MergeJournalState.databaseCommitted,
         'updated_at': now,
@@ -278,7 +278,7 @@ class ComicDuplicateMergeStore {
       return const <ComicRecord>[];
     }
     final rows = await txn.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       where: _whereIn('comic_id', comicIds.length),
       whereArgs: comicIds.toList(growable: false),
     );
@@ -292,7 +292,7 @@ class ComicDuplicateMergeStore {
   Future<void> _recoverPendingCoverMerges() async {
     final db = await _dbFuture;
     final operations = await db.query(
-      ComicLocalDb.comicCoverMergeOperationsTable,
+      AppDatabase.comicCoverMergeOperationsTable,
       orderBy: 'created_at ASC, operation_id ASC',
     );
     for (final operation in operations) {
@@ -450,7 +450,7 @@ class ComicDuplicateMergeStore {
   ) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await txn
-        .insert(ComicLocalDb.comicCoverMergeOperationsTable, <String, Object?>{
+        .insert(AppDatabase.comicCoverMergeOperationsTable, <String, Object?>{
           'operation_id': plan.operationId,
           'target_comic_id': plan.targetComicId,
           'state': _MergeJournalState.preparing,
@@ -459,7 +459,7 @@ class ComicDuplicateMergeStore {
         });
     for (final sourceComicId in plan.sourceComicIds) {
       await txn.insert(
-        ComicLocalDb.comicCoverMergeMembersTable,
+        AppDatabase.comicCoverMergeMembersTable,
         <String, Object?>{
           'operation_id': plan.operationId,
           'source_comic_id': sourceComicId,
@@ -470,7 +470,7 @@ class ComicDuplicateMergeStore {
       final source = selection.source ?? selection.finalBundle!;
       final target = selection.targetAsset ?? selection.finalBundle!.asset;
       await txn
-          .insert(ComicLocalDb.comicCoverMergeAssetsTable, <String, Object?>{
+          .insert(AppDatabase.comicCoverMergeAssetsTable, <String, Object?>{
             'operation_id': plan.operationId,
             'kind': selection.kind.name,
             'source_comic_id': source.ownerComicId,
@@ -550,7 +550,7 @@ class ComicDuplicateMergeStore {
   Future<void> _rollbackPreparingOperationById(String operationId) async {
     final db = await _dbFuture;
     final assets = await db.query(
-      ComicLocalDb.comicCoverMergeAssetsTable,
+      AppDatabase.comicCoverMergeAssetsTable,
       where: 'operation_id = ?',
       whereArgs: <Object>[operationId],
     );
@@ -561,7 +561,7 @@ class ComicDuplicateMergeStore {
       }
     }
     await db.delete(
-      ComicLocalDb.comicCoverMergeOperationsTable,
+      AppDatabase.comicCoverMergeOperationsTable,
       where: 'operation_id = ? AND state = ?',
       whereArgs: <Object>[operationId, _MergeJournalState.preparing],
     );
@@ -574,7 +574,7 @@ class ComicDuplicateMergeStore {
         ? 'custom_cover_revision'
         : 'cover_revision';
     final rows = await db.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       columns: <String>[column],
       where: 'comic_id = ?',
       whereArgs: <Object>[ownerId],
@@ -586,7 +586,7 @@ class ComicDuplicateMergeStore {
   Future<void> _cleanupCommittedOperation(String operationId) async {
     final db = await _dbFuture;
     final operations = await db.query(
-      ComicLocalDb.comicCoverMergeOperationsTable,
+      AppDatabase.comicCoverMergeOperationsTable,
       where: 'operation_id = ? AND state = ?',
       whereArgs: <Object>[operationId, _MergeJournalState.databaseCommitted],
       limit: 1,
@@ -595,7 +595,7 @@ class ComicDuplicateMergeStore {
       return;
     }
     final members = await db.query(
-      ComicLocalDb.comicCoverMergeMembersTable,
+      AppDatabase.comicCoverMergeMembersTable,
       columns: const <String>['source_comic_id'],
       where: 'operation_id = ?',
       whereArgs: <Object>[operationId],
@@ -610,7 +610,7 @@ class ComicDuplicateMergeStore {
       );
     }
     final assets = await db.query(
-      ComicLocalDb.comicCoverMergeAssetsTable,
+      AppDatabase.comicCoverMergeAssetsTable,
       where: 'operation_id = ?',
       whereArgs: <Object>[operationId],
     );
@@ -618,7 +618,7 @@ class ComicDuplicateMergeStore {
       await _libraryCoverStore.deleteOlderRevisions(_journalTargetAsset(row));
     }
     await db.delete(
-      ComicLocalDb.comicCoverMergeOperationsTable,
+      AppDatabase.comicCoverMergeOperationsTable,
       where: 'operation_id = ? AND state = ?',
       whereArgs: <Object>[operationId, _MergeJournalState.databaseCommitted],
     );
@@ -631,7 +631,7 @@ class ComicDuplicateMergeStore {
     for (final sourceComicId in plan.sourceComicIds) {
       for (final kind in LibraryCoverAssetKind.values) {
         await txn.delete(
-          ComicLocalDb.libraryCoverMigrationsTable,
+          AppDatabase.libraryCoverMigrationsTable,
           where: 'asset_id = ?',
           whereArgs: <Object>[_assetId(comicId: sourceComicId, kind: kind)],
         );
@@ -645,14 +645,14 @@ class ComicDuplicateMergeStore {
       );
       if (finalBundle == null || finalBundle.revision <= 0) {
         await txn.delete(
-          ComicLocalDb.libraryCoverMigrationsTable,
+          AppDatabase.libraryCoverMigrationsTable,
           where: 'asset_id = ?',
           whereArgs: <Object>[targetAssetId],
         );
         continue;
       }
       await txn.delete(
-        ComicLocalDb.libraryCoverMigrationsTable,
+        AppDatabase.libraryCoverMigrationsTable,
         where: 'asset_id = ? AND revision != ?',
         whereArgs: <Object>[targetAssetId, finalBundle.revision],
       );
@@ -660,7 +660,7 @@ class ComicDuplicateMergeStore {
     for (final selection in plan.transfers) {
       final target = selection.targetAsset!;
       await txn.insert(
-        ComicLocalDb.libraryCoverMigrationsTable,
+        AppDatabase.libraryCoverMigrationsTable,
         <String, Object?>{
           'asset_id': target.assetId,
           'revision': target.revision,
@@ -751,7 +751,7 @@ class ComicDuplicateMergeStore {
     required String targetComicId,
   }) async {
     final sourceEpisodes = await txn.query(
-      ComicLocalDb.episodesTable,
+      AppDatabase.episodesTable,
       where: 'comic_id = ?',
       whereArgs: <Object>[sourceComicId],
       orderBy: 'order_index ASC, episode_id ASC',
@@ -762,14 +762,14 @@ class ComicDuplicateMergeStore {
       final sourceTid = row['source_tid'] as String;
       final targetEpisodeId = '$targetComicId:$sourceTid';
       final existingRows = await txn.query(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         where: 'episode_id = ?',
         whereArgs: <Object>[targetEpisodeId],
         limit: 1,
       );
 
       if (existingRows.isEmpty) {
-        await txn.insert(ComicLocalDb.episodesTable, <String, Object?>{
+        await txn.insert(AppDatabase.episodesTable, <String, Object?>{
           ...row,
           'episode_id': targetEpisodeId,
           'comic_id': targetComicId,
@@ -788,7 +788,7 @@ class ComicDuplicateMergeStore {
           moveEpisodeState: false,
         );
         await txn.delete(
-          ComicLocalDb.episodesTable,
+          AppDatabase.episodesTable,
           where: 'episode_id = ?',
           whereArgs: <Object>[sourceEpisodeId],
         );
@@ -813,7 +813,7 @@ class ComicDuplicateMergeStore {
           moveEpisodeState: false,
         );
         await txn.delete(
-          ComicLocalDb.episodesTable,
+          AppDatabase.episodesTable,
           where: 'episode_id = ?',
           whereArgs: <Object>[sourceEpisodeId],
         );
@@ -890,7 +890,7 @@ class ComicDuplicateMergeStore {
       return;
     }
     await txn.update(
-      ComicLocalDb.episodesTable,
+      AppDatabase.episodesTable,
       update,
       where: 'episode_id = ?',
       whereArgs: <Object>[existing['episode_id'] as String],
@@ -911,14 +911,14 @@ class ComicDuplicateMergeStore {
     // source episode row is deleted at the end of mergeSourceComicIntoTarget.
     final targetImageCount =
         (await txn.rawQuery(
-              'SELECT COUNT(*) AS c FROM ${ComicLocalDb.episodeImagesTable} WHERE episode_id = ?',
+              'SELECT COUNT(*) AS c FROM ${AppDatabase.episodeImagesTable} WHERE episode_id = ?',
               <Object>[targetEpisodeId],
             )).first['c']
             as int? ??
         0;
     if (targetImageCount == 0) {
       await txn.update(
-        ComicLocalDb.episodeImagesTable,
+        AppDatabase.episodeImagesTable,
         <String, Object?>{
           'episode_id': targetEpisodeId,
           'stable_cache_key': null,
@@ -928,19 +928,19 @@ class ComicDuplicateMergeStore {
       );
     }
     await txn.update(
-      ComicLocalDb.readingProgressTable,
+      AppDatabase.readingProgressTable,
       <String, Object?>{'episode_id': targetEpisodeId},
       where: 'episode_id = ?',
       whereArgs: <Object>[sourceEpisodeId],
     );
     await txn.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{'last_read_episode_id': targetEpisodeId},
       where: 'last_read_episode_id = ?',
       whereArgs: <Object>[sourceEpisodeId],
     );
     await txn.update(
-      ComicLocalDb.libraryWorkStateTable,
+      AppDatabase.libraryWorkStateTable,
       <String, Object?>{'last_read_episode_id': targetEpisodeId},
       where: 'content_type = ? AND last_read_episode_id = ?',
       whereArgs: <Object>['comic', sourceEpisodeId],
@@ -949,7 +949,7 @@ class ComicDuplicateMergeStore {
       return;
     }
     await txn.update(
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       <String, Object?>{
         'episode_id': targetEpisodeId,
         'work_id': targetComicId,
@@ -966,7 +966,7 @@ class ComicDuplicateMergeStore {
     required String targetComicId,
   }) async {
     final sourceRows = await txn.query(
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       where: 'content_type = ? AND episode_id = ?',
       whereArgs: <Object>['comic', sourceEpisodeId],
       limit: 1,
@@ -976,14 +976,14 @@ class ComicDuplicateMergeStore {
     }
     final source = sourceRows.first;
     final targetRows = await txn.query(
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       where: 'content_type = ? AND episode_id = ?',
       whereArgs: <Object>['comic', targetEpisodeId],
       limit: 1,
     );
     if (targetRows.isEmpty) {
       await txn.update(
-        ComicLocalDb.libraryEpisodeStateTable,
+        AppDatabase.libraryEpisodeStateTable,
         <String, Object?>{
           'episode_id': targetEpisodeId,
           'work_id': targetComicId,
@@ -996,7 +996,7 @@ class ComicDuplicateMergeStore {
 
     final target = targetRows.first;
     await txn.update(
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       <String, Object?>{
         'work_id': targetComicId,
         'is_read': _maxInt(target['is_read'], source['is_read']),
@@ -1018,7 +1018,7 @@ class ComicDuplicateMergeStore {
       whereArgs: <Object>['comic', targetEpisodeId],
     );
     await txn.delete(
-      ComicLocalDb.libraryEpisodeStateTable,
+      AppDatabase.libraryEpisodeStateTable,
       where: 'content_type = ? AND episode_id = ?',
       whereArgs: <Object>['comic', sourceEpisodeId],
     );
@@ -1035,7 +1035,7 @@ class ComicDuplicateMergeStore {
     final all = <ComicRecord>[target, ...sources];
     final shortestTitle = _shortestDisplayTitle(all);
     await txn.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'title': shortestTitle,
         'source_title': _firstNormalized(<String?>[
@@ -1088,7 +1088,7 @@ class ComicDuplicateMergeStore {
     // Reassert the merge plan's exact revisions so corrupted negative legacy
     // values are normalized according to max(oldRevision, 0) + 1 as well.
     await txn.update(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       <String, Object?>{
         'cover_revision': sourceCover?.revision ?? 0,
         'custom_cover_revision': customCover?.revision ?? 0,
@@ -1119,7 +1119,7 @@ class ComicDuplicateMergeStore {
     required String comicId,
   }) async {
     final rows = await txn.query(
-      ComicLocalDb.episodesTable,
+      AppDatabase.episodesTable,
       columns: const <String>['episode_id', 'source_tid', 'order_index'],
       where: 'comic_id = ?',
       whereArgs: <Object>[comicId],
@@ -1128,7 +1128,7 @@ class ComicDuplicateMergeStore {
       ..sort(_coverStore.compareEpisodeRowsByFirstTid);
     for (var index = 0; index < ordered.length; index++) {
       await txn.update(
-        ComicLocalDb.episodesTable,
+        AppDatabase.episodesTable,
         <String, Object?>{'order_index': index},
         where: 'episode_id = ?',
         whereArgs: <Object>[ordered[index]['episode_id'] as String],
@@ -1145,7 +1145,7 @@ class ComicDuplicateMergeStore {
       return;
     }
     final rows = await txn.query(
-      ComicLocalDb.shelfItemsTable,
+      AppDatabase.shelfItemsTable,
       where: _whereIn('comic_id', sourceComicIds.length),
       whereArgs: sourceComicIds.toList(growable: false),
       orderBy: 'added_at ASC, sort_order ASC',
@@ -1153,27 +1153,23 @@ class ComicDuplicateMergeStore {
     for (final row in rows) {
       final categoryId = row['category_id'] as String;
       final existing = await txn.query(
-        ComicLocalDb.shelfItemsTable,
+        AppDatabase.shelfItemsTable,
         columns: const <String>['id'],
         where: 'category_id = ? AND comic_id = ?',
         whereArgs: <Object>[categoryId, targetComicId],
         limit: 1,
       );
       if (existing.isEmpty) {
-        await txn.insert(
-          ComicLocalDb.shelfItemsTable,
-          <String, Object?>{
-            'category_id': categoryId,
-            'comic_id': targetComicId,
-            'added_at': row['added_at'],
-            'sort_order': row['sort_order'],
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        await txn.insert(AppDatabase.shelfItemsTable, <String, Object?>{
+          'category_id': categoryId,
+          'comic_id': targetComicId,
+          'added_at': row['added_at'],
+          'sort_order': row['sort_order'],
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     }
     await txn.delete(
-      ComicLocalDb.shelfItemsTable,
+      AppDatabase.shelfItemsTable,
       where: _whereIn('comic_id', sourceComicIds.length),
       whereArgs: sourceComicIds.toList(growable: false),
     );
@@ -1200,7 +1196,7 @@ class ComicDuplicateMergeStore {
       targetComicId: targetComicId,
     );
     await txn.update(
-      ComicLocalDb.favoriteThreadsTable,
+      AppDatabase.favoriteThreadsTable,
       <String, Object?>{'work_id': targetComicId},
       where: where,
       whereArgs: args,
@@ -1211,7 +1207,7 @@ class ComicDuplicateMergeStore {
       targetComicId: targetComicId,
     );
     await txn.update(
-      ComicLocalDb.comicSearchRefreshQueueTable,
+      AppDatabase.comicSearchRefreshQueueTable,
       <String, Object?>{'comic_id': targetComicId},
       where: _whereIn('comic_id', sourceComicIds.length),
       whereArgs: args,
@@ -1230,7 +1226,7 @@ class ComicDuplicateMergeStore {
   }) async {
     final args = sourceComicIds.toList(growable: false);
     await txn.update(
-      ComicLocalDb.cachedImagesTable,
+      AppDatabase.cachedImagesTable,
       <String, Object?>{'owner_id': targetComicId},
       where: 'owner_type = ? AND ${_whereIn('owner_id', args.length)}',
       whereArgs: <Object>['comic', ...args],
@@ -1244,7 +1240,7 @@ class ComicDuplicateMergeStore {
   }) async {
     final args = sourceComicIds.toList(growable: false);
     final rows = await txn.query(
-      ComicLocalDb.libraryWorkStateTable,
+      AppDatabase.libraryWorkStateTable,
       where: 'content_type = ? AND ${_whereIn('work_id', args.length + 1)}',
       whereArgs: <Object>['comic', targetComicId, ...args],
     );
@@ -1295,7 +1291,7 @@ class ComicDuplicateMergeStore {
 
     final now = DateTime.now().millisecondsSinceEpoch;
     await txn.insert(
-      ComicLocalDb.libraryWorkStateTable,
+      AppDatabase.libraryWorkStateTable,
       <String, Object?>{
         'content_type': 'comic',
         'work_id': targetComicId,
@@ -1310,7 +1306,7 @@ class ComicDuplicateMergeStore {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     await txn.delete(
-      ComicLocalDb.libraryWorkStateTable,
+      AppDatabase.libraryWorkStateTable,
       where: 'content_type = ? AND ${_whereIn('work_id', args.length)}',
       whereArgs: <Object>['comic', ...args],
     );
@@ -1323,7 +1319,7 @@ class ComicDuplicateMergeStore {
   }) async {
     final args = sourceComicIds.toList(growable: false);
     final tagRows = await txn.query(
-      ComicLocalDb.libraryWorkTagsTable,
+      AppDatabase.libraryWorkTagsTable,
       columns: const <String>['tag_id'],
       where: 'content_type = ? AND ${_whereIn('work_id', args.length)}',
       whereArgs: <Object>['comic', ...args],
@@ -1334,7 +1330,7 @@ class ComicDuplicateMergeStore {
         continue;
       }
       await txn.insert(
-        ComicLocalDb.libraryWorkTagsTable,
+        AppDatabase.libraryWorkTagsTable,
         <String, Object?>{
           'content_type': 'comic',
           'work_id': targetComicId,
@@ -1344,7 +1340,7 @@ class ComicDuplicateMergeStore {
       );
     }
     await txn.delete(
-      ComicLocalDb.libraryWorkTagsTable,
+      AppDatabase.libraryWorkTagsTable,
       where: 'content_type = ? AND ${_whereIn('work_id', args.length)}',
       whereArgs: <Object>['comic', ...args],
     );
@@ -1357,7 +1353,7 @@ class ComicDuplicateMergeStore {
   }) async {
     final args = sourceComicIds.toList(growable: false);
     final rows = await txn.query(
-      ComicLocalDb.readingProgressTable,
+      AppDatabase.readingProgressTable,
       where: _whereIn('comic_id', args.length + 1),
       whereArgs: <Object>[targetComicId, ...args],
       orderBy: 'updated_at DESC, rowid DESC',
@@ -1372,13 +1368,13 @@ class ComicDuplicateMergeStore {
     }
     for (final winner in latestByEpisodeId.values) {
       await txn.insert(
-        ComicLocalDb.readingProgressTable,
+        AppDatabase.readingProgressTable,
         <String, Object?>{...winner, 'comic_id': targetComicId},
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
     await txn.delete(
-      ComicLocalDb.readingProgressTable,
+      AppDatabase.readingProgressTable,
       where: _whereIn('comic_id', args.length),
       whereArgs: args,
     );

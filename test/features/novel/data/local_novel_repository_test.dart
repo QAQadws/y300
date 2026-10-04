@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -23,7 +23,7 @@ void main() {
 
     setUp(() async {
       await deleteDatabase(testDbName);
-      dbFuture = ComicLocalDb.open(databaseName: testDbName);
+      dbFuture = AppDatabase.open(databaseName: testDbName);
       repository = LocalNovelRepository(dbFuture);
     });
 
@@ -155,7 +155,7 @@ void main() {
 
     test('reading progress reads old rows with defaults', () async {
       final db = await dbFuture;
-      await db.insert(ComicLocalDb.novelReadingProgressTable, <String, Object?>{
+      await db.insert(AppDatabase.novelReadingProgressTable, <String, Object?>{
         'novel_id': 'novel:old:progress',
         'episode_id': 'episode-old',
         'scroll_offset': 128.0,
@@ -195,7 +195,7 @@ void main() {
 
       final db = await dbFuture;
       final rows = await db.query(
-        ComicLocalDb.novelReadingProgressTable,
+        AppDatabase.novelReadingProgressTable,
         where: 'novel_id = ?',
         whereArgs: const <Object>['novel:single-progress'],
       );
@@ -335,7 +335,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.worksTable,
+            AppDatabase.worksTable,
             where: 'work_id = ? AND content_type = ?',
             whereArgs: const <Object>['novel:49:200', 'novel'],
           ),
@@ -343,7 +343,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.workEpisodesTable,
+            AppDatabase.workEpisodesTable,
             where: 'work_id = ? AND content_type = ?',
             whereArgs: const <Object>['novel:49:200', 'novel'],
           ),
@@ -351,7 +351,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.novelShelfItemsTable,
+            AppDatabase.novelShelfItemsTable,
             where: 'novel_id = ?',
             whereArgs: const <Object>['novel:49:200'],
           ),
@@ -359,7 +359,7 @@ void main() {
         );
         expect(
           await db.query(
-            ComicLocalDb.novelReadingProgressTable,
+            AppDatabase.novelReadingProgressTable,
             where: 'novel_id = ?',
             whereArgs: const <Object>['novel:49:200'],
           ),

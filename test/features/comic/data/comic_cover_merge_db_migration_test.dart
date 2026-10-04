@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:y300/features/comic/data/local/comic_local_db.dart';
+import 'package:y300/core/persistence/app_database.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -15,7 +15,7 @@ void main() {
         version: 39,
         onCreate: (db, version) async {
           await db.execute('''
-            CREATE TABLE ${ComicLocalDb.comicsTable} (
+            CREATE TABLE ${AppDatabase.comicsTable} (
               comic_id TEXT PRIMARY KEY,
               source_tid TEXT NOT NULL,
               source_fid TEXT NOT NULL,
@@ -27,7 +27,7 @@ void main() {
               updated_at INTEGER NOT NULL
             )
           ''');
-          await db.insert(ComicLocalDb.comicsTable, <String, Object?>{
+          await db.insert(AppDatabase.comicsTable, <String, Object?>{
             'comic_id': 'legacy-comic',
             'source_tid': '100',
             'source_fid': '30',
@@ -43,15 +43,15 @@ void main() {
     );
     await oldDb.close();
 
-    final db = await ComicLocalDb.open(databaseName: dbName);
+    final db = await AppDatabase.open(databaseName: dbName);
     addTearDown(() async {
       await db.close();
       await deleteDatabase(dbName);
     });
 
-    expect(await db.getVersion(), ComicLocalDb.dbVersion);
+    expect(await db.getVersion(), AppDatabase.dbVersion);
     final legacy = (await db.query(
-      ComicLocalDb.comicsTable,
+      AppDatabase.comicsTable,
       where: 'comic_id = ?',
       whereArgs: const <Object>['legacy-comic'],
     )).single;
@@ -64,9 +64,9 @@ void main() {
     expect(
       tables,
       containsAll(<String>{
-        ComicLocalDb.comicCoverMergeOperationsTable,
-        ComicLocalDb.comicCoverMergeMembersTable,
-        ComicLocalDb.comicCoverMergeAssetsTable,
+        AppDatabase.comicCoverMergeOperationsTable,
+        AppDatabase.comicCoverMergeMembersTable,
+        AppDatabase.comicCoverMergeAssetsTable,
       }),
     );
     final indexes = (await db.rawQuery(

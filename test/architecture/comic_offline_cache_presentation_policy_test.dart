@@ -55,7 +55,7 @@ void main() {
 
   test('offline cache terminology does not rename persistence contracts', () {
     final database = File(
-      'lib/features/comic/data/local/comic_local_db.dart',
+      'lib/core/persistence/app_database.dart',
     ).readAsStringSync();
 
     expect(database, contains("'comic_download_queue'"));
