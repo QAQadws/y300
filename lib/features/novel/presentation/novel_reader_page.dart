@@ -33,6 +33,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
@@ -77,7 +78,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       const NovelReaderTypographyResolver();
   final NovelReaderProgressPolicy _progressPolicy =
       const NovelReaderProgressPolicy();
-  final _preparedChapterCache = NovelReaderPreparedChapterCache();
+  NovelReaderPaginationSessionCache _paginationSessionCache =
+      NovelReaderPaginationSessionCache();
+  NovelReaderController? _paginationSessionController;
+  NovelReaderPreparedChapterCache get _preparedChapterCache =>
+      _paginationSessionCache.preparedChapterCache;
   NovelReaderDisplayPreferencesCoordinator? _displayPreferencesCoordinator;
   NovelReaderController? _displayPreferencesOwner;
   Future<void>? _displayCommitTail;
@@ -135,6 +140,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   void dispose() {
+    _paginationSessionCache.dispose();
     _verticalDockVisible.dispose();
     _postRouteSession.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -184,6 +190,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     });
     final state = ref.watch(readerProvider);
     final controller = ref.read(readerProvider.notifier);
+    _bindPaginationCacheSession(controller);
     if (state.isLoading) {
       _retireDisplayPreferencesCoordinator();
       _retireVerticalSession(preserveContentProof: true);
@@ -748,6 +755,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     });
   }
 
+  void _bindPaginationCacheSession(NovelReaderController controller) {
+    if (_paginationSessionController == null) {
+      _paginationSessionController = controller;
+    } else if (!identical(_paginationSessionController, controller)) {
+      _paginationSessionCache.dispose();
+      _paginationSessionCache = NovelReaderPaginationSessionCache();
+      _paginationSessionController = controller;
+    }
+  }
+
   Widget _buildReaderList(
     NovelReaderViewState viewState,
     NovelReaderTypography typography,
@@ -759,6 +776,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }) {
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return NovelReaderHtmlPagedSurface(
+        paginationCache: _paginationSessionCache.paginationCache,
+        paginationMeasureCache: _paginationSessionCache.measureCache,
+        paginationBoundaryCache: _paginationSessionCache.boundaryCache,
         preparedChapterCache: _preparedChapterCache,
         rawHtml: viewState.currentContent.rawHtml,
         episode: viewState.currentEpisode,

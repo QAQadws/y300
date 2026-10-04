@@ -22,6 +22,7 @@
 - 小说作者帖子正文固定通过 `threadAuthorPosts` 使用 `viewthread version=1`，不得改成 `version=4`。
 - 小说横向新锚点使用格式 1 的节点内语义码点与文本身份；DOM 源坐标、UTF-16 和扩展字素通过显式投影转换，不用语义 offset 切 HTML。精确恢复核对格式/文本身份和实际 coverage；旧、未来格式或近似恢复不因首帧、补页完成或退出自动迁移，真实阅读导航才确认新位置。语义文档记录构建时的转换来源，不能用当前预览偏好推断；来源不一致不猜节点对应。
 - 小说分页等待超时、测量失败或后台补页停滞不得自动切换或持久改写阅读模式；只由用户主动选择滚动。保留已可读页与位置，重试核对布局前缀并以独立请求代次隔离迟到结果；退出和取消释放等待 timer 与测量 session。
+- 小说复杂分页串行等待 chunk 消费，只在封页并完成稳定发布后确认 committed offset；晚失败只回退未发布 DOM 尾部，不重发整块或改动已读前缀。页快照使用只追加存储的固定只读前缀；plan/measure/boundary/prepared 纯缓存归实际阅读会话，模式切换保留，退出或换 owner 永久关闭并隔离迟到回填，不缓存 Context、Overlay 或测量 session。
 - 漫画/小说纯标题策略位于 `packages/content_title_core`，生产消费者统一使用 `content_title_core.dart` 公开入口。两组规则独立，subject 映射、HTML 准备、provider、搜索/同步与持久化仍归应用；生产代码不得依赖包的测试 fixture。
 - 图片连续阅读几何位于纯 Dart 包 `packages/continuous_image_geometry`，统一使用 `continuous_image_geometry.dart` 公开入口。应用图片模型实现只读 `ContinuousImageLayoutItem`，URL/缓存与业务 FlowPolicy、sequence position、Flutter 控制器、会话失效及实际 preload 仍归应用；不因提包启用未接入的长图/prefetch planner。
 - HTML 准备流水线与 prepared image 只依赖中立 `ForumHtmlPreparedImageResource` 和同步图片准备端口；资源实现保持不可变纯值，可随小说后台准备传递。缓存 spec/request 与默认 URL 装配归 application Host，不把缓存类型放回 prepared document，也不合并准备、显示和阅读器的既有缓存分类。

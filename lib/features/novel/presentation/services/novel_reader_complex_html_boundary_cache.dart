@@ -51,18 +51,22 @@ final class NovelReaderComplexHtmlBoundaryCacheResult {
 /// stale content hash or reused atom id cannot return boundaries for another
 /// fragment. DOM sessions are intentionally never persisted.
 final class NovelReaderComplexHtmlBoundaryCache {
-  NovelReaderComplexHtmlBoundaryCache({this.capacity = 32})
-    : assert(capacity > 0);
+  NovelReaderComplexHtmlBoundaryCache({
+    this.capacity = 32,
+    this.maxEstimatedBytes = 16 * 1024 * 1024,
+  }) : assert(capacity > 0),
+       assert(maxEstimatedBytes >= 0);
 
   final int capacity;
+  final int maxEstimatedBytes;
   final LinkedHashMap<
     _NovelReaderComplexHtmlBoundaryCacheKey,
-    NovelReaderComplexHtmlSliceSession
+    ({NovelReaderComplexHtmlSliceSession session, int bytes})
   >
   _entries =
       LinkedHashMap<
         _NovelReaderComplexHtmlBoundaryCacheKey,
-        NovelReaderComplexHtmlSliceSession
+        ({NovelReaderComplexHtmlSliceSession session, int bytes})
       >();
   final Map<
     _NovelReaderComplexHtmlBoundaryCacheKey,
@@ -74,20 +78,32 @@ final class NovelReaderComplexHtmlBoundaryCache {
         Future<NovelReaderComplexHtmlSliceSession>
       >{};
   int _generation = 0;
+  int _estimatedRetainedBytes = 0;
+  bool _closed = false;
 
   int get length => _entries.length;
+  bool get isClosed => _closed;
+
+  /// Conservative fixed weights for HTML/DOM, graphemes, boundaries and
+  /// projection arrays. Excludes in-flight work and is not a heap measurement.
+  int get estimatedRetainedBytes => _estimatedRetainedBytes;
 
   Future<NovelReaderComplexHtmlBoundaryCacheResult> resolve({
     required NovelReaderComplexHtmlBoundaryCacheRequest request,
     required NovelReaderComplexHtmlSliceSession Function() build,
   }) {
+    if (_closed) {
+      return Future<NovelReaderComplexHtmlBoundaryCacheResult>.error(
+        StateError('The boundary cache has been disposed.'),
+      );
+    }
     final key = _NovelReaderComplexHtmlBoundaryCacheKey.from(request);
     final cached = _entries.remove(key);
     if (cached != null) {
       _entries[key] = cached;
       return Future<NovelReaderComplexHtmlBoundaryCacheResult>.value(
         NovelReaderComplexHtmlBoundaryCacheResult(
-          session: cached,
+          session: cached.session,
           fromCache: true,
           joinedInFlight: false,
         ),
@@ -109,8 +125,8 @@ final class NovelReaderComplexHtmlBoundaryCache {
     final future = Future<NovelReaderComplexHtmlSliceSession>.sync(build).then((
       session,
     ) {
-      if (requestGeneration == _generation) {
-        _put(key, session);
+      if (!_closed && requestGeneration == _generation) {
+        _put(key, session, _estimate(request, session));
       }
       return session;
     });
@@ -135,18 +151,61 @@ final class NovelReaderComplexHtmlBoundaryCache {
     _generation += 1;
     _entries.clear();
     _inFlight.clear();
+    _estimatedRetainedBytes = 0;
+  }
+
+  void dispose() {
+    _closed = true;
+    clear();
   }
 
   void _put(
     _NovelReaderComplexHtmlBoundaryCacheKey key,
     NovelReaderComplexHtmlSliceSession session,
+    int bytes,
   ) {
-    _entries.remove(key);
-    _entries[key] = session;
-    while (_entries.length > capacity) {
-      _entries.remove(_entries.keys.first);
+    _evict(key);
+    if (bytes > maxEstimatedBytes) {
+      return;
+    }
+    _entries[key] = (session: session, bytes: bytes);
+    _estimatedRetainedBytes += bytes;
+    while (_entries.length > capacity ||
+        _estimatedRetainedBytes > maxEstimatedBytes) {
+      _evict(_entries.keys.first);
     }
   }
+
+  void _evict(_NovelReaderComplexHtmlBoundaryCacheKey key) {
+    final entry = _entries.remove(key);
+    if (entry != null) {
+      _estimatedRetainedBytes -= entry.bytes;
+    }
+  }
+
+  int _estimate(
+    NovelReaderComplexHtmlBoundaryCacheRequest request,
+    NovelReaderComplexHtmlSliceSession session,
+  ) =>
+      256 +
+      6 * request.html.length +
+      32 * session.textLength +
+      96 * session.boundaries.length +
+      32 * session.protectedRanges.length +
+      8 *
+          (request
+                  .sourceAnchorProjection
+                  ?.semanticOffsetsBySourceRuneBoundary
+                  .length ??
+              0) +
+      2 *
+          (request.episodeId.length +
+              request.contentHash.length +
+              request.atomId.length +
+              request.startAnchor.episodeId.length +
+              (request.startAnchor.nodeId?.length ?? 0) +
+              (request.startAnchor.textIdentity?.length ?? 0) +
+              (request.sourceAnchorProjection?.cacheIdentity.length ?? 0));
 
   void _removeInFlight(
     _NovelReaderComplexHtmlBoundaryCacheKey key,

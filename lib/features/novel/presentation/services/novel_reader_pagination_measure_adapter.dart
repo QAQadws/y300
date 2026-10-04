@@ -93,40 +93,72 @@ final class NovelReaderAdapterMeasureSessionFactory
 /// makes diagnostics useful, while the exact HTML prevents an unsafe cache hit
 /// when two ranges happen to share offsets but produce different wrappers.
 final class NovelReaderPaginationMeasureCache {
-  NovelReaderPaginationMeasureCache({this.capacity = 512})
-    : assert(capacity > 0);
+  NovelReaderPaginationMeasureCache({
+    this.capacity = 512,
+    this.maxEstimatedBytes = 4 * 1024 * 1024,
+  }) : assert(capacity > 0),
+       assert(maxEstimatedBytes >= 0);
 
   final int capacity;
-  final LinkedHashMap<_MeasureCacheKey, NovelReaderPaginationMeasureResult>
+  final int maxEstimatedBytes;
+  final LinkedHashMap<
+    _MeasureCacheKey,
+    ({NovelReaderPaginationMeasureResult result, int bytes})
+  >
   _entries =
-      LinkedHashMap<_MeasureCacheKey, NovelReaderPaginationMeasureResult>();
+      LinkedHashMap<
+        _MeasureCacheKey,
+        ({NovelReaderPaginationMeasureResult result, int bytes})
+      >();
   final Map<_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>
   _inFlight = <_MeasureCacheKey, Future<NovelReaderPaginationMeasureResult>>{};
   int _generation = 0;
+  int _estimatedRetainedBytes = 0;
+  bool _closed = false;
 
   int get length => _entries.length;
+  bool get isClosed => _closed;
+
+  /// Fixed-weight estimate of retained keys/results, excluding in-flight work.
+  /// This is not an actual heap-memory measurement.
+  int get estimatedRetainedBytes => _estimatedRetainedBytes;
 
   NovelReaderPaginationMeasureResult? get(
     NovelReaderPaginationMeasureRequest request,
   ) {
     final key = _MeasureCacheKey.from(request);
-    final result = _entries.remove(key);
-    if (result == null) {
+    final entry = _entries.remove(key);
+    if (entry == null) {
       return null;
     }
-    _entries[key] = result;
-    return result.copyWith(fromCache: true);
+    _entries[key] = entry;
+    return entry.result.copyWith(fromCache: true);
   }
 
   void put(
     NovelReaderPaginationMeasureRequest request,
     NovelReaderPaginationMeasureResult result,
   ) {
+    if (_closed) {
+      return;
+    }
     final key = _MeasureCacheKey.from(request);
-    _entries.remove(key);
-    _entries[key] = result.copyWith(fromCache: false);
-    while (_entries.length > capacity) {
-      _entries.remove(_entries.keys.first);
+    _evict(key);
+    final bytes =
+        96 +
+        2 *
+            (key.layoutIdentity.length +
+                key.episodeId.length +
+                key.atomId.length +
+                key.html.length);
+    if (bytes > maxEstimatedBytes) {
+      return;
+    }
+    _entries[key] = (result: result.copyWith(fromCache: false), bytes: bytes);
+    _estimatedRetainedBytes += bytes;
+    while (_entries.length > capacity ||
+        _estimatedRetainedBytes > maxEstimatedBytes) {
+      _evict(_entries.keys.first);
     }
   }
 
@@ -134,6 +166,11 @@ final class NovelReaderPaginationMeasureCache {
     required NovelReaderPaginationMeasureRequest request,
     required Future<NovelReaderPaginationMeasureResult> Function() measure,
   }) {
+    if (_closed) {
+      return Future<NovelReaderPaginationMeasureResult>.error(
+        StateError('The measurement cache has been disposed.'),
+      );
+    }
     final cached = get(request);
     if (cached != null) {
       return Future<NovelReaderPaginationMeasureResult>.value(
@@ -152,7 +189,7 @@ final class NovelReaderPaginationMeasureCache {
     final requestGeneration = _generation;
     final future = Future<NovelReaderPaginationMeasureResult>.sync(measure)
         .then((result) {
-          if (requestGeneration == _generation) {
+          if (!_closed && requestGeneration == _generation) {
             put(request, result);
           }
           return result;
@@ -172,6 +209,19 @@ final class NovelReaderPaginationMeasureCache {
     _generation += 1;
     _entries.clear();
     _inFlight.clear();
+    _estimatedRetainedBytes = 0;
+  }
+
+  void dispose() {
+    _closed = true;
+    clear();
+  }
+
+  void _evict(_MeasureCacheKey key) {
+    final entry = _entries.remove(key);
+    if (entry != null) {
+      _estimatedRetainedBytes -= entry.bytes;
+    }
   }
 
   void _removeInFlight(

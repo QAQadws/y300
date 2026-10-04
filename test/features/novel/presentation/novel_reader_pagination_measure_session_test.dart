@@ -12,6 +12,122 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   test(
+    'measurement byte LRU rejects large entries and clears retained accounting',
+    () {
+      const result = NovelReaderPaginationMeasureResult(height: 12);
+      final one = _request(html: '<p>one</p>');
+      final two = _request(html: '<p>two</p>');
+      final six = _request(html: '<p>six</p>');
+      final probe = NovelReaderPaginationMeasureCache()
+        ..put(one, result)
+        ..put(two, result);
+      final budget = probe.estimatedRetainedBytes;
+      final cache = NovelReaderPaginationMeasureCache(
+        capacity: 8,
+        maxEstimatedBytes: budget,
+      );
+      cache
+        ..put(one, result)
+        ..put(two, result);
+      expect(cache.get(one), isNotNull);
+      cache.put(six, result);
+      expect(cache.get(two), isNull);
+      expect(cache.get(one), isNotNull);
+      expect(cache.get(six), isNotNull);
+      cache.put(_request(html: '<p>${'large' * 1000}</p>'), result);
+      expect(cache.length, 2);
+      expect(cache.estimatedRetainedBytes, lessThanOrEqualTo(budget));
+      cache.clear();
+      expect(cache.estimatedRetainedBytes, 0);
+      cache.put(one, result);
+      expect(cache.length, 1);
+    },
+  );
+
+  test(
+    'clear isolates old measurement completion from a new same-key flight',
+    () async {
+      for (final fail in [false, true]) {
+        final cache = NovelReaderPaginationMeasureCache();
+        final request = _request(html: '<p>same</p>');
+        final oldGate = Completer<NovelReaderPaginationMeasureResult>();
+        final newGate = Completer<NovelReaderPaginationMeasureResult>();
+        final old = cache.resolve(
+          request: request,
+          measure: () => oldGate.future,
+        );
+        final oldFailure = fail ? expectLater(old, throwsStateError) : null;
+        cache.clear();
+        var newCalls = 0;
+        final current = cache.resolve(
+          request: request,
+          measure: () {
+            newCalls += 1;
+            return newGate.future;
+          },
+        );
+        if (fail) {
+          oldGate.completeError(StateError('old measurement'));
+          await oldFailure!;
+        } else {
+          oldGate.complete(const NovelReaderPaginationMeasureResult(height: 1));
+          expect((await old).height, 1);
+        }
+        expect(cache.length, 0);
+        expect(cache.estimatedRetainedBytes, 0);
+        final joined = cache.resolve(
+          request: request,
+          measure: () {
+            newCalls += 1;
+            throw StateError('new flight must remain registered');
+          },
+        );
+        newGate.complete(const NovelReaderPaginationMeasureResult(height: 2));
+        expect((await current).height, 2);
+        expect((await joined).height, 2);
+        expect(newCalls, 1);
+        expect(cache.get(request)?.height, 2);
+      }
+    },
+  );
+
+  test(
+    'disposed measurement cache rejects work and ignores late writes',
+    () async {
+      final cache = NovelReaderPaginationMeasureCache();
+      final request = _request(html: '<p>pending</p>');
+      final gate = Completer<NovelReaderPaginationMeasureResult>();
+      final pending = cache.resolve(
+        request: request,
+        measure: () => gate.future,
+      );
+      cache.dispose();
+      gate.complete(const NovelReaderPaginationMeasureResult(height: 4));
+      expect((await pending).height, 4);
+      cache
+        ..clear()
+        ..put(request, const NovelReaderPaginationMeasureResult(height: 5));
+      expect(cache.isClosed, isTrue);
+      expect(cache.length, 0);
+      expect(cache.estimatedRetainedBytes, 0);
+      var starts = 0;
+      await expectLater(
+        cache.resolve(
+          request: request,
+          measure: () {
+            starts += 1;
+            return Future.value(
+              const NovelReaderPaginationMeasureResult(height: 6),
+            );
+          },
+        ),
+        throwsStateError,
+      );
+      expect(starts, 0);
+    },
+  );
+
+  test(
     'cancellation listeners are scoped and cancelled yields leave no timer',
     () {
       fakeAsync((async) {

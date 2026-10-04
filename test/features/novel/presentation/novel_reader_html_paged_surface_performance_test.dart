@@ -25,6 +25,11 @@ import 'package:y300/features/novel/presentation/services/novel_forum_html_rende
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
@@ -32,6 +37,156 @@ import 'package:y300/features/library_shared/presentation/reader/reader_models.d
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
+  testWidgets('remounting the paged surface hits the reader session plan', (
+    tester,
+  ) async {
+    final owner = NovelReaderPaginationSessionCache();
+    final diagnostics = _RecordingDiagnosticsSink();
+    final host =
+        _BudgetSurfaceHost(
+            _BudgetPaginationCoordinator(),
+            enforceBudgets: false,
+          )
+          ..useDefaultCoordinator = true
+          ..paginationCache = owner.paginationCache
+          ..measureCache = owner.measureCache
+          ..boundaryCache = owner.boundaryCache
+          ..preparedCache = owner.preparedChapterCache
+          ..diagnosticsSink = diagnostics;
+    addTearDown(owner.dispose);
+    await tester.pumpWidget(host.build());
+    for (
+      var frame = 0;
+      frame < 120 && owner.paginationCache.length == 0;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pumpAndSettle();
+    final cold = diagnostics.records.lastWhere((entry) => entry.isComplete);
+    expect(cold.cacheHit, isFalse);
+    expect(
+      owner.paginationCache.length,
+      1,
+      reason: 'closed=${owner.isClosed}, ${diagnostics.records}',
+    );
+    expect(owner.preparedChapterCache.length, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(owner.isClosed, isFalse);
+    diagnostics.records.clear();
+    await tester.pumpWidget(host.build());
+    await tester.pumpAndSettle();
+    final warm = diagnostics.records.lastWhere((entry) => entry.isComplete);
+    expect(warm.cacheHit, isTrue);
+    expect(warm.paginationKey, cold.paginationKey);
+    expect(warm.pageCount, cold.pageCount);
+    expect(
+      find.byKey(const Key('novel-reader-paged-page-view')),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final cacheKind in ['plan', 'measure', 'boundary']) {
+    testWidgets('same layout rebinds a replaced $cacheKind cache', (
+      tester,
+    ) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      final originalKey = coordinator.attempts.single.key;
+      final originalCache = NovelReaderPaginationCache();
+      final originalMeasureCache = NovelReaderPaginationMeasureCache();
+      final originalBoundaryCache = NovelReaderComplexHtmlBoundaryCache();
+      switch (cacheKind) {
+        case 'plan':
+          host.paginationCache = originalCache;
+        case 'measure':
+          host.measureCache = originalMeasureCache;
+        case 'boundary':
+          host.boundaryCache = originalBoundaryCache;
+      }
+      await tester.pumpWidget(host.build());
+      await tester.pump();
+      await tester.pump();
+      expect(coordinator.attempts, hasLength(2));
+      expect(coordinator.attempts.last.key, originalKey);
+      expect(coordinator.cancelPendingCount, greaterThan(0));
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      coordinator.fail(0);
+      coordinator.emit(1, pageCount: 3, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-pagination-failure')),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(originalCache.isClosed, isFalse);
+      expect(originalMeasureCache.isClosed, isFalse);
+      expect(originalBoundaryCache.isClosed, isFalse);
+      expect(tester.takeException(), isNull);
+      originalCache.dispose();
+      originalMeasureCache.dispose();
+      originalBoundaryCache.dispose();
+    });
+  }
+
+  testWidgets(
+    'same HTML hash rechecks changed semantic conversion provenance',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final preparation = _GatedPreparationService();
+      final host = _BudgetSurfaceHost(
+        coordinator,
+        preparationService: preparation,
+        enforceBudgets: false,
+      );
+      _disposeBudgetHost(tester, coordinator);
+      NovelReaderDocument document(String identity) => NovelReaderDocument(
+        episodeId: _episode.episodeId,
+        rawHtmlHash: 'same-raw-hash',
+        body: RichDocument.empty,
+        plainText: '',
+        wordCount: 0,
+        textConversionIdentity: identity,
+      );
+      host.semanticDocument = document('original');
+      await _pumpBudgetHost(tester, host);
+      host.semanticDocument = document('simplified');
+      await tester.pumpWidget(host.build());
+      await tester.pump();
+      expect(preparation.requests, hasLength(2));
+      expect(
+        preparation.semanticDocuments.map((doc) => doc?.textConversionIdentity),
+        ['original', 'simplified'],
+      );
+      final chapter = await const DefaultNovelReaderHtmlPreparationService()
+          .prepare(
+            rawHtml: _budgetRawHtml,
+            episode: _episode,
+            preferences: const NovelHtmlReaderPreferencesAdapter().map(
+              host.preferences,
+            ),
+            theme: host.htmlTheme,
+            sourceId: _episode.episodeId,
+            threadId: _episode.sourceTid,
+            imageCacheOwnerId: _episode.sourceTid,
+          );
+      preparation.requests.first.complete(chapter);
+      await tester.pump();
+      expect(coordinator.attempts, isEmpty);
+      preparation.requests.last.complete(chapter);
+      await tester.pump();
+      await tester.pump();
+      expect(coordinator.attempts, hasLength(1));
+    },
+  );
+
   testWidgets('paged surface uses safe insets in its pagination geometry', (
     tester,
   ) async {
@@ -946,6 +1101,14 @@ final class _BudgetSurfaceHost {
   final navigation = NovelReaderPagedNavigationController();
   int scrollChoices = 0;
   NovelReaderAnchorNavigationRequest? navigationRequest;
+  NovelReaderDocument? semanticDocument;
+  NovelReaderPaginationCache? paginationCache;
+  NovelReaderPaginationMeasureCache? measureCache;
+  NovelReaderComplexHtmlBoundaryCache? boundaryCache;
+  NovelReaderPreparedChapterCache? preparedCache;
+  bool useDefaultCoordinator = false;
+  NovelReaderPaginationDiagnosticsSink diagnosticsSink =
+      const NovelReaderNoopPaginationDiagnosticsSink();
   NovelReaderProgressSnapshot snapshot = const NovelReaderProgressSnapshot(
     novelId: 'performance-novel',
     episodeId: 'performance-episode',
@@ -960,6 +1123,7 @@ final class _BudgetSurfaceHost {
     home: Scaffold(
       body: NovelReaderHtmlPagedSurface(
         rawHtml: _budgetRawHtml,
+        semanticDocument: semanticDocument,
         episode: _episode,
         preferences: preferences,
         typography: typography,
@@ -968,8 +1132,13 @@ final class _BudgetSurfaceHost {
         progressSnapshot: snapshot,
         navigationRequest: navigationRequest,
         navigationController: navigation,
-        coordinatorBuilder: coordinatorBuilder,
+        coordinatorBuilder: useDefaultCoordinator ? null : coordinatorBuilder,
         preparationService: preparationService,
+        paginationCache: paginationCache,
+        paginationMeasureCache: measureCache,
+        paginationBoundaryCache: boundaryCache,
+        preparedChapterCache: preparedCache,
+        diagnosticsSink: diagnosticsSink,
         performancePolicy: NovelReaderPaginationPerformancePolicy(
           targetPageWait: targetPageWait,
           backgroundIdle: backgroundIdle,
@@ -987,6 +1156,7 @@ final class _BudgetSurfaceHost {
 final class _GatedPreparationService
     implements NovelReaderHtmlPreparationService {
   final requests = <Completer<NovelReaderPreparedChapter>>[];
+  final semanticDocuments = <NovelReaderDocument?>[];
 
   @override
   int get legacyMarkupNormalizerRevision => 1;
@@ -1003,6 +1173,7 @@ final class _GatedPreparationService
     NovelReaderDocument? semanticDocument,
   }) {
     final request = Completer<NovelReaderPreparedChapter>();
+    semanticDocuments.add(semanticDocument);
     requests.add(request);
     return request.future;
   }

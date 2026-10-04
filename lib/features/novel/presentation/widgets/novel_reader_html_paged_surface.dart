@@ -188,6 +188,7 @@ class _NovelReaderHtmlPagedSurfaceState
     extends State<NovelReaderHtmlPagedSurface> {
   Future<NovelReaderPreparedChapter>? _prepareFuture;
   Object? _prepareSignature;
+  bool _refreshPreparation = false;
   NovelReaderPaginationCoordinator? _coordinator;
   Object? _coordinatorSignature;
   Stream<NovelReaderPaginationProgress>? _planStream;
@@ -235,6 +236,14 @@ class _NovelReaderHtmlPagedSurfaceState
   void didUpdateWidget(covariant NovelReaderHtmlPagedSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     _ensurePreparationFuture();
+    if (oldWidget.paginationCache != widget.paginationCache ||
+        oldWidget.paginationMeasureCache != widget.paginationMeasureCache ||
+        oldWidget.paginationBoundaryCache != widget.paginationBoundaryCache) {
+      _cancelPendingPagination();
+      _coordinator = null;
+      _coordinatorSignature = null;
+      _startTargetWaitTimer();
+    }
     if (oldWidget.performancePolicy != widget.performancePolicy) {
       _cancelPerformanceTimers();
       if (_requestError == null) {
@@ -261,6 +270,10 @@ class _NovelReaderHtmlPagedSurfaceState
   void dispose() {
     _cancelPerformanceTimers();
     _cancelPendingPagination();
+    _ownedCache?.dispose();
+    _ownedMeasureCache?.dispose();
+    _ownedBoundaryCache?.dispose();
+    _ownedPreparedCache?.dispose();
     super.dispose();
   }
 
@@ -626,6 +639,9 @@ class _NovelReaderHtmlPagedSurfaceState
       referer: widget.imageReferer,
       textScale: MediaQuery.textScalerOf(context).scale(1000).round(),
       builder: widget.coordinatorBuilder,
+      cache: widget.paginationCache,
+      measureCache: widget.paginationMeasureCache,
+      boundaryCache: widget.paginationBoundaryCache,
     );
     if (_coordinator == null || _coordinatorSignature != coordinatorSignature) {
       if (_coordinator != null) {
@@ -1121,6 +1137,8 @@ class _NovelReaderHtmlPagedSurfaceState
       episodeId: widget.episode.episodeId,
       sourceTid: widget.episode.sourceTid,
       semanticDocumentHash: widget.semanticDocument?.rawHtmlHash,
+      textConversionIdentity: widget.semanticDocument?.textConversionIdentity,
+      cache: widget.preparedChapterCache,
       preferences: htmlPreferences,
       themeSignature: widget.theme.signature,
       preparationService: widget.preparationService,
@@ -1149,7 +1167,9 @@ class _NovelReaderHtmlPagedSurfaceState
       threadId: widget.episode.sourceTid,
       imageCacheOwnerId: widget.episode.sourceTid,
       semanticDocument: widget.semanticDocument,
+      refresh: _refreshPreparation,
     );
+    _refreshPreparation = false;
     _prepareFuture = future;
     unawaited(
       future.then<void>(
@@ -1201,6 +1221,7 @@ class _NovelReaderHtmlPagedSurfaceState
     }
     _cancelPendingPagination();
     setState(() {
+      _refreshPreparation = true;
       _prepareFuture = null;
       _prepareSignature = null;
       _planStream = null;

@@ -51,6 +51,142 @@ import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
+  testWidgets(
+    'reader session caches survive a paged scroll paged mode round trip',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+        firstRawHtml:
+            '<p><span style="font-style:italic">会话缓存正文。</span><ruby>保护<rt>reading</rt></ruby></p>',
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await _pumpPagedCacheReady(tester);
+      final initialSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      final caches = _pagedSurfaceCaches(initialSurface);
+      expect(caches, everyElement(isNotNull));
+      _expectPagedCachesOpen(initialSurface);
+      final planCount = initialSurface.paginationCache!.length;
+      final preparedCount = initialSurface.preparedChapterCache!.length;
+      expect(planCount, greaterThan(0));
+      expect(preparedCount, greaterThan(0));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(NovelReaderPage)),
+        listen: false,
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final controller = container.read(provider.notifier);
+      final preferences = container.read(provider).value!.preferences;
+
+      controller.previewPreferences(
+        preferences.copyWith(flowMode: NovelReaderFlowMode.vertical),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(NovelReaderHtmlPagedSurface), findsNothing);
+      expect(find.byType(NovelReaderHtmlDocumentView), findsOneWidget);
+      _expectPagedCachesOpen(initialSurface);
+      expect(initialSurface.paginationCache!.length, planCount);
+      expect(
+        initialSurface.preparedChapterCache!.length,
+        greaterThanOrEqualTo(preparedCount),
+      );
+
+      controller.previewPreferences(preferences);
+      await _pumpPagedCacheReady(tester);
+      final returnedSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      expect(_pagedSurfaceCaches(returnedSurface), orderedEquals(caches));
+      _expectPagedCachesOpen(returnedSurface);
+      expect(returnedSurface.paginationCache!.length, planCount);
+      expect(
+        returnedSurface.preparedChapterCache!.length,
+        greaterThanOrEqualTo(preparedCount),
+      );
+      expect(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      _expectPagedCachesClosed(returnedSurface);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'reader argument rebinding retires old session caches on the same Page',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults(),
+      );
+      final episode = ValueNotifier('novel:49:100:5001');
+      addTearDown(episode.dispose);
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: repository,
+          home: ValueListenableBuilder<String>(
+            valueListenable: episode,
+            builder: (_, episodeId, _) => NovelReaderPage(
+              novelId: 'novel:49:100',
+              initialEpisodeId: episodeId,
+            ),
+          ),
+        ),
+      );
+      await _pumpPagedCacheReady(tester);
+      final pageElement = tester.element(find.byType(NovelReaderPage));
+      final container = ProviderScope.containerOf(pageElement, listen: false);
+      const oldArgs = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      const newArgs = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5002',
+      );
+      final oldController = container.read(
+        novelReaderControllerProvider(oldArgs).notifier,
+      );
+      final oldSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      final oldCaches = _pagedSurfaceCaches(oldSurface);
+      expect(oldSurface.paginationCache!.length, greaterThan(0));
+
+      episode.value = newArgs.episodeId;
+      await _pumpPagedCacheReady(tester);
+      expect(tester.element(find.byType(NovelReaderPage)), same(pageElement));
+      expect(
+        container.read(novelReaderControllerProvider(newArgs).notifier),
+        isNot(same(oldController)),
+      );
+      _expectPagedCachesClosed(oldSurface);
+      final currentSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      expect(currentSurface.episode.episodeId, newArgs.episodeId);
+      final currentCaches = _pagedSurfaceCaches(currentSurface);
+      for (var index = 0; index < currentCaches.length; index++) {
+        expect(currentCaches[index], isNot(same(oldCaches[index])));
+      }
+      _expectPagedCachesOpen(currentSurface);
+      expect(currentSurface.paginationCache!.length, greaterThan(0));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      _expectPagedCachesClosed(currentSurface);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('short paged chapter starts preparing during route entrance', (
     tester,
   ) async {
@@ -3190,6 +3326,68 @@ void main() {
       );
     },
   );
+}
+
+List<Object?> _pagedSurfaceCaches(NovelReaderHtmlPagedSurface surface) => [
+  surface.paginationCache,
+  surface.paginationMeasureCache,
+  surface.paginationBoundaryCache,
+  surface.preparedChapterCache,
+];
+
+Future<void> _pumpPagedCacheReady(WidgetTester tester) async {
+  for (var frame = 0; frame < 200; frame++) {
+    // Cooperative work can be pending without scheduling a Flutter frame.
+    await tester.pump(const Duration(milliseconds: 16));
+    final surfaces = find.byType(NovelReaderHtmlPagedSurface);
+    if (surfaces.evaluate().length == 1 &&
+        tester
+                .widget<NovelReaderHtmlPagedSurface>(surfaces)
+                .paginationCache!
+                .length >
+            0 &&
+        find
+            .byKey(const Key('novel-reader-paged-page-view'))
+            .evaluate()
+            .isNotEmpty) {
+      await tester.pumpAndSettle();
+      return;
+    }
+  }
+  expect(find.byKey(const Key('novel-reader-paged-page-view')), findsOneWidget);
+  expect(
+    tester
+        .widget<NovelReaderHtmlPagedSurface>(
+          find.byType(NovelReaderHtmlPagedSurface),
+        )
+        .paginationCache!
+        .length,
+    greaterThan(0),
+  );
+}
+
+void _expectPagedCachesOpen(NovelReaderHtmlPagedSurface surface) {
+  expect([
+    surface.paginationCache!.isClosed,
+    surface.paginationMeasureCache!.isClosed,
+    surface.paginationBoundaryCache!.isClosed,
+    surface.preparedChapterCache!.isClosed,
+  ], everyElement(isFalse));
+}
+
+void _expectPagedCachesClosed(NovelReaderHtmlPagedSurface surface) {
+  expect([
+    surface.paginationCache!.isClosed,
+    surface.paginationMeasureCache!.isClosed,
+    surface.paginationBoundaryCache!.isClosed,
+    surface.preparedChapterCache!.isClosed,
+  ], everyElement(isTrue));
+  expect([
+    surface.paginationCache!.length,
+    surface.paginationMeasureCache!.length,
+    surface.paginationBoundaryCache!.length,
+    surface.preparedChapterCache!.length,
+  ], everyElement(0));
 }
 
 Future<void> _showReaderMenu(WidgetTester tester) async {

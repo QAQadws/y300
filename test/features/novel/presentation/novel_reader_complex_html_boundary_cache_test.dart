@@ -7,6 +7,123 @@ import 'package:y300/features/novel/presentation/services/novel_reader_complex_h
 
 void main() {
   test(
+    'boundary byte LRU rejects oversized sessions and clears accounting',
+    () async {
+      const indexer = DefaultNovelReaderComplexHtmlBoundaryIndexer();
+      final probe = NovelReaderComplexHtmlBoundaryCache();
+      Future<NovelReaderComplexHtmlBoundaryCacheResult> resolve(
+        NovelReaderComplexHtmlBoundaryCache cache,
+        String html,
+      ) {
+        final request = _request(html);
+        return cache.resolve(
+          request: request,
+          build: () =>
+              indexer.prepare(html: html, startAnchor: request.startAnchor),
+        );
+      }
+
+      await resolve(probe, '<p>A</p>');
+      await resolve(probe, '<p>B</p>');
+      final budget = probe.estimatedRetainedBytes;
+      final cache = NovelReaderComplexHtmlBoundaryCache(
+        capacity: 8,
+        maxEstimatedBytes: budget,
+      );
+      await resolve(cache, '<p>A</p>');
+      await resolve(cache, '<p>B</p>');
+      expect((await resolve(cache, '<p>A</p>')).fromCache, isTrue);
+      await resolve(cache, '<p>C</p>');
+      expect(cache.length, 2);
+      expect((await resolve(cache, '<p>A</p>')).fromCache, isTrue);
+      expect((await resolve(cache, '<p>C</p>')).fromCache, isTrue);
+      expect((await resolve(cache, '<p>B</p>')).fromCache, isFalse);
+      final large = '<p>${'长块' * 1000}</p>';
+      expect((await resolve(cache, large)).fromCache, isFalse);
+      expect((await resolve(cache, large)).fromCache, isFalse);
+      expect(cache.length, 2);
+      expect(cache.estimatedRetainedBytes, lessThanOrEqualTo(budget));
+      cache.clear();
+      expect(cache.estimatedRetainedBytes, 0);
+      await resolve(cache, '<p>A</p>');
+      expect(cache.length, 1);
+    },
+  );
+
+  test(
+    'clear prevents a queued boundary build from filling a new generation',
+    () async {
+      final cache = NovelReaderComplexHtmlBoundaryCache();
+      const indexer = DefaultNovelReaderComplexHtmlBoundaryIndexer();
+      final request = _request('<p>same</p>');
+      final oldSession = indexer.prepare(
+        html: '<p>old</p>',
+        startAnchor: request.startAnchor,
+      );
+      final currentSession = indexer.prepare(
+        html: request.html,
+        startAnchor: request.startAnchor,
+      );
+      final old = cache.resolve(request: request, build: () => oldSession);
+      cache.clear();
+      final current = cache.resolve(
+        request: request,
+        build: () => currentSession,
+      );
+      final joined = cache.resolve(
+        request: request,
+        build: () => throw StateError('must coalesce'),
+      );
+      expect((await old).session, same(oldSession));
+      expect((await current).session, same(currentSession));
+      expect((await joined).joinedInFlight, isTrue);
+      final cached = await cache.resolve(
+        request: request,
+        build: () => throw StateError('must be cached'),
+      );
+      expect(cached.session, same(currentSession));
+      expect(cache.length, 1);
+    },
+  );
+
+  test(
+    'disposed boundary cache rejects builds and cannot receive queued results',
+    () async {
+      final cache = NovelReaderComplexHtmlBoundaryCache();
+      final request = _request('<p>pending</p>');
+      const indexer = DefaultNovelReaderComplexHtmlBoundaryIndexer();
+      final pending = cache.resolve(
+        request: request,
+        build: () => indexer.prepare(
+          html: request.html,
+          startAnchor: request.startAnchor,
+        ),
+      );
+      cache.dispose();
+      await pending;
+      cache.clear();
+      expect(cache.isClosed, isTrue);
+      expect(cache.length, 0);
+      expect(cache.estimatedRetainedBytes, 0);
+      var builds = 0;
+      await expectLater(
+        cache.resolve(
+          request: request,
+          build: () {
+            builds += 1;
+            return indexer.prepare(
+              html: request.html,
+              startAnchor: request.startAnchor,
+            );
+          },
+        ),
+        throwsStateError,
+      );
+      expect(builds, 0);
+    },
+  );
+
+  test(
     'coalesces builds and then serves the immutable boundary session',
     () async {
       final cache = NovelReaderComplexHtmlBoundaryCache(capacity: 2);

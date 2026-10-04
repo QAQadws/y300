@@ -19,10 +19,14 @@ import 'package:y300/features/novel/domain/repositories/novel_reader_preferences
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 
@@ -1216,7 +1220,7 @@ void main() {
   );
 
   test(
-    'a newly reported partial position reopens without the previous valid percent',
+    'a saved partial position reopens into a complete reflowed plan by its new anchor',
     () async {
       final repository = _ControllerNovelRepository(
         preferences: NovelReaderPreferences.defaults().copyWith(
@@ -1292,6 +1296,81 @@ void main() {
       expect(restored.progressSnapshot.progressPercent, 0);
       expect(restored.progressSnapshot.isProgressPercentValid, isFalse);
       expect(restored.progressSnapshot.pageCount, isNull);
+
+      // Reflow changes both the page index for offset 14 and the layout key.
+      // The reopened persisted snapshot must drive the real restore policy,
+      // rather than independently reconstructing its expected metadata.
+      const completeKey = NovelReaderPaginationKey(
+        episodeId: 'novel:49:100:5001',
+        contentHash: 'same-semantic-content',
+        viewportWidthPx: 320,
+        viewportHeightPx: 600,
+        typographySignature: 'reflowed-type',
+        themeSignature: 'theme',
+        imageDimensionRevision: 1,
+        rendererRevision: 19,
+      );
+      const boundaries = [0, 5, 10, 20, 30];
+      const text = '0123456789abcdefghijklmnopqrst';
+      final completePlan = NovelReaderPaginationPlan(
+        key: completeKey,
+        episodeId: args.episodeId,
+        pages: [
+          for (var index = 0; index < boundaries.length - 1; index++)
+            NovelReaderPageFragment(
+              index: index,
+              html:
+                  '<p>${text.substring(boundaries[index], boundaries[index + 1])}</p>',
+              startAnchor: NovelReaderTextAnchor(
+                episodeId: args.episodeId,
+                nodeId: 'node-2',
+                textOffset: boundaries[index],
+                formatVersion: 1,
+                textIdentity: 'semantic-text-v1',
+              ),
+              endAnchor: NovelReaderTextAnchor(
+                episodeId: args.episodeId,
+                nodeId: 'node-2',
+                textOffset: boundaries[index + 1],
+                formatVersion: 1,
+                textIdentity: 'semantic-text-v1',
+              ),
+              imageIndices: const [],
+            ),
+        ],
+      );
+      final reopenedSnapshot = restored.progressSnapshot;
+      expect(reopenedSnapshot.pageIndex, 1);
+      expect(
+        reopenedSnapshot.paginationKey,
+        isNot(completeKey.layoutFingerprint),
+      );
+      const restorePolicy = NovelReaderPaginationRestorePolicy();
+      final resolution = restorePolicy.resolveAvailablePage(
+        plan: completePlan,
+        snapshot: reopenedSnapshot,
+        isPlanComplete: true,
+      );
+      expect(resolution, isNotNull);
+      expect(resolution!.pageIndex, 2);
+      expect(resolution.isReadOnlyCompatibilityRestore, isFalse);
+      expect(
+        completePlan.pages[resolution.pageIndex].html,
+        '<p>abcdefghij</p>',
+      );
+      // The previous valid percentage would select a different page. Keeping
+      // it alongside the new anchor would therefore regress this round trip.
+      expect(
+        restorePolicy
+            .resolveInitialPage(
+              plan: completePlan,
+              snapshot: loaded.progressSnapshot,
+            )
+            .pageIndex,
+        3,
+      );
+      expect(reopenedSnapshot.anchorTextOffset, 14);
+      expect(reopenedSnapshot.isProgressPercentValid, isFalse);
     },
   );
 
