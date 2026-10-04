@@ -11,7 +11,8 @@ const _packageEntry = '${_packageLib}forum_content_renderer.dart';
 const _sharedRoot = 'lib/features/content_rendering_shared/';
 const _publicEntry = '${_sharedRoot}content_rendering.dart';
 const _threadHtmlRoot = 'lib/features/thread/presentation/html_rendering/';
-const _retiredThreadEntries = {
+const _retiredRenderingEntries = {
+  '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
   '${_threadHtmlRoot}forum_html_cached_image_widget_factory.dart',
   '${_threadHtmlRoot}forum_html_content_layout.dart',
   '${_threadHtmlRoot}forum_html_content_view.dart',
@@ -71,6 +72,7 @@ void main() {
       [_packageEntry],
     );
     for (final path in [
+      ..._retiredRenderingEntries,
       'lib/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart',
       'lib/features/reader_shared/presentation/rich_text/color/rich_text_color_contrast.dart',
       'lib/features/reader_shared/presentation/rich_text/color/rich_text_tone_resolver.dart',
@@ -151,25 +153,30 @@ import '../../../test/test_support/localized_test_app.dart';
     expect(violations, isEmpty, reason: violations.join('\n'));
   });
 
-  test('shared code rejects thread and app Host dependencies', () {
-    const source =
-        '${_sharedRoot}presentation/html_rendering/new_renderer.dart';
-    expect(
-      _violationTargets(source, '''
+  test(
+    'shared code rejects retired entries and thread or app Host dependencies',
+    () {
+      const source =
+          '${_sharedRoot}presentation/html_rendering/new_renderer.dart';
+      expect(
+        _violationTargets(source, '''
 import 'package:y300/features/thread/presentation/services/new_session.dart';
 export '../../../thread/presentation/thread_detail_page.dart';
 import 'package:y300/app/content_rendering/new_host.dart';
+import 'forum_html_render_preparer.dart';
 '''),
-      {
-        'lib/features/thread/presentation/services/new_session.dart',
-        'lib/features/thread/presentation/thread_detail_page.dart',
-        'lib/app/content_rendering/new_host.dart',
-      },
-    );
-  });
+        {
+          'lib/features/thread/presentation/services/new_session.dart',
+          'lib/features/thread/presentation/thread_detail_page.dart',
+          'lib/app/content_rendering/new_host.dart',
+          '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
+        },
+      );
+    },
+  );
 
   test(
-    'consumers cannot bypass the facade or reuse retired thread entries',
+    'consumers cannot bypass the facade or reuse retired rendering entries',
     () {
       const source = 'lib/features/novel/presentation/new_reader.dart';
       expect(
@@ -334,7 +341,7 @@ String _target(String source, String uri) =>
     : resolveDartDependencyTarget(source, uri);
 
 bool _isForbidden(String source, String target) {
-  if (_retiredThreadEntries.contains(target)) return true;
+  if (_retiredRenderingEntries.contains(target)) return true;
   if (source.startsWith(_packageRoot)) {
     final library = source.startsWith(_packageLib);
     if (_preparationPolicyFiles.contains(source) &&

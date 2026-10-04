@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'dart_dependency_directives.dart';
 
 const _publicEntry = 'package:forum_markup_core/forum_markup_core.dart';
-const _packageLib = 'packages/forum_markup_core/lib/';
+const _packageRoot = 'packages/forum_markup_core';
 const _retiredCorePaths = <String>{
   'lib/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart',
   'lib/features/composer_shared/domain/services/composer_collapse_bbcode_grammar.dart',
@@ -48,6 +48,30 @@ void main() {
       reason: 'The pure core is owned by forum_markup_core.',
     );
   });
+
+  test(
+    'package tests and example stay independent and use the public entry',
+    () {
+      final violations = <String>[];
+      for (final root in ['$_packageRoot/test', '$_packageRoot/example']) {
+        final files = Directory(root)
+            .listSync(recursive: true, followLinks: false)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'));
+        expect(files, isNotEmpty, reason: 'The $root source root must exist.');
+        for (final file in files) {
+          final source = normalizeDartSourcePath(file.path);
+          for (final target in _packageConsumerForbiddenTargets(
+            source,
+            file.readAsStringSync(encoding: utf8),
+          )) {
+            violations.add('$source -> $target');
+          }
+        }
+      }
+      expect(violations..sort(), isEmpty);
+    },
+  );
 
   test(
     'ordinary domain imports and the public package entry remain allowed',
@@ -93,12 +117,43 @@ export 'package:y300/features/composer_shared/domain/services/composer_attach_bb
 import '../models/composer_collapse_models.dart';
 import '../../../../../packages/forum_markup_core/lib/src/composer_collapse_models.dart';
 export '../../../../../packages/forum_markup_core/lib/forum_markup_core.dart';
+import '../../../../../packages/forum_markup_core/test/fixture.dart';
+export '../../../../../packages/forum_markup_core/example/basic_markup.dart';
 '''),
       {
         'lib/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart',
         'lib/features/composer_shared/domain/models/composer_collapse_models.dart',
         'packages/forum_markup_core/lib/src/composer_collapse_models.dart',
         'packages/forum_markup_core/lib/forum_markup_core.dart',
+        'packages/forum_markup_core/test/fixture.dart',
+        'packages/forum_markup_core/example/basic_markup.dart',
+      },
+    );
+  });
+
+  test('package consumers cannot bypass the barrel or use App fixtures', () {
+    expect(
+      _packageConsumerForbiddenTargets('$_packageRoot/test/new_test.dart', '''
+import '$_publicEntry';
+import 'package:test/test.dart';
+import 'dart:io';
+import 'fixtures/input.dart';
+import '../example/basic_markup.dart';
+import '../lib/forum_markup_core.dart';
+import '../lib/src/composer_collapse_models.dart';
+export '$_publicEntry'
+  if (dart.library.io) 'package:forum_markup_core/src/composer_attach_bbcode_grammar.dart';
+import '../../../test/root_fixture.dart';
+import 'package:y300/app.dart';
+import 'package:flutter_test/flutter_test.dart';
+'''),
+      {
+        '$_packageRoot/lib/forum_markup_core.dart',
+        '$_packageRoot/lib/src/composer_collapse_models.dart',
+        'package:forum_markup_core/src/composer_attach_bbcode_grammar.dart',
+        'test/root_fixture.dart',
+        'lib/app.dart',
+        'package:flutter_test/flutter_test.dart',
       },
     );
   });
@@ -131,6 +186,29 @@ bool _isForbidden(String uri, String target) {
       uri.startsWith('package:forum_markup_core/')) {
     return uri != _publicEntry;
   }
-  // Relative imports of even the barrel bypass the canonical package URI.
-  return target.startsWith(_packageLib);
+  // App consumers cannot enter package fixtures or even the barrel by path.
+  return target.startsWith('$_packageRoot/');
+}
+
+Set<String> _packageConsumerForbiddenTargets(
+  String sourcePath,
+  String source,
+) => {
+  for (final uri in dartDependencyDirectiveUris(source))
+    if (!_isAllowedPackageConsumer(
+      uri,
+      resolveDartDependencyTarget(sourcePath, uri),
+    ))
+      resolveDartDependencyTarget(sourcePath, uri),
+};
+
+bool _isAllowedPackageConsumer(String uri, String target) {
+  if (uri == 'package:forum_markup_core' ||
+      uri.startsWith('package:forum_markup_core/')) {
+    return uri == _publicEntry;
+  }
+  return (target.startsWith('dart:') && target != 'dart:ui') ||
+      target == 'package:test/test.dart' ||
+      target.startsWith('$_packageRoot/test/') ||
+      target.startsWith('$_packageRoot/example/');
 }

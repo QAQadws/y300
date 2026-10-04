@@ -1,10 +1,12 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart'
+    show DefaultForumHtmlRenderPreparer, ForumHtmlReaderPreferences;
 import 'forum_html_test_theme.dart';
 
 void main() {
@@ -128,9 +130,43 @@ void main() {
     expect(fragment.querySelectorAll('img'), hasLength(1));
   });
 
+  test('custom document origin preserves the default deduplication origin', () {
+    const origin = SiteUrlResolver(
+      siteOrigin: 'https://origin.example.invalid/base/',
+    );
+    const preparer = DefaultForumHtmlRenderPreparer(
+      urlResolver: origin,
+      imagePolicy: _ImagePolicy(),
+    );
+
+    final prepared = preparer.prepare(
+      html:
+          '<img id="aimg_9" src="data/attachment/forum/page.jpg">'
+          '<img id="aimg_9" '
+          'src="https://bbs.yamibo.com/data/attachment/forum/page.jpg">',
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: forumHtmlTestTheme,
+      sourceId: 'independent-default-deduplication',
+      threadId: null,
+      imageCacheOwnerId: null,
+    );
+
+    expect(prepared.totalImageCount, 1);
+    expect(prepared.sequence.entries, hasLength(1));
+    expect(prepared.sequence.entries.single.index, 0);
+    expect(
+      prepared.sequence.entries.single.rawSrc,
+      'data/attachment/forum/page.jpg',
+    );
+    expect(
+      prepared.sequence.entries.single.url,
+      'https://origin.example.invalid/base/data/attachment/forum/page.jpg',
+    );
+  });
+
   test('core pipeline uses neutral resources and the explicit URL origin', () {
     final origin = Uri.parse('https://origin.example.invalid/base/');
-    final pipeline = ForumHtmlRenderPipeline(
+    final pipeline = ForumHtmlPreparationPipeline(
       imagePolicy: const _ImagePolicy(),
       resolveUrl: (raw) => origin.resolve(raw).toString(),
     );
@@ -140,7 +176,12 @@ void main() {
           '<img id="aimg_9" '
           'src="https://origin.example.invalid/base/first.jpg">'
           '<img id="aimg_10" src="last.jpg" width="320" height="600">',
-      preferences: ForumHtmlReaderPreferences.defaults(),
+      options: const ForumHtmlRenderOptions(
+        fontScale: 1.15,
+        lineHeightScale: 1.5,
+        paragraphSpacing: 12,
+        preserveAuthorFontSize: true,
+      ),
       theme: forumHtmlTestTheme,
       sourceId: 'neutral-image-pipeline',
       threadId: null,

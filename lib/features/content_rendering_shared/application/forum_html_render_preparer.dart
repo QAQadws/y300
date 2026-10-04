@@ -4,7 +4,7 @@ import 'package:y300/features/content_rendering_shared/application/host/forum_ca
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'forum_html_render_preferences_projection.dart';
 
 /// App defaults stay as values so this facade can cross preparation isolates.
 class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
@@ -42,7 +42,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     required String? threadId,
     required String? imageCacheOwnerId,
   }) =>
-      ForumHtmlRenderPipeline(
+      ForumHtmlPreparationPipeline(
         imagePolicy:
             _imagePolicy ??
             ForumCacheHtmlPreparationImagePolicy(
@@ -60,7 +60,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         resolveUrl: _urlResolver.resolve,
       ).prepare(
         html: html,
-        preferences: preferences,
+        options: preferences.renderOptions,
         theme: theme,
         sourceId: sourceId,
         threadId: threadId,

@@ -164,11 +164,18 @@ import '../../../../lib/features/comic/domain/models/comic_models.dart';
 import '$_publicEntry';
 import 'package:test/test.dart';
 import 'fixtures/generated_cases.dart';
+import '../lib/content_title_core.dart';
+import '../lib/src/comic/comic_title_rules.dart';
+export '$_publicEntry'
+  if (dart.library.io) 'package:content_title_core/src/comic/comic_title_analysis.dart';
 import '../../../test/features/comic/domain/services/comic_title_parser_cases.dart';
 export 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 ''', _Scope.packageConsumer),
       {
+        _publicSource,
+        '${_packageLib}src/comic/comic_title_rules.dart',
+        '${_packageLib}src/comic/comic_title_analysis.dart',
         'test/features/comic/domain/services/comic_title_parser_cases.dart',
         'lib/features/comic/domain/models/comic_models.dart',
         'package:flutter_test/flutter_test.dart',
@@ -343,8 +350,13 @@ bool _isAllowed(String source, String uri, String target, _Scope scope) {
         _runtimePackageEntries.contains(target) ||
         target.startsWith(_packageLib);
   }
+  if (uri == 'package:content_title_core' ||
+      uri.startsWith('package:content_title_core/')) {
+    return uri == _publicEntry;
+  }
   return (target.startsWith('dart:') && target != 'dart:ui') ||
       target == 'package:test/test.dart' ||
       _runtimePackageEntries.contains(target) ||
-      target.startsWith('$_packageRoot/');
+      target.startsWith('$_packageRoot/test/') ||
+      target.startsWith('$_packageRoot/example/');
 }

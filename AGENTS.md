@@ -92,5 +92,5 @@ Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
 - 新增小说作品标题清洗或纯文本章节标题样本，添加到 `packages/content_title_core/test/fixtures/novel_title_fixtures.dart`；算法样本只维护一份，不放进生产 barrel。
 - 漫画 subject 业务映射、重复匹配和交互样本继续归 `test/features/comic/domain/services/comic_title_parser_cases.dart`。
 - 小说 HTML/分页集成样本继续归应用 `test/features/novel/test_support/`；原 `novel_title_fixtures.dart` 只桥接包内标题样本，并保有 HTML wrapper/分页标识，不复制算法语料。
-- 包内测试不得读取 App 文件或导入 Flutter。App 仅通过上述小说 fixture 桥接复用包内测试数据；新增跨边界测试引用须明确归属并更新对应守护。
+- `content_title_core` 包内测试不得读取 App 文件或导入 Flutter。App 仅通过上述小说 fixture 桥接复用包内测试数据；新增跨边界测试引用须明确归属并更新对应守护。
 - 图片几何算法与纯参考样本维护在 `packages/continuous_image_geometry/test/`；Host 图片映射、视口 Widget、恢复/seek 与会话回归继续归应用测试，不跨边界引用包内测试 fixture。
