@@ -7,7 +7,7 @@ import 'package:y300/core/network/browser_user_agents.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/data/services/webview_login_progress.dart';
 import 'package:y300/features/auth/data/services/webview_login_session_resolver.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/auth_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
 

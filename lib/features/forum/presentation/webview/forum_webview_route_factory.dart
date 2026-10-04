@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
@@ -23,7 +23,7 @@ final forumWebViewRouteFactoryProvider = Provider<ForumWebViewRouteFactory>((
         )
         ? resolver.resolveForViewer(
             config.initialUri.toString(),
-            readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+            readViewerUserId: () => ref.read(verifiedSessionOwnerProvider)?.uid,
           )
         : null;
     final nativePage = ref.read(nativeForumLinkPageFactoryProvider);

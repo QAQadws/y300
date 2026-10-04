@@ -5,7 +5,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
 import 'package:y300/features/profile/domain/daily_sign_in_attempt_ledger.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 const _unchanged = Object();
 
@@ -29,7 +29,7 @@ final class DailySignInViewState {
     this.checkpointUnavailable = false,
   });
 
-  final VerifiedProfileOwner? owner;
+  final VerifiedSessionOwner? owner;
   final ForumDailySignInSnapshot? snapshot;
   final DataReadFailure<
     ForumDailySignInSnapshot,
@@ -72,7 +72,7 @@ final class DailySignInViewState {
   }) => DailySignInViewState(
     owner: identical(owner, _unchanged)
         ? this.owner
-        : owner as VerifiedProfileOwner?,
+        : owner as VerifiedSessionOwner?,
     snapshot: identical(snapshot, _unchanged)
         ? this.snapshot
         : snapshot as ForumDailySignInSnapshot?,
@@ -119,16 +119,16 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   int _automaticEpoch = 0;
   Future<ForumDailySignInPreparationToken?>? _readFlight;
   Future<void>? _submitFlight;
-  VerifiedProfileOwner? _submitFlightOwner;
+  VerifiedSessionOwner? _submitFlightOwner;
   Future<void>? _automaticFlight;
-  VerifiedProfileOwner? _automaticFlightOwner;
+  VerifiedSessionOwner? _automaticFlightOwner;
   bool _submittingAutomatically = false;
   ForumRequestCancellation? _readCancellation;
   ForumRequestCancellation? _submitCancellation;
 
   @override
   DailySignInViewState build() {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     _generation++;
     _automaticEpoch++;
     _readCancellation?.cancel();
@@ -159,7 +159,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   }
 
   Future<void> _loadAutoPreference(
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     int generation,
   ) async {
     try {
@@ -225,7 +225,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   }
 
   Future<ForumDailySignInPreparationToken?> _refreshPreparation(
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
   ) {
     if (_readFlight != null) return _readFlight!;
     final future = _load(owner, _generation);
@@ -236,7 +236,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   }
 
   Future<ForumDailySignInPreparationToken?> _load(
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     int generation, {
     ForumRequestCancellation? cancellation,
     bool prepare = true,
@@ -402,7 +402,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   }
 
   Future<void> _runAutomatic(
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     int generation,
     int epoch,
   ) async {
@@ -480,7 +480,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   }
 
   Future<void> _startSubmit(
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     String forumDay,
     int generation, {
     required bool automatic,
@@ -520,7 +520,7 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   }
 
   Future<void> _executeSubmit(
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     String forumDay,
     int generation, {
     required bool automatic,
@@ -687,13 +687,13 @@ class DailySignInController extends Notifier<DailySignInViewState> {
   }
 
   bool _automaticIsCurrent(
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     int generation,
     int epoch,
   ) => epoch == _automaticEpoch && _isCurrent(owner, generation);
 
-  bool _isCurrent(VerifiedProfileOwner owner, int generation) =>
+  bool _isCurrent(VerifiedSessionOwner owner, int generation) =>
       ref.mounted &&
       generation == _generation &&
-      ref.read(verifiedProfileOwnerProvider) == owner;
+      ref.read(verifiedSessionOwnerProvider) == owner;
 }

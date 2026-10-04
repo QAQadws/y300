@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/account_display_controller.dart';
 import 'package:y300/features/profile/presentation/current_account_avatar_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -14,7 +14,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 
 const _initialOwner = (uid: '42', revision: 0);
-final _ownerProvider = StateProvider<VerifiedProfileOwner?>((ref) => null);
+final _ownerProvider = StateProvider<VerifiedSessionOwner?>((ref) => null);
 final _previewProvider = StateProvider<String?>((ref) => null);
 
 void main() {
@@ -189,7 +189,7 @@ void main() {
     expect(harness.state.isLoading, isFalse);
   });
 
-  for (final nextOwner in <VerifiedProfileOwner>[
+  for (final nextOwner in <VerifiedSessionOwner>[
     (uid: '43', revision: 1),
     (uid: '42', revision: 1),
   ]) {
@@ -399,7 +399,7 @@ _success(
 final class _Harness {
   _Harness(
     _Repository repository, {
-    VerifiedProfileOwner? owner = _initialOwner,
+    VerifiedSessionOwner? owner = _initialOwner,
     String? preview,
     ImageCacheService? avatarCache,
   }) {
@@ -410,7 +410,7 @@ final class _Harness {
         _previewProvider.overrideWith((_) => preview),
         accountDisplayControllerProvider.overrideWith(_PreviewController.new),
         _ownerProvider.overrideWith((ref) => owner),
-        verifiedProfileOwnerProvider.overrideWith(
+        verifiedSessionOwnerProvider.overrideWith(
           (ref) => ref.watch(_ownerProvider),
         ),
         currentAccountSummaryRepositoryProvider.overrideWithValue(repository),
@@ -430,7 +430,7 @@ final class _Harness {
   ProviderSubscription<CurrentAccountSummaryState> watch() =>
       container.listen(currentAccountSummaryControllerProvider, (_, _) {});
 
-  void setOwner(VerifiedProfileOwner? owner) {
+  void setOwner(VerifiedSessionOwner? owner) {
     container.read(_ownerProvider.notifier).state = owner;
   }
 }

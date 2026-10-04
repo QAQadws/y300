@@ -2,66 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/data/providers/auth_contract_providers.dart';
+import 'package:y300/features/auth/domain/models/auth_session_view_state.dart';
+
+export 'package:y300/features/auth/domain/models/auth_session_view_state.dart';
 
 final authSessionControllerProvider =
     AsyncNotifierProvider.autoDispose<
       AuthSessionController,
       AuthSessionViewState
     >(AuthSessionController.new);
-
-class AuthSessionViewState {
-  const AuthSessionViewState({
-    required this.isLoggedIn,
-    required this.uid,
-    required this.username,
-    required this.isLoggingOut,
-    this.logoutFailure,
-    this.verificationInconclusive = false,
-  });
-
-  final bool isLoggedIn;
-  final String uid;
-  final String username;
-  final bool isLoggingOut;
-  final Object? logoutFailure;
-
-  /// Display caches may survive an offline probe without granting login.
-  final bool verificationInconclusive;
-
-  const AuthSessionViewState.signedOut({this.verificationInconclusive = false})
-    : isLoggedIn = false,
-      uid = '',
-      username = '',
-      isLoggingOut = false,
-      logoutFailure = null;
-
-  factory AuthSessionViewState.fromIdentity(ForumSessionIdentity session) {
-    return AuthSessionViewState(
-      isLoggedIn: true,
-      uid: session.userId,
-      username: session.username,
-      isLoggingOut: false,
-    );
-  }
-
-  AuthSessionViewState copyWith({
-    bool? isLoggedIn,
-    String? uid,
-    String? username,
-    bool? isLoggingOut,
-    Object? logoutFailure,
-    bool clearError = false,
-  }) {
-    return AuthSessionViewState(
-      isLoggedIn: isLoggedIn ?? this.isLoggedIn,
-      uid: uid ?? this.uid,
-      username: username ?? this.username,
-      isLoggingOut: isLoggingOut ?? this.isLoggingOut,
-      logoutFailure: clearError ? null : (logoutFailure ?? this.logoutFailure),
-      verificationInconclusive: verificationInconclusive,
-    );
-  }
-}
 
 class AuthSessionController extends AsyncNotifier<AuthSessionViewState> {
   ForumSessionRepository get _sessionRepository =>

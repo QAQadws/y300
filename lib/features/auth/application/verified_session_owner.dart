@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
+import 'package:y300/features/auth/domain/models/verified_session_owner.dart';
 
-/// A verified account and the local generation of its authenticated session.
-typedef VerifiedProfileOwner = ({String uid, int revision});
+export 'package:y300/features/auth/domain/models/verified_session_owner.dart';
 
 /// The session store emits identity transitions, including logout and a later
 /// login to the same UID. Keeping this generation shared prevents old results
-/// from being displayed by either profile or sign-in pages.
-final profileSessionRevisionProvider = StreamProvider.autoDispose<int>((ref) {
+/// from being accepted by account-bound consumers.
+final sessionRevisionProvider = StreamProvider.autoDispose<int>((ref) {
   final changes = StreamController<int>(sync: true);
   var revision = 0;
   final subscription = ref
@@ -26,16 +26,16 @@ final profileSessionRevisionProvider = StreamProvider.autoDispose<int>((ref) {
   return changes.stream;
 });
 
-final verifiedProfileOwnerProvider =
-    Provider.autoDispose<VerifiedProfileOwner?>(
-      (ref) => verifiedProfileOwner(
+final verifiedSessionOwnerProvider =
+    Provider.autoDispose<VerifiedSessionOwner?>(
+      (ref) => verifiedSessionOwner(
         ref.watch(authSessionControllerProvider),
-        ref.watch(profileSessionRevisionProvider),
+        ref.watch(sessionRevisionProvider),
         ref.read(yamiboSessionStoreProvider).readCurrent(),
       ),
     );
 
-VerifiedProfileOwner? verifiedProfileOwner(
+VerifiedSessionOwner? verifiedSessionOwner(
   AsyncValue<AuthSessionViewState> auth,
   AsyncValue<int> sessionRevision,
   YamiboSessionSnapshot? snapshot,

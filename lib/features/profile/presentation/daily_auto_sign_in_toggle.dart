@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 /// Loads only the account preference; displaying this control never checks
@@ -13,7 +13,7 @@ class DailyAutoSignInToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final state = ref.watch(dailySignInControllerProvider);
     if (owner == null || state.owner != owner) return const SizedBox.shrink();
 
@@ -58,14 +58,14 @@ class DailyAutoSignInToggle extends ConsumerWidget {
   Future<void> _setEnabled(
     BuildContext context,
     WidgetRef ref,
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     bool value,
   ) async {
-    if (ref.read(verifiedProfileOwnerProvider) != owner) return;
+    if (ref.read(verifiedSessionOwnerProvider) != owner) return;
     await ref
         .read(dailySignInControllerProvider.notifier)
         .setAutomaticEnabled(value);
-    if (!context.mounted || ref.read(verifiedProfileOwnerProvider) != owner) {
+    if (!context.mounted || ref.read(verifiedSessionOwnerProvider) != owner) {
       return;
     }
     if (ref.read(dailySignInControllerProvider).settingsUnavailable) {

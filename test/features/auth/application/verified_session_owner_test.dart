@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 const _signedIn = AuthSessionViewState(
   isLoggedIn: true,
@@ -28,7 +28,7 @@ void main() {
 
     for (final auth in unverified) {
       expect(
-        verifiedProfileOwner(auth, const AsyncData(0), snapshot),
+        verifiedSessionOwner(auth, const AsyncData(0), snapshot),
         isNull,
         reason: 'Only a verified, active authentication grants an owner.',
       );
@@ -38,7 +38,7 @@ void main() {
   test('owner requires a valid positive user identity', () {
     for (final uid in ['', '0', '-1', 'member']) {
       expect(
-        verifiedProfileOwner(
+        verifiedSessionOwner(
           AsyncData(_signedIn.copyWith(uid: uid)),
           const AsyncData(0),
           _snapshot(uid),
@@ -55,7 +55,7 @@ void main() {
       AsyncError(StateError('revision_failed'), StackTrace.current),
     ]) {
       expect(
-        verifiedProfileOwner(
+        verifiedSessionOwner(
           const AsyncData(_signedIn),
           revision,
           _snapshot('101'),
@@ -71,7 +71,7 @@ void main() {
       _snapshot('101', isLoggedIn: false),
     ]) {
       expect(
-        verifiedProfileOwner(
+        verifiedSessionOwner(
           const AsyncData(_signedIn),
           const AsyncData(3),
           snapshot,
@@ -80,7 +80,7 @@ void main() {
       );
     }
     expect(
-      verifiedProfileOwner(
+      verifiedSessionOwner(
         AsyncData(_signedIn.copyWith(uid: ' 101 ')),
         const AsyncData(3),
         _snapshot(' 101 '),
@@ -91,7 +91,7 @@ void main() {
 
   test('empty initial store differs from a cleared session store', () {
     expect(
-      verifiedProfileOwner(
+      verifiedSessionOwner(
         const AsyncData(_signedIn),
         const AsyncData(0),
         null,
@@ -99,7 +99,7 @@ void main() {
       (uid: '101', revision: 0),
     );
     expect(
-      verifiedProfileOwner(
+      verifiedSessionOwner(
         const AsyncData(_signedIn),
         const AsyncData(1),
         null,
@@ -113,26 +113,26 @@ void main() {
     () async {
       final sessions = YamiboSessionStore()..saveExtracted(_snapshot('101'));
       final container = _container(sessions);
-      container.listen(verifiedProfileOwnerProvider, (_, _) {});
+      container.listen(verifiedSessionOwnerProvider, (_, _) {});
       await container.read(authSessionControllerProvider.future);
-      await container.read(profileSessionRevisionProvider.future);
+      await container.read(sessionRevisionProvider.future);
       await container.pump();
 
-      final original = container.read(verifiedProfileOwnerProvider);
+      final original = container.read(verifiedSessionOwnerProvider);
       expect(original, isNotNull);
 
       sessions.saveExtracted(_snapshot('101', formhash: 'renewed'));
       await container.pump();
-      expect(container.read(verifiedProfileOwnerProvider), original);
+      expect(container.read(verifiedSessionOwnerProvider), original);
 
       // The old auth projection may remain until its own refresh completes.
       sessions.clear();
       await container.pump();
-      expect(container.read(verifiedProfileOwnerProvider), isNull);
+      expect(container.read(verifiedSessionOwnerProvider), isNull);
 
       sessions.saveExtracted(_snapshot('101'));
       await container.pump();
-      final reopened = container.read(verifiedProfileOwnerProvider);
+      final reopened = container.read(verifiedSessionOwnerProvider);
       expect(reopened?.uid, original!.uid);
       expect(reopened?.revision, greaterThan(original.revision));
       expect(reopened, isNot(original));
@@ -144,22 +144,22 @@ void main() {
     () async {
       final sessions = YamiboSessionStore();
       final container = _container(sessions);
-      container.listen(verifiedProfileOwnerProvider, (_, _) {});
+      container.listen(verifiedSessionOwnerProvider, (_, _) {});
       await container.read(authSessionControllerProvider.future);
-      await container.read(profileSessionRevisionProvider.future);
+      await container.read(sessionRevisionProvider.future);
       await container.pump();
-      expect(container.read(verifiedProfileOwnerProvider), (
+      expect(container.read(verifiedSessionOwnerProvider), (
         uid: '101',
         revision: 0,
       ));
 
       sessions.saveExtracted(_snapshot('0', isLoggedIn: false));
       await container.pump();
-      expect(container.read(verifiedProfileOwnerProvider), isNull);
+      expect(container.read(verifiedSessionOwnerProvider), isNull);
 
       sessions.saveExtracted(_snapshot('101'));
       await container.pump();
-      final confirmed = container.read(verifiedProfileOwnerProvider);
+      final confirmed = container.read(verifiedSessionOwnerProvider);
       expect(confirmed?.uid, '101');
       expect(confirmed?.revision, greaterThan(0));
     },

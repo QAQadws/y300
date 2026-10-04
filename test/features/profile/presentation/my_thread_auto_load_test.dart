@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -287,7 +287,7 @@ void main() {
     },
   );
 
-  for (final replacement in <VerifiedProfileOwner?>[
+  for (final replacement in <VerifiedSessionOwner?>[
     (uid: '202', revision: 1),
     (uid: '101', revision: 1),
     null,
@@ -304,7 +304,7 @@ void main() {
         final abandoned = repository.requests[1];
 
         host.container.updateOverrides([
-          verifiedProfileOwnerProvider.overrideWithValue(replacement),
+          verifiedSessionOwnerProvider.overrideWithValue(replacement),
           userThreadDirectoryRepositoryProvider.overrideWithValue(repository),
         ]);
         await _pumpFrames(tester);
@@ -389,7 +389,7 @@ final class _ThreadTestHost {
   _ThreadTestHost() {
     container = ProviderContainer(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 0,
         )),

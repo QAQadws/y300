@@ -5,7 +5,7 @@ import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 import '../../features/profile/test_support/friend_read_fixture.dart';
 import '../../test_support/localized_test_app.dart';
@@ -22,7 +22,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue((
+          verifiedSessionOwnerProvider.overrideWithValue((
             uid: '101',
             revision: 0,
           )),

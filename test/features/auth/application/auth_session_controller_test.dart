@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/auth/data/providers/auth_contract_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 
 void main() {
   test(

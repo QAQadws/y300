@@ -17,7 +17,7 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_content.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_page_body.dart';
@@ -30,7 +30,7 @@ const _output = String.fromEnvironment('PROFILE_VISUAL_OUTPUT');
 const _font = String.fromEnvironment('PROFILE_VISUAL_FONT');
 const _capture = Key('profile-visual-capture');
 
-final _ownerSource = StateProvider<VerifiedProfileOwner>(
+final _ownerSource = StateProvider<VerifiedSessionOwner>(
   (ref) => (uid: '101', revision: 1),
 );
 
@@ -995,7 +995,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWith(
+        verifiedSessionOwnerProvider.overrideWith(
           (ref) => ref.watch(_ownerSource),
         ),
         forumUserProfileRepositoryProvider.overrideWithValue(

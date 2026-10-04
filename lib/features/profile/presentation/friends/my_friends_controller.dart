@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 typedef FriendFeedRead =
     DataReadResult<ForumFriendFeedPage, ForumFriendFeedReadCapabilities>;
@@ -66,7 +66,7 @@ final class MyFriendsController extends ValueNotifier<MyFriendsPageState> {
     required ForumFriendFeedRepository repository,
     required ForumFriendRemovalCommand removalCommand,
     required this.owner,
-    required VerifiedProfileOwner? Function() currentOwner,
+    required VerifiedSessionOwner? Function() currentOwner,
     required MyFriendsPageArgs args,
   }) : _repository = repository,
        _removalCommand = removalCommand,
@@ -83,8 +83,8 @@ final class MyFriendsController extends ValueNotifier<MyFriendsPageState> {
 
   final ForumFriendFeedRepository _repository;
   final ForumFriendRemovalCommand _removalCommand;
-  final VerifiedProfileOwner? owner;
-  final VerifiedProfileOwner? Function() _currentOwner;
+  final VerifiedSessionOwner? owner;
+  final VerifiedSessionOwner? Function() _currentOwner;
   final _retained = <ForumFriendFeedScope, MyFriendsPageState>{};
   final _stale = <ForumFriendFeedScope>{};
   final _unverified = <String>{};

@@ -5,12 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/y300_app.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/startup/presentation/daily_sign_in_automation_host.dart';
 
 const _firstOwner = (uid: '654321', revision: 1);
 const _secondOwner = (uid: '777777', revision: 2);
-final _testOwnerProvider = StateProvider<VerifiedProfileOwner?>((ref) => null);
+final _testOwnerProvider = StateProvider<VerifiedSessionOwner?>((ref) => null);
 
 void main() {
   test('the default app home keeps the automation host mounted', () {
@@ -255,13 +255,13 @@ void main() {
 Future<void> _pumpHost(
   WidgetTester tester, {
   required _FakeOperations operations,
-  VerifiedProfileOwner? initialOwner,
+  VerifiedSessionOwner? initialOwner,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         _testOwnerProvider.overrideWith((ref) => initialOwner),
-        verifiedProfileOwnerProvider.overrideWith(
+        verifiedSessionOwnerProvider.overrideWith(
           (ref) => ref.watch(_testOwnerProvider),
         ),
         dailySignInAutomationOperationsProvider.overrideWithValue(
@@ -281,7 +281,7 @@ Future<void> _pumpHost(
   await tester.pump();
 }
 
-void _setOwner(WidgetTester tester, VerifiedProfileOwner? owner) {
+void _setOwner(WidgetTester tester, VerifiedSessionOwner? owner) {
   final scope = ProviderScope.containerOf(
     tester.element(find.byType(DailySignInAutomationHost)),
   );

@@ -9,7 +9,7 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_account_guard.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
@@ -103,7 +103,7 @@ void main() {
           var driverFactoryReads = 0;
           final container = ProviderContainer(
             overrides: [
-              verifiedProfileOwnerProvider.overrideWithValue((
+              verifiedSessionOwnerProvider.overrideWithValue((
                 uid: '101',
                 revision: 0,
               )),
@@ -144,7 +144,7 @@ void main() {
   ) async {
     final container = ProviderContainer(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 0,
         )),
@@ -181,7 +181,7 @@ void main() {
   ) async {
     final container = ProviderContainer(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 0,
         )),
@@ -217,7 +217,7 @@ void main() {
     ) async {
       final container = ProviderContainer(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue((
+          verifiedSessionOwnerProvider.overrideWithValue((
             uid: '101',
             revision: 0,
           )),
@@ -245,7 +245,7 @@ void main() {
       'unverified initial friend explicitUser=$explicitUser is owner-safe',
       (tester) async {
         final container = ProviderContainer(
-          overrides: [verifiedProfileOwnerProvider.overrideWithValue(null)],
+          overrides: [verifiedSessionOwnerProvider.overrideWithValue(null)],
         );
         addTearDown(container.dispose);
         final route = container.read(forumWebViewRouteFactoryProvider)(
@@ -276,7 +276,7 @@ void main() {
             var driverFactoryReads = 0;
             final container = ProviderContainer(
               overrides: [
-                verifiedProfileOwnerProvider.overrideWithValue((
+                verifiedSessionOwnerProvider.overrideWithValue((
                   uid: '101',
                   revision: 0,
                 )),
@@ -333,7 +333,7 @@ void main() {
   ) async {
     final container = ProviderContainer(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 0,
         )),
@@ -379,7 +379,7 @@ void main() {
   ) async {
     final container = ProviderContainer(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 0,
         )),
@@ -417,7 +417,7 @@ void main() {
     ) async {
       final container = ProviderContainer(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue((
+          verifiedSessionOwnerProvider.overrideWithValue((
             uid: '101',
             revision: 0,
           )),

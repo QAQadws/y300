@@ -7,14 +7,14 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/native_pagination_bar.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../test_support/friend_read_fixture.dart';
 
-final _ownerSource = StateProvider<VerifiedProfileOwner?>(
+final _ownerSource = StateProvider<VerifiedSessionOwner?>(
   (_) => (uid: '101', revision: 0),
 );
 
@@ -436,7 +436,7 @@ void main() {
     });
   }
 
-  for (final nextOwner in <VerifiedProfileOwner?>[
+  for (final nextOwner in <VerifiedSessionOwner?>[
     (uid: '999', revision: 1),
     (uid: '101', revision: 1),
     null,
@@ -447,7 +447,7 @@ void main() {
       final repository = FriendFeedFixture(autoComplete: true);
       final removal = FriendRemovalFixture();
       final overrides = _overrides(repository, removal);
-      overrides[0] = verifiedProfileOwnerProvider.overrideWith(
+      overrides[0] = verifiedSessionOwnerProvider.overrideWith(
         (ref) => ref.watch(_ownerSource),
       );
       await tester.pumpWidget(
@@ -479,7 +479,7 @@ void main() {
         final links = <String>[];
         final conversations = <ForumConversationTarget>[];
         final overrides = _overrides(repository, removal);
-        overrides[0] = verifiedProfileOwnerProvider.overrideWith(
+        overrides[0] = verifiedSessionOwnerProvider.overrideWith(
           (ref) => ref.watch(_ownerSource),
         );
         await tester.pumpWidget(
@@ -680,7 +680,7 @@ void main() {
       final repository = FriendFeedFixture(autoComplete: true);
       final removal = FriendRemovalFixture();
       final overrides = _overrides(repository, removal);
-      overrides[0] = verifiedProfileOwnerProvider.overrideWith(
+      overrides[0] = verifiedSessionOwnerProvider.overrideWith(
         (ref) => ref.watch(_ownerSource),
       );
       await tester.pumpWidget(
@@ -760,9 +760,9 @@ MyFriendsPage _page({bool isActive = true}) => MyFriendsPage(
 List<Override> _overrides(
   FriendFeedFixture repository,
   FriendRemovalFixture removal, {
-  VerifiedProfileOwner? owner = (uid: '101', revision: 0),
+  VerifiedSessionOwner? owner = (uid: '101', revision: 0),
 }) => [
-  verifiedProfileOwnerProvider.overrideWithValue(owner),
+  verifiedSessionOwnerProvider.overrideWithValue(owner),
   friendFeedRepositoryProvider.overrideWithValue(repository),
   friendRemovalCommandProvider.overrideWithValue(removal),
   forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
@@ -774,7 +774,7 @@ Future<void> _pumpPage(
   FriendRemovalFixture? removal,
   MyFriendsPage? page,
   Locale locale = const Locale('zh'),
-  VerifiedProfileOwner? owner = (uid: '101', revision: 0),
+  VerifiedSessionOwner? owner = (uid: '101', revision: 0),
   bool settle = true,
   double textScale = 1,
 }) async {

@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 final friendFeedRepositoryProvider = Provider<ForumFriendFeedRepository>(
   (ref) => ref.watch(yamiboForumClientProvider).friendFeed!,
@@ -14,12 +14,12 @@ final friendRemovalCommandProvider = Provider<ForumFriendRemovalCommand>(
 
 final myFriendsControllerProvider = Provider.autoDispose
     .family<MyFriendsController, MyFriendsPageArgs>((ref, args) {
-      final owner = ref.watch(verifiedProfileOwnerProvider);
+      final owner = ref.watch(verifiedSessionOwnerProvider);
       final controller = MyFriendsController(
         repository: ref.watch(friendFeedRepositoryProvider),
         removalCommand: ref.watch(friendRemovalCommandProvider),
         owner: owner,
-        currentOwner: () => ref.read(verifiedProfileOwnerProvider),
+        currentOwner: () => ref.read(verifiedSessionOwnerProvider),
         args: args,
       );
       ref.onDispose(controller.dispose);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -22,7 +22,7 @@ class _MyProfileWebViewActionState
 
   @override
   Widget build(BuildContext context) {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final uri = widget.currentUri;
     final site = Uri.parse(AppConfig.siteBaseUrl);
     final parameters = uri.queryParametersAll;
@@ -49,8 +49,8 @@ class _MyProfileWebViewActionState
     );
   }
 
-  Future<void> _open(VerifiedProfileOwner owner) async {
-    if (_opening || ref.read(verifiedProfileOwnerProvider) != owner) return;
+  Future<void> _open(VerifiedSessionOwner owner) async {
+    if (_opening || ref.read(verifiedSessionOwnerProvider) != owner) return;
     setState(() => _opening = true);
     try {
       await Navigator.of(context).push<void>(

@@ -39,7 +39,7 @@ import 'package:y300/features/posting/domain/models/posting_target.dart';
 import 'package:y300/features/posting/presentation/posting_composer_page.dart';
 import 'package:y300/features/posting/presentation/posting_composer_state.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
@@ -472,7 +472,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
     final destination = _prefersNativeNavigation
         ? resolver.resolveForViewer(
             url,
-            readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+            readViewerUserId: () => ref.read(verifiedSessionOwnerProvider)?.uid,
           )
         : null;
     if (destination != null) {

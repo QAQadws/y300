@@ -4,11 +4,11 @@ import 'package:y300/features/more/presentation/more_account_identity_layout.dar
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/features/profile/presentation/daily_auto_sign_in_toggle.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 
@@ -33,7 +33,7 @@ class MoreAccountHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authSessionControllerProvider);
     final session = auth.asData?.value;
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final summary = ref.watch(currentAccountSummaryControllerProvider);
     final canPreview =
         auth.isLoading ||

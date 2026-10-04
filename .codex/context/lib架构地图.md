@@ -30,7 +30,7 @@
 ## 功能模块职责
 
 - `app_update`：Gitee Release 更新检查、版本/校验和解析、APK 下载与校验、后台下载事件、安装权限、安装/外部打开和更新弹窗协调。
-- `auth`：API 与 WebView 登录、登录进度和认证状态 controller。会话恢复/校验、密码登录与登出经 forum client 的 `session`/`passwordLogin`/`logout` 契约；formhash 由包内 provider 统一提供，不再由本模块自持。
+- `auth`：API 与 WebView 登录、登录进度和认证状态 controller。公共 `VerifiedSessionOwner` 模型归 domain，认证 controller 与 `verifiedSessionOwnerProvider` 归 application；账号绑定的资料、签到、WebView 和路由共享唯一 `(uid, revision)` 来源，同 UID 退出重登也使旧 owner 失效。会话恢复/校验、密码登录与登出经 forum client 的 `session`/`passwordLogin`/`logout` 契约；formhash 由包内 provider 统一提供，不再由本模块自持。
 - `cache`：统一可再生磁盘缓存。负责图片、原始 HTML、解析快照、受保护封面、retention 分类、统一容量预算/LRU 裁剪、写入通知、静态容量统计/手动导出和论坛图片预加载；受保护图片字节经包 `ForumResourceClient` 流式获取，本模块只做落盘、索引与预算。
 - `comic`：漫画数据、书架、详情和阅读器。章节目录、帖子发现与标签目录经 forum client 读取契约消费业务投影；负责标题分析、章节发现与 TID 顺序、刷新/搜索 fallback 工作流、重复合并、封面与阅读进度、评论页、持久化下载队列、单章 CBZ 产物和下载图片限速。
 - `composer_shared`：发帖、回复与帖子编辑共用编辑器基础设施。负责 source/Quill surface、BBCode 转换与预览、`collapse=0` grammar/原子 embed/编辑流程、附件语义与预览解析、编辑偏好、通用 controller 基类和错误呈现；表情目录、图片上传权限/上传、未使用附件目录与删除经 forum client 契约执行。草稿能力由调用方决定，帖子编辑明确关闭持久化草稿。

@@ -5,7 +5,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_navigation.dart';
@@ -25,7 +25,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue(null),
+          verifiedSessionOwnerProvider.overrideWithValue(null),
           forumWebViewRouteFactoryProvider.overrideWithValue((config) {
             browser.add(config);
             return MaterialPageRoute(builder: (_) => const SizedBox());
@@ -101,7 +101,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue((
+          verifiedSessionOwnerProvider.overrideWithValue((
             uid: '101',
             revision: 0,
           )),

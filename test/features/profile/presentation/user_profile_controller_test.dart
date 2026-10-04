@@ -5,11 +5,11 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_controller.dart';
 
 const _owner = (uid: '42', revision: 0);
-final _ownerProvider = StateProvider<VerifiedProfileOwner?>((ref) => null);
+final _ownerProvider = StateProvider<VerifiedSessionOwner?>((ref) => null);
 
 void main() {
   test(
@@ -228,12 +228,12 @@ final class _Harness {
     _Repository repository, {
     this.target = '7',
     this.self = false,
-    VerifiedProfileOwner? owner,
+    VerifiedSessionOwner? owner,
   }) {
     container = ProviderContainer(
       overrides: [
         _ownerProvider.overrideWith((ref) => owner),
-        verifiedProfileOwnerProvider.overrideWith(
+        verifiedSessionOwnerProvider.overrideWith(
           (ref) => ref.watch(_ownerProvider),
         ),
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
@@ -262,7 +262,7 @@ final class _Harness {
       ? container.read(myUserProfileProvider.notifier).refresh()
       : container.read(userProfileProvider(target).notifier).refresh();
 
-  void setOwner(VerifiedProfileOwner? owner) =>
+  void setOwner(VerifiedSessionOwner? owner) =>
       container.read(_ownerProvider.notifier).state = owner;
 
   void dispose() {

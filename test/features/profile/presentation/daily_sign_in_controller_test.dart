@@ -11,9 +11,9 @@ import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dar
 import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
 import 'package:y300/features/profile/domain/daily_sign_in_attempt_ledger.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
-final _ownerProvider = StateProvider<VerifiedProfileOwner?>(
+final _ownerProvider = StateProvider<VerifiedSessionOwner?>(
   (ref) => (uid: '42', revision: 0),
 );
 
@@ -370,7 +370,7 @@ final class _Harness {
 
   ProviderContainer container() => ProviderContainer(
     overrides: [
-      verifiedProfileOwnerProvider.overrideWith(
+      verifiedSessionOwnerProvider.overrideWith(
         (ref) => ref.watch(_ownerProvider),
       ),
       dailySignInRepositoryProvider.overrideWithValue(repository),

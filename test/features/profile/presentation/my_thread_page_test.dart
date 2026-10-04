@@ -13,7 +13,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -132,7 +132,7 @@ void main() {
       final locator = _PendingLocator();
       final container = ProviderContainer(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue((
+          verifiedSessionOwnerProvider.overrideWithValue((
             uid: '101',
             revision: 0,
           )),
@@ -158,7 +158,7 @@ void main() {
       expect(locator.targets.single, (tid: '100', pid: '502'));
       expect(locator.sourceUri!.queryParameters['pid'], '502');
       container.updateOverrides([
-        verifiedProfileOwnerProvider.overrideWithValue(null),
+        verifiedSessionOwnerProvider.overrideWithValue(null),
         userThreadDirectoryRepositoryProvider.overrideWithValue(repository),
         threadPostLocatorProvider.overrideWithValue(locator),
       ]);
@@ -265,7 +265,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 0,
         )),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_content_action_sheet.dart';
 
@@ -17,7 +17,7 @@ final class FriendActionTarget {
     required this.userId,
   });
 
-  final VerifiedProfileOwner owner;
+  final VerifiedSessionOwner owner;
   final ForumFriendFeedScope scope;
   final int page;
   final String userId;
@@ -59,7 +59,7 @@ class _FriendActionSheetState extends ConsumerState<FriendActionSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     if (owner != widget.target.owner || !widget.isTargetAttached()) {
       return _dismiss();
     }

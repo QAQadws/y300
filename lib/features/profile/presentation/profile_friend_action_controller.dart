@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 typedef PrepareProfileFriendAction =
     Future<DataReadResult<ForumFriendPreparation, ForumFriendReadCapabilities>>
@@ -45,7 +45,7 @@ final class ProfileFriendActionController
     required this.owner,
     required this.targetUserId,
     required this.actionLink,
-    required VerifiedProfileOwner? Function() currentOwner,
+    required VerifiedSessionOwner? Function() currentOwner,
     required PrepareProfileFriendAction prepare,
     required SubmitProfileFriendAction submit,
   }) : _currentOwner = currentOwner,
@@ -53,10 +53,10 @@ final class ProfileFriendActionController
        _submit = submit,
        super(const ProfileFriendActionState());
 
-  final VerifiedProfileOwner owner;
+  final VerifiedSessionOwner owner;
   final String targetUserId;
   final ForumUserProfileActionLink actionLink;
-  final VerifiedProfileOwner? Function() _currentOwner;
+  final VerifiedSessionOwner? Function() _currentOwner;
   final PrepareProfileFriendAction _prepare;
   final SubmitProfileFriendAction _submit;
   ForumRequestCancellation? _cancellation;

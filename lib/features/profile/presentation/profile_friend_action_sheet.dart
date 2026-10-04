@@ -8,7 +8,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_friend_action_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 
@@ -19,7 +19,7 @@ Future<bool> showProfileFriendAction({
   required String targetUserId,
   required ForumUserProfileActionLink actionLink,
 }) async {
-  final owner = ref.read(verifiedProfileOwnerProvider);
+  final owner = ref.read(verifiedSessionOwnerProvider);
   if (owner == null ||
       targetUserId == owner.uid ||
       !RegExp(r'^[1-9]\d*$').hasMatch(targetUserId) ||
@@ -52,7 +52,7 @@ class ProfileFriendActionSheet extends ConsumerStatefulWidget {
     required this.actionLink,
   });
 
-  final VerifiedProfileOwner owner;
+  final VerifiedSessionOwner owner;
   final String targetUserId;
   final ForumUserProfileActionLink actionLink;
 
@@ -76,7 +76,7 @@ class _ProfileFriendActionSheetState
       owner: widget.owner,
       targetUserId: widget.targetUserId,
       actionLink: widget.actionLink,
-      currentOwner: () => ref.read(verifiedProfileOwnerProvider),
+      currentOwner: () => ref.read(verifiedSessionOwnerProvider),
       prepare: operations.prepare,
       submit: operations.submit,
     );
@@ -99,7 +99,7 @@ class _ProfileFriendActionSheetState
     if (mounted &&
         applied &&
         action != null &&
-        ref.read(verifiedProfileOwnerProvider) == widget.owner &&
+        ref.read(verifiedSessionOwnerProvider) == widget.owner &&
         _controller.value.phase == ProfileFriendActionPhase.applied) {
       final l10n = AppLocalizations.of(context);
       final message = switch (action) {
@@ -115,7 +115,7 @@ class _ProfileFriendActionSheetState
   }
 
   Future<void> _openForum() async {
-    if (ref.read(verifiedProfileOwnerProvider) != widget.owner ||
+    if (ref.read(verifiedSessionOwnerProvider) != widget.owner ||
         ModalRoute.of(context)?.isCurrent == false ||
         !_validFriendDestination(widget.actionLink, widget.targetUserId)) {
       return;
@@ -135,7 +135,7 @@ class _ProfileFriendActionSheetState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(verifiedProfileOwnerProvider, (_, owner) {
+    ref.listen(verifiedSessionOwnerProvider, (_, owner) {
       if (owner != widget.owner) _controller.expire();
     });
     final l10n = AppLocalizations.of(context);

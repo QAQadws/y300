@@ -13,13 +13,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/more/presentation/more_account_avatar.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/more_account_identity_layout.dart';
 import 'package:y300/features/more/presentation/more_account_action.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/daily_auto_sign_in_toggle.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -34,7 +34,7 @@ const _session = AuthSessionViewState(
   username: 'Session reader',
   isLoggingOut: false,
 );
-final _ownerSource = StateProvider<VerifiedProfileOwner?>((ref) => _owner);
+final _ownerSource = StateProvider<VerifiedSessionOwner?>((ref) => _owner);
 final _sessionSource = StateProvider<AuthSessionViewState>((ref) => _session);
 
 void main() {
@@ -592,7 +592,7 @@ void main() {
 Future<void> _pumpHeader(
   WidgetTester tester, {
   required _Repository repository,
-  VerifiedProfileOwner? owner = _owner,
+  VerifiedSessionOwner? owner = _owner,
   AuthSessionViewState session = _session,
   VoidCallback? onLogin,
   VoidCallback? onLogout,
@@ -613,7 +613,7 @@ Future<void> _pumpHeader(
         imageCacheServiceProvider.overrideWithValue(_NoAvatarCache()),
         _ownerSource.overrideWith((ref) => owner),
         _sessionSource.overrideWith((ref) => session),
-        verifiedProfileOwnerProvider.overrideWith(
+        verifiedSessionOwnerProvider.overrideWith(
           (ref) => ref.watch(_ownerSource),
         ),
         authSessionControllerProvider.overrideWith(_TestAuthController.new),

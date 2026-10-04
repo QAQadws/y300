@@ -10,7 +10,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
@@ -26,7 +26,7 @@ import 'package:y300/features/profile/presentation/friends/my_friends_page.dart'
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
 import 'package:y300/features/profile/presentation/my_profile_webview_action.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
@@ -457,7 +457,7 @@ void main() {
     expect(find.text(l10n.profileLoginToInteract), findsOneWidget);
   });
 
-  for (final owner in <VerifiedProfileOwner?>[
+  for (final owner in <VerifiedSessionOwner?>[
     null,
     (uid: '654321', revision: 0),
   ]) {
@@ -834,7 +834,7 @@ void main() {
     );
     expect(
       container.read(myUserProfileProvider).asData!.value.ownerRevision,
-      container.read(verifiedProfileOwnerProvider)!.revision,
+      container.read(verifiedSessionOwnerProvider)!.revision,
     );
     expect(
       repository.cancellations
@@ -1324,7 +1324,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue((
+          verifiedSessionOwnerProvider.overrideWithValue((
             uid: '654321',
             revision: 0,
           )),
@@ -1362,13 +1362,13 @@ Future<void> _pumpPublicProfile(
   ImageCacheService? imageCacheService,
   PrivateConversationRouteFactory? conversationRoute,
   UserBlogDirectoryRepository? blogRepository,
-  VerifiedProfileOwner? owner = (uid: '654321', revision: 0),
+  VerifiedSessionOwner? owner = (uid: '654321', revision: 0),
   bool settle = true,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue(owner),
+        verifiedSessionOwnerProvider.overrideWithValue(owner),
         forumUserProfileRepositoryProvider.overrideWithValue(repository),
         if (blogRepository != null) ...[
           userBlogDirectoryRepositoryProvider.overrideWithValue(blogRepository),

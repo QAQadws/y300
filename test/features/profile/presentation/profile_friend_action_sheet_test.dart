@@ -10,7 +10,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_friend_action_sheet.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
@@ -131,7 +131,7 @@ void main() {
     tester,
   ) async {
     final service = ProfileFriendOperationFixture();
-    VerifiedProfileOwner? owner = (uid: '101', revision: 0);
+    VerifiedSessionOwner? owner = (uid: '101', revision: 0);
     await _pump(tester, service, currentOwner: () => owner);
     final container = ProviderScope.containerOf(
       tester.element(find.byKey(const Key('open-friend-action'))),
@@ -145,7 +145,7 @@ void main() {
       '私密输入',
     );
     owner = (uid: '101', revision: 1);
-    container.invalidate(verifiedProfileOwnerProvider);
+    container.invalidate(verifiedSessionOwnerProvider);
     await tester.pumpAndSettle();
     final l10n = AppLocalizations.of(
       tester.element(find.byType(ProfileFriendActionSheet)),
@@ -163,13 +163,13 @@ Future<void> _pump(
   bool remove = false,
   double textScale = 1,
   void Function(bool)? onResult,
-  VerifiedProfileOwner? Function()? currentOwner,
+  VerifiedSessionOwner? Function()? currentOwner,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         forumFriendOperationsProvider.overrideWithValue(service),
-        verifiedProfileOwnerProvider.overrideWith(
+        verifiedSessionOwnerProvider.overrideWith(
           (_) =>
               currentOwner == null ? (uid: '101', revision: 0) : currentOwner(),
         ),

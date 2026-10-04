@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/presentation/profile_friend_action_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 import '../test_support/profile_friend_operation_fixture.dart';
 
 void main() {
   late ProfileFriendOperationFixture service;
-  VerifiedProfileOwner? owner;
+  VerifiedSessionOwner? owner;
 
   ProfileFriendActionController make({bool remove = false}) {
     final controller = ProfileFriendActionController(

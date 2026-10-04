@@ -6,16 +6,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/preferences/preference_key.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/profile/presentation/account_display_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 final _auth = StateProvider<Future<AuthSessionViewState>>(
   (_) => Future.value(
     const AuthSessionViewState.signedOut(verificationInconclusive: true),
   ),
 );
-final _owner = StateProvider<VerifiedProfileOwner?>((_) => null);
+final _owner = StateProvider<VerifiedSessionOwner?>((_) => null);
 
 void main() {
   test(
@@ -27,7 +27,7 @@ void main() {
       container.listen(accountDisplayControllerProvider, (_, _) {});
       await _flush();
       expect(container.read(accountDisplayControllerProvider), '42');
-      expect(container.read(verifiedProfileOwnerProvider), isNull);
+      expect(container.read(verifiedSessionOwnerProvider), isNull);
       verification.complete(
         const AuthSessionViewState.signedOut(verificationInconclusive: true),
       );
@@ -119,7 +119,7 @@ ProviderContainer _container(
     overrides: [
       _auth.overrideWith((_) => initial),
       authSessionControllerProvider.overrideWith(_AuthController.new),
-      verifiedProfileOwnerProvider.overrideWith((ref) => ref.watch(_owner)),
+      verifiedSessionOwnerProvider.overrideWith((ref) => ref.watch(_owner)),
       preferencesStoreProvider.overrideWithValue(preferences),
     ],
   );

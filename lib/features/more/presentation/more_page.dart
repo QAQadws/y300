@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/core/config/app_config.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/comic/presentation/comic_download_queue_page.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
@@ -20,7 +20,7 @@ import 'package:y300/features/more/presentation/navigation_management_page.dart'
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/features/profile/presentation/current_account_avatar_controller.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/profile_action_navigation.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
@@ -60,7 +60,7 @@ class _MorePageState extends ConsumerState<MorePage> {
     final auth = ref.watch(authSessionControllerProvider);
     final authSession =
         auth.asData?.value ?? const AuthSessionViewState.signedOut();
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final canOpenMyContent =
         !_accountActionPending &&
         !auth.isLoading &&
@@ -238,7 +238,7 @@ class _MorePageState extends ConsumerState<MorePage> {
         ModalRoute.of(context)?.isCurrent == false) {
       return;
     }
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     if (owner == null) return;
     setState(() => _openingMyContent = true);
     try {
@@ -249,7 +249,7 @@ class _MorePageState extends ConsumerState<MorePage> {
         userId: owner.uid,
         isMyProfile: true,
         isCurrentOwner: () =>
-            mounted && ref.read(verifiedProfileOwnerProvider) == owner,
+            mounted && ref.read(verifiedSessionOwnerProvider) == owner,
       );
       await _refreshAccountAfterVisit(owner);
     } finally {
@@ -263,7 +263,7 @@ class _MorePageState extends ConsumerState<MorePage> {
         ModalRoute.of(context)?.isCurrent == false) {
       return;
     }
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     if (owner == null) return;
     setState(() => _openingMyCredits = true);
     try {
@@ -317,12 +317,12 @@ class _MorePageState extends ConsumerState<MorePage> {
     }
   }
 
-  Future<void> _refreshAccountAfterVisit(VerifiedProfileOwner? owner) async {
+  Future<void> _refreshAccountAfterVisit(VerifiedSessionOwner? owner) async {
     // A different session already starts its own initial read. Do not refresh
     // that new account on behalf of the route opened by the previous owner.
     if (!mounted ||
         owner == null ||
-        ref.read(verifiedProfileOwnerProvider) != owner) {
+        ref.read(verifiedSessionOwnerProvider) != owner) {
       return;
     }
     await ref.read(currentAccountSummaryControllerProvider.notifier).refresh();
@@ -373,7 +373,7 @@ class _MorePageState extends ConsumerState<MorePage> {
         if (session?.isLoggedIn != true) return;
       }
       if (!context.mounted) return;
-      final owner = ref.read(verifiedProfileOwnerProvider);
+      final owner = ref.read(verifiedSessionOwnerProvider);
       if (owner == null) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(builder: (_) => const MyProfilePage()),
@@ -399,7 +399,7 @@ class _MorePageState extends ConsumerState<MorePage> {
         initialSession.isLoggingOut) {
       return;
     }
-    final initialOwner = ref.read(verifiedProfileOwnerProvider);
+    final initialOwner = ref.read(verifiedSessionOwnerProvider);
     setState(() => _confirmingLogout = true);
     try {
       final confirmed = await showDialog<bool>(
@@ -424,7 +424,7 @@ class _MorePageState extends ConsumerState<MorePage> {
           confirmed != true ||
           ref.read(authSessionControllerProvider).asData?.value.uid !=
               initialSession.uid ||
-          ref.read(verifiedProfileOwnerProvider) != initialOwner) {
+          ref.read(verifiedSessionOwnerProvider) != initialOwner) {
         return;
       }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class MoreAccountAction extends ConsumerWidget {
@@ -20,7 +20,7 @@ class MoreAccountAction extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authSessionControllerProvider);
     final session = auth.asData?.value;
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final signedIn = session?.isLoggedIn == true;
     final loggingOut = session?.isLoggingOut == true;
     final busy =

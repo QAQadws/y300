@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_controller.dart';
 
 final userThreadDirectoryRepositoryProvider =
@@ -13,7 +13,7 @@ final userThreadControllerProvider = Provider.autoDispose
     .family<UserThreadController, UserThreadPageArgs>((ref, args) {
       // The owner includes the session revision, so logging into the same UID
       // again also disposes old retained content and invalidates pending reads.
-      final owner = ref.watch(verifiedProfileOwnerProvider);
+      final owner = ref.watch(verifiedSessionOwnerProvider);
       final controller = UserThreadController(
         repository: ref.watch(userThreadDirectoryRepositoryProvider),
         viewerUserId: owner?.uid,

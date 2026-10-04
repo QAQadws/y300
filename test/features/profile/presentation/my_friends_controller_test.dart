@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 import '../test_support/friend_read_fixture.dart';
 
@@ -192,7 +192,7 @@ void main() {
     expect(controller.value.failure!.kind, DataReadFailureKind.unauthorized);
   });
 
-  for (final nextOwner in <VerifiedProfileOwner?>[
+  for (final nextOwner in <VerifiedSessionOwner?>[
     (uid: '999', revision: 1),
     (uid: '101', revision: 1),
     null,
@@ -204,7 +204,7 @@ void main() {
         final removal = FriendRemovalFixture();
         final container = ProviderContainer(
           overrides: [
-            verifiedProfileOwnerProvider.overrideWithValue(_owner),
+            verifiedSessionOwnerProvider.overrideWithValue(_owner),
             friendFeedRepositoryProvider.overrideWithValue(repository),
             friendRemovalCommandProvider.overrideWithValue(removal),
           ],
@@ -218,7 +218,7 @@ void main() {
         final old = subscription.read();
         final pending = old.setActive(true);
         container.updateOverrides([
-          verifiedProfileOwnerProvider.overrideWithValue(nextOwner),
+          verifiedSessionOwnerProvider.overrideWithValue(nextOwner),
           friendFeedRepositoryProvider.overrideWithValue(repository),
           friendRemovalCommandProvider.overrideWithValue(removal),
         ]);
@@ -376,7 +376,7 @@ void main() {
     () async {
       final repository = FriendFeedFixture();
       final removal = FriendRemovalFixture();
-      VerifiedProfileOwner? currentOwner = _owner;
+      VerifiedSessionOwner? currentOwner = _owner;
       final controller = MyFriendsController(
         repository: repository,
         removalCommand: removal,
@@ -494,7 +494,7 @@ void main() {
 MyFriendsController _controller(
   FriendFeedFixture repository, {
   FriendRemovalFixture? removal,
-  VerifiedProfileOwner? owner = _owner,
+  VerifiedSessionOwner? owner = _owner,
   MyFriendsPageArgs args = const MyFriendsPageArgs(),
 }) => MyFriendsController(
   repository: repository,

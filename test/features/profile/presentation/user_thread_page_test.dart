@@ -8,7 +8,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -114,7 +114,7 @@ void main() {
     );
   }
 
-  for (final transition in <String, VerifiedProfileOwner?>{
+  for (final transition in <String, VerifiedSessionOwner?>{
     'viewer account': (uid: '303', revision: 1),
     'same account session': (uid: '101', revision: 1),
     'logout': null,
@@ -229,7 +229,7 @@ Future<ProviderContainer> _mount(
   WidgetTester tester,
   ThreadDirectoryFixture repository, {
   Widget page = const UserThreadPage(userId: '202'),
-  VerifiedProfileOwner? owner = (uid: '101', revision: 0),
+  VerifiedSessionOwner? owner = (uid: '101', revision: 0),
   _PendingLocator? locator,
   Locale locale = const Locale('zh'),
   double scale = 1,
@@ -262,9 +262,9 @@ Future<ProviderContainer> _mount(
 
 List<Override> _overrides(
   ThreadDirectoryFixture repository,
-  VerifiedProfileOwner? owner,
+  VerifiedSessionOwner? owner,
 ) => [
-  verifiedProfileOwnerProvider.overrideWithValue(owner),
+  verifiedSessionOwnerProvider.overrideWithValue(owner),
   userThreadDirectoryRepositoryProvider.overrideWithValue(repository),
 ];
 

@@ -14,7 +14,7 @@ import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
@@ -100,7 +100,7 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
       const resolver = YamiboForumLinkResolver();
       final destination = resolver.resolveForViewer(
         url,
-        readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+        readViewerUserId: () => ref.read(verifiedSessionOwnerProvider)?.uid,
       );
       if (destination == null ||
           !{'https', 'http'}.contains(destination.uri.scheme)) {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/auth_text_resolver.dart';
 import 'package:y300/features/auth/presentation/login_controller.dart';
 import 'package:y300/features/auth/presentation/login_state.dart';

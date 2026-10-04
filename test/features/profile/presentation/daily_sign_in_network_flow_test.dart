@@ -13,9 +13,9 @@ import 'package:y300/features/profile/data/daily_sign_in_storage.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
 import 'package:y300/features/profile/domain/daily_sign_in_attempt_ledger.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
-final _owner = StateProvider<VerifiedProfileOwner?>(
+final _owner = StateProvider<VerifiedSessionOwner?>(
   (ref) => (uid: '42', revision: 0),
 );
 
@@ -288,7 +288,7 @@ void main() {
     );
   }
 
-  for (final nextOwner in <VerifiedProfileOwner?>[
+  for (final nextOwner in <VerifiedSessionOwner?>[
     null,
     (uid: '43', revision: 1),
     (uid: '42', revision: 1),
@@ -386,7 +386,7 @@ final class _Harness {
   late final container = ProviderContainer(
     overrides: [
       yamiboForumClientProvider.overrideWithValue(client),
-      verifiedProfileOwnerProvider.overrideWith((ref) => ref.watch(_owner)),
+      verifiedSessionOwnerProvider.overrideWith((ref) => ref.watch(_owner)),
       dailySignInAttemptLedgerProvider.overrideWithValue(ledger),
       dailyAutoSignInSettingsProvider.overrideWithValue(settings),
     ],

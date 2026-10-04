@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/profile_user_link.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -24,7 +24,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            verifiedProfileOwnerProvider.overrideWithValue((
+            verifiedSessionOwnerProvider.overrideWithValue((
               uid: '202',
               revision: 1,
             )),
@@ -73,7 +73,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue(null),
+          verifiedSessionOwnerProvider.overrideWithValue(null),
           forumUserProfileRepositoryProvider.overrideWithValue(profiles),
           forumImageRefererProvider.overrideWithValue('https://example.test/'),
         ],

@@ -15,7 +15,7 @@ import 'package:y300/features/messages/presentation/new_private_message_page.dar
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/data/services/thread_post_locator.dart';
@@ -39,7 +39,7 @@ void main() {
     web = [];
     container = ProviderContainer.test(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 0,
         )),

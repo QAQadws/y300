@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/account_display_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 final class CurrentAccountSummaryState {
   const CurrentAccountSummaryState({
@@ -17,7 +17,7 @@ final class CurrentAccountSummaryState {
     this.networkRevision = 0,
   });
 
-  final VerifiedProfileOwner? owner;
+  final VerifiedSessionOwner? owner;
   final String? previewUid;
   String? get displayUid => owner?.uid ?? previewUid;
   final CurrentUserProfileData? data;
@@ -46,12 +46,12 @@ final class CurrentAccountSummaryController
   int _networkRevision = 0;
   Future<void>? _readFlight;
   CurrentAccountSummaryState _last = const CurrentAccountSummaryState();
-  VerifiedProfileOwner? _identityBlockedOwner;
-  VerifiedProfileOwner? _lastLoadedOwner;
+  VerifiedSessionOwner? _identityBlockedOwner;
+  VerifiedSessionOwner? _lastLoadedOwner;
 
   @override
   CurrentAccountSummaryState build() {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final previewUid =
         owner?.uid ?? ref.watch(accountDisplayControllerProvider);
     final uid = owner?.uid ?? previewUid;
@@ -81,7 +81,7 @@ final class CurrentAccountSummaryController
 
   Future<void> _restore(
     String uid,
-    VerifiedProfileOwner? owner,
+    VerifiedSessionOwner? owner,
     int generation,
   ) async {
     if (!_isCurrent(uid, generation)) return;
@@ -136,7 +136,7 @@ final class CurrentAccountSummaryController
     });
   }
 
-  Future<void> _load(VerifiedProfileOwner owner, int generation) async {
+  Future<void> _load(VerifiedSessionOwner owner, int generation) async {
     final previous = state;
     _publish(
       CurrentAccountSummaryState(
@@ -166,7 +166,7 @@ final class CurrentAccountSummaryController
       );
     }
     if (!_isCurrent(owner.uid, generation) ||
-        ref.read(verifiedProfileOwnerProvider) != owner) {
+        ref.read(verifiedSessionOwnerProvider) != owner) {
       return;
     }
     _lastLoadedOwner = owner;

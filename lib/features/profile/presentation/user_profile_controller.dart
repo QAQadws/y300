@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 final class ForumUserProfilePageState {
   const ForumUserProfilePageState({
@@ -27,7 +27,7 @@ final class ForumUserProfilePageState {
   final String? ownerUid;
   final int? ownerRevision;
 
-  bool belongsToSession(VerifiedProfileOwner? owner) =>
+  bool belongsToSession(VerifiedSessionOwner? owner) =>
       ownerUid == owner?.uid && ownerRevision == owner?.revision;
 
   ForumUserProfilePageState copyWith({
@@ -86,7 +86,7 @@ abstract class _ProfilePageController
 
   @override
   Future<ForumUserProfilePageState> build() {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     _cancel();
     ref.onDispose(_cancel);
     if (_selfOnly && owner == null) {
@@ -99,7 +99,7 @@ abstract class _ProfilePageController
     if (!ref.mounted) return Future.value();
     final pending = _pending;
     if (pending != null) return pending.then((_) {});
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     final previous = state.asData?.value;
     if ((_selfOnly && owner == null) ||
         previous == null ||
@@ -119,7 +119,7 @@ abstract class _ProfilePageController
   }
 
   Future<ForumUserProfilePageState> _start(
-    VerifiedProfileOwner? owner, {
+    VerifiedSessionOwner? owner, {
     required ForumUserProfilePageState? previous,
     required bool refresh,
   }) {
@@ -140,7 +140,7 @@ abstract class _ProfilePageController
   }
 
   Future<ForumUserProfilePageState> _load(
-    VerifiedProfileOwner? owner,
+    VerifiedSessionOwner? owner,
     int generation,
     ForumRequestCancellation cancellation,
     ForumUserProfilePageState? previous,
@@ -236,10 +236,10 @@ abstract class _ProfilePageController
     );
   }
 
-  bool _isCurrent(VerifiedProfileOwner? owner, int generation) =>
+  bool _isCurrent(VerifiedSessionOwner? owner, int generation) =>
       ref.mounted &&
       generation == _generation &&
-      ref.read(verifiedProfileOwnerProvider) == owner;
+      ref.read(verifiedSessionOwnerProvider) == owner;
 
   void _cancel() {
     ++_generation;

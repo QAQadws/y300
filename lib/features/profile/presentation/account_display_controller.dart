@@ -6,8 +6,8 @@ import 'package:y300/core/config/technical_storage_keys.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/preferences/preference_key.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 /// This pointer is deliberately separate from authenticated session ownership.
 final accountDisplayControllerProvider =
@@ -25,7 +25,7 @@ class AccountDisplayController extends Notifier<String?> {
   @override
   String? build() {
     ref.listen(authSessionControllerProvider, (_, _) => _reconcile());
-    ref.listen(verifiedProfileOwnerProvider, (_, _) => _reconcile());
+    ref.listen(verifiedSessionOwnerProvider, (_, _) => _reconcile());
     final generation = _generation;
     unawaited(
       Future<void>.microtask(() async {
@@ -48,7 +48,7 @@ class AccountDisplayController extends Notifier<String?> {
 
   void _reconcile() {
     final auth = ref.read(authSessionControllerProvider).asData?.value;
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     if (owner != null) {
       _set(owner.uid);
       return;
@@ -59,7 +59,7 @@ class AccountDisplayController extends Notifier<String?> {
       return;
     }
     final snapshot = ref.read(yamiboSessionStoreProvider).readCurrent();
-    final revision = ref.read(profileSessionRevisionProvider).asData?.value;
+    final revision = ref.read(sessionRevisionProvider).asData?.value;
     if ((snapshot != null &&
             (!snapshot.isLoggedIn || snapshot.uid != auth.uid)) ||
         (snapshot == null && revision != null && revision > 0)) {

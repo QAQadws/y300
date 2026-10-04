@@ -6,7 +6,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_controller.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_pager.dart';
@@ -76,7 +76,7 @@ class _UserThreadPageState extends ConsumerState<UserThreadPage> {
 
   void _open(
     UserThreadController controller,
-    VerifiedProfileOwner owner,
+    VerifiedSessionOwner owner,
     UserThreadDirectoryType type,
     UserThreadSummary item,
     UserThreadReplyPreview? reply,
@@ -84,7 +84,7 @@ class _UserThreadPageState extends ConsumerState<UserThreadPage> {
     bool current() =>
         mounted &&
         widget.isActive &&
-        ref.read(verifiedProfileOwnerProvider) == owner &&
+        ref.read(verifiedSessionOwnerProvider) == owner &&
         identical(ref.read(userThreadControllerProvider(_args)), controller) &&
         controller.value.query.type == type &&
         ModalRoute.of(context)?.isCurrent != false;
@@ -128,7 +128,7 @@ class _UserThreadPageState extends ConsumerState<UserThreadPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final palette = Theme.of(context).y300NativeContent;
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final isSelf = widget.userId == null || widget.userId == owner?.uid;
     final loginRequiredMessage = isSelf
         ? l10n.profileThreadsLoginRequired

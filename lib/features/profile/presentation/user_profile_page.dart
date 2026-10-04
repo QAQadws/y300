@@ -5,11 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_link_navigation.dart';
 import 'package:y300/features/profile/presentation/profile_action_navigation.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_controller.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_content.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_identity_card.dart';
@@ -26,7 +26,7 @@ class UserProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     if (owner?.uid == uid) return const MyProfilePage();
     return _ProfilePage(userId: uid);
   }
@@ -37,7 +37,7 @@ class MyProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     return _ProfilePage(userId: owner?.uid, isMyProfile: true);
   }
 }
@@ -61,7 +61,7 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
     AsyncValue<ForumUserProfilePageState>? previous,
     AsyncValue<ForumUserProfilePageState> next,
   ) {
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     final before = previous?.asData?.value;
     final current = next.asData?.value;
     if (!mounted ||
@@ -90,13 +90,13 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
     ForumUserProfileData? profile,
   }) async {
     if (_opening) return;
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     final target = widget.userId;
     if (target == null) return;
     bool current() =>
         mounted &&
         widget.userId == target &&
-        ref.read(verifiedProfileOwnerProvider) == owner;
+        ref.read(verifiedSessionOwnerProvider) == owner;
     _opening = true;
     try {
       // Replies are a tab of the same native directory advertised by threads.
@@ -130,7 +130,7 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
 
   Future<void> _openForumPage() async {
     if (_opening) return;
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     final target = widget.userId;
     if (target == null) return;
     _opening = true;
@@ -143,7 +143,7 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
         isCurrentOwner: () =>
             mounted &&
             widget.userId == target &&
-            ref.read(verifiedProfileOwnerProvider) == owner,
+            ref.read(verifiedSessionOwnerProvider) == owner,
       );
     } finally {
       _opening = false;
@@ -167,7 +167,7 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final colors = Theme.of(context).y300NativeContent;
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     ref.listen(
       widget.isMyProfile
           ? myUserProfileProvider
@@ -194,7 +194,7 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
         widget.isMyProfile &&
         owner == null &&
         (ref.watch(authSessionControllerProvider).isLoading ||
-            ref.watch(profileSessionRevisionProvider).isLoading);
+            ref.watch(sessionRevisionProvider).isLoading);
     final unauthorized =
         widget.isMyProfile &&
         state?.failure?.kind == DataReadFailureKind.unauthorized;
@@ -222,7 +222,7 @@ class _ProfilePageState extends ConsumerState<_ProfilePage> {
               onPressed: () {
                 // A rebuilt session must not reuse the old frame's action source.
                 if (!mounted ||
-                    ref.read(verifiedProfileOwnerProvider) != owner) {
+                    ref.read(verifiedSessionOwnerProvider) != owner) {
                   return;
                 }
                 unawaited(

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/profile/presentation/daily_sign_in_controller.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 
 /// Gives each verified account one automatic sign-in run per app launch.
 ///
@@ -91,7 +91,7 @@ class _DailySignInAutomationHostState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<VerifiedProfileOwner?>(verifiedProfileOwnerProvider, (
+    ref.listen<VerifiedSessionOwner?>(verifiedSessionOwnerProvider, (
       previous,
       next,
     ) {
@@ -106,7 +106,7 @@ class _DailySignInAutomationHostState
 
   void _requestTrigger() {
     if (!mounted || !_isForeground) return;
-    final owner = ref.read(verifiedProfileOwnerProvider);
+    final owner = ref.read(verifiedSessionOwnerProvider);
     if (owner == null || _handledUserIds.contains(owner.uid)) return;
     if (_running) {
       // A new account waits for the old coordinator flight to settle.
@@ -119,7 +119,7 @@ class _DailySignInAutomationHostState
       if (!mounted || !_queued) return;
       _queued = false;
       if (!_isForeground) return;
-      final currentOwner = ref.read(verifiedProfileOwnerProvider);
+      final currentOwner = ref.read(verifiedSessionOwnerProvider);
       if (currentOwner == null || _handledUserIds.contains(currentOwner.uid)) {
         return;
       }
@@ -127,7 +127,7 @@ class _DailySignInAutomationHostState
     });
   }
 
-  Future<void> _trigger(VerifiedProfileOwner owner) async {
+  Future<void> _trigger(VerifiedSessionOwner owner) async {
     // Register before any asynchronous work: failure, cancellation, or a new
     // session for this UID must not restart automatic work in this launch.
     if (!_handledUserIds.add(owner.uid)) return;

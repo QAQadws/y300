@@ -12,7 +12,7 @@ import 'package:y300/features/profile/presentation/friends/friend_list_row.dart'
 import 'package:y300/features/profile/presentation/friends/friend_read_status.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_controller.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_scope_pager.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
@@ -59,7 +59,7 @@ class _MyFriendsPageState extends ConsumerState<MyFriendsPage> {
       mounted &&
       widget.isActive &&
       controller.isCurrentOwner &&
-      ref.read(verifiedProfileOwnerProvider) == controller.owner &&
+      ref.read(verifiedSessionOwnerProvider) == controller.owner &&
       identical(ref.read(myFriendsControllerProvider(_args)), controller);
 
   bool _current(
@@ -143,7 +143,7 @@ class _MyFriendsPageState extends ConsumerState<MyFriendsPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final palette = Theme.of(context).y300NativeContent;
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     final appBar = AppBar(title: Text(l10n.profileMyFriendsTitle));
     if (owner == null) {
       return Scaffold(
@@ -428,7 +428,7 @@ class _FriendsFeed extends StatelessWidget {
 class _RemoveFriendDialog extends ConsumerStatefulWidget {
   const _RemoveFriendDialog({required this.owner, required this.username});
 
-  final VerifiedProfileOwner owner;
+  final VerifiedSessionOwner owner;
   final String username;
 
   @override
@@ -441,7 +441,7 @@ class _RemoveFriendDialogState extends ConsumerState<_RemoveFriendDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final owner = ref.watch(verifiedProfileOwnerProvider);
+    final owner = ref.watch(verifiedSessionOwnerProvider);
     if (owner != widget.owner) {
       if ((ModalRoute.isCurrentOf(context) ?? false) && !_dismissScheduled) {
         _dismissScheduled = true;

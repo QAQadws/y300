@@ -33,7 +33,7 @@ import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/domain/services/history_visit_recorder.dart';
 import 'package:y300/features/posting/data/providers/posting_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
 import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
@@ -284,7 +284,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            verifiedProfileOwnerProvider.overrideWithValue((
+            verifiedSessionOwnerProvider.overrideWithValue((
               uid: '654321',
               revision: 0,
             )),
@@ -3063,7 +3063,7 @@ Widget _buildTestApp({
   HistoryVisitRecorder? historyRecorder,
   UserThreadDirectoryRepository? threadDirectory,
   ForumFriendFeedRepository? friendFeed,
-  VerifiedProfileOwner? profileOwner = (uid: '101', revision: 0),
+  VerifiedSessionOwner? profileOwner = (uid: '101', revision: 0),
   ForumWebViewHostPurpose? hostPurpose,
 }) {
   final resolvedFavoriteRepository =
@@ -3073,7 +3073,7 @@ Widget _buildTestApp({
       if (hostPurpose != null)
         forumWebViewHostPurposeProvider.overrideWithValue(hostPurpose),
       if (threadDirectory != null || friendFeed != null)
-        verifiedProfileOwnerProvider.overrideWithValue(profileOwner),
+        verifiedSessionOwnerProvider.overrideWithValue(profileOwner),
       if (threadDirectory != null)
         userThreadDirectoryRepositoryProvider.overrideWithValue(
           threadDirectory,

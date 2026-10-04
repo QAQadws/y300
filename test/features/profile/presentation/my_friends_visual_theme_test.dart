@@ -11,7 +11,7 @@ import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/data/providers/friend_read_providers.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
@@ -63,7 +63,7 @@ void main() {
           await tester.pumpWidget(
             ProviderScope(
               overrides: [
-                verifiedProfileOwnerProvider.overrideWithValue((
+                verifiedSessionOwnerProvider.overrideWithValue((
                   uid: '101',
                   revision: 0,
                 )),

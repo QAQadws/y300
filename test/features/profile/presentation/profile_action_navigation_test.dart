@@ -11,7 +11,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/presentation/profile_action_navigation.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 
 const _owner = (uid: '42', revision: 0);
@@ -231,7 +231,7 @@ void main() {
     expect(openedTitle, 'profile-member');
   });
 
-  for (final owner in <VerifiedProfileOwner?>[null, _owner]) {
+  for (final owner in <VerifiedSessionOwner?>[null, _owner]) {
     testWidgets('private message rejects guest or own UID for $owner', (
       tester,
     ) async {
@@ -368,7 +368,7 @@ Future<_Observer> _pump(
   bool advertisesAction = true,
   String? targetUserId,
   String? responseViewer,
-  VerifiedProfileOwner? owner = _owner,
+  VerifiedSessionOwner? owner = _owner,
   ForumUserProfileActionLink? link,
   PrivateConversationRouteFactory? conversationRoute,
   ForumWebViewRouteFactory? webRoute,
@@ -388,7 +388,7 @@ Future<_Observer> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        verifiedProfileOwnerProvider.overrideWithValue(owner),
+        verifiedSessionOwnerProvider.overrideWithValue(owner),
         if (conversationRoute != null)
           privateConversationRouteFactoryProvider.overrideWithValue(
             conversationRoute,

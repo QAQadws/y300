@@ -8,7 +8,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_driver.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/profile_friend_action_sheet.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
 
 /// Native destinations remain useful while the remote profile is loading.
@@ -28,7 +28,7 @@ Future<Object?> openProfileNativeAction({
       (ModalRoute.of(context)?.isCurrent == false)) {
     return Future.value();
   }
-  final owner = ref.read(verifiedProfileOwnerProvider);
+  final owner = ref.read(verifiedSessionOwnerProvider);
   if (isMyProfile && owner?.uid != userId) return Future.value();
   final Widget destination;
   switch (action) {
@@ -91,7 +91,7 @@ Future<Object?> openProfileAction({
       (ModalRoute.of(context)?.isCurrent == false)) {
     return Future.value();
   }
-  final owner = ref.read(verifiedProfileOwnerProvider);
+  final owner = ref.read(verifiedSessionOwnerProvider);
   if ((isMyProfile && owner?.uid != userId) ||
       (profile.viewerUserId != null && profile.viewerUserId != owner?.uid)) {
     return Future.value();
@@ -160,7 +160,7 @@ Future<Object?> openProfileForumPage({
       !isCurrentOwner() ||
       !_positiveUserId(userId) ||
       (ModalRoute.of(context)?.isCurrent == false) ||
-      (isMyProfile && ref.read(verifiedProfileOwnerProvider)?.uid != userId)) {
+      (isMyProfile && ref.read(verifiedSessionOwnerProvider)?.uid != userId)) {
     return Future.value();
   }
   final uri = Uri.parse(AppConfig.siteBaseUrl).replace(
@@ -182,7 +182,7 @@ Future<Object?> openProfileForumPage({
         purpose: isMyProfile
             ? ForumWebViewHostPurpose.selfProfile
             : ForumWebViewHostPurpose.browse,
-        expectedAccountId: ref.read(verifiedProfileOwnerProvider)?.uid,
+        expectedAccountId: ref.read(verifiedSessionOwnerProvider)?.uid,
       ),
     ),
   );

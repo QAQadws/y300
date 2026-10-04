@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
@@ -20,7 +20,7 @@ import 'package:y300/features/thread/presentation/html_rendering/forum_html_rend
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -145,7 +145,7 @@ class ThreadPostNavigation {
     const resolver = YamiboForumLinkResolver();
     final destination = resolver.resolveForViewer(
       url,
-      readViewerUserId: () => ref.read(verifiedProfileOwnerProvider)?.uid,
+      readViewerUserId: () => ref.read(verifiedSessionOwnerProvider)?.uid,
     );
     if (destination?.kind != YamiboForumLinkKind.threadPost) {
       routeSession.invalidate();

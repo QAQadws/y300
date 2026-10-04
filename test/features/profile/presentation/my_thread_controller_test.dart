@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_controller.dart';
 
 import '../test_support/thread_directory_fixture.dart';
@@ -164,7 +164,7 @@ void main() {
       final repository = ThreadDirectoryFixture();
       final container = ProviderContainer(
         overrides: [
-          verifiedProfileOwnerProvider.overrideWithValue((
+          verifiedSessionOwnerProvider.overrideWithValue((
             uid: '101',
             revision: 0,
           )),
@@ -180,7 +180,7 @@ void main() {
       final old = subscription.read();
       final pending = old.setActive(true);
       container.updateOverrides([
-        verifiedProfileOwnerProvider.overrideWithValue((
+        verifiedSessionOwnerProvider.overrideWithValue((
           uid: '101',
           revision: 1,
         )),

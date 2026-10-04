@@ -16,7 +16,7 @@ import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
 import '../../../support/forum_auth_test_support.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/auth/presentation/login_webview_page.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
@@ -32,7 +32,7 @@ import 'package:y300/features/profile/data/providers/friend_read_providers.dart'
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/data/providers/thread_read_providers.dart';
 import 'package:y300/features/profile/presentation/threads/my_thread_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/current_account_summary_controller.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
@@ -439,7 +439,7 @@ void main() {
             const ForumSessionIdentity(userId: '200', username: 'next-account'),
           );
       await tester.pumpAndSettle();
-      expect(container.read(verifiedProfileOwnerProvider)?.uid, '200');
+      expect(container.read(verifiedSessionOwnerProvider)?.uid, '200');
       // Offstage consumers may pause; observe the new summary before returning.
       expect(
         container.read(currentAccountSummaryControllerProvider).owner?.uid,

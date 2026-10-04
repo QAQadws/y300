@@ -13,10 +13,10 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/features/auth/presentation/auth_session_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
-import 'package:y300/features/profile/presentation/profile_session_owner.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import '../../profile/test_support/profile_repository_fixture.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -5515,7 +5515,7 @@ void main() {
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
           additionalOverrides: [
-            verifiedProfileOwnerProvider.overrideWithValue(null),
+            verifiedSessionOwnerProvider.overrideWithValue(null),
             forumUserProfileRepositoryProvider.overrideWithValue(
               ProfileRepositoryFixture(),
             ),
@@ -5569,7 +5569,7 @@ void main() {
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
           additionalOverrides: [
-            verifiedProfileOwnerProvider.overrideWithValue(null),
+            verifiedSessionOwnerProvider.overrideWithValue(null),
             forumUserProfileRepositoryProvider.overrideWithValue(
               ProfileRepositoryFixture(),
             ),
@@ -5634,7 +5634,7 @@ void main() {
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
           additionalOverrides: [
-            verifiedProfileOwnerProvider.overrideWithValue(null),
+            verifiedSessionOwnerProvider.overrideWithValue(null),
             forumUserProfileRepositoryProvider.overrideWithValue(
               ProfileRepositoryFixture(),
             ),
@@ -5700,7 +5700,7 @@ void main() {
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
           additionalOverrides: [
-            verifiedProfileOwnerProvider.overrideWithValue(null),
+            verifiedSessionOwnerProvider.overrideWithValue(null),
             forumUserProfileRepositoryProvider.overrideWithValue(
               ProfileRepositoryFixture(),
             ),
@@ -5766,7 +5766,7 @@ void main() {
           repository,
           forumWebViewDriverFactory: () => webViewDriver,
           additionalOverrides: [
-            verifiedProfileOwnerProvider.overrideWithValue(null),
+            verifiedSessionOwnerProvider.overrideWithValue(null),
             forumUserProfileRepositoryProvider.overrideWithValue(
               ProfileRepositoryFixture(),
             ),
