@@ -11,10 +11,14 @@ final class NovelReaderHtmlDomTextSlice {
   const NovelReaderHtmlDomTextSlice({
     required this.html,
     required this.hasRenderableContent,
+    required this.domNodeCount,
   });
 
   final String html;
   final bool hasRenderableContent;
+
+  /// Retained element, text and opaque nodes, excluding the fragment root.
+  final int domNodeCount;
 }
 
 final class NovelReaderHtmlDomGrapheme {
@@ -115,7 +119,21 @@ final class NovelReaderHtmlDomTextIndex {
       hasRenderableContent: nodes.any(
         (node) => _hasRenderableContent(node, _protectedInlineNodeAdapter),
       ),
+      domNodeCount: _countNodes(nodes),
     );
+  }
+
+  static int _countNodes(List<html_dom.Node> roots) {
+    // Count the already sliced tree, including complete protected/opaque
+    // clones. Re-parsing serialized HTML would add work to every fit probe.
+    final pending = <html_dom.Node>[...roots];
+    var count = 0;
+    while (pending.isNotEmpty) {
+      final node = pending.removeLast();
+      count += 1;
+      pending.addAll(node.nodes);
+    }
+    return count;
   }
 
   static NovelReaderHtmlDomProtectedNodeKind? _protectedKind(

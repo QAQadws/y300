@@ -99,6 +99,22 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
   bool isLegalBoundary(int textOffset) => _legalOffsets.contains(textOffset);
 
   @override
+  int firstBoundaryIndexAfter(int startOffset) {
+    RangeError.checkValueInInterval(startOffset, 0, textLength, 'startOffset');
+    var low = 0;
+    var high = boundaries.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (boundaries[middle].textOffset <= startOffset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
+
+  @override
   NovelReaderComplexHtmlSlice slice({
     required int startOffset,
     required int endOffset,
@@ -123,6 +139,7 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
       startOffset: startOffset,
       endOffset: endOffset,
       hasRenderableContent: sliced.hasRenderableContent,
+      domNodeCount: sliced.domNodeCount,
     );
   }
 

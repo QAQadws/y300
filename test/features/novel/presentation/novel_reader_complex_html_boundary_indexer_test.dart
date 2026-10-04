@@ -64,6 +64,7 @@ void main() {
     }
     for (final slice in slices) {
       expect(html_parser.parseFragment(slice.html).nodes, isNotEmpty);
+      expect(slice.domNodeCount, _serializedDomNodeCount(slice.html));
     }
     expect(codec.parseCount, 1);
   });
@@ -236,6 +237,7 @@ void main() {
         .slice(startOffset: 0, endOffset: 1);
     expect(spacer.html, '<br>');
     expect(spacer.hasRenderableContent, isFalse);
+    expect(spacer.domNodeCount, 1);
     expect(spacer.startAnchor.textOffset, 0);
     expect(spacer.endAnchor.textOffset, 0);
   });
@@ -339,6 +341,7 @@ void main() {
     expect(fragment.querySelectorAll('rt'), hasLength(1));
     expect(fragment.querySelectorAll('rp'), hasLength(2));
     expect(fragment.text, '鬼魂(Ghost)');
+    expect(ruby.domNodeCount, 9);
     expect(
       () => session.slice(
         startOffset: range.startOffset,
@@ -373,6 +376,7 @@ void main() {
     );
     final smiley = session.slice(startOffset: 1, endOffset: 2);
     expect(smiley.hasRenderableContent, isTrue);
+    expect(smiley.domNodeCount, 2);
     expect(
       html_parser.parseFragment(smiley.html).querySelectorAll('img'),
       hasLength(1),
@@ -426,6 +430,96 @@ void main() {
     expect(offsets, orderedEquals(offsets.toSet().toList()..sort()));
   });
 
+  test(
+    'looks up a sorted immutable boundary range without copying a suffix',
+    () {
+      final text = List<String>.filled(1024, '甲').join();
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html:
+                '<p>$text<strong>e</strong><i>\u0301</i><br>'
+                '<ruby>字<rt>じ</rt></ruby><img class="smilie" '
+                'src="static/image/smiley/default/smile.gif" '
+                'width="24" height="24">尾</p>',
+            startAnchor: _anchor,
+          );
+      final boundaries = session.boundaries;
+      final offsets = boundaries
+          .map((boundary) => boundary.textOffset)
+          .toList();
+
+      expect(offsets, orderedEquals(offsets.toSet().toList()..sort()));
+      expect(
+        boundaries.every(
+          (boundary) => session.isLegalBoundary(boundary.textOffset),
+        ),
+        isTrue,
+      );
+      expect(boundaries.last.textOffset, session.textLength);
+      expect(() => boundaries.clear(), throwsUnsupportedError);
+      for (final offset in <int>{
+        0,
+        1,
+        511,
+        1023,
+        ...List<int>.generate(
+          session.textLength - 1024 + 1,
+          (index) => 1024 + index,
+        ),
+      }) {
+        final reference = boundaries.indexWhere(
+          (boundary) => boundary.textOffset > offset,
+        );
+        expect(
+          session.firstBoundaryIndexAfter(offset),
+          reference == -1 ? boundaries.length : reference,
+          reason: 'offset=$offset',
+        );
+      }
+      expect(identical(session.boundaries, boundaries), isTrue);
+      expect(() => session.firstBoundaryIndexAfter(-1), throwsRangeError);
+      expect(
+        () => session.firstBoundaryIndexAfter(session.textLength + 1),
+        throwsRangeError,
+      );
+
+      final empty = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(html: '', startAnchor: _anchor);
+      expect(empty.firstBoundaryIndexAfter(0), empty.boundaries.length);
+    },
+  );
+
+  test('counts retained clone nodes without parsing each candidate again', () {
+    final codec = _CountingFragmentCodec();
+    final index = NovelReaderHtmlDomTextIndex.parse(
+      '<div>A<!--kept--><script>opaque</script>'
+      '<span>e</span><i>\u0301</i><br>'
+      '<ruby>字<rt>じ</rt></ruby><img class="smilie" '
+      'src="static/image/smiley/default/smile.gif" '
+      'width="24" height="24">B</div>',
+      fragmentCodec: codec,
+    );
+    final complex = index.sliceGraphemes(start: 1, end: 2);
+
+    // The opaque script's child is retained by a deep clone even though the
+    // source text index deliberately ignores that subtree.
+    expect(complex.html, contains('<script>opaque</script>'));
+    expect(complex.html, contains('<!--kept-->'));
+    expect(complex.domNodeCount, 8);
+    expect(complex.domNodeCount, _serializedDomNodeCount(complex.html));
+    for (final slice in <NovelReaderHtmlDomTextSlice>[
+      index.sliceRunes(start: 1, end: 3),
+      index.sliceRunes(start: 0, end: index.runeLength),
+      index.sliceGraphemes(start: 0, end: index.graphemeLength),
+      index.sliceGraphemes(start: 3, end: index.graphemeLength),
+      index.sliceGraphemes(start: 2, end: 2),
+    ]) {
+      expect(slice.domNodeCount, _serializedDomNodeCount(slice.html));
+    }
+    expect(index.sliceGraphemes(start: 2, end: 2).domNodeCount, 0);
+    expect(codec.parseCount, 1);
+  });
+
   test('marks whitespace and zero-text ranges as non-renderable', () {
     final whitespace = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
         .prepare(
@@ -455,6 +549,7 @@ void main() {
     final emptySlice = empty.slice(startOffset: 0, endOffset: 0);
     expect(emptySlice.html, isEmpty);
     expect(emptySlice.hasRenderableContent, isFalse);
+    expect(emptySlice.domNodeCount, 0);
   });
 
   test('existing rune slicer delegates to one shared DOM parse', () {
@@ -523,6 +618,15 @@ List<NovelReaderComplexHtmlSlice> _consecutiveSlices(
     for (var index = 1; index < offsets.length; index += 1)
       session.slice(startOffset: offsets[index - 1], endOffset: offsets[index]),
   ];
+}
+
+int _serializedDomNodeCount(String html) {
+  int count(html_dom.Node node) =>
+      1 + node.nodes.fold<int>(0, (total, child) => total + count(child));
+  return html_parser
+      .parseFragment(html)
+      .nodes
+      .fold<int>(0, (total, node) => total + count(node));
 }
 
 final class _CountingFragmentCodec implements ForumHtmlFragmentCodec {

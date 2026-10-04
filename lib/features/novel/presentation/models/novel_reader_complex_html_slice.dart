@@ -54,6 +54,7 @@ final class NovelReaderComplexHtmlSlice {
     required this.startOffset,
     required this.endOffset,
     required this.hasRenderableContent,
+    required this.domNodeCount,
   });
 
   final String html;
@@ -62,16 +63,28 @@ final class NovelReaderComplexHtmlSlice {
   final int startOffset;
   final int endOffset;
   final bool hasRenderableContent;
+
+  /// Element, text and opaque nodes retained in the slice DOM, excluding the
+  /// fragment root. This describes the slice, not any buffered page HTML.
+  final int domNodeCount;
 }
 
 abstract interface class NovelReaderComplexHtmlSliceSession {
   int get textLength;
 
+  /// Immutable legal boundaries, sorted by unique
+  /// [NovelReaderComplexHtmlBoundary.textOffset] values. The final boundary is
+  /// [textLength], including for an empty session.
   List<NovelReaderComplexHtmlBoundary> get boundaries;
 
   List<NovelReaderComplexHtmlProtectedRange> get protectedRanges;
 
   bool isLegalBoundary(int textOffset);
+
+  /// Index of the first boundary strictly after [startOffset], or
+  /// `boundaries.length` if none exists. Queries may be inside protected ranges,
+  /// but must stay within `[0, textLength]`.
+  int firstBoundaryIndexAfter(int startOffset);
 
   NovelReaderComplexHtmlSlice slice({
     required int startOffset,

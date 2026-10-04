@@ -146,6 +146,7 @@ NovelReaderFlowableComplexChunk _complexChunk(
   return NovelReaderFlowableComplexChunk(
     slice: NovelReaderComplexHtmlSlice(
       html: html,
+      domNodeCount: 2,
       startAnchor: NovelReaderTextAnchor(
         episodeId: 'composer-test',
         nodeId: 'complex',
