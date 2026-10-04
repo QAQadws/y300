@@ -1,12 +1,10 @@
-import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
+import 'package:html/dom.dart' as html_dom;
+import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
-/// Slices prepared safe HTML by local DOM source rune offsets, counting BR as
-/// one newline and textless inline widgets as zero source runes.
-///
-/// Complex HTML uses the same DOM index through its grapheme-based session;
-/// This coordinate is independent of semantic anchors; their projection is
-/// carried by the atom rather than used to cut DOM text.
+/// Preserves the prepared safe-HTML rune slicing entry point. The core owns
+/// DOM slicing; semantic anchors are projected by the atom's Host separately.
 final class NovelReaderHtmlTextRangeSlicer {
   const NovelReaderHtmlTextRangeSlicer({
     ForumHtmlFragmentCodec fragmentCodec =
@@ -17,7 +15,10 @@ final class NovelReaderHtmlTextRangeSlicer {
 
   NovelReaderHtmlTextRangeSliceSession prepare(String html) {
     return NovelReaderHtmlTextRangeSliceSession._(
-      NovelReaderHtmlDomTextIndex.parse(html, fragmentCodec: _fragmentCodec),
+      HtmlTextRangeSlicer(
+        fragmentParser: _ForumFragmentParser(_fragmentCodec),
+        protectedInlinePredicate: _isStableProtectedInline,
+      ).prepare(html),
     );
   }
 
@@ -27,16 +28,23 @@ final class NovelReaderHtmlTextRangeSlicer {
 }
 
 final class NovelReaderHtmlTextRangeSliceSession {
-  const NovelReaderHtmlTextRangeSliceSession._(this._index);
+  const NovelReaderHtmlTextRangeSliceSession._(this._session);
 
-  final NovelReaderHtmlDomTextIndex _index;
+  final HtmlTextRangeSliceSession _session;
 
-  String slice({required int start, required int end}) {
-    if (start < 0 || end < start) {
-      throw RangeError.range(start, 0, end, 'start');
-    }
-    final clampedStart = start.clamp(0, _index.runeLength).toInt();
-    final clampedEnd = end.clamp(0, _index.runeLength).toInt();
-    return _index.sliceRunes(start: clampedStart, end: clampedEnd).html;
-  }
+  String slice({required int start, required int end}) =>
+      _session.slice(start: start, end: end);
+}
+
+bool _isStableProtectedInline(html_dom.Element element) =>
+    const DefaultNovelReaderProtectedInlineNodeAdapter()
+        .assess(element)
+        .isStable;
+
+final class _ForumFragmentParser implements HtmlFragmentParser {
+  const _ForumFragmentParser(this.codec);
+  final ForumHtmlFragmentCodec codec;
+
+  @override
+  html_dom.DocumentFragment parse(String html) => codec.parse(html);
 }

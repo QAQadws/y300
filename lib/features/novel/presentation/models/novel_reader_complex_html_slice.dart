@@ -1,18 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
-enum NovelReaderComplexBoundaryKind {
-  blockEnd,
-  hardBreak,
-  sentenceEnd,
-  wordEnd,
-  graphemeEnd,
-  rubyClusterEnd,
-  protectedInlineEnd,
-  atomEnd,
-}
-
-enum NovelReaderComplexProtectedRangeKind { ruby, inlineWidget }
+typedef NovelReaderComplexBoundaryKind = HtmlComplexBoundaryKind;
+typedef NovelReaderComplexProtectedRangeKind = HtmlComplexProtectedRangeKind;
+typedef NovelReaderComplexHtmlProtectedRange = HtmlComplexProtectedRange;
 
 @immutable
 final class NovelReaderComplexHtmlBoundary {
@@ -27,22 +19,6 @@ final class NovelReaderComplexHtmlBoundary {
   final NovelReaderTextAnchor anchor;
   final NovelReaderComplexBoundaryKind kind;
   final int preference;
-}
-
-@immutable
-final class NovelReaderComplexHtmlProtectedRange {
-  const NovelReaderComplexHtmlProtectedRange({
-    required this.startOffset,
-    required this.endOffset,
-    required this.kind,
-  });
-
-  final int startOffset;
-  final int endOffset;
-  final NovelReaderComplexProtectedRangeKind kind;
-
-  bool containsInteriorOffset(int offset) =>
-      offset > startOffset && offset < endOffset;
 }
 
 @immutable
@@ -75,6 +51,12 @@ final class NovelReaderComplexHtmlSlice {
 }
 
 abstract interface class NovelReaderComplexHtmlSliceSession {
+  /// Pure source-coordinate session; business anchors stay in this Host adapter.
+  HtmlComplexSliceSession get coreSession;
+
+  /// Projects an already cloned slice without slicing or parsing its HTML again.
+  NovelReaderComplexHtmlSlice projectSlice(HtmlComplexSlice slice);
+
   int get textLength;
 
   /// Immutable legal boundaries, sorted by unique

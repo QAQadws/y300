@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/novel/domain/services/novel_reader_text_coordinates.dart';
+import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
 
 void main() {
   test('source coordinates round trip at Unicode code-point boundaries', () {
@@ -8,21 +8,21 @@ void main() {
     for (var codePoint = 0; codePoint < boundaries.length; codePoint++) {
       final utf16 = boundaries[codePoint];
       expect(
-        NovelReaderTextCoordinates.codePointOffsetForUtf16(text, utf16),
+        HtmlTextCoordinates.codePointOffsetForUtf16(text, utf16),
         codePoint,
       );
       expect(
-        NovelReaderTextCoordinates.utf16OffsetForCodePoint(text, codePoint),
+        HtmlTextCoordinates.utf16OffsetForCodePoint(text, codePoint),
         utf16,
       );
     }
-    expect(NovelReaderTextCoordinates.codePointOffsetForUtf16(text, 3), 2);
-    expect(NovelReaderTextCoordinates.codePointOffsetForUtf16(text, -1), 0);
-    expect(NovelReaderTextCoordinates.codePointOffsetForUtf16(text, 100), 8);
-    expect(NovelReaderTextCoordinates.utf16OffsetForCodePoint(text, -1), 0);
-    expect(NovelReaderTextCoordinates.utf16OffsetForCodePoint(text, 100), 11);
-    expect(NovelReaderTextCoordinates.codePointOffsetForUtf16('', 1), 0);
-    expect(NovelReaderTextCoordinates.utf16OffsetForCodePoint('', 1), 0);
+    expect(HtmlTextCoordinates.codePointOffsetForUtf16(text, 3), 2);
+    expect(HtmlTextCoordinates.codePointOffsetForUtf16(text, -1), 0);
+    expect(HtmlTextCoordinates.codePointOffsetForUtf16(text, 100), 8);
+    expect(HtmlTextCoordinates.utf16OffsetForCodePoint(text, -1), 0);
+    expect(HtmlTextCoordinates.utf16OffsetForCodePoint(text, 100), 11);
+    expect(HtmlTextCoordinates.codePointOffsetForUtf16('', 1), 0);
+    expect(HtmlTextCoordinates.utf16OffsetForCodePoint('', 1), 0);
   });
 
   test(
@@ -32,7 +32,7 @@ void main() {
       const text = 'x${family}Ke\u0301z';
       const start = 1 + family.length;
       expect(
-        NovelReaderTextCoordinates.snippet(
+        HtmlTextCoordinates.snippet(
           text: text,
           start: start,
           end: start + 1,
@@ -47,7 +47,7 @@ void main() {
     'snippet expands match endpoints inside flag and combining graphemes',
     () {
       expect(
-        NovelReaderTextCoordinates.snippet(
+        HtmlTextCoordinates.snippet(
           text: 'x🇨🇳y',
           start: 2,
           end: 3,
@@ -56,7 +56,7 @@ void main() {
         '...🇨🇳...',
       );
       expect(
-        NovelReaderTextCoordinates.snippet(
+        HtmlTextCoordinates.snippet(
           text: 'xe\u0301y',
           start: 2,
           end: 3,
@@ -69,11 +69,11 @@ void main() {
 
   test('snippet clamps source ranges without trimming its whitespace', () {
     expect(
-      NovelReaderTextCoordinates.snippet(text: '  A😀  ', start: -10, end: 100),
+      HtmlTextCoordinates.snippet(text: '  A😀  ', start: -10, end: 100),
       '  A😀  ',
     );
     expect(
-      NovelReaderTextCoordinates.snippet(
+      HtmlTextCoordinates.snippet(
         text: 'abcdef',
         start: 2,
         end: 3,
@@ -81,6 +81,6 @@ void main() {
       ),
       '...c...',
     );
-    expect(NovelReaderTextCoordinates.snippet(text: '', start: 1, end: 2), '');
+    expect(HtmlTextCoordinates.snippet(text: '', start: 1, end: 2), '');
   });
 }

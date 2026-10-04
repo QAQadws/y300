@@ -1,12 +1,14 @@
 import 'dart:async';
 
+import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 
 /// Cooperative cancellation for derived pagination work.
 ///
 /// Synchronous Flutter layout must finish its current step. Host/probe waits
 /// can stop immediately; a cancelled run must never publish a plan.
-final class NovelReaderPaginationCancellationToken {
+final class NovelReaderPaginationCancellationToken
+    implements HtmlPaginationCancellation {
   bool _cancelled = false;
   final _pendingYields = <Completer<void>, Timer>{};
   final _listeners = <void Function()>{};
@@ -39,6 +41,7 @@ final class NovelReaderPaginationCancellationToken {
   }
 
   /// Releases this wait on cancellation while still observing a late result.
+  @override
   Future<T> waitFor<T>(Future<T> operation) {
     final completion = Completer<T>();
     final removeListener = onCancel(() {
@@ -71,6 +74,7 @@ final class NovelReaderPaginationCancellationToken {
   }
 
   /// Yield UI execution without leaving a timer behind when the page exits.
+  @override
   Future<void> yieldToEventLoop() async {
     throwIfCancelled();
     final completion = Completer<void>();
@@ -83,6 +87,7 @@ final class NovelReaderPaginationCancellationToken {
     throwIfCancelled();
   }
 
+  @override
   void throwIfCancelled() {
     if (_cancelled) {
       throw const NovelReaderPaginationException(

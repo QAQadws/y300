@@ -2,13 +2,12 @@ import 'dart:convert';
 
 import 'package:characters/characters.dart';
 import 'package:html/dom.dart' as html_dom;
-import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'ports.dart';
 
-enum NovelReaderHtmlDomProtectedNodeKind { ruby, inlineWidget }
+enum HtmlDomProtectedNodeKind { ruby, inlineWidget }
 
-final class NovelReaderHtmlDomTextSlice {
-  const NovelReaderHtmlDomTextSlice({
+final class HtmlDomTextSlice {
+  const HtmlDomTextSlice({
     required this.html,
     required this.hasRenderableContent,
     required this.domNodeCount,
@@ -21,8 +20,8 @@ final class NovelReaderHtmlDomTextSlice {
   final int domNodeCount;
 }
 
-final class NovelReaderHtmlDomGrapheme {
-  const NovelReaderHtmlDomGrapheme({
+final class HtmlDomGrapheme {
+  const HtmlDomGrapheme({
     required this.text,
     required this.sourceStart,
     required this.sourceEnd,
@@ -38,49 +37,45 @@ final class NovelReaderHtmlDomGrapheme {
 /// Immutable DOM index shared by source-rune and grapheme slicing.
 /// Inline BR occupies one source rune; textless widgets occupy only a synthetic
 /// grapheme. Adjacent inline text is segmented together, including across spans.
-final class NovelReaderHtmlDomTextIndex {
-  NovelReaderHtmlDomTextIndex._({
+final class HtmlDomTextIndex {
+  HtmlDomTextIndex._({
     required this.roots,
     required this.runeLength,
     required this.graphemes,
     required List<int> sourceRuneBoundaries,
-    required NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
+    required HtmlProtectedInlinePredicate protectedInlinePredicate,
   }) : _sourceRuneBoundaries = sourceRuneBoundaries,
-       _protectedInlineNodeAdapter = protectedInlineNodeAdapter;
+       _protectedInlinePredicate = protectedInlinePredicate;
 
-  factory NovelReaderHtmlDomTextIndex.parse(
+  factory HtmlDomTextIndex.parse(
     String html, {
-    ForumHtmlFragmentCodec fragmentCodec =
-        const HtmlPackageForumHtmlFragmentCodec(),
-    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter =
-        const DefaultNovelReaderProtectedInlineNodeAdapter(),
+    HtmlFragmentParser fragmentParser = const DefaultHtmlFragmentParser(),
+    HtmlProtectedInlinePredicate protectedInlinePredicate = _notProtectedInline,
   }) {
-    final fragment = fragmentCodec.parse(html);
-    final builder = _HtmlTextIndexBuilder(protectedInlineNodeAdapter);
+    final fragment = fragmentParser.parse(html);
+    final builder = _HtmlTextIndexBuilder(protectedInlinePredicate);
     final drafts = fragment.nodes.map(builder.visit).toList(growable: false);
     builder.flushText();
     final boundaries = List<int>.unmodifiable(<int>[
       0,
       ...builder.graphemes.map((grapheme) => grapheme.sourceEnd),
     ]);
-    return NovelReaderHtmlDomTextIndex._(
-      roots: List<NovelReaderHtmlDomIndexedNode>.unmodifiable(
+    return HtmlDomTextIndex._(
+      roots: List<HtmlDomIndexedNode>.unmodifiable(
         drafts.map((draft) => draft.freeze(boundaries)),
       ),
       runeLength: builder.runeOffset,
-      graphemes: List<NovelReaderHtmlDomGrapheme>.unmodifiable(
-        builder.graphemes,
-      ),
+      graphemes: List<HtmlDomGrapheme>.unmodifiable(builder.graphemes),
       sourceRuneBoundaries: boundaries,
-      protectedInlineNodeAdapter: protectedInlineNodeAdapter,
+      protectedInlinePredicate: protectedInlinePredicate,
     );
   }
 
-  final List<NovelReaderHtmlDomIndexedNode> roots;
+  final List<HtmlDomIndexedNode> roots;
   final int runeLength;
-  final List<NovelReaderHtmlDomGrapheme> graphemes;
+  final List<HtmlDomGrapheme> graphemes;
   final List<int> _sourceRuneBoundaries;
-  final NovelReaderProtectedInlineNodeAdapter _protectedInlineNodeAdapter;
+  final HtmlProtectedInlinePredicate _protectedInlinePredicate;
 
   int get graphemeLength => graphemes.length;
 
@@ -89,10 +84,7 @@ final class NovelReaderHtmlDomTextIndex {
     return _sourceRuneBoundaries[offset];
   }
 
-  NovelReaderHtmlDomTextSlice sliceRunes({
-    required int start,
-    required int end,
-  }) {
+  HtmlDomTextSlice sliceRunes({required int start, required int end}) {
     _validateRange(start: start, end: end, length: runeLength);
     final nodes = roots
         .map((node) => node.sliceRunes(start, end))
@@ -101,10 +93,7 @@ final class NovelReaderHtmlDomTextIndex {
     return _result(nodes);
   }
 
-  NovelReaderHtmlDomTextSlice sliceGraphemes({
-    required int start,
-    required int end,
-  }) {
+  HtmlDomTextSlice sliceGraphemes({required int start, required int end}) {
     _validateRange(start: start, end: end, length: graphemeLength);
     final nodes = roots
         .map((node) => node.sliceGraphemes(start, end))
@@ -113,11 +102,11 @@ final class NovelReaderHtmlDomTextIndex {
     return _result(nodes);
   }
 
-  NovelReaderHtmlDomTextSlice _result(List<html_dom.Node> nodes) {
-    return NovelReaderHtmlDomTextSlice(
+  HtmlDomTextSlice _result(List<html_dom.Node> nodes) {
+    return HtmlDomTextSlice(
       html: nodes.map(_serializeNode).join(),
       hasRenderableContent: nodes.any(
-        (node) => _hasRenderableContent(node, _protectedInlineNodeAdapter),
+        (node) => _hasRenderableContent(node, _protectedInlinePredicate),
       ),
       domNodeCount: _countNodes(nodes),
     );
@@ -136,15 +125,15 @@ final class NovelReaderHtmlDomTextIndex {
     return count;
   }
 
-  static NovelReaderHtmlDomProtectedNodeKind? _protectedKind(
+  static HtmlDomProtectedNodeKind? _protectedKind(
     html_dom.Element element,
-    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
+    HtmlProtectedInlinePredicate protectedInlinePredicate,
   ) {
     if (element.localName?.toLowerCase() == 'ruby') {
-      return NovelReaderHtmlDomProtectedNodeKind.ruby;
+      return HtmlDomProtectedNodeKind.ruby;
     }
-    if (protectedInlineNodeAdapter.assess(element).isStable) {
-      return NovelReaderHtmlDomProtectedNodeKind.inlineWidget;
+    if (protectedInlinePredicate(element)) {
+      return HtmlDomProtectedNodeKind.inlineWidget;
     }
     return null;
   }
@@ -161,7 +150,7 @@ final class NovelReaderHtmlDomTextIndex {
 
   static bool _hasRenderableContent(
     html_dom.Node node,
-    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
+    HtmlProtectedInlinePredicate protectedInlinePredicate,
   ) {
     if (node is html_dom.Text) {
       return _renderableTextPattern.hasMatch(node.data);
@@ -169,7 +158,7 @@ final class NovelReaderHtmlDomTextIndex {
     if (node is! html_dom.Element) {
       return false;
     }
-    if (_protectedKind(node, protectedInlineNodeAdapter) != null ||
+    if (_protectedKind(node, protectedInlinePredicate) != null ||
         const <String>{
           'hr',
           'img',
@@ -181,7 +170,7 @@ final class NovelReaderHtmlDomTextIndex {
       return true;
     }
     return node.nodes.any(
-      (child) => _hasRenderableContent(child, protectedInlineNodeAdapter),
+      (child) => _hasRenderableContent(child, protectedInlinePredicate),
     );
   }
 
@@ -196,8 +185,8 @@ final class NovelReaderHtmlDomTextIndex {
   );
 }
 
-sealed class NovelReaderHtmlDomIndexedNode {
-  const NovelReaderHtmlDomIndexedNode({
+sealed class HtmlDomIndexedNode {
+  const HtmlDomIndexedNode({
     required this.original,
     required this.runeStart,
     required this.runeEnd,
@@ -238,9 +227,8 @@ sealed class NovelReaderHtmlDomIndexedNode {
       : end > rangeStart && start < rangeEnd;
 }
 
-final class NovelReaderHtmlDomIndexedTextNode
-    extends NovelReaderHtmlDomIndexedNode {
-  const NovelReaderHtmlDomIndexedTextNode({
+final class HtmlDomIndexedTextNode extends HtmlDomIndexedNode {
+  const HtmlDomIndexedTextNode({
     required super.original,
     required super.runeStart,
     required super.runeEnd,
@@ -272,9 +260,8 @@ final class NovelReaderHtmlDomIndexedTextNode
   }
 }
 
-final class NovelReaderHtmlDomIndexedElementNode
-    extends NovelReaderHtmlDomIndexedNode {
-  const NovelReaderHtmlDomIndexedElementNode({
+final class HtmlDomIndexedElementNode extends HtmlDomIndexedNode {
+  const HtmlDomIndexedElementNode({
     required html_dom.Element super.original,
     required super.runeStart,
     required super.runeEnd,
@@ -284,8 +271,8 @@ final class NovelReaderHtmlDomIndexedElementNode
     required this.protectedKind,
   });
 
-  final List<NovelReaderHtmlDomIndexedNode> children;
-  final NovelReaderHtmlDomProtectedNodeKind? protectedKind;
+  final List<HtmlDomIndexedNode> children;
+  final HtmlDomProtectedNodeKind? protectedKind;
 
   String get tagName =>
       (original as html_dom.Element).localName?.toLowerCase() ?? '';
@@ -314,7 +301,7 @@ final class NovelReaderHtmlDomIndexedElementNode
   }
 
   html_dom.Node? _sliceChildren(
-    html_dom.Node? Function(NovelReaderHtmlDomIndexedNode child) slice,
+    html_dom.Node? Function(HtmlDomIndexedNode child) slice,
   ) {
     final clone = original.clone(false) as html_dom.Element;
     for (final child in children) {
@@ -325,9 +312,8 @@ final class NovelReaderHtmlDomIndexedElementNode
   }
 }
 
-final class NovelReaderHtmlDomIndexedOpaqueNode
-    extends NovelReaderHtmlDomIndexedNode {
-  const NovelReaderHtmlDomIndexedOpaqueNode({
+final class HtmlDomIndexedOpaqueNode extends HtmlDomIndexedNode {
+  const HtmlDomIndexedOpaqueNode({
     required super.original,
     required super.runeStart,
     required super.runeEnd,
@@ -345,10 +331,10 @@ final class NovelReaderHtmlDomIndexedOpaqueNode
 }
 
 final class _HtmlTextIndexBuilder {
-  _HtmlTextIndexBuilder(this.protectedInlineNodeAdapter);
+  _HtmlTextIndexBuilder(this.protectedInlinePredicate);
 
-  final NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter;
-  final List<NovelReaderHtmlDomGrapheme> graphemes = [];
+  final HtmlProtectedInlinePredicate protectedInlinePredicate;
+  final List<HtmlDomGrapheme> graphemes = [];
   final StringBuffer _text = StringBuffer();
   int _textStart = 0;
   int runeOffset = 0;
@@ -375,9 +361,9 @@ final class _HtmlTextIndexBuilder {
       );
     }
     final tag = node.localName?.toLowerCase() ?? '';
-    final protectedKind = NovelReaderHtmlDomTextIndex._protectedKind(
+    final protectedKind = HtmlDomTextIndex._protectedKind(
       node,
-      protectedInlineNodeAdapter,
+      protectedInlinePredicate,
     );
     final separatesText =
         protectedKind != null || tag == 'br' || _blockTags.contains(tag);
@@ -387,7 +373,7 @@ final class _HtmlTextIndexBuilder {
     if (tag == 'br') {
       runeOffset += 1;
       graphemes.add(
-        NovelReaderHtmlDomGrapheme(
+        HtmlDomGrapheme(
           text: '\n',
           sourceStart: runeStart,
           sourceEnd: runeOffset,
@@ -399,7 +385,7 @@ final class _HtmlTextIndexBuilder {
       if (separatesText) flushText();
       if (protectedKind != null && graphemes.length == graphemeStart) {
         graphemes.add(
-          NovelReaderHtmlDomGrapheme(
+          HtmlDomGrapheme(
             text: '\uFFFC',
             sourceStart: runeOffset,
             sourceEnd: runeOffset,
@@ -424,7 +410,7 @@ final class _HtmlTextIndexBuilder {
     for (final text in _text.toString().characters) {
       final end = sourceOffset + text.runes.length;
       graphemes.add(
-        NovelReaderHtmlDomGrapheme(
+        HtmlDomGrapheme(
           text: text,
           sourceStart: sourceOffset,
           sourceEnd: end,
@@ -478,16 +464,16 @@ final class _HtmlIndexedNodeDraft {
   final int runeStart;
   final int runeEnd;
   final List<_HtmlIndexedNodeDraft> children;
-  final NovelReaderHtmlDomProtectedNodeKind? protectedKind;
+  final HtmlDomProtectedNodeKind? protectedKind;
   final int? explicitGraphemeStart;
   final int? explicitGraphemeEnd;
 
-  NovelReaderHtmlDomIndexedNode freeze(List<int> boundaries) {
+  HtmlDomIndexedNode freeze(List<int> boundaries) {
     final node = original;
     final start = _upperBound(boundaries, runeStart) - 1;
     final end = runeStart == runeEnd ? start : _lowerBound(boundaries, runeEnd);
     if (node is html_dom.Text) {
-      return NovelReaderHtmlDomIndexedTextNode(
+      return HtmlDomIndexedTextNode(
         original: node,
         runeStart: runeStart,
         runeEnd: runeEnd,
@@ -500,7 +486,7 @@ final class _HtmlIndexedNodeDraft {
     if (node is html_dom.Element &&
         node.localName != 'script' &&
         node.localName != 'style') {
-      final indexedChildren = List<NovelReaderHtmlDomIndexedNode>.unmodifiable(
+      final indexedChildren = List<HtmlDomIndexedNode>.unmodifiable(
         children.map((child) => child.freeze(boundaries)),
       );
       // Zero-source siblings can share a rune boundary while occupying
@@ -517,7 +503,7 @@ final class _HtmlIndexedNodeDraft {
           if (child.graphemeEnd > childEnd) childEnd = child.graphemeEnd;
         }
       }
-      return NovelReaderHtmlDomIndexedElementNode(
+      return HtmlDomIndexedElementNode(
         original: node,
         runeStart: runeStart,
         runeEnd: runeEnd,
@@ -527,7 +513,7 @@ final class _HtmlIndexedNodeDraft {
         protectedKind: protectedKind,
       );
     }
-    return NovelReaderHtmlDomIndexedOpaqueNode(
+    return HtmlDomIndexedOpaqueNode(
       original: node,
       runeStart: runeStart,
       runeEnd: runeEnd,
@@ -564,3 +550,5 @@ final class _HtmlIndexedNodeDraft {
     return low;
   }
 }
+
+bool _notProtectedInline(html_dom.Element element) => false;

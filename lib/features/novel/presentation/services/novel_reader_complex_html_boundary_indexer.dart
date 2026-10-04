@@ -1,7 +1,8 @@
+import 'package:html/dom.dart' as html_dom;
+import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
@@ -13,6 +14,7 @@ abstract interface class NovelReaderComplexHtmlBoundaryIndexer {
   });
 }
 
+/// Projects the pure DOM source coordinates into this reader's canonical anchors.
 final class DefaultNovelReaderComplexHtmlBoundaryIndexer
     implements NovelReaderComplexHtmlBoundaryIndexer {
   const DefaultNovelReaderComplexHtmlBoundaryIndexer({
@@ -31,320 +33,96 @@ final class DefaultNovelReaderComplexHtmlBoundaryIndexer
     required NovelReaderTextAnchor startAnchor,
     NovelReaderSourceAnchorProjection? sourceAnchorProjection,
   }) {
-    final index = NovelReaderHtmlDomTextIndex.parse(
-      html,
-      fragmentCodec: _fragmentCodec,
-      protectedInlineNodeAdapter: protectedInlineNodeAdapter,
-    );
-    final collector = _ComplexBoundaryCollector(
-      startAnchor: startAnchor,
-      index: index,
-      sourceAnchorProjection: sourceAnchorProjection,
-    );
+    final adapter = protectedInlineNodeAdapter;
+    final core = DefaultHtmlComplexBoundaryIndexer(
+      fragmentParser: _ForumFragmentParser(_fragmentCodec),
+      protectedInlinePredicate: (element) => adapter.assess(element).isStable,
+    ).prepare(html: html);
     if (sourceAnchorProjection != null &&
-        sourceAnchorProjection.sourceRuneLength != index.runeLength) {
+        sourceAnchorProjection.sourceRuneLength != core.sourceRuneLength) {
       throw ArgumentError('Source anchor projection does not cover the HTML.');
     }
-    collector.collectTextBoundaries();
-    for (final node in index.roots) {
-      collector.visit(node);
-    }
-    return _DefaultNovelReaderComplexHtmlSliceSession(
-      index: index,
+    return _NovelReaderComplexHtmlSliceSession(
+      coreSession: core,
       startAnchor: startAnchor,
       sourceAnchorProjection: sourceAnchorProjection,
-      boundaries: collector.finishBoundaries(),
-      protectedRanges: collector.finishProtectedRanges(),
     );
   }
 }
 
-final class _DefaultNovelReaderComplexHtmlSliceSession
+final class _NovelReaderComplexHtmlSliceSession
     implements NovelReaderComplexHtmlSliceSession {
-  _DefaultNovelReaderComplexHtmlSliceSession({
-    required NovelReaderHtmlDomTextIndex index,
+  _NovelReaderComplexHtmlSliceSession({
+    required this.coreSession,
     required this.startAnchor,
     required this.sourceAnchorProjection,
-    required List<NovelReaderComplexHtmlBoundary> boundaries,
-    required List<NovelReaderComplexHtmlProtectedRange> protectedRanges,
-  }) : _index = index,
-       boundaries = List<NovelReaderComplexHtmlBoundary>.unmodifiable(
-         boundaries,
-       ),
-       protectedRanges =
-           List<NovelReaderComplexHtmlProtectedRange>.unmodifiable(
-             protectedRanges,
-           ),
-       _legalOffsets = <int>{
-         0,
-         ...boundaries.map((boundary) => boundary.textOffset),
-       };
+  }) {
+    boundaries = List<NovelReaderComplexHtmlBoundary>.unmodifiable(
+      coreSession.boundaries.map(
+        (boundary) => NovelReaderComplexHtmlBoundary(
+          textOffset: boundary.textOffset,
+          anchor: _anchorAtSourceRune(boundary.sourceRuneOffset),
+          kind: boundary.kind,
+          preference: boundary.preference,
+        ),
+      ),
+    );
+  }
 
-  final NovelReaderHtmlDomTextIndex _index;
+  @override
+  final HtmlComplexSliceSession coreSession;
   final NovelReaderTextAnchor startAnchor;
   final NovelReaderSourceAnchorProjection? sourceAnchorProjection;
 
   @override
-  int get textLength => _index.graphemeLength;
+  int get textLength => coreSession.textLength;
 
   @override
-  final List<NovelReaderComplexHtmlBoundary> boundaries;
+  late final List<NovelReaderComplexHtmlBoundary> boundaries;
 
   @override
-  final List<NovelReaderComplexHtmlProtectedRange> protectedRanges;
-
-  final Set<int> _legalOffsets;
-
-  @override
-  bool isLegalBoundary(int textOffset) => _legalOffsets.contains(textOffset);
+  List<NovelReaderComplexHtmlProtectedRange> get protectedRanges =>
+      coreSession.protectedRanges;
 
   @override
-  int firstBoundaryIndexAfter(int startOffset) {
-    RangeError.checkValueInInterval(startOffset, 0, textLength, 'startOffset');
-    var low = 0;
-    var high = boundaries.length;
-    while (low < high) {
-      final middle = low + (high - low) ~/ 2;
-      if (boundaries[middle].textOffset <= startOffset) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
-    return low;
-  }
+  bool isLegalBoundary(int textOffset) =>
+      coreSession.isLegalBoundary(textOffset);
+
+  @override
+  int firstBoundaryIndexAfter(int startOffset) =>
+      coreSession.firstBoundaryIndexAfter(startOffset);
 
   @override
   NovelReaderComplexHtmlSlice slice({
     required int startOffset,
     required int endOffset,
-  }) {
-    if (startOffset < 0 || endOffset < startOffset || endOffset > textLength) {
-      throw RangeError(
-        'Invalid complex HTML range [$startOffset, $endOffset) for '
-        '$textLength.',
-      );
-    }
-    if (!isLegalBoundary(startOffset) || !isLegalBoundary(endOffset)) {
-      throw ArgumentError(
-        'Complex HTML slices must start and end at legal boundaries: '
-        '[$startOffset, $endOffset).',
-      );
-    }
-    final sliced = _index.sliceGraphemes(start: startOffset, end: endOffset);
-    return NovelReaderComplexHtmlSlice(
-      html: sliced.html,
-      startAnchor: _anchorAt(startOffset),
-      endAnchor: _anchorAt(endOffset),
-      startOffset: startOffset,
-      endOffset: endOffset,
-      hasRenderableContent: sliced.hasRenderableContent,
-      domNodeCount: sliced.domNodeCount,
-      sourceRuneLength:
-          _index.sourceRuneAtGraphemeBoundary(endOffset) -
-          _index.sourceRuneAtGraphemeBoundary(startOffset),
-    );
-  }
-
-  NovelReaderTextAnchor _anchorAt(int offset) {
-    return _anchorAtGrapheme(
-      _index,
-      startAnchor,
-      sourceAnchorProjection,
-      offset,
-    );
-  }
-}
-
-final class _ComplexBoundaryCollector {
-  _ComplexBoundaryCollector({
-    required this.startAnchor,
-    required this.index,
-    required this.sourceAnchorProjection,
-  });
-
-  final NovelReaderTextAnchor startAnchor;
-  final NovelReaderHtmlDomTextIndex index;
-  final NovelReaderSourceAnchorProjection? sourceAnchorProjection;
-  int get textLength => index.graphemeLength;
-  final Map<int, _BoundaryCandidate> _candidates = <int, _BoundaryCandidate>{};
-  final List<NovelReaderComplexHtmlProtectedRange> _protectedRanges =
-      <NovelReaderComplexHtmlProtectedRange>[];
-
-  static const _blockTags = <String>{
-    'address',
-    'article',
-    'aside',
-    'blockquote',
-    'dd',
-    'div',
-    'dl',
-    'dt',
-    'figcaption',
-    'figure',
-    'footer',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'header',
-    'li',
-    'main',
-    'p',
-    'pre',
-    'section',
-  };
-
-  void visit(NovelReaderHtmlDomIndexedNode node) {
-    if (node is NovelReaderHtmlDomIndexedTextNode) {
-      return;
-    }
-    if (node is! NovelReaderHtmlDomIndexedElementNode) {
-      return;
-    }
-    final protectedKind = node.protectedKind;
-    if (protectedKind != null) {
-      final rangeKind =
-          protectedKind == NovelReaderHtmlDomProtectedNodeKind.ruby
-          ? NovelReaderComplexProtectedRangeKind.ruby
-          : NovelReaderComplexProtectedRangeKind.inlineWidget;
-      _protectedRanges.add(
-        NovelReaderComplexHtmlProtectedRange(
-          startOffset: node.graphemeStart,
-          endOffset: node.graphemeEnd,
-          kind: rangeKind,
-        ),
-      );
-      _put(
-        node.graphemeEnd,
-        protectedKind == NovelReaderHtmlDomProtectedNodeKind.ruby
-            ? NovelReaderComplexBoundaryKind.rubyClusterEnd
-            : NovelReaderComplexBoundaryKind.protectedInlineEnd,
-      );
-      return;
-    }
-    if (node.tagName == 'br') {
-      _put(node.graphemeStart, NovelReaderComplexBoundaryKind.hardBreak);
-      return;
-    }
-    for (final child in node.children) {
-      visit(child);
-    }
-    if (_blockTags.contains(node.tagName)) {
-      _put(node.graphemeEnd, NovelReaderComplexBoundaryKind.blockEnd);
-    }
-  }
-
-  void collectTextBoundaries() {
-    final graphemes = index.graphemes;
-    for (var offset = 0; offset < graphemes.length; offset += 1) {
-      final current = graphemes[offset];
-      if (!current.isText) continue;
-      final next = offset + 1 < graphemes.length && graphemes[offset + 1].isText
-          ? graphemes[offset + 1].text
-          : null;
-      final kind = _textBoundaryKind(current: current.text, next: next);
-      _put(offset + 1, kind);
-    }
-  }
-
-  NovelReaderComplexBoundaryKind _textBoundaryKind({
-    required String current,
-    required String? next,
-  }) {
-    if (_sentenceEndPattern.hasMatch(current)) {
-      return NovelReaderComplexBoundaryKind.sentenceEnd;
-    }
-    if (_wordDelimiterPattern.hasMatch(current) ||
-        (next != null && _wordDelimiterPattern.hasMatch(next))) {
-      return NovelReaderComplexBoundaryKind.wordEnd;
-    }
-    return NovelReaderComplexBoundaryKind.graphemeEnd;
-  }
-
-  void _put(int offset, NovelReaderComplexBoundaryKind kind) {
-    final candidate = _BoundaryCandidate(
-      kind: kind,
-      preference: _preference(kind),
-    );
-    final previous = _candidates[offset];
-    if (previous == null || candidate.preference > previous.preference) {
-      _candidates[offset] = candidate;
-    }
-  }
-
-  List<NovelReaderComplexHtmlBoundary> finishBoundaries() {
-    _put(textLength, NovelReaderComplexBoundaryKind.atomEnd);
-    for (final range in _protectedRanges) {
-      _candidates.removeWhere(
-        (offset, _) => range.containsInteriorOffset(offset),
-      );
-    }
-    final offsets = _candidates.keys.toList()..sort();
-    return offsets
-        .map((offset) {
-          final candidate = _candidates[offset]!;
-          return NovelReaderComplexHtmlBoundary(
-            textOffset: offset,
-            anchor: _anchorAtGrapheme(
-              index,
-              startAnchor,
-              sourceAnchorProjection,
-              offset,
-            ),
-            kind: candidate.kind,
-            preference: candidate.preference,
-          );
-        })
-        .toList(growable: false);
-  }
-
-  List<NovelReaderComplexHtmlProtectedRange> finishProtectedRanges() {
-    _protectedRanges.sort(
-      (left, right) => left.startOffset.compareTo(right.startOffset),
-    );
-    return List<NovelReaderComplexHtmlProtectedRange>.unmodifiable(
-      _protectedRanges,
-    );
-  }
-
-  int _preference(NovelReaderComplexBoundaryKind kind) {
-    return switch (kind) {
-      NovelReaderComplexBoundaryKind.atomEnd => 1000,
-      NovelReaderComplexBoundaryKind.blockEnd => 900,
-      NovelReaderComplexBoundaryKind.hardBreak => 800,
-      NovelReaderComplexBoundaryKind.rubyClusterEnd ||
-      NovelReaderComplexBoundaryKind.protectedInlineEnd => 750,
-      NovelReaderComplexBoundaryKind.sentenceEnd => 700,
-      NovelReaderComplexBoundaryKind.wordEnd => 600,
-      NovelReaderComplexBoundaryKind.graphemeEnd => 500,
-    };
-  }
-
-  static final _sentenceEndPattern = RegExp(r'^[。！？!?；;…]+$');
-  static final _wordDelimiterPattern = RegExp(
-    r'''^[\s\u00A0\u3000，、：:,.()（）「」『』“”"'-]+$''',
+  }) => projectSlice(
+    coreSession.slice(startOffset: startOffset, endOffset: endOffset),
   );
-}
 
-NovelReaderTextAnchor _anchorAtGrapheme(
-  NovelReaderHtmlDomTextIndex index,
-  NovelReaderTextAnchor startAnchor,
-  NovelReaderSourceAnchorProjection? projection,
-  int offset,
-) {
-  final sourceRune = index.sourceRuneAtGraphemeBoundary(offset);
-  // Production atoms carry exact semantic projections. The null path only
-  // supports legacy fixtures whose anchors use their local source rune axis.
-  return projection?.anchorAtSourceRune(sourceRune) ??
+  @override
+  NovelReaderComplexHtmlSlice projectSlice(HtmlComplexSlice slice) =>
+      NovelReaderComplexHtmlSlice(
+        html: slice.html,
+        startAnchor: _anchorAtSourceRune(slice.sourceRuneStart),
+        endAnchor: _anchorAtSourceRune(slice.sourceRuneEnd),
+        startOffset: slice.startOffset,
+        endOffset: slice.endOffset,
+        hasRenderableContent: slice.hasRenderableContent,
+        domNodeCount: slice.domNodeCount,
+        sourceRuneLength: slice.sourceRuneLength,
+      );
+
+  NovelReaderTextAnchor _anchorAtSourceRune(int sourceRune) =>
+      // Null projections retain legacy fixtures' local source-rune coordinates.
+      sourceAnchorProjection?.anchorAtSourceRune(sourceRune) ??
       startAnchor.copyWith(textOffset: startAnchor.textOffset + sourceRune);
 }
 
-final class _BoundaryCandidate {
-  const _BoundaryCandidate({required this.kind, required this.preference});
+final class _ForumFragmentParser implements HtmlFragmentParser {
+  const _ForumFragmentParser(this.codec);
+  final ForumHtmlFragmentCodec codec;
 
-  final NovelReaderComplexBoundaryKind kind;
-  final int preference;
+  @override
+  html_dom.DocumentFragment parse(String html) => codec.parse(html);
 }

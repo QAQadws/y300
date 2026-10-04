@@ -191,6 +191,8 @@ final class NovelReaderComplexHtmlBoundaryCache {
       6 * request.html.length +
       32 * session.textLength +
       96 * session.boundaries.length +
+      // The neutral session also retains source-coordinate boundary values.
+      40 * session.coreSession.boundaries.length +
       32 * session.protectedRanges.length +
       8 *
           (request
