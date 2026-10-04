@@ -564,6 +564,159 @@ void main() {
         expect(comicItems.single.hasTags, isTrue);
       },
     );
+
+    test(
+      'remote upsert rolls back earlier updates and inserts when one row fails',
+      () async {
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: 'original favorite'),
+        ]);
+        final db = await AppDatabase.open(databaseName: dbName);
+        await db.execute("""
+        CREATE TRIGGER favorite_test_reject_insert
+        BEFORE INSERT ON ${AppDatabase.favoriteThreadsTable}
+        WHEN NEW.tid = '200'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected row failure');
+        END
+        """);
+
+        await expectLater(
+          repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+            _thread(tid: '100', title: 'changed favorite'),
+            _thread(tid: '150', title: 'new favorite'),
+            _thread(tid: '200', title: 'rejected favorite'),
+          ]),
+          throwsA(isA<DatabaseException>()),
+        );
+
+        expect(await repository.getActiveTids(), <String>{'100'});
+        expect(
+          (await repository.getActiveThreadByTid('100'))?.title,
+          'original favorite',
+        );
+      },
+    );
+
+    test(
+      'category deletion rolls back assignments and later returns items to their system category',
+      () async {
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: 'favorite'),
+        ]);
+        final categoryId = await repository.createCategory(name: 'custom');
+        await repository.moveThreadToCategory(
+          tid: '100',
+          toCategoryId: categoryId,
+        );
+        final db = await AppDatabase.open(databaseName: dbName);
+        await db.execute("""
+        CREATE TRIGGER favorite_test_reject_category_delete
+        BEFORE DELETE ON ${AppDatabase.favoriteCategoriesTable}
+        BEGIN
+          SELECT RAISE(ABORT, 'injected category failure');
+        END
+        """);
+
+        await expectLater(
+          repository.deleteCategory(categoryId: categoryId),
+          throwsA(isA<DatabaseException>()),
+        );
+
+        expect(
+          (await repository.getActiveThreadByTid('100'))?.customCategoryId,
+          categoryId,
+        );
+        expect(
+          (await repository.loadCategoryItems(categoryId)).single.workId,
+          FavoriteShelfWorkId.fromTid('100'),
+        );
+        expect(
+          (await repository.loadVisibleCategories()).map(
+            (category) => category.categoryId,
+          ),
+          contains(categoryId),
+        );
+
+        await db.execute('DROP TRIGGER favorite_test_reject_category_delete');
+        await repository.deleteCategory(categoryId: categoryId);
+
+        expect(
+          (await repository.getActiveThreadByTid('100'))?.customCategoryId,
+          isNull,
+        );
+        expect(
+          (await repository.loadVisibleCategories()).map(
+            (category) => category.categoryId,
+          ),
+          isNot(contains(categoryId)),
+        );
+        expect(
+          (await repository.loadCategoryItems(
+            favoriteDefaultCategoryId,
+          )).single.workId,
+          FavoriteShelfWorkId.fromTid('100'),
+        );
+      },
+    );
+
+    test(
+      'incremental completion and failure preserve the last full-sync baseline',
+      () async {
+        final lastFullSync = DateTime.utc(2025, 1, 1);
+        final db = await AppDatabase.open(databaseName: dbName);
+        await db.insert(AppDatabase.favoriteSyncStateTable, <String, Object?>{
+          'sync_key': favoriteSyncKey,
+          'remote_count': 2,
+          'local_active_count': 2,
+          'last_synced_at': lastFullSync.millisecondsSinceEpoch,
+          'last_full_synced_at': lastFullSync.millisecondsSinceEpoch,
+          'status': 'ok',
+        });
+        await repository.upsertRemoteThreads(<FavoriteThreadCacheUpsert>[
+          _thread(tid: '100', title: 'active'),
+          _thread(tid: '200', title: 'removed'),
+        ]);
+        await repository.markRemovedByTids(<String>{'200'});
+
+        await repository.finishSync(
+          mode: FavoriteSyncMode.incremental,
+          remoteCount: 3,
+          status: 'partial',
+          message: 'detail issue',
+        );
+        final completed = (await repository.getSyncSnapshot())!;
+        expect(completed.remoteCount, 3);
+        expect(completed.localActiveCount, 1);
+        expect(completed.status, 'partial');
+        expect(
+          completed.lastFullSyncedAt?.millisecondsSinceEpoch,
+          lastFullSync.millisecondsSinceEpoch,
+        );
+
+        await repository.markSyncFailure('network failure');
+        final failed = (await repository.getSyncSnapshot())!;
+        expect(failed.remoteCount, completed.remoteCount);
+        expect(failed.localActiveCount, completed.localActiveCount);
+        expect(failed.status, 'failed');
+        expect(
+          failed.lastFullSyncedAt?.millisecondsSinceEpoch,
+          lastFullSync.millisecondsSinceEpoch,
+        );
+
+        await repository.finishSync(
+          mode: FavoriteSyncMode.fullDiff,
+          remoteCount: 1,
+        );
+        final recovered = (await repository.getSyncSnapshot())!;
+        expect(recovered.status, 'ok');
+        expect(recovered.remoteCount, 1);
+        expect(recovered.localActiveCount, 1);
+        expect(recovered.lastFullSyncedAt, recovered.lastSyncedAt);
+        expect(recovered.lastFullSyncedAt!.isAfter(lastFullSync), isTrue);
+      },
+    );
+
     test('snapshot query count stays constant as the shelf grows', () async {
       final db = await AppDatabase.open(databaseName: dbName);
       final counted = _QueryCountingDatabase(db);
