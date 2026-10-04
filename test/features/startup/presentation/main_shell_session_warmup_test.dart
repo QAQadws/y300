@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import 'package:y300/features/startup/presentation/main_shell_page.dart';
+import 'package:y300/app/startup/main_shell_startup_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 
 void main() {

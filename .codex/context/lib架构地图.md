@@ -9,7 +9,7 @@
 应用按功能模块组织代码：通用基础设施放在 `core`，应用级装配放在 `app`，业务能力放在 `features`，无单一业务归属的 UI 放在 `shared`，论坛远端协议客户端放在 `packages`。Riverpod provider 是主要依赖组合和生命周期管理方式。
 
 - `lib/main.dart`：Flutter 入口、全局初始化和启动前兼容维护。
-- `lib/app`：应用顶层装配；`navigation` 负责跨 feature 路由，`settings` 负责外观设置，`theme` 负责主题 token、语义色和组件主题，`localization` 负责语言解析，`storage` 组合各业务统计 adapter、统一报表与缓存维护 provider；`Y300App` 还装配更新提示和后台 WAF 恢复宿主。
+- `lib/app`：应用顶层装配；`navigation` 负责跨 feature 路由，`settings` 负责外观设置，`theme` 负责主题 token、语义色和组件主题，`localization` 负责语言解析，`storage` 组合各业务统计 adapter、统一报表与缓存维护 provider，`startup` 组合主壳启动协调、跨 feature 维护与账号/任务通知 Host；`Y300App` 还装配更新提示和后台 WAF 恢复宿主。
 - `lib/core/config`：应用配置、稳定存储 key 和技术性存储 key。
 - `lib/core/media`：封面裁剪/焦点、图片降采样、显示 provider 和 Flutter 图片内存缓存调优。
 - `lib/core/network`：共享网络基础设施与 forum client Host 边界。包括 `ApiResult`、`YamiboHttpGateway`（唯一 Host 传输：Cookie、会话与 formhash 存储、WAF 挑战检测/恢复协调、敏感 URI 日志脱敏）、WebView Cookie 同步、图片请求头和 URL 解析；`yamibo_forum_client_provider.dart`、`yamibo_forum_transport_providers.dart`、`yamibo_forum_client_host_adapters.dart` 负责把 Host 传输、Cookie、会话、document/snapshot 缓存和表情目录存储注入 `YamiboForumClient`。
@@ -24,6 +24,7 @@
 
 - `data`：本地持久化、codec、平台集成服务、Riverpod provider 装配，以及对 forum client 契约的消费；远端协议解析与请求构造不再位于 feature 数据层，统一在 `packages/yamibo_forum_client`。
 - `domain`：稳定模型、repository/服务契约、业务策略、分类器和解析器；原则上不依赖 Flutter Widget。
+- `application`：组合领域契约的用例/生命周期协调对象，以及 feature 的 provider/Host 装配入口；状态与显示映射仍留在 presentation。
 - `presentation`：页面、controller、adapter、视图状态、Widget，以及必须依赖 Flutter 布局/渲染的阅读与 HTML 展示服务。
 
 依赖方向优先保持 `presentation -> domain <- data`，由 provider 在边界处装配实现。跨 feature 调用应优先经过公开 contract、service、adapter、bus 或 use case，不直接穿透另一个模块的私有数据库或页面状态。
@@ -49,7 +50,7 @@
 - `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。
 - `reply`：帖子回复与楼层回复。回复准备与提交经 forum client preparation/command 契约（楼层回复动态字段封装在包内 opaque token）；负责草稿校验，并在 `composer_shared` 之上提供回复 controller/page。
 - `search`：搜索读取经 forum client `forumSearch` 契约（formhash、POST、redirect 校验与结果页解析在包内）；负责搜索调度器、限流、查询 generation 隔离、自动分页搜索页和漫画 fallback 编排。`ForumSearchTimingPolicy` 归 domain/services，提供调度与漫画持久化搜索队列共用的默认 10.5 秒节奏；限流与调度实现仍归 data。
-- `startup`：可配置导航的懒加载主壳（日志与消息默认隐藏）、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热（经 client 当前用户资料契约）。
+- `startup`：可配置导航的懒加载主壳（日志与消息默认隐藏）与跨书架选择操作。页面持有每个主壳独立的 app/startup coordinator/token 与 readiness Future；启动 provider 和账号/任务通知 Host 归 app。封面合并恢复→自定义封面迁移→ready 顺序保持；预算/队列/可再生维护独立运行，下载在 storage gate 后恢复。通知、草稿附件维护与 client profile/图片 transport 预热失败隔离；dispose 停止迟到的后续启动，共享 queue/scheduler/bridge 仍由 provider container 拥有。
 - `storage`：下载根目录选择、目录/文件名规范化、原子 JSON 写入、漫画 CBZ 定位和下载存储模型；提供下载统计、通用统计组合/表计数 helper 与共享数据库物理文件容量 adapter，不负责具体业务下载队列。业务表配置仍归各 owner；app 聚合保留原分类及 slice 顺序，共享 SQLite 主文件容量只计一次。
 - `tags`：论坛标签索引与查询、标签主题页；标签主题列表读取经 forum client 桌面 HTML 契约。为帖子内容分类和漫画/小说识别提供元数据。
 - `thread`：帖子详情核心。详情、回复分页、只看楼主、评分/点评的准备与提交、投票、收藏动作、楼层定位经 forum client 契约；负责内容分类、HTML-first 正文准备/主题适配/缓存图片、原生帖子页、历史记录和帖子图片阅读器桥接。帖子编辑的表单准备、提交与图片附件删除契约已在包内，本模块负责编辑 composer 工作流、提交回读验证、capability gate、原生编辑页及 WebView fallback。

@@ -55,6 +55,7 @@ import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
+import 'package:y300/app/startup/main_shell_startup_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
@@ -220,9 +221,11 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
             queueSnapshot,
           ),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(
+            (_) async {},
+          ),
           mainShellNotificationInitializerProvider.overrideWithValue(
-            () async {},
+            (_) async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
@@ -404,10 +407,10 @@ void main() {
               queueSnapshot,
             ),
             mainShellBackgroundTaskStarterProvider.overrideWithValue(
-              () async {},
+              (_) async {},
             ),
             mainShellNotificationInitializerProvider.overrideWithValue(
-              () async {},
+              (_) async {},
             ),
             mainShellReplyDraftAttachmentMaintenanceStarterProvider
                 .overrideWithValue(() async {}),
@@ -522,9 +525,11 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
             queueSnapshot,
           ),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(
+            (_) async {},
+          ),
           mainShellNotificationInitializerProvider.overrideWithValue(
-            () async {},
+            (_) async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
@@ -578,10 +583,10 @@ void main() {
               queueSnapshot,
             ),
             mainShellBackgroundTaskStarterProvider.overrideWithValue(
-              () async {},
+              (_) async {},
             ),
             mainShellNotificationInitializerProvider.overrideWithValue(
-              () async {},
+              (_) async {},
             ),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
             ...forumAuthOverrides(_FakeAuthRepository()),
@@ -640,7 +645,7 @@ void main() {
               queueSnapshot,
             ),
             mainShellBackgroundTaskStarterProvider.overrideWithValue(
-              () async {},
+              (_) async {},
             ),
             libraryTaskNotificationServiceProvider.overrideWithValue(
               notificationService,
@@ -692,9 +697,11 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
             queueSnapshot,
           ),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(
+            (_) async {},
+          ),
           mainShellNotificationInitializerProvider.overrideWithValue(
-            () async {},
+            (_) async {},
           ),
           mainShellReplyDraftAttachmentMaintenanceStarterProvider
               .overrideWithValue(() async {}),
@@ -744,9 +751,11 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
             queueSnapshot,
           ),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(
+            (_) async {},
+          ),
           mainShellNotificationInitializerProvider.overrideWithValue(
-            () async {},
+            (_) async {},
           ),
           mainShellReplyDraftAttachmentMaintenanceStarterProvider
               .overrideWithValue(() async {}),
@@ -800,10 +809,10 @@ void main() {
               queueSnapshot,
             ),
             mainShellBackgroundTaskStarterProvider.overrideWithValue(
-              () async {},
+              (_) async {},
             ),
             mainShellNotificationInitializerProvider.overrideWithValue(
-              () async {},
+              (_) async {},
             ),
             mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
             ...forumAuthOverrides(_FakeAuthRepository()),
@@ -881,9 +890,11 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
             queueSnapshot,
           ),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(
+            (_) async {},
+          ),
           mainShellNotificationInitializerProvider.overrideWithValue(
-            () async {},
+            (_) async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
@@ -1043,9 +1054,11 @@ void main() {
           comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
             queueSnapshot,
           ),
-          mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
+          mainShellBackgroundTaskStarterProvider.overrideWithValue(
+            (_) async {},
+          ),
           mainShellNotificationInitializerProvider.overrideWithValue(
-            () async {},
+            (_) async {},
           ),
           mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
           ...forumAuthOverrides(_FakeAuthRepository()),
@@ -1147,8 +1160,10 @@ Future<void> _pumpSelectionShell(
         comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
           queueSnapshot,
         ),
-        mainShellBackgroundTaskStarterProvider.overrideWithValue(() async {}),
-        mainShellNotificationInitializerProvider.overrideWithValue(() async {}),
+        mainShellBackgroundTaskStarterProvider.overrideWithValue((_) async {}),
+        mainShellNotificationInitializerProvider.overrideWithValue(
+          (_) async {},
+        ),
         mainShellYamiboSessionWarmupProvider.overrideWithValue(() async {}),
         ...forumAuthOverrides(_FakeAuthRepository()),
         shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),

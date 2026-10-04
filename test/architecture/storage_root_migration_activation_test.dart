@@ -48,7 +48,7 @@ void main() {
       'lib/features/storage/data/download_storage_accounting_adapter.dart',
     ).readAsStringSync();
     final startup = File(
-      'lib/features/startup/presentation/main_shell_page.dart',
+      'lib/app/startup/main_shell_startup_providers.dart',
     ).readAsStringSync();
 
     expect(queue, contains('_storageRootAccessGate.runWithAccess'));
