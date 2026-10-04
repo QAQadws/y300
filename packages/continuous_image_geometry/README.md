@@ -46,3 +46,6 @@ Host 先读取 previous extent 并计算补偿计划，再写入 next extent、�
 在包目录运行 `dart test`、`dart analyze`，以及 `dart run example/geometry.dart`。
 示例使用私有不可变类实现输入接口，演示候选尺寸优先级、inclusive 边缘/gap 与 extent 更新后的重建。
 包测试不依赖 Flutter 或 App 文件；Host 的会话、控件与漫画/帖子消费者回归仍在应用测试中执行。
+仓库级公开入口、纯依赖、测试独立性与旧路径退役检查集中在 App 的
+`test/architecture/continuous_image_geometry_boundary_test.dart`，复用现有指令解析工具；
+包内算法测试保持独立，不读取 App 的守护或辅助文件。

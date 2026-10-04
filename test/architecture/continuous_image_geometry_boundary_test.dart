@@ -5,195 +5,232 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'dart_dependency_directives.dart';
 
-const _packageRoot = 'packages/continuous_image_geometry';
-const _packageLib = '$_packageRoot/lib/';
-const _publicEntry =
+const _root = 'packages/continuous_image_geometry';
+const _lib = '$_root/lib/';
+const _entry =
     'package:continuous_image_geometry/continuous_image_geometry.dart';
-const _retiredAlgorithmPaths = <String>{
-  'lib/features/reader_shared/domain/continuous_image/continuous_image_layout_resolver.dart',
-  'lib/features/reader_shared/domain/continuous_image/continuous_image_layout_index.dart',
-  'lib/features/reader_shared/domain/continuous_image/continuous_image_extent_registry.dart',
-  'lib/features/reader_shared/domain/continuous_image/continuous_image_scroll_anchor_coordinator.dart',
+const _barrel = '${_lib}continuous_image_geometry.dart';
+const _pureSdk = {
+  'dart:async',
+  'dart:collection',
+  'dart:convert',
+  'dart:core',
+  'dart:math',
+  'dart:typed_data',
+};
+const _publicTypes = {
+  'ContinuousImageDimensionSource',
+  'ContinuousImageDimensions',
+  'ContinuousImageExtent',
+  'ContinuousImageLayoutHint',
+  'ContinuousImageLayoutItem',
+  'ContinuousImageScrollDirection',
+  'ContinuousImageViewportState',
+  'ContinuousImageExtentRegistry',
+  'InMemoryContinuousImageExtentRegistry',
+  'ContinuousImageLayoutIndex',
+  'ContinuousImageDimensionCandidate',
+  'ContinuousImageLayoutResolver',
+  'ContinuousImageScrollAnchorCoordinator',
+  'ContinuousImageScrollAnchorMetrics',
+  'ContinuousImageScrollCompensationPlan',
+  'ContinuousImageScrollCompensationTiming',
+};
+final _retired = {
+  for (final name in [
+    'layout_resolver',
+    'layout_index',
+    'extent_registry',
+    'scroll_anchor_coordinator',
+  ])
+    'lib/features/reader_shared/domain/continuous_image/continuous_image_$name.dart',
 };
 
-enum _Scope { app, packageConsumer }
+enum _Scope { app, library, consumer }
 
 void main() {
-  test('App and App tests use the sole public geometry package entry', () {
-    expect(_violations(['lib', 'test'], _Scope.app), isEmpty);
-  });
-
-  test('the four retired App algorithms are not reintroduced', () {
-    expect(
-      _retiredAlgorithmPaths.where((path) => File(path).existsSync()),
-      isEmpty,
-      reason: 'The package owns the only continuous image geometry algorithms.',
-    );
-  });
-
   test(
-    'package tests and example stay independent of App and root fixtures',
+    'App uses the public entry and keeps the four old algorithms retired',
     () {
-      expect(
-        _violations([
-          '$_packageRoot/test',
-          '$_packageRoot/example',
-        ], _Scope.packageConsumer),
-        isEmpty,
-      );
+      expect(_violations(['lib', 'test'], _Scope.app), isEmpty);
+      expect(_retired.where((path) => File(path).existsSync()), isEmpty);
     },
   );
 
-  test('the public entry and App metadata adapters remain allowed', () {
+  test('the library is pure Dart with one explicit geometry API', () {
+    expect(_violations(['$_root/lib'], _Scope.library), isEmpty);
     expect(
-      _forbiddenTargets('lib/new_adapter.dart', '''
-import '$_publicEntry' show ContinuousImageLayoutItem;
-import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image_models.dart';
-import 'package:y300/features/reader_shared/domain/reader_flow/reader_sequence_position.dart';
-''', _Scope.app),
-      isEmpty,
+      _files('$_root/lib')
+          .map((file) => normalizeDartSourcePath(file.path))
+          .where((path) => !path.startsWith('${_lib}src/')),
+      [_barrel],
     );
+    final source = File(_barrel).readAsStringSync(encoding: utf8);
+    final showLists = dartExportShowLists(source).toList();
+    expect(showLists, isNotEmpty);
+    expect(showLists, everyElement(isNotNull));
     expect(
-      _forbiddenTargets('$_packageRoot/test/new_test.dart', '''
-import 'dart:io';
-import 'package:test/test.dart';
-import '$_publicEntry';
-import 'fixtures/geometry_fixture.dart';
-''', _Scope.packageConsumer),
-      isEmpty,
+      showLists.expand((names) => names ?? const <String>[]).toSet(),
+      _publicTypes,
     );
+    for (final uri in dartDependencyDirectiveUris(source)) {
+      final target = _target(_barrel, uri);
+      expect(target, startsWith('${_lib}src/'));
+      expect(File(target).existsSync(), isTrue, reason: target);
+    }
   });
 
-  test('conditional directives cannot hide private package dependencies', () {
+  test('the manifest has no runtime dependencies or Flutter SDK', () {
     expect(
-      _forbiddenTargets('lib/new_adapter.dart', '''
-import '$_publicEntry'
-  if (dart.library.io == 'true')
-    'package:continuous_image_geometry/src/continuous_image_layout_index.dart';
-export '$_publicEntry'
-  if (dart.library.html) 'package:continuous_image_geometry/other.dart';
-''', _Scope.app),
-      {
-        '${_packageLib}src/continuous_image_layout_index.dart',
-        '${_packageLib}other.dart',
-      },
-    );
-  });
-
-  test('relative paths cannot bypass algorithm ownership or the barrel', () {
-    expect(
-      _forbiddenTargets(
-        'lib/features/reader_shared/domain/continuous_image/new_adapter.dart',
-        '''
-import 'continuous_image_layout_index.dart';
-export 'package:y300/features/reader_shared/domain/continuous_image/continuous_image_layout_resolver.dart';
-import '../../../../../packages/continuous_image_geometry/lib/continuous_image_geometry.dart';
-import '../../../../../packages/continuous_image_geometry/lib/src/continuous_image_extent_registry.dart';
-''',
-        _Scope.app,
+      _manifestViolations(
+        File('$_root/pubspec.yaml').readAsStringSync(encoding: utf8),
       ),
-      {
-        'lib/features/reader_shared/domain/continuous_image/continuous_image_layout_index.dart',
-        'lib/features/reader_shared/domain/continuous_image/continuous_image_layout_resolver.dart',
-        '${_packageLib}continuous_image_geometry.dart',
-        '${_packageLib}src/continuous_image_extent_registry.dart',
-      },
+      isEmpty,
     );
   });
 
-  test('standalone consumers cannot reach App, root fixtures or private lib', () {
+  test('package tests and example stay independent of the App', () {
     expect(
-      _forbiddenTargets('$_packageRoot/test/new_test.dart', '''
-import '../../../test/features/reader_shared/domain/continuous_image/root_fixture.dart';
-import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image_models.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:continuous_image_geometry/src/continuous_image_layout_index.dart';
-export '../lib/continuous_image_geometry.dart';
-''', _Scope.packageConsumer),
-      {
-        'test/features/reader_shared/domain/continuous_image/root_fixture.dart',
-        'lib/features/reader_shared/domain/continuous_image/continuous_image_models.dart',
-        'package:flutter_test/flutter_test.dart',
-        '${_packageLib}src/continuous_image_layout_index.dart',
-        '${_packageLib}continuous_image_geometry.dart',
-      },
+      _violations(['$_root/test', '$_root/example'], _Scope.consumer),
+      isEmpty,
     );
   });
 
-  test('comments and quoted source examples do not create dependencies', () {
+  test('boundary rules reject bypasses without rejecting valid directives', () {
     expect(
-      _forbiddenTargets('lib/new_adapter.dart', '''
-// import 'package:continuous_image_geometry/src/private.dart';
-/* outer /* export 'dart:ui'; */ comment */
-import '$_publicEntry';
-const example = """import 'package:continuous_image_geometry/other.dart';""";
-const rawExample = r"export 'package:continuous_image_geometry/src/private.dart';";
+      _forbidden('lib/new_adapter.dart', r'''
+import 'package:continuous_image_geometry/continuous_image_geometry.dart'
+  if (dart.library.io == 'true') 'package:continuous_image_geometry/\x73rc/private.dart';
+export 'features/reader_shared/domain/continuous_image/./temporary/../continuous_image_layout_index.dart';
 ''', _Scope.app),
+      {
+        '${_lib}src/private.dart',
+        _retired.firstWhere((path) => path.endsWith('layout_index.dart')),
+      },
+    );
+    expect(
+      _forbidden('${_lib}src/new_geometry.dart', '''
+import 'dart:math';
+import 'continuous_image_geometry_models.dart';
+export 'dart:collection' if (dart.library.ui) 'dart:ui';
+part '../../test/host.dart';
+''', _Scope.library),
+      {'dart:ui', '$_root/test/host.dart'},
+    );
+    expect(
+      _forbidden('$_root/test/new_test.dart', '''
+import 'package:test/test.dart';
+import '$_entry';
+import 'fixtures/input.dart';
+import '../../../test/root_fixture.dart';
+import 'package:y300/app.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:continuous_image_geometry/../test/fixture.dart';
+''', _Scope.consumer),
+      {
+        'test/root_fixture.dart',
+        'lib/app.dart',
+        'package:flutter_test/flutter_test.dart',
+        '$_root/test/fixture.dart',
+      },
+    );
+    expect(
+      dartExportShowLists('''
+// export 'src/ignored.dart';
+const example = "export 'src/ignored.dart' show Host;";
+export 'src/geometry.dart' if (dart.library.io == 'true') 'src/other.dart'
+  show ContinuousImageLayoutItem, ContinuousImageExtent;
+export 'src/host.dart';
+'''),
+      [
+        ['ContinuousImageLayoutItem', 'ContinuousImageExtent'],
+        null,
+      ],
+    );
+    for (final manifest in [
+      'dependencies: {http: any}',
+      'dependencies:\n  http: any',
+      'dev_dependencies:\n  flutter_test:\n    sdk: flutter',
+      'dev_dependencies: {flutter_test: {sdk: flutter}}',
+    ]) {
+      expect(_manifestViolations(manifest), isNotEmpty);
+    }
+    expect(
+      _manifestViolations('dependencies: {}\ndev_dependencies:\n  test: any'),
       isEmpty,
     );
   });
 }
 
-Iterable<File> _dartFiles(String root) {
-  final directory = Directory(root);
-  expect(directory.existsSync(), isTrue, reason: 'Missing source root: $root');
-  final files = directory
+Iterable<File> _files(String root) {
+  final files = Directory(root)
       .listSync(recursive: true, followLinks: false)
       .whereType<File>()
-      .where((file) => file.path.endsWith('.dart'));
-  expect(files, isNotEmpty, reason: 'No Dart source in $root');
+      .where((file) => file.path.endsWith('.dart'))
+      .toList();
+  expect(files, isNotEmpty, reason: 'Missing Dart sources: $root');
   return files;
 }
 
-List<String> _violations(List<String> roots, _Scope scope) {
-  final violations = <String>[];
+Iterable<String> _violations(List<String> roots, _Scope scope) sync* {
   for (final root in roots) {
-    for (final file in _dartFiles(root)) {
+    for (final file in _files(root)) {
       final source = normalizeDartSourcePath(file.path);
-      for (final target in _forbiddenTargets(
+      for (final target in _forbidden(
         source,
         file.readAsStringSync(encoding: utf8),
         scope,
       )) {
-        violations.add('$source -> $target');
+        yield '$source -> $target';
       }
     }
   }
-  return violations..sort();
 }
 
-Set<String> _forbiddenTargets(String source, String text, _Scope scope) => {
+Set<String> _forbidden(String source, String text, _Scope scope) => {
   for (final uri in dartDependencyDirectiveUris(text))
-    if (!_isAllowed(uri, _resolveTarget(source, uri), scope))
-      _resolveTarget(source, uri),
+    if (!_allowed(uri, _target(source, uri), scope)) _target(source, uri),
 };
 
-String _resolveTarget(String source, String uri) {
-  const ownPackage = 'package:continuous_image_geometry/';
-  if (uri.startsWith(ownPackage)) {
-    return normalizeDartSourcePath(
-      '$_packageLib${uri.substring(ownPackage.length)}',
-    );
-  }
-  return resolveDartDependencyTarget(source, uri);
-}
+String _target(String source, String uri) =>
+    uri.startsWith('package:continuous_image_geometry/')
+    ? normalizeDartSourcePath(
+        '$_lib${uri.substring('package:continuous_image_geometry/'.length)}',
+      )
+    : resolveDartDependencyTarget(source, uri);
 
-bool _isAllowed(String uri, String target, _Scope scope) {
-  if (scope == _Scope.app) {
-    if (_retiredAlgorithmPaths.contains(target)) return false;
-    if (uri == 'package:continuous_image_geometry' ||
-        uri.startsWith('package:continuous_image_geometry/')) {
-      return uri == _publicEntry;
-    }
-    // Even the barrel must use the canonical package URI, not a relative path.
-    return !target.startsWith('$_packageRoot/');
+bool _allowed(String uri, String target, _Scope scope) {
+  if (scope == _Scope.library) {
+    return _pureSdk.contains(target) || target.startsWith(_lib);
   }
-  if (uri.startsWith('package:continuous_image_geometry/') ||
-      target.startsWith(_packageLib)) {
-    return uri == _publicEntry;
+  if (uri == 'package:continuous_image_geometry' ||
+      uri.startsWith('package:continuous_image_geometry/')) {
+    return uri == _entry;
+  }
+  if (scope == _Scope.app) {
+    return !_retired.contains(target) && !target.startsWith('$_root/');
   }
   return (target.startsWith('dart:') && target != 'dart:ui') ||
       target == 'package:test/test.dart' ||
-      target.startsWith('$_packageRoot/test/') ||
-      target.startsWith('$_packageRoot/example/');
+      target.startsWith('$_root/test/') ||
+      target.startsWith('$_root/example/');
+}
+
+List<String> _manifestViolations(String source) {
+  final violations = <String>[];
+  var runtime = false;
+  for (final raw in source.split('\n')) {
+    final line = raw.split('#').first.trimRight();
+    if (line.trim().isEmpty) continue;
+    final indented = line.startsWith(' ') || line.startsWith('\t');
+    if (!indented) runtime = line.startsWith('dependencies:');
+    if (runtime &&
+        (indented || !{'dependencies:', 'dependencies: {}'}.contains(line))) {
+      violations.add(line);
+    }
+    if (RegExp(r'^\s*flutter:|\bsdk:\s*flutter\b').hasMatch(line)) {
+      violations.add(line);
+    }
+  }
+  return violations;
 }

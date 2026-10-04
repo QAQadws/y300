@@ -21,7 +21,7 @@
 - `packages/yamibo_forum_client`：纯 Dart 论坛协议客户端包，不依赖 Flutter 与应用状态。包含 source-neutral 的读取/命令/资源/会话认证契约、Discuz adapter、来源装配计划（source plan）、document/snapshot 缓存端口和 WAF 边界；全部 Yamibo 请求构造、协议解析、成功证据与失败分类都在这里，feature 只消费契约结果。
 - `packages/forum_markup_core`：本地纯 Dart attach/collapse 语法包，运行时无第三方依赖。统一 grammar/token、无损 AST、默认 16 层 parser 与 serializer，保留 UTF-16 偏移、原始标签/CRLF 和非法原文回退；唯一入口为 `forum_markup_core.dart`。包内纯测试与 App Quill/预览/帖子编辑集成回归分别执行，旧 composer 核心路径退役；不承载远端协议、附件状态或 UI。
 - `packages/content_title_core`：本地纯 Dart 漫画/小说标题包，内部按 comic/novel 分工，运行时依赖 petitparser 和 characters。唯一入口 content_title_core.dart 显式导出 12 个既有类型；保持漫画原文/18 runes 搜索裁剪/候选规则，以及小说作品清洗/纯文本章节标题/36 grapheme 默认截断。算法语料与测试归包内 test，旧包和 App 纯核心路径退役。App 保有 subject/provider/刷新/HTML/分页与持久化；小说原 fixture 仅在测试层精确桥接纯语料并保有 HTML wrapper/分页标识，生产代码不依赖 fixture。
-- `packages/continuous_image_geometry`：本地纯 Dart 图片连续布局包，运行时无第三方依赖。唯一入口 continuous_image_geometry.dart 公开 16 个几何契约，生产 resolver/index、extent registry、anchor 与纯值归包；应用图片模型实现只读 ContinuousImageLayoutItem，原列表直接消费。URL/缓存和业务 FlowPolicy、sequence position、诊断、未接入的长图/prefetch planner、真实 preload 与 Flutter/session/位置系统继续归应用；算法参考扫描独立运行，Host 测试与双侧入口守护分别验收。
+- `packages/continuous_image_geometry`：本地纯 Dart 图片连续布局包，运行时无第三方依赖。唯一入口 continuous_image_geometry.dart 公开 16 个几何契约，生产 resolver/index、extent registry、anchor 与纯值归包；应用图片模型实现只读 ContinuousImageLayoutItem，原列表直接消费。URL/缓存和业务 FlowPolicy、sequence position、诊断、未接入的长图/prefetch planner、真实 preload 与 Flutter/session/位置系统继续归应用；算法参考扫描独立运行，Host 集成回归与 App 集中的包/App 边界守护分别验收，包测试不读取 App 辅助文件。
 
 大多数 feature 模块采用轻量 Clean Architecture 分层：
 

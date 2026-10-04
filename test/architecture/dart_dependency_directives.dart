@@ -15,7 +15,7 @@ Iterable<String> dartDependencyDirectiveUris(String source) sync* {
   final tokens = _sourceTokens(source).toList();
   for (var index = 0; index < tokens.length; index++) {
     final token = tokens[index];
-    if (token.isString || (token.text != 'import' && token.text != 'export')) {
+    if (token.isString || !{'import', 'export', 'part'}.contains(token.text)) {
       continue;
     }
     var expectsUri = true;
@@ -34,6 +34,34 @@ Iterable<String> dartDependencyDirectiveUris(String source) sync* {
         if (parentheses == 0) expectsUri = true;
       }
     }
+  }
+}
+
+/// A null list means that an export has no explicit show combinator.
+Iterable<List<String>?> dartExportShowLists(String source) sync* {
+  final tokens = _sourceTokens(source).toList();
+  for (var index = 0; index < tokens.length; index++) {
+    final token = tokens[index];
+    if (token.isString || token.text != 'export') continue;
+    List<String>? names;
+    var showing = false;
+    var parentheses = 0;
+    while (++index < tokens.length && tokens[index].text != ';') {
+      final next = tokens[index];
+      if (next.isString) continue;
+      if (next.text == '(') parentheses++;
+      if (next.text == ')') parentheses--;
+      if (parentheses != 0) continue;
+      if (next.text == 'show') {
+        names ??= <String>[];
+        showing = true;
+      } else if (next.text == 'hide') {
+        showing = false;
+      } else if (showing && _isIdentifierCode(next.text.codeUnitAt(0))) {
+        names!.add(next.text);
+      }
+    }
+    yield names;
   }
 }
 
