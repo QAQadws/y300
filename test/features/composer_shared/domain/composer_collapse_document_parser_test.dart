@@ -108,6 +108,35 @@ void main() {
     expect(serializer.serialize(document), source);
   });
 
+  test('a title edit rewrites only the opening line of raw CRLF markup', () {
+    const rawOpeningLine = '[CoLlApSe \t= \t0,原题,逗号]\r\n';
+    const body = '[b]第一行[/b]\r\n第二行';
+    const rawClosing = '[/CoLlApSe \t]';
+    const source = '$rawOpeningLine$body$rawClosing';
+    const newTitle = '新标题,仍有逗号';
+    const expected = '[collapse=0,$newTitle]\n$body$rawClosing';
+    final document = parser.parse(source);
+    final block = document.parts.single as ComposerCollapseBlock;
+
+    expect(document.isLossless, isTrue);
+    expect(serializer.serialize(document), source);
+    expect(
+      serializer.serialize(
+        document.copyWith(parts: [block.copyWith(title: newTitle)]),
+      ),
+      expected,
+    );
+    expect(
+      serializer.serializeBlock(
+        title: newTitle,
+        bodyBbCode: block.body.source,
+        rawOpeningLine: block.rawOpeningLine,
+        rawClosing: block.rawClosing,
+      ),
+      expected,
+    );
+  });
+
   test('keeps unsupported or malformed collapse markup as raw text', () {
     for (final source in const [
       '[collapse=1,展开]\n正文[/collapse]',
@@ -125,6 +154,7 @@ void main() {
       expect(document.parts.single, isA<ComposerCollapseText>());
       expect((document.parts.single as ComposerCollapseText).value, source);
       expect(document.isLossless, isFalse, reason: source);
+      expect(serializer.serialize(document), source, reason: source);
     }
   });
 
@@ -145,6 +175,34 @@ void main() {
     expect(document.issues, isNotEmpty);
   });
 
+  test('the default depth accepts 16 levels and preserves 17 as raw text', () {
+    final supportedSource = _nestedCollapseSource(16);
+    final supported = parser.parse(supportedSource);
+
+    expect(supported.isLossless, isTrue);
+    expect(supported.issues, isEmpty);
+    expect(serializer.serialize(supported), supportedSource);
+    var body = supported;
+    for (var level = 0; level < 16; level += 1) {
+      final block = body.parts.single as ComposerCollapseBlock;
+      expect(block.title, '层$level');
+      body = block.body;
+    }
+    expect((body.parts.single as ComposerCollapseText).value, '正文');
+
+    final tooDeepSource = _nestedCollapseSource(17);
+    final tooDeep = parser.parse(tooDeepSource);
+
+    expect(tooDeep.isLossless, isFalse);
+    expect(tooDeep.parts, hasLength(1));
+    expect((tooDeep.parts.single as ComposerCollapseText).value, tooDeepSource);
+    expect(
+      tooDeep.issues.single.code,
+      ComposerCollapseParseIssueCode.maximumDepthExceeded,
+    );
+    expect(serializer.serialize(tooDeep), tooDeepSource);
+  });
+
   test('consumes only the mandatory opening line break from the body', () {
     const source = '[collapse=0,标题]\n\n正文[/collapse]';
     final block = parser.parse(source).parts.single as ComposerCollapseBlock;
@@ -153,4 +211,16 @@ void main() {
     expect(serializer.serialize(block.body), '\n正文');
     expect(serializer.serialize(parser.parse(source)), source);
   });
+}
+
+String _nestedCollapseSource(int depth) {
+  final source = StringBuffer();
+  for (var level = 0; level < depth; level += 1) {
+    source.write('[collapse=0,层$level]\n');
+  }
+  source.write('正文');
+  for (var level = 0; level < depth; level += 1) {
+    source.write('[/collapse]');
+  }
+  return source.toString();
 }

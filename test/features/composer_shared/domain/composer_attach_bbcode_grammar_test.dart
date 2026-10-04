@@ -72,6 +72,25 @@ void main() {
       expect(matches.single.start, 1);
     });
 
+    test('reports UTF-16 spans when emoji surround attachment tokens', () {
+      const source = '😀[attach]12[/attach]🚀[attachimg]345[/attachimg]';
+      final matches = grammar.scan(source);
+
+      expect(matches, hasLength(2));
+      expect(matches.first.start, 2);
+      expect(matches.first.end, 21);
+      expect(matches.last.start, 23);
+      expect(matches.last.end, 49);
+      expect(
+        source.substring(matches.first.start, matches.first.end),
+        '[attach]12[/attach]',
+      );
+      expect(
+        source.substring(matches.last.start, matches.last.end),
+        '[attachimg]345[/attachimg]',
+      );
+    });
+
     test('skips illegal tokens', () {
       final matches = grammar.scan('[attach]abc[/attach][attach]7[/attach]');
 
