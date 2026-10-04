@@ -577,7 +577,13 @@ class _ForumHtmlCachedBlockImageViewState
     final ForumImageDimensionIndex index =
         widget.dimensionIndex ??
         ref.read(forumHtmlImageHostProvider).dimensionIndex;
-    final dimensions = await index.getBySpec(widget.spec);
+    ForumImageDimensions? dimensions;
+    try {
+      dimensions = await index.getBySpec(widget.spec);
+    } catch (_) {
+      // Cached dimensions are optional hints; a cache race must not stop display.
+      return;
+    }
     if (!mounted || _loadedCacheKey != cacheKey || dimensions == null) {
       return;
     }
@@ -685,7 +691,13 @@ class _ForumHtmlCachedStickerImageViewState
     final ForumImageDimensionIndex index =
         widget.dimensionIndex ??
         ref.read(forumHtmlImageHostProvider).dimensionIndex;
-    final dimensions = await index.getBySpec(widget.spec);
+    ForumImageDimensions? dimensions;
+    try {
+      dimensions = await index.getBySpec(widget.spec);
+    } catch (_) {
+      // Keep the intrinsic placeholder when optional metadata is unavailable.
+      return;
+    }
     if (!mounted || _loadedCacheKey != cacheKey || dimensions == null) {
       return;
     }
