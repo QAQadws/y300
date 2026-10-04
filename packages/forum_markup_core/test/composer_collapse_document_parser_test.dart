@@ -1,7 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/composer_shared/domain/models/composer_collapse_models.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_collapse_document_parser.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_collapse_serializer.dart';
+import 'package:test/test.dart';
+import 'package:forum_markup_core/forum_markup_core.dart';
 
 void main() {
   const parser = ComposerCollapseDocumentParser();

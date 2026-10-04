@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_insertion_models.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+import 'package:forum_markup_core/forum_markup_core.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_selection_adapter.dart';

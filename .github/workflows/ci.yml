@@ -36,6 +36,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes libsqlite3-0 libsqlite3-dev
       - name: Install app dependencies
         run: flutter pub get
+      - name: Install markup package dependencies
+        working-directory: packages/forum_markup_core
+        run: dart pub get
       - name: Analyze app
         run: flutter analyze --no-pub
       - name: Test app
@@ -49,3 +52,12 @@ jobs:
       - name: Test protocol package
         working-directory: packages/yamibo_forum_client
         run: dart test --reporter expanded
+      - name: Analyze markup package
+        working-directory: packages/forum_markup_core
+        run: dart analyze --fatal-infos
+      - name: Test markup package
+        working-directory: packages/forum_markup_core
+        run: dart test --reporter expanded
+      - name: Run markup package example
+        working-directory: packages/forum_markup_core
+        run: dart run example/basic_markup.dart

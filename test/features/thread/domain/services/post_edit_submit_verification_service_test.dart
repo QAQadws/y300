@@ -37,6 +37,42 @@ void main() {
     expect(result.kind, PostEditSubmitResponseKind.confirmedSuccess);
   });
 
+  test(
+    'does not confirm invalid attachment markup against a legal readback',
+    () {
+      const invalidTokens = [
+        '[attach] 123 [/attach]',
+        '[attachimg]\t123\n[/attachimg]',
+        '[attach]123[/attachimg]',
+        '[attachimg]123[/attach]',
+      ];
+      final after = _snapshot(
+        message: 'new\n[attach]123[/attach]',
+        fingerprint: 'after',
+        aids: const ['123'],
+      );
+
+      // App verification preserves invalid editor source independently of the
+      // protocol client's more tolerant readback canonicalization.
+      for (final token in invalidTokens) {
+        final result = service.verify(
+          before: before,
+          after: after,
+          submittedSubject: 'subject',
+          submittedMessage: 'new\r\n$token',
+          attachNewAids: const ['123'],
+        );
+
+        expect(
+          result.kind,
+          PostEditSubmitResponseKind.ambiguous,
+          reason: token,
+        );
+        expect(result.detail, 'message_mismatch', reason: token);
+      }
+    },
+  );
+
   test('reports partial success when a new aid is not associated', () {
     final result = service.verify(
       before: before,

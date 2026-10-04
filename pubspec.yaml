@@ -32,6 +32,8 @@ dependencies:
     sdk: flutter
   yamibo_forum_client:
     path: packages/yamibo_forum_client
+  forum_markup_core:
+    path: packages/forum_markup_core
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2

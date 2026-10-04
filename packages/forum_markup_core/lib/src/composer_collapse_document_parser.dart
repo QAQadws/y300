@@ -1,5 +1,5 @@
-import 'package:y300/features/composer_shared/domain/models/composer_collapse_models.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_collapse_bbcode_grammar.dart';
+import 'composer_collapse_models.dart';
+import 'composer_collapse_bbcode_grammar.dart';
 
 final class ComposerCollapseDocumentParser {
   const ComposerCollapseDocumentParser({

@@ -7,8 +7,8 @@
 /// and logical-offset mapping) must use this grammar instead of duplicating
 /// regular expressions.
 ///
-/// [ComposerAttachBbCodeService] remains intentionally more tolerant for
-/// extracting and cleaning old drafts and server-returned text.
+/// Legacy draft extraction and server readback may apply separate compatibility
+/// policies; those Host decisions are outside this strict grammar.
 enum ComposerAttachTagKind {
   attach('attach'),
   attachImg('attachimg');

@@ -1,4 +1,4 @@
-import 'package:y300/features/composer_shared/domain/models/composer_collapse_models.dart';
+import 'composer_collapse_models.dart';
 
 final class ComposerCollapseOpeningToken {
   const ComposerCollapseOpeningToken({

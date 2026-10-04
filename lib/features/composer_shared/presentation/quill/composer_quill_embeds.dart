@@ -1,6 +1,5 @@
 import 'package:flutter_quill/flutter_quill.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
-import 'package:y300/features/composer_shared/domain/services/composer_collapse_bbcode_grammar.dart';
+import 'package:forum_markup_core/forum_markup_core.dart';
 
 const composerQuillStickerEmbedType = 'sticker';
 const composerQuillAttachEmbedType = 'attach';

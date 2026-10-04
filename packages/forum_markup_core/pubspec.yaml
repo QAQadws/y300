@@ -1,0 +1,11 @@
+name: forum_markup_core
+description: Lossless attachment and collapse BBCode primitives for Y300.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0

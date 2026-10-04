@@ -1,4 +1,4 @@
-import 'package:y300/features/composer_shared/domain/services/composer_attach_bbcode_grammar.dart';
+import 'package:forum_markup_core/forum_markup_core.dart';
 
 /// Maintains `[attach]aid[/attach]` and `[attachimg]aid[/attachimg]`
 /// fragments in composer messages.
