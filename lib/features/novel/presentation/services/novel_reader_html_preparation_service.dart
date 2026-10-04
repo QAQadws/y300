@@ -51,6 +51,7 @@ final class DefaultNovelReaderHtmlPreparationService
       episode.episodeId,
       flowUnitExtractor,
       semanticDocument,
+      preferences.conversionMode.name,
     );
     final source = preparer;
     if (source is NovelHtmlChapterRenderPreparer) {
@@ -84,11 +85,17 @@ _chapterProjection(
   String episodeId,
   NovelReaderHtmlFlowUnitExtractor extractor,
   NovelReaderDocument? semanticDocument,
+  String conversionIdentity,
 ) => (prepared) {
   final flowUnits = extractor.extract(
     episodeId: episodeId,
     renderDocument: prepared.document,
-    semanticDocument: semanticDocument,
+    // Preview/rebuild can display new preferences before the semantic document
+    // catches up. Literal equality in another node is not provenance.
+    semanticDocument:
+        semanticDocument?.textConversionIdentity == conversionIdentity
+        ? semanticDocument
+        : null,
   );
   final scrollHtml = NovelReaderScrollMarkup.prepare(
     prepared.document.preparedHtml,

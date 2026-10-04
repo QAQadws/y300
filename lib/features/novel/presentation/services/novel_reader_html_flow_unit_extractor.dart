@@ -3,9 +3,13 @@ import 'dart:convert';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_text_normalization.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 abstract interface class NovelReaderHtmlFlowUnitExtractor {
@@ -65,7 +69,17 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     _removeNonRenderingNodes(fragment);
     final occurrences = <String, int>{};
     final units = <NovelReaderFlowUnit>[];
-    var semanticIndex = 0;
+    final displayIdentity = NovelReaderAnchorFormat.textIdentity(
+      renderDocument.preparedHtml,
+    );
+    final semanticNodesByText = <String, List<String>>{};
+    if (semanticDocument != null) {
+      for (final block in semanticDocument.blocks) {
+        (semanticNodesByText[block.novelPlainText] ??= <String>[]).add(
+          block.anchorId,
+        );
+      }
+    }
 
     for (final node in fragment.nodes) {
       if (!_isMeaningful(node)) {
@@ -74,20 +88,18 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
       final semanticMatch = _matchSemanticAnchor(
         node,
         semanticDocument,
-        startIndex: semanticIndex,
+        semanticNodesByText,
       );
       final descriptor = _describeNode(
         node,
         episodeId: episodeId,
         occurrences: occurrences,
         renderDocument: renderDocument,
-        semanticAnchor: semanticMatch?.$1,
+        semanticProjection: semanticMatch,
+        displayIdentity: displayIdentity,
       );
       if (descriptor != null) {
         units.add(descriptor);
-        if (semanticMatch != null && semanticMatch.$2 >= semanticIndex) {
-          semanticIndex = semanticMatch.$2 + 1;
-        }
       }
     }
 
@@ -130,7 +142,8 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     required String episodeId,
     required Map<String, int> occurrences,
     required ForumHtmlPreparedRenderDocument renderDocument,
-    required NovelReaderTextAnchor? semanticAnchor,
+    required NovelReaderSourceAnchorProjection? semanticProjection,
+    required String displayIdentity,
   }) {
     final html = _serializeNode(node);
     if (html.trim().isEmpty) {
@@ -144,64 +157,157 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
       ifAbsent: () => 0,
     );
     final anchorId = _anchorId(identity, occurrence);
-    final textLength = _readableText(node).runes.length;
-    final semanticNodeId = semanticAnchor?.nodeId;
-    final startAnchor = NovelReaderTextAnchor(
-      episodeId: episodeId,
-      nodeId: semanticNodeId ?? anchorId,
-      textOffset: 0,
-    );
-    final endAnchor = NovelReaderTextAnchor(
-      episodeId: episodeId,
-      nodeId: semanticNodeId ?? anchorId,
-      textOffset: textLength,
-    );
+    final sourceText = _readableText(node);
+    final isSpacer = element?.localName == 'br';
+    // Ambiguous/multi-block/converted text has its own exact layout identity.
+    // It can restore the same display projection, but cannot impersonate node-N.
+    final projection =
+        semanticProjection ??
+        NovelReaderSourceAnchorProjection(
+          baseAnchor: NovelReaderTextAnchor(
+            episodeId: episodeId,
+            nodeId: anchorId,
+            formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+            textIdentity: NovelReaderAnchorFormat.layoutTextIdentity(
+              isSpacer ? '' : sourceText,
+              displayIdentity,
+            ),
+            isProgressPercentValid: false,
+          ),
+          semanticOffsetsBySourceRuneBoundary: List<int>.generate(
+            sourceText.runes.length + 1,
+            (index) => isSpacer ? 0 : index,
+          ),
+        );
 
     return NovelReaderFlowUnit(
       unitId: '$episodeId:$anchorId',
       html: html,
-      startAnchor: startAnchor,
-      endAnchor: endAnchor,
+      startAnchor: projection.anchorAtSourceRune(0),
+      endAnchor: projection.anchorAtSourceRune(projection.sourceRuneLength),
       breakability: _breakability(element, node),
       imageIndices: _imageIndices(node, renderDocument),
+      sourceAnchorProjection: projection,
     );
   }
 
-  (NovelReaderTextAnchor, int)? _matchSemanticAnchor(
+  NovelReaderSourceAnchorProjection? _matchSemanticAnchor(
     html_dom.Node node,
-    NovelReaderDocument? semanticDocument, {
-    required int startIndex,
-  }) {
+    NovelReaderDocument? semanticDocument,
+    Map<String, List<String>> semanticNodesByText,
+  ) {
     if (semanticDocument == null) {
       return null;
     }
-    final text = _normalizeComparableText(_readableText(node));
-    if (text.isEmpty) {
+    final source = _readableText(node);
+    if (source.trim().isEmpty) {
       return null;
     }
-    final blocks = semanticDocument.blocks;
-    for (var index = startIndex; index < blocks.length; index += 1) {
-      final blockText = _normalizeComparableText(blocks[index].novelPlainText);
-      if (blockText.isEmpty) {
-        continue;
-      }
-      if (blockText == text ||
-          blockText.contains(text) ||
-          text.contains(blockText)) {
-        return (
-          NovelReaderTextAnchor(
-            episodeId: semanticDocument.episodeId,
-            nodeId: blocks[index].anchorId,
-          ),
-          index,
+    for (final candidate in _candidateProjections(node, source)) {
+      if (candidate.text.trim().isEmpty) continue;
+      NovelReaderSourceAnchorProjection? match;
+      final exactNodes = semanticNodesByText[candidate.text];
+      if (exactNodes != null) {
+        if (exactNodes.length != 1) return null;
+        if (semanticNodesByText.keys.any(
+          (text) => text != candidate.text && text.contains(candidate.text),
+        )) {
+          return null;
+        }
+        return _semanticProjection(
+          semanticDocument.episodeId,
+          exactNodes.single,
+          candidate.text,
+          0,
+          candidate.offsets,
         );
       }
+      for (final block in semanticDocument.blocks) {
+        final text = block.novelPlainText;
+        var cursor = 0;
+        while (cursor <= text.length) {
+          final offset = text.indexOf(candidate.text, cursor);
+          if (offset < 0) break;
+          if (match != null) return null;
+          final base = text.substring(0, offset).runes.length;
+          match = _semanticProjection(
+            semanticDocument.episodeId,
+            block.anchorId,
+            text,
+            base,
+            candidate.offsets,
+          );
+          cursor = offset + 1;
+        }
+      }
+      if (match != null) return match;
     }
     return null;
   }
 
-  String _normalizeComparableText(String value) {
-    return value.replaceAll(RegExp(r'\s+'), '').trim();
+  Iterable<_SourceTextProjection> _candidateProjections(
+    html_dom.Node node,
+    String source,
+  ) sync* {
+    yield _SourceTextProjection(
+      source,
+      List<int>.generate(source.runes.length + 1, (index) => index),
+    );
+    yield _projectInlineSource(node);
+    final plain = NovelReaderTextNormalization.project(source, trim: true);
+    yield _SourceTextProjection(plain.text, plain.offsets);
+  }
+
+  NovelReaderSourceAnchorProjection _semanticProjection(
+    String episodeId,
+    String nodeId,
+    String text,
+    int base,
+    List<int> offsets,
+  ) => NovelReaderSourceAnchorProjection(
+    baseAnchor: NovelReaderTextAnchor(
+      episodeId: episodeId,
+      nodeId: nodeId,
+      formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+      textIdentity: NovelReaderAnchorFormat.textIdentity(text),
+      isProgressPercentValid: false,
+    ),
+    semanticOffsetsBySourceRuneBoundary: offsets
+        .map((value) => base + value)
+        .toList(growable: false),
+  );
+
+  _SourceTextProjection _projectInlineSource(html_dom.Node node) {
+    if (node is html_dom.Text ||
+        (node is html_dom.Element && node.localName == 'a')) {
+      final source = _readableText(node);
+      final projected = NovelReaderTextNormalization.project(
+        source,
+        trim: node is html_dom.Element,
+      );
+      if (projected.text.trim().isEmpty) {
+        return _SourceTextProjection(
+          '',
+          List<int>.filled(source.runes.length + 1, 0),
+        );
+      }
+      return _SourceTextProjection(projected.text, projected.offsets);
+    }
+    if (node is html_dom.Element && node.localName == 'br') {
+      return const _SourceTextProjection('\n', <int>[0, 1]);
+    }
+    final text = StringBuffer();
+    final offsets = <int>[0];
+    var semanticOffset = 0;
+    for (final child in node.nodes) {
+      final projected = _projectInlineSource(child);
+      text.write(projected.text);
+      offsets.addAll(
+        projected.offsets.skip(1).map((value) => semanticOffset + value),
+      );
+      semanticOffset += projected.text.runes.length;
+    }
+    return _SourceTextProjection(text.toString(), offsets);
   }
 
   bool _isMeaningful(html_dom.Node node) {
@@ -295,10 +401,7 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
   }
 
   String _readableText(html_dom.Node node) {
-    if (node is html_dom.Text) {
-      return node.data;
-    }
-    return node.text ?? '';
+    return NovelReaderDomSourceText.read(node);
   }
 
   String _serializeNode(html_dom.Node node) {
@@ -319,4 +422,10 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     }
     return hash.toRadixString(16).padLeft(8, '0');
   }
+}
+
+final class _SourceTextProjection {
+  const _SourceTextProjection(this.text, this.offsets);
+  final String text;
+  final List<int> offsets;
 }

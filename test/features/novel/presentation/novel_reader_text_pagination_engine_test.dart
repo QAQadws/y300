@@ -11,6 +11,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_text_pagination_engine.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -99,6 +100,59 @@ void main() {
     expect(result.metrics.totalHeight, 90);
   });
 
+  test(
+    'keeps BR and every source rune when each line uses a separate page',
+    () {
+      final prepared = _safeAtom('<p>A<br>B<br>C</p>');
+      final result = DefaultNovelReaderTextPaginationEngine().paginate(
+        atom: prepared.$1,
+        runs: prepared.$2,
+        width: 320,
+        pageHeight: 30,
+        paragraphSpacing: 0,
+        typographySignature: 'one-line-pages',
+      );
+      expect(result.chunks, hasLength(3));
+      expect(
+        result.chunks
+            .map(
+              (chunk) => NovelReaderDomSourceText.read(
+                html_parser.parseFragment(chunk.html),
+              ),
+            )
+            .join(),
+        'A\nB\nC',
+      );
+      expect(result.chunks.map((chunk) => chunk.sourceStart), <int>[0, 2, 4]);
+      expect(result.chunks.map((chunk) => chunk.sourceEnd), <int>[2, 4, 5]);
+    },
+  );
+
+  test('does not split extended graphemes spanning styled runs', () {
+    const family = '👩‍👩‍👧‍👦';
+    const text = 'e\u0301$family末';
+    final prepared = _safeAtom(
+      '<p>e<span>\u0301</span>👩<b>‍👩‍👧</b>‍👦末</p>',
+    );
+    final result = DefaultNovelReaderTextPaginationEngine().paginate(
+      atom: prepared.$1,
+      runs: prepared.$2,
+      width: 40,
+      pageHeight: 30,
+      paragraphSpacing: 0,
+      typographySignature: 'cross-span-graphemes',
+    );
+    final slices = result.chunks
+        .map((chunk) => html_parser.parseFragment(chunk.html).text ?? '')
+        .toList();
+    expect(slices.join(), text);
+    final endpoints = <int>{0, 2, 9, 10};
+    for (final chunk in result.chunks) {
+      expect(endpoints, contains(chunk.sourceStart));
+      expect(endpoints, contains(chunk.sourceEnd));
+    }
+  });
+
   test('reuses metrics and invalidates on width or style changes', () {
     final cache = NovelReaderTextMetricsCache(capacity: 4);
     final engine = DefaultNovelReaderTextPaginationEngine(metricsCache: cache);
@@ -170,7 +224,7 @@ void main() {
     );
 
     final first = session.slice(start: 0, end: 2);
-    final second = session.slice(start: 2, end: 4);
+    final second = session.slice(start: 2, end: 5);
 
     expect(html_parser.parseFragment(first).text, '甲乙');
     expect(first, contains('<strong>甲乙</strong>'));
@@ -289,7 +343,9 @@ NovelReaderPaginationAtom _atom(
   String html, {
   NovelReaderPaginationAtomKind kind = NovelReaderPaginationAtomKind.text,
 }) {
-  final length = (html_parser.parseFragment(html).text ?? '').runes.length;
+  final length = NovelReaderDomSourceText.read(
+    html_parser.parseFragment(html),
+  ).runes.length;
   return NovelReaderPaginationAtom(
     atomId: 'text-engine:atom',
     kind: kind,

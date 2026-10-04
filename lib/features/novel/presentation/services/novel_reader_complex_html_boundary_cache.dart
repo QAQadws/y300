@@ -3,10 +3,11 @@ import 'dart:collection';
 
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 
 /// Invalidates cached DOM boundary sessions when indexing semantics change.
 abstract final class NovelReaderComplexHtmlBoundaryIndexRevision {
-  static const int current = 1;
+  static const int current = 2;
 }
 
 final class NovelReaderComplexHtmlBoundaryCacheRequest {
@@ -17,6 +18,7 @@ final class NovelReaderComplexHtmlBoundaryCacheRequest {
     required this.html,
     required this.startAnchor,
     required this.normalizerRevision,
+    this.sourceAnchorProjection,
     this.boundaryIndexerRevision =
         NovelReaderComplexHtmlBoundaryIndexRevision.current,
   });
@@ -26,6 +28,7 @@ final class NovelReaderComplexHtmlBoundaryCacheRequest {
   final String atomId;
   final String html;
   final NovelReaderTextAnchor startAnchor;
+  final NovelReaderSourceAnchorProjection? sourceAnchorProjection;
   final int normalizerRevision;
   final int boundaryIndexerRevision;
 }
@@ -164,6 +167,10 @@ final class _NovelReaderComplexHtmlBoundaryCacheKey {
     required this.anchorEpisodeId,
     required this.anchorNodeId,
     required this.anchorTextOffset,
+    required this.anchorFormatVersion,
+    required this.anchorTextIdentity,
+    required this.anchorIsProgressPercentValid,
+    required this.sourceProjectionIdentity,
     required this.normalizerRevision,
     required this.boundaryIndexerRevision,
   });
@@ -179,6 +186,10 @@ final class _NovelReaderComplexHtmlBoundaryCacheKey {
       anchorEpisodeId: request.startAnchor.episodeId,
       anchorNodeId: request.startAnchor.nodeId,
       anchorTextOffset: request.startAnchor.textOffset,
+      anchorFormatVersion: request.startAnchor.formatVersion,
+      anchorTextIdentity: request.startAnchor.textIdentity,
+      anchorIsProgressPercentValid: request.startAnchor.isProgressPercentValid,
+      sourceProjectionIdentity: request.sourceAnchorProjection?.cacheIdentity,
       normalizerRevision: request.normalizerRevision,
       boundaryIndexerRevision: request.boundaryIndexerRevision,
     );
@@ -191,6 +202,10 @@ final class _NovelReaderComplexHtmlBoundaryCacheKey {
   final String anchorEpisodeId;
   final String? anchorNodeId;
   final int anchorTextOffset;
+  final int anchorFormatVersion;
+  final String? anchorTextIdentity;
+  final bool? anchorIsProgressPercentValid;
+  final String? sourceProjectionIdentity;
   final int normalizerRevision;
   final int boundaryIndexerRevision;
 
@@ -204,6 +219,10 @@ final class _NovelReaderComplexHtmlBoundaryCacheKey {
         other.anchorEpisodeId == anchorEpisodeId &&
         other.anchorNodeId == anchorNodeId &&
         other.anchorTextOffset == anchorTextOffset &&
+        other.anchorFormatVersion == anchorFormatVersion &&
+        other.anchorTextIdentity == anchorTextIdentity &&
+        other.anchorIsProgressPercentValid == anchorIsProgressPercentValid &&
+        other.sourceProjectionIdentity == sourceProjectionIdentity &&
         other.normalizerRevision == normalizerRevision &&
         other.boundaryIndexerRevision == boundaryIndexerRevision;
   }
@@ -217,6 +236,10 @@ final class _NovelReaderComplexHtmlBoundaryCacheKey {
     anchorEpisodeId,
     anchorNodeId,
     anchorTextOffset,
+    anchorFormatVersion,
+    anchorTextIdentity,
+    anchorIsProgressPercentValid,
+    sourceProjectionIdentity,
     normalizerRevision,
     boundaryIndexerRevision,
   );

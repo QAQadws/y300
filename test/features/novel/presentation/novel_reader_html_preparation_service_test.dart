@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
@@ -15,6 +16,181 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 void main() {
   const service = DefaultNovelReaderHtmlPreparationService();
   const adapter = NovelHtmlReaderPreferencesAdapter();
+
+  test(
+    'converted text cannot acquire a different semantic node through a spelling collision',
+    () async {
+      const rawHtml = '<p>臺</p><p>台</p>';
+      final semantic = const DiscuzNovelReaderDocumentParser().parse(
+        episodeId: _episode.episodeId,
+        rawHtml: rawHtml,
+        fallbackParagraphs: const <String>[],
+      );
+      final prepared =
+          await const DefaultNovelReaderHtmlPreparationService(
+            preparer: _ConvertedChapterPreparer(),
+          ).prepare(
+            rawHtml: rawHtml,
+            episode: _episode,
+            preferences: adapter
+                .map(NovelReaderPreferences.defaults())
+                .copyWith(conversionMode: TextConversionMode.toSimplified),
+            theme: _theme,
+            sourceId: _episode.episodeId,
+            threadId: _episode.sourceTid,
+            imageCacheOwnerId: _episode.sourceTid,
+            semanticDocument: semantic,
+          );
+      expect(prepared.convertedTextNodeCount, 1);
+      expect(prepared.flowUnits, hasLength(2));
+      expect(
+        prepared.flowUnits[0].startAnchor.nodeId,
+        startsWith('novel-html-'),
+      );
+      expect(
+        prepared.flowUnits[1].startAnchor.nodeId,
+        startsWith('novel-html-'),
+      );
+      expect(
+        prepared.flowUnits[0].startAnchor.nodeId,
+        isNot(prepared.flowUnits[1].startAnchor.nodeId),
+      );
+      expect(
+        prepared.flowUnits.every(
+          (unit) => unit.startAnchor.hasCanonicalTextOffset,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'matching conversion provenance retains a unique semantic node',
+    () async {
+      const convertedHtml = '<p>台正文</p>';
+      final parsed = const DiscuzNovelReaderDocumentParser().parse(
+        episodeId: _episode.episodeId,
+        rawHtml: convertedHtml,
+        fallbackParagraphs: const <String>[],
+      );
+      final semantic = _withConversionIdentity(
+        parsed,
+        TextConversionMode.toSimplified.name,
+      );
+      final prepared =
+          await const DefaultNovelReaderHtmlPreparationService(
+            preparer: _ConvertedChapterPreparer(),
+          ).prepare(
+            rawHtml: '<p>臺正文</p>',
+            episode: _episode,
+            preferences: adapter
+                .map(NovelReaderPreferences.defaults())
+                .copyWith(conversionMode: TextConversionMode.toSimplified),
+            theme: _theme,
+            sourceId: _episode.episodeId,
+            threadId: _episode.sourceTid,
+            imageCacheOwnerId: _episode.sourceTid,
+            semanticDocument: semantic,
+          );
+
+      expect(prepared.convertedTextNodeCount, 1);
+      expect(
+        prepared.flowUnits.single.startAnchor.nodeId,
+        semantic.blocks.single.anchorId,
+      );
+      expect(
+        prepared.flowUnits.single.startAnchor.hasCanonicalTextOffset,
+        isTrue,
+      );
+      expect(prepared.flowUnits.single.endAnchor.textOffset, 3);
+    },
+  );
+
+  test(
+    'same semantic HTML hash with different modes cannot share prepared cache',
+    () async {
+      final parsed = const DiscuzNovelReaderDocumentParser().parse(
+        episodeId: _episode.episodeId,
+        rawHtml: '<p>台正文</p>',
+        fallbackParagraphs: const <String>[],
+      );
+      final matching = _withConversionIdentity(
+        parsed,
+        TextConversionMode.toSimplified.name,
+      );
+      final cache = NovelReaderPreparedChapterCache();
+      final service = NovelReaderCachingHtmlPreparationService(
+        delegate: const DefaultNovelReaderHtmlPreparationService(
+          preparer: _ConvertedChapterPreparer(),
+        ),
+        cache: cache,
+      );
+      final preferences = adapter
+          .map(NovelReaderPreferences.defaults())
+          .copyWith(conversionMode: TextConversionMode.toSimplified);
+      Future<NovelReaderPreparedChapter> prepare(
+        NovelReaderDocument semantic,
+      ) => service.prepare(
+        rawHtml: '<p>臺正文</p>',
+        episode: _episode,
+        preferences: preferences,
+        theme: _theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+        semanticDocument: semantic,
+      );
+
+      expect(parsed.rawHtmlHash, matching.rawHtmlHash);
+      final oldMode = prepare(parsed);
+      final currentMode = prepare(matching);
+      expect(identical(oldMode, currentMode), isFalse);
+      final oldPrepared = await oldMode;
+      final currentPrepared = await currentMode;
+      expect(
+        oldPrepared.flowUnits.single.startAnchor.nodeId,
+        startsWith('novel-html-'),
+      );
+      expect(
+        currentPrepared.flowUnits.single.startAnchor.nodeId,
+        matching.blocks.single.anchorId,
+      );
+      expect(cache.length, 2);
+      expect(await prepare(parsed), same(oldPrepared));
+      expect(await prepare(matching), same(currentPrepared));
+    },
+  );
+
+  test(
+    'previewing none cannot use a semantic document from an earlier conversion',
+    () async {
+      final parsed = const DiscuzNovelReaderDocumentParser().parse(
+        episodeId: _episode.episodeId,
+        rawHtml: '<p>相同文字</p>',
+        fallbackParagraphs: const <String>[],
+      );
+      final semantic = _withConversionIdentity(
+        parsed,
+        TextConversionMode.toSimplified.name,
+      );
+      final prepared = await service.prepare(
+        rawHtml: '<p>相同文字</p>',
+        episode: _episode,
+        preferences: adapter.map(NovelReaderPreferences.defaults()),
+        theme: _theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+        semanticDocument: semantic,
+      );
+
+      expect(prepared.convertedTextNodeCount, 0);
+      expect(
+        prepared.flowUnits.single.startAnchor.nodeId,
+        startsWith('novel-html-'),
+      );
+    },
+  );
 
   test('large background preparation matches synchronous HTML and anchors', () async {
     final body = List.generate(
@@ -341,6 +517,18 @@ void main() {
   );
 }
 
+NovelReaderDocument _withConversionIdentity(
+  NovelReaderDocument document,
+  String identity,
+) => NovelReaderDocument(
+  episodeId: document.episodeId,
+  rawHtmlHash: document.rawHtmlHash,
+  body: document.body,
+  plainText: document.plainText,
+  wordCount: document.wordCount,
+  textConversionIdentity: identity,
+);
+
 class _CountingPreparationService implements NovelReaderHtmlPreparationService {
   int calls = 0;
 
@@ -367,6 +555,35 @@ class _CountingPreparationService implements NovelReaderHtmlPreparationService {
       sourceId: 'episode-1',
       threadId: '100',
       imageCacheOwnerId: '100',
+    );
+  }
+}
+
+class _ConvertedChapterPreparer implements NovelHtmlChapterPreparer {
+  const _ConvertedChapterPreparer();
+  @override
+  int get legacyMarkupNormalizerRevision => 1;
+  @override
+  Future<NovelHtmlPreparedChapter> prepare({
+    required String rawHtml,
+    required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
+    required String sourceId,
+    required String? threadId,
+    required String? imageCacheOwnerId,
+  }) async {
+    final converted = rawHtml.replaceAll('臺', '台');
+    return NovelHtmlPreparedChapter(
+      html: converted,
+      convertedTextNodeCount: 1,
+      document: const DefaultForumHtmlRenderPreparer().prepare(
+        html: converted,
+        preferences: preferences,
+        theme: theme,
+        sourceId: sourceId,
+        threadId: threadId,
+        imageCacheOwnerId: imageCacheOwnerId,
+      ),
     );
   }
 }

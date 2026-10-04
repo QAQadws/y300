@@ -86,12 +86,14 @@ void main() {
           scrollOffset: 0,
           updatedAt: DateTime(2026, 10, 4),
           anchorFormatVersion: version,
+          anchorTextOffset: -7,
           anchorTextIdentity: identity,
           isProgressPercentValid: validity,
         ),
       );
 
       expect(snapshot.anchorFormatVersion, version);
+      expect(snapshot.anchorTextOffset, version == 1 ? 0 : -7);
       expect(snapshot.anchorTextIdentity, identity);
       expect(snapshot.isProgressPercentValid, validity);
       expect(snapshot.copyWith(), snapshot);
@@ -258,6 +260,22 @@ void main() {
       ),
       300,
     );
+    expect(
+      policy.restoreScrollOffset(
+        snapshot.copyWith(isProgressPercentValid: false),
+        maxScrollExtent: 800,
+        viewportDimension: 200,
+      ),
+      345.5,
+    );
+    expect(
+      policy.restoreScrollOffset(
+        snapshot.copyWith(progressPercent: 0, isProgressPercentValid: true),
+        maxScrollExtent: 800,
+        viewportDimension: 200,
+      ),
+      0,
+    );
   });
 
   test('restore policy uses percentage before stale layout hints', () {
@@ -331,13 +349,17 @@ void main() {
       progressPercent: 0,
     );
     expect(
-      restorePolicy.resolveInitialPage(plan: plan, snapshot: sameLayout),
+      restorePolicy
+          .resolveInitialPage(plan: plan, snapshot: sameLayout)
+          .pageIndex,
       2,
     );
 
     final changedPosition = sameLayout.copyWith(progressPercent: 0.1);
     expect(
-      restorePolicy.resolveInitialPage(plan: plan, snapshot: changedPosition),
+      restorePolicy
+          .resolveInitialPage(plan: plan, snapshot: changedPosition)
+          .pageIndex,
       0,
     );
 
@@ -348,7 +370,9 @@ void main() {
       anchorTextOffset: 1,
     );
     expect(
-      restorePolicy.resolveInitialPage(plan: plan, snapshot: changedLayout),
+      restorePolicy
+          .resolveInitialPage(plan: plan, snapshot: changedLayout)
+          .pageIndex,
       1,
     );
 
@@ -359,13 +383,17 @@ void main() {
       clearAnchorNodeId: true,
     );
     expect(
-      restorePolicy.resolveInitialPage(plan: plan, snapshot: percentOnly),
+      restorePolicy
+          .resolveInitialPage(plan: plan, snapshot: percentOnly)
+          .pageIndex,
       1,
     );
 
     final invalidLegacy = percentOnly.copyWith(progressPercent: 0);
     expect(
-      restorePolicy.resolveInitialPage(plan: plan, snapshot: invalidLegacy),
+      restorePolicy
+          .resolveInitialPage(plan: plan, snapshot: invalidLegacy)
+          .pageIndex,
       0,
     );
 
@@ -378,7 +406,9 @@ void main() {
       progressPercent: 0.66,
     );
     expect(
-      restorePolicy.resolveInitialPage(plan: plan, snapshot: verticalPercent),
+      restorePolicy
+          .resolveInitialPage(plan: plan, snapshot: verticalPercent)
+          .pageIndex,
       1,
     );
 
@@ -388,32 +418,126 @@ void main() {
       pages: <NovelReaderPageFragment>[plan.pages.first],
     );
     expect(
-      restorePolicy.resolveAvailablePage(
-        plan: partialPlan,
-        snapshot: changedLayout,
-        isPlanComplete: false,
-      ),
+      restorePolicy
+          .resolveAvailablePage(
+            plan: partialPlan,
+            snapshot: changedLayout,
+            isPlanComplete: false,
+          )
+          ?.pageIndex,
       isNull,
     );
     expect(
-      restorePolicy.resolveAvailablePage(
-        plan: plan,
-        snapshot: changedLayout,
-        isPlanComplete: false,
-      ),
+      restorePolicy
+          .resolveAvailablePage(
+            plan: plan,
+            snapshot: changedLayout,
+            isPlanComplete: false,
+          )
+          ?.pageIndex,
       1,
     );
     expect(
-      restorePolicy.resolveAvailablePage(
-        plan: partialPlan,
-        snapshot: invalidLegacy,
-        isPlanComplete: true,
-      ),
+      restorePolicy
+          .resolveAvailablePage(
+            plan: partialPlan,
+            snapshot: invalidLegacy,
+            isPlanComplete: true,
+          )
+          ?.pageIndex,
+      0,
+    );
+
+    final canonicalPlan = NovelReaderPaginationPlan(
+      key: key,
+      episodeId: plan.episodeId,
+      pages: [
+        for (final page in plan.pages)
+          NovelReaderPageFragment(
+            index: page.index,
+            html: page.html,
+            startAnchor: page.startAnchor.copyWith(
+              formatVersion: 1,
+              textIdentity: 'text:${page.startAnchor.nodeId}',
+            ),
+            endAnchor: page.endAnchor.copyWith(
+              formatVersion: 1,
+              textIdentity: 'text:${page.endAnchor.nodeId}',
+            ),
+            imageIndices: page.imageIndices,
+          ),
+      ],
+    );
+    final exact = changedLayout.copyWith(
+      anchorFormatVersion: 1,
+      anchorTextIdentity: 'text:paragraph-2',
+    );
+    expect(
+      restorePolicy
+          .resolveInitialPage(plan: canonicalPlan, snapshot: exact)
+          .isReadOnlyCompatibilityRestore,
+      isFalse,
+    );
+    for (final compatibility in [
+      exact.copyWith(anchorFormatVersion: 0),
+      exact.copyWith(anchorFormatVersion: 37),
+      exact.copyWith(anchorTextIdentity: 'changed text'),
+    ]) {
+      // Neither a trusted layout key nor a valid percentage proves the unit
+      // of an unsupported or mismatched offset. The raw input stays untouched.
+      for (final hint in [
+        compatibility.copyWith(
+          paginationKey: key.layoutFingerprint,
+          pageIndex: 2,
+        ),
+        compatibility.copyWith(
+          progressPercent: 0.5,
+          isProgressPercentValid: true,
+        ),
+      ]) {
+        final resolution = restorePolicy.resolveInitialPage(
+          plan: canonicalPlan,
+          snapshot: hint,
+        );
+        expect(resolution.isReadOnlyCompatibilityRestore, isTrue);
+        expect(hint.anchorTextOffset, 1);
+        expect(hint.anchorFormatVersion, compatibility.anchorFormatVersion);
+        expect(hint.anchorTextIdentity, compatibility.anchorTextIdentity);
+      }
+      final nodeFirst = restorePolicy.resolveInitialPage(
+        plan: canonicalPlan,
+        snapshot: compatibility.copyWith(anchorTextOffset: 999),
+      );
+      expect(nodeFirst.pageIndex, 1);
+      expect(nodeFirst.isReadOnlyCompatibilityRestore, isTrue);
+    }
+    expect(
+      restorePolicy
+          .resolveInitialPage(
+            plan: canonicalPlan,
+            snapshot: exact.copyWith(
+              progressPercent: 0.8,
+              isProgressPercentValid: false,
+            ),
+          )
+          .pageIndex,
+      1,
+    );
+    expect(
+      restorePolicy
+          .resolveInitialPage(
+            plan: canonicalPlan,
+            snapshot: exact.copyWith(
+              progressPercent: 0,
+              isProgressPercentValid: true,
+            ),
+          )
+          .pageIndex,
       0,
     );
   });
 
-  test('characterizes partial last-page overmatch before the coverage fix', () {
+  test('partial anchor coverage is finite and complete end is exact', () {
     const key = NovelReaderPaginationKey(
       episodeId: 'episode-1',
       contentHash: 'content',
@@ -427,6 +551,8 @@ void main() {
     const start = NovelReaderTextAnchor(
       episodeId: 'episode-1',
       nodeId: 'paragraph-1',
+      formatVersion: 1,
+      textIdentity: 'exact-paragraph-1',
     );
     NovelReaderPageFragment page(int index, int from, int to) {
       final fromAnchor = start.copyWith(textOffset: from);
@@ -463,35 +589,129 @@ void main() {
       paginationKey: 'previous-layout',
       anchorNodeId: 'paragraph-1',
       anchorTextOffset: 15,
+      anchorFormatVersion: 1,
+      anchorTextIdentity: 'exact-paragraph-1',
       progressPercent: 0,
     );
     const restorePolicy = NovelReaderPaginationRestorePolicy();
     final target = start.copyWith(textOffset: snapshot.anchorTextOffset);
 
     expect(target.textOffset, greaterThan(firstPage.endAnchor.textOffset));
-    // Stage 1 must replace both partial-plan results below with null: this
-    // target is not covered until the second page has actually been built.
-    expect(partialPlan.pageIndexForAnchor(target), 0);
+    expect(
+      partialPlan.pageIndexForAnchor(target, isPlanComplete: false),
+      isNull,
+    );
     expect(
       restorePolicy.resolveAvailablePage(
         plan: partialPlan,
         snapshot: snapshot,
         isPlanComplete: false,
       ),
-      0,
+      isNull,
     );
-    expect(extendedPlan.pageIndexForAnchor(target), 1);
+    expect(extendedPlan.pageIndexForAnchor(target, isPlanComplete: false), 1);
     expect(
-      restorePolicy.resolveAvailablePage(
-        plan: extendedPlan,
-        snapshot: snapshot,
+      restorePolicy
+          .resolveAvailablePage(
+            plan: extendedPlan,
+            snapshot: snapshot,
+            isPlanComplete: false,
+          )
+          ?.pageIndex,
+      1,
+    );
+    expect(
+      partialPlan.pageIndexForAnchor(
+        target.copyWith(nodeId: 'paragraph-2'),
+        isPlanComplete: false,
+      ),
+      isNull,
+    );
+    expect(
+      partialPlan.pageIndexForAnchor(
+        start.copyWith(textOffset: 10),
+        isPlanComplete: false,
+      ),
+      isNull,
+    );
+    expect(
+      extendedPlan.pageIndexForAnchor(
+        start.copyWith(textOffset: 10),
         isPlanComplete: false,
       ),
       1,
     );
     expect(
-      partialPlan.pageIndexForAnchor(target.copyWith(nodeId: 'paragraph-2')),
+      extendedPlan.pageIndexForAnchor(
+        start.copyWith(textOffset: 20),
+        isPlanComplete: false,
+      ),
       isNull,
+    );
+    expect(
+      extendedPlan.pageIndexForAnchor(
+        start.copyWith(textOffset: 20),
+        isPlanComplete: true,
+      ),
+      1,
+    );
+    expect(
+      extendedPlan.pageIndexForAnchor(
+        start.copyWith(textOffset: 21),
+        isPlanComplete: true,
+      ),
+      isNull,
+    );
+    expect(
+      extendedPlan.pageIndexForAnchor(
+        target.copyWith(textIdentity: 'changed'),
+        isPlanComplete: true,
+      ),
+      isNull,
+    );
+    final nextNode = start.copyWith(
+      nodeId: 'paragraph-2',
+      textOffset: 0,
+      textIdentity: 'exact-paragraph-2',
+    );
+    final multiRangeLastPage = NovelReaderPaginationPlan(
+      key: key,
+      episodeId: 'episode-1',
+      pages: [
+        NovelReaderPageFragment(
+          index: 0,
+          html: '<p>two nodes</p>',
+          startAnchor: start,
+          endAnchor: nextNode.copyWith(textOffset: 3),
+          imageIndices: const [],
+          anchorRanges: [
+            NovelReaderPageAnchorRange(
+              start: start,
+              end: start.copyWith(textOffset: 10),
+            ),
+            NovelReaderPageAnchorRange(
+              start: nextNode,
+              end: nextNode.copyWith(textOffset: 3),
+            ),
+          ],
+        ),
+      ],
+    );
+    // Completeness only closes the actual final range, not every node range
+    // contained in the final page.
+    expect(
+      multiRangeLastPage.pageIndexForAnchor(
+        start.copyWith(textOffset: 10),
+        isPlanComplete: true,
+      ),
+      isNull,
+    );
+    expect(
+      multiRangeLastPage.pageIndexForAnchor(
+        nextNode.copyWith(textOffset: 3),
+        isPlanComplete: true,
+      ),
+      0,
     );
   });
 }

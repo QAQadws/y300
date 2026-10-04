@@ -25,6 +25,7 @@ class NovelReaderDocument {
     required this.body,
     required this.plainText,
     required this.wordCount,
+    this.textConversionIdentity,
   });
 
   final String episodeId;
@@ -32,6 +33,10 @@ class NovelReaderDocument {
   final RichDocument body;
   final String plainText;
   final int wordCount;
+
+  /// The conversion mode that produced this document, never the UI preview.
+  /// Null means that the caller has not established display provenance.
+  final String? textConversionIdentity;
 
   /// Block tree in document order.
   List<RichBlock> get blocks => body.blocks;

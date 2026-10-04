@@ -1,4 +1,5 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
@@ -50,6 +51,7 @@ class NovelReaderFlowUnit {
     required this.endAnchor,
     required this.breakability,
     required this.imageIndices,
+    this.sourceAnchorProjection,
   });
 
   final String unitId;
@@ -58,6 +60,7 @@ class NovelReaderFlowUnit {
   final NovelReaderTextAnchor endAnchor;
   final NovelReaderFlowUnitBreakability breakability;
   final List<int> imageIndices;
+  final NovelReaderSourceAnchorProjection? sourceAnchorProjection;
 }
 
 enum NovelReaderFlowUnitBreakability {

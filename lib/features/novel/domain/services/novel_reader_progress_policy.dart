@@ -157,7 +157,13 @@ class NovelReaderProgressPolicy {
       pageIndex: progress.pageIndex < 0 ? 0 : progress.pageIndex,
       pageCount: _normalizePageCount(progress.pageCount),
       anchorNodeId: _normalizeAnchor(progress.anchorNodeId),
-      anchorTextOffset: math.max(0, progress.anchorTextOffset).toInt(),
+      anchorTextOffset:
+          NovelReaderAnchorFormat.isSupported(
+            progress.anchorFormatVersion,
+            progress.anchorTextIdentity,
+          )
+          ? math.max(0, progress.anchorTextOffset).toInt()
+          : progress.anchorTextOffset,
       // Compatibility metadata is evidence, not a value to infer or normalize.
       anchorFormatVersion: progress.anchorFormatVersion,
       anchorTextIdentity: progress.anchorTextIdentity,
@@ -197,7 +203,7 @@ class NovelReaderProgressPolicy {
     bool isPageCountFinal = true,
     String? anchorNodeId,
     int anchorTextOffset = 0,
-    int anchorFormatVersion = 0,
+    int anchorFormatVersion = NovelReaderAnchorFormat.legacyUnknown,
     String? anchorTextIdentity,
   }) {
     if (flowMode == NovelReaderFlowMode.vertical) {
@@ -242,7 +248,11 @@ class NovelReaderProgressPolicy {
     final safeMax = math.max(0.0, maxScrollExtent);
     // Offset and page numbers belong to a previous layout. Percentage is the
     // stable cross-layout position, so prefer it whenever it is meaningful.
-    if (snapshot.progressPercent.isFinite && snapshot.progressPercent > 0) {
+    if (snapshot.isProgressPercentValid != false &&
+        snapshot.progressPercent.isFinite &&
+        (snapshot.progressPercent > 0 ||
+            (snapshot.progressPercent == 0 &&
+                snapshot.isProgressPercentValid == true))) {
       final target = _clampPercent(snapshot.progressPercent) * safeMax;
       if (snapshot.flowMode == NovelReaderFlowMode.vertical ||
           snapshot.pageCount != null) {

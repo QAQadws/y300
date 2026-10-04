@@ -7,10 +7,36 @@ import 'package:y300/features/novel/presentation/models/novel_reader_prepared_ch
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   const extractor = NovelReaderPaginationAtomExtractor();
+
+  test(
+    'image splitting retains the projected semantic offset after collapsed spaces and BR',
+    () async {
+      const html =
+          '<p>前  文<img src="data/attachment/forum/first.jpg">后&nbsp;&nbsp;中<br>尾</p>';
+      final chapter = await _prepare(html);
+      final atoms = extractor.extract(chapter);
+      expect(atoms, hasLength(3));
+      expect(atoms[0].endAnchor.textOffset, 3);
+      expect(atoms[1].startAnchor.textOffset, 0);
+      expect(atoms[1].endAnchor.textOffset, 0);
+      expect(atoms[2].startAnchor.textOffset, 3);
+      expect(atoms[2].endAnchor.textOffset, '前 文后 中\n尾'.runes.length);
+      for (final atom in atoms) {
+        expect(
+          atom.sourceAnchorProjection!.sourceRuneLength,
+          NovelReaderDomSourceText.read(
+            html_parser.parseFragment(atom.html),
+          ).runes.length,
+        );
+      }
+    },
+  );
 
   test('isolates readable images while preserving surrounding text', () async {
     final chapter = await _prepare(
@@ -149,6 +175,11 @@ Future<NovelReaderPreparedChapter> _prepare(String html) {
   );
   return const DefaultNovelReaderHtmlPreparationService().prepare(
     rawHtml: html,
+    semanticDocument: const DiscuzNovelReaderDocumentParser().parse(
+      episodeId: episode.episodeId,
+      rawHtml: html,
+      fallbackParagraphs: const <String>[],
+    ),
     episode: episode,
     preferences: const NovelHtmlReaderPreferencesAdapter().map(
       NovelReaderPreferences.defaults(),

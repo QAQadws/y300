@@ -2,9 +2,12 @@ import 'dart:convert';
 
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_background_work.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 /// Converts existing prepared flow units into pagination atoms.
@@ -35,10 +38,18 @@ final class NovelReaderPaginationAtomExtractor {
               sequence: chapter.renderDocument.sequence,
             );
       var textOffset = unit.startAnchor.textOffset;
+      var sourceOffset = 0;
       for (var index = 0; index < parts.length; index += 1) {
         final part = parts[index];
-        final partHtml = _normalizeTopLevelTextWhitespace(part.html);
+        final originalLength = _textLength(part.html);
+        final normalized = _normalizeTopLevelTextWhitespace(part.html);
+        final partHtml = normalized.$1;
         final textLength = _textLength(partHtml);
+        final sourceProjection = unit.sourceAnchorProjection?.subrange(
+          sourceOffset,
+          sourceOffset + originalLength,
+        );
+        sourceOffset += originalLength;
         if (!part.isolatedImage && !_isMeaningfulPart(partHtml)) {
           textOffset += textLength;
           continue;
@@ -47,11 +58,11 @@ final class NovelReaderPaginationAtomExtractor {
             ? '${unit.startAnchor.nodeId ?? unit.unitId}:image-'
                   '${part.imageIndices.single}'
             : null;
-        final startAnchor = unit.startAnchor.copyWith(
+        var startAnchor = unit.startAnchor.copyWith(
           nodeId: imageNodeId,
           textOffset: part.isolatedImage ? 0 : textOffset,
         );
-        final endAnchor = unit.endAnchor.copyWith(
+        var endAnchor = unit.endAnchor.copyWith(
           nodeId: imageNodeId,
           textOffset: part.isolatedImage ? 0 : textOffset + textLength,
         );
@@ -60,6 +71,32 @@ final class NovelReaderPaginationAtomExtractor {
           unit.breakability,
           isIsolatedImage: part.isolatedImage,
         );
+        NovelReaderSourceAnchorProjection? projection;
+        if (sourceProjection != null) {
+          if (part.isolatedImage) {
+            startAnchor = startAnchor.copyWith(
+              textIdentity: NovelReaderAnchorFormat.textIdentity(''),
+            );
+            projection = NovelReaderSourceAnchorProjection(
+              baseAnchor: startAnchor,
+              semanticOffsetsBySourceRuneBoundary: const <int>[0],
+            );
+          } else {
+            projection = NovelReaderSourceAnchorProjection(
+              baseAnchor: sourceProjection.baseAnchor,
+              semanticOffsetsBySourceRuneBoundary: normalized.$2
+                  .map(
+                    (offset) => sourceProjection
+                        .semanticOffsetsBySourceRuneBoundary[offset],
+                  )
+                  .toList(growable: false),
+            );
+          }
+          startAnchor = projection.anchorAtSourceRune(0);
+          endAnchor = projection.anchorAtSourceRune(
+            projection.sourceRuneLength,
+          );
+        }
         atoms.add(
           NovelReaderPaginationAtom(
             atomId: '${unit.unitId}:atom-$index',
@@ -75,6 +112,7 @@ final class NovelReaderPaginationAtomExtractor {
             imagePagePolicy: part.isolatedImage
                 ? NovelReaderImagePagePolicy.isolated
                 : NovelReaderImagePagePolicy.inline,
+            sourceAnchorProjection: projection,
           ),
         );
         textOffset += textLength;
@@ -136,21 +174,47 @@ final class NovelReaderPaginationAtomExtractor {
     return hasBreak;
   }
 
-  String _normalizeTopLevelTextWhitespace(String html) {
+  (String, List<int>) _normalizeTopLevelTextWhitespace(String html) {
     final fragment = html_parser.parseFragment(html);
     if (fragment.nodes.isEmpty ||
         fragment.nodes.any((node) => node is! html_dom.Text)) {
-      return html;
+      final length = NovelReaderDomSourceText.read(fragment).runes.length;
+      return (html, List<int>.generate(length + 1, (index) => index));
     }
     final text = fragment.nodes
         .cast<html_dom.Text>()
         .map((node) => node.data)
         .join();
-    final normalized = text
-        .replaceAll(RegExp(r'[\t\n\f\r ]+'), ' ')
-        .replaceFirst(RegExp(r'^[\t\n\f\r ]+'), '')
-        .replaceFirst(RegExp(r'[\t\n\f\r ]+$'), '');
-    return const HtmlEscape().convert(normalized);
+    final runes = text.runes.toList(growable: false);
+    bool isSpace(int rune) =>
+        rune == 9 || rune == 10 || rune == 12 || rune == 13 || rune == 32;
+    var start = 0;
+    var end = runes.length;
+    while (start < end && isSpace(runes[start])) {
+      start++;
+    }
+    while (end > start && isSpace(runes[end - 1])) {
+      end--;
+    }
+    final output = <int>[];
+    final boundaries = <int>[start];
+    var cursor = start;
+    while (cursor < end) {
+      final rune = runes[cursor++];
+      if (isSpace(rune)) {
+        while (cursor < end && isSpace(runes[cursor])) {
+          cursor++;
+        }
+        output.add(32);
+      } else {
+        output.add(rune);
+      }
+      boundaries.add(cursor);
+    }
+    return (
+      const HtmlEscape().convert(String.fromCharCodes(output)),
+      boundaries,
+    );
   }
 
   List<_AtomPart> _splitFragment({
@@ -253,7 +317,9 @@ final class NovelReaderPaginationAtomExtractor {
   }
 
   int _textLength(String html) {
-    return (html_parser.parseFragment(html).text ?? '').runes.length;
+    return NovelReaderDomSourceText.read(
+      html_parser.parseFragment(html),
+    ).runes.length;
   }
 
   bool _isMeaningfulPart(String html) {

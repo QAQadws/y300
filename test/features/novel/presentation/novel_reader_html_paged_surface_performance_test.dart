@@ -11,10 +11,12 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
@@ -430,7 +432,7 @@ void main() {
         palette,
       );
       final coordinator = _ControlledRestorePaginationCoordinator();
-      final positions = <int>[];
+      final positions = <NovelReaderPaginationPosition>[];
       final diagnostics = _RecordingDiagnosticsSink();
 
       await tester.pumpWidget(
@@ -465,7 +467,7 @@ void main() {
                   }) => coordinator,
               diagnosticsSink: diagnostics,
               onPositionChanged: (position) {
-                positions.add(position.pageIndex);
+                positions.add(position);
               },
             ),
           ),
@@ -497,7 +499,8 @@ void main() {
         find.byKey(const Key('novel-reader-paged-page-view')),
         findsOneWidget,
       );
-      expect(positions, <int>[1]);
+      expect(positions.map((position) => position.pageIndex), <int>[1]);
+      expect(positions.single.isReadOnlyCompatibilityRestore, isTrue);
       final firstFrame = diagnostics.records.single;
       expect(firstFrame.isComplete, isFalse);
       expect(firstFrame.firstPublishedPageDuration, isNotNull);
@@ -525,8 +528,114 @@ void main() {
         diagnostics.records.last.firstPublishedPageDuration,
         firstFrame.firstPublishedPageDuration,
       );
+      expect(
+        positions.every((position) => position.isReadOnlyCompatibilityRestore),
+        isTrue,
+      );
     },
   );
+
+  for (final interaction in ['tap', 'drag', 'seek']) {
+    testWidgets(
+      'legacy background restore stays read-only until a real $interaction',
+      (tester) async {
+        final coordinator = _ControlledRestorePaginationCoordinator(
+          finalPageCount: 3,
+        );
+        final navigation = NovelReaderPagedNavigationController();
+        NovelReaderPageSeekRequest? seekRequest;
+        final positions = <NovelReaderPaginationPosition>[];
+        final preferences = NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        );
+        final theme = ThemeData.light();
+        final palette = const NovelReaderThemeResolver().resolve(
+          preferences: preferences,
+          theme: theme,
+        );
+        final typography = const NovelReaderTypographyResolver().resolve(
+          preferences: preferences,
+          theme: theme,
+          palette: palette,
+        );
+        Widget host() => LocalizedTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: NovelReaderHtmlPagedSurface(
+              rawHtml: '<p>第一页</p><p>恢复目标页</p><p>尾页</p>',
+              episode: _episode,
+              preferences: preferences,
+              typography: typography,
+              theme: const NovelForumHtmlRenderThemeFactory().fromPalette(
+                palette,
+              ),
+              imageReferer: 'https://bbs.yamibo.com/',
+              progressSnapshot: const NovelReaderProgressSnapshot(
+                novelId: 'performance-novel',
+                episodeId: 'performance-episode',
+                flowMode: NovelReaderFlowMode.pagedLtr,
+                scrollOffset: 0,
+                pageIndex: 0,
+                anchorNodeId: 'paragraph-0',
+                anchorTextOffset: 777,
+                progressPercent: 0.8,
+              ),
+              navigationController: navigation,
+              pageSeekRequest: seekRequest,
+              coordinatorBuilder:
+                  ({
+                    required BuildContext context,
+                    required ForumHtmlThemeContext theme,
+                    required ForumHtmlReaderPreferences preferences,
+                    required String sourceId,
+                    required String? threadId,
+                    required String? imageCacheOwnerId,
+                    required String? imageReferer,
+                  }) => coordinator,
+              onPositionChanged: positions.add,
+            ),
+          ),
+        );
+        await tester.pumpWidget(host());
+        await tester.pump();
+        await tester.pump();
+        expect(positions.last.pageIndex, 0);
+        expect(positions.last.isReadOnlyCompatibilityRestore, isTrue);
+        coordinator.emitComplete();
+        await tester.pump();
+        await tester.pump();
+        // Completion moves the visible page by the old percentage rule. That
+        // programmatic jump must not masquerade as reader confirmation.
+        expect(positions.last.pageIndex, 1);
+        expect(
+          positions.every(
+            (position) => position.isReadOnlyCompatibilityRestore,
+          ),
+          isTrue,
+        );
+        if (interaction == 'tap') {
+          expect(navigation.turnNext(), isTrue);
+        } else if (interaction == 'seek') {
+          seekRequest = NovelReaderPageSeekRequest(
+            requestId: 1,
+            episodeId: _episode.episodeId,
+            paginationKey: positions.last.paginationKey,
+            pageIndex: 1,
+          );
+          await tester.pumpWidget(host());
+        } else {
+          await tester.drag(
+            find.byKey(const Key('novel-reader-paged-page-view')),
+            const Offset(-600, 0),
+          );
+        }
+        await tester.pumpAndSettle();
+        expect(positions.last.pageIndex, interaction == 'seek' ? 1 : 2);
+        expect(positions.last.isReadOnlyCompatibilityRestore, isFalse);
+        expect(positions.last.anchor.formatVersion, 1);
+      },
+    );
+  }
 }
 
 const _episode = NovelEpisodeItem(
@@ -641,6 +750,9 @@ final class _PartialThenStalledPaginationCoordinator
 
 final class _ControlledRestorePaginationCoordinator
     implements NovelReaderPaginationCoordinator {
+  _ControlledRestorePaginationCoordinator({this.finalPageCount = 2});
+
+  final int finalPageCount;
   StreamController<NovelReaderPaginationProgress>? _controller;
   NovelReaderPreparedChapter? _chapter;
   NovelReaderPaginationKey? _key;
@@ -673,7 +785,7 @@ final class _ControlledRestorePaginationCoordinator
   }
 
   void emitComplete() {
-    _controller?.add(_progress(pageCount: 2, isComplete: true));
+    _controller?.add(_progress(pageCount: finalPageCount, isComplete: true));
   }
 
   NovelReaderPaginationProgress _progress({
@@ -682,41 +794,53 @@ final class _ControlledRestorePaginationCoordinator
   }) {
     final chapter = _chapter!;
     final key = _key!;
-    const firstStart = NovelReaderTextAnchor(
+    final firstStart = NovelReaderTextAnchor(
       episodeId: 'performance-episode',
       nodeId: 'paragraph-0',
+      formatVersion: 1,
+      textIdentity: NovelReaderAnchorFormat.textIdentity('第一页'),
     );
-    const firstEnd = NovelReaderTextAnchor(
-      episodeId: 'performance-episode',
-      nodeId: 'paragraph-0',
-      textOffset: 3,
-    );
-    const targetStart = NovelReaderTextAnchor(
+    final firstEnd = firstStart.copyWith(textOffset: 3);
+    final targetStart = NovelReaderTextAnchor(
       episodeId: 'performance-episode',
       nodeId: 'paragraph-1',
+      formatVersion: 1,
+      textIdentity: NovelReaderAnchorFormat.textIdentity('恢复目标页'),
     );
-    const targetEnd = NovelReaderTextAnchor(
+    final targetEnd = targetStart.copyWith(textOffset: 5);
+    final lastStart = NovelReaderTextAnchor(
       episodeId: 'performance-episode',
-      nodeId: 'paragraph-1',
-      textOffset: 5,
+      nodeId: 'paragraph-2',
+      formatVersion: 1,
+      textIdentity: NovelReaderAnchorFormat.textIdentity('尾页'),
     );
     final pages = <NovelReaderPageFragment>[
-      const NovelReaderPageFragment(
+      NovelReaderPageFragment(
         index: 0,
         html: '<p>第一页</p>',
         startAnchor: firstStart,
         endAnchor: firstEnd,
-        imageIndices: <int>[],
+        imageIndices: const <int>[],
         usedHeight: 80,
         availableHeight: 600,
       ),
       if (pageCount > 1)
-        const NovelReaderPageFragment(
+        NovelReaderPageFragment(
           index: 1,
           html: '<p>恢复目标页</p>',
           startAnchor: targetStart,
           endAnchor: targetEnd,
-          imageIndices: <int>[],
+          imageIndices: const <int>[],
+          usedHeight: 80,
+          availableHeight: 600,
+        ),
+      if (pageCount > 2)
+        NovelReaderPageFragment(
+          index: 2,
+          html: '<p>尾页</p>',
+          startAnchor: lastStart,
+          endAnchor: lastStart.copyWith(textOffset: 2),
+          imageIndices: const [],
           usedHeight: 80,
           availableHeight: 600,
         ),

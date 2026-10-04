@@ -71,13 +71,23 @@ class AdaptiveNovelReaderDocumentBuildService
     // Convert on the current isolate first: OpenCC uses a MethodChannel and
     // cannot run inside Isolate.run. IdentityTextConverter is a cheap no-op.
     final converted = await _convert(request, converter);
+    final NovelReaderDocument document;
     if (_shouldBuildInBackground(converted)) {
-      return _executor.buildInBackground(converted);
+      document = await _executor.buildInBackground(converted);
+    } else {
+      document = _parser.parse(
+        episodeId: converted.episodeId,
+        rawHtml: converted.rawHtml,
+        fallbackParagraphs: converted.fallbackParagraphs,
+      );
     }
-    return _parser.parse(
-      episodeId: converted.episodeId,
-      rawHtml: converted.rawHtml,
-      fallbackParagraphs: converted.fallbackParagraphs,
+    return NovelReaderDocument(
+      episodeId: document.episodeId,
+      rawHtmlHash: document.rawHtmlHash,
+      body: document.body,
+      plainText: document.plainText,
+      wordCount: document.wordCount,
+      textConversionIdentity: converter.mode.name,
     );
   }
 

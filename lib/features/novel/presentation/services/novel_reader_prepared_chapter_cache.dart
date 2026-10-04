@@ -89,6 +89,7 @@ final class NovelReaderCachingHtmlPreparationService
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,
       semanticDocumentHash: semanticDocument?.rawHtmlHash,
+      semanticConversionIdentity: semanticDocument?.textConversionIdentity,
       legacyMarkupNormalizerRevision: legacyMarkupNormalizerRevision,
     ).value;
     final cached = cache.get(key);
@@ -147,6 +148,7 @@ final class _PreparationCacheKey {
     required String? threadId,
     required String? imageCacheOwnerId,
     required String? semanticDocumentHash,
+    required String? semanticConversionIdentity,
     required int legacyMarkupNormalizerRevision,
   }) {
     final source = <String?>[
@@ -162,6 +164,7 @@ final class _PreparationCacheKey {
       threadId,
       imageCacheOwnerId,
       semanticDocumentHash,
+      semanticConversionIdentity,
       legacyMarkupNormalizerRevision.toString(),
     ].join('\u001f');
     return _PreparationCacheKey(_hash(source));

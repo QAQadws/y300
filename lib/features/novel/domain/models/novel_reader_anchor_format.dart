@@ -11,6 +11,11 @@ abstract final class NovelReaderAnchorFormat {
   static String textIdentity(String semanticText) =>
       'novel-text-v1:${sha256.convert(utf8.encode(semanticText))}';
 
+  /// Layout-only nodes have no stable semantic provenance. Bind them to the
+  /// whole display projection as well, so duplicate insertion cannot look exact.
+  static String layoutTextIdentity(String text, String displayIdentity) =>
+      'novel-layout-text-v1:${sha256.convert(utf8.encode('$displayIdentity\u001f$text'))}';
+
   static bool isSupported(int version, String? textIdentity) =>
       version == semanticCodePoints &&
       textIdentity != null &&

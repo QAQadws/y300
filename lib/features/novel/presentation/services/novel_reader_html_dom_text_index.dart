@@ -17,16 +17,32 @@ final class NovelReaderHtmlDomTextSlice {
   final bool hasRenderableContent;
 }
 
-/// Shared immutable DOM index used by safe rune slicing and complex grapheme
-/// slicing. Parsing happens only in [parse]; all range operations clone the
-/// indexed tree without reparsing HTML.
+final class NovelReaderHtmlDomGrapheme {
+  const NovelReaderHtmlDomGrapheme({
+    required this.text,
+    required this.sourceStart,
+    required this.sourceEnd,
+    required this.isText,
+  });
+
+  final String text;
+  final int sourceStart;
+  final int sourceEnd;
+  final bool isText;
+}
+
+/// Immutable DOM index shared by source-rune and grapheme slicing.
+/// Inline BR occupies one source rune; textless widgets occupy only a synthetic
+/// grapheme. Adjacent inline text is segmented together, including across spans.
 final class NovelReaderHtmlDomTextIndex {
   NovelReaderHtmlDomTextIndex._({
     required this.roots,
     required this.runeLength,
-    required this.graphemeLength,
+    required this.graphemes,
+    required List<int> sourceRuneBoundaries,
     required NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
-  }) : _protectedInlineNodeAdapter = protectedInlineNodeAdapter;
+  }) : _sourceRuneBoundaries = sourceRuneBoundaries,
+       _protectedInlineNodeAdapter = protectedInlineNodeAdapter;
 
   factory NovelReaderHtmlDomTextIndex.parse(
     String html, {
@@ -36,22 +52,38 @@ final class NovelReaderHtmlDomTextIndex {
         const DefaultNovelReaderProtectedInlineNodeAdapter(),
   }) {
     final fragment = fragmentCodec.parse(html);
-    final cursor = _HtmlTextIndexCursor();
-    final roots = fragment.nodes
-        .map((node) => _indexNode(node, cursor, protectedInlineNodeAdapter))
-        .toList(growable: false);
+    final builder = _HtmlTextIndexBuilder(protectedInlineNodeAdapter);
+    final drafts = fragment.nodes.map(builder.visit).toList(growable: false);
+    builder.flushText();
+    final boundaries = List<int>.unmodifiable(<int>[
+      0,
+      ...builder.graphemes.map((grapheme) => grapheme.sourceEnd),
+    ]);
     return NovelReaderHtmlDomTextIndex._(
-      roots: List<NovelReaderHtmlDomIndexedNode>.unmodifiable(roots),
-      runeLength: cursor.runeOffset,
-      graphemeLength: cursor.graphemeOffset,
+      roots: List<NovelReaderHtmlDomIndexedNode>.unmodifiable(
+        drafts.map((draft) => draft.freeze(boundaries)),
+      ),
+      runeLength: builder.runeOffset,
+      graphemes: List<NovelReaderHtmlDomGrapheme>.unmodifiable(
+        builder.graphemes,
+      ),
+      sourceRuneBoundaries: boundaries,
       protectedInlineNodeAdapter: protectedInlineNodeAdapter,
     );
   }
 
   final List<NovelReaderHtmlDomIndexedNode> roots;
   final int runeLength;
-  final int graphemeLength;
+  final List<NovelReaderHtmlDomGrapheme> graphemes;
+  final List<int> _sourceRuneBoundaries;
   final NovelReaderProtectedInlineNodeAdapter _protectedInlineNodeAdapter;
+
+  int get graphemeLength => graphemes.length;
+
+  int sourceRuneAtGraphemeBoundary(int offset) {
+    RangeError.checkValueInInterval(offset, 0, graphemeLength, 'offset');
+    return _sourceRuneBoundaries[offset];
+  }
 
   NovelReaderHtmlDomTextSlice sliceRunes({
     required int start,
@@ -86,61 +118,11 @@ final class NovelReaderHtmlDomTextIndex {
     );
   }
 
-  static NovelReaderHtmlDomIndexedNode _indexNode(
-    html_dom.Node node,
-    _HtmlTextIndexCursor cursor,
-    NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
-  ) {
-    final runeStart = cursor.runeOffset;
-    final graphemeStart = cursor.graphemeOffset;
-    if (node is html_dom.Text) {
-      final runes = node.data.runes.toList(growable: false);
-      final graphemes = node.data.characters.toList(growable: false);
-      cursor.runeOffset += runes.length;
-      cursor.graphemeOffset += graphemes.length;
-      return NovelReaderHtmlDomIndexedTextNode(
-        original: node,
-        runeStart: runeStart,
-        runeEnd: cursor.runeOffset,
-        graphemeStart: graphemeStart,
-        graphemeEnd: cursor.graphemeOffset,
-        runes: runes,
-        graphemes: graphemes,
-      );
-    }
-    if (node is html_dom.Element) {
-      final protectedKind = _protectedKind(node, protectedInlineNodeAdapter);
-      final children = node.nodes
-          .map((child) => _indexNode(child, cursor, protectedInlineNodeAdapter))
-          .toList(growable: false);
-      if (protectedKind != null && cursor.graphemeOffset == graphemeStart) {
-        cursor.graphemeOffset += 1;
-      }
-      return NovelReaderHtmlDomIndexedElementNode(
-        original: node,
-        runeStart: runeStart,
-        runeEnd: cursor.runeOffset,
-        graphemeStart: graphemeStart,
-        graphemeEnd: cursor.graphemeOffset,
-        children: List<NovelReaderHtmlDomIndexedNode>.unmodifiable(children),
-        protectedKind: protectedKind,
-      );
-    }
-    return NovelReaderHtmlDomIndexedOpaqueNode(
-      original: node,
-      runeStart: runeStart,
-      runeEnd: runeStart,
-      graphemeStart: graphemeStart,
-      graphemeEnd: graphemeStart,
-    );
-  }
-
   static NovelReaderHtmlDomProtectedNodeKind? _protectedKind(
     html_dom.Element element,
     NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter,
   ) {
-    final tag = element.localName?.toLowerCase();
-    if (tag == 'ruby') {
+    if (element.localName?.toLowerCase() == 'ruby') {
       return NovelReaderHtmlDomProtectedNodeKind.ruby;
     }
     if (protectedInlineNodeAdapter.assess(element).isStable) {
@@ -186,12 +168,8 @@ final class NovelReaderHtmlDomTextIndex {
   }
 
   static String _serializeNode(html_dom.Node node) {
-    if (node is html_dom.Element) {
-      return node.outerHtml;
-    }
-    if (node is html_dom.Text) {
-      return const HtmlEscape().convert(node.data);
-    }
+    if (node is html_dom.Element) return node.outerHtml;
+    if (node is html_dom.Text) return const HtmlEscape().convert(node.data);
     return node.text ?? '';
   }
 
@@ -216,7 +194,6 @@ sealed class NovelReaderHtmlDomIndexedNode {
   final int graphemeEnd;
 
   html_dom.Node? sliceRunes(int rangeStart, int rangeEnd);
-
   html_dom.Node? sliceGraphemes(int rangeStart, int rangeEnd);
 
   bool ownsRuneRange(int rangeStart, int rangeEnd) => _ownsRange(
@@ -238,11 +215,9 @@ sealed class NovelReaderHtmlDomIndexedNode {
     required int end,
     required int rangeStart,
     required int rangeEnd,
-  }) {
-    return start == end
-        ? start >= rangeStart && start < rangeEnd
-        : end > rangeStart && start < rangeEnd;
-  }
+  }) => start == end
+      ? start >= rangeStart && start < rangeEnd
+      : end > rangeStart && start < rangeEnd;
 }
 
 final class NovelReaderHtmlDomIndexedTextNode
@@ -254,32 +229,28 @@ final class NovelReaderHtmlDomIndexedTextNode
     required super.graphemeStart,
     required super.graphemeEnd,
     required this.runes,
-    required this.graphemes,
-  });
+    required List<int> sourceRuneBoundaries,
+  }) : _sourceRuneBoundaries = sourceRuneBoundaries;
 
   final List<int> runes;
-  final List<String> graphemes;
+  final List<int> _sourceRuneBoundaries;
 
   @override
   html_dom.Node? sliceRunes(int rangeStart, int rangeEnd) {
     final from = (rangeStart - runeStart).clamp(0, runes.length).toInt();
     final to = (rangeEnd - runeStart).clamp(0, runes.length).toInt();
-    if (from >= to) {
-      return null;
-    }
+    if (from >= to) return null;
     return html_dom.Text(String.fromCharCodes(runes.sublist(from, to)));
   }
 
   @override
   html_dom.Node? sliceGraphemes(int rangeStart, int rangeEnd) {
-    final from = (rangeStart - graphemeStart)
-        .clamp(0, graphemes.length)
-        .toInt();
-    final to = (rangeEnd - graphemeStart).clamp(0, graphemes.length).toInt();
-    if (from >= to) {
-      return null;
-    }
-    return html_dom.Text(graphemes.sublist(from, to).join());
+    // A grapheme may span several text nodes. Every contributing node uses the
+    // same global source boundaries rather than segmenting its own text.
+    return sliceRunes(
+      _sourceRuneBoundaries[rangeStart],
+      _sourceRuneBoundaries[rangeEnd],
+    );
   }
 }
 
@@ -303,10 +274,8 @@ final class NovelReaderHtmlDomIndexedElementNode
 
   @override
   html_dom.Node? sliceRunes(int rangeStart, int rangeEnd) {
-    if (!ownsRuneRange(rangeStart, rangeEnd)) {
-      return null;
-    }
-    if (runeStart == runeEnd) {
+    if (!ownsRuneRange(rangeStart, rangeEnd)) return null;
+    if (tagName == 'br' || runeStart == runeEnd) {
       return original.clone(true);
     }
     return _sliceChildren((child) => child.sliceRunes(rangeStart, rangeEnd));
@@ -314,17 +283,13 @@ final class NovelReaderHtmlDomIndexedElementNode
 
   @override
   html_dom.Node? sliceGraphemes(int rangeStart, int rangeEnd) {
-    if (!ownsGraphemeRange(rangeStart, rangeEnd)) {
-      return null;
-    }
-    if (protectedKind != null) {
+    if (!ownsGraphemeRange(rangeStart, rangeEnd)) return null;
+    if (protectedKind != null || tagName == 'br') {
       return rangeStart <= graphemeStart && rangeEnd >= graphemeEnd
           ? original.clone(true)
           : null;
     }
-    if (graphemeStart == graphemeEnd) {
-      return original.clone(true);
-    }
+    if (graphemeStart == graphemeEnd) return original.clone(true);
     return _sliceChildren(
       (child) => child.sliceGraphemes(rangeStart, rangeEnd),
     );
@@ -336,9 +301,7 @@ final class NovelReaderHtmlDomIndexedElementNode
     final clone = original.clone(false) as html_dom.Element;
     for (final child in children) {
       final sliced = slice(child);
-      if (sliced != null) {
-        clone.append(sliced);
-      }
+      if (sliced != null) clone.append(sliced);
     }
     return clone.nodes.isEmpty ? null : clone;
   }
@@ -363,7 +326,223 @@ final class NovelReaderHtmlDomIndexedOpaqueNode
       ownsGraphemeRange(rangeStart, rangeEnd) ? original.clone(true) : null;
 }
 
-final class _HtmlTextIndexCursor {
+final class _HtmlTextIndexBuilder {
+  _HtmlTextIndexBuilder(this.protectedInlineNodeAdapter);
+
+  final NovelReaderProtectedInlineNodeAdapter protectedInlineNodeAdapter;
+  final List<NovelReaderHtmlDomGrapheme> graphemes = [];
+  final StringBuffer _text = StringBuffer();
+  int _textStart = 0;
   int runeOffset = 0;
-  int graphemeOffset = 0;
+
+  _HtmlIndexedNodeDraft visit(html_dom.Node node) {
+    final runeStart = runeOffset;
+    if (node is html_dom.Text) {
+      if (_text.isEmpty) _textStart = runeStart;
+      _text.write(node.data);
+      runeOffset += node.data.runes.length;
+      return _HtmlIndexedNodeDraft(
+        original: node,
+        runeStart: runeStart,
+        runeEnd: runeOffset,
+      );
+    }
+    if (node is! html_dom.Element ||
+        node.localName == 'script' ||
+        node.localName == 'style') {
+      return _HtmlIndexedNodeDraft(
+        original: node,
+        runeStart: runeStart,
+        runeEnd: runeStart,
+      );
+    }
+    final tag = node.localName?.toLowerCase() ?? '';
+    final protectedKind = NovelReaderHtmlDomTextIndex._protectedKind(
+      node,
+      protectedInlineNodeAdapter,
+    );
+    final separatesText =
+        protectedKind != null || tag == 'br' || _blockTags.contains(tag);
+    if (separatesText) flushText();
+    final graphemeStart = graphemes.length;
+    final children = <_HtmlIndexedNodeDraft>[];
+    if (tag == 'br') {
+      runeOffset += 1;
+      graphemes.add(
+        NovelReaderHtmlDomGrapheme(
+          text: '\n',
+          sourceStart: runeStart,
+          sourceEnd: runeOffset,
+          isText: false,
+        ),
+      );
+    } else {
+      children.addAll(node.nodes.map(visit));
+      if (separatesText) flushText();
+      if (protectedKind != null && graphemes.length == graphemeStart) {
+        graphemes.add(
+          NovelReaderHtmlDomGrapheme(
+            text: '\uFFFC',
+            sourceStart: runeOffset,
+            sourceEnd: runeOffset,
+            isText: false,
+          ),
+        );
+      }
+    }
+    return _HtmlIndexedNodeDraft(
+      original: node,
+      runeStart: runeStart,
+      runeEnd: runeOffset,
+      children: children,
+      protectedKind: protectedKind,
+      explicitGraphemeStart: separatesText ? graphemeStart : null,
+      explicitGraphemeEnd: separatesText ? graphemes.length : null,
+    );
+  }
+
+  void flushText() {
+    var sourceOffset = _textStart;
+    for (final text in _text.toString().characters) {
+      final end = sourceOffset + text.runes.length;
+      graphemes.add(
+        NovelReaderHtmlDomGrapheme(
+          text: text,
+          sourceStart: sourceOffset,
+          sourceEnd: end,
+          isText: true,
+        ),
+      );
+      sourceOffset = end;
+    }
+    _text.clear();
+  }
+
+  static const _blockTags = <String>{
+    'address',
+    'article',
+    'aside',
+    'blockquote',
+    'dd',
+    'div',
+    'dl',
+    'dt',
+    'figcaption',
+    'figure',
+    'footer',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'header',
+    'li',
+    'main',
+    'p',
+    'pre',
+    'section',
+  };
+}
+
+final class _HtmlIndexedNodeDraft {
+  _HtmlIndexedNodeDraft({
+    required this.original,
+    required this.runeStart,
+    required this.runeEnd,
+    this.children = const [],
+    this.protectedKind,
+    this.explicitGraphemeStart,
+    this.explicitGraphemeEnd,
+  });
+
+  final html_dom.Node original;
+  final int runeStart;
+  final int runeEnd;
+  final List<_HtmlIndexedNodeDraft> children;
+  final NovelReaderHtmlDomProtectedNodeKind? protectedKind;
+  final int? explicitGraphemeStart;
+  final int? explicitGraphemeEnd;
+
+  NovelReaderHtmlDomIndexedNode freeze(List<int> boundaries) {
+    final node = original;
+    final start = _upperBound(boundaries, runeStart) - 1;
+    final end = runeStart == runeEnd ? start : _lowerBound(boundaries, runeEnd);
+    if (node is html_dom.Text) {
+      return NovelReaderHtmlDomIndexedTextNode(
+        original: node,
+        runeStart: runeStart,
+        runeEnd: runeEnd,
+        graphemeStart: start,
+        graphemeEnd: end,
+        runes: List<int>.unmodifiable(node.data.runes),
+        sourceRuneBoundaries: boundaries,
+      );
+    }
+    if (node is html_dom.Element &&
+        node.localName != 'script' &&
+        node.localName != 'style') {
+      final indexedChildren = List<NovelReaderHtmlDomIndexedNode>.unmodifiable(
+        children.map((child) => child.freeze(boundaries)),
+      );
+      // Zero-source siblings can share a rune boundary while occupying
+      // different graphemes. An empty child must not hide a later widget.
+      var childStart = start;
+      var childEnd = end;
+      if (indexedChildren.isNotEmpty) {
+        childStart = indexedChildren.first.graphemeStart;
+        childEnd = indexedChildren.first.graphemeEnd;
+        for (final child in indexedChildren.skip(1)) {
+          if (child.graphemeStart < childStart) {
+            childStart = child.graphemeStart;
+          }
+          if (child.graphemeEnd > childEnd) childEnd = child.graphemeEnd;
+        }
+      }
+      return NovelReaderHtmlDomIndexedElementNode(
+        original: node,
+        runeStart: runeStart,
+        runeEnd: runeEnd,
+        graphemeStart: explicitGraphemeStart ?? childStart,
+        graphemeEnd: explicitGraphemeEnd ?? childEnd,
+        children: indexedChildren,
+        protectedKind: protectedKind,
+      );
+    }
+    return NovelReaderHtmlDomIndexedOpaqueNode(
+      original: node,
+      runeStart: runeStart,
+      runeEnd: runeEnd,
+      graphemeStart: start,
+      graphemeEnd: start,
+    );
+  }
+
+  static int _lowerBound(List<int> values, int target) {
+    var low = 0;
+    var high = values.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (values[middle] < target) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
+
+  static int _upperBound(List<int> values, int target) {
+    var low = 0;
+    var high = values.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (values[middle] <= target) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
 }

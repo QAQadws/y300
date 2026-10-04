@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 
@@ -90,9 +92,94 @@ void main() {
         ),
       );
       await resolve(_request('<p>正文 A。</p>', normalizerRevision: 2));
-      await resolve(_request('<p>正文 A。</p>', boundaryIndexerRevision: 2));
+      await resolve(_request('<p>正文 A。</p>', boundaryIndexerRevision: 3));
+      await resolve(
+        _request(
+          '<p>正文 A。</p>',
+          startAnchor: baseline.startAnchor.copyWith(
+            formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+            textIdentity: NovelReaderAnchorFormat.textIdentity('正文 A。'),
+          ),
+        ),
+      );
+      await resolve(
+        _request(
+          '<p>正文 A。</p>',
+          startAnchor: baseline.startAnchor.copyWith(
+            formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+            textIdentity: NovelReaderAnchorFormat.textIdentity('前文正文 A。'),
+          ),
+        ),
+      );
 
-      expect(buildCount, 6);
+      expect(buildCount, 8);
+    },
+  );
+
+  test(
+    'same HTML keeps different semantic projections out of one session',
+    () async {
+      final cache = NovelReaderComplexHtmlBoundaryCache();
+      const indexer = DefaultNovelReaderComplexHtmlBoundaryIndexer();
+      final anchor =
+          const NovelReaderTextAnchor(
+            episodeId: 'episode-1',
+            nodeId: 'node-1',
+            textOffset: 5,
+            formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+          ).copyWith(
+            textIdentity: NovelReaderAnchorFormat.textIdentity('前文前文前A B'),
+          );
+      final folded = NovelReaderSourceAnchorProjection(
+        baseAnchor: anchor,
+        semanticOffsetsBySourceRuneBoundary: const [5, 6, 7, 7, 8],
+      );
+      final expanded = NovelReaderSourceAnchorProjection(
+        baseAnchor: anchor,
+        semanticOffsetsBySourceRuneBoundary: const [5, 6, 7, 8, 9],
+      );
+      var builds = 0;
+
+      Future<NovelReaderComplexHtmlBoundaryCacheResult> resolve(
+        NovelReaderSourceAnchorProjection projection,
+      ) {
+        final request = _request(
+          '<p>A  B</p>',
+          startAnchor: anchor,
+          sourceAnchorProjection: projection,
+        );
+        return cache.resolve(
+          request: request,
+          build: () {
+            builds += 1;
+            return indexer.prepare(
+              html: request.html,
+              startAnchor: request.startAnchor,
+              sourceAnchorProjection: request.sourceAnchorProjection,
+            );
+          },
+        );
+      }
+
+      final first = resolve(folded);
+      final different = resolve(expanded);
+      final firstResult = await first;
+      final differentResult = await different;
+      expect(differentResult.joinedInFlight, isFalse);
+      expect(differentResult.fromCache, isFalse);
+      expect(firstResult.session.boundaries.last.anchor.textOffset, 8);
+      expect(differentResult.session.boundaries.last.anchor.textOffset, 9);
+      expect(differentResult.session, isNot(same(firstResult.session)));
+
+      final equivalent = await resolve(
+        NovelReaderSourceAnchorProjection(
+          baseAnchor: anchor,
+          semanticOffsetsBySourceRuneBoundary: const [5, 6, 7, 7, 8],
+        ),
+      );
+      expect(equivalent.fromCache, isTrue);
+      expect(equivalent.session, same(firstResult.session));
+      expect(builds, 2);
     },
   );
 
@@ -136,6 +223,7 @@ NovelReaderComplexHtmlBoundaryCacheRequest _request(
   int normalizerRevision = 1,
   int boundaryIndexerRevision =
       NovelReaderComplexHtmlBoundaryIndexRevision.current,
+  NovelReaderSourceAnchorProjection? sourceAnchorProjection,
 }) {
   return NovelReaderComplexHtmlBoundaryCacheRequest(
     episodeId: 'episode-1',
@@ -143,6 +231,7 @@ NovelReaderComplexHtmlBoundaryCacheRequest _request(
     atomId: 'atom-1',
     html: html,
     startAnchor: startAnchor,
+    sourceAnchorProjection: sourceAnchorProjection,
     normalizerRevision: normalizerRevision,
     boundaryIndexerRevision: boundaryIndexerRevision,
   );

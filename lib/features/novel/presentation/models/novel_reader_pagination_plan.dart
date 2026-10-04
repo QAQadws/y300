@@ -217,8 +217,11 @@ class NovelReaderPaginationPlan {
     return pages[index];
   }
 
-  int? pageIndexForAnchor(NovelReaderTextAnchor anchor) {
-    if (anchor.episodeId != episodeId) {
+  int? pageIndexForAnchor(
+    NovelReaderTextAnchor anchor, {
+    required bool isPlanComplete,
+  }) {
+    if (anchor.episodeId != episodeId || !anchor.hasCanonicalTextOffset) {
       return null;
     }
     for (final page in pages) {
@@ -230,12 +233,16 @@ class NovelReaderPaginationPlan {
               ),
             ]
           : page.anchorRanges;
-      for (final range in ranges) {
+      for (var rangeIndex = 0; rangeIndex < ranges.length; rangeIndex++) {
+        final range = ranges[rangeIndex];
         if (_contains(
           range.start,
           range.end,
           anchor,
-          isLastPage: page.index == pages.length - 1,
+          includesTerminalEnd:
+              isPlanComplete &&
+              page.index == pages.length - 1 &&
+              rangeIndex == ranges.length - 1,
         )) {
           return page.index;
         }
@@ -244,23 +251,72 @@ class NovelReaderPaginationPlan {
     return null;
   }
 
+  /// Legacy and incompatible anchors can locate a node, but their numeric
+  /// offsets cannot be interpreted as canonical code points.
+  int? pageIndexForNode(NovelReaderTextAnchor anchor) {
+    if (anchor.episodeId != episodeId || anchor.nodeId == null) return null;
+    for (final page in pages) {
+      if (page.anchorRanges.isEmpty) {
+        if (page.startAnchor.nodeId == anchor.nodeId ||
+            page.endAnchor.nodeId == anchor.nodeId) {
+          return page.index;
+        }
+      } else {
+        for (final range in page.anchorRanges) {
+          if (range.start.nodeId == anchor.nodeId ||
+              range.end.nodeId == anchor.nodeId) {
+            return page.index;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  bool hasMatchingTextIdentity(NovelReaderTextAnchor anchor) {
+    if (anchor.episodeId != episodeId || !anchor.hasCanonicalTextOffset) {
+      return false;
+    }
+    for (final page in pages) {
+      if (page.anchorRanges.isEmpty) {
+        if (_sameText(page.startAnchor, anchor) &&
+            _sameText(page.endAnchor, anchor)) {
+          return true;
+        }
+      } else {
+        for (final range in page.anchorRanges) {
+          if (_sameText(range.start, anchor) && _sameText(range.end, anchor)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   bool _contains(
     NovelReaderTextAnchor start,
     NovelReaderTextAnchor end,
     NovelReaderTextAnchor target, {
-    required bool isLastPage,
+    required bool includesTerminalEnd,
   }) {
-    if (start.nodeId != target.nodeId || end.nodeId != target.nodeId) {
+    if (!_sameText(start, target) || !_sameText(end, target)) {
       return false;
     }
     final startOffset = start.textOffset;
-    final endOffset = end.textOffset < startOffset
-        ? startOffset
-        : end.textOffset;
+    final endOffset = end.textOffset;
+    if (startOffset < 0 || endOffset < startOffset) return false;
     if (startOffset == endOffset) {
       return target.textOffset == startOffset;
     }
     return target.textOffset >= startOffset &&
-        (target.textOffset < endOffset || isLastPage);
+        (target.textOffset < endOffset ||
+            (includesTerminalEnd && target.textOffset == endOffset));
   }
+
+  bool _sameText(NovelReaderTextAnchor left, NovelReaderTextAnchor right) =>
+      left.hasCanonicalTextOffset &&
+      left.episodeId == right.episodeId &&
+      left.nodeId == right.nodeId &&
+      left.textIdentity == right.textIdentity;
 }

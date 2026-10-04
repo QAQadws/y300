@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -55,7 +58,10 @@ void main() {
     expect(link.style.color, _lightTheme.link);
     expect(link.style.decoration, TextDecoration.underline);
     final lineBreak = runs.singleWhere((run) => run.isParagraphBreak);
-    expect(lineBreak.startAnchor.textOffset, lineBreak.endAnchor.textOffset);
+    expect(
+      lineBreak.endAnchor.textOffset,
+      lineBreak.startAnchor.textOffset + 1,
+    );
     expect(runs.first.startAnchor.textOffset, 0);
     expect(runs.last.endAnchor.textOffset, atom.textLength);
   });
@@ -82,79 +88,100 @@ void main() {
     expect(run.style.fontSize, closeTo(27.75, 0.001));
   });
 
-  test(
-    'characterizes rune, grapheme and UTF-16 anchors for the same position',
-    () {
-      const prefix = 'A👩‍👩‍👧‍👦e\u0301';
-      const text = '$prefix中';
-      final atom = _atom('<p>$prefix<span>中</span></p>');
-      final classified = classifier.classify(
-        atom: atom,
-        baseStyle: _baseStyle,
-        preferences: _preferences,
-        theme: _lightTheme,
-      );
-      expect(classified.route, NovelReaderPaginationRoute.safeText);
-      final runs = extractor.extract(
-        classifiedAtom: classified,
-        baseStyle: _baseStyle,
-        preferences: _preferences,
-        theme: _lightTheme,
-      );
-      final ordinaryTarget = runs.singleWhere((run) => run.text == '中');
-      final complexAtom = _atom(
-        '<p><font face="Uninstalled Fantasy Font">'
-        '$prefix<span>中</span></font></p>',
-      );
-      final complexClassified = classifier.classify(
-        atom: complexAtom,
-        baseStyle: _baseStyle,
-        preferences: _preferences,
-        theme: _lightTheme,
-      );
-      expect(
-        complexClassified.route,
-        NovelReaderPaginationRoute.flowableComplexText,
-      );
-      final complex = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
-          .prepare(
-            html: complexClassified.atom.html,
-            startAnchor: complexClassified.atom.startAnchor,
-          );
-      final complexTarget = complex.slice(startOffset: 3, endOffset: 4);
-      final document = NovelReaderDocument(
-        episodeId: atom.startAnchor.episodeId,
-        rawHtmlHash: 'unicode-coordinate-baseline',
-        body: const RichDocument(
-          blocks: <RichBlock>[
-            RichTextBlock(
-              anchorId: 'node-1',
-              runs: <RichRun>[RichRun(text: text)],
-            ),
-          ],
-        ),
-        plainText: text,
-        wordCount: text.runes.length,
-      );
-      final searchTarget = const NovelReaderSearchService()
-          .search(document: document, keyword: '中')
-          .single;
+  test('maps rune, grapheme and UTF-16 paths to the same anchor position', () {
+    const prefix = 'A👩‍👩‍👧‍👦e\u0301';
+    const text = '$prefix中';
+    final projection = NovelReaderSourceAnchorProjection(
+      baseAnchor: NovelReaderTextAnchor(
+        episodeId: 'episode',
+        nodeId: 'node-1',
+        formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+        textIdentity: NovelReaderAnchorFormat.textIdentity(text),
+      ),
+      semanticOffsetsBySourceRuneBoundary: List<int>.generate(
+        text.runes.length + 1,
+        (index) => index,
+      ),
+    );
+    final atom = _atom(
+      '<p>$prefix<span>中</span></p>',
+      sourceAnchorProjection: projection,
+    );
+    final classified = classifier.classify(
+      atom: atom,
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    expect(classified.route, NovelReaderPaginationRoute.safeText);
+    final runs = extractor.extract(
+      classifiedAtom: classified,
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    final ordinaryTarget = runs.singleWhere((run) => run.text == '中');
+    final complexAtom = _atom(
+      '<p><font face="Uninstalled Fantasy Font">'
+      '$prefix<span>中</span></font></p>',
+      sourceAnchorProjection: projection,
+    );
+    final complexClassified = classifier.classify(
+      atom: complexAtom,
+      baseStyle: _baseStyle,
+      preferences: _preferences,
+      theme: _lightTheme,
+    );
+    expect(
+      complexClassified.route,
+      NovelReaderPaginationRoute.flowableComplexText,
+    );
+    final complex = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+        .prepare(
+          html: complexClassified.atom.html,
+          startAnchor: complexClassified.atom.startAnchor,
+          sourceAnchorProjection: complexClassified.atom.sourceAnchorProjection,
+        );
+    final complexTarget = complex.slice(startOffset: 3, endOffset: 4);
+    final document = NovelReaderDocument(
+      episodeId: atom.startAnchor.episodeId,
+      rawHtmlHash: 'unicode-coordinate-baseline',
+      body: const RichDocument(
+        blocks: <RichBlock>[
+          RichTextBlock(
+            anchorId: 'node-1',
+            runs: <RichRun>[RichRun(text: text)],
+          ),
+        ],
+      ),
+      plainText: text,
+      wordCount: text.runes.length,
+    );
+    final searchTarget = const NovelReaderSearchService()
+        .search(document: document, keyword: '中')
+        .single;
 
-      expect(runs.map((run) => run.text).join(), text);
-      expect(html_parser.parseFragment(complexTarget.html).text, '中');
-      expect(searchTarget.snippet, contains(text));
-      expect(ordinaryTarget.startAnchor.nodeId, searchTarget.anchor.nodeId);
-      expect(complexTarget.startAnchor.nodeId, searchTarget.anchor.nodeId);
-      // Stage 0 records the current mismatch, not a compatibility promise.
-      // Stage 1 must retain grapheme-safe slices while mapping all anchors to
-      // the same node-local coordinate; search match ranges need their own map.
-      expect(ordinaryTarget.startAnchor.textOffset, 10);
-      expect(complexTarget.startAnchor.textOffset, 3);
-      expect(searchTarget.anchor.textOffset, 14);
-      expect(searchTarget.matchStart, 14);
-      expect(searchTarget.matchEnd, 15);
-    },
-  );
+    expect(runs.map((run) => run.text).join(), text);
+    expect(html_parser.parseFragment(complexTarget.html).text, '中');
+    expect(searchTarget.snippet, contains(text));
+    expect(ordinaryTarget.startAnchor.nodeId, searchTarget.anchor.nodeId);
+    expect(complexTarget.startAnchor.nodeId, searchTarget.anchor.nodeId);
+    expect(ordinaryTarget.startAnchor.textOffset, 10);
+    expect(complexTarget.startAnchor.textOffset, 10);
+    expect(searchTarget.anchor.textOffset, 10);
+    expect(ordinaryTarget.startAnchor.hasCanonicalTextOffset, isTrue);
+    expect(complexTarget.startAnchor.hasCanonicalTextOffset, isTrue);
+    expect(
+      ordinaryTarget.startAnchor.textIdentity,
+      searchTarget.anchor.textIdentity,
+    );
+    expect(
+      complexTarget.startAnchor.textIdentity,
+      searchTarget.anchor.textIdentity,
+    );
+    expect(searchTarget.matchStart, 14);
+    expect(searchTarget.matchEnd, 15);
+  });
 
   test(
     'assigns explicit capabilities to ruby, dedicated and atomic content',
@@ -598,21 +625,25 @@ NovelReaderPaginationAtom _atom(
   String html, {
   NovelReaderPaginationAtomKind kind = NovelReaderPaginationAtomKind.text,
   NovelReaderImagePagePolicy imagePolicy = NovelReaderImagePagePolicy.inline,
+  NovelReaderSourceAnchorProjection? sourceAnchorProjection,
 }) {
-  final textLength = (html_parser.parseFragment(html).text ?? '').runes.length;
+  final textLength = NovelReaderDomSourceText.read(
+    html_parser.parseFragment(html),
+  ).runes.length;
   return NovelReaderPaginationAtom(
     atomId: 'episode:atom',
     kind: kind,
     html: html,
-    startAnchor: const NovelReaderTextAnchor(
-      episodeId: 'episode',
-      nodeId: 'node-1',
-    ),
-    endAnchor: NovelReaderTextAnchor(
-      episodeId: 'episode',
-      nodeId: 'node-1',
-      textOffset: textLength,
-    ),
+    startAnchor:
+        sourceAnchorProjection?.anchorAtSourceRune(0) ??
+        const NovelReaderTextAnchor(episodeId: 'episode', nodeId: 'node-1'),
+    endAnchor:
+        sourceAnchorProjection?.anchorAtSourceRune(textLength) ??
+        NovelReaderTextAnchor(
+          episodeId: 'episode',
+          nodeId: 'node-1',
+          textOffset: textLength,
+        ),
     textLength: textLength,
     imageIndices: imagePolicy == NovelReaderImagePagePolicy.isolated
         ? <int>[0]
@@ -621,6 +652,7 @@ NovelReaderPaginationAtom _atom(
         ? NovelReaderFlowUnitBreakability.blockImage
         : NovelReaderFlowUnitBreakability.text,
     imagePagePolicy: imagePolicy,
+    sourceAnchorProjection: sourceAnchorProjection,
   );
 }
 

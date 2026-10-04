@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_text_run.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -27,7 +28,7 @@ final class NovelReaderPaginationTextRunExtractor {
     }
     final fragment = html_parser.parseFragment(classifiedAtom.atom.html);
     final runs = <NovelReaderPaginationTextRun>[];
-    final cursor = _TextRunCursor(classifiedAtom.atom.startAnchor.textOffset);
+    final cursor = _TextRunCursor(0);
     for (var index = 0; index < fragment.nodes.length; index += 1) {
       _extractNode(
         fragment.nodes[index],
@@ -66,14 +67,12 @@ final class NovelReaderPaginationTextRunExtractor {
         NovelReaderPaginationTextRun(
           text: node.data,
           style: parentStyle,
-          startAnchor: atom.atom.startAnchor.copyWith(
-            textOffset: cursor.offset,
-          ),
-          endAnchor: atom.atom.endAnchor.copyWith(
-            textOffset: cursor.offset + length,
-          ),
+          startAnchor: _anchorAt(atom, cursor.offset),
+          endAnchor: _anchorAt(atom, cursor.offset + length),
           htmlNodeId: '${atom.atom.atomId}:$path',
           href: inheritedHref,
+          sourceStart: cursor.offset,
+          sourceEnd: cursor.offset + length,
         ),
       );
       cursor.offset += length;
@@ -87,15 +86,16 @@ final class NovelReaderPaginationTextRunExtractor {
         NovelReaderPaginationTextRun(
           text: '\n',
           style: parentStyle,
-          startAnchor: atom.atom.startAnchor.copyWith(
-            textOffset: cursor.offset,
-          ),
-          endAnchor: atom.atom.endAnchor.copyWith(textOffset: cursor.offset),
+          startAnchor: _anchorAt(atom, cursor.offset),
+          endAnchor: _anchorAt(atom, cursor.offset + 1),
           htmlNodeId: '${atom.atom.atomId}:$path',
           href: inheritedHref,
           isParagraphBreak: true,
+          sourceStart: cursor.offset,
+          sourceEnd: cursor.offset + 1,
         ),
       );
+      cursor.offset++;
       return;
     }
     final resolved = styleResolver.resolve(
@@ -128,6 +128,15 @@ final class NovelReaderPaginationTextRunExtractor {
       );
     }
   }
+
+  NovelReaderTextAnchor _anchorAt(
+    NovelReaderClassifiedPaginationAtom atom,
+    int sourceOffset,
+  ) =>
+      atom.atom.sourceAnchorProjection?.anchorAtSourceRune(sourceOffset) ??
+      atom.atom.startAnchor.copyWith(
+        textOffset: atom.atom.startAnchor.textOffset + sourceOffset,
+      );
 }
 
 final class _TextRunCursor {

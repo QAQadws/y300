@@ -1,5 +1,6 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -8,6 +9,7 @@ abstract interface class NovelReaderComplexHtmlBoundaryIndexer {
   NovelReaderComplexHtmlSliceSession prepare({
     required String html,
     required NovelReaderTextAnchor startAnchor,
+    NovelReaderSourceAnchorProjection? sourceAnchorProjection,
   });
 }
 
@@ -27,6 +29,7 @@ final class DefaultNovelReaderComplexHtmlBoundaryIndexer
   NovelReaderComplexHtmlSliceSession prepare({
     required String html,
     required NovelReaderTextAnchor startAnchor,
+    NovelReaderSourceAnchorProjection? sourceAnchorProjection,
   }) {
     final index = NovelReaderHtmlDomTextIndex.parse(
       html,
@@ -35,14 +38,21 @@ final class DefaultNovelReaderComplexHtmlBoundaryIndexer
     );
     final collector = _ComplexBoundaryCollector(
       startAnchor: startAnchor,
-      textLength: index.graphemeLength,
+      index: index,
+      sourceAnchorProjection: sourceAnchorProjection,
     );
+    if (sourceAnchorProjection != null &&
+        sourceAnchorProjection.sourceRuneLength != index.runeLength) {
+      throw ArgumentError('Source anchor projection does not cover the HTML.');
+    }
+    collector.collectTextBoundaries();
     for (final node in index.roots) {
       collector.visit(node);
     }
     return _DefaultNovelReaderComplexHtmlSliceSession(
       index: index,
       startAnchor: startAnchor,
+      sourceAnchorProjection: sourceAnchorProjection,
       boundaries: collector.finishBoundaries(),
       protectedRanges: collector.finishProtectedRanges(),
     );
@@ -54,6 +64,7 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
   _DefaultNovelReaderComplexHtmlSliceSession({
     required NovelReaderHtmlDomTextIndex index,
     required this.startAnchor,
+    required this.sourceAnchorProjection,
     required List<NovelReaderComplexHtmlBoundary> boundaries,
     required List<NovelReaderComplexHtmlProtectedRange> protectedRanges,
   }) : _index = index,
@@ -71,6 +82,7 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
 
   final NovelReaderHtmlDomTextIndex _index;
   final NovelReaderTextAnchor startAnchor;
+  final NovelReaderSourceAnchorProjection? sourceAnchorProjection;
 
   @override
   int get textLength => _index.graphemeLength;
@@ -115,9 +127,11 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
   }
 
   NovelReaderTextAnchor _anchorAt(int offset) {
-    return startAnchor.copyWith(
-      textOffset:
-          startAnchor.textOffset + _visibleTextOffset(offset, protectedRanges),
+    return _anchorAtGrapheme(
+      _index,
+      startAnchor,
+      sourceAnchorProjection,
+      offset,
     );
   }
 }
@@ -125,11 +139,14 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
 final class _ComplexBoundaryCollector {
   _ComplexBoundaryCollector({
     required this.startAnchor,
-    required this.textLength,
+    required this.index,
+    required this.sourceAnchorProjection,
   });
 
   final NovelReaderTextAnchor startAnchor;
-  final int textLength;
+  final NovelReaderHtmlDomTextIndex index;
+  final NovelReaderSourceAnchorProjection? sourceAnchorProjection;
+  int get textLength => index.graphemeLength;
   final Map<int, _BoundaryCandidate> _candidates = <int, _BoundaryCandidate>{};
   final List<NovelReaderComplexHtmlProtectedRange> _protectedRanges =
       <NovelReaderComplexHtmlProtectedRange>[];
@@ -162,7 +179,6 @@ final class _ComplexBoundaryCollector {
 
   void visit(NovelReaderHtmlDomIndexedNode node) {
     if (node is NovelReaderHtmlDomIndexedTextNode) {
-      _visitText(node);
       return;
     }
     if (node is! NovelReaderHtmlDomIndexedElementNode) {
@@ -201,14 +217,16 @@ final class _ComplexBoundaryCollector {
     }
   }
 
-  void _visitText(NovelReaderHtmlDomIndexedTextNode node) {
-    for (var index = 0; index < node.graphemes.length; index += 1) {
-      final current = node.graphemes[index];
-      final next = index + 1 < node.graphemes.length
-          ? node.graphemes[index + 1]
+  void collectTextBoundaries() {
+    final graphemes = index.graphemes;
+    for (var offset = 0; offset < graphemes.length; offset += 1) {
+      final current = graphemes[offset];
+      if (!current.isText) continue;
+      final next = offset + 1 < graphemes.length && graphemes[offset + 1].isText
+          ? graphemes[offset + 1].text
           : null;
-      final kind = _textBoundaryKind(current: current, next: next);
-      _put(node.graphemeStart + index + 1, kind);
+      final kind = _textBoundaryKind(current: current.text, next: next);
+      _put(offset + 1, kind);
     }
   }
 
@@ -250,10 +268,11 @@ final class _ComplexBoundaryCollector {
           final candidate = _candidates[offset]!;
           return NovelReaderComplexHtmlBoundary(
             textOffset: offset,
-            anchor: startAnchor.copyWith(
-              textOffset:
-                  startAnchor.textOffset +
-                  _visibleTextOffset(offset, _protectedRanges),
+            anchor: _anchorAtGrapheme(
+              index,
+              startAnchor,
+              sourceAnchorProjection,
+              offset,
             ),
             kind: candidate.kind,
             preference: candidate.preference,
@@ -290,18 +309,17 @@ final class _ComplexBoundaryCollector {
   );
 }
 
-int _visibleTextOffset(
-  int indexedOffset,
-  List<NovelReaderComplexHtmlProtectedRange> protectedRanges,
+NovelReaderTextAnchor _anchorAtGrapheme(
+  NovelReaderHtmlDomTextIndex index,
+  NovelReaderTextAnchor startAnchor,
+  NovelReaderSourceAnchorProjection? projection,
+  int offset,
 ) {
-  var syntheticPlaceholderCount = 0;
-  for (final range in protectedRanges) {
-    if (range.kind == NovelReaderComplexProtectedRangeKind.inlineWidget &&
-        range.endOffset <= indexedOffset) {
-      syntheticPlaceholderCount += range.endOffset - range.startOffset;
-    }
-  }
-  return indexedOffset - syntheticPlaceholderCount;
+  final sourceRune = index.sourceRuneAtGraphemeBoundary(offset);
+  // Production atoms carry exact semantic projections. The null path only
+  // supports legacy fixtures whose anchors use their local source rune axis.
+  return projection?.anchorAtSourceRune(sourceRune) ??
+      startAnchor.copyWith(textOffset: startAnchor.textOffset + sourceRune);
 }
 
 final class _BoundaryCandidate {

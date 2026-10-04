@@ -75,7 +75,11 @@ class NovelReaderSearchResult {
   final String keyword;
   final NovelReaderTextAnchor anchor;
   final String snippet;
+
+  /// Inclusive UTF-16 start in the original node text, before display trimming.
   final int matchStart;
+
+  /// Exclusive UTF-16 end in the original node text; not a code-point offset.
   final int matchEnd;
   final String nodeId;
 }

@@ -28,7 +28,10 @@ void main() {
         expect(html_parser.parseFragment(page.html).nodes, isNotEmpty);
       }
       expect(
-        plan.pageIndexForAnchor(plan.pages.last.startAnchor),
+        plan.pageIndexForAnchor(
+          plan.pages.last.startAnchor,
+          isPlanComplete: true,
+        ),
         plan.pages.last.index,
       );
       expect(plan.domSliceCount, greaterThan(0));
@@ -100,7 +103,10 @@ void main() {
     expect(plan.pages[1].containsIsolatedImage, isTrue);
     expect(plan.pages[1].imageIndices, <int>[0]);
     expect(plan.pages[1].gapReason, NovelReaderPageGapReason.isolatedImage);
-    expect(plan.pageIndexForAnchor(plan.pages[1].startAnchor), 1);
+    expect(
+      plan.pageIndexForAnchor(plan.pages[1].startAnchor, isPlanComplete: true),
+      1,
+    );
     expect(plan.pages[2].containsIsolatedImage, isFalse);
     expect(plan.pages[2].gapReason, NovelReaderPageGapReason.naturalEnd);
     expect(plan.atomCount, 3);
@@ -158,7 +164,13 @@ void main() {
     ).paginate(chapter, _key(chapter, height: 8));
 
     expect(plan.pageCount, 1);
-    expect(plan.pageIndexForAnchor(chapter.flowUnits[1].startAnchor), 0);
+    expect(
+      plan.pageIndexForAnchor(
+        chapter.flowUnits[1].startAnchor,
+        isPlanComplete: true,
+      ),
+      0,
+    );
   });
 
   test(

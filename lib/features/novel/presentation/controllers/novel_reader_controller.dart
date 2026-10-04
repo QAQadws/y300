@@ -5,10 +5,12 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_text_coordinates.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
@@ -186,6 +188,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   final NovelReaderPreferenceImpactAnalyzer _preferenceImpactAnalyzer =
       const DefaultNovelReaderPreferenceImpactAnalyzer();
   String? _pendingBeginningCommitEpisodeId;
+  bool _isPagedRestoreReadOnly = false;
   int _activeSessionToken = 0;
   int _transitionRequestSerial = 0;
   int _preferenceCommitSerial = 0;
@@ -433,6 +436,17 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         position.paginationKey.trim().isEmpty) {
       return;
     }
+    final shouldCommitBeginning =
+        _pendingBeginningCommitEpisodeId == position.episodeId;
+    final hasPersistedPosition =
+        current.readingProgress?.episodeId == position.episodeId;
+    if (position.isReadOnlyCompatibilityRestore &&
+        hasPersistedPosition &&
+        !shouldCommitBeginning) {
+      _isPagedRestoreReadOnly = true;
+      return;
+    }
+    _isPagedRestoreReadOnly = false;
     final snapshot = _progressPolicy.pagedSnapshot(
       novelId: _args.novelId,
       episodeId: position.episodeId,
@@ -446,8 +460,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       anchorFormatVersion: position.anchor.formatVersion,
       anchorTextIdentity: position.anchor.textIdentity,
     );
-    final shouldCommitBeginning =
-        _pendingBeginningCommitEpisodeId == position.episodeId;
     if (shouldCommitBeginning) {
       _pendingBeginningCommitEpisodeId = null;
     }
@@ -477,6 +489,12 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null ||
         snapshot.novelId != _args.novelId ||
         snapshot.episodeId != current.currentEpisode.episodeId) {
+      return;
+    }
+    // Exit also flushes the view state's snapshot. A passive compatibility
+    // restore must keep the original row, even before its first position report.
+    if (current.preferences.flowMode != NovelReaderFlowMode.vertical &&
+        _isPagedRestoreReadOnly) {
       return;
     }
     final sessionToken = _activeSessionToken;
@@ -993,6 +1011,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     required String episodeId,
     required NovelEpisodeOpenPolicy openPolicy,
   }) {
+    _isPagedRestoreReadOnly =
+        openPolicy != NovelEpisodeOpenPolicy.startAtBeginning;
     _pendingBeginningCommitEpisodeId =
         openPolicy == NovelEpisodeOpenPolicy.startAtBeginning
         ? episodeId
@@ -1053,19 +1073,36 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (nodeId != null) {
       for (final block in document.blocks) {
         if (block.anchorId == nodeId) {
-          final text = block.novelPlainText.trim();
-          if (text.isNotEmpty) {
-            final start = anchor.textOffset.clamp(0, text.length).toInt();
-            final end = (start + 36).clamp(0, text.length).toInt();
-            return text.substring(start, end);
+          final text = block.novelPlainText;
+          if (text.trim().isNotEmpty) {
+            final start =
+                anchor.hasCanonicalTextOffset &&
+                    anchor.textIdentity ==
+                        NovelReaderAnchorFormat.textIdentity(text)
+                ? NovelReaderTextCoordinates.utf16OffsetForCodePoint(
+                    text,
+                    anchor.textOffset,
+                  )
+                : 0;
+            return NovelReaderTextCoordinates.snippet(
+              text: text,
+              start: start,
+              end: (start + 36).clamp(0, text.length).toInt(),
+              contextLength: 0,
+            ).trim();
           }
         }
       }
     }
-    final plainText = document.plainText.trim();
-    if (plainText.isEmpty) {
+    final plainText = document.plainText;
+    if (plainText.trim().isEmpty) {
       return '';
     }
-    return plainText.length <= 36 ? plainText : plainText.substring(0, 36);
+    return NovelReaderTextCoordinates.snippet(
+      text: plainText,
+      start: 0,
+      end: plainText.length.clamp(0, 36).toInt(),
+      contextLength: 0,
+    ).trim();
   }
 }

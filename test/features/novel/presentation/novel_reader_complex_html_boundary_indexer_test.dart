@@ -2,8 +2,11 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
@@ -65,7 +68,7 @@ void main() {
     expect(codec.parseCount, 1);
   });
 
-  test('uses grapheme offsets for emoji and combining characters', () {
+  test('slices by graphemes while legacy fixture anchors use source runes', () {
     final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
         .prepare(
           html: '<p>A👩‍👩‍👧‍👦e\u0301中</p>',
@@ -92,10 +95,208 @@ void main() {
     );
     expect(slices.first.startAnchor.textOffset, 7);
     expect(slices.first.endAnchor.textOffset, 8);
-    expect(slices.last.endAnchor.textOffset, 11);
+    expect(slices.map((slice) => slice.endAnchor.textOffset), <int>[
+      8,
+      15,
+      17,
+      18,
+    ]);
     expect(
       slices.every((slice) => slice.startAnchor.nodeId == 'node-1'),
       isTrue,
+    );
+  });
+
+  test('segments combining and ZWJ text across inline wrappers together', () {
+    const text = 'Ae\u0301👩‍👩‍👧‍👦Z';
+    final anchor = _anchor.copyWith(
+      formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+      textIdentity: NovelReaderAnchorFormat.textIdentity(text),
+    );
+    final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+        .prepare(
+          html:
+              '<p>A<strong data-part="base">e</strong><i>\u0301</i>'
+              '<span>👩</span><span>\u200d👩\u200d</span>'
+              '<em>👧\u200d👦</em>Z</p>',
+          startAnchor: anchor,
+          sourceAnchorProjection: NovelReaderSourceAnchorProjection(
+            baseAnchor: anchor,
+            semanticOffsetsBySourceRuneBoundary: List<int>.generate(
+              text.runes.length + 1,
+              (index) => index,
+            ),
+          ),
+        );
+    final slices = _consecutiveSlices(session);
+
+    expect(session.textLength, 4);
+    expect(
+      slices.map((slice) => html_parser.parseFragment(slice.html).text),
+      <String>['A', 'e\u0301', '👩‍👩‍👧‍👦', 'Z'],
+    );
+    expect(slices[1].html, contains('data-part="base"'));
+    expect(slices[1].html, contains('<i>\u0301</i>'));
+    expect(slices.map((slice) => slice.endAnchor.textOffset), <int>[
+      1,
+      3,
+      10,
+      11,
+    ]);
+    expect(slices.last.endAnchor.textIdentity, anchor.textIdentity);
+  });
+
+  test(
+    'projects a substring and collapsed whitespace without cutting by anchors',
+    () {
+      const semanticText = '前文前文前A e\u0301B';
+      final anchor = _anchor.copyWith(
+        textOffset: 5,
+        formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+        textIdentity: NovelReaderAnchorFormat.textIdentity(semanticText),
+      );
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html: '<p>A  <span>e\u0301</span>B</p>',
+            startAnchor: anchor,
+            sourceAnchorProjection: NovelReaderSourceAnchorProjection(
+              baseAnchor: anchor,
+              semanticOffsetsBySourceRuneBoundary: const [5, 6, 7, 7, 8, 9, 10],
+            ),
+          );
+      final slices = _consecutiveSlices(session);
+
+      expect(
+        slices
+            .map((slice) => html_parser.parseFragment(slice.html).text)
+            .join(),
+        'A  e\u0301B',
+      );
+      expect(slices.first.startAnchor.textOffset, 5);
+      expect(slices.map((slice) => slice.endAnchor.textOffset), <int>[
+        6,
+        7,
+        7,
+        9,
+        10,
+      ]);
+      expect(
+        slices.every((slice) => slice.endAnchor.hasCanonicalTextOffset),
+        isTrue,
+      );
+      for (var index = 1; index < slices.length; index += 1) {
+        expect(
+          slices[index].startAnchor.textOffset,
+          slices[index - 1].endAnchor.textOffset,
+        );
+      }
+    },
+  );
+
+  test('counts BR in the source axis but not a textless inline widget', () {
+    final index = NovelReaderHtmlDomTextIndex.parse(
+      '<p>A<br><span><img class="smilie" '
+      'src="static/image/smiley/default/smile.gif" width="24" height="24">'
+      '<img class="smilie" src="static/image/smiley/default/smile.gif" '
+      'width="24" height="24"></span>B</p>',
+    );
+
+    expect(index.runeLength, 3);
+    expect(index.graphemeLength, 5);
+    expect(List<int>.generate(6, index.sourceRuneAtGraphemeBoundary), <int>[
+      0,
+      1,
+      2,
+      2,
+      2,
+      3,
+    ]);
+    expect(index.sliceRunes(start: 1, end: 2).html, contains('<br>'));
+    expect(
+      html_parser
+          .parseFragment(index.sliceGraphemes(start: 2, end: 3).html)
+          .querySelectorAll('img'),
+      hasLength(1),
+      reason: 'Zero-source widgets in one wrapper still own separate ranges.',
+    );
+
+    final spacerAnchor = _anchor.copyWith(
+      formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+      textIdentity: NovelReaderAnchorFormat.textIdentity(''),
+    );
+    final spacer = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+        .prepare(
+          html: '<br>',
+          startAnchor: spacerAnchor,
+          sourceAnchorProjection: NovelReaderSourceAnchorProjection(
+            baseAnchor: spacerAnchor,
+            semanticOffsetsBySourceRuneBoundary: const [0, 0],
+          ),
+        )
+        .slice(startOffset: 0, endOffset: 1);
+    expect(spacer.html, '<br>');
+    expect(spacer.hasRenderableContent, isFalse);
+    expect(spacer.startAnchor.textOffset, 0);
+    expect(spacer.endAnchor.textOffset, 0);
+  });
+
+  test('empty inline siblings do not hide protected widgets in a wrapper', () {
+    const image =
+        '<img class="smilie" '
+        'src="static/image/smiley/default/smile.gif" width="24" height="24">';
+    for (final (children, expectedImages) in <(String, int)>[
+      ('<em></em>$image', 1),
+      ('$image<em></em>', 1),
+      ('<em></em>$image<i></i>$image<b></b>', 2),
+    ]) {
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html: '<p>A<span data-wrapper="kept">$children</span>B</p>',
+            startAnchor: _anchor,
+          );
+      final slices = _consecutiveSlices(session);
+      expect(
+        slices
+            .map((slice) => html_parser.parseFragment(slice.html).text)
+            .join(),
+        'AB',
+        reason: children,
+      );
+      expect(
+        slices.expand(
+          (slice) =>
+              html_parser.parseFragment(slice.html).querySelectorAll('img'),
+        ),
+        hasLength(expectedImages),
+        reason: children,
+      );
+      for (var offset = 1; offset <= expectedImages; offset += 1) {
+        final slice = session.slice(startOffset: offset, endOffset: offset + 1);
+        final fragment = html_parser.parseFragment(slice.html);
+        expect(
+          fragment.querySelectorAll('img'),
+          hasLength(1),
+          reason: children,
+        );
+        expect(
+          fragment.querySelector('span')?.attributes['data-wrapper'],
+          'kept',
+        );
+      }
+    }
+  });
+
+  test('rejects an incomplete projection instead of clamping its anchors', () {
+    expect(
+      () => const DefaultNovelReaderComplexHtmlBoundaryIndexer().prepare(
+        html: '<p>A<br>B</p>',
+        startAnchor: _anchor,
+        sourceAnchorProjection: NovelReaderSourceAnchorProjection(
+          baseAnchor: _anchor,
+          semanticOffsetsBySourceRuneBoundary: const [0, 1, 2],
+        ),
+      ),
+      throwsArgumentError,
     );
   });
 
@@ -211,7 +412,7 @@ void main() {
       (boundary) => boundary.textOffset == 2,
     );
     final firstBlockEnd = session.boundaries.singleWhere(
-      (boundary) => boundary.textOffset == 3,
+      (boundary) => boundary.textOffset == 4,
     );
     final atomEnd = session.boundaries.last;
 
@@ -243,7 +444,7 @@ void main() {
     expect(html_parser.parseFragment(blank.html).text?.trim(), isEmpty);
 
     final empty = const DefaultNovelReaderComplexHtmlBoundaryIndexer().prepare(
-      html: '<div></div><br>',
+      html: '<div></div>',
       startAnchor: _anchor,
     );
     expect(empty.textLength, 0);
@@ -263,13 +464,13 @@ void main() {
     ).prepare('<p><strong>甲乙</strong><br><span>丙丁</span></p>');
 
     final first = session.slice(start: 0, end: 2);
-    final second = session.slice(start: 2, end: 4);
+    final second = session.slice(start: 2, end: 5);
 
     expect(codec.parseCount, 1);
     expect(html_parser.parseFragment(first).text, '甲乙');
     expect(html_parser.parseFragment(second).text, '丙丁');
     expect(second, contains('<br>'));
-    expect(session.slice(start: 4, end: 99), isEmpty);
+    expect(session.slice(start: 5, end: 99), isEmpty);
     expect(codec.parseCount, 1);
   });
 

@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
@@ -9,6 +11,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_flowable_co
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
@@ -362,6 +365,124 @@ void main() {
     }
   });
 
+  test(
+    'complex chunks retain DOM text and project absolute semantic offsets',
+    () async {
+      const text = 'e\u0301  中';
+      final anchor =
+          const NovelReaderTextAnchor(
+            episodeId: 'episode-1',
+            nodeId: 'node-1',
+            textOffset: 7,
+            formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+          ).copyWith(
+            textIdentity: NovelReaderAnchorFormat.textIdentity(
+              '前文前文前文前e\u0301 中',
+            ),
+          );
+      final projection = NovelReaderSourceAnchorProjection(
+        baseAnchor: anchor,
+        semanticOffsetsBySourceRuneBoundary: const [7, 8, 9, 10, 10, 11],
+      );
+      final result =
+          await const DefaultNovelReaderFlowableComplexPaginationEngine()
+              .paginate(
+                atom: _atom(text, sourceAnchorProjection: projection),
+                page: const NovelReaderPaginationPageContext(
+                  bufferedHtml: '',
+                  hasBufferedContent: false,
+                  availableHeight: 20,
+                ),
+                chapter: chapter,
+                key: key,
+                measureSession: _RecordingSession(_rangeHeight),
+                cancellationToken: NovelReaderPaginationCancellationToken(),
+              );
+
+      expect(result.requiresAtomicFallback, isFalse);
+      expect(result.chunks, hasLength(2));
+      expect(
+        result.chunks
+            .map((chunk) => html_parser.parseFragment(chunk.slice.html).text)
+            .join(),
+        text,
+      );
+      expect(result.chunks.map((chunk) => chunk.slice.startOffset), <int>[
+        0,
+        2,
+      ]);
+      expect(result.chunks.map((chunk) => chunk.slice.endOffset), <int>[2, 4]);
+      expect(
+        result.chunks.map((chunk) => chunk.slice.startAnchor.textOffset),
+        <int>[7, 10],
+      );
+      expect(
+        result.chunks.map((chunk) => chunk.slice.endAnchor.textOffset),
+        <int>[10, 11],
+      );
+      expect(
+        result.chunks.every(
+          (chunk) =>
+              chunk.slice.startAnchor.textIdentity == anchor.textIdentity &&
+              chunk.slice.endAnchor.hasCanonicalTextOffset,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'engine boundary cache follows the atom projection rather than HTML alone',
+    () async {
+      final engine = DefaultNovelReaderFlowableComplexPaginationEngine(
+        boundaryCache: NovelReaderComplexHtmlBoundaryCache(),
+      );
+      final anchor =
+          const NovelReaderTextAnchor(
+            episodeId: 'episode-1',
+            nodeId: 'node-1',
+            textOffset: 5,
+            formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+          ).copyWith(
+            textIdentity: NovelReaderAnchorFormat.textIdentity('前文前文前A B'),
+          );
+      Future<NovelReaderFlowableComplexPaginationResult> paginate(
+        List<int> offsets,
+      ) {
+        return engine.paginate(
+          atom: _atom(
+            'A  B',
+            sourceAnchorProjection: NovelReaderSourceAnchorProjection(
+              baseAnchor: anchor,
+              semanticOffsetsBySourceRuneBoundary: offsets,
+            ),
+          ),
+          page: const NovelReaderPaginationPageContext(
+            bufferedHtml: '',
+            hasBufferedContent: false,
+            availableHeight: 100,
+          ),
+          chapter: chapter,
+          key: key,
+          measureSession: _RecordingSession(_rangeHeight),
+          cancellationToken: NovelReaderPaginationCancellationToken(),
+        );
+      }
+
+      final folded = await paginate(const [5, 6, 7, 7, 8]);
+      final expanded = await paginate(const [5, 6, 7, 8, 9]);
+      final foldedAgain = await paginate(const [5, 6, 7, 7, 8]);
+      expect(folded.chunks.single.slice.endAnchor.textOffset, 8);
+      expect(expanded.chunks.single.slice.endAnchor.textOffset, 9);
+      expect(foldedAgain.chunks.single.slice.endAnchor.textOffset, 8);
+      expect(folded.boundaryIndexBuildCount, 1);
+      expect(expanded.boundaryIndexBuildCount, 1);
+      expect(expanded.boundaryIndexCacheHitCount, 0);
+      expect(foldedAgain.boundaryIndexBuildCount, 0);
+      expect(foldedAgain.boundaryIndexCacheHitCount, 1);
+    },
+  );
+
   test('rejects a route without the DOM-range flow policy', () async {
     const engine = DefaultNovelReaderFlowableComplexPaginationEngine();
     final atom = _atom(
@@ -408,24 +529,29 @@ NovelReaderClassifiedPaginationAtom _atom(
   String text, {
   NovelReaderPaginationRoute route =
       NovelReaderPaginationRoute.flowableComplexText,
+  NovelReaderSourceAnchorProjection? sourceAnchorProjection,
 }) {
   final atom = NovelReaderPaginationAtom(
     atomId: 'complex:1',
     kind: NovelReaderPaginationAtomKind.text,
     html: '<font face="Fantasy Novel Font">$text</font>',
-    startAnchor: const NovelReaderTextAnchor(
-      episodeId: 'episode-1',
-      nodeId: 'node-1',
-    ),
-    endAnchor: NovelReaderTextAnchor(
-      episodeId: 'episode-1',
-      nodeId: 'node-1',
-      textOffset: text.length,
-    ),
+    startAnchor:
+        sourceAnchorProjection?.anchorAtSourceRune(0) ??
+        const NovelReaderTextAnchor(episodeId: 'episode-1', nodeId: 'node-1'),
+    endAnchor: sourceAnchorProjection == null
+        ? NovelReaderTextAnchor(
+            episodeId: 'episode-1',
+            nodeId: 'node-1',
+            textOffset: text.length,
+          )
+        : sourceAnchorProjection.anchorAtSourceRune(
+            sourceAnchorProjection.sourceRuneLength,
+          ),
     textLength: text.length,
     imageIndices: const <int>[],
     breakability: NovelReaderFlowUnitBreakability.text,
     imagePagePolicy: NovelReaderImagePagePolicy.inline,
+    sourceAnchorProjection: sourceAnchorProjection,
   );
   return NovelReaderClassifiedPaginationAtom(
     atom: atom,
@@ -496,12 +622,17 @@ final class _TimedBoundaryIndexer
   NovelReaderComplexHtmlSliceSession prepare({
     required String html,
     required NovelReaderTextAnchor startAnchor,
+    NovelReaderSourceAnchorProjection? sourceAnchorProjection,
   }) {
     prepareCount += 1;
     final stopwatch = Stopwatch()..start();
     try {
       final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
-          .prepare(html: html, startAnchor: startAnchor);
+          .prepare(
+            html: html,
+            startAnchor: startAnchor,
+            sourceAnchorProjection: sourceAnchorProjection,
+          );
       if (fail) {
         throw StateError('synthetic boundary indexing failure');
       }

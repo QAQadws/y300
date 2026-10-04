@@ -324,7 +324,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 16,
+                rendererRevision: 17,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),
@@ -374,7 +374,10 @@ class _NovelReaderHtmlPagedSurfaceState
                     );
                   }
                   final isPlanComplete = progress?.isComplete == true;
-                  final requestedPage = _requestedPageFor(plan);
+                  final requestedPage = _requestedPageFor(
+                    plan,
+                    isPlanComplete: isPlanComplete,
+                  );
                   final navigationIsPending = _hasPendingAnchorNavigation(
                     plan: plan,
                     requestedPage: requestedPage,
@@ -392,14 +395,16 @@ class _NovelReaderHtmlPagedSurfaceState
                   if (entryPage != null) {
                     _scheduleChapterEntryApplied(widget.chapterEntryRequest!);
                   }
-                  final initialPage =
-                      requestedPage ??
-                      entryPage ??
-                      widget.restorePolicy.resolveAvailablePage(
+                  final restoreResolution = widget.restorePolicy
+                      .resolveAvailablePage(
                         plan: plan,
                         snapshot: widget.progressSnapshot,
                         isPlanComplete: isPlanComplete,
                       );
+                  final initialPage =
+                      requestedPage ??
+                      entryPage ??
+                      restoreResolution?.pageIndex;
                   if (navigationIsPending ||
                       entryIsPending ||
                       initialPage == null) {
@@ -450,6 +455,10 @@ class _NovelReaderHtmlPagedSurfaceState
                           plan: plan,
                           isPageCountFinal: isPlanComplete,
                           initialPage: initialPage,
+                          isReadOnlyCompatibilityRestore:
+                              requestedPage == null &&
+                              entryPage == null &&
+                              restoreResolution!.isReadOnlyCompatibilityRestore,
                           navigationRequest: widget.navigationRequest,
                           pageSeekRequest: widget.pageSeekRequest,
                           navigationController: widget.navigationController,
@@ -972,12 +981,23 @@ class _NovelReaderHtmlPagedSurfaceState
     });
   }
 
-  int? _requestedPageFor(NovelReaderPaginationPlan plan) {
+  int? _requestedPageFor(
+    NovelReaderPaginationPlan plan, {
+    required bool isPlanComplete,
+  }) {
     final request = widget.navigationRequest;
     if (request == null || request.anchor.episodeId != plan.episodeId) {
       return null;
     }
-    return plan.pageIndexForAnchor(request.anchor);
+    final exact = plan.pageIndexForAnchor(
+      request.anchor,
+      isPlanComplete: isPlanComplete,
+    );
+    if (exact != null) return exact;
+    if (!plan.hasMatchingTextIdentity(request.anchor) || isPlanComplete) {
+      return plan.pageIndexForNode(request.anchor);
+    }
+    return null;
   }
 
   /// Resolves an edge entry into a page index. The `end` edge deliberately
@@ -1068,6 +1088,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     required this.plan,
     required this.isPageCountFinal,
     required this.initialPage,
+    required this.isReadOnlyCompatibilityRestore,
     this.navigationRequest,
     this.pageSeekRequest,
     this.navigationController,
@@ -1097,6 +1118,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final NovelReaderPaginationPlan plan;
   final bool isPageCountFinal;
   final int initialPage;
+  final bool isReadOnlyCompatibilityRestore;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final NovelReaderPageSeekRequest? pageSeekRequest;
   final NovelReaderPagedNavigationController? navigationController;
@@ -1134,6 +1156,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   int _currentPage = 0;
   bool _reportedInitialPage = false;
   bool _hasUserNavigated = false;
+  bool _userDragInProgress = false;
   final ValueNotifier<NovelReaderChapterTurnHint?> _chapterTurnHint =
       ValueNotifier<NovelReaderChapterTurnHint?>(null);
   double _forwardOverscroll = 0;
@@ -1196,12 +1219,14 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     final oldRequestId = oldWidget.navigationRequest?.requestId;
     final newRequestId = widget.navigationRequest?.requestId;
     if (oldRequestId != newRequestId && widget.targetPage != null) {
+      final targetPage = widget.targetPage!;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || widget.targetPage == null) {
+        if (!mounted ||
+            widget.navigationRequest?.requestId != newRequestId ||
+            widget.targetPage != targetPage) {
           return;
         }
-        _pageController.jumpToPage(widget.targetPage!);
-        _emitPosition(widget.targetPage!);
+        _jumpToPage(targetPage);
       });
     }
     final oldSeekRequestId = oldWidget.pageSeekRequest?.requestId;
@@ -1211,6 +1236,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
+          widget.pageSeekRequest?.requestId != seekRequest.requestId ||
           seekRequest.episodeId != widget.plan.episodeId ||
           seekRequest.paginationKey != widget.plan.key.layoutFingerprint ||
           seekRequest.pageIndex < 0 ||
@@ -1392,8 +1418,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     if (!mounted || index < 0 || index >= widget.plan.pageCount) {
       return;
     }
-    _pageController.jumpToPage(index);
     _hasUserNavigated = true;
+    _pageController.jumpToPage(index);
     if (_currentPage != index) {
       setState(() {
         _currentPage = index;
@@ -1417,6 +1443,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       return false;
     }
     if (notification is ScrollStartNotification) {
+      _userDragInProgress = notification.dragDetails != null;
       _resetChapterTurnTracking();
       return false;
     }
@@ -1444,6 +1471,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       return false;
     }
     if (notification is ScrollEndNotification) {
+      _userDragInProgress = false;
       _commitChapterTurnIfRequested(notification.metrics);
       return false;
     }
@@ -1571,7 +1599,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     if (!mounted || index < 0 || index >= widget.plan.pageCount) {
       return;
     }
-    if (_reportedInitialPage && index != _currentPage) {
+    if (_userDragInProgress && index != _currentPage) {
       _hasUserNavigated = true;
     }
     setState(() {
@@ -1595,6 +1623,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         pageIndex: index,
         pageCount: widget.plan.pageCount,
         isPageCountFinal: widget.isPageCountFinal,
+        isReadOnlyCompatibilityRestore:
+            !_hasUserNavigated && widget.isReadOnlyCompatibilityRestore,
         anchor: page.startAnchor.copyWith(pageIndex: index),
       ),
     );

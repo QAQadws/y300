@@ -1,12 +1,118 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   const extractor = DefaultNovelReaderHtmlFlowUnitExtractor();
+
+  test('projects decoded spaces, BR and ruby onto the exact semantic node', () {
+    const html =
+        '<p>A&nbsp;&nbsp;👩‍👩‍👧‍👦<span>e\u0301</span><br>中<ruby>漢<rt>かん</rt></ruby>末</p>';
+    final semantic = const DiscuzNovelReaderDocumentParser().parse(
+      episodeId: 'semantic',
+      rawHtml: html,
+      fallbackParagraphs: const <String>[],
+    );
+    final unit = extractor
+        .extract(
+          episodeId: 'semantic',
+          renderDocument: _prepare(html),
+          semanticDocument: semantic,
+        )
+        .single;
+    final projection = unit.sourceAnchorProjection!;
+    final source = NovelReaderDomSourceText.read(
+      html_parser.parseFragment(unit.html),
+    );
+    expect(unit.startAnchor.nodeId, semantic.blocks.single.anchorId);
+    expect(
+      unit.startAnchor.formatVersion,
+      NovelReaderAnchorFormat.semanticCodePoints,
+    );
+    expect(
+      unit.endAnchor.textOffset,
+      'A 👩‍👩‍👧‍👦e\u0301\n中漢かん末'.runes.length,
+    );
+    expect(projection.sourceRuneLength, source.runes.length);
+    expect(
+      projection
+          .anchorAtSourceRune(
+            source.substring(0, source.indexOf('中')).runes.length,
+          )
+          .textOffset,
+      'A 👩‍👩‍👧‍👦e\u0301\n'.runes.length,
+    );
+    expect(
+      unit.startAnchor.textIdentity,
+      NovelReaderAnchorFormat.textIdentity('A 👩‍👩‍👧‍👦e\u0301\n中漢かん末'),
+    );
+  });
+
+  test('uses the actual nonzero semantic substring origin', () {
+    final semantic = const DiscuzNovelReaderDocumentParser().parse(
+      episodeId: 'substring',
+      rawHtml: '<p>前👩‍👩‍👧‍👦中尾后</p>',
+      fallbackParagraphs: const <String>[],
+    );
+    final unit = extractor
+        .extract(
+          episodeId: 'substring',
+          renderDocument: _prepare('<span>中尾</span>'),
+          semanticDocument: semantic,
+        )
+        .single;
+    expect(unit.startAnchor.nodeId, semantic.blocks.single.anchorId);
+    expect(unit.startAnchor.textOffset, 8);
+    expect(unit.endAnchor.textOffset, 10);
+    expect(unit.sourceAnchorProjection!.anchorAtSourceRune(1).textOffset, 9);
+  });
+
+  test(
+    'ambiguous, multi-node and converted text use an exact layout identity',
+    () {
+      for (final sample in <(String, String)>[
+        ('<p>重复</p><p>重复</p>', '<p>重复</p>'),
+        ('<p>重复</p><p>前重复后</p>', '<p>重复</p>'),
+        (
+          '<span>甲<strong>乙</strong>丙</span>',
+          '<span>甲<strong>乙</strong>丙</span>',
+        ),
+        ('<p>國</p>', '<p>国</p>'),
+      ]) {
+        final semantic = const DiscuzNovelReaderDocumentParser().parse(
+          episodeId: 'fallback',
+          rawHtml: sample.$1,
+          fallbackParagraphs: const <String>[],
+        );
+        final rendered = _prepare(sample.$2);
+        final unit = extractor
+            .extract(
+              episodeId: 'fallback',
+              renderDocument: rendered,
+              semanticDocument: semantic,
+            )
+            .single;
+        final source = NovelReaderDomSourceText.read(
+          html_parser.parseFragment(unit.html),
+        );
+        expect(unit.startAnchor.nodeId, startsWith('novel-html-'));
+        expect(
+          unit.startAnchor.textIdentity,
+          NovelReaderAnchorFormat.layoutTextIdentity(
+            source,
+            NovelReaderAnchorFormat.textIdentity(rendered.preparedHtml),
+          ),
+        );
+        expect(unit.endAnchor.textOffset, source.runes.length);
+      }
+    },
+  );
 
   test('extracts stable semantic units from the prepared HTML document', () {
     final document = _prepare(
@@ -40,6 +146,22 @@ void main() {
         reason: unit.unitId,
       );
     }
+  });
+
+  test('layout-only anchors invalidate when the display context changes', () {
+    final first = extractor.extract(
+      episodeId: 'layout',
+      renderDocument: _prepare('<p>重复</p><p>重复</p>'),
+    );
+    final changed = extractor.extract(
+      episodeId: 'layout',
+      renderDocument: _prepare('<p>插入</p><p>重复</p><p>重复</p>'),
+    );
+    expect(first.first.startAnchor.nodeId, changed[1].startAnchor.nodeId);
+    expect(
+      first.first.startAnchor.textIdentity,
+      isNot(changed[1].startAnchor.textIdentity),
+    );
   });
 
   test('keeps whole-chapter readable image indices after unit extraction', () {

@@ -59,6 +59,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
         return boundaryIndexer.prepare(
           html: atom.atom.html,
           startAnchor: atom.atom.startAnchor,
+          sourceAnchorProjection: atom.atom.sourceAnchorProjection,
         );
       } finally {
         stopwatch.stop();
@@ -78,6 +79,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
             atomId: atom.atom.atomId,
             html: atom.atom.html,
             startAnchor: atom.atom.startAnchor,
+            sourceAnchorProjection: atom.atom.sourceAnchorProjection,
             normalizerRevision: chapter.legacyMarkupNormalization.revision,
           ),
           build: buildBoundaries,

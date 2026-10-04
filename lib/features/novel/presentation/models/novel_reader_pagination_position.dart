@@ -10,6 +10,7 @@ class NovelReaderPaginationPosition {
     required this.pageCount,
     required this.anchor,
     this.isPageCountFinal = true,
+    this.isReadOnlyCompatibilityRestore = false,
   });
 
   final String episodeId;
@@ -18,6 +19,7 @@ class NovelReaderPaginationPosition {
   final int pageCount;
   final NovelReaderTextAnchor anchor;
   final bool isPageCountFinal;
+  final bool isReadOnlyCompatibilityRestore;
 }
 
 @immutable

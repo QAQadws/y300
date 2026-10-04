@@ -1,10 +1,12 @@
 import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
-/// Slices prepared safe HTML by readable-text rune offsets.
+/// Slices prepared safe HTML by local DOM source rune offsets, counting BR as
+/// one newline and textless inline widgets as zero source runes.
 ///
 /// Complex HTML uses the same DOM index through its grapheme-based session;
-/// keeping this rune facade preserves existing TextPainter source offsets.
+/// This coordinate is independent of semantic anchors; their projection is
+/// carried by the atom rather than used to cut DOM text.
 final class NovelReaderHtmlTextRangeSlicer {
   const NovelReaderHtmlTextRangeSlicer({
     ForumHtmlFragmentCodec fragmentCodec =

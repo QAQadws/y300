@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 
 enum NovelReaderPaginationAtomKind {
   text,
@@ -41,6 +42,7 @@ class NovelReaderPaginationAtom {
     required List<int> imageIndices,
     required this.breakability,
     required this.imagePagePolicy,
+    this.sourceAnchorProjection,
   }) : imageIndices = List<int>.unmodifiable(imageIndices);
 
   final String atomId;
@@ -52,6 +54,7 @@ class NovelReaderPaginationAtom {
   final List<int> imageIndices;
   final NovelReaderFlowUnitBreakability breakability;
   final NovelReaderImagePagePolicy imagePagePolicy;
+  final NovelReaderSourceAnchorProjection? sourceAnchorProjection;
 
   bool get isIsolatedImage =>
       imagePagePolicy == NovelReaderImagePagePolicy.isolated;

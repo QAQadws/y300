@@ -190,6 +190,10 @@ final class DefaultNovelReaderTextPaginationEngine
     required TextScaler textScaler,
   }) {
     final flattened = _flattenRuns(atom, runs);
+    final graphemeBoundaries = <int>[0];
+    for (final character in flattened.text.characters) {
+      graphemeBoundaries.add(graphemeBoundaries.last + character.length);
+    }
     final painter = TextPainter(
       text: TextSpan(children: flattened.spans),
       textDirection: textDirection,
@@ -218,8 +222,17 @@ final class DefaultNovelReaderTextPaginationEngine
         } else {
           layoutRange = TextRange.empty;
         }
-        final start = layoutRange.start.clamp(0, flattened.text.length);
-        final end = layoutRange.end.clamp(start, flattened.text.length);
+        final start = layoutOffset.clamp(0, flattened.text.length);
+        final end = _safeLayoutBoundary(
+          graphemeBoundaries,
+          layoutRange.end.clamp(start, flattened.text.length),
+        );
+        final nextOffset = _nextLineLayoutOffset(
+          flattened.text,
+          graphemeBoundaries: graphemeBoundaries,
+          boundaryEnd: end,
+          currentOffset: layoutOffset,
+        );
         final lineHeight =
             NovelReaderPaginationLineHeightPolicy.alignToRenderer(
               metric.height,
@@ -230,7 +243,7 @@ final class DefaultNovelReaderTextPaginationEngine
             layoutStart: start,
             layoutEnd: end,
             sourceStart: flattened.sourceOffsets[start],
-            sourceEnd: flattened.sourceOffsets[end],
+            sourceEnd: flattened.sourceOffsets[nextOffset],
             top: top,
             bottom: bottom,
             hardBreak: metric.hardBreak,
@@ -240,11 +253,7 @@ final class DefaultNovelReaderTextPaginationEngine
           ),
         );
         top = bottom;
-        layoutOffset = _nextLineLayoutOffset(
-          flattened.text,
-          boundaryEnd: end,
-          currentOffset: layoutOffset,
-        );
+        layoutOffset = nextOffset;
       }
       return NovelReaderTextLayoutMetrics(
         runId: atom.atom.atomId,
@@ -372,12 +381,15 @@ final class DefaultNovelReaderTextPaginationEngine
     final safeStart = start.clamp(0, atom.atom.textLength);
     final safeEnd = end.clamp(safeStart, atom.atom.textLength);
     final baseOffset = atom.atom.startAnchor.textOffset;
+    final projection = atom.atom.sourceAnchorProjection;
     return NovelReaderTextPageChunk(
       html: sliceSession.slice(start: safeStart, end: safeEnd),
-      startAnchor: atom.atom.startAnchor.copyWith(
-        textOffset: baseOffset + safeStart,
-      ),
-      endAnchor: atom.atom.endAnchor.copyWith(textOffset: baseOffset + safeEnd),
+      startAnchor:
+          projection?.anchorAtSourceRune(safeStart) ??
+          atom.atom.startAnchor.copyWith(textOffset: baseOffset + safeStart),
+      endAnchor:
+          projection?.anchorAtSourceRune(safeEnd) ??
+          atom.atom.endAnchor.copyWith(textOffset: baseOffset + safeEnd),
       sourceStart: safeStart,
       sourceEnd: safeEnd,
       usedHeight: usedHeight,
@@ -392,6 +404,7 @@ final class DefaultNovelReaderTextPaginationEngine
 
   int _nextLineLayoutOffset(
     String text, {
+    required List<int> graphemeBoundaries,
     required int boundaryEnd,
     required int currentOffset,
   }) {
@@ -410,9 +423,23 @@ final class DefaultNovelReaderTextPaginationEngine
       }
     }
     if (next <= currentOffset && currentOffset < text.length) {
-      return currentOffset + 1;
+      return _safeLayoutBoundary(graphemeBoundaries, currentOffset + 1);
     }
     return next;
+  }
+
+  int _safeLayoutBoundary(List<int> boundaries, int offset) {
+    var low = 0;
+    var high = boundaries.length - 1;
+    while (low < high) {
+      final middle = (low + high) ~/ 2;
+      if (boundaries[middle] < offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return boundaries[low];
   }
 
   static final RegExp _renderableTextPattern = RegExp(
@@ -429,19 +456,21 @@ final class DefaultNovelReaderTextPaginationEngine
     final atomBase = atom.atom.startAnchor.textOffset;
     var currentSource = 0;
     for (final run in runs) {
-      currentSource = (run.startAnchor.textOffset - atomBase).clamp(
-        currentSource,
-        atom.atom.textLength,
-      );
+      currentSource =
+          (run.sourceStart ?? (run.startAnchor.textOffset - atomBase)).clamp(
+            currentSource,
+            atom.atom.textLength,
+          );
       final spanText = StringBuffer();
       final runes = run.text.runes.toList(growable: false);
       for (var index = 0; index < runes.length; index += 1) {
         final sourceStart = currentSource;
         if (run.isParagraphBreak) {
+          currentSource = (currentSource + 1).clamp(0, atom.atom.textLength);
           _appendLayoutText(
             text: String.fromCharCode(runes[index]),
             sourceStart: sourceStart,
-            sourceEnd: sourceStart,
+            sourceEnd: currentSource,
             documentBuffer: buffer,
             spanBuffer: spanText,
             sourceOffsets: sourceOffsets,

@@ -930,6 +930,10 @@ final class DefaultNovelReaderHybridPaginationPlanner
         imageIndices: atom.imageIndices,
         breakability: atom.breakability,
         imagePagePolicy: atom.imagePagePolicy,
+        sourceAnchorProjection: atom.sourceAnchorProjection?.subrange(
+          first.sourceStart,
+          atom.textLength,
+        ),
       ),
       route: route,
       reason: NovelReaderPaginationRouteReason.unsupportedStyle,

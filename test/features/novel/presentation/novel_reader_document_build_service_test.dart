@@ -3,6 +3,8 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 
 void main() {
   test(
@@ -27,6 +29,7 @@ ${List.filled(180, '<p>正文<b>粗体</b><a href="https://example.org">链接</
         fallbackParagraphs: request.fallbackParagraphs,
       );
       expect(background.rawHtmlHash, local.rawHtmlHash);
+      expect(background.textConversionIdentity, TextConversionMode.none.name);
       expect(background.plainText, local.plainText);
       expect(
         background.blocks.map((block) => block.anchorId),
@@ -97,7 +100,92 @@ ${List.filled(180, '<p>正文<b>粗体</b><a href="https://example.org">链接</
     expect(executor.callCount, 0);
     expect(document.blocks, hasLength(2));
     expect((document.blocks.first as RichTextBlock).novelPlainText, '第一段');
+    expect(document.textConversionIdentity, TextConversionMode.none.name);
   });
+
+  test(
+    'small converted document records the mode that produced its text',
+    () async {
+      final executor = _RecordingBuildExecutor();
+      final converter = _RecordingConverter(TextConversionMode.toSimplified);
+      final service = AdaptiveNovelReaderDocumentBuildService(
+        parser: const DiscuzNovelReaderDocumentParser(),
+        executor: executor,
+      );
+      final document = await service.build(
+        const NovelReaderDocumentBuildRequest(
+          episodeId: 'converted-small',
+          rawHtml: '<p>臺正文</p>',
+          fallbackParagraphs: <String>['臺回退'],
+        ),
+        converter: converter,
+      );
+
+      expect(executor.callCount, 0);
+      expect(converter.calls, 2);
+      expect(document.plainText, '台正文');
+      expect(
+        document.textConversionIdentity,
+        TextConversionMode.toSimplified.name,
+      );
+      expect(document.blocks.single.novelPlainText, '台正文');
+    },
+  );
+
+  test(
+    'async executor conversion metadata wraps the returned body without rebuilding it',
+    () async {
+      final executor = _RecordingBuildExecutor();
+      final converter = _RecordingConverter(TextConversionMode.toSimplified);
+      final service = AdaptiveNovelReaderDocumentBuildService(
+        parser: const DiscuzNovelReaderDocumentParser(),
+        executor: executor,
+      );
+      final text = List<String>.filled(13000, '臺').join();
+      final document = await service.build(
+        NovelReaderDocumentBuildRequest(
+          episodeId: 'converted-large',
+          rawHtml: '<p>$text</p>',
+          fallbackParagraphs: const <String>[],
+        ),
+        converter: converter,
+      );
+
+      expect(executor.callCount, 1);
+      expect(executor.lastRequest!.rawHtml, isNot(contains('臺')));
+      expect(document.plainText, List<String>.filled(13000, '台').join());
+      expect(
+        document.textConversionIdentity,
+        TextConversionMode.toSimplified.name,
+      );
+      expect(document.body, same(executor.lastDocument!.body));
+      expect(document.rawHtmlHash, executor.lastDocument!.rawHtmlHash);
+      expect(document.wordCount, executor.lastDocument!.wordCount);
+    },
+  );
+
+  test(
+    'none mode preserves the source and does not invoke a converter',
+    () async {
+      final converter = _RecordingConverter(TextConversionMode.none);
+      final document =
+          await AdaptiveNovelReaderDocumentBuildService(
+            parser: const DiscuzNovelReaderDocumentParser(),
+            executor: _RecordingBuildExecutor(),
+          ).build(
+            const NovelReaderDocumentBuildRequest(
+              episodeId: 'unconverted',
+              rawHtml: '<p>臺正文</p>',
+              fallbackParagraphs: <String>[],
+            ),
+            converter: converter,
+          );
+
+      expect(converter.calls, 0);
+      expect(document.plainText, '臺正文');
+      expect(document.textConversionIdentity, TextConversionMode.none.name);
+    },
+  );
 
   test('large request builds through async executor', () async {
     final executor = _RecordingBuildExecutor();
@@ -140,16 +228,39 @@ ${List.filled(180, '<p>正文<b>粗体</b><a href="https://example.org">链接</
 
 class _RecordingBuildExecutor implements NovelReaderDocumentBuildExecutor {
   int callCount = 0;
+  NovelReaderDocumentBuildRequest? lastRequest;
+  NovelReaderDocument? lastDocument;
 
   @override
   Future<NovelReaderDocument> buildInBackground(
     NovelReaderDocumentBuildRequest request,
   ) async {
     callCount += 1;
-    return const DiscuzNovelReaderDocumentParser().parse(
+    lastRequest = request;
+    final document = const DiscuzNovelReaderDocumentParser().parse(
       episodeId: request.episodeId,
       rawHtml: request.rawHtml,
       fallbackParagraphs: request.fallbackParagraphs,
     );
+    lastDocument = document;
+    return document;
+  }
+}
+
+class _RecordingConverter implements TextConverter {
+  _RecordingConverter(this.mode);
+
+  @override
+  final TextConversionMode mode;
+
+  @override
+  String get id => 'fixture-${mode.name}';
+
+  int calls = 0;
+
+  @override
+  Future<String> convertHtml(String html) async {
+    calls += 1;
+    return html.replaceAll('臺', '台');
   }
 }

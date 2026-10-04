@@ -1,4 +1,5 @@
 import 'package:html/dom.dart' as html_dom;
+import 'package:y300/features/novel/domain/services/novel_reader_text_normalization.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
@@ -117,6 +118,7 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
       wordCount: plainText.runes
           .where((rune) => !_isWhitespaceRune(rune))
           .length,
+      textConversionIdentity: 'none',
     );
   }
 
@@ -191,20 +193,11 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
   }
 
   String _normalizeText(String text) {
-    return text
-        .replaceAll(' ', ' ')
-        .replaceAll(RegExp(r'\r\n|\r'), '\n')
-        .replaceAll(RegExp(r'[ \t]+'), ' ')
-        .replaceAll(RegExp(r'\n[ \t]+'), '\n')
-        .trim();
+    return NovelReaderTextNormalization.normalize(text, trim: true);
   }
 
   String _normalizeInlineText(String text) {
-    return text
-        .replaceAll(' ', ' ')
-        .replaceAll(RegExp(r'\r\n|\r'), '\n')
-        .replaceAll(RegExp(r'[ \t]+'), ' ')
-        .replaceAll(RegExp(r'\n[ \t]+'), '\n');
+    return NovelReaderTextNormalization.normalize(text);
   }
 
   bool _isWhitespaceRune(int rune) {

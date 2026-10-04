@@ -10,6 +10,8 @@ final class NovelReaderPaginationTextRun {
     required this.htmlNodeId,
     this.href,
     this.isParagraphBreak = false,
+    this.sourceStart,
+    this.sourceEnd,
   });
 
   final String text;
@@ -19,4 +21,8 @@ final class NovelReaderPaginationTextRun {
   final String htmlNodeId;
   final String? href;
   final bool isParagraphBreak;
+
+  /// Local DOM rune coordinates; never inferred from projected semantic offsets.
+  final int? sourceStart;
+  final int? sourceEnd;
 }
