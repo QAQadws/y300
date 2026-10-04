@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -128,6 +129,80 @@ void main() {
       expect(request.effectiveRetentionClass, ImageRetentionClass.protected);
     },
   );
+
+  test(
+    'Host rewrites preserve DOM projection and rejection keeps indices dense',
+    () {
+      const preparer = DefaultForumHtmlRenderPreparer(
+        imagePolicy: _ProtectedNovelImagePolicy(
+          rewriteProjection: true,
+          rejectedFileName: 'rejected.jpg',
+        ),
+      );
+      final document = preparer.prepare(
+        html:
+            '<img id="aimg_41" src="data/attachment/forum/first.jpg" '
+            'width="200" height="300">'
+            '<img id="aimg_42" src="data/attachment/forum/rejected.jpg">'
+            '<img id="aimg_43" src="data/attachment/forum/last.jpg" '
+            'width="320" height="480">',
+        preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: _renderTheme(),
+        sourceId: 'host-rewritten-projection',
+        threadId: '100',
+        imageCacheOwnerId: '100',
+      );
+      final images = html_parser
+          .parseFragment(document.preparedHtml)
+          .querySelectorAll('img');
+      final first = document.sequence.entries.first;
+      final last = document.sequence.entries.last;
+
+      expect(document.totalImageCount, 3);
+      expect(document.skippedNonNetworkCount, 1);
+      expect(document.attachmentTaggedCount, 3);
+      expect(document.sequence.entries.map((entry) => entry.index), [0, 1]);
+      expect(first.rawSrc, 'data/attachment/forum/first.jpg');
+      expect(
+        first.url,
+        'https://bbs.yamibo.com/data/attachment/forum/first.jpg',
+      );
+      expect(first.htmlWidth, 200);
+      expect(first.htmlHeight, 300);
+      expect(first.attachmentId, '41');
+      expect(first.spec.url.toString(), 'https://example.invalid/host/0.jpg');
+      expect(first.spec.htmlWidth, 800);
+      expect(first.spec.htmlHeight, 1200);
+      expect(first.spec.displayWidth, 400);
+      expect(first.spec.displayHeight, 600);
+      expect(last.rawSrc, 'data/attachment/forum/last.jpg');
+      expect(last.url, 'https://bbs.yamibo.com/data/attachment/forum/last.jpg');
+      expect(last.htmlWidth, 320);
+      expect(last.htmlHeight, 480);
+      expect(last.spec.imageIndex, 1);
+      expect(last.cacheKey, 'host-content:1');
+      expect(images.first.attributes['src'], first.url);
+      expect(images.first.attributes['width'], '200');
+      expect(images.first.attributes['height'], '300');
+      expect(
+        images.first.attributes[forumHtmlReadableImageIndexAttribute],
+        '0',
+      );
+      expect(
+        images[1].attributes[forumHtmlReadableImageIndexAttribute],
+        isNull,
+      );
+      expect(images.last.attributes[forumHtmlReadableImageIndexAttribute], '1');
+      expect(document.attachmentIdsByUrl, {
+        'data/attachment/forum/first.jpg': '41',
+        'https://bbs.yamibo.com/data/attachment/forum/first.jpg': '41',
+        'data/attachment/forum/rejected.jpg': '42',
+        'https://bbs.yamibo.com/data/attachment/forum/rejected.jpg': '42',
+        'data/attachment/forum/last.jpg': '43',
+        'https://bbs.yamibo.com/data/attachment/forum/last.jpg': '43',
+      });
+    },
+  );
 }
 
 Color _opaque(Color color, Color background) =>
@@ -142,7 +217,13 @@ ForumHtmlThemeContext _renderTheme() =>
     );
 
 class _ProtectedNovelImagePolicy implements ForumHtmlPreparationImagePolicy {
-  const _ProtectedNovelImagePolicy();
+  const _ProtectedNovelImagePolicy({
+    this.rewriteProjection = false,
+    this.rejectedFileName,
+  });
+
+  final bool rewriteProjection;
+  final String? rejectedFileName;
 
   @override
   ForumImageLoadSpec inlineSpec({
@@ -155,8 +236,12 @@ class _ProtectedNovelImagePolicy implements ForumHtmlPreparationImagePolicy {
     String? alt,
     String? title,
   }) => ForumImageLoadSpec(
-    kind: ForumImageKind.comicReaderPage,
-    url: url,
+    kind: url.pathSegments.last == rejectedFileName
+        ? ForumImageKind.externalInline
+        : ForumImageKind.comicReaderPage,
+    url: rewriteProjection
+        ? Uri.parse('https://example.invalid/host/$imageIndex.jpg')
+        : url,
     referer: 'https://example.invalid/novel',
     ownerType: ImageCacheOwnerType.novel,
     ownerId: 'novel-host-owner',
@@ -164,8 +249,8 @@ class _ProtectedNovelImagePolicy implements ForumHtmlPreparationImagePolicy {
     imageIndex: imageIndex,
     cacheKey: 'host-content:$imageIndex',
     retentionClass: ImageRetentionClass.protected,
-    htmlWidth: htmlWidth,
-    htmlHeight: htmlHeight,
+    htmlWidth: rewriteProjection ? 800 : htmlWidth,
+    htmlHeight: rewriteProjection ? 1200 : htmlHeight,
     displayWidth: 400,
     displayHeight: 600,
     alt: alt,
