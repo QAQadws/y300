@@ -25,6 +25,10 @@ class NovelReaderPaginationDiagnostics {
     this.atomizationDuration = Duration.zero,
     this.measureSessionCreateDuration = Duration.zero,
     this.classificationDuration = Duration.zero,
+    this.longestSynchronousStepDuration = Duration.zero,
+    this.maximumCandidateHtmlCodeUnits = 0,
+    this.totalCandidateHtmlCodeUnits = 0,
+    this.uncachedCandidateHtmlCodeUnits = 0,
     this.frameWaitCount = 0,
     this.domSliceCount = 0,
     this.readableImageCount = 0,
@@ -37,6 +41,7 @@ class NovelReaderPaginationDiagnostics {
     this.flowableComplexFragmentCount = 0,
     this.complexBoundaryCount = 0,
     this.complexBoundaryIndexBuildCount = 0,
+    this.complexBoundaryIndexBuildDuration = Duration.zero,
     this.complexBoundaryIndexCacheHitCount = 0,
     this.complexBoundaryIndexSingleFlightHitCount = 0,
     this.complexSearchProbeCount = 0,
@@ -54,6 +59,9 @@ class NovelReaderPaginationDiagnostics {
     this.legacyMarkupNormalizerRevision = 0,
     this.normalizedLegacyAttributeCount = 0,
     this.firstPageDuration = Duration.zero,
+    this.firstPublishedPageDuration,
+    this.firstVisibleFrameDuration,
+    this.isComplete = true,
     this.cancelledPlanCount = 0,
     this.availableHeight = 0,
     this.averageTextPageFullness = 0,
@@ -123,6 +131,10 @@ class NovelReaderPaginationDiagnostics {
   final Duration atomizationDuration;
   final Duration measureSessionCreateDuration;
   final Duration classificationDuration;
+  final Duration longestSynchronousStepDuration;
+  final int maximumCandidateHtmlCodeUnits;
+  final int totalCandidateHtmlCodeUnits;
+  final int uncachedCandidateHtmlCodeUnits;
   final int frameWaitCount;
   final int domSliceCount;
   final int readableImageCount;
@@ -135,6 +147,7 @@ class NovelReaderPaginationDiagnostics {
   final int flowableComplexFragmentCount;
   final int complexBoundaryCount;
   final int complexBoundaryIndexBuildCount;
+  final Duration complexBoundaryIndexBuildDuration;
   final int complexBoundaryIndexCacheHitCount;
   final int complexBoundaryIndexSingleFlightHitCount;
   final int complexSearchProbeCount;
@@ -152,6 +165,14 @@ class NovelReaderPaginationDiagnostics {
   final int legacyMarkupNormalizerRevision;
   final int normalizedLegacyAttributeCount;
   final Duration firstPageDuration;
+  // All page timings start at this layout request, after chapter preparation.
+  // The legacy firstPageDuration measures target availability before build.
+  Duration get targetPageAvailableDuration => firstPageDuration;
+  final Duration? firstPublishedPageDuration;
+
+  /// Framework frame completion, not GPU presentation or image readiness.
+  final Duration? firstVisibleFrameDuration;
+  final bool isComplete;
   final int cancelledPlanCount;
   final double availableHeight;
   final double averageTextPageFullness;
@@ -189,7 +210,16 @@ class NovelReaderPaginationDiagnostics {
         'atomizationMs=${atomizationDuration.inMilliseconds}, '
         'sessionCreateMs=${measureSessionCreateDuration.inMilliseconds}, '
         'classificationMs=${classificationDuration.inMilliseconds}, '
+        'boundaryIndexBuildUs=${complexBoundaryIndexBuildDuration.inMicroseconds}, '
+        'maxSyncStepUs=${longestSynchronousStepDuration.inMicroseconds}, '
+        'candidateMaxCodeUnits=$maximumCandidateHtmlCodeUnits, '
+        'candidateTotalCodeUnits=$totalCandidateHtmlCodeUnits, '
+        'uncachedCandidateCodeUnits=$uncachedCandidateHtmlCodeUnits, '
         'firstPageMs=${firstPageDuration.inMilliseconds}, '
+        'firstPublishedUs=${firstPublishedPageDuration?.inMicroseconds}, '
+        'targetAvailableUs=${targetPageAvailableDuration.inMicroseconds}, '
+        'firstVisibleFrameUs=${firstVisibleFrameDuration?.inMicroseconds}, '
+        'complete=$isComplete, '
         'rendererValidations=$rendererValidationCount, '
         'rendererMismatches=$rendererValidationMismatchCount, '
         'textLayouts=$textLayoutCount, safeRuns=$safeTextRunCount, '

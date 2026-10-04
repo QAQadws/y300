@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
@@ -78,6 +81,80 @@ void main() {
 
     expect(run.style.fontSize, closeTo(27.75, 0.001));
   });
+
+  test(
+    'characterizes rune, grapheme and UTF-16 anchors for the same position',
+    () {
+      const prefix = 'A👩‍👩‍👧‍👦e\u0301';
+      const text = '$prefix中';
+      final atom = _atom('<p>$prefix<span>中</span></p>');
+      final classified = classifier.classify(
+        atom: atom,
+        baseStyle: _baseStyle,
+        preferences: _preferences,
+        theme: _lightTheme,
+      );
+      expect(classified.route, NovelReaderPaginationRoute.safeText);
+      final runs = extractor.extract(
+        classifiedAtom: classified,
+        baseStyle: _baseStyle,
+        preferences: _preferences,
+        theme: _lightTheme,
+      );
+      final ordinaryTarget = runs.singleWhere((run) => run.text == '中');
+      final complexAtom = _atom(
+        '<p><font face="Uninstalled Fantasy Font">'
+        '$prefix<span>中</span></font></p>',
+      );
+      final complexClassified = classifier.classify(
+        atom: complexAtom,
+        baseStyle: _baseStyle,
+        preferences: _preferences,
+        theme: _lightTheme,
+      );
+      expect(
+        complexClassified.route,
+        NovelReaderPaginationRoute.flowableComplexText,
+      );
+      final complex = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html: complexClassified.atom.html,
+            startAnchor: complexClassified.atom.startAnchor,
+          );
+      final complexTarget = complex.slice(startOffset: 3, endOffset: 4);
+      final document = NovelReaderDocument(
+        episodeId: atom.startAnchor.episodeId,
+        rawHtmlHash: 'unicode-coordinate-baseline',
+        body: const RichDocument(
+          blocks: <RichBlock>[
+            RichTextBlock(
+              anchorId: 'node-1',
+              runs: <RichRun>[RichRun(text: text)],
+            ),
+          ],
+        ),
+        plainText: text,
+        wordCount: text.runes.length,
+      );
+      final searchTarget = const NovelReaderSearchService()
+          .search(document: document, keyword: '中')
+          .single;
+
+      expect(runs.map((run) => run.text).join(), text);
+      expect(html_parser.parseFragment(complexTarget.html).text, '中');
+      expect(searchTarget.snippet, contains(text));
+      expect(ordinaryTarget.startAnchor.nodeId, searchTarget.anchor.nodeId);
+      expect(complexTarget.startAnchor.nodeId, searchTarget.anchor.nodeId);
+      // Stage 0 records the current mismatch, not a compatibility promise.
+      // Stage 1 must retain grapheme-safe slices while mapping all anchors to
+      // the same node-local coordinate; search match ranges need their own map.
+      expect(ordinaryTarget.startAnchor.textOffset, 10);
+      expect(complexTarget.startAnchor.textOffset, 3);
+      expect(searchTarget.anchor.textOffset, 14);
+      expect(searchTarget.matchStart, 14);
+      expect(searchTarget.matchEnd, 15);
+    },
+  );
 
   test(
     'assigns explicit capabilities to ruby, dedicated and atomic content',

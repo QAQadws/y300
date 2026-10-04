@@ -48,16 +48,28 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
 
     late final NovelReaderComplexHtmlSliceSession sliceSession;
     var boundaryIndexBuildCount = 0;
+    var boundaryIndexBuildDuration = Duration.zero;
     var boundaryIndexCacheHitCount = 0;
     var boundaryIndexSingleFlightHitCount = 0;
-    try {
-      final cache = boundaryCache;
-      if (cache == null) {
-        boundaryIndexBuildCount = 1;
-        sliceSession = boundaryIndexer.prepare(
+
+    NovelReaderComplexHtmlSliceSession buildBoundaries() {
+      boundaryIndexBuildCount = 1;
+      final stopwatch = Stopwatch()..start();
+      try {
+        return boundaryIndexer.prepare(
           html: atom.atom.html,
           startAnchor: atom.atom.startAnchor,
         );
+      } finally {
+        stopwatch.stop();
+        boundaryIndexBuildDuration += stopwatch.elapsed;
+      }
+    }
+
+    try {
+      final cache = boundaryCache;
+      if (cache == null) {
+        sliceSession = buildBoundaries();
       } else {
         final cached = await cache.resolve(
           request: NovelReaderComplexHtmlBoundaryCacheRequest(
@@ -68,13 +80,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
             startAnchor: atom.atom.startAnchor,
             normalizerRevision: chapter.legacyMarkupNormalization.revision,
           ),
-          build: () {
-            boundaryIndexBuildCount = 1;
-            return boundaryIndexer.prepare(
-              html: atom.atom.html,
-              startAnchor: atom.atom.startAnchor,
-            );
-          },
+          build: buildBoundaries,
         );
         cancellationToken.throwIfCancelled();
         sliceSession = cached.session;
@@ -91,6 +97,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       return _fallback(
         NovelReaderFlowableComplexFallbackReason.boundaryIndexFailure,
         boundaryIndexBuildCount: boundaryIndexBuildCount,
+        boundaryIndexBuildDuration: boundaryIndexBuildDuration,
         boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
         boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
       );
@@ -133,6 +140,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
           boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
@@ -147,6 +155,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
           boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
@@ -166,6 +175,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           budgetExceededCount: budgetExceededCount,
           minimumFragmentCount: 1,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
           boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
@@ -180,6 +190,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
+          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
           boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
@@ -206,6 +217,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       budgetExceededCount: budgetExceededCount,
       minimumFragmentCount: 0,
       boundaryIndexBuildCount: boundaryIndexBuildCount,
+      boundaryIndexBuildDuration: boundaryIndexBuildDuration,
       boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
       boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
     );
@@ -219,6 +231,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
     int budgetExceededCount = 0,
     int minimumFragmentCount = 0,
     int boundaryIndexBuildCount = 0,
+    Duration boundaryIndexBuildDuration = Duration.zero,
     int boundaryIndexCacheHitCount = 0,
     int boundaryIndexSingleFlightHitCount = 0,
   }) {
@@ -230,6 +243,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       budgetExceededCount: budgetExceededCount,
       minimumFragmentCount: minimumFragmentCount,
       boundaryIndexBuildCount: boundaryIndexBuildCount,
+      boundaryIndexBuildDuration: boundaryIndexBuildDuration,
       boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
       boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
       fallbackReason: reason,

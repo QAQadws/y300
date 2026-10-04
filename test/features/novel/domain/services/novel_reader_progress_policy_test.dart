@@ -342,4 +342,86 @@ void main() {
       0,
     );
   });
+
+  test('characterizes partial last-page overmatch before the coverage fix', () {
+    const key = NovelReaderPaginationKey(
+      episodeId: 'episode-1',
+      contentHash: 'content',
+      viewportWidthPx: 320,
+      viewportHeightPx: 600,
+      typographySignature: 'type',
+      themeSignature: 'theme',
+      imageDimensionRevision: 1,
+      rendererRevision: 1,
+    );
+    const start = NovelReaderTextAnchor(
+      episodeId: 'episode-1',
+      nodeId: 'paragraph-1',
+    );
+    NovelReaderPageFragment page(int index, int from, int to) {
+      final fromAnchor = start.copyWith(textOffset: from);
+      final toAnchor = start.copyWith(textOffset: to);
+      return NovelReaderPageFragment(
+        index: index,
+        html: '<p>0123456789</p>',
+        startAnchor: fromAnchor,
+        endAnchor: toAnchor,
+        anchorRanges: <NovelReaderPageAnchorRange>[
+          NovelReaderPageAnchorRange(start: fromAnchor, end: toAnchor),
+        ],
+        imageIndices: const [],
+      );
+    }
+
+    final firstPage = page(0, 0, 10);
+    final partialPlan = NovelReaderPaginationPlan(
+      key: key,
+      episodeId: 'episode-1',
+      pages: <NovelReaderPageFragment>[firstPage],
+    );
+    final extendedPlan = NovelReaderPaginationPlan(
+      key: key,
+      episodeId: 'episode-1',
+      pages: <NovelReaderPageFragment>[firstPage, page(1, 10, 20)],
+    );
+    const snapshot = NovelReaderProgressSnapshot(
+      novelId: 'novel:1',
+      episodeId: 'episode-1',
+      flowMode: NovelReaderFlowMode.pagedLtr,
+      scrollOffset: 0,
+      pageIndex: 99,
+      paginationKey: 'previous-layout',
+      anchorNodeId: 'paragraph-1',
+      anchorTextOffset: 15,
+      progressPercent: 0,
+    );
+    const restorePolicy = NovelReaderPaginationRestorePolicy();
+    final target = start.copyWith(textOffset: snapshot.anchorTextOffset);
+
+    expect(target.textOffset, greaterThan(firstPage.endAnchor.textOffset));
+    // Stage 1 must replace both partial-plan results below with null: this
+    // target is not covered until the second page has actually been built.
+    expect(partialPlan.pageIndexForAnchor(target), 0);
+    expect(
+      restorePolicy.resolveAvailablePage(
+        plan: partialPlan,
+        snapshot: snapshot,
+        isPlanComplete: false,
+      ),
+      0,
+    );
+    expect(extendedPlan.pageIndexForAnchor(target), 1);
+    expect(
+      restorePolicy.resolveAvailablePage(
+        plan: extendedPlan,
+        snapshot: snapshot,
+        isPlanComplete: false,
+      ),
+      1,
+    );
+    expect(
+      partialPlan.pageIndexForAnchor(target.copyWith(nodeId: 'paragraph-2')),
+      isNull,
+    );
+  });
 }

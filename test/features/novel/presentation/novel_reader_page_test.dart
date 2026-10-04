@@ -39,6 +39,7 @@ import 'package:y300/features/novel/presentation/controllers/novel_reader_contro
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
@@ -1780,6 +1781,98 @@ void main() {
     expect(repository.readingProgress?.pageIndex, pagedSlider.max.toInt());
     expect(repository.readingProgress?.pageCount, pagedSlider.max.toInt() + 1);
   });
+
+  testWidgets(
+    'phase 0 baseline: automatic surface fallback persists vertical mode '
+    '(stage 2 flips this contract)',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      final surface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      final savesBeforeFallback = repository.upsertPreferencesCallCount;
+      expect(repository.preferences.flowMode, NovelReaderFlowMode.pagedLtr);
+
+      // Surface timer tests cover automatic delivery; this exercises the actual
+      // page callback through its display coordinator and preferences repository.
+      surface.onFallbackToVertical!();
+      await tester.pumpAndSettle();
+
+      expect(repository.upsertPreferencesCallCount, savesBeforeFallback + 1);
+      expect(
+        repository.latestPreferences?.flowMode,
+        NovelReaderFlowMode.vertical,
+      );
+      expect(repository.preferences.flowMode, NovelReaderFlowMode.vertical);
+      expect(
+        find.byKey(const Key('novel-reader-html-document-view')),
+        findsOneWidget,
+      );
+      expect(find.byType(NovelReaderHtmlPagedSurface), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'phase 0 baseline: retired paged fallback cannot save another chapter mode',
+    (tester) async {
+      final repository = _FakeNovelRepository.threeEpisodes(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await tester.pumpAndSettle();
+      final oldSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      final oldFallback = oldSurface.onFallbackToVertical!;
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(NovelReaderPage)),
+        listen: false,
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final controller = container.read(
+        novelReaderControllerProvider(args).notifier,
+      );
+      expect(
+        await tester.runAsync(
+          () => controller.openEpisodeFromCatalog('novel:49:100:5002'),
+        ),
+        isTrue,
+      );
+      await tester.pumpAndSettle();
+      final currentSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      expect(currentSurface.episode.episodeId, 'novel:49:100:5002');
+      final savesBeforeLateCallback = repository.upsertPreferencesCallCount;
+
+      oldFallback();
+      await tester.pumpAndSettle();
+
+      expect(repository.upsertPreferencesCallCount, savesBeforeLateCallback);
+      expect(repository.preferences.flowMode, NovelReaderFlowMode.pagedLtr);
+      expect(
+        tester
+            .widget<NovelReaderHtmlPagedSurface>(
+              find.byType(NovelReaderHtmlPagedSurface),
+            )
+            .episode
+            .episodeId,
+        'novel:49:100:5002',
+      );
+    },
+  );
 
   testWidgets('NovelReaderPage persists paged mode across reconstruction', (
     tester,

@@ -203,11 +203,13 @@ final class DefaultNovelReaderHybridPaginationPlanner
       await workSlice.yieldIfNeeded();
       cancellationToken.throwIfCancelled();
       classifiedAtoms.add(
-        atomClassifier.classify(
-          atom: atom,
-          baseStyle: baseStyle,
-          preferences: preferences,
-          theme: theme,
+        workSlice.trackSynchronous(
+          () => atomClassifier.classify(
+            atom: atom,
+            baseStyle: baseStyle,
+            preferences: preferences,
+            theme: theme,
+          ),
         ),
       );
     }
@@ -263,6 +265,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
     var flowableComplexFragmentCount = 0;
     var complexBoundaryCount = 0;
     var complexBoundaryIndexBuildCount = 0;
+    var complexBoundaryIndexBuildDuration = Duration.zero;
+    var longestComplexIndexStepDuration = Duration.zero;
     var complexBoundaryIndexCacheHitCount = 0;
     var complexBoundaryIndexSingleFlightHitCount = 0;
     var complexSearchProbeCount = 0;
@@ -296,6 +300,14 @@ final class DefaultNovelReaderHybridPaginationPlanner
         atomizationDuration: atomizationStopwatch.elapsed,
         measureSessionCreateDuration: sessionStopwatch.elapsed,
         classificationDuration: classificationStopwatch.elapsed,
+        longestSynchronousStepDuration:
+            workSlice.longestSynchronousStepDuration >
+                longestComplexIndexStepDuration
+            ? workSlice.longestSynchronousStepDuration
+            : longestComplexIndexStepDuration,
+        maximumCandidateHtmlCodeUnits: session.maximumCandidateHtmlCodeUnits,
+        totalCandidateHtmlCodeUnits: session.totalCandidateHtmlCodeUnits,
+        uncachedCandidateHtmlCodeUnits: session.uncachedCandidateHtmlCodeUnits,
         frameWaitCount: session.frameWaitCount,
         domSliceCount: domSliceCount,
         readableImageCount: chapter.renderDocument.sequence.entries.length,
@@ -308,6 +320,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
         flowableComplexFragmentCount: flowableComplexFragmentCount,
         complexBoundaryCount: complexBoundaryCount,
         complexBoundaryIndexBuildCount: complexBoundaryIndexBuildCount,
+        complexBoundaryIndexBuildDuration: complexBoundaryIndexBuildDuration,
         complexBoundaryIndexCacheHitCount: complexBoundaryIndexCacheHitCount,
         complexBoundaryIndexSingleFlightHitCount:
             complexBoundaryIndexSingleFlightHitCount,
@@ -408,11 +421,13 @@ final class DefaultNovelReaderHybridPaginationPlanner
           case NovelReaderPaginationRoute.safeText:
             late final List<NovelReaderPaginationTextRun> runs;
             try {
-              runs = textRunExtractor.extract(
-                classifiedAtom: classified,
-                baseStyle: baseStyle,
-                preferences: preferences,
-                theme: theme,
+              runs = workSlice.trackSynchronous(
+                () => textRunExtractor.extract(
+                  classifiedAtom: classified,
+                  baseStyle: baseStyle,
+                  preferences: preferences,
+                  theme: theme,
+                ),
               );
             } catch (error) {
               if (_isCancellation(error)) {
@@ -433,17 +448,19 @@ final class DefaultNovelReaderHybridPaginationPlanner
             }
             late NovelReaderTextPaginationResult textResult;
             try {
-              textResult = textEngine.paginate(
-                atom: classified,
-                runs: runs,
-                width: key.viewportWidthPx.toDouble(),
-                pageHeight: key.viewportHeightPx.toDouble(),
-                firstPageHeight: composer.remainingHeight,
-                paragraphSpacing: _paragraphSpacingFor(classified.atom),
-                typographySignature: key.typographySignature,
-                textDirection: textDirection,
-                textAlign: textAlign,
-                textScaler: textScaler,
+              textResult = workSlice.trackSynchronous(
+                () => textEngine.paginate(
+                  atom: classified,
+                  runs: runs,
+                  width: key.viewportWidthPx.toDouble(),
+                  pageHeight: key.viewportHeightPx.toDouble(),
+                  firstPageHeight: composer.remainingHeight,
+                  paragraphSpacing: _paragraphSpacingFor(classified.atom),
+                  typographySignature: key.typographySignature,
+                  textDirection: textDirection,
+                  textAlign: textAlign,
+                  textScaler: textScaler,
+                ),
               );
               textLayoutCount += textResult.layoutCount;
               domSliceCount += textResult.chunks.length;
@@ -453,16 +470,18 @@ final class DefaultNovelReaderHybridPaginationPlanner
                 composer.flush(
                   gapReason: NovelReaderPageGapReason.algorithmBoundary,
                 );
-                textResult = textEngine.paginate(
-                  atom: classified,
-                  runs: runs,
-                  width: key.viewportWidthPx.toDouble(),
-                  pageHeight: key.viewportHeightPx.toDouble(),
-                  paragraphSpacing: _paragraphSpacingFor(classified.atom),
-                  typographySignature: key.typographySignature,
-                  textDirection: textDirection,
-                  textAlign: textAlign,
-                  textScaler: textScaler,
+                textResult = workSlice.trackSynchronous(
+                  () => textEngine.paginate(
+                    atom: classified,
+                    runs: runs,
+                    width: key.viewportWidthPx.toDouble(),
+                    pageHeight: key.viewportHeightPx.toDouble(),
+                    paragraphSpacing: _paragraphSpacingFor(classified.atom),
+                    typographySignature: key.typographySignature,
+                    textDirection: textDirection,
+                    textAlign: textAlign,
+                    textScaler: textScaler,
+                  ),
                 );
                 textLayoutCount += textResult.layoutCount;
                 domSliceCount += textResult.chunks.length;
@@ -554,17 +573,19 @@ final class DefaultNovelReaderHybridPaginationPlanner
               final backedHeight = key.viewportHeightPx * ratio;
               late final NovelReaderTextPaginationResult backed;
               try {
-                backed = textEngine.paginate(
-                  atom: classified,
-                  runs: runs,
-                  width: key.viewportWidthPx.toDouble(),
-                  pageHeight: backedHeight,
-                  firstPageHeight: backedHeight,
-                  paragraphSpacing: _paragraphSpacingFor(classified.atom),
-                  typographySignature: key.typographySignature,
-                  textDirection: textDirection,
-                  textAlign: textAlign,
-                  textScaler: textScaler,
+                backed = workSlice.trackSynchronous(
+                  () => textEngine.paginate(
+                    atom: classified,
+                    runs: runs,
+                    width: key.viewportWidthPx.toDouble(),
+                    pageHeight: backedHeight,
+                    firstPageHeight: backedHeight,
+                    paragraphSpacing: _paragraphSpacingFor(classified.atom),
+                    typographySignature: key.typographySignature,
+                    textDirection: textDirection,
+                    textAlign: textAlign,
+                    textScaler: textScaler,
+                  ),
                 );
               } catch (error) {
                 if (_isCancellation(error)) {
@@ -768,6 +789,13 @@ final class DefaultNovelReaderHybridPaginationPlanner
             }
             complexBoundaryCount += flowable.boundaryCount;
             complexBoundaryIndexBuildCount += flowable.boundaryIndexBuildCount;
+            complexBoundaryIndexBuildDuration +=
+                flowable.boundaryIndexBuildDuration;
+            if (flowable.boundaryIndexBuildDuration >
+                longestComplexIndexStepDuration) {
+              longestComplexIndexStepDuration =
+                  flowable.boundaryIndexBuildDuration;
+            }
             complexBoundaryIndexCacheHitCount +=
                 flowable.boundaryIndexCacheHitCount;
             complexBoundaryIndexSingleFlightHitCount +=
@@ -1092,6 +1120,9 @@ final class _TrackedPaginationMeasureSession
   int cacheHitCount = 0;
   int frameWaitCount = 0;
   Duration measurementDuration = Duration.zero;
+  int maximumCandidateHtmlCodeUnits = 0;
+  int totalCandidateHtmlCodeUnits = 0;
+  int uncachedCandidateHtmlCodeUnits = 0;
   final List<NovelReaderPaginationMeasurementSample> samples =
       <NovelReaderPaginationMeasurementSample>[];
 
@@ -1100,13 +1131,25 @@ final class _TrackedPaginationMeasureSession
     NovelReaderPaginationMeasureRequest request,
   ) async {
     measurementCount += 1;
+    final codeUnits = request.html.length;
+    totalCandidateHtmlCodeUnits += codeUnits;
+    if (codeUnits > maximumCandidateHtmlCodeUnits) {
+      maximumCandidateHtmlCodeUnits = codeUnits;
+    }
     final stopwatch = Stopwatch()..start();
-    final result = await _delegate.measure(request);
-    stopwatch.stop();
-    measurementDuration += stopwatch.elapsed;
+    late final NovelReaderPaginationMeasureResult result;
+    try {
+      result = await _delegate.measure(request);
+    } finally {
+      stopwatch.stop();
+      measurementDuration += stopwatch.elapsed;
+    }
     frameWaitCount += result.frameWaitCount;
     if (result.fromCache) {
       cacheHitCount += 1;
+    } else {
+      // Failed attempts have unknown cache status and only contribute to total.
+      uncachedCandidateHtmlCodeUnits += codeUnits;
     }
     if (samples.length < 64) {
       final rawAtomId = request.atomId?.replaceFirst(':validation', '') ?? '';
@@ -1119,6 +1162,7 @@ final class _TrackedPaginationMeasureSession
           height: result.height,
           duration: stopwatch.elapsed,
           fromCache: result.fromCache,
+          htmlCodeUnits: codeUnits,
         ),
       );
     }

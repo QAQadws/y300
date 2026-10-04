@@ -49,6 +49,7 @@ final class NovelReaderFlowableComplexPaginationResult {
     required this.budgetExceededCount,
     required this.minimumFragmentCount,
     this.boundaryIndexBuildCount = 0,
+    this.boundaryIndexBuildDuration = Duration.zero,
     this.boundaryIndexCacheHitCount = 0,
     this.boundaryIndexSingleFlightHitCount = 0,
     this.fallbackReason,
@@ -70,6 +71,7 @@ final class NovelReaderFlowableComplexPaginationResult {
   final int budgetExceededCount;
   final int minimumFragmentCount;
   final int boundaryIndexBuildCount;
+  final Duration boundaryIndexBuildDuration;
   final int boundaryIndexCacheHitCount;
   final int boundaryIndexSingleFlightHitCount;
   final NovelReaderFlowableComplexFallbackReason? fallbackReason;

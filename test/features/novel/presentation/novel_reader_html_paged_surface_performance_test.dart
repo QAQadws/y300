@@ -13,6 +13,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
@@ -430,6 +431,7 @@ void main() {
       );
       final coordinator = _ControlledRestorePaginationCoordinator();
       final positions = <int>[];
+      final diagnostics = _RecordingDiagnosticsSink();
 
       await tester.pumpWidget(
         LocalizedTestApp(
@@ -461,6 +463,7 @@ void main() {
                     required String? imageCacheOwnerId,
                     required String? imageReferer,
                   }) => coordinator,
+              diagnosticsSink: diagnostics,
               onPositionChanged: (position) {
                 positions.add(position.pageIndex);
               },
@@ -480,6 +483,7 @@ void main() {
         findsNothing,
       );
       expect(positions, isEmpty);
+      expect(diagnostics.records, isEmpty);
 
       coordinator.emitTargetPage();
       await tester.pump();
@@ -494,6 +498,33 @@ void main() {
         findsOneWidget,
       );
       expect(positions, <int>[1]);
+      final firstFrame = diagnostics.records.single;
+      expect(firstFrame.isComplete, isFalse);
+      expect(firstFrame.firstPublishedPageDuration, isNotNull);
+      expect(
+        firstFrame.targetPageAvailableDuration,
+        greaterThan(firstFrame.firstPublishedPageDuration!),
+      );
+      expect(
+        firstFrame.firstVisibleFrameDuration,
+        greaterThanOrEqualTo(firstFrame.targetPageAvailableDuration),
+      );
+
+      coordinator.emitComplete();
+      await tester.pump();
+      await tester.pump();
+      expect(diagnostics.records.map((record) => record.isComplete), <bool>[
+        false,
+        true,
+      ]);
+      expect(
+        diagnostics.records.last.firstVisibleFrameDuration,
+        firstFrame.firstVisibleFrameDuration,
+      );
+      expect(
+        diagnostics.records.last.firstPublishedPageDuration,
+        firstFrame.firstPublishedPageDuration,
+      );
     },
   );
 }
@@ -641,7 +672,14 @@ final class _ControlledRestorePaginationCoordinator
     _controller?.add(_progress(pageCount: 2));
   }
 
-  NovelReaderPaginationProgress _progress({required int pageCount}) {
+  void emitComplete() {
+    _controller?.add(_progress(pageCount: 2, isComplete: true));
+  }
+
+  NovelReaderPaginationProgress _progress({
+    required int pageCount,
+    bool isComplete = false,
+  }) {
     final chapter = _chapter!;
     final key = _key!;
     const firstStart = NovelReaderTextAnchor(
@@ -690,8 +728,8 @@ final class _ControlledRestorePaginationCoordinator
         pages: pages,
         atomCount: 3,
       ),
-      isComplete: false,
-      processedAtomCount: pageCount,
+      isComplete: isComplete,
+      processedAtomCount: isComplete ? 3 : pageCount,
       totalAtomCount: 3,
     );
   }
@@ -709,6 +747,16 @@ final class _ControlledRestorePaginationCoordinator
 
   @override
   void clearEpisode(String episodeId) => cancelPending();
+}
+
+final class _RecordingDiagnosticsSink
+    implements NovelReaderPaginationDiagnosticsSink {
+  final records = <NovelReaderPaginationDiagnostics>[];
+
+  @override
+  void record(NovelReaderPaginationDiagnostics diagnostics) {
+    records.add(diagnostics);
+  }
 }
 
 final class _CompleteRecordingPaginationCoordinator

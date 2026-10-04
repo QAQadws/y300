@@ -957,6 +957,103 @@ void main() {
     }
   });
 
+  // Stage 4 replaces whole-atom publication/fallback with a stable prefix.
+  for (final failSecondPage in <bool>[false, true]) {
+    test(
+      failSecondPage
+          ? 'stage 0 falls back the whole complex atom after a later probe fails'
+          : 'stage 0 waits for the whole complex atom before publishing its pages',
+      () async {
+        final text = List<String>.filled(96, '甲').join();
+        final chapter = await _prepare(
+          '<p><font face="Fantasy Novel Font">$text</font></p>',
+        );
+        final secondPageStarted = Completer<void>();
+        final releaseSecondPage = Completer<void>();
+        final candidateDomNodeCounts = <int>[];
+        final adapter = _RecordingMeasureAdapter(
+          heightFor: (request, _) =>
+              (request.endOffset! - request.startOffset!) * 10.0,
+          beforeMeasure: (request) async {
+            final fragment = html_parser.parseFragment(request.html);
+            final pending = <html_dom.Node>[...fragment.nodes];
+            var nodeCount = 0;
+            while (pending.isNotEmpty) {
+              final node = pending.removeLast();
+              nodeCount += 1;
+              pending.addAll(node.nodes);
+            }
+            candidateDomNodeCounts.add(nodeCount);
+            if (request.startOffset! > 0 && !secondPageStarted.isCompleted) {
+              secondPageStarted.complete();
+              await releaseSecondPage.future;
+              if (failSecondPage) {
+                throw StateError('synthetic later complex measurement failure');
+              }
+            }
+          },
+        );
+        final events = <NovelReaderPaginationProgress>[];
+        final completed = _planner(adapter)
+            .planIncrementally(
+              chapter: chapter,
+              key: _key(chapter, height: 80),
+              cancellationToken: NovelReaderPaginationCancellationToken(),
+            )
+            .map((progress) {
+              events.add(progress);
+              return progress;
+            })
+            .toList();
+
+        try {
+          await secondPageStarted.future;
+          expect(
+            adapter.requests.any(
+              (request) => request.startOffset == 0 && request.endOffset == 8,
+            ),
+            isTrue,
+          );
+          expect(adapter.requests.last.startOffset, 8);
+          expect(events, isEmpty);
+        } finally {
+          releaseSecondPage.complete();
+        }
+
+        final updates = await completed;
+        final plan = updates.last.plan;
+        expect(candidateDomNodeCounts, hasLength(adapter.requests.length));
+        expect(
+          candidateDomNodeCounts.fold<int>(0, (total, count) => total + count),
+          greaterThan(adapter.requests.length),
+          reason: 'DOM node cost is recorded only for uncached adapter probes.',
+        );
+        expect(updates.last.isComplete, isTrue);
+        expect(
+          plan.routeCounts[NovelReaderPaginationRoute.flowableComplexText],
+          1,
+        );
+        expect(plan.pages.map((page) => _visibleText(page.html)).join(), text);
+        if (failSecondPage) {
+          expect(plan.pageCount, 1);
+          expect(plan.atomicWidgetPageCount, 1);
+          expect(plan.flowableComplexFragmentCount, 0);
+          expect(plan.pages.single.requiresInnerScroll, isTrue);
+          expect(plan.pages.single.startAnchor.textOffset, 0);
+          expect(plan.pages.single.endAnchor.textOffset, text.length);
+          expect(plan.flowabilityFailureReasonCounts, {
+            NovelReaderFlowableComplexFallbackReason.measurementFailure: 1,
+          });
+        } else {
+          expect(plan.pageCount, 12);
+          expect(plan.flowableComplexFragmentCount, 12);
+          expect(plan.atomicWidgetPageCount, 0);
+          expect(plan.flowabilityFailureReasonCounts, isEmpty);
+        }
+      },
+    );
+  }
+
   test(
     'falls back atomically when the minimum complex fragment overflows',
     () async {
@@ -1048,9 +1145,11 @@ typedef _HeightFor =
 
 final class _RecordingMeasureAdapter
     implements NovelReaderPaginationMeasureAdapter {
-  _RecordingMeasureAdapter({this.heightFor});
+  _RecordingMeasureAdapter({this.heightFor, this.beforeMeasure});
 
   final _HeightFor? heightFor;
+  final Future<void> Function(NovelReaderPaginationMeasureRequest)?
+  beforeMeasure;
   int calls = 0;
   int validationCalls = 0;
   final List<NovelReaderPaginationMeasureRequest> requests =
@@ -1064,6 +1163,10 @@ final class _RecordingMeasureAdapter
     requests.add(request);
     if (request.atomId?.endsWith(':validation') == true) {
       validationCalls += 1;
+    }
+    final beforeMeasure = this.beforeMeasure;
+    if (beforeMeasure != null) {
+      await beforeMeasure(request);
     }
     return NovelReaderPaginationMeasureResult(
       height: heightFor?.call(request, validationCalls) ?? 10,

@@ -11,6 +11,24 @@ final class NovelReaderWorkSlice {
   final Duration budget;
   final NovelReaderPaginationCancellationToken? cancellationToken;
   final Stopwatch _clock = Stopwatch()..start();
+  Duration _longestSynchronousStepDuration = Duration.zero;
+
+  Duration get longestSynchronousStepDuration =>
+      _longestSynchronousStepDuration;
+
+  /// Observes selected synchronous steps only; async frame/probe waits and
+  /// time between yield checks are not continuous UI work.
+  T trackSynchronous<T>(T Function() step) {
+    final stopwatch = Stopwatch()..start();
+    try {
+      return step();
+    } finally {
+      stopwatch.stop();
+      if (stopwatch.elapsed > _longestSynchronousStepDuration) {
+        _longestSynchronousStepDuration = stopwatch.elapsed;
+      }
+    }
+  }
 
   Future<void> yieldIfNeeded() async {
     cancellationToken?.throwIfCancelled();

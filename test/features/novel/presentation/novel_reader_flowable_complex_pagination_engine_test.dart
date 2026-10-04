@@ -1,13 +1,16 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
@@ -89,6 +92,78 @@ void main() {
       );
     }
   });
+
+  test(
+    'stage 0 records whole-suffix probes and cumulative candidate cost',
+    () async {
+      final text = List<String>.filled(96, '甲').join();
+      final session = _RecordingSession(_rangeHeight);
+      final result = await _paginate(
+        text: text,
+        page: const NovelReaderPaginationPageContext(
+          bufferedHtml: '',
+          hasBufferedContent: false,
+          availableHeight: 80,
+        ),
+        chapter: chapter,
+        key: key,
+        session: session,
+      );
+
+      expect(result.requiresAtomicFallback, isFalse);
+      expect(result.chunks, hasLength(12));
+      final firstProbeByStart = <int, NovelReaderPaginationMeasureRequest>{};
+      for (final request in session.requests) {
+        firstProbeByStart.putIfAbsent(request.startOffset!, () => request);
+      }
+      final firstProbes = firstProbeByStart.values.toList();
+      expect(
+        firstProbes.map((request) => request.startOffset),
+        result.chunks.map((chunk) => chunk.slice.startOffset),
+      );
+      // Stage 3 replaces this current cost baseline with bounded candidates.
+      expect(
+        firstProbes.every((request) => request.endOffset == text.length),
+        isTrue,
+      );
+      expect(firstProbes.first.startOffset, 0);
+      final candidateLengths = session.requests
+          .map((request) => request.html.length)
+          .toList();
+      final maxCandidateLength = candidateLengths.reduce(
+        (left, right) => left > right ? left : right,
+      );
+      final cumulativeCandidateLength = candidateLengths.fold<int>(
+        0,
+        (total, length) => total + length,
+      );
+      final cumulativeFirstProbeLength = firstProbes.fold<int>(
+        0,
+        (total, request) => total + request.html.length,
+      );
+      final costSummary =
+          'pages=${result.chunks.length}, probes=${candidateLengths.length}, '
+          'maxHtmlCodeUnits=$maxCandidateLength, '
+          'cumulativeHtmlCodeUnits=$cumulativeCandidateLength, '
+          'wholeSuffixHtmlCodeUnits=$cumulativeFirstProbeLength';
+      expect(
+        maxCandidateLength,
+        firstProbes.first.html.length,
+        reason: costSummary,
+      );
+      expect(
+        cumulativeFirstProbeLength,
+        greaterThan(maxCandidateLength * result.chunks.length ~/ 2),
+        reason: costSummary,
+      );
+      expect(
+        cumulativeCandidateLength,
+        greaterThan(cumulativeFirstProbeLength),
+        reason: costSummary,
+      );
+      debugPrint('[NovelPaginationBaseline] $costSummary');
+    },
+  );
 
   test(
     'retries a whole atom on a fresh page when minimum cannot fit',
@@ -193,8 +268,10 @@ void main() {
 
   test('reuses a boundary session across production engine calls', () async {
     final cache = NovelReaderComplexHtmlBoundaryCache();
+    final indexer = _TimedBoundaryIndexer();
     final engine = DefaultNovelReaderFlowableComplexPaginationEngine(
       boundaryCache: cache,
+      boundaryIndexer: indexer,
     );
     final atom = _atom('cached complex text');
     const page = NovelReaderPaginationPageContext(
@@ -203,7 +280,7 @@ void main() {
       availableHeight: 400,
     );
 
-    final first = await engine.paginate(
+    final firstPending = engine.paginate(
       atom: atom,
       page: page,
       chapter: chapter,
@@ -211,6 +288,16 @@ void main() {
       measureSession: _RecordingSession(_rangeHeight),
       cancellationToken: NovelReaderPaginationCancellationToken(),
     );
+    final joinedPending = engine.paginate(
+      atom: atom,
+      page: page,
+      chapter: chapter,
+      key: key,
+      measureSession: _RecordingSession(_rangeHeight),
+      cancellationToken: NovelReaderPaginationCancellationToken(),
+    );
+    final first = await firstPending;
+    final joined = await joinedPending;
     final second = await engine.paginate(
       atom: atom,
       page: page,
@@ -221,10 +308,58 @@ void main() {
     );
 
     expect(first.boundaryIndexBuildCount, 1);
+    expect(
+      first.boundaryIndexBuildDuration,
+      greaterThanOrEqualTo(indexer.prepareDuration),
+    );
     expect(first.boundaryIndexCacheHitCount, 0);
+    expect(joined.boundaryIndexBuildCount, 0);
+    expect(joined.boundaryIndexSingleFlightHitCount, 1);
+    expect(joined.boundaryIndexBuildDuration, Duration.zero);
     expect(second.boundaryIndexBuildCount, 0);
+    expect(second.boundaryIndexBuildDuration, Duration.zero);
     expect(second.boundaryIndexCacheHitCount, 1);
+    expect(indexer.prepareCount, 1);
     expect(cache.length, 1);
+  });
+
+  test('records boundary build duration even when preparation fails', () async {
+    for (final cache in <NovelReaderComplexHtmlBoundaryCache?>[
+      null,
+      NovelReaderComplexHtmlBoundaryCache(),
+    ]) {
+      final indexer = _TimedBoundaryIndexer(fail: true);
+      final session = _RecordingSession(_rangeHeight);
+      final result =
+          await DefaultNovelReaderFlowableComplexPaginationEngine(
+            boundaryIndexer: indexer,
+            boundaryCache: cache,
+          ).paginate(
+            atom: _atom('failed complex indexing'),
+            page: const NovelReaderPaginationPageContext(
+              bufferedHtml: '',
+              hasBufferedContent: false,
+              availableHeight: 400,
+            ),
+            chapter: chapter,
+            key: key,
+            measureSession: session,
+            cancellationToken: NovelReaderPaginationCancellationToken(),
+          );
+
+      expect(indexer.prepareCount, 1);
+      expect(result.boundaryIndexBuildCount, 1);
+      expect(
+        result.boundaryIndexBuildDuration,
+        greaterThanOrEqualTo(indexer.prepareDuration),
+      );
+      expect(
+        result.fallbackReason,
+        NovelReaderFlowableComplexFallbackReason.boundaryIndexFailure,
+      );
+      expect(result.chunks, isEmpty);
+      expect(session.requests, isEmpty);
+    }
   });
 
   test('rejects a route without the DOM-range flow policy', () async {
@@ -348,6 +483,35 @@ NovelReaderPaginationKey _key(NovelReaderPreparedChapter chapter) {
 
 typedef _HeightResolver =
     double Function(NovelReaderPaginationMeasureRequest request);
+
+final class _TimedBoundaryIndexer
+    implements NovelReaderComplexHtmlBoundaryIndexer {
+  _TimedBoundaryIndexer({this.fail = false});
+
+  final bool fail;
+  int prepareCount = 0;
+  Duration prepareDuration = Duration.zero;
+
+  @override
+  NovelReaderComplexHtmlSliceSession prepare({
+    required String html,
+    required NovelReaderTextAnchor startAnchor,
+  }) {
+    prepareCount += 1;
+    final stopwatch = Stopwatch()..start();
+    try {
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(html: html, startAnchor: startAnchor);
+      if (fail) {
+        throw StateError('synthetic boundary indexing failure');
+      }
+      return session;
+    } finally {
+      stopwatch.stop();
+      prepareDuration = stopwatch.elapsed;
+    }
+  }
+}
 
 final class _RecordingSession implements NovelReaderPaginationMeasureSession {
   _RecordingSession(this.heightResolver);

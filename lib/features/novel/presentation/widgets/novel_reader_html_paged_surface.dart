@@ -196,10 +196,13 @@ class _NovelReaderHtmlPagedSurfaceState
   Duration _preparationDuration = Duration.zero;
   int _layoutGeneration = 0;
   String? _lastUnavailableNavigationKey;
-  String? _recordedDiagnosticsKey;
+  final Set<bool> _recordedDiagnosticsStages = <bool>{};
   Stopwatch? _layoutStopwatch;
+  Stopwatch? _visibleFrameStopwatch;
   bool _layoutCacheHit = false;
   Duration? _firstPageDuration;
+  Duration? _firstPublishedPageDuration;
+  Duration? _firstVisibleFrameDuration;
   String? _performanceFallbackKey;
   Timer? _firstPageBudgetTimer;
   Timer? _fullPlanBudgetTimer;
@@ -417,13 +420,14 @@ class _NovelReaderHtmlPagedSurfaceState
                     key: key,
                     isComplete: isPlanComplete,
                   );
+                  _scheduleDiagnostics(
+                    plan: plan,
+                    prepared: prepared,
+                    key: key,
+                    isComplete: isPlanComplete,
+                  );
                   if (isPlanComplete) {
                     _planCompleted = true;
-                    _scheduleDiagnostics(
-                      plan: plan,
-                      prepared: prepared,
-                      key: key,
-                    );
                     _scheduleUnavailableNavigationIfNeeded(
                       plan: plan,
                       requestedPage: requestedPage,
@@ -539,14 +543,25 @@ class _NovelReaderHtmlPagedSurfaceState
     _layoutGeneration += 1;
     _layoutCacheHit = _coordinator!.isCached(key);
     _layoutStopwatch = Stopwatch()..start();
+    _visibleFrameStopwatch = Stopwatch()..start();
     _firstPageDuration = null;
+    _firstPublishedPageDuration = null;
+    _firstVisibleFrameDuration = null;
     _performanceFallbackKey = null;
     _cancelPerformanceTimers();
-    _recordedDiagnosticsKey = null;
-    _planStream = _coordinator!.paginateIncrementally(
-      chapter: prepared,
-      key: key,
-    );
+    _recordedDiagnosticsStages.clear();
+    final requestGeneration = _layoutGeneration;
+    _planStream = _coordinator!
+        .paginateIncrementally(chapter: prepared, key: key)
+        .map((progress) {
+          // Observe the event before StreamBuilder can coalesce multiple updates.
+          if (_planKey == key &&
+              _layoutGeneration == requestGeneration &&
+              progress.plan.pages.isNotEmpty) {
+            _firstPublishedPageDuration ??= _layoutStopwatch?.elapsed;
+          }
+          return progress;
+        });
     _planCompleted = false;
     _startFirstPageBudgetTimer(key);
     return _planStream!;
@@ -586,20 +601,26 @@ class _NovelReaderHtmlPagedSurfaceState
     required NovelReaderPaginationPlan plan,
     required NovelReaderPreparedChapter prepared,
     required NovelReaderPaginationKey key,
+    required bool isComplete,
   }) {
-    final diagnosticsKey = key.cacheIdentity;
-    if (_recordedDiagnosticsKey == diagnosticsKey) {
+    // One visible-frame snapshot even if background pagination never finishes,
+    // and one final snapshot. No per-page diagnostic history is retained.
+    if (!_recordedDiagnosticsStages.add(isComplete)) {
       return;
     }
-    _recordedDiagnosticsKey = diagnosticsKey;
+    final requestGeneration = _layoutGeneration;
     final stopwatch = _layoutStopwatch;
-    if (stopwatch?.isRunning == true) {
+    if (isComplete && stopwatch?.isRunning == true) {
       stopwatch!.stop();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _planKey != key) {
+      if (!mounted ||
+          _planKey != key ||
+          _layoutGeneration != requestGeneration) {
         return;
       }
+      _firstVisibleFrameDuration ??= _visibleFrameStopwatch?.elapsed;
+      _visibleFrameStopwatch?.stop();
       widget.diagnosticsSink.record(
         NovelReaderPaginationDiagnostics(
           episodeId: plan.episodeId,
@@ -625,6 +646,10 @@ class _NovelReaderHtmlPagedSurfaceState
           atomizationDuration: plan.atomizationDuration,
           measureSessionCreateDuration: plan.measureSessionCreateDuration,
           classificationDuration: plan.classificationDuration,
+          longestSynchronousStepDuration: plan.longestSynchronousStepDuration,
+          maximumCandidateHtmlCodeUnits: plan.maximumCandidateHtmlCodeUnits,
+          totalCandidateHtmlCodeUnits: plan.totalCandidateHtmlCodeUnits,
+          uncachedCandidateHtmlCodeUnits: plan.uncachedCandidateHtmlCodeUnits,
           frameWaitCount: plan.frameWaitCount,
           domSliceCount: plan.domSliceCount,
           readableImageCount: plan.readableImageCount,
@@ -636,6 +661,8 @@ class _NovelReaderHtmlPagedSurfaceState
           flowableComplexFragmentCount: plan.flowableComplexFragmentCount,
           complexBoundaryCount: plan.complexBoundaryCount,
           complexBoundaryIndexBuildCount: plan.complexBoundaryIndexBuildCount,
+          complexBoundaryIndexBuildDuration:
+              plan.complexBoundaryIndexBuildDuration,
           complexBoundaryIndexCacheHitCount:
               plan.complexBoundaryIndexCacheHitCount,
           complexBoundaryIndexSingleFlightHitCount:
@@ -661,6 +688,9 @@ class _NovelReaderHtmlPagedSurfaceState
               prepared.legacyMarkupNormalization.reasonCounts,
           safeTextRunCount: plan.safeTextRunCount,
           firstPageDuration: _firstPageDuration ?? Duration.zero,
+          firstPublishedPageDuration: _firstPublishedPageDuration,
+          firstVisibleFrameDuration: _firstVisibleFrameDuration,
+          isComplete: isComplete,
           cancelledPlanCount: _cancelledPlanCount,
           availableHeight: key.viewportHeightPx.toDouble(),
           averageTextPageFullness: plan.averageTextPageFullness,
@@ -784,6 +814,7 @@ class _NovelReaderHtmlPagedSurfaceState
   }
 
   void _cancelPendingPagination({bool clearCache = false}) {
+    _visibleFrameStopwatch?.stop();
     if (_planStream != null && !_planCompleted) {
       _cancelledPlanCount += 1;
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
@@ -15,10 +16,79 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'candidate cost totals include cache hits beyond sampled probes',
+    () async {
+      final chapter = await const DefaultNovelReaderHtmlPreparationService()
+          .prepare(
+            rawHtml: List<String>.filled(
+              80,
+              '<table><tr><td>成本</td></tr></table>',
+            ).join(),
+            episode: _episode,
+            preferences: _preferences,
+            theme: _theme,
+            sourceId: _episode.episodeId,
+            threadId: _episode.sourceTid,
+            imageCacheOwnerId: _episode.sourceTid,
+          );
+      final key = NovelReaderPaginationKey(
+        episodeId: chapter.episodeId,
+        contentHash: chapter.contentHash,
+        viewportWidthPx: 320,
+        viewportHeightPx: 600,
+        typographySignature: 'candidate-cost-baseline',
+        themeSignature: chapter.themeSignature,
+        imageDimensionRevision: chapter.imageDimensionRevision,
+        rendererRevision: 3,
+      );
+      final adapter = _RecordingCostMeasureAdapter();
+      final planner = DefaultNovelReaderHybridPaginationPlanner(
+        measureAdapter: adapter,
+        preferences: _preferences,
+        theme: _theme,
+        baseStyle: _baseStyle,
+      );
+      final cold = await planner.paginate(chapter, key);
+      final coldLengths = List<int>.of(adapter.codeUnits);
+      final hot = await planner.paginate(chapter, key);
+
+      expect(cold.measurementCount, 80);
+      expect(cold.measurementSamples, hasLength(64));
+      expect(coldLengths, hasLength(80));
+      final maximumLength = coldLengths.reduce((a, b) => a > b ? a : b);
+      final totalLength = coldLengths.fold<int>(
+        0,
+        (total, length) => total + length,
+      );
+      expect(cold.maximumCandidateHtmlCodeUnits, maximumLength);
+      expect(cold.totalCandidateHtmlCodeUnits, totalLength);
+      expect(cold.uncachedCandidateHtmlCodeUnits, totalLength);
+      expect(
+        cold.measurementSamples.map((sample) => sample.htmlCodeUnits),
+        coldLengths.take(64),
+      );
+      expect(hot.totalCandidateHtmlCodeUnits, cold.totalCandidateHtmlCodeUnits);
+      expect(hot.uncachedCandidateHtmlCodeUnits, 0);
+      expect(hot.measurementCacheHitCount, 80);
+      expect(adapter.codeUnits, hasLength(80));
+      expect(
+        hot.pages.map((page) => page.html),
+        cold.pages.map((page) => page.html),
+      );
+      debugPrint(
+        '[NovelPaginationBaseline] tables=80 maxCodeUnits=$maximumLength '
+        'totalCodeUnits=$totalLength coldUncached=${cold.uncachedCandidateHtmlCodeUnits} '
+        'hotUncached=${hot.uncachedCandidateHtmlCodeUnits} samples=64',
+      );
+    },
+  );
+
   for (final targetPages in const <int>[20, 80, 200]) {
     test(
       '$targetPages-page plain-text benchmark stays on the linear path',
       () async {
+        final preparationStopwatch = Stopwatch()..start();
         final chapter = await const DefaultNovelReaderHtmlPreparationService()
             .prepare(
               rawHtml: _htmlFor(targetPages),
@@ -29,6 +99,7 @@ void main() {
               threadId: _episode.sourceTid,
               imageCacheOwnerId: _episode.sourceTid,
             );
+        preparationStopwatch.stop();
         final key = NovelReaderPaginationKey(
           episodeId: chapter.episodeId,
           contentHash: chapter.contentHash,
@@ -78,10 +149,13 @@ void main() {
         expect(plan.measurementCount, 1);
         expect(plan.frameWaitCount, 0);
         expect(firstPageDuration, isNotNull);
-        printOnFailure(
-          'target=$targetPages actual=${plan.pageCount} '
+        debugPrint(
+          '[NovelPaginationBaseline] target=$targetPages actual=${plan.pageCount} '
           'firstPageMs=${firstPageDuration!.inMilliseconds} '
-          'fullPlanMs=${stopwatch.elapsedMilliseconds}',
+          'fullPlanMs=${stopwatch.elapsedMilliseconds} '
+          'prepareUs=${preparationStopwatch.elapsedMicroseconds} '
+          'measurementUs=${plan.measurementDuration.inMicroseconds} '
+          'maxSyncStepUs=${plan.longestSynchronousStepDuration.inMicroseconds}',
         );
       },
     );
@@ -245,6 +319,25 @@ final class _ConstantMeasureAdapter
   Future<NovelReaderPaginationMeasureResult> measure(
     NovelReaderPaginationMeasureRequest request,
   ) async {
+    return const NovelReaderPaginationMeasureResult(height: 100);
+  }
+}
+
+final class _RecordingCostMeasureAdapter
+    implements NovelReaderPaginationMeasureAdapter {
+  final codeUnits = <int>[];
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) async {
+    codeUnits.add(request.html.length);
+    // Parsing belongs only to this deterministic test adapter; production
+    // length telemetry does not construct another DOM for each probe.
+    expect(
+      html_parser.parseFragment(request.html).querySelectorAll('table'),
+      hasLength(1),
+    );
     return const NovelReaderPaginationMeasureResult(height: 100);
   }
 }

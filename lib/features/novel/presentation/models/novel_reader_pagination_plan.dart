@@ -21,6 +21,7 @@ class NovelReaderPaginationMeasurementSample {
     required this.height,
     required this.duration,
     this.fromCache = false,
+    this.htmlCodeUnits = 0,
   });
 
   final String atomId;
@@ -28,6 +29,7 @@ class NovelReaderPaginationMeasurementSample {
   final double height;
   final Duration duration;
   final bool fromCache;
+  final int htmlCodeUnits;
 }
 
 @immutable
@@ -43,6 +45,10 @@ class NovelReaderPaginationPlan {
     this.atomizationDuration = Duration.zero,
     this.measureSessionCreateDuration = Duration.zero,
     this.classificationDuration = Duration.zero,
+    this.longestSynchronousStepDuration = Duration.zero,
+    this.maximumCandidateHtmlCodeUnits = 0,
+    this.totalCandidateHtmlCodeUnits = 0,
+    this.uncachedCandidateHtmlCodeUnits = 0,
     this.frameWaitCount = 0,
     this.domSliceCount = 0,
     this.readableImageCount = 0,
@@ -55,6 +61,7 @@ class NovelReaderPaginationPlan {
     this.flowableComplexFragmentCount = 0,
     this.complexBoundaryCount = 0,
     this.complexBoundaryIndexBuildCount = 0,
+    this.complexBoundaryIndexBuildDuration = Duration.zero,
     this.complexBoundaryIndexCacheHitCount = 0,
     this.complexBoundaryIndexSingleFlightHitCount = 0,
     this.complexSearchProbeCount = 0,
@@ -113,6 +120,17 @@ class NovelReaderPaginationPlan {
   final Duration atomizationDuration;
   final Duration measureSessionCreateDuration;
   final Duration classificationDuration;
+
+  /// Maximum observed classification/run/TextPainter/index step, not a frame
+  /// stall or a complete trace of every synchronous operation.
+  final Duration longestSynchronousStepDuration;
+
+  /// HTML UTF-16 cost proxies; totals include cached and failed attempts.
+  final int maximumCandidateHtmlCodeUnits;
+  final int totalCandidateHtmlCodeUnits;
+
+  /// Successful measurements confirmed not to have come from cache.
+  final int uncachedCandidateHtmlCodeUnits;
   final int frameWaitCount;
   final int domSliceCount;
   final int readableImageCount;
@@ -125,6 +143,7 @@ class NovelReaderPaginationPlan {
   final int flowableComplexFragmentCount;
   final int complexBoundaryCount;
   final int complexBoundaryIndexBuildCount;
+  final Duration complexBoundaryIndexBuildDuration;
   final int complexBoundaryIndexCacheHitCount;
   final int complexBoundaryIndexSingleFlightHitCount;
   final int complexSearchProbeCount;
