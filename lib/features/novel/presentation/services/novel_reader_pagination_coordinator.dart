@@ -231,6 +231,13 @@ final class DefaultNovelReaderPaginationCoordinator
           message: 'Incremental pagination ended without a complete plan.',
         );
       }
+      cancellationToken.throwIfCancelled();
+      if (requestGeneration != _generation) {
+        throw const NovelReaderPaginationException(
+          code: 'staleRequest',
+          message: 'A newer pagination generation superseded this result.',
+        );
+      }
       cache.put(completed.plan);
       flight.close();
     } catch (error, stackTrace) {

@@ -55,6 +55,7 @@ final class NovelReaderComplexHtmlSlice {
     required this.endOffset,
     required this.hasRenderableContent,
     required this.domNodeCount,
+    required this.sourceRuneLength,
   });
 
   final String html;
@@ -67,6 +68,10 @@ final class NovelReaderComplexHtmlSlice {
   /// Element, text and opaque nodes retained in the slice DOM, excluding the
   /// fragment root. This describes the slice, not any buffered page HTML.
   final int domNodeCount;
+
+  /// Source-rune span, including inline BR and excluding textless widgets.
+  /// This is not the grapheme range or the projected semantic anchor distance.
+  final int sourceRuneLength;
 }
 
 abstract interface class NovelReaderComplexHtmlSliceSession {

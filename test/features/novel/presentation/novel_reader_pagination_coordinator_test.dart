@@ -119,6 +119,34 @@ void main() {
     expect(coordinator.cache.length, 1);
   });
 
+  test(
+    'a completed event cannot refill the cache after cancellation before stream done',
+    () async {
+      final breaker = _IncrementalDelayedBreaker();
+      final coordinator = DefaultNovelReaderPaginationCoordinator(
+        pageBreaker: breaker,
+      );
+      final received = Completer<void>();
+      final errors = <Object>[];
+      final subscription = coordinator
+          .paginateIncrementally(
+            chapter: _prepared('episode'),
+            key: _key('episode'),
+          )
+          .listen((progress) {
+            if (progress.isComplete) received.complete();
+          }, onError: errors.add);
+      breaker.emit(_progress('episode', isComplete: true));
+      await received.future;
+      coordinator.cancelPending();
+      await breaker.close();
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.cache.length, 0);
+      expect(errors, hasLength(1));
+      await subscription.cancel();
+    },
+  );
+
   test('drops late incremental writes from a cancelled generation', () async {
     final breaker = _IncrementalDelayedBreaker();
     final coordinator = DefaultNovelReaderPaginationCoordinator(

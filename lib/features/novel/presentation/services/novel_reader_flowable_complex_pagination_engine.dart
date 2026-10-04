@@ -10,6 +10,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_complex_h
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_work_slice.dart';
 
 abstract interface class NovelReaderFlowableComplexPaginationEngine {
   Future<NovelReaderFlowableComplexPaginationResult> paginate({
@@ -19,6 +20,7 @@ abstract interface class NovelReaderFlowableComplexPaginationEngine {
     required NovelReaderPaginationKey key,
     required NovelReaderPaginationMeasureSession measureSession,
     required NovelReaderPaginationCancellationToken cancellationToken,
+    NovelReaderFlowableComplexChunkConsumer? onChunk,
   });
 }
 
@@ -42,6 +44,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
     required NovelReaderPaginationKey key,
     required NovelReaderPaginationMeasureSession measureSession,
     required NovelReaderPaginationCancellationToken cancellationToken,
+    NovelReaderFlowableComplexChunkConsumer? onChunk,
   }) async {
     _validateAtom(atom);
     cancellationToken.throwIfCancelled();
@@ -96,23 +99,68 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       if (_isCancellation(error)) {
         rethrow;
       }
-      return _fallback(
-        NovelReaderFlowableComplexFallbackReason.boundaryIndexFailure,
+      return NovelReaderFlowableComplexPaginationResult(
+        chunks: const <NovelReaderFlowableComplexChunk>[],
+        boundaryCount: 0,
+        probeCount: 0,
+        cacheHitCount: 0,
+        budgetExceededCount: 0,
+        minimumFragmentCount: 0,
         boundaryIndexBuildCount: boundaryIndexBuildCount,
         boundaryIndexBuildDuration: boundaryIndexBuildDuration,
         boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
         boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
+        fallbackReason:
+            NovelReaderFlowableComplexFallbackReason.boundaryIndexFailure,
       );
     }
 
     final chunks = <NovelReaderFlowableComplexChunk>[];
+    final workSlice = NovelReaderWorkSlice(
+      cancellationToken: cancellationToken,
+    );
     var startOffset = 0;
+    var committedOffset = 0;
     var bufferedPageHtml = page.hasBufferedContent ? page.bufferedHtml : '';
     var probeCount = 0;
     var cacheHitCount = 0;
     var budgetExceededCount = 0;
     var minimumFragmentCount = 0;
     int? preferredWindowGraphemes;
+
+    NovelReaderFlowableComplexPaginationResult snapshot({
+      NovelReaderFlowableComplexFallbackReason? fallbackReason,
+      int? fallbackMinimumFragmentCount,
+      double? measuredMinimumAtomHeight,
+      String? measuredMinimumAtomHtml,
+      bool includeCollectedChunks = false,
+    }) {
+      return NovelReaderFlowableComplexPaginationResult(
+        chunks: includeCollectedChunks
+            ? chunks
+            : const <NovelReaderFlowableComplexChunk>[],
+        boundaryCount: sliceSession.boundaries.length,
+        probeCount: probeCount,
+        cacheHitCount: cacheHitCount,
+        budgetExceededCount: budgetExceededCount,
+        minimumFragmentCount:
+            fallbackMinimumFragmentCount ?? minimumFragmentCount,
+        boundaryIndexBuildCount: boundaryIndexBuildCount,
+        boundaryIndexBuildDuration: boundaryIndexBuildDuration,
+        boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
+        boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
+        committedOffset: committedOffset,
+        remainingSlice: fallbackReason == null
+            ? null
+            : sliceSession.slice(
+                startOffset: committedOffset,
+                endOffset: sliceSession.textLength,
+              ),
+        fallbackReason: fallbackReason,
+        measuredMinimumAtomHeight: measuredMinimumAtomHeight,
+        measuredMinimumAtomHtml: measuredMinimumAtomHtml,
+      );
+    }
 
     while (startOffset < sliceSession.textLength) {
       cancellationToken.throwIfCancelled();
@@ -136,35 +184,18 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
         if (_mustPropagate(error)) {
           rethrow;
         }
-        return _fallback(
-          error.code == 'complexFitSearchNonMonotonic'
+        return snapshot(
+          fallbackReason: error.code == 'complexFitSearchNonMonotonic'
               ? NovelReaderFlowableComplexFallbackReason.nonMonotonicMeasurement
               : NovelReaderFlowableComplexFallbackReason.measurementFailure,
-          boundaryCount: sliceSession.boundaries.length,
-          probeCount: probeCount,
-          cacheHitCount: cacheHitCount,
-          budgetExceededCount: budgetExceededCount,
-          minimumFragmentCount: minimumFragmentCount,
-          boundaryIndexBuildCount: boundaryIndexBuildCount,
-          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
-          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
-          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
       } catch (error) {
         if (_mustPropagate(error)) {
           rethrow;
         }
-        return _fallback(
-          NovelReaderFlowableComplexFallbackReason.measurementFailure,
-          boundaryCount: sliceSession.boundaries.length,
-          probeCount: probeCount,
-          cacheHitCount: cacheHitCount,
-          budgetExceededCount: budgetExceededCount,
-          minimumFragmentCount: minimumFragmentCount,
-          boundaryIndexBuildCount: boundaryIndexBuildCount,
-          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
-          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
-          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
+        return snapshot(
+          fallbackReason:
+              NovelReaderFlowableComplexFallbackReason.measurementFailure,
         );
       }
 
@@ -179,108 +210,67 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
         minimumFragmentCount += 1;
       }
       if (!fit.fits) {
-        final isWholeFreshMinimum =
-            startOffset == 0 &&
+        final isUncommittedFreshMinimum =
+            startOffset == committedOffset &&
             fit.slice.endOffset == sliceSession.textLength &&
             (bufferedPageHtml.isEmpty || fit.requiresFreshPage) &&
             !sliceSession.boundaries.any(
               (boundary) =>
-                  boundary.textOffset > 0 &&
+                  boundary.textOffset > committedOffset &&
                   boundary.textOffset < sliceSession.textLength &&
                   sliceSession.isLegalBoundary(boundary.textOffset),
             );
-        return _fallback(
-          NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow,
-          boundaryCount: sliceSession.boundaries.length,
-          probeCount: probeCount,
-          cacheHitCount: cacheHitCount,
-          budgetExceededCount: budgetExceededCount,
-          minimumFragmentCount:
+        return snapshot(
+          fallbackReason:
+              NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow,
+          fallbackMinimumFragmentCount:
               minimumFragmentCount + (fit.oversizedMinimumFragment ? 0 : 1),
-          measuredMinimumAtomHeight: isWholeFreshMinimum
+          measuredMinimumAtomHeight: isUncommittedFreshMinimum
               ? fit.measuredHeight
               : null,
-          measuredMinimumAtomHtml: isWholeFreshMinimum ? fit.slice.html : null,
-          boundaryIndexBuildCount: boundaryIndexBuildCount,
-          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
-          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
-          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
+          measuredMinimumAtomHtml: isUncommittedFreshMinimum
+              ? fit.slice.html
+              : null,
         );
       }
 
       final slice = fit.slice;
       if (slice.endOffset <= startOffset) {
-        return _fallback(
-          NovelReaderFlowableComplexFallbackReason.invalidSliceProgress,
-          boundaryCount: sliceSession.boundaries.length,
-          probeCount: probeCount,
-          cacheHitCount: cacheHitCount,
-          budgetExceededCount: budgetExceededCount,
-          minimumFragmentCount: minimumFragmentCount,
-          boundaryIndexBuildCount: boundaryIndexBuildCount,
-          boundaryIndexBuildDuration: boundaryIndexBuildDuration,
-          boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
-          boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
+        return snapshot(
+          fallbackReason:
+              NovelReaderFlowableComplexFallbackReason.invalidSliceProgress,
         );
       }
       final hasRemainder = slice.endOffset < sliceSession.textLength;
-      chunks.add(
-        NovelReaderFlowableComplexChunk(
-          slice: slice,
-          composedHeight: fit.measuredHeight,
-          requiresFreshPage: fit.requiresFreshPage,
-          flushAfterAppend: hasRemainder,
-        ),
+      final chunk = NovelReaderFlowableComplexChunk(
+        slice: slice,
+        composedHeight: fit.measuredHeight,
+        requiresFreshPage: fit.requiresFreshPage,
+        flushAfterAppend: hasRemainder,
       );
+      final consumer = onChunk;
+      if (consumer == null) {
+        chunks.add(chunk);
+      } else {
+        // Consumer failures must not become a measurement fallback: it may
+        // already have published pages which cannot be rolled back.
+        cancellationToken.throwIfCancelled();
+        final sealedAndPublished = await cancellationToken.waitFor(
+          consumer(chunk, snapshot()),
+        );
+        cancellationToken.throwIfCancelled();
+        if (sealedAndPublished && chunk.flushAfterAppend) {
+          committedOffset = slice.endOffset;
+        }
+      }
       preferredWindowGraphemes = slice.endOffset - startOffset;
       startOffset = slice.endOffset;
       bufferedPageHtml = hasRemainder ? '' : '$bufferedPageHtml${slice.html}';
+      await workSlice.yieldIfNeeded();
     }
 
     cancellationToken.throwIfCancelled();
-    return NovelReaderFlowableComplexPaginationResult(
-      chunks: chunks,
-      boundaryCount: sliceSession.boundaries.length,
-      probeCount: probeCount,
-      cacheHitCount: cacheHitCount,
-      budgetExceededCount: budgetExceededCount,
-      minimumFragmentCount: minimumFragmentCount,
-      boundaryIndexBuildCount: boundaryIndexBuildCount,
-      boundaryIndexBuildDuration: boundaryIndexBuildDuration,
-      boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
-      boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
-    );
-  }
-
-  NovelReaderFlowableComplexPaginationResult _fallback(
-    NovelReaderFlowableComplexFallbackReason reason, {
-    int boundaryCount = 0,
-    int probeCount = 0,
-    int cacheHitCount = 0,
-    int budgetExceededCount = 0,
-    int minimumFragmentCount = 0,
-    int boundaryIndexBuildCount = 0,
-    Duration boundaryIndexBuildDuration = Duration.zero,
-    int boundaryIndexCacheHitCount = 0,
-    int boundaryIndexSingleFlightHitCount = 0,
-    double? measuredMinimumAtomHeight,
-    String? measuredMinimumAtomHtml,
-  }) {
-    return NovelReaderFlowableComplexPaginationResult(
-      chunks: const <NovelReaderFlowableComplexChunk>[],
-      boundaryCount: boundaryCount,
-      probeCount: probeCount,
-      cacheHitCount: cacheHitCount,
-      budgetExceededCount: budgetExceededCount,
-      minimumFragmentCount: minimumFragmentCount,
-      boundaryIndexBuildCount: boundaryIndexBuildCount,
-      boundaryIndexBuildDuration: boundaryIndexBuildDuration,
-      boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
-      boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
-      fallbackReason: reason,
-      measuredMinimumAtomHeight: measuredMinimumAtomHeight,
-      measuredMinimumAtomHtml: measuredMinimumAtomHtml,
-    );
+    return snapshot(includeCollectedChunks: onChunk == null);
   }
 
   void _validateAtom(NovelReaderClassifiedPaginationAtom atom) {

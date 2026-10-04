@@ -140,6 +140,9 @@ final class _DefaultNovelReaderComplexHtmlSliceSession
       endOffset: endOffset,
       hasRenderableContent: sliced.hasRenderableContent,
       domNodeCount: sliced.domNodeCount,
+      sourceRuneLength:
+          _index.sourceRuneAtGraphemeBoundary(endOffset) -
+          _index.sourceRuneAtGraphemeBoundary(startOffset),
     );
   }
 

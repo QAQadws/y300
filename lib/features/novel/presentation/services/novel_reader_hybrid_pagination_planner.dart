@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -184,7 +185,11 @@ final class DefaultNovelReaderHybridPaginationPlanner
           ),
         );
       },
-      onCancel: cancellationToken.cancel,
+      onCancel: () {
+        // StreamController also invokes onCancel after normal close. Only an
+        // early unsubscribe cancels work; a completed plan must remain valid.
+        if (!controller.isClosed) cancellationToken.cancel();
+      },
     );
     return controller.stream;
   }
@@ -363,19 +368,22 @@ final class DefaultNovelReaderHybridPaginationPlanner
       );
     }
 
-    Future<void> publishFinalPages({bool isComplete = false}) async {
+    Future<void> publishFinalPages({
+      bool isComplete = false,
+      NovelReaderPaginationPlan? completePlan,
+    }) async {
       if (onProgress == null) {
         return;
       }
       cancellationToken.throwIfCancelled();
-      final pages = composer.pages;
-      if (!isComplete && pages.length <= publishedPageCount) {
+      if (!isComplete && composer.pageCount <= publishedPageCount) {
         return;
       }
-      publishedPageCount = pages.length;
+      final plan = completePlan ?? snapshotPlan(composer.pages);
+      publishedPageCount = plan.pageCount;
       await onProgress(
         NovelReaderPaginationProgress(
-          plan: snapshotPlan(pages),
+          plan: plan,
           isComplete: isComplete,
           processedAtomCount: processedAtomCount,
           totalAtomCount: atoms.length,
@@ -413,13 +421,16 @@ final class DefaultNovelReaderHybridPaginationPlanner
       NovelReaderFlowableComplexFallbackReason reason, {
       double? measuredMinimumAtomHeight,
       String? measuredMinimumAtomHtml,
+      NovelReaderComplexHtmlSlice? remainingSlice,
     }) async {
       flowabilityFailureReasonCounts.update(
         reason,
         (value) => value + 1,
         ifAbsent: () => 1,
       );
-      final fallback = _atomicFallbackForFlowableAtom(classified);
+      final fallback = remainingSlice == null
+          ? _atomicFallbackForFlowableAtom(classified)
+          : _atomicFallbackForComplexTail(classified, remainingSlice);
       final block = await _measureAtomicFallback(
         atom: fallback,
         chapter: chapter,
@@ -545,7 +556,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
             final needsRiskStyleValidation =
                 riskStyleSignature != null &&
                 !validatedRiskStyleSignatures.contains(riskStyleSignature);
-            final candidatePageOrdinal = composer.pages.length;
+            final candidatePageOrdinal = composer.pageCount;
             final needsPageValidation =
                 !validatedSafePageOrdinals.contains(candidatePageOrdinal) &&
                 validationPolicy.shouldValidate(
@@ -658,7 +669,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
               accepted = backed;
               keepBackedChunksSeparate = true;
               firstChunkValidated = true;
-              validatedSafePageOrdinals.add(composer.pages.length);
+              validatedSafePageOrdinals.add(composer.pageCount);
               if (riskStyleSignature != null) {
                 validatedRiskStyleSignatures.add(riskStyleSignature);
               }
@@ -668,7 +679,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
               await workSlice.yieldIfNeeded();
               cancellationToken.throwIfCancelled();
               final chunk = accepted.chunks[index];
-              final pageOrdinal = composer.pages.length;
+              final pageOrdinal = composer.pageCount;
               final shouldValidate =
                   !(index == 0 && firstChunkValidated) &&
                   !validatedSafePageOrdinals.contains(pageOrdinal) &&
@@ -790,6 +801,45 @@ final class DefaultNovelReaderHybridPaginationPlanner
           case NovelReaderPaginationRoute.flowableComplexText:
           case NovelReaderPaginationRoute.rubyInline:
             complexBlockCount += 1;
+            final beforeAtom = (
+              boundaries: complexBoundaryCount,
+              builds: complexBoundaryIndexBuildCount,
+              buildDuration: complexBoundaryIndexBuildDuration,
+              indexHits: complexBoundaryIndexCacheHitCount,
+              joins: complexBoundaryIndexSingleFlightHitCount,
+              probes: complexSearchProbeCount,
+              searchHits: complexSearchCacheHitCount,
+              limits: complexSearchBudgetExceededCount,
+              minimums: minimumComplexFragmentCount,
+            );
+            void recordFlowableProgress(
+              NovelReaderFlowableComplexPaginationResult progress,
+            ) {
+              complexBoundaryCount =
+                  beforeAtom.boundaries + progress.boundaryCount;
+              complexBoundaryIndexBuildCount =
+                  beforeAtom.builds + progress.boundaryIndexBuildCount;
+              complexBoundaryIndexBuildDuration =
+                  beforeAtom.buildDuration +
+                  progress.boundaryIndexBuildDuration;
+              complexBoundaryIndexCacheHitCount =
+                  beforeAtom.indexHits + progress.boundaryIndexCacheHitCount;
+              complexBoundaryIndexSingleFlightHitCount =
+                  beforeAtom.joins + progress.boundaryIndexSingleFlightHitCount;
+              complexSearchProbeCount = beforeAtom.probes + progress.probeCount;
+              complexSearchCacheHitCount =
+                  beforeAtom.searchHits + progress.cacheHitCount;
+              complexSearchBudgetExceededCount =
+                  beforeAtom.limits + progress.budgetExceededCount;
+              minimumComplexFragmentCount =
+                  beforeAtom.minimums + progress.minimumFragmentCount;
+              if (progress.boundaryIndexBuildDuration >
+                  longestComplexIndexStepDuration) {
+                longestComplexIndexStepDuration =
+                    progress.boundaryIndexBuildDuration;
+              }
+            }
+            var consumerStarted = false;
             late final NovelReaderFlowableComplexPaginationResult flowable;
             try {
               flowable = await flowableComplexEngine.paginate(
@@ -799,9 +849,26 @@ final class DefaultNovelReaderHybridPaginationPlanner
                 key: key,
                 measureSession: session,
                 cancellationToken: cancellationToken,
+                onChunk: (chunk, progress) async {
+                  consumerStarted = true;
+                  cancellationToken.throwIfCancelled();
+                  recordFlowableProgress(progress);
+                  final sealedBefore = composer.pageCount;
+                  composer.appendFlowableComplexChunk(chunk);
+                  flowableComplexFragmentCount += 1;
+                  domSliceCount += 1;
+                  await publishFinalPages();
+                  cancellationToken.throwIfCancelled();
+                  // Full-plan callers retain sealed pages directly; streaming
+                  // callers confirm only after the immutable prefix is published.
+                  return chunk.flushAfterAppend &&
+                      composer.pageCount > sealedBefore &&
+                      (onProgress == null ||
+                          publishedPageCount == composer.pageCount);
+                },
               );
             } catch (error) {
-              if (_mustPropagate(error)) {
+              if (consumerStarted || _mustPropagate(error)) {
                 rethrow;
               }
               flowable = NovelReaderFlowableComplexPaginationResult(
@@ -816,38 +883,22 @@ final class DefaultNovelReaderHybridPaginationPlanner
               );
             }
             cancellationToken.throwIfCancelled();
-            complexBoundaryCount += flowable.boundaryCount;
-            complexBoundaryIndexBuildCount += flowable.boundaryIndexBuildCount;
-            complexBoundaryIndexBuildDuration +=
-                flowable.boundaryIndexBuildDuration;
-            if (flowable.boundaryIndexBuildDuration >
-                longestComplexIndexStepDuration) {
-              longestComplexIndexStepDuration =
-                  flowable.boundaryIndexBuildDuration;
-            }
-            complexBoundaryIndexCacheHitCount +=
-                flowable.boundaryIndexCacheHitCount;
-            complexBoundaryIndexSingleFlightHitCount +=
-                flowable.boundaryIndexSingleFlightHitCount;
-            complexSearchProbeCount += flowable.probeCount;
-            complexSearchCacheHitCount += flowable.cacheHitCount;
-            complexSearchBudgetExceededCount += flowable.budgetExceededCount;
-            minimumComplexFragmentCount += flowable.minimumFragmentCount;
+            recordFlowableProgress(flowable);
             if (flowable.fallbackReason case final reason?) {
               await fallbackFlowableAtom(
                 classified,
                 reason,
                 measuredMinimumAtomHeight: flowable.measuredMinimumAtomHeight,
                 measuredMinimumAtomHtml: flowable.measuredMinimumAtomHtml,
+                remainingSlice: flowable.remainingSlice,
               );
               continue;
             }
-            for (final chunk in flowable.chunks) {
-              cancellationToken.throwIfCancelled();
-              composer.appendFlowableComplexChunk(chunk);
-              flowableComplexFragmentCount += 1;
-              domSliceCount += 1;
-              await publishFinalPages();
+            if (flowable.chunks.isNotEmpty) {
+              throw const NovelReaderPaginationException(
+                code: 'complexChunkDeliveryMismatch',
+                message: 'A consumed complex atom returned duplicate chunks.',
+              );
             }
           case NovelReaderPaginationRoute.editStatus:
             complexBlockCount += 1;
@@ -893,7 +944,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
       cancellationToken.throwIfCancelled();
       final pages = composer.finish();
       final plan = snapshotPlan(pages);
-      await publishFinalPages(isComplete: true);
+      await publishFinalPages(isComplete: true, completePlan: plan);
       return plan;
     } finally {
       removeCancellationListener();
@@ -982,6 +1033,30 @@ final class DefaultNovelReaderHybridPaginationPlanner
     const route = NovelReaderPaginationRoute.atomicWidget;
     return NovelReaderClassifiedPaginationAtom(
       atom: classified.atom,
+      route: route,
+      reason: classified.reason,
+      layoutPolicy: layoutPolicyResolver.resolve(route),
+    );
+  }
+
+  NovelReaderClassifiedPaginationAtom _atomicFallbackForComplexTail(
+    NovelReaderClassifiedPaginationAtom classified,
+    NovelReaderComplexHtmlSlice tail,
+  ) {
+    final original = classified.atom;
+    const route = NovelReaderPaginationRoute.atomicWidget;
+    return NovelReaderClassifiedPaginationAtom(
+      atom: NovelReaderPaginationAtom(
+        atomId: '${original.atomId}:tail-${tail.startOffset}',
+        kind: original.kind,
+        html: tail.html,
+        startAnchor: tail.startAnchor,
+        endAnchor: tail.endAnchor,
+        textLength: tail.sourceRuneLength,
+        imageIndices: original.imageIndices,
+        breakability: original.breakability,
+        imagePagePolicy: original.imagePagePolicy,
+      ),
       route: route,
       reason: classified.reason,
       layoutPolicy: layoutPolicyResolver.resolve(route),

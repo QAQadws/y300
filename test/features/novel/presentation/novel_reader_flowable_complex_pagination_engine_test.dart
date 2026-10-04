@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -169,6 +170,314 @@ void main() {
     expect(result.chunks, hasLength(3));
     expect(searcher.preferredWindows, <int?>[null, 4, 4]);
   });
+
+  test('waits for publication before probing the next chunk', () async {
+    final session = _RecordingSession(_rangeHeight);
+    final consumed = <NovelReaderFlowableComplexChunk>[];
+    final progress = <NovelReaderFlowableComplexPaginationResult>[];
+    final entered = Completer<void>();
+    final receipt = Completer<bool>();
+    final pending = _paginate(
+      text: 'abcdefghijkl',
+      page: const NovelReaderPaginationPageContext(
+        bufferedHtml: '',
+        hasBufferedContent: false,
+        availableHeight: 40,
+      ),
+      chapter: chapter,
+      key: key,
+      session: session,
+      onChunk: (chunk, snapshot) async {
+        consumed.add(chunk);
+        progress.add(snapshot);
+        if (consumed.length == 1) {
+          entered.complete();
+          return receipt.future;
+        }
+        return true;
+      },
+    );
+
+    await entered.future;
+    final measuredBeforePublication = session.requests.length;
+    expect(measuredBeforePublication, greaterThan(0));
+    expect(progress.single.probeCount, measuredBeforePublication);
+    expect(progress.single.committedOffset, 0);
+    await Future<void>.delayed(Duration.zero);
+    expect(session.requests, hasLength(measuredBeforePublication));
+    expect(consumed, hasLength(1));
+
+    receipt.complete(true);
+    final result = await pending;
+    expect(consumed.map((chunk) => chunk.slice.endOffset), [4, 8, 12]);
+    expect(progress.map((snapshot) => snapshot.committedOffset), [0, 4, 8]);
+    expect(progress.every((snapshot) => snapshot.chunks.isEmpty), isTrue);
+    expect(progress.first.probeCount, measuredBeforePublication);
+    expect(result.probeCount, session.requests.length);
+    expect(result.chunks, isEmpty);
+    // Even a true final receipt cannot commit an open page buffer.
+    expect(result.committedOffset, 8);
+    expect(result.remainingSlice, isNull);
+  });
+
+  for (final lateFailure in [false, true]) {
+    test('cancellation ignores a late consumer '
+        '${lateFailure ? 'failure' : 'receipt'}', () async {
+      final token = NovelReaderPaginationCancellationToken();
+      final session = _RecordingSession(_rangeHeight);
+      final entered = Completer<void>();
+      final receipt = Completer<bool>();
+      var consumed = 0;
+      final pending = _paginate(
+        text: 'abcdefghijkl',
+        page: const NovelReaderPaginationPageContext(
+          bufferedHtml: '',
+          hasBufferedContent: false,
+          availableHeight: 40,
+        ),
+        chapter: chapter,
+        key: key,
+        session: session,
+        cancellationToken: token,
+        onChunk: (chunk, progress) {
+          consumed += 1;
+          entered.complete();
+          return receipt.future;
+        },
+      );
+      final stopped = expectLater(
+        pending,
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (error) => error.code,
+            'code',
+            'paginationCancelled',
+          ),
+        ),
+      );
+      await entered.future;
+      final measuredBeforeCancellation = session.requests.length;
+      token.cancel();
+      await stopped;
+      if (lateFailure) {
+        receipt.completeError(StateError('late consumer failure'));
+      } else {
+        receipt.complete(true);
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(consumed, 1);
+      expect(session.requests, hasLength(measuredBeforeCancellation));
+    });
+  }
+
+  test('propagates consumer errors without an atomic fallback', () async {
+    final error = StateError('publication failed');
+    final session = _RecordingSession(_rangeHeight);
+    var consumed = 0;
+    await expectLater(
+      _paginate(
+        text: 'abcdefghijkl',
+        page: const NovelReaderPaginationPageContext(
+          bufferedHtml: '',
+          hasBufferedContent: false,
+          availableHeight: 40,
+        ),
+        chapter: chapter,
+        key: key,
+        session: session,
+        onChunk: (chunk, progress) async {
+          consumed += 1;
+          throw error;
+        },
+      ),
+      throwsA(same(error)),
+    );
+    expect(consumed, 1);
+    expect(
+      session.requests.every((request) => request.startOffset == 0),
+      isTrue,
+    );
+  });
+
+  test(
+    'late measurement failure returns only the canonical unpublished tail',
+    () async {
+      const text = 'e\u0301  中';
+      final anchor =
+          const NovelReaderTextAnchor(
+            episodeId: 'episode-1',
+            nodeId: 'node-1',
+            textOffset: 7,
+            formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+          ).copyWith(
+            textIdentity: NovelReaderAnchorFormat.textIdentity(
+              '前文前文前文前e\u0301 中',
+            ),
+          );
+      final published = <NovelReaderFlowableComplexChunk>[];
+      final result =
+          await const DefaultNovelReaderFlowableComplexPaginationEngine()
+              .paginate(
+                atom: _atom(
+                  text,
+                  sourceAnchorProjection: NovelReaderSourceAnchorProjection(
+                    baseAnchor: anchor,
+                    semanticOffsetsBySourceRuneBoundary: const [
+                      7,
+                      8,
+                      9,
+                      10,
+                      10,
+                      11,
+                    ],
+                  ),
+                ),
+                page: const NovelReaderPaginationPageContext(
+                  bufferedHtml: '',
+                  hasBufferedContent: false,
+                  availableHeight: 20,
+                ),
+                chapter: chapter,
+                key: key,
+                measureSession: _RecordingSession((request) {
+                  if (request.startOffset! > 0) {
+                    throw StateError('later layout failure');
+                  }
+                  return _rangeHeight(request);
+                }),
+                cancellationToken: NovelReaderPaginationCancellationToken(),
+                onChunk: (chunk, progress) async {
+                  published.add(chunk);
+                  return true;
+                },
+              );
+
+      expect(
+        result.fallbackReason,
+        NovelReaderFlowableComplexFallbackReason.measurementFailure,
+      );
+      expect(published, hasLength(1));
+      expect(result.chunks, isEmpty);
+      expect(result.committedOffset, 2);
+      final tail = result.remainingSlice!;
+      expect(tail.startOffset, 2);
+      expect(tail.endOffset, 4);
+      expect(tail.sourceRuneLength, 2);
+      expect(tail.startAnchor.textOffset, 10);
+      expect(tail.endAnchor.textOffset, 11);
+      expect(
+        tail.startAnchor.formatVersion,
+        NovelReaderAnchorFormat.semanticCodePoints,
+      );
+      expect(tail.startAnchor.textIdentity, anchor.textIdentity);
+      expect(tail.endAnchor.textIdentity, anchor.textIdentity);
+      expect(
+        html_parser
+            .parseFragment('${published.single.slice.html}${tail.html}')
+            .text,
+        text,
+      );
+    },
+  );
+
+  test('an unacknowledged chunk remains in the fallback tail', () async {
+    const text = 'abcdefghijkl';
+    var consumed = 0;
+    final result = await _paginate(
+      text: text,
+      page: const NovelReaderPaginationPageContext(
+        bufferedHtml: '',
+        hasBufferedContent: false,
+        availableHeight: 40,
+      ),
+      chapter: chapter,
+      key: key,
+      session: _RecordingSession((request) {
+        if (request.startOffset! > 0) {
+          throw StateError('later layout failure');
+        }
+        return _rangeHeight(request);
+      }),
+      onChunk: (chunk, progress) async {
+        consumed += 1;
+        return false;
+      },
+    );
+    expect(consumed, 1);
+    expect(result.committedOffset, 0);
+    expect(result.remainingSlice!.startOffset, 0);
+    expect(html_parser.parseFragment(result.remainingSlice!.html).text, text);
+  });
+
+  test('an open final chunk does not commit even after consumption', () async {
+    var consumed = 0;
+    final result = await _paginate(
+      text: 'abcd',
+      page: const NovelReaderPaginationPageContext(
+        bufferedHtml: '',
+        hasBufferedContent: false,
+        availableHeight: 100,
+      ),
+      chapter: chapter,
+      key: key,
+      session: _RecordingSession(_rangeHeight),
+      onChunk: (chunk, progress) async {
+        expect(chunk.flushAfterAppend, isFalse);
+        consumed += 1;
+        return false;
+      },
+    );
+    expect(consumed, 1);
+    expect(result.committedOffset, 0);
+    expect(result.chunks, isEmpty);
+  });
+
+  test(
+    'reuses the measured indivisible tail after a published prefix',
+    () async {
+      final text = List<String>.filled(9000, '甲').join();
+      final session = _RecordingSession((request) {
+        return request.startOffset == 0 ? 10 : 200;
+      });
+      final published = <NovelReaderFlowableComplexChunk>[];
+      final result =
+          await const DefaultNovelReaderFlowableComplexPaginationEngine()
+              .paginate(
+                atom: _atom(
+                  'A<ruby>$text<rt>注</rt></ruby>',
+                  route: NovelReaderPaginationRoute.rubyInline,
+                ),
+                page: const NovelReaderPaginationPageContext(
+                  bufferedHtml: '',
+                  hasBufferedContent: false,
+                  availableHeight: 100,
+                ),
+                chapter: chapter,
+                key: key,
+                measureSession: session,
+                cancellationToken: NovelReaderPaginationCancellationToken(),
+                onChunk: (chunk, progress) async {
+                  published.add(chunk);
+                  return true;
+                },
+              );
+      expect(published, hasLength(1));
+      expect(html_parser.parseFragment(published.single.slice.html).text, 'A');
+      expect(result.committedOffset, 1);
+      expect(result.remainingSlice!.startOffset, 1);
+      expect(
+        result.fallbackReason,
+        NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow,
+      );
+      expect(result.measuredMinimumAtomHeight, 200);
+      expect(result.measuredMinimumAtomHtml, session.requests.last.html);
+      expect(result.measuredMinimumAtomHtml, result.remainingSlice!.html);
+      expect(
+        session.requests.where((request) => request.startOffset == 1),
+        hasLength(1),
+      );
+    },
+  );
 
   for (final code in [
     'complexFitSearchCandidateLimitExceeded',
@@ -439,6 +748,8 @@ void main() {
         NovelReaderFlowableComplexFallbackReason.boundaryIndexFailure,
       );
       expect(result.chunks, isEmpty);
+      expect(result.committedOffset, 0);
+      expect(result.remainingSlice, isNull);
       expect(session.requests, isEmpty);
     }
   });
@@ -592,6 +903,8 @@ Future<NovelReaderFlowableComplexPaginationResult> _paginate({
   required NovelReaderPreparedChapter chapter,
   required NovelReaderPaginationKey key,
   required NovelReaderPaginationMeasureSession session,
+  NovelReaderPaginationCancellationToken? cancellationToken,
+  NovelReaderFlowableComplexChunkConsumer? onChunk,
 }) {
   return const DefaultNovelReaderFlowableComplexPaginationEngine().paginate(
     atom: _atom(text),
@@ -599,7 +912,9 @@ Future<NovelReaderFlowableComplexPaginationResult> _paginate({
     chapter: chapter,
     key: key,
     measureSession: session,
-    cancellationToken: NovelReaderPaginationCancellationToken(),
+    cancellationToken:
+        cancellationToken ?? NovelReaderPaginationCancellationToken(),
+    onChunk: onChunk,
   );
 }
 

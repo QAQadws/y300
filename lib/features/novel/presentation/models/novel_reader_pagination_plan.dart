@@ -3,6 +3,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_page_snapshot.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 
@@ -86,7 +87,9 @@ class NovelReaderPaginationPlan {
         const <NovelReaderFlowableComplexFallbackReason, int>{},
     List<NovelReaderPaginationMeasurementSample> measurementSamples =
         const <NovelReaderPaginationMeasurementSample>[],
-  }) : pages = List<NovelReaderPageFragment>.unmodifiable(pages),
+  }) : pages = pages is NovelReaderPageSnapshot
+           ? pages
+           : List<NovelReaderPageFragment>.unmodifiable(pages),
        atomKindCounts = Map<NovelReaderPaginationAtomKind, int>.unmodifiable(
          atomKindCounts,
        ),

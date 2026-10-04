@@ -1066,12 +1066,11 @@ void main() {
     }
   });
 
-  // Stage 4 replaces whole-atom publication/fallback with a stable prefix.
   for (final failSecondPage in <bool>[false, true]) {
     test(
       failSecondPage
-          ? 'stage 0 falls back the whole complex atom after a later probe fails'
-          : 'stage 0 waits for the whole complex atom before publishing its pages',
+          ? 'a later complex failure preserves the published prefix and falls back only the tail'
+          : 'publishes a stable complex first page before measuring the second',
       () async {
         final text = List<String>.filled(96, '甲').join();
         final chapter = await _prepare(
@@ -1124,13 +1123,24 @@ void main() {
             isTrue,
           );
           expect(adapter.requests.last.startOffset, 8);
-          expect(events, isEmpty);
+          expect(events, hasLength(1));
+          expect(events.single.isComplete, isFalse);
+          expect(events.single.plan.pageCount, 1);
+          expect(
+            _visibleText(events.single.plan.pages.single.html),
+            text.substring(0, 8),
+          );
+          expect(events.single.plan.flowableComplexFragmentCount, 1);
+          expect(events.single.plan.complexBoundaryIndexBuildCount, 1);
+          expect(events.single.plan.complexSearchProbeCount, greaterThan(0));
         } finally {
           releaseSecondPage.complete();
         }
 
         final updates = await completed;
         final plan = updates.last.plan;
+        expect(updates.first.plan.pageCount, 1);
+        expect(plan.pages.first, same(updates.first.plan.pages.first));
         expect(candidateDomNodeCounts, hasLength(adapter.requests.length));
         expect(
           candidateDomNodeCounts.fold<int>(0, (total, count) => total + count),
@@ -1144,12 +1154,15 @@ void main() {
         );
         expect(plan.pages.map((page) => _visibleText(page.html)).join(), text);
         if (failSecondPage) {
-          expect(plan.pageCount, 1);
+          expect(plan.pageCount, 2);
           expect(plan.atomicWidgetPageCount, 1);
-          expect(plan.flowableComplexFragmentCount, 0);
-          expect(plan.pages.single.requiresInnerScroll, isTrue);
-          expect(plan.pages.single.startAnchor.textOffset, 0);
-          expect(plan.pages.single.endAnchor.textOffset, text.length);
+          expect(plan.flowableComplexFragmentCount, 1);
+          expect(plan.pages.last.requiresInnerScroll, isTrue);
+          expect(plan.pages.first.startAnchor.textOffset, 0);
+          expect(plan.pages.first.endAnchor.textOffset, 8);
+          expect(plan.pages.last.startAnchor.textOffset, 8);
+          expect(plan.pages.last.endAnchor.textOffset, text.length);
+          expect(adapter.requests.last.html, isNot(contains(text)));
           expect(plan.flowabilityFailureReasonCounts, {
             NovelReaderFlowableComplexFallbackReason.measurementFailure: 1,
           });
@@ -1162,6 +1175,51 @@ void main() {
       },
     );
   }
+
+  test(
+    'an unmeasurable failed tail leaves the stable prefix available',
+    () async {
+      final text = '甲' * 9000;
+      final chapter = await _prepare(
+        '<p><font face="Fantasy Novel Font">$text</font></p>',
+      );
+      final adapter = _RecordingMeasureAdapter(
+        heightFor: (request, _) =>
+            (request.endOffset! - request.startOffset!) * 10.0,
+        beforeMeasure: (request) async {
+          if (request.startOffset! > 0) {
+            throw StateError('failed uncommitted tail');
+          }
+        },
+      );
+      final updates = <NovelReaderPaginationProgress>[];
+      await expectLater(
+        _planner(adapter)
+            .planIncrementally(
+              chapter: chapter,
+              key: _key(chapter, height: 80),
+              cancellationToken: NovelReaderPaginationCancellationToken(),
+            )
+            .map((progress) {
+              updates.add(progress);
+              return progress;
+            })
+            .toList(),
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (e) => e.code,
+            'code',
+            'complexFitSearchCandidateLimitExceeded',
+          ),
+        ),
+      );
+      expect(updates, hasLength(1));
+      expect(updates.single.isComplete, isFalse);
+      expect(updates.single.plan.pageCount, 1);
+      expect(_visibleText(updates.single.plan.pages.single.html), '甲' * 8);
+      expect(adapter.requests.every((r) => r.html.length <= 8192), isTrue);
+    },
+  );
 
   test(
     'falls back atomically when the minimum complex fragment overflows',
@@ -1348,6 +1406,7 @@ final class _RejectingFlowableEngine
     required NovelReaderPaginationKey key,
     required NovelReaderPaginationMeasureSession measureSession,
     required NovelReaderPaginationCancellationToken cancellationToken,
+    NovelReaderFlowableComplexChunkConsumer? onChunk,
   }) async {
     throw NovelReaderPaginationException(
       code: code,

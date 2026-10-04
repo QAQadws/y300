@@ -3,6 +3,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_classified_
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_page_snapshot.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
@@ -25,7 +26,8 @@ final class NovelReaderPaginationPageComposer {
   final double pageHeight;
   final double lineHeight;
   final int maxPages;
-  final List<NovelReaderPageFragment> _pages = <NovelReaderPageFragment>[];
+  final NovelReaderPageSnapshotBuilder _pages =
+      NovelReaderPageSnapshotBuilder();
   _ComposedPageBuffer? _buffer;
   StringBuffer? _pendingStructuralHtml;
   NovelReaderTextAnchor? _pendingStructuralStart;
@@ -48,8 +50,9 @@ final class NovelReaderPaginationPageComposer {
     );
   }
 
-  List<NovelReaderPageFragment> get pages =>
-      List<NovelReaderPageFragment>.unmodifiable(_pages);
+  int get pageCount => _pages.length;
+
+  NovelReaderPageSnapshot get pages => _pages.snapshot;
 
   bool canAppendComplexBlock(NovelReaderComplexBlockPage block) {
     return hasBufferedContent &&

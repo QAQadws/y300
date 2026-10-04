@@ -5,6 +5,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_complex_blo
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_page_snapshot.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
@@ -135,6 +136,43 @@ void main() {
     expect(pages[1].gapReason, NovelReaderPageGapReason.dedicatedTable);
     expect(pages[2].html, 'after');
   });
+
+  test('snapshots share sealed pages and exclude the changing open buffer', () {
+    final composer = NovelReaderPaginationPageComposer(
+      pageHeight: 100,
+      lineHeight: 20,
+    );
+    final empty = composer.pages;
+    composer.appendTextChunk(_textChunk('first', usedHeight: 40));
+
+    expect(composer.pageCount, 0);
+    expect(composer.pages, same(empty));
+    expect(empty, isEmpty);
+    composer.appendTextChunk(_textChunk('second', usedHeight: 60));
+    final sealed = composer.pages;
+    final firstPage = sealed.single;
+
+    expect(sealed, isA<NovelReaderPageSnapshot>());
+    expect(composer.pageCount, 1);
+    expect(firstPage.html, 'firstsecond');
+    expect(firstPage.anchorRanges, hasLength(2));
+    expect(composer.pages, same(sealed));
+    composer.appendTextChunk(_textChunk('tail', usedHeight: 20));
+    expect(composer.pages, same(sealed));
+    expect(composer.pageCount, 1);
+
+    final complete = composer.finish();
+    expect(complete, same(composer.pages));
+    expect(composer.pageCount, 2);
+    expect(complete.first, same(firstPage));
+    expect(complete.last.html, 'tail');
+    expect(sealed, hasLength(1));
+    expect(sealed.single.html, 'firstsecond');
+    expect(empty, isEmpty);
+    expect(composer.finish(), same(complete));
+    expect(() => sealed.single.anchorRanges.clear(), throwsUnsupportedError);
+    expect(() => complete.clear(), throwsUnsupportedError);
+  });
 }
 
 NovelReaderFlowableComplexChunk _complexChunk(
@@ -159,6 +197,7 @@ NovelReaderFlowableComplexChunk _complexChunk(
       ),
       startOffset: start,
       endOffset: end,
+      sourceRuneLength: end - start,
       hasRenderableContent: true,
     ),
     composedHeight: composedHeight,
