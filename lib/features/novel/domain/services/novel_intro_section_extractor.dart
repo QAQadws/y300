@@ -12,8 +12,7 @@ import 'package:y300/features/novel/domain/services/novel_chapter_title_candidat
 ///    - 仅 intro 命中：取 [intro, 结尾]
 ///    - 其它（都没 / 顺序异常）：返回 null（不更新简介）
 ///
-/// 这是与 [`IntroBeforeFirstChapterRule`] 互补的另一条简介路径：后者
-/// 用首章标题之前的文字作为简介；前者用人工目录标记作为边界。
+/// 仅更新 source metadata 中的来源简介；用户自定义简介由 library state 保存。
 abstract class NovelIntroSectionExtractor {
   const NovelIntroSectionExtractor();
 

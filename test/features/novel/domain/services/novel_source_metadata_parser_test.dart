@@ -84,6 +84,55 @@ void main() {
       expect(metadata.coverImageUrl, 'https://cdn.example.test/cover.webp');
     });
 
+    test('uses a first-post attachment-only image as cover', () {
+      final metadata = parser.parseFirstPost(
+        seed: const NovelSourceSeed(fid: '49', tid: '200'),
+        detail: _detail(
+          posts: <ThreadPost>[
+            _post(
+              message: '<p>正文A</p>',
+              attachmentImages: const <ForumPostAttachmentImage>[
+                ForumPostAttachmentImage(
+                  aid: '1',
+                  url: 'data/attachment/forum/',
+                  attachment: 'cover.jpg',
+                  filename: 'cover.jpg',
+                  attachimg: '1',
+                  ext: 'jpg',
+                ),
+              ],
+            ),
+          ],
+        ),
+        ingestedAt: ingestedAt,
+      );
+
+      expect(
+        metadata.coverImageUrl,
+        'https://bbs.yamibo.com/data/attachment/forum/cover.jpg',
+      );
+    });
+
+    test(
+      'keeps the first-post intro before the catalog in source metadata',
+      () {
+        final metadata = parser.parseFirstPost(
+          seed: const NovelSourceSeed(fid: '49', tid: '200'),
+          detail: _detail(
+            posts: <ThreadPost>[
+              _post(
+                message: '<p>简介：本文讲述</p><p>一段感人的故事。</p><p>目录</p><p>第1章 开始</p>',
+              ),
+            ],
+          ),
+          ingestedAt: ingestedAt,
+        );
+
+        expect(metadata.sourceIntro, '简介：本文讲述\n一段感人的故事。');
+        expect(metadata.catalogEntries, isEmpty);
+      },
+    );
+
     test('rejects missing first post and invalid publisher id', () {
       expect(
         () => parser.parseFirstPost(
@@ -106,6 +155,29 @@ void main() {
 
   group('NovelFirstPostCatalogExtractor', () {
     const extractor = NovelFirstPostCatalogExtractor();
+
+    test('keeps chapter links while excluding the catalog self link', () {
+      final entries = extractor.extract(
+        threadTid: '521519',
+        firstPost: _post(
+          pid: '40213901',
+          message: '''
+            <a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=521519&amp;pid=40213901">目录</a>
+            <a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=521519&amp;pid=40213902">Episode 1</a>
+            <a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=521519&amp;pid=40213904">Episode 2</a>
+          ''',
+        ),
+      );
+
+      expect(entries.map((entry) => entry.pid), <String>[
+        '40213902',
+        '40213904',
+      ]);
+      expect(entries.map((entry) => entry.title), <String>[
+        'Episode 1',
+        'Episode 2',
+      ]);
+    });
 
     test('deduplicates same-thread findpost links without decoding noise', () {
       final entries = extractor.extract(
@@ -154,6 +226,8 @@ ThreadPost _post({
   String authorId = '99',
   String message = '<p>简介</p><p>目录</p>',
   int number = 1,
+  List<ForumPostAttachmentImage> attachmentImages =
+      const <ForumPostAttachmentImage>[],
 }) {
   return ThreadPost(
     pid: pid,
@@ -163,6 +237,7 @@ ThreadPost _post({
     number: number,
     isFirst: number == 1,
     dateline: '2026-07-13',
+    attachmentImages: attachmentImages,
   );
 }
 

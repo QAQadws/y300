@@ -28,7 +28,6 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
-import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
@@ -55,7 +54,6 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
@@ -1638,18 +1636,6 @@ class _FakeNovelRepository implements NovelRepository {
     required String novelId,
   }) async => null;
 
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({
-    required String novelId,
-    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
-    FavoriteSyncExecutionContext? executionContext,
-  }) async {
-    return const NovelEpisodeRefreshResult(
-      insertedCount: 0,
-      updatedCount: 0,
-      totalCount: 0,
-    );
-  }
-
   @override
   Future<void> removeFromShelf({required String novelId}) async {}
 
@@ -1674,11 +1660,6 @@ class _FakeNovelRepository implements NovelRepository {
     int anchorTextOffset = 0,
     String? paginationKey,
     double progressPercent = 0,
-  }) async {}
-
-  Future<void> upsertNovelBySeed({
-    required NovelRefreshSeed seed,
-    FavoriteSyncExecutionContext? executionContext,
   }) async {}
 
   @override

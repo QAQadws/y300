@@ -3,17 +3,23 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-const _legacyRepository =
-    'lib/features/novel/data/repositories/local_novel_repository.dart';
-
-// These declarations and the fixture repository remain explicit migration debt.
-// They need not keep existing, but new production consumers must not be added.
-const _legacyDeclarationOwners = <String, String>{
-  'LegacyNovelThreadGateway':
-      'lib/features/novel/domain/models/novel_thread_models.dart',
-  'NovelEpisodeDiscoveryService':
-      'lib/features/novel/domain/services/novel_episode_discovery_service.dart',
-};
+// Fixtures seed current storage contracts directly. No production declaration
+// or repository retains an exception for the retired discovery/update chain.
+const _retiredIdentifiers = <String>[
+  'LegacyNovelThreadGateway',
+  'NovelEpisodeDiscoveryService',
+  'NovelRefreshSeed',
+  'NovelEpisodeRefreshResult',
+  'NovelRefreshPlan',
+  'NovelEpisodeRefreshMode',
+  'NovelDiscoveryOptions',
+  'NovelSameThreadCatalogExtractor',
+  'NovelParsingRule',
+  'NovelParsingContext',
+  'NovelParsingDebugInfo',
+  'NovelSyncLogger',
+  'upsertNovelBySeed',
+];
 
 void main() {
   test('production code cannot enable fixture-only novel dependencies', () {
@@ -30,7 +36,7 @@ void main() {
       isEmpty,
       reason:
           'Production ingest and updates must use source metadata and chapter '
-          'sync services; legacy fixture APIs may remain in their current owner.',
+          'sync services; fixtures must not restore retired production APIs.',
     );
   });
 
@@ -93,8 +99,18 @@ repository
       ),
       isEmpty,
     );
+    const repositoryPath =
+        'lib/features/novel/data/repositories/local_novel_repository.dart';
     expect(
-      _dependencyViolations(_legacyRepository, '''
+      _dependencyViolations(repositoryPath, '''
+final repository = LocalNovelRepository(database, stateRepository: state);
+final metadata = DefaultNovelSourceMetadataParser();
+final sync = DefaultNovelChapterSyncService(threadGateway: gateway);
+'''),
+      isEmpty,
+    );
+    expect(
+      _dependencyViolations(repositoryPath, '''
 class LocalNovelRepository {
   LocalNovelRepository(database, {
     LegacyNovelThreadGateway? threadGateway,
@@ -103,46 +119,47 @@ class LocalNovelRepository {
   Future<void> upsertNovelBySeed({required NovelRefreshSeed seed}) async {}
   Future<void> refreshEpisodes({required String novelId}) async {}
 }
-'''),
-      isEmpty,
-    );
-    expect(
-      _dependencyViolations(
-        _legacyRepository,
-        'upsertNovelBySeed(seed: seed); refreshEpisodes(novelId: id);',
-      ),
-      hasLength(2),
+''').map((violation) => violation.substring(violation.indexOf(': ') + 2)),
+      unorderedEquals(<String>[
+        'LegacyNovelThreadGateway',
+        'NovelEpisodeDiscoveryService',
+        'NovelRefreshSeed',
+        'upsertNovelBySeed',
+        'refreshEpisodes(novelId: ...)',
+      ]),
     );
   });
+
+  test(
+    'retired DTOs and services cannot return as production declarations',
+    () {
+      for (final identifier in _retiredIdentifiers) {
+        final violations = _dependencyViolations(
+          'lib/features/novel/domain/retired.dart',
+          'class $identifier {}',
+        );
+        expect(violations, <String>[
+          'lib/features/novel/domain/retired.dart: $identifier',
+        ]);
+      }
+    },
+  );
 }
 
 List<String> _dependencyViolations(String path, String source) {
-  final isLegacyRepository = path == _legacyRepository;
   final code = _maskCommentsAndStrings(source);
   final violations = <String>[];
   void report(String edge) => violations.add('$path: $edge');
 
-  for (final entry in _legacyDeclarationOwners.entries) {
-    if (!isLegacyRepository &&
-        path != entry.value &&
-        _identifier(entry.key).hasMatch(code)) {
-      report(entry.key);
+  for (final identifier in _retiredIdentifiers) {
+    if (_identifier(identifier).hasMatch(code)) {
+      report(identifier);
     }
-  }
-  final seedCall = _invocationArguments(
-    code,
-    'upsertNovelBySeed',
-  ).any((arguments) => RegExp(r'\bseed\s*:').hasMatch(arguments));
-  if ((!isLegacyRepository &&
-          _identifier('upsertNovelBySeed').hasMatch(code)) ||
-      seedCall) {
-    report('upsertNovelBySeed');
   }
 
   // Comic detail has a different refreshEpisodes API. The legacy novel method
   // requires novelId; also reject novel-local tear-offs before they can escape.
   final novelLocalReference =
-      !isLegacyRepository &&
       path.startsWith('lib/features/novel/') &&
       _identifier('refreshEpisodes').hasMatch(code);
   final novelRefreshCall = _invocationArguments(

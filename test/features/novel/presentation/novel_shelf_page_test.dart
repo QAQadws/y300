@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_view_preferences_providers.dart';
 import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
@@ -15,7 +14,6 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/presentation/novel_shelf_page.dart';
 
 void main() {
@@ -186,18 +184,6 @@ class _FakeNovelRepository implements NovelRepository {
     required String toCategoryId,
   }) async {}
 
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({
-    required String novelId,
-    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
-    FavoriteSyncExecutionContext? executionContext,
-  }) async {
-    return const NovelEpisodeRefreshResult(
-      insertedCount: 0,
-      updatedCount: 0,
-      totalCount: 0,
-    );
-  }
-
   @override
   Future<void> removeFromShelf({required String novelId}) async {}
 
@@ -222,11 +208,6 @@ class _FakeNovelRepository implements NovelRepository {
     int anchorTextOffset = 0,
     String? paginationKey,
     double progressPercent = 0,
-  }) async {}
-
-  Future<void> upsertNovelBySeed({
-    required NovelRefreshSeed seed,
-    FavoriteSyncExecutionContext? executionContext,
   }) async {}
 
   @override

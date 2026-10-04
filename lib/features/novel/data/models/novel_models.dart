@@ -1,4 +1,3 @@
-import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 
 export 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
@@ -129,27 +128,6 @@ class NovelReadingProgress {
   final int anchorTextOffset;
   final String? paginationKey;
   final double progressPercent;
-}
-
-class NovelEpisodeRefreshResult {
-  const NovelEpisodeRefreshResult({
-    required this.insertedCount,
-    required this.updatedCount,
-    required this.totalCount,
-  });
-
-  final int insertedCount;
-  final int updatedCount;
-  final int totalCount;
-}
-
-class NovelRefreshSeed extends NovelSourceSeed {
-  const NovelRefreshSeed({
-    required super.fid,
-    required super.tid,
-    super.typeid,
-    super.tagName,
-  });
 }
 
 class NovelShelfCategory {

@@ -41,7 +41,7 @@
 - `library_shared`：漫画、小说、收藏共用的书架/详情/选择模式抽象。`LibraryStateRepository` 与可选书签查询端口归 domain/repositories，持久化实现与 provider 归 data。包含模块 adapter、统一 controller/page、排序筛选、视图偏好、书架状态、刷新总线、任务进度/通知、批量阅读状态、封面预热和作品清理契约。
 - `messages`：原生消息目录、单人及已有群组对话、用户名发送、提醒列表与按类型/作者屏蔽。读取和命令经 forum client 契约；负责账号隔离、取消、分页合并、延迟失效刷新、输入生命周期和正文展示。跨 feature 链接由 `app/navigation/message_routes.dart` 装配，不自建协议或持久化私信缓存。
 - `more`：更多页、关于页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/手动导出和 Debug 原型工具。
-- `novel`：小说数据、书架、详情和阅读器。作者帖正文经 forum client `threadAuthorPosts` 契约以 `version=1` 读取；负责来源元数据与章节同步/恢复、帖子章节网关、正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
+- `novel`：小说数据、书架、详情和阅读器。作者帖正文经 forum client `threadAuthorPosts` 契约以 `version=1` 读取；生产更新统一使用当前来源 metadata、chapter sync 与 update service，LocalNovelRepository 仅保留活跃本地持久化，不承载 fixture 或旧刷新链。负责来源元数据与章节同步/恢复、帖子章节网关、正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。
 - `posting`：新主题发布流程。发帖准备与提交经 forum client preparation/command 契约；负责版块/类型/标签/特殊主题与投票建模、提交结果映射，并在 `composer_shared` 之上提供发帖 controller/page。
 - `profile`：当前用户与指定用户资料、账号摘要、每日签到、好友列表、日志列表/详情及原生 HTML 日志编辑器。当前用户资料、账号摘要、公开资料/日志、好友目录/删除和签到经 forum client 契约；好友页包含我的好友、在线会员、最近访客和我的足迹，按已验证账号与会话 revision 隔离路由状态，不持久化目录。提供原生主题／回复、日志、好友目录、消息中心与单人对话入口，完整消息工作流归 `messages`；好友卡片按协议返回的资料链接复用既有 URL 路由，资料链接/私信路由由 `app/navigation/friend_routes.dart` 装配。资料页读取和好友申请／接受／解除经 forum client 契约，并按 viewer、会话代次、取消与请求 generation 隔离。原生日志详情在成功内容可见后经 history 的 recorder 保存浏览记录。新建日志由独立领域快照/repository 和保存协调组件接入账号草稿，SQLite `blog_drafts.db` v1 每账号一份、不自动过期；编辑已有日志和评论不保存草稿。本人资料设置按已验证的服务器目的地址进入绑定账号的受管 WebView。好友操作只在 `applied` 后更新页面，未知结果不重发，临时表单与输入不持久化。
 - `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。

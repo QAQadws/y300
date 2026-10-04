@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -14,7 +13,6 @@ import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -1227,18 +1225,6 @@ class _ControllerNovelRepository implements NovelRepository {
     required String newName,
   }) async {}
 
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({
-    required String novelId,
-    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
-    FavoriteSyncExecutionContext? executionContext,
-  }) async {
-    return NovelEpisodeRefreshResult(
-      insertedCount: 0,
-      updatedCount: 0,
-      totalCount: episodes.length,
-    );
-  }
-
   @override
   Future<void> saveReadingProgress({
     required String novelId,
@@ -1267,11 +1253,6 @@ class _ControllerNovelRepository implements NovelRepository {
       progressPercent: progressPercent,
     );
   }
-
-  Future<void> upsertNovelBySeed({
-    required NovelRefreshSeed seed,
-    FavoriteSyncExecutionContext? executionContext,
-  }) async {}
 
   @override
   Future<void> addReaderBookmark({

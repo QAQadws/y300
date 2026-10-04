@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
@@ -13,7 +12,6 @@ import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
-import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
@@ -196,7 +194,6 @@ void main() {
     expect(result.insertedCount, 1);
     expect(result.updatedCount, 2);
     expect(fullResult.outcomeCode, DetailRefreshOutcomeCode.chaptersChanged);
-    expect(repository.lastRefreshMode, isNull);
   });
 
   test('loadHeader exposes source asset without synchronous caching', () async {
@@ -420,9 +417,6 @@ class _FakeNovelRepository implements NovelRepository {
   final double? customCoverFocusY;
   final bool coverHidden;
 
-  /// 最近一次 refreshEpisodes 收到的 mode —— 用来断言 adapter 是否传了增量模式。
-  NovelEpisodeRefreshMode? lastRefreshMode;
-
   @override
   Future<String> createCategory({required String name}) async => 'created';
 
@@ -510,19 +504,6 @@ class _FakeNovelRepository implements NovelRepository {
   @override
   Future<void> purgeWork({required String novelId}) async {}
 
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({
-    required String novelId,
-    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
-    FavoriteSyncExecutionContext? executionContext,
-  }) async {
-    lastRefreshMode = mode;
-    return const NovelEpisodeRefreshResult(
-      insertedCount: 0,
-      updatedCount: 0,
-      totalCount: 0,
-    );
-  }
-
   @override
   Future<void> removeFromShelf({required String novelId}) async {}
 
@@ -544,11 +525,6 @@ class _FakeNovelRepository implements NovelRepository {
     int anchorTextOffset = 0,
     String? paginationKey,
     double progressPercent = 0,
-  }) async {}
-
-  Future<void> upsertNovelBySeed({
-    required NovelRefreshSeed seed,
-    FavoriteSyncExecutionContext? executionContext,
   }) async {}
 
   @override

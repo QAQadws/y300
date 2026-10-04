@@ -37,7 +37,6 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
-import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_page.dart';
@@ -56,7 +55,6 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
@@ -5132,8 +5130,6 @@ void main() {
       expect(find.text('小说 · 原创'), findsNothing);
       expect(find.byKey(const Key('comic-add-to-shelf-button')), findsNothing);
       expect(find.byKey(const Key('comic-in-shelf-button')), findsNothing);
-      expect(novelRepository.upsertCalled, isFalse);
-      expect(novelRepository.refreshCalled, isFalse);
     });
 
     testWidgets(
@@ -7332,8 +7328,6 @@ class _NoopComposerImageUploadCoordinator
 }
 
 class _FakeNovelRepository implements NovelRepository {
-  bool upsertCalled = false;
-  bool refreshCalled = false;
   final Set<String> _ids = <String>{};
 
   @override
@@ -7403,19 +7397,6 @@ class _FakeNovelRepository implements NovelRepository {
     required String novelId,
   }) async => null;
 
-  Future<NovelEpisodeRefreshResult> refreshEpisodes({
-    required String novelId,
-    NovelEpisodeRefreshMode mode = NovelEpisodeRefreshMode.full,
-    FavoriteSyncExecutionContext? executionContext,
-  }) async {
-    refreshCalled = true;
-    return const NovelEpisodeRefreshResult(
-      insertedCount: 1,
-      updatedCount: 0,
-      totalCount: 1,
-    );
-  }
-
   @override
   Future<void> removeFromShelf({required String novelId}) async {
     _ids.remove(novelId);
@@ -7445,14 +7426,6 @@ class _FakeNovelRepository implements NovelRepository {
     String? paginationKey,
     double progressPercent = 0,
   }) async {}
-
-  Future<void> upsertNovelBySeed({
-    required NovelRefreshSeed seed,
-    FavoriteSyncExecutionContext? executionContext,
-  }) async {
-    upsertCalled = true;
-    _ids.add('novel:${seed.fid}:${seed.tid}');
-  }
 
   @override
   Future<void> addReaderBookmark({
