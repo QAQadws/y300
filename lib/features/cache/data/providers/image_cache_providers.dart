@@ -11,7 +11,6 @@ import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/cache/data/services/cache_diagnostic_export_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
 import 'package:y300/features/cache/data/providers/cache_mutation_provider.dart';
-import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/services/long_term_image_revalidator.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
@@ -23,11 +22,8 @@ import 'package:y300/features/cache/data/services/y300_forum_resource_file_servi
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
 import 'package:y300/features/cache/data/services/protected_cover_file_store.dart';
-import 'package:y300/features/cache/data/services/storage_accounting_service.dart';
-import 'package:y300/features/cache/data/services/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
-import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/cache_diagnostic_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
@@ -36,14 +32,9 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/services/native_page_cache_invalidation_service.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/services/protected_cover_cache_maintenance.dart';
-import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
-import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/storage/data/storage_providers.dart';
-import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
-import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 
 export 'cache_mutation_provider.dart';
 
@@ -194,22 +185,6 @@ final cacheDiagnosticExportServiceProvider =
       );
     });
 
-final cacheMaintenanceServiceProvider = Provider<CacheMaintenanceService>((
-  ref,
-) {
-  return DefaultCacheMaintenanceService(
-    imageCacheService: ref.watch(imageCacheServiceProvider),
-    documentCacheService: ref.watch(documentCacheServiceProvider),
-    snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
-    storageAccountingService: ref.watch(storageAccountingServiceProvider),
-    cacheBudgetCoordinator: ref.watch(cacheBudgetCoordinatorProvider),
-    protectedCoverMaintenance: ref.watch(
-      protectedCoverCacheMaintenanceProvider,
-    ),
-    protectedCoverOwnerExists: (_) => true,
-  );
-});
-
 final cacheBudgetCoordinatorProvider = Provider<CacheBudgetCoordinator>((ref) {
   final services = <Object>[
     ref.watch(imageCacheServiceProvider),
@@ -220,36 +195,5 @@ final cacheBudgetCoordinatorProvider = Provider<CacheBudgetCoordinator>((ref) {
     participants: services.whereType<CacheBudgetParticipant>().toList(
       growable: false,
     ),
-  );
-});
-
-final storageAccountingServiceProvider = Provider<StorageAccountingService>((
-  ref,
-) {
-  final imageCacheRepository = ref.watch(imageCacheRepositoryProvider);
-  return DefaultStorageAccountingService(
-    adapters: <StorageAccountingAdapter>[
-      ImageCacheStorageAccountingAdapter(repository: imageCacheRepository),
-      LibraryCoverStorageAccountingAdapter(
-        thumbnails: ref.watch(libraryCoverThumbnailStoreProvider),
-        store: ref.watch(libraryCoverStoreProvider),
-      ),
-      PageCacheStorageAccountingAdapter(
-        documentCacheService: ref.watch(documentCacheServiceProvider),
-        snapshotCacheService: ref.watch(parsedSnapshotCacheServiceProvider),
-      ),
-      ComposerDraftStorageAccountingAdapter(
-        databaseProvider: ref.watch(composerDraftDatabaseManagerProvider).open,
-        blogDraftRepository: ref.watch(blogDraftRepositoryProvider),
-      ),
-      DownloadStorageAccountingAdapter(
-        storageService: ref.watch(downloadStorageServiceProvider),
-        storageRootAccessGate: ref.watch(storageRootAccessGateProvider),
-      ),
-      const LibraryMetadataStorageAccountingAdapter(),
-      HistoryStorageAccountingAdapter(
-        databaseProvider: ref.watch(historyDatabaseManagerProvider).open,
-      ),
-    ],
   );
 });

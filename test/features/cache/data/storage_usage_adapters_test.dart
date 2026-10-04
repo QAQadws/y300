@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:y300/app/storage/storage_accounting_composition.dart';
+import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
@@ -12,16 +14,19 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
-import 'package:y300/core/persistence/app_database.dart';
+import 'package:y300/features/composer_shared/data/services/composer_draft_storage_accounting_adapter.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
 import 'package:y300/features/composer_shared/data/repositories/sqflite_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/history/data/local/history_local_db.dart';
+import 'package:y300/features/history/data/services/history_storage_accounting_adapter.dart';
 import 'package:y300/features/profile/domain/models/blog_draft_snapshot.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
+import 'package:y300/features/library_shared/data/services/library_cover_storage_accounting_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
+import 'package:y300/features/storage/data/download_storage_accounting_adapter.dart';
 
 import '../../storage/test_support/ready_storage_root_access_gate.dart';
 import '../../profile/test_support/blog_draft_fixture.dart';
@@ -251,11 +256,16 @@ void main() {
         accountId: '101',
         updatedAt: DateTime(2000),
       );
-      final mixed = await ComposerDraftStorageAccountingAdapter(
+      final mixed = await composeComposerDraftStorageAccountingAdapter(
         databaseProvider: () async => db,
         blogDraftRepository: blogs,
       ).calculateUsage();
       expect(mixed.bytes, section.bytes + 100);
+      expect(mixed.clearable, isTrue);
+      expect(mixed.slices.map((slice) => slice.id), <String>[
+        'composer_draft:blog',
+        'composer_draft:sqlite',
+      ]);
       final blogSlice = mixed.slices.singleWhere(
         (slice) => slice.labelRef?.code == 'blog_draft',
       );
@@ -310,7 +320,7 @@ void main() {
   );
 
   test(
-    'LibraryMetadataStorageAccountingAdapter reports sqlite and table counts',
+    'library metadata composition reports sqlite and table counts',
     () async {
       const dbName = 'storage_usage_library_metadata_test.db';
       await deleteDatabase(dbName);
@@ -334,8 +344,8 @@ void main() {
         'updated_at': now,
       });
 
-      final section = await LibraryMetadataStorageAccountingAdapter(
-        databaseFuture: Future<Database>.value(db),
+      final section = await composeLibraryMetadataStorageAccountingAdapter(
+        databaseProvider: () async => db,
         databasePathFuture: Future<String>.value(dbFile.path),
       ).calculateUsage();
 

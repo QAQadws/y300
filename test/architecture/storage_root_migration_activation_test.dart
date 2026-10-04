@@ -45,7 +45,7 @@ void main() {
       'lib/features/cache/data/services/cache_diagnostic_export_service.dart',
     ).readAsStringSync();
     final accounting = File(
-      'lib/features/cache/data/services/storage_usage_adapters.dart',
+      'lib/features/storage/data/download_storage_accounting_adapter.dart',
     ).readAsStringSync();
     final startup = File(
       'lib/features/startup/presentation/main_shell_page.dart',
