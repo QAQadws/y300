@@ -1,4 +1,4 @@
-import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_fit.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';

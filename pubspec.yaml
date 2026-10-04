@@ -38,6 +38,8 @@ dependencies:
     path: packages/content_title_core
   continuous_image_geometry:
     path: packages/continuous_image_geometry
+  html_pagination_core:
+    path: packages/html_pagination_core
   forum_content_renderer:
     path: packages/forum_content_renderer
   flutter_localizations:

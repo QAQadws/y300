@@ -23,6 +23,7 @@
 - 小说横向新锚点使用格式 1 的节点内语义码点与文本身份；DOM 源坐标、UTF-16 和扩展字素通过显式投影转换，不用语义 offset 切 HTML。精确恢复核对格式/文本身份和实际 coverage；旧、未来格式或近似恢复不因首帧、补页完成或退出自动迁移，真实阅读导航才确认新位置。语义文档记录构建时的转换来源，不能用当前预览偏好推断；来源不一致不猜节点对应。
 - 小说分页等待超时、测量失败或后台补页停滞不得自动切换或持久改写阅读模式；只由用户主动选择滚动。保留已可读页与位置，重试核对布局前缀并以独立请求代次隔离迟到结果；退出和取消释放等待 timer 与测量 session。
 - 小说复杂分页串行等待 chunk 消费，只在封页并完成稳定发布后确认 committed offset；晚失败只回退未发布 DOM 尾部，不重发整块或改动已读前缀。页快照使用只追加存储的固定只读前缀；plan/measure/boundary/prepared 纯缓存归实际阅读会话，模式切换保留，退出或换 owner 永久关闭并隔离迟到回填，不缓存 Context、Overlay 或测量 session。
+- HTML 文字坐标、DOM 索引/切片、合法/受保护边界与有界 fit 搜索位于纯 Dart 包 `packages/html_pagination_core`，只消费 `html_pagination_core.dart` 公开入口。包内范围区分源码点、字素和 UTF-16；论坛保护判定、语义锚点投影、章节/cache identity、Flutter 测量、实际取消生命周期及 composer/hybrid 编排仍归 App。parse 端口不覆盖切片序列化，禁止借抽包启用随机起点或持久检查点。
 - 漫画/小说纯标题策略位于 `packages/content_title_core`，生产消费者统一使用 `content_title_core.dart` 公开入口。两组规则独立，subject 映射、HTML 准备、provider、搜索/同步与持久化仍归应用；生产代码不得依赖包的测试 fixture。
 - 图片连续阅读几何位于纯 Dart 包 `packages/continuous_image_geometry`，统一使用 `continuous_image_geometry.dart` 公开入口。应用图片模型实现只读 `ContinuousImageLayoutItem`，URL/缓存与业务 FlowPolicy、sequence position、Flutter 控制器、会话失效及实际 preload 仍归应用；不因提包启用未接入的长图/prefetch planner。
 - HTML 准备流水线与 prepared image 只依赖中立 `ForumHtmlPreparedImageResource` 和同步图片准备端口；资源实现保持不可变纯值，可随小说后台准备传递。缓存 spec/request 与默认 URL 装配归 application Host，不把缓存类型放回 prepared document，也不合并准备、显示和阅读器的既有缓存分类。
@@ -97,3 +98,4 @@ Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
 - 小说 HTML/分页集成样本继续归应用 `test/features/novel/test_support/`；原 `novel_title_fixtures.dart` 只桥接包内标题样本，并保有 HTML wrapper/分页标识，不复制算法语料。
 - `content_title_core` 包内测试不得读取 App 文件或导入 Flutter。App 仅通过上述小说 fixture 桥接复用包内测试数据；新增跨边界测试引用须明确归属并更新对应守护。
 - 图片几何算法与纯参考样本维护在 `packages/continuous_image_geometry/test/`；Host 图片映射、视口 Widget、恢复/seek 与会话回归继续归应用测试，不跨边界引用包内测试 fixture。
+- HTML 分页纯坐标、DOM/Unicode 合成样本及 fit 算法测试维护在 `packages/html_pagination_core/test/`；章节转换、业务锚点、renderer、持久化和阅读时序仍归 App 测试。包内测试只经公开入口、不得读 App 或导入 Flutter；App 不引用该包测试 fixture，不复制纯算法语料。

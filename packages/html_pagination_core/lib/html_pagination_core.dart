@@ -1,4 +1,4 @@
-export 'ports.dart'
+export 'src/ports.dart'
     show
         HtmlFragmentParser,
         DefaultHtmlFragmentParser,
@@ -8,9 +8,9 @@ export 'ports.dart'
         HtmlPaginationMeasure,
         HtmlPaginationCancellation,
         HtmlPaginationException;
-export 'text_coordinates.dart' show HtmlTextCoordinates;
-export 'work_slice.dart' show HtmlPaginationWorkSlice;
-export 'complex_slice.dart'
+export 'src/text_coordinates.dart' show HtmlTextCoordinates;
+export 'src/work_slice.dart' show HtmlPaginationWorkSlice;
+export 'src/complex_slice.dart'
     show
         HtmlComplexBoundaryKind,
         HtmlComplexProtectedRangeKind,
@@ -18,12 +18,12 @@ export 'complex_slice.dart'
         HtmlComplexProtectedRange,
         HtmlComplexSlice,
         HtmlComplexSliceSession;
-export 'complex_boundary_indexer.dart'
+export 'src/complex_boundary_indexer.dart'
     show HtmlComplexBoundaryIndexer, DefaultHtmlComplexBoundaryIndexer;
-export 'text_range_slicer.dart'
+export 'src/text_range_slicer.dart'
     show HtmlTextRangeSlicer, HtmlTextRangeSliceSession;
-export 'dom_text_index.dart' show HtmlDomTextSlice;
-export 'complex_fit.dart' show HtmlComplexFitResult;
-export 'complex_search_budget.dart' show HtmlComplexSearchBudget;
-export 'complex_fit_searcher.dart'
+export 'src/dom_text_index.dart' show HtmlDomTextSlice;
+export 'src/complex_fit.dart' show HtmlComplexFitResult;
+export 'src/complex_search_budget.dart' show HtmlComplexSearchBudget;
+export 'src/complex_fit_searcher.dart'
     show HtmlComplexFitSearcher, DefaultHtmlComplexFitSearcher;

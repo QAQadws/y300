@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
+import 'package:test/test.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 
 void main() {
   test('indexes once and rebuilds closed nested wrappers for every slice', () {

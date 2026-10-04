@@ -1,5 +1,5 @@
 import 'package:html/dom.dart' as html_dom;
-import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 

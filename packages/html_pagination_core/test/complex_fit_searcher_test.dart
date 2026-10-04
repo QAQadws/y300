@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 
 void main() {
   test('whole remainder fast check accepts an exact full fit', () async {

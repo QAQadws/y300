@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/core/html_pagination_core/html_pagination_core.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
 typedef NovelReaderComplexBoundaryKind = HtmlComplexBoundaryKind;
