@@ -49,6 +49,13 @@ const _cacheNeutralPreparationFiles = {
   '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
   '${_sharedRoot}presentation/html_rendering/forum_html_image_deduplicator.dart',
 };
+const _cacheNeutralDisplayFiles = {
+  '${_sharedRoot}presentation/contracts/forum_html_image_host.dart',
+  '${_sharedRoot}presentation/contracts/forum_html_display_image.dart',
+  '${_sharedRoot}presentation/html_rendering/forum_html_image_widget_factory.dart',
+  '${_sharedRoot}presentation/html_rendering/forum_html_render_callbacks.dart',
+  '${_sharedRoot}presentation/services/forum_html_image_viewport_coordinator.dart',
+};
 
 void main() {
   test('shared rendering keeps Host ownership and one public entry', () {
@@ -66,6 +73,9 @@ void main() {
       );
     }
     expect(Directory(_sharedRoot).existsSync(), isTrue);
+    for (final source in _cacheNeutralDisplayFiles) {
+      expect(File(source).existsSync(), isTrue, reason: source);
+    }
     expect(violations, isEmpty, reason: violations.join('\n'));
   });
 
@@ -196,6 +206,43 @@ export '../contracts/forum_html_prepared_image_resource.dart'
       );
     }
   });
+
+  test(
+    'image UI consumes explicit Host contracts without cache or providers',
+    () {
+      for (final source in _cacheNeutralDisplayFiles) {
+        expect(
+          _violationTargets(source, '''
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
+import 'package:provider/provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+export 'package:y300/features/content_rendering_shared/application/forum_html_image_host_provider.dart';
+import 'package:y300/features/content_rendering_shared/data/new_repository.dart';
+'''),
+          {
+            'lib/features/cache/domain/models/forum_image_load_spec.dart',
+            'package:flutter_riverpod/flutter_riverpod.dart',
+            'package:riverpod/riverpod.dart',
+            'package:provider/provider.dart',
+            _publicEntry,
+            '${_sharedRoot}application/forum_html_image_host_provider.dart',
+            '${_sharedRoot}data/new_repository.dart',
+          },
+        );
+        expect(
+          _violationTargets(source, '''
+import 'package:flutter/widgets.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:html/dom.dart';
+import 'package:y300/features/content_rendering_shared/domain/models/forum_html_content_layout.dart';
+'''),
+          isEmpty,
+        );
+      }
+    },
+  );
 }
 
 Set<String> _violationTargets(String source, String contents) => {
@@ -223,6 +270,16 @@ bool _isForbidden(String source, String target) {
           target.startsWith('lib/core/network/') ||
           target.contains('/application/') ||
           target.contains('/data/'))) {
+    return true;
+  }
+  if (_cacheNeutralDisplayFiles.contains(source) &&
+      (target == _publicEntry ||
+          target.startsWith('lib/features/cache/') ||
+          target.contains('/application/') ||
+          target.contains('/data/') ||
+          target.startsWith('package:flutter_riverpod/') ||
+          target.startsWith('package:riverpod/') ||
+          target.startsWith('package:provider/'))) {
     return true;
   }
   final domain = source.startsWith('${_sharedRoot}domain/');

@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
@@ -9,7 +11,10 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_image_widget_factory.dart';
+import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_image_host.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_image_host_provider.dart';
+import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_content_layout.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
@@ -45,6 +50,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
     this.imagePrecacheService,
+    this.imageHost,
     this.preparedDocument,
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
@@ -84,6 +90,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   onBlockImageResolved;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
+
+  /// Explicit display port; default cache configuration stays in the App facade.
+  final ForumHtmlImageHost? imageHost;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
@@ -94,6 +103,9 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final inheritedBinding = context
+        .getInheritedWidgetOfExactType<_ForumHtmlInheritedHostBinding>()
+        ?.binding;
     final resolvedPreferences =
         preferences ?? ForumHtmlReaderPreferences.defaults();
     final stylePolicy = ForumHtmlStylePolicy(
@@ -125,43 +137,100 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     }
     final preparedHtml = document.preparedHtml;
     final imageAttachmentIdsByUrl = document.attachmentIdsByUrl;
-    final handlesImageTapInFactory = threadId?.trim().isNotEmpty == true;
+    final handlesImageTapInFactory =
+        inheritedBinding != null ||
+        imageHost != null ||
+        threadId?.trim().isNotEmpty == true;
     final presentation = bodyPresentation;
     final baseStyle = stylePolicy.baseTextStyle(context);
-    Widget buildBody(VoidCallback? onReady) => HtmlWidget(
-      preparedHtml,
-      key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
-      baseUrl: linkBaseUri ?? forumBaseUri,
-      onErrorBuilder: onReady == null
-          ? null
-          : (_, _, _) {
-              onReady();
-              return null;
-            },
-      buildAsync: buildAsync,
-      customStylesBuilder: stylePolicy.customStylesFor,
-      customWidgetBuilder: (element) => _buildCustomWidget(
-        context,
-        element,
-        stylePolicy,
-        resolvedPreferences,
-        document,
-      ),
-      factoryBuilder: _cachedImageFactoryBuilder(onReady),
-      enableCaching: enableCaching,
-      renderMode: renderMode,
-      rebuildTriggers: [contentLayout, linkBaseUri],
-      textStyle: baseStyle,
-      onTapUrl: callbacks.onTapUrl == null
-          ? null
-          : (url) {
-              callbacks.onInteraction?.call();
-              return callbacks.onTapUrl!(url);
-            },
-      onTapImage: handlesImageTapInFactory
-          ? null
-          : (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
-    );
+    Widget renderBody(
+      VoidCallback? onReady,
+      ForumHtmlImageHost? host,
+      Object? hostRevision,
+    ) {
+      Widget render(ValueListenable<ForumHtmlImageFactoryBinding>? binding) =>
+          HtmlWidget(
+            preparedHtml,
+            key: Key('forum-html-renderer-${sourceId ?? 'anonymous'}'),
+            baseUrl: linkBaseUri ?? forumBaseUri,
+            onErrorBuilder: onReady == null
+                ? null
+                : (_, _, _) {
+                    onReady();
+                    return null;
+                  },
+            buildAsync: buildAsync,
+            customStylesBuilder: stylePolicy.customStylesFor,
+            customWidgetBuilder: (element) => _buildCustomWidget(
+              context,
+              element,
+              stylePolicy,
+              resolvedPreferences,
+              document,
+              binding,
+            ),
+            factoryBuilder: _imageFactoryBuilder(onReady, binding),
+            enableCaching: enableCaching,
+            renderMode: renderMode,
+            rebuildTriggers: [contentLayout, linkBaseUri],
+            textStyle: baseStyle,
+            onTapUrl: callbacks.onTapUrl == null
+                ? null
+                : (url) {
+                    callbacks.onInteraction?.call();
+                    return callbacks.onTapUrl!(url);
+                  },
+            onTapImage: handlesImageTapInFactory
+                ? null
+                : (image) => _handleTapImage(image, imageAttachmentIdsByUrl),
+          );
+      if (inheritedBinding != null) return render(inheritedBinding);
+      if (host == null) return render(null);
+      return _ForumHtmlHostBinding(
+        binding: (host: host, viewport: imageViewportCoordinator),
+        revision: hostRevision,
+        builder: render,
+      );
+    }
+
+    Widget buildBody(VoidCallback? onReady) {
+      if (inheritedBinding != null ||
+          imageHost != null ||
+          !handlesImageTapInFactory) {
+        return renderBody(onReady, imageHost, (
+          imageHost,
+          imageViewportCoordinator,
+        ));
+      }
+      final host =
+          CacheForumHtmlImageHost.lazy(
+            dimensionIndexFor: () => ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(forumHtmlImageHostProvider).dimensionIndex,
+          ).forContent(
+            threadId: threadId!,
+            imageReferer: imageReferer,
+            imageCacheOwnerId: imageCacheOwnerId,
+            contentImageKind: contentImageKind,
+            imageRequestResolver: imageRequestResolver,
+            imageDimensionIndex: imageDimensionIndex,
+            fallbackAspectRatioFor: imageFallbackAspectRatioFor,
+            onBlockImageResolved: onBlockImageResolved,
+            imagePrecacheService: imagePrecacheService,
+          );
+      return renderBody(onReady, host, (
+        threadId,
+        imageReferer,
+        imageCacheOwnerId,
+        contentImageKind,
+        imageRequestResolver,
+        imageDimensionIndex,
+        imagePrecacheService,
+        imageViewportCoordinator,
+      ));
+    }
+
     if (presentation == null || renderMode != RenderMode.column) {
       return buildBody(onBodyBuilt);
     }
@@ -186,16 +255,16 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     );
   }
 
-  WidgetFactory Function()? _cachedImageFactoryBuilder(VoidCallback? onReady) {
-    final tid = threadId?.trim();
-    if (tid == null || tid.isEmpty) {
+  WidgetFactory Function()? _imageFactoryBuilder(
+    VoidCallback? onReady,
+    ValueListenable<ForumHtmlImageFactoryBinding>? binding,
+  ) {
+    if (binding == null) {
       return onReady == null ? null : () => _BodyReadyWidgetFactory(onReady);
     }
-    return () => ForumHtmlCachedImageWidgetFactory(
-      threadId: tid,
+    return () => ForumHtmlImageWidgetFactory(
+      binding: binding,
       onBodyBuilt: onReady,
-      imageReferer: imageReferer,
-      imageCacheOwnerId: imageCacheOwnerId,
       onTapImageRequest: callbacks.onTapImage == null
           ? null
           : (request) {
@@ -206,13 +275,6 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       readableImageKeyPrefix: sourceId == null
           ? null
           : 'thread-post-html-first-readable-image-$sourceId',
-      contentImageKind: contentImageKind,
-      imageRequestResolver: imageRequestResolver,
-      imageDimensionIndex: imageDimensionIndex,
-      fallbackAspectRatioFor: imageFallbackAspectRatioFor,
-      onBlockImageResolved: onBlockImageResolved,
-      imageViewportCoordinator: imageViewportCoordinator,
-      imagePrecacheService: imagePrecacheService,
     );
   }
 
@@ -222,6 +284,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     ForumHtmlStylePolicy stylePolicy,
     ForumHtmlReaderPreferences resolvedPreferences,
     ForumHtmlPreparedRenderDocument document,
+    ValueListenable<ForumHtmlImageFactoryBinding>? imageBinding,
   ) {
     if (stylePolicy.isDiscuzEditStatusElement(element)) {
       return _DiscuzEditStatusText(
@@ -250,7 +313,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       sourceId: collapseId,
       onInteraction: callbacks.onInteraction,
       nestedRendererBuilder: (html, {required sourceId}) {
-        return ForumHtmlWidgetPostRenderer(
+        final renderer = ForumHtmlWidgetPostRenderer(
           html: html,
           theme: theme,
           callbacks: callbacks,
@@ -269,12 +332,19 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
           onBlockImageResolved: onBlockImageResolved,
           imageViewportCoordinator: imageViewportCoordinator,
           imagePrecacheService: imagePrecacheService,
+          imageHost: imageHost,
           contentImageKind: contentImageKind,
           blockSpacingMode: blockSpacingMode,
           contentLayout: contentLayout,
           linkBaseUri: linkBaseUri,
           preparedDocument: document.copyWith(preparedHtml: html),
         );
+        return imageBinding == null
+            ? renderer
+            : _ForumHtmlInheritedHostBinding(
+                binding: imageBinding,
+                child: renderer,
+              );
       },
     );
     // HtmlWidget caches its widget tree. Re-read chapter-owned state when a
@@ -361,9 +431,6 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
         attachmentId:
             imageAttachmentIdsByUrl[source.url] ??
             _attachmentIdFromUrl(source.url),
-        kind: _isForumStickerImage(source.url)
-            ? ForumImageKind.remoteSmiley
-            : null,
       ),
     );
   }
@@ -381,6 +448,57 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     final aidMatch = RegExp(r'(?:aid|attachmentid)=(\d+)').firstMatch(url);
     return aidMatch?.group(1);
   }
+}
+
+/// fwfh keeps its initial factory. Update image bindings without remounting
+/// the measured body or discarding a collapse block's local expansion state.
+class _ForumHtmlHostBinding extends StatefulWidget {
+  const _ForumHtmlHostBinding({
+    required this.binding,
+    required this.revision,
+    required this.builder,
+  });
+
+  final ForumHtmlImageFactoryBinding binding;
+  final Object? revision;
+  final Widget Function(ValueListenable<ForumHtmlImageFactoryBinding>) builder;
+
+  @override
+  State<_ForumHtmlHostBinding> createState() => _ForumHtmlHostBindingState();
+}
+
+class _ForumHtmlHostBindingState extends State<_ForumHtmlHostBinding> {
+  late final _binding = ValueNotifier(widget.binding);
+
+  @override
+  void didUpdateWidget(covariant _ForumHtmlHostBinding oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.revision != widget.revision) {
+      _binding.value = widget.binding;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_binding);
+
+  @override
+  void dispose() {
+    _binding.dispose();
+    super.dispose();
+  }
+}
+
+class _ForumHtmlInheritedHostBinding extends InheritedWidget {
+  const _ForumHtmlInheritedHostBinding({
+    required this.binding,
+    required super.child,
+  });
+
+  final ValueListenable<ForumHtmlImageFactoryBinding> binding;
+
+  @override
+  bool updateShouldNotify(_ForumHtmlInheritedHostBinding oldWidget) =>
+      !identical(binding, oldWidget.binding);
 }
 
 class _BodyReadyWidgetFactory extends WidgetFactory {

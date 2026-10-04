@@ -520,7 +520,6 @@ void main() {
 
     expect(tappedImage?.readableIndex, 0);
     expect(tappedImage?.attachmentId, '286401');
-    expect(tappedImage?.kind, ForumImageKind.threadInline);
     expect(interactions, 1);
     expect(
       tappedImage?.cacheKey,

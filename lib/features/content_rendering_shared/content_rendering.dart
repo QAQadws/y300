@@ -10,6 +10,7 @@ export 'domain/services/forum_html_reader_preference_policy.dart';
 export 'application/forum_html_image_host_provider.dart';
 export 'domain/models/forum_html_content_layout.dart';
 export 'presentation/contracts/forum_html_image_host.dart';
+export 'presentation/contracts/forum_html_display_image.dart';
 export 'presentation/contracts/forum_html_preparation_image_policy.dart';
 export 'presentation/contracts/forum_html_prepared_image_resource.dart';
 export 'presentation/contracts/forum_html_render_palette.dart';
