@@ -16,17 +16,28 @@ void main() {
           RegExp(r'\bComicLocalDb\b').hasMatch(source)) {
         violations.add('$path: retired comic-owned database entry');
       }
-      if (path.startsWith('lib/core/persistence/')) continue;
-      // Schema and version assembly stay internal to the shared persistence module.
+      final ownsDatabase = path.startsWith('lib/core/persistence/');
       for (final directive in RegExp(
-        r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+        r'^\s*(?:import|export)\s+([^;]+);',
         multiLine: true,
       ).allMatches(source)) {
-        final uri = directive.group(1)!;
-        if (uri.contains('/persistence/schema/') ||
-            uri.endsWith('/app_database_schema.dart') ||
-            uri.endsWith('/app_database_migrations.dart')) {
-          violations.add('$path: imports database implementation $uri');
+        // Include conditional import/export URIs in the same bounded directive.
+        for (final quoted in RegExp(
+          r'''['"]([^'"]+)['"]''',
+        ).allMatches(directive.group(1)!)) {
+          final uri = quoted.group(1)!;
+          if (ownsDatabase) {
+            if (uri.contains('/features/') || uri.contains('/app/')) {
+              violations.add(
+                '$path: persistence depends on application/feature $uri',
+              );
+            }
+          } else if (uri.contains('/persistence/schema/') ||
+              uri.endsWith('/app_database_schema.dart') ||
+              uri.endsWith('/app_database_migrations.dart') ||
+              uri.endsWith('/app_database_tables.dart')) {
+            violations.add('$path: imports database implementation $uri');
+          }
         }
       }
     }
