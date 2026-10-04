@@ -16,6 +16,7 @@ import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/library_shared/domain/models/reader_corner_dock_side.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock_location.dart';
+import 'package:y300/features/novel/application/novel_reader_display_preferences_coordinator.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
@@ -76,13 +77,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   final NovelReaderProgressPolicy _progressPolicy =
       const NovelReaderProgressPolicy();
   final _preparedChapterCache = NovelReaderPreparedChapterCache();
-  Timer? _displayPreviewThrottle;
-  Timer? _displayPersistDebounce;
-  NovelReaderPreferences? _pendingDisplayPreferences;
-  NovelReaderPreferences? _lastPreviewedDisplayPreferences;
-  NovelReaderPreferences? _lastPersistedDisplayPreferences;
-  NovelReaderPreferences? _inFlightDisplayPreferences;
-  int _displayPersistSerial = 0;
+  NovelReaderDisplayPreferencesCoordinator? _displayPreferencesCoordinator;
+  NovelReaderController? _displayPreferencesOwner;
+  Future<void>? _displayCommitTail;
   int _readerSemanticsSuspendCount = 0;
   bool _hasRestoredOffset = false;
   String? _verticalRestoreOwner;
@@ -147,8 +144,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _overlayController.dispose();
     _readerGestureCoordinator.dispose();
     _pagedNavigationController.dispose();
-    _displayPreviewThrottle?.cancel();
-    _displayPersistDebounce?.cancel();
+    _retireDisplayPreferencesCoordinator();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -165,8 +161,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(novelReaderControllerProvider(_args));
-    final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    final readerProvider = novelReaderControllerProvider(_args);
+    ref.listen(readerProvider, (_, next) {
+      if (next.isLoading) _retireDisplayPreferencesCoordinator();
+    });
+    final state = ref.watch(readerProvider);
+    final controller = ref.read(readerProvider.notifier);
+    if (state.isLoading) {
+      _retireDisplayPreferencesCoordinator();
+    } else {
+      _displayPreferencesCoordinatorFor(controller);
+    }
     final imageReferer = ref.watch(forumImageRefererProvider);
     final externalLauncher = ref.watch(forumWebViewExternalLauncherProvider);
 
@@ -1498,7 +1503,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _fallbackToVertical(NovelReaderController controller) async {
-    final current = ref.read(novelReaderControllerProvider(_args)).value;
+    final state = ref.read(novelReaderControllerProvider(_args));
+    if (state.isLoading) return;
+    final current = state.value;
     if (current == null ||
         current.preferences.flowMode == NovelReaderFlowMode.vertical) {
       return;
@@ -1506,17 +1513,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final next = current.persistedPreferences.copyWith(
       flowMode: NovelReaderFlowMode.vertical,
     );
-    controller.previewPreferences(next);
-    try {
-      await controller.commitPreferences(next);
-    } catch (_) {
-      controller.revertPreferencePreview();
-      if (mounted) {
+    final coordinator = _displayPreferencesCoordinatorFor(controller);
+    coordinator.begin(
+      preferences: current.preferences,
+      persistedPreferences: current.persistedPreferences,
+    );
+    await coordinator.commitImmediately(
+      next,
+      onFailure: () {
+        if (!mounted) return;
         _showReaderSnackBar(
           AppLocalizations.of(context).novelReturnToScrollFailed,
         );
-      }
-    }
+      },
+    );
   }
 
   Future<T> _runWithReaderSemanticsSuspended<T>(
@@ -1586,107 +1596,58 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderViewState viewState,
     NovelReaderController controller,
   ) async {
+    if (ref.read(novelReaderControllerProvider(_args)).isLoading) return;
     _overlayController.hideMenu();
     final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.5;
-    _pendingDisplayPreferences = viewState.preferences;
-    _lastPreviewedDisplayPreferences = viewState.preferences;
-    _lastPersistedDisplayPreferences = viewState.persistedPreferences;
-    _inFlightDisplayPreferences = null;
+    final coordinator = _displayPreferencesCoordinatorFor(controller);
+    coordinator.begin(
+      preferences: viewState.preferences,
+      persistedPreferences: viewState.persistedPreferences,
+    );
     await _runWithReaderSemanticsSuspended(() async {
       await showModalBottomSheet<void>(
         context: context,
         constraints: BoxConstraints(maxHeight: maxSheetHeight),
         builder: (context) => NovelReaderDisplaySettingsSheet(
           initialPreferences: viewState.preferences,
-          onPreferencesChanged: (preferences) =>
-              _onDisplayPreferencesChanged(preferences, controller),
+          onPreferencesChanged: coordinator.change,
         ),
       );
       if (!mounted) {
         return;
       }
-      await _flushDisplayPreferenceChanges(controller);
+      await coordinator.flush();
     });
   }
 
-  void _onDisplayPreferencesChanged(
-    NovelReaderPreferences preferences,
+  NovelReaderDisplayPreferencesCoordinator _displayPreferencesCoordinatorFor(
     NovelReaderController controller,
   ) {
-    _pendingDisplayPreferences = preferences;
-    _scheduleDisplayPreferencePreview(controller);
-    _scheduleDisplayPreferencePersist(controller);
-  }
-
-  void _scheduleDisplayPreferencePreview(NovelReaderController controller) {
-    if (_displayPreviewThrottle?.isActive == true) {
-      return;
+    if (identical(_displayPreferencesOwner, controller)) {
+      return _displayPreferencesCoordinator!;
     }
-    _applyPendingDisplayPreview(controller);
-    _displayPreviewThrottle = Timer(const Duration(milliseconds: 90), () {
-      _displayPreviewThrottle = null;
-      _applyPendingDisplayPreview(controller);
-    });
+    _retireDisplayPreferencesCoordinator();
+    _displayPreferencesOwner = controller;
+    return _displayPreferencesCoordinator =
+        NovelReaderDisplayPreferencesCoordinator(
+          preview: controller.previewPreferences,
+          commit: controller.commitPreferences,
+          revertPreview: controller.revertPreferencePreview,
+          precedingCommit: _displayCommitTail,
+          onFailure: () {
+            if (!mounted) return;
+            _showReaderSnackBar(
+              AppLocalizations.of(context).novelSaveDisplaySettingsFailed,
+            );
+          },
+        );
   }
 
-  void _applyPendingDisplayPreview(NovelReaderController controller) {
-    final preferences = _pendingDisplayPreferences;
-    if (preferences == null ||
-        preferences == _lastPreviewedDisplayPreferences) {
-      return;
-    }
-    _lastPreviewedDisplayPreferences = preferences;
-    controller.previewPreferences(preferences);
-  }
-
-  void _scheduleDisplayPreferencePersist(NovelReaderController controller) {
-    _displayPersistDebounce?.cancel();
-    _displayPersistDebounce = Timer(const Duration(milliseconds: 520), () {
-      _displayPersistDebounce = null;
-      unawaited(_persistPendingDisplayPreferences(controller));
-    });
-  }
-
-  Future<void> _flushDisplayPreferenceChanges(
-    NovelReaderController controller,
-  ) async {
-    _displayPreviewThrottle?.cancel();
-    _displayPreviewThrottle = null;
-    _displayPersistDebounce?.cancel();
-    _displayPersistDebounce = null;
-    _applyPendingDisplayPreview(controller);
-    await _persistPendingDisplayPreferences(controller);
-  }
-
-  Future<void> _persistPendingDisplayPreferences(
-    NovelReaderController controller,
-  ) async {
-    final preferences = _pendingDisplayPreferences;
-    if (preferences == null ||
-        preferences == _lastPersistedDisplayPreferences ||
-        preferences == _inFlightDisplayPreferences) {
-      return;
-    }
-    _inFlightDisplayPreferences = preferences;
-    final serial = ++_displayPersistSerial;
-    try {
-      await controller.commitPreferences(preferences);
-      if (serial == _displayPersistSerial) {
-        _lastPersistedDisplayPreferences = preferences;
-      }
-    } catch (_) {
-      if (!mounted || serial != _displayPersistSerial) {
-        return;
-      }
-      controller.revertPreferencePreview();
-      _showReaderSnackBar(
-        AppLocalizations.of(context).novelSaveDisplaySettingsFailed,
-      );
-    } finally {
-      if (_inFlightDisplayPreferences == preferences) {
-        _inFlightDisplayPreferences = null;
-      }
-    }
+  void _retireDisplayPreferencesCoordinator() {
+    final coordinator = _displayPreferencesCoordinator;
+    if (coordinator != null) _displayCommitTail = coordinator.dispose();
+    _displayPreferencesCoordinator = null;
+    _displayPreferencesOwner = null;
   }
 
   Future<void> _toggleEpisodeBookmark(NovelReaderViewState viewState) async {

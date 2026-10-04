@@ -34,6 +34,7 @@ import 'package:y300/features/novel/domain/repositories/novel_chapter_interactio
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
@@ -43,6 +44,7 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
   testWidgets('short paged chapter starts preparing during route entrance', (
@@ -1021,6 +1023,305 @@ void main() {
         NovelReaderThemePreset.sepia,
       );
       expect(repository.upsertPreferencesCallCount, 1);
+    },
+  );
+
+  testWidgets('dismissing display settings flushes before the save debounce', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.vertical,
+        themePreset: NovelReaderThemePreset.light,
+      ),
+    );
+    final preferencesRepository = _ControlledPagePreferencesRepository(
+      repository,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        preferencesRepository: preferencesRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('novel-theme-sepia')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-theme-sepia')));
+    await tester.pump();
+    expect(preferencesRepository.saves, isEmpty);
+
+    await tester.tapAt(const Offset(24, 24));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('novel-reader-display-settings-sheet')),
+      findsNothing,
+    );
+    expect(preferencesRepository.saves, hasLength(1));
+    expect(repository.latestPreferences, isNull);
+    preferencesRepository.saves.single.complete();
+    await tester.pumpAndSettle();
+    expect(
+      repository.latestPreferences?.themePreset,
+      NovelReaderThemePreset.sepia,
+    );
+    expect(repository.upsertPreferencesCallCount, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a failed active save after dismissal rolls back and reports localized error',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.vertical,
+          themePreset: NovelReaderThemePreset.light,
+        ),
+      );
+      final preferencesRepository = _ControlledPagePreferencesRepository(
+        repository,
+      );
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: repository,
+          preferencesRepository: preferencesRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final context = tester.element(find.byType(NovelReaderPage));
+      final container = ProviderScope.containerOf(context, listen: false);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final initial = container.read(provider).value!;
+      final failureText = AppLocalizations.of(
+        context,
+      ).novelSaveDisplaySettingsFailed;
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('novel-theme-sepia')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('novel-theme-sepia')));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(preferencesRepository.saves, hasLength(1));
+      await tester.tapAt(const Offset(24, 24));
+      await tester.pumpAndSettle();
+      expect(preferencesRepository.saves, hasLength(1));
+      preferencesRepository.saves.single.fail();
+      await tester.pumpAndSettle();
+
+      final state = container.read(provider).value!;
+      expect(state.preferences, initial.persistedPreferences);
+      expect(state.persistedPreferences, initial.persistedPreferences);
+      expect(state.progressSnapshot, initial.progressSnapshot);
+      expect(find.text(failureText), findsOneWidget);
+      expect(repository.latestPreferences, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('reader rebuild retires the old sheet preview and save timers', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.vertical,
+        themePreset: NovelReaderThemePreset.light,
+      ),
+    );
+    final preferencesRepository = _ControlledPagePreferencesRepository(
+      repository,
+    );
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: repository,
+        preferencesRepository: preferencesRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NovelReaderPage)),
+      listen: false,
+    );
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-display')),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('novel-theme-sepia')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('novel-theme-sepia')));
+    await tester.tap(find.byKey(const Key('novel-theme-dark')));
+    container.invalidate(provider);
+    final rebuilt = await container.read(provider.future);
+    final nextPreview = rebuilt.preferences.copyWith(fontSize: 24);
+    container.read(provider.notifier).previewPreferences(nextPreview);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(preferencesRepository.saves, isEmpty);
+    expect(container.read(provider).value!.preferences, nextPreview);
+
+    // The sheet still holds callbacks from the retired coordinator.
+    await tester.tap(find.byKey(const Key('novel-theme-light')));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(preferencesRepository.saves, isEmpty);
+    expect(container.read(provider).value!.preferences, nextPreview);
+    await tester.tapAt(const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(preferencesRepository.saves, isEmpty);
+    expect(
+      container.read(provider).value!.persistedPreferences,
+      rebuilt.persistedPreferences,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'reader rebuild isolates a late save failure from the new preview',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.vertical,
+          themePreset: NovelReaderThemePreset.light,
+        ),
+      );
+      final preferencesRepository = _ControlledPagePreferencesRepository(
+        repository,
+      );
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: repository,
+          preferencesRepository: preferencesRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final context = tester.element(find.byType(NovelReaderPage));
+      final failureText = AppLocalizations.of(
+        context,
+      ).novelSaveDisplaySettingsFailed;
+      final container = ProviderScope.containerOf(context, listen: false);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('novel-theme-sepia')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('novel-theme-sepia')));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(preferencesRepository.saves, hasLength(1));
+      container.invalidate(provider);
+      final rebuilt = await container.read(provider.future);
+      final nextPreview = rebuilt.preferences.copyWith(fontSize: 24);
+      container.read(provider.notifier).previewPreferences(nextPreview);
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(24, 24));
+      await tester.pumpAndSettle();
+      preferencesRepository.saves.single.fail();
+      await tester.pumpAndSettle();
+
+      final state = container.read(provider).value!;
+      expect(state.preferences, nextPreview);
+      expect(state.persistedPreferences, rebuilt.persistedPreferences);
+      expect(state.progressSnapshot, rebuilt.progressSnapshot);
+      expect(preferencesRepository.saves, hasLength(1));
+      expect(find.text(failureText), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'latest baseline choice survives a successful save from the retired reader',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.vertical,
+          themePreset: NovelReaderThemePreset.light,
+        ),
+      );
+      final original = repository.preferences;
+      final preferencesRepository = _ControlledPagePreferencesRepository(
+        repository,
+      );
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: repository,
+          preferencesRepository: preferencesRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(NovelReaderPage)),
+        listen: false,
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('novel-theme-sepia')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('novel-theme-sepia')));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(preferencesRepository.saves, hasLength(1));
+      container.invalidate(provider);
+      final rebuilt = await container.read(provider.future);
+      expect(rebuilt.persistedPreferences, original);
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(24, 24));
+      await tester.pumpAndSettle();
+
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('novel-theme-dark')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('novel-theme-dark')));
+      await tester.tap(find.byKey(const Key('novel-theme-light')));
+      await tester.pump();
+      await tester.tapAt(const Offset(24, 24));
+      await tester.pumpAndSettle();
+      expect(preferencesRepository.saves, hasLength(1));
+
+      preferencesRepository.saves.first.complete();
+      await tester.pumpAndSettle();
+      expect(preferencesRepository.saves, hasLength(2));
+      expect(repository.preferences.themePreset, NovelReaderThemePreset.sepia);
+      preferencesRepository.saves.last.complete();
+      await tester.pumpAndSettle();
+      expect(repository.preferences, original);
+      expect(container.read(provider).value!.preferences, original);
+      expect(container.read(provider).value!.persistedPreferences, original);
+      expect(repository.upsertPreferencesCallCount, 2);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -2320,6 +2621,7 @@ Finder _readerText(String text) {
 
 Widget _buildReaderApp({
   required _FakeNovelRepository repository,
+  NovelReaderPreferencesRepository? preferencesRepository,
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
@@ -2339,7 +2641,8 @@ Widget _buildReaderApp({
           .overrideWithValue(dockRepository),
       novelRepositoryProvider.overrideWithValue(repository),
       novelReaderPreferencesRepositoryProvider.overrideWithValue(
-        _FakeNovelReaderPreferencesRepository(repository),
+        preferencesRepository ??
+            _FakeNovelReaderPreferencesRepository(repository),
       ),
       novelChapterUpdateServiceProvider.overrideWithValue(
         chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
@@ -3109,6 +3412,34 @@ class _FakeNovelReaderPreferencesRepository
     repository.latestPreferences = preferences;
     repository.preferences = preferences;
   }
+}
+
+class _ControlledPagePreferencesRepository
+    implements NovelReaderPreferencesRepository {
+  _ControlledPagePreferencesRepository(this.repository);
+
+  final _FakeNovelRepository repository;
+  final saves = <_PendingPagePreferencesSave>[];
+
+  @override
+  Future<NovelReaderPreferences> load() async => repository.preferences;
+
+  @override
+  Future<void> save(NovelReaderPreferences preferences) async {
+    final save = _PendingPagePreferencesSave();
+    saves.add(save);
+    repository.upsertPreferencesCallCount += 1;
+    await save.completer.future;
+    repository.latestPreferences = preferences;
+    repository.preferences = preferences;
+  }
+}
+
+class _PendingPagePreferencesSave {
+  final completer = Completer<void>();
+
+  void complete() => completer.complete();
+  void fail() => completer.completeError(StateError('preferences save failed'));
 }
 
 class _DelayedNovelReaderDocumentBuildService

@@ -189,10 +189,24 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   int _activeSessionToken = 0;
   int _transitionRequestSerial = 0;
   int _preferenceCommitSerial = 0;
+  int _preferenceWritesInFlight = 0;
+  // A refreshed state may load its baseline before an older write reaches disk.
+  bool _persistedPreferenceSnapshotDirty = false;
 
   @override
   FutureOr<NovelReaderViewState> build() async {
-    ref.onDispose(ref.read(novelReaderProgressCommitterProvider).cancel);
+    if (_preferenceWritesInFlight > 0) {
+      _persistedPreferenceSnapshotDirty = true;
+    }
+    _preferenceCommitSerial += 1;
+    final progressCommitter = ref.read(novelReaderProgressCommitterProvider);
+    ref.onDispose(() {
+      if (_preferenceWritesInFlight > 0) {
+        _persistedPreferenceSnapshotDirty = true;
+      }
+      _preferenceCommitSerial += 1;
+      progressCommitter.cancel();
+    });
     return _loadInitialCriticalState(
       _args.episodeId,
       openPolicy: _args.openPolicy,
@@ -224,7 +238,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       current.persistedPreferences,
       next,
     );
-    if (!persistedDiff.hasChanges) {
+    if (!persistedDiff.hasChanges &&
+        !_persistedPreferenceSnapshotDirty &&
+        _preferenceWritesInFlight == 0) {
       final persistedEffective = current.persistedPreferences;
       if (current.effectivePreferences == persistedEffective) {
         return;
@@ -235,10 +251,20 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     final commitSerial = ++_preferenceCommitSerial;
-    await ref.read(novelReaderPreferencesRepositoryProvider).save(next);
-    if (commitSerial != _preferenceCommitSerial) {
+    _preferenceWritesInFlight += 1;
+    try {
+      await ref.read(novelReaderPreferencesRepositoryProvider).save(next);
+    } catch (_) {
+      _persistedPreferenceSnapshotDirty = true;
+      rethrow;
+    } finally {
+      _preferenceWritesInFlight -= 1;
+    }
+    if (!ref.mounted || commitSerial != _preferenceCommitSerial) {
+      _persistedPreferenceSnapshotDirty = true;
       return;
     }
+    _persistedPreferenceSnapshotDirty = _preferenceWritesInFlight > 0;
     final latest = state.value ?? current;
     final effectivePreferences =
         latest.effectivePreferences == current.effectivePreferences
@@ -269,16 +295,27 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
+    // Leaving and returning to the same episode still starts a new session.
+    final sessionToken = _activeSessionToken;
+    final episodeId = current.currentEpisode.episodeId;
     final context = NovelReaderLoadContext(
       novelId: _args.novelId,
-      requestedEpisodeId: current.currentEpisode.episodeId,
+      requestedEpisodeId: episodeId,
       preservedProgress: _readingProgressFromSnapshot(current.progressSnapshot),
     );
     final critical = await _loadCriticalBootstrap(context);
     if (!ref.mounted || commitSerial != _preferenceCommitSerial) {
       return;
     }
-    final latest = state.value ?? current;
+    final latest = state.value;
+    if (latest == null ||
+        !_canApplySupplemental(
+          current: latest,
+          sessionToken: sessionToken,
+          episodeId: episodeId,
+        )) {
+      return;
+    }
     state = AsyncData(
       latest.copyWith(
         currentContent: critical.currentContent,

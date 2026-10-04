@@ -224,6 +224,219 @@ void main() {
     },
   );
 
+  test('late preference save preserves a newer preview and progress', () async {
+    final repository = _ControllerNovelRepository();
+    final preferencesRepository = _DelayedPreferencesRepository(repository);
+    final container = _buildContainer(
+      repository: repository,
+      preferencesRepository: preferencesRepository,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+    final initial = await container.read(provider.future);
+    final controller = container.read(provider.notifier);
+    final first = initial.preferences.copyWith(fontSize: 20);
+    final latest = first.copyWith(fontSize: 24);
+    controller.previewPreferences(first);
+    final commit = controller.commitPreferences(first);
+    controller.previewPreferences(latest);
+    preferencesRepository.saveGate.complete();
+    await commit;
+
+    final state = container.read(provider).value!;
+    expect(state.persistedPreferences, first);
+    expect(state.effectivePreferences, latest);
+    expect(state.progressSnapshot, initial.progressSnapshot);
+    expect(state.document, initial.document);
+  });
+
+  test(
+    'preference save finishing after disposal does not use disposed ref',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final preferencesRepository = _DelayedPreferencesRepository(repository);
+      final container = _buildContainer(
+        repository: repository,
+        preferencesRepository: preferencesRepository,
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      final initial = await container.read(provider.future);
+      final next = initial.preferences.copyWith(fontSize: 24);
+      final commit = container.read(provider.notifier).commitPreferences(next);
+      subscription.close();
+      container.dispose();
+      preferencesRepository.saveGate.complete();
+
+      await expectLater(commit, completes);
+      expect(repository.latestPreferences, next);
+    },
+  );
+
+  test('an old save cannot mutate a rebuilt reader generation', () async {
+    final repository = _ControllerNovelRepository();
+    final preferencesRepository = _DelayedPreferencesRepository(repository);
+    final container = _buildContainer(
+      repository: repository,
+      preferencesRepository: preferencesRepository,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+    final initial = await container.read(provider.future);
+    final first = initial.preferences.copyWith(fontSize: 20);
+    final commit = container.read(provider.notifier).commitPreferences(first);
+    container.invalidate(provider);
+    final rebuilt = await container.read(provider.future);
+    final latest = rebuilt.preferences.copyWith(fontSize: 24);
+    container.read(provider.notifier).previewPreferences(latest);
+    preferencesRepository.saveGate.complete();
+    await commit;
+
+    final state = container.read(provider).value!;
+    expect(state.persistedPreferences, rebuilt.persistedPreferences);
+    expect(state.effectivePreferences, latest);
+    expect(state.document, rebuilt.document);
+    expect(state.progressSnapshot, rebuilt.progressSnapshot);
+  });
+
+  test(
+    'equal baseline is saved when an old write finished after rebuild',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final preferencesRepository = _DelayedPreferencesRepository(repository);
+      final container = _buildContainer(
+        repository: repository,
+        preferencesRepository: preferencesRepository,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final initial = await container.read(provider.future);
+      final oldCommit = container
+          .read(provider.notifier)
+          .commitPreferences(initial.preferences.copyWith(fontSize: 20));
+      container.invalidate(provider);
+      final rebuilt = await container.read(provider.future);
+      preferencesRepository.saveGate.complete();
+      await oldCommit;
+      expect(repository.preferences, isNot(rebuilt.persistedPreferences));
+
+      await container
+          .read(provider.notifier)
+          .commitPreferences(rebuilt.persistedPreferences);
+      expect(repository.preferences, rebuilt.persistedPreferences);
+      expect(repository.upsertPreferencesCallCount, 2);
+      await container
+          .read(provider.notifier)
+          .commitPreferences(rebuilt.persistedPreferences);
+      expect(repository.upsertPreferencesCallCount, 2);
+    },
+  );
+
+  for (final returnToOriginal in [false, true]) {
+    test(
+      returnToOriginal
+          ? 'late converted document cannot replace a new session of the same episode'
+          : 'late converted document cannot replace the next episode',
+      () async {
+        final repository = _ControllerNovelRepository();
+        final bootstrap = _SequenceNovelReaderBootstrapService();
+        bootstrap.completeAt(
+          0,
+          _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+        );
+        final container = _buildContainer(
+          repository: repository,
+          bootstrapService: bootstrap,
+        );
+        addTearDown(container.dispose);
+        const args = NovelReaderArgs(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+        );
+        final provider = novelReaderControllerProvider(args);
+        final subscription = _keepReaderAlive(container, args);
+        addTearDown(subscription.close);
+        final initial = await container.read(provider.future);
+        final controller = container.read(provider.notifier);
+        final next = initial.preferences.copyWith(
+          conversionMode: NovelReaderConversionMode.toTraditional,
+        );
+        controller.previewPreferences(next);
+        final commit = controller.commitPreferences(next);
+        await Future<void>.delayed(Duration.zero);
+        expect(bootstrap.contexts, hasLength(2));
+        expect(
+          bootstrap.contexts[1].requestedEpisodeId,
+          initial.currentEpisode.episodeId,
+        );
+        final transition = controller.openEpisodeFromCatalog(
+          'novel:49:100:5002',
+        );
+        bootstrap.completeAt(
+          2,
+          _criticalBootstrap(
+            episodeId: 'novel:49:100:5002',
+            paragraphText: '第二章当前正文。',
+            preferences: next,
+          ),
+        );
+        expect(await transition, isTrue);
+        if (returnToOriginal) {
+          final returnTransition = controller.openEpisodeFromCatalog(
+            'novel:49:100:5001',
+          );
+          bootstrap.completeAt(
+            3,
+            _criticalBootstrap(
+              episodeId: 'novel:49:100:5001',
+              paragraphText: '第一章新会话正文。',
+              preferences: next,
+            ),
+          );
+          expect(await returnTransition, isTrue);
+        }
+        final current = container.read(provider).value!;
+        bootstrap.completeAt(
+          1,
+          _criticalBootstrap(
+            episodeId: 'novel:49:100:5001',
+            paragraphText: '迟到的旧转换正文。',
+            preferences: next,
+          ),
+        );
+        await commit;
+
+        final state = container.read(provider).value!;
+        expect(state.currentEpisode, current.currentEpisode);
+        expect(state.currentContent, current.currentContent);
+        expect(state.document, current.document);
+        expect(state.progressSnapshot, current.progressSnapshot);
+      },
+    );
+  }
+
   test(
     'NovelReaderController preview and commit are no-op for equal preferences',
     () async {
@@ -868,6 +1081,7 @@ ProviderSubscription<AsyncValue<NovelReaderViewState>> _keepReaderAlive(
 
 ProviderContainer _buildContainer({
   required _ControllerNovelRepository repository,
+  NovelReaderPreferencesRepository? preferencesRepository,
   LibraryStateRepository? stateRepository,
   NovelReaderBootstrapService? bootstrapService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
@@ -879,7 +1093,8 @@ ProviderContainer _buildContainer({
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
       novelReaderPreferencesRepositoryProvider.overrideWithValue(
-        _ControllerNovelReaderPreferencesRepository(repository),
+        preferencesRepository ??
+            _ControllerNovelReaderPreferencesRepository(repository),
       ),
       novelChapterUpdateServiceProvider.overrideWithValue(
         chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
@@ -1314,6 +1529,43 @@ class _ControllerNovelReaderPreferencesRepository
     repository.upsertPreferencesCallCount += 1;
     repository.latestPreferences = preferences;
     repository.preferences = preferences;
+  }
+}
+
+class _DelayedPreferencesRepository
+    implements NovelReaderPreferencesRepository {
+  _DelayedPreferencesRepository(this.repository);
+
+  final _ControllerNovelRepository repository;
+  final saveGate = Completer<void>();
+
+  @override
+  Future<NovelReaderPreferences> load() async => repository.preferences;
+
+  @override
+  Future<void> save(NovelReaderPreferences preferences) async {
+    repository.upsertPreferencesCallCount += 1;
+    await saveGate.future;
+    repository.latestPreferences = preferences;
+    repository.preferences = preferences;
+  }
+}
+
+class _SequenceNovelReaderBootstrapService
+    implements NovelReaderBootstrapService {
+  final contexts = <NovelReaderLoadContext>[];
+  final _sequence = _HydrationSequence<NovelReaderCriticalBootstrap>();
+
+  @override
+  Future<NovelReaderCriticalBootstrap> loadCritical(
+    NovelReaderLoadContext context,
+  ) {
+    contexts.add(context);
+    return _sequence.take();
+  }
+
+  void completeAt(int index, NovelReaderCriticalBootstrap value) {
+    _sequence.completeAt(index, value);
   }
 }
 
