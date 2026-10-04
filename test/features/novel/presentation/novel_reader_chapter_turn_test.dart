@@ -212,31 +212,47 @@ void main() {
       expect(edges, <NovelReaderChapterEdge>[NovelReaderChapterEdge.end]);
     });
 
-    testWidgets('tap controller does not cross an incomplete plan boundary', (
+    testWidgets('tap controller waits once at an incomplete plan boundary', (
       tester,
     ) async {
       final navigationController = NovelReaderPagedNavigationController();
       addTearDown(navigationController.dispose);
       final coordinator = _GrowingPlanPaginationCoordinator();
       final edges = <NovelReaderChapterEdge>[];
+      final positions = <NovelReaderPaginationPosition>[];
       await tester.pumpWidget(
         _buildSurface(
           coordinator: coordinator,
           navigationController: navigationController,
           nextChapterTitle: '第二章',
           onTurnToAdjacentChapter: _accepting(edges),
+          onPositionChanged: positions.add,
         ),
       );
       await tester.pump();
       await tester.pump();
 
+      expect(positions.last.pageIndex, 0);
+      expect(positions.last.isReadOnlyCompatibilityRestore, isTrue);
+      expect(navigationController.turnNext(), isTrue);
       expect(navigationController.turnNext(), isFalse);
+      await tester.pump();
+      expect(
+        tester.widget<PageView>(_pageView).controller!.page,
+        closeTo(0, 0.001),
+      );
+      expect(positions.last.pageIndex, 0);
+      expect(positions.last.isReadOnlyCompatibilityRestore, isTrue);
       expect(edges, isEmpty);
 
       coordinator.complete();
       await tester.pumpAndSettle();
-      expect(navigationController.turnNext(), isTrue);
-      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PageView>(_pageView).controller!.page,
+        closeTo(1, 0.001),
+      );
+      expect(positions.last.pageIndex, 1);
+      expect(positions.last.isReadOnlyCompatibilityRestore, isFalse);
       expect(edges, isEmpty);
     });
 

@@ -24,6 +24,80 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged
 import 'package:y300/l10n/app_localizations.dart';
 
 final _errors = <String>[];
+const _profilePartialNavigation = bool.fromEnvironment(
+  'PROFILE_PARTIAL_NAVIGATION',
+  defaultValue: true,
+);
+
+/// Read the mounted, currently turnable prefix without production diagnostics.
+@visibleForTesting
+int? visiblePaginationPageCount(BuildContext context) {
+  int? count;
+  var found = false;
+  void visit(Element element) {
+    if (found) return;
+    final widget = element.widget;
+    if (widget is PageView &&
+        widget.key == const Key('novel-reader-paged-page-view')) {
+      found = true;
+      count = widget.childrenDelegate.estimatedChildCount;
+      return;
+    }
+    element.visitChildElements(visit);
+  }
+
+  context.visitChildElements(visit);
+  return count;
+}
+
+/// An invalid interaction window must not become a successful background test.
+@visibleForTesting
+String? partialNavigationInvalidReason({
+  required bool firstReadableWasPartial,
+  required bool completed,
+  required Iterable<
+    ({bool pending, bool uncovered, bool accepted, bool covered, bool reached})
+  >
+  requests,
+}) {
+  final observations = requests.toList(growable: false);
+  if (!firstReadableWasPartial) return 'completed_before_first_input';
+  if (observations.isEmpty) return 'no_navigation_requests';
+  if (!observations.any((request) => request.pending && request.uncovered)) {
+    return 'no_pending_uncovered_request';
+  }
+  if (observations.any(
+    (request) => !request.accepted || !request.covered || !request.reached,
+  )) {
+    return 'navigation_target_not_reached';
+  }
+  if (!completed) return 'pagination_not_completed';
+  return null;
+}
+
+/// Keep interaction metadata separate from the already dense plan record.
+@visibleForTesting
+Map<String, Object?> navigationProfileSummary({
+  required String name,
+  required String? invalidReason,
+  required bool firstReadableWasPartial,
+  required int requestsWhilePending,
+  required int uncoveredRequestsWhilePending,
+  required int? interactionWindowUs,
+}) => {
+  'event': 'scenario_navigation_summary',
+  'name': name,
+  'valid': invalidReason == null,
+  'invalidReason': invalidReason,
+  'firstReadableWasPartial': firstReadableWasPartial,
+  'requestsWhilePending': requestsWhilePending,
+  'uncoveredRequestsWhilePending': uncoveredRequestsWhilePending,
+  'referencePagesAt450x800': 9,
+  'interactionWindowUs': interactionWindowUs,
+  'coverageSource': 'mounted-page-view',
+  'coveragePollMs': 20,
+};
+
 void _emit(Map<String, Object?> value) {
   // ignore: avoid_print
   print('NOVEL_PROFILE ${jsonEncode(value)}');
@@ -149,6 +223,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
       'textScaleAtOne': MediaQuery.textScalerOf(context).scale(1),
       'fontFamily': _preferences.fontFamily,
       'syntheticContent': true,
+      'partialNavigationRequested': _profilePartialNavigation,
     });
     try {
       await _scenario('safe-cold', _safeHtml, clear: true);
@@ -219,6 +294,9 @@ class _ProfileReaderState extends State<_ProfileReader> {
       _finish(exited, retired: true);
       _clearCaches();
       await Future<void>.delayed(const Duration(milliseconds: 750));
+      if (_profilePartialNavigation) {
+        await _partialNavigationScenario();
+      }
       // Leave known, completed production content for screenshots/manual turns.
       await _scenario('safe-final-visible', _safeHtml);
     } catch (error) {
@@ -360,7 +438,11 @@ class _ProfileReaderState extends State<_ProfileReader> {
 
   Future<void> _wait(bool Function() condition) async {
     final clock = Stopwatch()..start();
-    while (!condition()) {
+    while (true) {
+      if (mounted && _run?.partialNavigation == true) {
+        _observeVisibleCoverage(_run!);
+      }
+      if (condition()) return;
       if (!mounted || _errors.isNotEmpty || _run!.errors.isNotEmpty) {
         throw StateError('Profile work failed.');
       }
@@ -369,6 +451,84 @@ class _ProfileReaderState extends State<_ProfileReader> {
       }
       await Future<void>.delayed(const Duration(milliseconds: 20));
     }
+  }
+
+  void _observeVisibleCoverage(_Run run) {
+    if (!mounted || !_visible || !identical(_run, run)) return;
+    final count = visiblePaginationPageCount(context);
+    run.availablePages = count;
+    run.observePageRequests(visiblePageCount: count);
+  }
+
+  Future<void> _partialNavigationScenario() async {
+    final run = _start('complex-partial-navigation', _complexHtml, clear: true);
+    run.partialNavigation = true;
+    try {
+      // Wake directly from the real ready/position callbacks, rather than
+      // polling until a fast device has already finished the remaining pages.
+      await run.readable.future.timeout(const Duration(seconds: 30));
+      run.firstReadableWasPartial =
+          !run.complete && !run.position!.isPageCountFinal;
+      run.interactionWallStart = DateTime.now().microsecondsSinceEpoch;
+      if (run.firstReadableWasPartial) {
+        for (var index = 0; index < 3; index++) {
+          final position = run.position!;
+          _observeVisibleCoverage(run);
+          final availablePages = run.availablePages;
+          if (availablePages == null) {
+            throw StateError('The readable page view is not mounted.');
+          }
+          final request = _PageRequest(
+            from: position.pageIndex,
+            target: position.pageIndex + 1,
+            requestedUs: run.clock.elapsedMicroseconds,
+            availablePages: availablePages,
+            pending: !run.complete && !position.isPageCountFinal,
+          );
+          run.pageRequests.add(request);
+          run.observePageRequests();
+          // The old surface rejects an uncovered edge. The new surface may
+          // accept a pending turn, so stop submitting once it accepts this one.
+          await _wait(() {
+            if (_navigation.turnNext()) {
+              request.acceptedUs = run.clock.elapsedMicroseconds;
+              return true;
+            }
+            request.rejectedAttempts++;
+            return false;
+          });
+          await _wait(() => request.reachedUs != null);
+        }
+      }
+      run.interactionWallEnd = DateTime.now().microsecondsSinceEpoch;
+      await _wait(() => run.complete && run.position?.isPageCountFinal == true);
+      if (run.records.last.cacheHit) {
+        run.errors.add('partial_navigation_unexpected_plan_cache_hit');
+      }
+      if (run.pageRequests.isNotEmpty &&
+          (run.position!.pageIndex != run.pageRequests.last.target ||
+              run.records.last.pageCount <= run.pageRequests.last.target)) {
+        run.errors.add('partial_navigation_final_coverage_mismatch');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    } catch (error) {
+      run.errors.add('partial_navigation_${error.runtimeType}');
+    }
+    run.interactionWallEnd ??= DateTime.now().microsecondsSinceEpoch;
+    run.partialNavigationInvalidReason = partialNavigationInvalidReason(
+      firstReadableWasPartial: run.firstReadableWasPartial,
+      completed: run.complete,
+      requests: run.pageRequests.map(
+        (request) => (
+          pending: request.pending,
+          uncovered: request.uncovered,
+          accepted: request.acceptedUs != null,
+          covered: request.coveredUs != null,
+          reached: request.reachedUs != null,
+        ),
+      ),
+    );
+    _finish(run);
   }
 
   NovelReaderProgressSnapshot _saved(NovelReaderPaginationPosition position) =>
@@ -431,6 +591,58 @@ class _ProfileReaderState extends State<_ProfileReader> {
       'ui': frameStats(build),
       'raster': frameStats(raster),
     });
+    if (run.partialNavigation) {
+      final interactionFrames = frames.where((frame) {
+        final timestamp = frame.timestampInMicroseconds(
+          FramePhase.rasterFinishWallTime,
+        );
+        return run.interactionWallStart != null &&
+            timestamp >= run.interactionWallStart! &&
+            timestamp <= run.interactionWallEnd!;
+      }).toList();
+      final interactionBuild =
+          interactionFrames
+              .map((frame) => frame.buildDuration.inMicroseconds)
+              .toList()
+            ..sort();
+      final interactionRaster =
+          interactionFrames
+              .map((frame) => frame.rasterDuration.inMicroseconds)
+              .toList()
+            ..sort();
+      // This window includes real page rendering, animation and background
+      // probes. Compare matching actions/windows, not a baseline spinner GPU.
+      _emit({
+        'event': 'scenario_interaction_frames',
+        'name': run.name,
+        'window': 'first-readable-to-last-requested-page-visible',
+        'valid': run.partialNavigationInvalidReason == null,
+        'frames': interactionFrames.length,
+        'ui': frameStats(interactionBuild),
+        'raster': frameStats(interactionRaster),
+      });
+      _emit({
+        'event': 'scenario_navigation_requests',
+        'name': run.name,
+        'items': [for (final request in run.pageRequests) request.toJson()],
+      });
+      _emit(
+        navigationProfileSummary(
+          name: run.name,
+          invalidReason: run.partialNavigationInvalidReason,
+          firstReadableWasPartial: run.firstReadableWasPartial,
+          requestsWhilePending: run.pageRequests
+              .where((request) => request.pending)
+              .length,
+          uncoveredRequestsWhilePending: run.pageRequests
+              .where((request) => request.pending && request.uncovered)
+              .length,
+          interactionWindowUs: run.interactionWallStart == null
+              ? null
+              : run.interactionWallEnd! - run.interactionWallStart!,
+        ),
+      );
+    }
     _emit({
       'event': 'scenario_publications',
       'name': run.name,
@@ -450,6 +662,8 @@ class _ProfileReaderState extends State<_ProfileReader> {
       'passed':
           run.errors.isEmpty &&
           run.lateCallbacks == 0 &&
+          (!run.partialNavigation ||
+              run.partialNavigationInvalidReason == null) &&
           (run.retired ? run.pendingAtRetirement : run.complete),
       'retired': run.retired,
       'pendingAtRetirement': run.pendingAtRetirement,
@@ -474,6 +688,8 @@ class _ProfileReaderState extends State<_ProfileReader> {
       'textLayouts': diagnostic?.textLayoutCount,
       'complexBlocks': diagnostic?.complexBlockCount,
       'rendererValidations': diagnostic?.rendererValidationCount,
+      'rendererValidationMismatchCount':
+          diagnostic?.rendererValidationMismatchCount,
       'domSlices': diagnostic?.domSliceCount,
       'candidateMaxCodeUnits': diagnostic?.maximumCandidateHtmlCodeUnits,
       'candidateTotalCodeUnits': diagnostic?.totalCandidateHtmlCodeUnits,
@@ -489,6 +705,8 @@ class _ProfileReaderState extends State<_ProfileReader> {
           diagnostic?.targetPageAvailableDuration.inMicroseconds,
       'firstFrameworkFrameUs':
           diagnostic?.firstVisibleFrameDuration?.inMicroseconds,
+      if (run.partialNavigation)
+        'partialNavigationValid': run.partialNavigationInvalidReason == null,
     };
     // A plan-cache hit replays stored cold-plan statistics; it is not fresh probe work.
     _results.add(result);
@@ -550,6 +768,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
             if (record.isComplete) {
               run.completeUs ??= run.clock.elapsedMicroseconds;
             }
+            run.observePageRequests();
           }
         }),
         onContentReady: () {
@@ -560,6 +779,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
               'scenario': run.name,
               'wallUs': run.readyUs,
             });
+            run.completeReadableIfPossible();
           }
         },
         onContentTerminal: () {
@@ -576,6 +796,8 @@ class _ProfileReaderState extends State<_ProfileReader> {
                       .abs();
             }
             run.position = position;
+            run.observePageRequests();
+            run.completeReadableIfPossible();
           }
         },
       ),
@@ -611,7 +833,68 @@ class _Run {
   int? readyUs, completeUs, wallEnd, lastPageSpan;
   int lateCallbacks = 0;
   bool retired = false, pendingAtRetirement = false;
+  final readable = Completer<void>();
+  final pageRequests = <_PageRequest>[];
+  bool partialNavigation = false, firstReadableWasPartial = false;
+  String? partialNavigationInvalidReason;
+  int? interactionWallStart, interactionWallEnd;
+  int? availablePages;
   bool get complete => completeUs != null;
+
+  void completeReadableIfPossible() {
+    if (!readable.isCompleted && readyUs != null && position != null) {
+      readable.complete();
+    }
+  }
+
+  void observePageRequests({int? visiblePageCount}) {
+    final elapsedUs = clock.elapsedMicroseconds;
+    for (final request in pageRequests) {
+      if (visiblePageCount != null && visiblePageCount > request.target) {
+        request.coveredUs ??= elapsedUs;
+      }
+      if (position?.pageIndex == request.target) {
+        request.reachedUs ??= elapsedUs;
+        request.reachedWhilePending ??=
+            !complete && !position!.isPageCountFinal;
+      }
+    }
+  }
+}
+
+class _PageRequest {
+  _PageRequest({
+    required this.from,
+    required this.target,
+    required this.requestedUs,
+    required this.availablePages,
+    required this.pending,
+  }) : coveredUs = target < availablePages ? requestedUs : null;
+
+  final int from, target, requestedUs, availablePages;
+  final bool pending;
+  int? acceptedUs, coveredUs, reachedUs;
+  bool? reachedWhilePending;
+  int rejectedAttempts = 0;
+  bool get uncovered => target >= availablePages;
+
+  Map<String, Object?> toJson() => {
+    'fromPage': from,
+    'targetPage': target,
+    'requestedUs': requestedUs,
+    'observedAvailablePagesAtRequest': availablePages,
+    'pendingAtRequest': pending,
+    'observedUncoveredAtRequest': uncovered,
+    'acceptedUs': acceptedUs,
+    // Sampling identifies the first observed coverage, not its publish instant.
+    'observedCoverageWaitUs': coveredUs == null
+        ? null
+        : coveredUs! - requestedUs,
+    'acceptanceWaitUs': acceptedUs == null ? null : acceptedUs! - requestedUs,
+    'visibleWaitUs': reachedUs == null ? null : reachedUs! - requestedUs,
+    'reachedWhilePending': reachedWhilePending,
+    'rejectedAttempts': rejectedAttempts,
+  };
 }
 
 final _safeHtml = List<String>.filled(

@@ -594,6 +594,383 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a missing forward page keeps one target until it becomes readable',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 2);
+      await tester.pump();
+      await tester.pump();
+      expect(host.navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+      final pageElement = tester.element(pageFinder);
+      final pageController = tester.widget<PageView>(pageFinder).controller!;
+      expect(pageController.page, closeTo(1, 0.001));
+
+      expect(host.navigation.turnNext(), isTrue);
+      expect(host.navigation.turnNext(), isFalse);
+      await tester.pump();
+      expect(pageController.page, closeTo(1, 0.001));
+      coordinator.emit(0, pageCount: 2);
+      await tester.pumpAndSettle();
+      expect(pageController.page, closeTo(1, 0.001));
+      expect(host.navigation.turnNext(), isFalse);
+
+      coordinator.emit(0, pageCount: 3);
+      await tester.pumpAndSettle();
+      expect(tester.element(pageFinder), same(pageElement));
+      expect(
+        tester.widget<PageView>(pageFinder).controller,
+        same(pageController),
+      );
+      expect(pageController.page, closeTo(2, 0.001));
+      expect(host.positions.last.pageIndex, 2);
+      expect(host.positions.last.isReadOnlyCompatibilityRestore, isFalse);
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      await tester.pumpAndSettle();
+      expect(pageController.page, closeTo(2, 0.001));
+      expect(coordinator.attempts, hasLength(1));
+      expect(host.scrollChoices, 0);
+    },
+  );
+
+  testWidgets(
+    'a newly published page accepts a turn before the old view rebuilds',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 2);
+      await tester.pump();
+      await tester.pump();
+      expect(host.navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+      final controller = tester.widget<PageView>(pageFinder).controller!;
+      expect(controller.page, closeTo(1, 0.001));
+
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      // Deliver the stream result without rebuilding the still-two-page view.
+      await tester.idle();
+      expect(
+        tester
+            .widget<PageView>(pageFinder)
+            .childrenDelegate
+            .estimatedChildCount,
+        2,
+      );
+      expect(host.navigation.turnNext(), isTrue);
+      expect(host.navigation.turnNext(), isFalse);
+      await tester.pumpAndSettle();
+      expect(controller.page, closeTo(2, 0.001));
+      expect(host.positions.last.pageIndex, 2);
+      expect(host.chapterTurns, 0);
+    },
+  );
+
+  testWidgets(
+    'a claimed turn takes precedence over late legacy percentage restoration',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      host.snapshot = host.snapshot.copyWith(
+        progressPercent: 0.8,
+        pageCount: 3,
+        anchorNodeId: 'paragraph-0',
+      );
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 1);
+      await tester.pump();
+      await tester.pump();
+      expect(host.positions.last.pageIndex, 0);
+      expect(host.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+      expect(host.navigation.turnNext(), isTrue);
+      await tester.pump();
+      expect(host.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      expect(host.positions.last.pageIndex, 0);
+      expect(host.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+      await tester.pumpAndSettle();
+      final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(1, 0.001),
+      );
+      expect(host.positions.last.pageIndex, 1);
+      expect(host.positions.last.isReadOnlyCompatibilityRestore, isFalse);
+      expect(
+        host.positions.any((position) => position.pageIndex == 2),
+        isFalse,
+      );
+      expect(coordinator.attempts, hasLength(1));
+    },
+  );
+
+  for (final cancellation in ['reverse', 'drag', 'navigation', 'seek']) {
+    testWidgets(
+      '$cancellation cancels a missing-page turn before late coverage',
+      (tester) async {
+        final coordinator = _BudgetPaginationCoordinator();
+        final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+        _disposeBudgetHost(tester, coordinator);
+        await _pumpBudgetHost(tester, host);
+        coordinator.emit(0, pageCount: 2);
+        await tester.pump();
+        await tester.pump();
+        expect(host.navigation.turnNext(), isTrue);
+        await tester.pumpAndSettle();
+        expect(host.navigation.turnNext(), isTrue);
+        final pageFinder = find.byKey(
+          const Key('novel-reader-paged-page-view'),
+        );
+        switch (cancellation) {
+          case 'reverse':
+            expect(host.navigation.turnPrevious(), isTrue);
+          case 'drag':
+            await tester.drag(pageFinder, const Offset(600, 0));
+          case 'navigation':
+            host.navigationRequest = _budgetNavigation(10, 0);
+            await tester.pumpWidget(host.build());
+          case 'seek':
+            host.pageSeekRequest = NovelReaderPageSeekRequest(
+              requestId: 10,
+              episodeId: _episode.episodeId,
+              paginationKey: host.positions.last.paginationKey,
+              pageIndex: 0,
+            );
+            await tester.pumpWidget(host.build());
+        }
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<PageView>(pageFinder).controller!.page,
+          closeTo(0, 0.001),
+        );
+        final reports = host.positions.length;
+        coordinator.emit(0, pageCount: 3, isComplete: true);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<PageView>(pageFinder).controller!.page,
+          closeTo(0, 0.001),
+        );
+        expect(
+          host.positions
+              .skip(reports)
+              .any((position) => position.pageIndex == 2),
+          isFalse,
+        );
+        expect(coordinator.attempts, hasLength(1));
+      },
+    );
+  }
+
+  for (final retirement in ['retry', 'generation']) {
+    testWidgets(
+      '$retirement retires a missing-page turn with its old attempt',
+      (tester) async {
+        final coordinator = _BudgetPaginationCoordinator();
+        final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+        _disposeBudgetHost(tester, coordinator);
+        await _pumpBudgetHost(tester, host);
+        coordinator.emit(0, pageCount: 2);
+        await tester.pump();
+        await tester.pump();
+        expect(host.navigation.turnNext(), isTrue);
+        await tester.pumpAndSettle();
+        expect(host.navigation.turnNext(), isTrue);
+        final pageFinder = find.byKey(
+          const Key('novel-reader-paged-page-view'),
+        );
+        if (retirement == 'retry') {
+          coordinator.fail(0);
+          await tester.pump();
+          await tester.pump();
+          await tester.tap(
+            find.byKey(const Key('novel-reader-pagination-retry')),
+          );
+          await tester.pump();
+        } else {
+          final replacementCache = NovelReaderPaginationCache();
+          addTearDown(replacementCache.dispose);
+          host.paginationCache = replacementCache;
+          await tester.pumpWidget(host.build());
+          await tester.pump();
+        }
+        await tester.pump();
+        expect(coordinator.attempts, hasLength(2));
+        final reports = host.positions.length;
+        coordinator.emit(0, pageCount: 3, isComplete: true);
+        await tester.pump();
+        coordinator.emit(1, pageCount: 3, isComplete: true);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<PageView>(pageFinder).controller!.page,
+          closeTo(retirement == 'retry' ? 1 : 0, 0.001),
+        );
+        expect(
+          host.positions
+              .skip(reports)
+              .any((position) => position.pageIndex == 2),
+          isFalse,
+        );
+        expect(coordinator.cancelPendingCount, greaterThan(0));
+        expect(host.scrollChoices, 0);
+      },
+    );
+  }
+
+  for (final retirement in ['failure', 'retry', 'generation']) {
+    testWidgets(
+      '$retirement stops a claimed missing-page animation before arrival',
+      (tester) async {
+        final coordinator = _BudgetPaginationCoordinator();
+        final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+        _disposeBudgetHost(tester, coordinator);
+        await _pumpBudgetHost(tester, host);
+        coordinator.emit(0, pageCount: 2);
+        await tester.pump();
+        await tester.pump();
+        expect(host.navigation.turnNext(), isTrue);
+        await tester.pumpAndSettle();
+        expect(host.navigation.turnNext(), isTrue);
+        coordinator.emit(0, pageCount: 3);
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 8));
+        final pageFinder = find.byKey(
+          const Key('novel-reader-paged-page-view'),
+        );
+        final controller = tester.widget<PageView>(pageFinder).controller!;
+        expect(controller.page, allOf(greaterThan(1), lessThan(1.5)));
+        expect(host.positions.last.pageIndex, 1);
+        final reports = host.positions.length;
+
+        if (retirement == 'generation') {
+          final replacementCache = NovelReaderPaginationCache();
+          addTearDown(replacementCache.dispose);
+          host.paginationCache = replacementCache;
+          await tester.pumpWidget(host.build());
+          await tester.pump();
+        } else {
+          coordinator.fail(0);
+          await tester.pump();
+          await tester.pump();
+          expect(controller.page, closeTo(1, 0.001));
+          if (retirement == 'retry') {
+            await tester.tap(
+              find.byKey(const Key('novel-reader-pagination-retry')),
+            );
+            await tester.pump();
+          }
+        }
+        await tester.pump();
+        if (retirement != 'failure') {
+          expect(coordinator.attempts, hasLength(2));
+          coordinator.emit(1, pageCount: 3, isComplete: true);
+        }
+        coordinator.emit(0, pageCount: 3, isComplete: true);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<PageView>(pageFinder).controller!.page,
+          closeTo(retirement == 'generation' ? 0 : 1, 0.001),
+        );
+        expect(
+          host.positions
+              .skip(reports)
+              .any((position) => position.pageIndex == 2),
+          isFalse,
+        );
+        expect(host.chapterTurns, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('an absent pending page at completion never turns the chapter', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+      ..allowChapterTurns = true;
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 2);
+    await tester.pump();
+    await tester.pump();
+    expect(host.navigation.turnNext(), isTrue);
+    await tester.pumpAndSettle();
+    expect(host.navigation.turnNext(), isTrue);
+    coordinator.emit(0, pageCount: 2, isComplete: true);
+    await tester.pumpAndSettle();
+    final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+    expect(
+      tester.widget<PageView>(pageFinder).controller!.page,
+      closeTo(1, 0.001),
+    );
+    expect(host.chapterTurns, 0);
+    // A subsequent explicit turn still reaches the configured chapter handler.
+    expect(host.navigation.turnNext(), isFalse);
+    expect(host.chapterTurns, 1);
+  });
+
+  for (final value in ['body', 'align', 'direction']) {
+    testWidgets(
+      'actual $value layout changes rebind the coordinator under a new key',
+      (tester) async {
+        final coordinator = _BudgetPaginationCoordinator();
+        final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+        _disposeBudgetHost(tester, coordinator);
+        await _pumpBudgetHost(tester, host);
+        coordinator.emit(0, pageCount: 3, isComplete: true);
+        await tester.pump();
+        await tester.pump();
+        final originalKey = coordinator.attempts.single.key;
+        final originalBuildCount = host.coordinatorBuildCount;
+        if (value == 'direction') {
+          host.direction = TextDirection.rtl;
+        } else {
+          final typography = host.typography;
+          host.typography = NovelReaderTypography(
+            body: value == 'body'
+                ? typography.body.copyWith(fontSize: 24.5, letterSpacing: 1.5)
+                : typography.body,
+            chapterTitle: typography.chapterTitle,
+            quote: typography.quote,
+            link: typography.link,
+            textAlign: value == 'align'
+                ? TextAlign.center
+                : typography.textAlign,
+            firstLineIndent: typography.firstLineIndent,
+            contentMaxWidth: typography.contentMaxWidth,
+          );
+        }
+        await tester.pumpWidget(host.build());
+        await tester.pump();
+        await tester.pump();
+        expect(coordinator.attempts, hasLength(2));
+        final newKey = coordinator.attempts.last.key;
+        expect(newKey, isNot(originalKey));
+        expect(newKey.layoutFingerprint, isNot(originalKey.layoutFingerprint));
+        expect(host.coordinatorBuildCount, originalBuildCount + 1);
+        expect(coordinator.cancelPendingCount, greaterThan(0));
+        coordinator.emit(0, pageCount: 3, isComplete: true);
+        coordinator.emit(1, pageCount: 3, isComplete: true);
+        await tester.pump();
+        await tester.pump();
+        expect(host.positions.last.paginationKey, newKey.layoutFingerprint);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final stop in ['timeout', 'error']) {
     testWidgets('background $stop retains the visible page through retry', (
       tester,
@@ -1082,7 +1459,10 @@ final class _BudgetSurfaceHost {
           required String? threadId,
           required String? imageCacheOwnerId,
           required String? imageReferer,
-        }) => coordinator;
+        }) {
+          coordinatorBuildCount += 1;
+          return coordinator;
+        };
   }
 
   final _BudgetPaginationCoordinator coordinator;
@@ -1094,13 +1474,18 @@ final class _BudgetSurfaceHost {
     flowMode: NovelReaderFlowMode.pagedLtr,
   );
   late final ThemeData theme;
-  late final NovelReaderTypography typography;
+  late NovelReaderTypography typography;
   late final ForumHtmlThemeContext htmlTheme;
   late final NovelReaderPaginationCoordinatorBuilder coordinatorBuilder;
   final positions = <NovelReaderPaginationPosition>[];
   final navigation = NovelReaderPagedNavigationController();
   int scrollChoices = 0;
+  int coordinatorBuildCount = 0;
+  TextDirection direction = TextDirection.ltr;
+  bool allowChapterTurns = false;
+  int chapterTurns = 0;
   NovelReaderAnchorNavigationRequest? navigationRequest;
+  NovelReaderPageSeekRequest? pageSeekRequest;
   NovelReaderDocument? semanticDocument;
   NovelReaderPaginationCache? paginationCache;
   NovelReaderPaginationMeasureCache? measureCache;
@@ -1121,33 +1506,44 @@ final class _BudgetSurfaceHost {
   Widget build() => LocalizedTestApp(
     theme: theme,
     home: Scaffold(
-      body: NovelReaderHtmlPagedSurface(
-        rawHtml: _budgetRawHtml,
-        semanticDocument: semanticDocument,
-        episode: _episode,
-        preferences: preferences,
-        typography: typography,
-        theme: htmlTheme,
-        imageReferer: 'https://bbs.yamibo.com/',
-        progressSnapshot: snapshot,
-        navigationRequest: navigationRequest,
-        navigationController: navigation,
-        coordinatorBuilder: useDefaultCoordinator ? null : coordinatorBuilder,
-        preparationService: preparationService,
-        paginationCache: paginationCache,
-        paginationMeasureCache: measureCache,
-        paginationBoundaryCache: boundaryCache,
-        preparedChapterCache: preparedCache,
-        diagnosticsSink: diagnosticsSink,
-        performancePolicy: NovelReaderPaginationPerformancePolicy(
-          targetPageWait: targetPageWait,
-          backgroundIdle: backgroundIdle,
-          enforceBudgets: enforceBudgets,
+      body: Directionality(
+        textDirection: direction,
+        child: NovelReaderHtmlPagedSurface(
+          rawHtml: _budgetRawHtml,
+          semanticDocument: semanticDocument,
+          episode: _episode,
+          preferences: preferences,
+          typography: typography,
+          theme: htmlTheme,
+          imageReferer: 'https://bbs.yamibo.com/',
+          progressSnapshot: snapshot,
+          navigationRequest: navigationRequest,
+          pageSeekRequest: pageSeekRequest,
+          navigationController: navigation,
+          nextChapterTitle: allowChapterTurns ? _episode.episodeTitle : null,
+          onTurnToAdjacentChapter: allowChapterTurns
+              ? (_) {
+                  chapterTurns += 1;
+                  return false;
+                }
+              : null,
+          coordinatorBuilder: useDefaultCoordinator ? null : coordinatorBuilder,
+          preparationService: preparationService,
+          paginationCache: paginationCache,
+          paginationMeasureCache: measureCache,
+          paginationBoundaryCache: boundaryCache,
+          preparedChapterCache: preparedCache,
+          diagnosticsSink: diagnosticsSink,
+          performancePolicy: NovelReaderPaginationPerformancePolicy(
+            targetPageWait: targetPageWait,
+            backgroundIdle: backgroundIdle,
+            enforceBudgets: enforceBudgets,
+          ),
+          onPositionChanged: positions.add,
+          onChooseScrollMode: () {
+            scrollChoices += 1;
+          },
         ),
-        onPositionChanged: positions.add,
-        onChooseScrollMode: () {
-          scrollChoices += 1;
-        },
       ),
     ),
   );

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
@@ -18,6 +19,8 @@ import 'package:y300/features/novel/presentation/services/novel_reader_flowable_
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
@@ -782,6 +785,190 @@ void main() {
     }
   });
 
+  test(
+    'nearby pages pause probes and promotion resumes the same session',
+    () async {
+      final chapter = await _prepare(
+        '<p><font face="Fantasy Novel Font">${'甲' * 96}</font></p>',
+      );
+      final key = _key(chapter, height: 80);
+      double heightFor(NovelReaderPaginationMeasureRequest request, int _) =>
+          (request.endOffset! - request.startOffset!) * 10.0;
+      final eager = await _planner(
+        _RecordingMeasureAdapter(heightFor: heightFor),
+      ).paginate(chapter, key);
+      final idle = Completer<void>();
+      final deferred = Completer<void>();
+      final demand = NovelReaderPaginationDemand(
+        lookAhead: 0,
+        idleScheduler: () => idle.future,
+      )..update(targetPending: false, pageIndex: 0);
+      demand.addListener(() {
+        if (demand.isDeferring && !deferred.isCompleted) {
+          deferred.complete();
+        }
+      });
+      final adapter = _RecordingMeasureAdapter(heightFor: heightFor);
+      final sessions = _DemandMeasureSessionFactory(adapter);
+      final events = <NovelReaderPaginationProgress>[];
+      final completed = _planner(sessions, workDemand: demand)
+          .planIncrementally(
+            chapter: chapter,
+            key: key,
+            cancellationToken: NovelReaderPaginationCancellationToken(),
+          )
+          .map((progress) {
+            events.add(progress);
+            return progress;
+          })
+          .toList();
+
+      await deferred.future.timeout(const Duration(seconds: 2));
+      try {
+        final probeCount = adapter.requests.length;
+        expect(events.last.plan.pageCount, 1);
+        expect(events.every((event) => !event.isComplete), isTrue);
+        expect(sessions.sessions, hasLength(1));
+        expect(sessions.sessions.single.disposeCalls, 0);
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        expect(adapter.requests, hasLength(probeCount));
+        expect(events.last.plan.pageCount, 1);
+      } finally {
+        demand.update(
+          targetPending: false,
+          pageIndex: 0,
+          requireComplete: true,
+        );
+      }
+      final updates = await completed;
+      final plan = updates.last.plan;
+      expect(updates.last.isComplete, isTrue);
+      expect(
+        plan.pages.map((page) => page.html),
+        eager.pages.map((page) => page.html),
+      );
+      for (var index = 0; index < plan.pageCount; index += 1) {
+        final actual = plan.pages[index];
+        final expected = eager.pages[index];
+        expect(
+          _anchorValues(actual.startAnchor),
+          _anchorValues(expected.startAnchor),
+        );
+        expect(
+          _anchorValues(actual.endAnchor),
+          _anchorValues(expected.endAnchor),
+        );
+        expect(
+          actual.anchorRanges.map(
+            (range) => [_anchorValues(range.start), _anchorValues(range.end)],
+          ),
+          expected.anchorRanges.map(
+            (range) => [_anchorValues(range.start), _anchorValues(range.end)],
+          ),
+        );
+      }
+      expect(sessions.sessions, hasLength(1));
+      expect(sessions.sessions.single.disposeCalls, 1);
+      expect(plan.pages.take(1).toList(), events.first.plan.pages);
+      idle.complete();
+      await Future<void>.delayed(Duration.zero);
+      demand.dispose();
+    },
+  );
+
+  test(
+    'cancelling deferred work releases its session without late cache writes',
+    () async {
+      final chapter = await _prepare(
+        '<p><font face="Fantasy Novel Font">${'甲' * 96}</font></p>',
+      );
+      final idle = Completer<void>();
+      final deferred = Completer<void>();
+      final demand = NovelReaderPaginationDemand(
+        lookAhead: 0,
+        idleScheduler: () => idle.future,
+      )..update(targetPending: false, pageIndex: 0);
+      demand.addListener(() {
+        if (demand.isDeferring && !deferred.isCompleted) {
+          deferred.complete();
+        }
+      });
+      final adapter = _RecordingMeasureAdapter(
+        heightFor: (request, _) =>
+            (request.endOffset! - request.startOffset!) * 10.0,
+      );
+      final sessions = _DemandMeasureSessionFactory(adapter);
+      final coordinator = DefaultNovelReaderPaginationCoordinator(
+        pageBreaker: _planner(sessions, workDemand: demand),
+      );
+      final events = <NovelReaderPaginationProgress>[];
+      final errors = <Object>[];
+      final done = Completer<void>();
+      final subscription = coordinator
+          .paginateIncrementally(
+            chapter: chapter,
+            key: _key(chapter, height: 80),
+          )
+          .listen(events.add, onError: errors.add, onDone: done.complete);
+      await deferred.future.timeout(const Duration(seconds: 2));
+      final probeCount = adapter.requests.length;
+      final eventCount = events.length;
+      coordinator.cancelPending();
+      await done.future.timeout(const Duration(seconds: 2));
+      idle.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      expect(demand.isDeferring, isFalse);
+      expect(sessions.sessions, hasLength(1));
+      expect(sessions.sessions.single.disposeCalls, 1);
+      expect(adapter.requests, hasLength(probeCount));
+      expect(events, hasLength(eventCount));
+      expect(events.every((event) => !event.isComplete), isTrue);
+      expect(errors, hasLength(1));
+      expect(
+        errors.single,
+        isA<NovelReaderPaginationException>().having(
+          (error) => error.code,
+          'code',
+          'paginationCancelled',
+        ),
+      );
+      expect(coordinator.cache.length, 0);
+      await subscription.cancel();
+      demand.dispose();
+    },
+  );
+
+  test(
+    'complete-plan callers remain eager when a demand object is supplied',
+    () async {
+      final chapter = await _prepare(
+        '<p><font face="Fantasy Novel Font">${'甲' * 48}</font></p>',
+      );
+      final demand = NovelReaderPaginationDemand(
+        lookAhead: 0,
+        idleScheduler: () =>
+            throw StateError('Complete plans must not be gated.'),
+      )..update(targetPending: false, pageIndex: 0);
+      final adapter = _RecordingMeasureAdapter(
+        heightFor: (request, _) =>
+            (request.endOffset! - request.startOffset!) * 10.0,
+      );
+      final plan = await _planner(
+        adapter,
+        workDemand: demand,
+      ).paginate(chapter, _key(chapter, height: 80));
+
+      expect(plan.pageCount, 6);
+      expect(
+        plan.pages.map((page) => _visibleText(page.html)).join(),
+        '甲' * 48,
+      );
+      expect(demand.isDeferring, isFalse);
+      demand.dispose();
+    },
+  );
+
   test('incremental pagination stops publishing after cancellation', () async {
     final chapter = await _prepare(
       '<p>${List<String>.filled(80, '可取消的增量分页正文。').join()}</p>',
@@ -1381,15 +1568,72 @@ String _withoutFormattingWhitespace(String html) {
 DefaultNovelReaderHybridPaginationPlanner _planner(
   NovelReaderPaginationMeasureAdapter adapter, {
   NovelReaderFlowableComplexPaginationEngine? flowableComplexEngine,
+  NovelReaderPaginationDemand? workDemand,
 }) {
   return DefaultNovelReaderHybridPaginationPlanner(
     measureAdapter: adapter,
     preferences: _preferences,
     theme: _theme,
     baseStyle: _baseStyle,
+    workDemand: workDemand,
     flowableComplexEngine: flowableComplexEngine,
     validationPolicy: const NovelReaderPaginationValidationPolicy(interval: 8),
   );
+}
+
+List<Object?> _anchorValues(NovelReaderTextAnchor anchor) => [
+  anchor.episodeId,
+  anchor.nodeId,
+  anchor.textOffset,
+  anchor.pageIndex,
+  anchor.scrollOffset,
+  anchor.progressPercent,
+  anchor.formatVersion,
+  anchor.textIdentity,
+  anchor.isProgressPercentValid,
+];
+
+final class _DemandMeasureSessionFactory
+    implements
+        NovelReaderPaginationMeasureAdapter,
+        NovelReaderPaginationMeasureSessionFactory {
+  _DemandMeasureSessionFactory(this.adapter);
+
+  final _RecordingMeasureAdapter adapter;
+  final sessions = <_DemandMeasureSession>[];
+
+  @override
+  NovelReaderPaginationMeasureSession create({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  }) {
+    final session = _DemandMeasureSession(adapter);
+    sessions.add(session);
+    return session;
+  }
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) => adapter.measure(request);
+}
+
+final class _DemandMeasureSession
+    implements NovelReaderPaginationMeasureSession {
+  _DemandMeasureSession(this.adapter);
+
+  final _RecordingMeasureAdapter adapter;
+  int disposeCalls = 0;
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) => adapter.measure(request);
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls += 1;
+  }
 }
 
 final class _RejectingFlowableEngine

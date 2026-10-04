@@ -24,6 +24,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_increment
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_page_composer.dart';
@@ -56,6 +57,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
     this.textDirection = TextDirection.ltr,
     this.textAlign = TextAlign.start,
     this.textScaler = TextScaler.noScaling,
+    this.workDemand,
     this.atomExtractor = const NovelReaderPaginationAtomExtractor(),
     this.atomClassifier = const NovelReaderPaginationAtomClassifier(),
     this.layoutPolicyResolver =
@@ -99,6 +101,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
   final TextDirection textDirection;
   final TextAlign textAlign;
   final TextScaler textScaler;
+  final NovelReaderPaginationDemand? workDemand;
   final NovelReaderPaginationAtomExtractor atomExtractor;
   final NovelReaderPaginationAtomClassifier atomClassifier;
   final NovelReaderPaginationLayoutPolicyResolver layoutPolicyResolver;
@@ -269,6 +272,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
       );
     });
     sessionStopwatch.stop();
+    NovelReaderPaginationDemandLease? demandLease;
     final validator = NovelReaderSessionPaginationRendererValidator(session);
     final complexMeasurer = NovelReaderSessionComplexBlockMeasurer(session);
     final textEngine = DefaultNovelReaderTextPaginationEngine(
@@ -389,6 +393,12 @@ final class DefaultNovelReaderHybridPaginationPlanner
           totalAtomCount: atoms.length,
         ),
       );
+      // Keep the producer's cursor and composer alive while nearby pages are
+      // covered. Pausing a Stream subscription would not stop this producer.
+      await demandLease?.afterPublication(
+        plan.pageCount,
+        isComplete: isComplete,
+      );
     }
 
     Future<void> fallbackWholeSafeAtom(
@@ -447,6 +457,9 @@ final class DefaultNovelReaderHybridPaginationPlanner
     }
 
     try {
+      if (onProgress != null) {
+        demandLease = workDemand?.start(cancellationToken);
+      }
       for (
         var classifiedIndex = 0;
         classifiedIndex < classifiedAtoms.length;
@@ -947,6 +960,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
       await publishFinalPages(isComplete: true, completePlan: plan);
       return plan;
     } finally {
+      demandLease?.close();
       removeCancellationListener();
       await (cancellationDisposal ?? session.dispose());
     }
@@ -1257,6 +1271,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
       textDirection: textDirection,
       textAlign: textAlign,
       textScaler: textScaler,
+      workDemand: workDemand,
       atomExtractor: atomExtractor,
       atomClassifier: atomClassifier,
       layoutPolicyResolver: layoutPolicyResolver,

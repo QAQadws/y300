@@ -27,6 +27,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_html_prep
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
@@ -226,10 +227,15 @@ class _NovelReaderHtmlPagedSurfaceState
   int? _appliedChapterEntryRequestId;
   Object? _reportedContentReadyIdentity;
   Object? _reportedContentTerminalIdentity;
+  final NovelReaderPaginationDemand _workDemand = NovelReaderPaginationDemand();
+  bool _restoreTargetPending = true;
+  int _demandPageIndex = 0;
+  int? _pendingForwardPage;
 
   @override
   void initState() {
     super.initState();
+    _workDemand.addListener(_onWorkDeferralChanged);
     _ensurePreparationFuture();
   }
 
@@ -256,6 +262,8 @@ class _NovelReaderHtmlPagedSurfaceState
       }
     }
     if (_navigationIdentity(oldWidget) != _navigationIdentity(widget)) {
+      _pendingForwardPage = null;
+      _restoreTargetPending = true;
       _targetReady = false;
       _backgroundIdleTimer?.cancel();
       _backgroundIdleTimer = null;
@@ -265,12 +273,18 @@ class _NovelReaderHtmlPagedSurfaceState
         _startTargetWaitTimer();
       }
     }
+    if (oldWidget.pageSeekRequest?.requestId !=
+        widget.pageSeekRequest?.requestId) {
+      _cancelPendingForwardPage(rebuild: false);
+    }
   }
 
   @override
   void dispose() {
+    _workDemand.removeListener(_onWorkDeferralChanged);
     _cancelPerformanceTimers();
     _cancelPendingPagination();
+    _workDemand.dispose();
     _ownedCache?.dispose();
     _ownedMeasureCache?.dispose();
     _ownedBoundaryCache?.dispose();
@@ -483,10 +497,27 @@ class _NovelReaderHtmlPagedSurfaceState
                       requestedPage ??
                       entryPage ??
                       restoreResolution?.pageIndex;
-                  final targetIsPending =
+                  final restoreTargetIsPending =
                       navigationIsPending ||
                       entryIsPending ||
                       resolvedPage == null;
+                  if ((!_hasReadablePage || _restoreTargetPending) &&
+                      resolvedPage != null) {
+                    _demandPageIndex = resolvedPage;
+                  }
+                  _restoreTargetPending = restoreTargetIsPending;
+                  if (isPlanComplete &&
+                      _pendingForwardPage != null &&
+                      _pendingForwardPage! >= plan.pageCount) {
+                    // A provisional edge is not permission to turn a chapter.
+                    _pendingForwardPage = null;
+                  }
+                  final forwardTargetIsPending =
+                      _pendingForwardPage != null &&
+                      _pendingForwardPage! >= plan.pageCount;
+                  final targetIsPending =
+                      restoreTargetIsPending || forwardTargetIsPending;
+                  _syncWorkDemand();
                   if (targetIsPending && !_hasReadablePage) {
                     if (_requestError != null) {
                       _scheduleContentTerminal((
@@ -563,6 +594,21 @@ class _NovelReaderHtmlPagedSurfaceState
                           pageSeekRequest: widget.pageSeekRequest,
                           navigationController: widget.navigationController,
                           targetPage: requestedPage,
+                          pendingForwardPage: _pendingForwardPage,
+                          onRequestPendingForwardPage: (target) =>
+                              mounted &&
+                              _requestGeneration == requestGeneration &&
+                              _requestPendingForwardPage(target),
+                          onConsumePendingForwardPage: (target) =>
+                              mounted &&
+                              _requestGeneration == requestGeneration &&
+                              _consumePendingForwardPage(target),
+                          onCancelPendingForwardPage: () {
+                            if (mounted &&
+                                _requestGeneration == requestGeneration) {
+                              _cancelPendingForwardPage();
+                            }
+                          },
                           reverse:
                               widget.preferences.flowMode ==
                               NovelReaderFlowMode.pagedRtl,
@@ -596,6 +642,8 @@ class _NovelReaderHtmlPagedSurfaceState
                                 _planKey == plan.key &&
                                 _requestGeneration == requestGeneration) {
                               _visiblePosition = position;
+                              _demandPageIndex = position.pageIndex;
+                              _syncWorkDemand();
                               widget.onPositionChanged?.call(position);
                             }
                           },
@@ -1041,9 +1089,95 @@ class _NovelReaderHtmlPagedSurfaceState
     });
   }
 
+  void _syncWorkDemand() {
+    final snapshot = widget.progressSnapshot;
+    final percentNeedsComplete =
+        snapshot.episodeId == widget.episode.episodeId &&
+        snapshot.isProgressPercentValid != false &&
+        snapshot.progressPercent.isFinite &&
+        snapshot.progressPercent >= 0 &&
+        (snapshot.progressPercent > 0 ||
+            snapshot.isProgressPercentValid == true);
+    final entry = widget.chapterEntryRequest;
+    final endNeedsComplete =
+        entry?.episodeId == widget.episode.episodeId &&
+        entry?.edge == NovelReaderChapterEdge.end;
+    final pending = _pendingForwardPage;
+    _workDemand.update(
+      targetPending:
+          _restoreTargetPending ||
+          (pending != null &&
+              pending >= (_latestProgress?.plan.pageCount ?? 0)),
+      pageIndex: pending ?? _demandPageIndex,
+      // A percentage or end entry cannot be resolved from a provisional total.
+      requireComplete: percentNeedsComplete || endNeedsComplete,
+    );
+  }
+
+  void _onWorkDeferralChanged() {
+    if (!mounted) {
+      return;
+    }
+    if (_workDemand.isDeferring) {
+      _backgroundIdleTimer?.cancel();
+      _backgroundIdleTimer = null;
+    } else {
+      // This can run synchronously from build; only timers change here.
+      _ensureBackgroundIdleTimer();
+    }
+  }
+
+  bool _requestPendingForwardPage(int target) {
+    if (_pendingForwardPage != null ||
+        !_hasReadablePage ||
+        _requestError != null ||
+        (_planCompleted && target >= (_latestProgress?.plan.pageCount ?? 0))) {
+      return false;
+    }
+    setState(() {
+      _pendingForwardPage = target;
+      _targetReady = false;
+    });
+    _backgroundIdleTimer?.cancel();
+    _backgroundIdleTimer = null;
+    _startTargetWaitTimer();
+    _syncWorkDemand();
+    return true;
+  }
+
+  bool _consumePendingForwardPage(int target) {
+    if (_pendingForwardPage != target ||
+        _requestError != null ||
+        target >= (_latestProgress?.plan.pageCount ?? 0)) {
+      return false;
+    }
+    _cancelPendingForwardPage();
+    return true;
+  }
+
+  void _cancelPendingForwardPage({bool rebuild = true}) {
+    if (_pendingForwardPage == null) {
+      return;
+    }
+    _pendingForwardPage = null;
+    _demandPageIndex = _visiblePosition?.pageIndex ?? _demandPageIndex;
+    _targetReady = !_restoreTargetPending;
+    if (_targetReady) {
+      _targetWaitTimer?.cancel();
+      _targetWaitTimer = null;
+    }
+    _syncWorkDemand();
+    _ensureBackgroundIdleTimer();
+    if (rebuild) {
+      setState(() {});
+    }
+  }
+
   void _ensureBackgroundIdleTimer() {
     if (!_targetReady ||
         _planCompleted ||
+        _planSubscription == null ||
+        _workDemand.isDeferring ||
         _requestError != null ||
         _backgroundIdleTimer != null ||
         !widget.performancePolicy.enforceBudgets) {
@@ -1069,6 +1203,7 @@ class _NovelReaderHtmlPagedSurfaceState
     _cancelPerformanceTimers();
     unawaited(_planSubscription?.cancel());
     _planSubscription = null;
+    _pendingForwardPage = null;
     _coordinator?.cancelPending();
     if (_planStream != null && !_planCompleted) _cancelledPlanCount += 1;
     setState(() => _requestError = error);
@@ -1087,6 +1222,7 @@ class _NovelReaderHtmlPagedSurfaceState
     _visibleFrameStopwatch?.stop();
     unawaited(_planSubscription?.cancel());
     _planSubscription = null;
+    _pendingForwardPage = null;
     if (_planStream != null && !_planCompleted && _requestError == null) {
       _cancelledPlanCount += 1;
     }
@@ -1102,7 +1238,10 @@ class _NovelReaderHtmlPagedSurfaceState
       _visiblePosition = null;
       _displayInitialPage = 0;
       _displayRestoreReadOnly = false;
+      _restoreTargetPending = true;
+      _demandPageIndex = 0;
     }
+    _syncWorkDemand();
   }
 
   NovelReaderPaginationCoordinator _defaultCoordinator({
@@ -1131,6 +1270,7 @@ class _NovelReaderHtmlPagedSurfaceState
         textDirection: renderEnvironment.textDirection,
         textAlign: renderEnvironment.textAlign,
         textScaler: renderEnvironment.textScaler,
+        workDemand: _workDemand,
         boundaryCache:
             widget.paginationBoundaryCache ??
             (_ownedBoundaryCache ??= NovelReaderComplexHtmlBoundaryCache()),
@@ -1381,6 +1521,10 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.pageSeekRequest,
     this.navigationController,
     this.targetPage,
+    this.pendingForwardPage,
+    required this.onRequestPendingForwardPage,
+    required this.onConsumePendingForwardPage,
+    required this.onCancelPendingForwardPage,
     required this.reverse,
     required this.showProgressIndicator,
     this.previousChapterTitle,
@@ -1413,6 +1557,10 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final NovelReaderPageSeekRequest? pageSeekRequest;
   final NovelReaderPagedNavigationController? navigationController;
   final int? targetPage;
+  final int? pendingForwardPage;
+  final bool Function(int target) onRequestPendingForwardPage;
+  final bool Function(int target) onConsumePendingForwardPage;
+  final VoidCallback onCancelPendingForwardPage;
   final bool reverse;
   final bool showProgressIndicator;
   final String? previousChapterTitle;
@@ -1454,6 +1602,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   double _backwardOverscroll = 0;
   bool _chapterTurnRequested = false;
   bool _tapTurnAnimationInFlight = false;
+  Object? _tapTurnAnimationIdentity;
+  int? _forwardAnimationTarget;
 
   @override
   void initState() {
@@ -1483,6 +1633,13 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   void didUpdateWidget(covariant _NovelReaderPagedPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.requestGeneration != widget.requestGeneration ||
+        oldWidget.navigationRequest?.requestId !=
+            widget.navigationRequest?.requestId ||
+        oldWidget.pageSeekRequest?.requestId !=
+            widget.pageSeekRequest?.requestId) {
+      _retirePendingForwardAnimation(deferSnap: true);
+    }
     if (!_reportedInitialPage) _scheduleInitialPosition();
     if (!identical(
       oldWidget.navigationController,
@@ -1491,6 +1648,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       oldWidget.navigationController?._detach(this);
       widget.navigationController?._attach(this);
     }
+    _schedulePendingForwardPage();
     // A turn that ends without replacing this chapter (it failed, or it landed
     // back here) leaves this state alive, so release the latch on the falling
     // edge instead of keeping the gesture off for good.
@@ -1511,7 +1669,12 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
             widget.navigationRequest?.requestId != navigation) {
           return;
         }
-        if (!_hasUserNavigated && restoredPage != _currentPage) {
+        // Accepted forward intent wins over the old percentage, but becomes a
+        // confirmed position only when its animation actually reaches a page.
+        if (!_hasUserNavigated &&
+            widget.pendingForwardPage == null &&
+            _forwardAnimationTarget == null &&
+            restoredPage != _currentPage) {
           _pageController.jumpToPage(restoredPage);
           setState(() {
             _currentPage = restoredPage;
@@ -1554,6 +1717,35 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         return;
       }
       _jumpToPage(seekRequest.pageIndex);
+    });
+  }
+
+  void _schedulePendingForwardPage() {
+    final target = widget.pendingForwardPage;
+    if (target == null || target >= widget.plan.pageCount) {
+      return;
+    }
+    final generation = widget.requestGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.requestGeneration != generation ||
+          widget.pendingForwardPage != target ||
+          !_pageController.hasClients ||
+          _userDragInProgress ||
+          _tapTurnAnimationInFlight ||
+          _pageController.position.isScrollingNotifier.value) {
+        return;
+      }
+      if (_currentPage + 1 != target) {
+        widget.onCancelPendingForwardPage();
+        return;
+      }
+      // Atomically claim the Surface intent. Repeated builds cannot animate it
+      // twice, and claiming alone does not report or confirm a reading position.
+      if (widget.onConsumePendingForwardPage(target)) {
+        _tapTurnAnimationInFlight = true;
+        unawaited(_animateTapTurnToPage(target, confirmOnArrival: true));
+      }
     });
   }
 
@@ -1680,6 +1872,10 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
 
   bool _turnPageByTap(int delta) {
     assert(delta == -1 || delta == 1);
+    if (mounted && delta < 0) {
+      _retirePendingForwardAnimation();
+      widget.onCancelPendingForwardPage();
+    }
     if (!mounted ||
         widget.plan.pageCount <= 0 ||
         !_pageController.hasClients ||
@@ -1692,10 +1888,15 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
 
     final target = _currentPage + delta;
     if (target >= 0 && target < widget.plan.pageCount) {
+      widget.onCancelPendingForwardPage();
       _hasUserNavigated = true;
       _tapTurnAnimationInFlight = true;
       unawaited(_animateTapTurnToPage(target));
       return true;
+    }
+
+    if (delta > 0 && !widget.isPageCountFinal) {
+      return widget.onRequestPendingForwardPage(target);
     }
 
     if (!widget.isPageCountFinal || !_canTurnChapter()) {
@@ -1711,7 +1912,13 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     return accepted;
   }
 
-  Future<void> _animateTapTurnToPage(int target) async {
+  Future<void> _animateTapTurnToPage(
+    int target, {
+    bool confirmOnArrival = false,
+  }) async {
+    final identity = Object();
+    _tapTurnAnimationIdentity = identity;
+    _forwardAnimationTarget = confirmOnArrival ? target : null;
     try {
       await _pageController.animateToPage(
         target,
@@ -1719,16 +1926,58 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         curve: ReaderPagedTurnMotion.animationCurve,
       );
     } finally {
-      if (mounted) {
+      if (mounted && identical(_tapTurnAnimationIdentity, identity)) {
         _tapTurnAnimationInFlight = false;
+        _tapTurnAnimationIdentity = null;
+        _forwardAnimationTarget = null;
       }
     }
+  }
+
+  void _retirePendingForwardAnimation({
+    bool deferSnap = false,
+    bool preserveDrag = false,
+  }) {
+    if (_forwardAnimationTarget == null) {
+      return;
+    }
+    _forwardAnimationTarget = null;
+    _tapTurnAnimationIdentity = null;
+    _tapTurnAnimationInFlight = false;
+    if (!_pageController.hasClients || preserveDrag) {
+      return;
+    }
+    final reportedPage = _currentPage;
+    if (!deferSnap) {
+      _pageController.jumpToPage(reportedPage);
+      return;
+    }
+    // Stop the driven activity before the next frame, but do not change scroll
+    // pixels during widget update. An old animation must not reach a new run.
+    _pageController.position.hold(() {});
+    final generation = widget.requestGeneration;
+    final navigation = widget.navigationRequest?.requestId;
+    final seek = widget.pageSeekRequest?.requestId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.requestGeneration != generation ||
+          widget.navigationRequest?.requestId != navigation ||
+          widget.pageSeekRequest?.requestId != seek ||
+          _tapTurnAnimationIdentity != null ||
+          _userDragInProgress ||
+          !_pageController.hasClients) {
+        return;
+      }
+      _pageController.jumpToPage(reportedPage);
+    });
   }
 
   void _jumpToPage(int index) {
     if (!mounted || index < 0 || index >= widget.plan.pageCount) {
       return;
     }
+    _retirePendingForwardAnimation();
+    widget.onCancelPendingForwardPage();
     _hasUserNavigated = true;
     _pageController.jumpToPage(index);
     if (_currentPage != index) {
@@ -1755,6 +2004,11 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     }
     if (notification is ScrollStartNotification) {
       _userDragInProgress = notification.dragDetails != null;
+      if (_userDragInProgress) {
+        // Flutter already replaced the driven activity with this user's drag.
+        _retirePendingForwardAnimation(preserveDrag: true);
+        widget.onCancelPendingForwardPage();
+      }
       _resetChapterTurnTracking();
       return false;
     }
@@ -1910,7 +2164,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     if (!mounted || index < 0 || index >= widget.plan.pageCount) {
       return;
     }
-    if (_userDragInProgress && index != _currentPage) {
+    if ((_userDragInProgress || _forwardAnimationTarget == index) &&
+        index != _currentPage) {
       _hasUserNavigated = true;
     }
     setState(() {
