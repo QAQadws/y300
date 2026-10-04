@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/application/composer_draft_coordinator.dart';
+import 'package:y300/features/composer_shared/application/composer_upload_session.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -101,22 +102,19 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   bool _closed = false;
   int _sessionGeneration = 0;
   ComposerImagePicker? _imagePicker;
-  ComposerImageUploadCoordinator? _imageUploadCoordinator;
+  ComposerUploadSession? _uploadSession;
   ComposerAttachBbCodeService? _attachBbCodeService;
   ComposerDraftAttachmentVerificationService? _draftVerificationService;
   ComposerUploadCacheStorage? _uploadCacheStorage;
   final ComposerDraftAttachmentSanitizer _draftAttachmentSanitizer =
       const ComposerDraftAttachmentSanitizer();
   TState? _latestState;
-  StreamSubscription<ComposerImageUploadEvent>? _imageUploadSubscription;
-  int _uploadGeneration = 0;
   int _draftVerificationGeneration = 0;
   bool _draftVerificationInFlight = false;
   final ComposerMessageInsertionService _messageInsertionService =
       const ComposerMessageInsertionService();
   final ComposerMessageRevisionTracker _messageRevisionTracker =
       ComposerMessageRevisionTracker();
-  _ComposerUploadBatch? _activeUploadBatch;
 
   TState? get latestState => _latestState;
   ComposerAttachBbCodeService get attachBbCodeService =>
@@ -141,7 +139,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           )
         : null;
     _imagePicker = ref.read(composerImagePickerProvider);
-    _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
+    unawaited(_uploadSession?.close());
+    final uploads = _uploadSession = ComposerUploadSession(
+      coordinator: ref.read(composerImageUploadCoordinatorProvider),
+    );
     _attachBbCodeService = ref.read(composerAttachBbCodeServiceProvider);
     _draftVerificationService = ref.read(
       composerDraftAttachmentVerificationServiceProvider,
@@ -151,12 +152,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     ref.onDispose(() {
       if (generation == _sessionGeneration) {
         _closed = true;
-        _uploadGeneration += 1;
         _draftVerificationGeneration += 1;
-        _imageUploadCoordinator?.cancel();
-        unawaited(_imageUploadSubscription?.cancel());
-        _imageUploadSubscription = null;
       }
+      unawaited(uploads.close());
       unawaited(drafts?.close());
     });
 
@@ -447,12 +445,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     final drafts = _draftCoordinator;
 
     _draftCoordinator?.cancelPendingSave();
-    _uploadGeneration += 1;
-    _activeUploadBatch = null;
-    _imageUploadCoordinator?.cancel();
-    final subscription = _imageUploadSubscription;
-    _imageUploadSubscription = null;
-    await subscription?.cancel();
+    await _uploadSession?.cancel();
     if (!_isSessionActive(generation)) return;
 
     final reset = resetToBaseline(
@@ -514,10 +507,14 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       return;
     }
     final generation = _sessionGeneration;
+    final uploads = _uploadSession!;
+    final acceptsSelection = uploads.captureSelectionValidity();
 
     try {
       final pickedImages = await _imagePicker!.pickImagesInOrder();
-      if (!_isSessionActive(generation) || pickedImages.isEmpty) {
+      if (!_isSessionActive(generation) ||
+          !acceptsSelection() ||
+          pickedImages.isEmpty) {
         return;
       }
       final latest = state.value ?? current;
@@ -552,18 +549,13 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
           ),
         ),
       );
-      _activeUploadBatch = _ComposerUploadBatch(
-        anchor: insertionAnchor,
-        localIds: [
-          for (final attachment in attachments.skip(existingCount))
-            attachment.localId,
-        ],
-      );
       _startImageUpload(
         attachments.skip(existingCount).toList(growable: false),
+        uploads: uploads,
+        anchor: insertionAnchor,
       );
     } on ComposerImagePickerException catch (_) {
-      if (!_isSessionActive(generation)) return;
+      if (!_isSessionActive(generation) || !acceptsSelection()) return;
       final latest = state.value ?? current;
       _setDataState(
         applyPatch(
@@ -578,20 +570,26 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     }
   }
 
-  void _startImageUpload(List<ComposerImageAttachment> attachments) {
+  void _startImageUpload(
+    List<ComposerImageAttachment> attachments, {
+    required ComposerUploadSession uploads,
+    required ComposerInsertionAnchor? anchor,
+  }) {
     if (attachments.isEmpty) {
       return;
     }
-    final generation = ++_uploadGeneration;
-    unawaited(_imageUploadSubscription?.cancel());
-    final stream = _imageUploadCoordinator!.uploadInOrder(
+    final generation = _sessionGeneration;
+    uploads.start(
       fid: uploadFid,
       attachments: attachments,
-    );
-    _imageUploadSubscription = stream.listen(
-      (event) => _handleImageUploadEvent(event, generation),
+      anchor: anchor,
+      onEvent: (event) {
+        if (_isSessionActive(generation)) {
+          _handleImageUploadEvent(event, uploads);
+        }
+      },
       onError: (Object error, StackTrace stackTrace) {
-        if (generation != _uploadGeneration) {
+        if (!_isSessionActive(generation)) {
           return;
         }
         final current = state.value ?? _latestState;
@@ -609,15 +607,15 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             ),
           ),
         );
-        _settleSuccessfulUploadsAsPending(generation);
+        _settleSuccessfulUploadsAsPending(uploads);
       },
     );
   }
 
-  void _handleImageUploadEvent(ComposerImageUploadEvent event, int generation) {
-    if (generation != _uploadGeneration) {
-      return;
-    }
+  void _handleImageUploadEvent(
+    ComposerImageUploadEvent event,
+    ComposerUploadSession uploads,
+  ) {
     final current = state.value ?? _latestState;
     if (current == null) {
       return;
@@ -714,24 +712,20 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
             ),
           ),
         );
-        _finishUploadBatch(generation);
+        _finishUploadBatch(uploads);
         break;
     }
   }
 
   /// Inserts successful uploads only after the whole batch is settled. This
   /// keeps selection mapping deterministic and preserves the picker order.
-  void _finishUploadBatch(int generation) {
-    if (generation != _uploadGeneration) {
-      return;
-    }
-    final batch = _activeUploadBatch;
-    _activeUploadBatch = null;
+  void _finishUploadBatch(ComposerUploadSession uploads) {
+    final batch = uploads.consumeBatch();
     final current = state.value ?? _latestState;
     if (batch == null || current == null) {
       return;
     }
-    final aids = _successfulAidsForBatch(current, batch);
+    final aids = batch.successfulAids(current.imageAttachments);
     if (aids.isEmpty) {
       return;
     }
@@ -746,38 +740,16 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _insertAidsAtAnchor(current, resolved, aids);
   }
 
-  void _settleSuccessfulUploadsAsPending(int generation) {
-    if (generation != _uploadGeneration) {
-      return;
-    }
-    final batch = _activeUploadBatch;
-    _activeUploadBatch = null;
+  void _settleSuccessfulUploadsAsPending(ComposerUploadSession uploads) {
+    final batch = uploads.consumeBatch();
     final current = state.value ?? _latestState;
     if (batch == null || current == null) {
       return;
     }
-    final aids = _successfulAidsForBatch(current, batch);
+    final aids = batch.successfulAids(current.imageAttachments);
     if (aids.isNotEmpty) {
       _setPendingAttachments(current, aids);
     }
-  }
-
-  List<String> _successfulAidsForBatch(
-    TState current,
-    _ComposerUploadBatch batch,
-  ) {
-    final byLocalId = <String, ComposerImageAttachment>{
-      for (final attachment in current.imageAttachments)
-        attachment.localId: attachment,
-    };
-    final seen = <String>{};
-    return [
-      for (final localId in batch.localIds)
-        if (byLocalId[localId] case final attachment?)
-          if (attachment.canEnterSubmitPayload &&
-              seen.add(attachment.aid!.trim()))
-            attachment.aid!.trim(),
-    ];
   }
 
   void _setPendingAttachments(TState current, List<String> aids) {
@@ -1129,10 +1101,3 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 }
 
 const Object _unsetControllerValue = Object();
-
-class _ComposerUploadBatch {
-  const _ComposerUploadBatch({required this.anchor, required this.localIds});
-
-  final ComposerInsertionAnchor? anchor;
-  final List<String> localIds;
-}

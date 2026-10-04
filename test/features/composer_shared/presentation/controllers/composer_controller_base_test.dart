@@ -23,6 +23,7 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 
 part 'composer_controller_base_test_fakes.dart';
 part 'composer_controller_base_draft_lifecycle_cases.dart';
+part 'composer_controller_base_upload_lifecycle_cases.dart';
 
 final _testControllerProvider = AsyncNotifierProvider.autoDispose
     .family<_TestComposerController, _TestComposerState, _TestArgs>(
@@ -32,6 +33,7 @@ final _testControllerProvider = AsyncNotifierProvider.autoDispose
 void main() {
   group('ComposerControllerBase', () {
     _draftLifecycleCases();
+    _uploadLifecycleCases();
     test('restores message and useSignature from draft snapshot', () async {
       final draftRepository = _MemoryDraftRepository();
       const args = _TestArgs(fid: '33', tid: '572063');

@@ -11,10 +11,13 @@ const _draftContract =
     'lib/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 const _draftCoordinator =
     'lib/features/composer_shared/application/composer_draft_coordinator.dart';
+const _applicationRoot = 'lib/features/composer_shared/application/';
+const _uploadSession = '${_applicationRoot}composer_upload_session.dart';
+const _uploadBatch = '${_applicationRoot}composer_upload_batch.dart';
 
 void main() {
   test(
-    'draft coordination and contracts stay independent of implementations and UI',
+    'composer lifecycle and contracts stay independent of implementations and UI',
     () {
       final violations = <String>[];
       for (final file in Directory(
@@ -28,6 +31,8 @@ void main() {
       }
       expect(File(_draftContract).existsSync(), isTrue);
       expect(File(_draftCoordinator).existsSync(), isTrue);
+      expect(File(_uploadSession).existsSync(), isTrue);
+      expect(File(_uploadBatch).existsSync(), isTrue);
       expect(File(_retiredDraftContract).existsSync(), isFalse);
       expect(violations, isEmpty, reason: violations.join('\n'));
     },
@@ -58,6 +63,36 @@ import 'package:y300/features/composer_shared/domain/models/composer_draft_model
       isEmpty,
     );
   });
+
+  test(
+    'new application sessions and batches cannot depend on widget or storage adapters',
+    () {
+      for (final source in [
+        _uploadSession,
+        _uploadBatch,
+        '${_applicationRoot}future_session.dart',
+      ]) {
+        expect(
+          _violations(source, '''
+import '../data/services/new_upload_adapter.dart';
+export 'package:y300/features/composer_shared/presentation/controllers/new_controller.dart';
+import 'package:flutter/widgets.dart';
+import 'dart:ui';
+'''),
+          hasLength(4),
+        );
+        expect(
+          _violations(source, '''
+import 'dart:async';
+import 'composer_upload_batch.dart';
+import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';
+import 'package:y300/features/composer_shared/domain/services/composer_image_upload_coordinator.dart';
+'''),
+          isEmpty,
+        );
+      }
+    },
+  );
 }
 
 List<String> _violations(String source, String contents) => [
@@ -68,7 +103,9 @@ List<String> _violations(String source, String contents) => [
 
 bool _forbidden(String source, String target) {
   if (target == _retiredDraftContract) return true;
-  if (source != _draftContract && source != _draftCoordinator) return false;
+  if (source != _draftContract && !source.startsWith(_applicationRoot)) {
+    return false;
+  }
   return target.contains('/data/') ||
       target.contains('/presentation/') ||
       target.startsWith('lib/app/') ||
