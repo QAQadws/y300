@@ -33,9 +33,12 @@ import 'package:y300/features/novel/domain/repositories/novel_reader_preferences
 import 'package:y300/features/novel/domain/repositories/novel_chapter_interactions_dock_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
@@ -303,6 +306,386 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'old vertical callbacks cannot project into a rebuilt provider before paint',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        firstParagraphs: List.generate(
+          80,
+          (index) => '恢复隔离正文 $index ${'正文' * 12}',
+        ),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await _pumpVerticalReaderReady(tester);
+      final oldHtml = tester.widget<NovelReaderHtmlDocumentView>(
+        find.byType(NovelReaderHtmlDocumentView),
+      );
+      final oldPosition = _verticalPosition(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(NovelReaderPage)),
+        listen: false,
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      repository.readingProgress = NovelReadingProgress(
+        novelId: args.novelId,
+        episodeId: args.episodeId,
+        scrollOffset: 444,
+        progressPercent: 0.4,
+        updatedAt: DateTime(2026),
+      );
+      container.invalidate(provider);
+      final rebuilt = (await tester.runAsync(
+        () => container.read(provider.future),
+      ))!;
+
+      // Provider state has changed, while the old viewport has not rebuilt yet.
+      oldPosition.jumpTo(60);
+      oldHtml.onContentReady?.call();
+      oldHtml.onContentTerminal?.call();
+      expect(
+        container.read(provider).value!.progressSnapshot,
+        rebuilt.progressSnapshot,
+      );
+      expect(
+        container.read(provider).value!.readingProgress,
+        rebuilt.readingProgress,
+      );
+
+      await _pumpVerticalReaderReady(tester);
+      final position = _verticalPosition(tester);
+      expect(position.pixels, closeTo(position.maxScrollExtent * 0.4, 1));
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-surface')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'failed vertical chapter switch restores the visible offset and resumes progress',
+    (tester) async {
+      final repository = _FakeNovelRepository.threeEpisodes(
+        firstParagraphs: List.generate(
+          80,
+          (index) => '失败恢复正文 $index ${'正文' * 12}',
+        ),
+        failedEpisodeIds: const {'novel:49:100:5002'},
+        chapterLoadDelay: const Duration(milliseconds: 120),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await _pumpVerticalReaderReady(tester);
+      final failure = AppLocalizations.of(
+        tester.element(find.byType(NovelReaderPage)),
+      ).novelChapterSwitchFailed;
+      await tester.drag(
+        find.byKey(const Key('novel-reader-paragraph-list')),
+        const Offset(0, -260),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 250));
+      final before = _verticalPosition(tester).pixels;
+      expect(before, greaterThan(0));
+      repository.savedProgressOffsets.clear();
+
+      await _showReaderMenu(tester);
+      await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+      await tester.pumpAndSettle();
+      expect(_verticalPosition(tester).pixels, closeTo(before, 0.01));
+      expect(find.text(failure), findsOneWidget);
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-surface')),
+        findsNothing,
+      );
+      expect(repository.savedProgressOffsets, everyElement(greaterThan(0)));
+
+      await tester.drag(
+        find.byKey(const Key('novel-reader-paragraph-list')),
+        const Offset(0, -120),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 250));
+      final after = _verticalPosition(tester).pixels;
+      expect(after, greaterThan(before));
+      expect(repository.readingProgress?.scrollOffset, closeTo(after, 0.01));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'returning to the same chapter does not revive its old ready callback',
+    (tester) async {
+      final repository = _FakeNovelRepository.threeEpisodes(
+        firstParagraphs: List.generate(
+          80,
+          (index) => '往返隔离正文 $index ${'正文' * 12}',
+        ),
+      );
+      final committer = _ControlledPageProgressCommitter(
+        repository,
+        forwardScheduledCommits: true,
+      );
+      await tester.pumpWidget(
+        _buildReaderApp(repository: repository, progressCommitter: committer),
+      );
+      await _pumpVerticalReaderReady(tester);
+      await tester.drag(
+        find.byKey(const Key('novel-reader-paragraph-list')),
+        const Offset(0, -260),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(_verticalPosition(tester).pixels, greaterThan(0));
+      expect(repository.readingProgress?.scrollOffset, greaterThan(0));
+      final oldHtml = tester.widget<NovelReaderHtmlDocumentView>(
+        find.byType(NovelReaderHtmlDocumentView),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(NovelReaderPage)),
+        listen: false,
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final controller = container.read(provider.notifier);
+      expect(
+        await tester.runAsync(
+          () => controller.openEpisodeFromCatalog('novel:49:100:5002'),
+        ),
+        isTrue,
+      );
+      expect(
+        await tester.runAsync(
+          () => controller.openEpisodeFromCatalog('novel:49:100:5001'),
+        ),
+        isTrue,
+      );
+      oldHtml.onContentReady?.call();
+      oldHtml.onContentTerminal?.call();
+      expect(committer.flushes, isEmpty);
+
+      await _pumpVerticalReaderReady(tester);
+      for (final flush in committer.flushes) {
+        flush.complete();
+      }
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(_verticalPosition(tester).pixels, closeTo(0, 0.01));
+      expect(container.read(provider).value!.progressSnapshot.scrollOffset, 0);
+      expect(repository.readingProgress?.scrollOffset, 0);
+      expect(
+        container.read(provider).value!.currentEpisode.episodeId,
+        'novel:49:100:5001',
+      );
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-surface')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('late pre-switch flush cannot advance a different chapter', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes();
+    final committer = _ControlledPageProgressCommitter(repository);
+    await tester.pumpWidget(
+      _buildReaderApp(repository: repository, progressCommitter: committer),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NovelReaderPage)),
+      listen: false,
+    );
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.pump();
+    expect(committer.flushes, hasLength(1));
+
+    expect(
+      await container
+          .read(provider.notifier)
+          .openEpisodeFromCatalog('novel:49:100:5002'),
+      isTrue,
+    );
+    await tester.pumpAndSettle();
+    committer.flushes.first.complete();
+    await tester.pumpAndSettle();
+    for (final flush in committer.flushes) {
+      flush.complete();
+    }
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(provider).value!.currentEpisode.episodeId,
+      'novel:49:100:5002',
+    );
+    expect(
+      repository.chapterLoadEpisodeIds,
+      isNot(contains('novel:49:100:5003')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'disposed page does not switch after its progress flush completes',
+    (tester) async {
+      final repository = _FakeNovelRepository.threeEpisodes();
+      final committer = _ControlledPageProgressCommitter(repository);
+      await tester.pumpWidget(
+        _buildReaderApp(repository: repository, progressCommitter: committer),
+      );
+      await tester.pumpAndSettle();
+      await _showReaderMenu(tester);
+      await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+      await tester.pump();
+      expect(committer.flushes, hasLength(1));
+      await tester.pumpWidget(const SizedBox());
+      committer.flushes.first.complete();
+      await tester.pumpAndSettle();
+      expect(
+        repository.chapterLoadEpisodeIds,
+        isNot(contains('novel:49:100:5002')),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('late failed chapter switch stays silent on a newer chapter', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes(
+      failedEpisodeIds: const {'novel:49:100:5002'},
+    );
+    final chapterGate = Completer<void>();
+    repository.chapterLoadGates['novel:49:100:5002'] = chapterGate;
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+    final context = tester.element(find.byType(NovelReaderPage));
+    final failure = AppLocalizations.of(context).novelChapterSwitchFailed;
+    final container = ProviderScope.containerOf(context, listen: false);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    await _showReaderMenu(tester);
+    await tester.tap(find.byKey(const Key('shared-reader-next-button')));
+    await tester.pump();
+    await tester.pump();
+    expect(repository.chapterLoadEpisodeIds, contains('novel:49:100:5002'));
+
+    expect(
+      await container
+          .read(provider.notifier)
+          .openEpisodeFromCatalog('novel:49:100:5003'),
+      isTrue,
+    );
+    await tester.pumpAndSettle();
+    chapterGate.complete();
+    await tester.pumpAndSettle();
+    expect(
+      container.read(provider).value!.currentEpisode.episodeId,
+      'novel:49:100:5003',
+    );
+    expect(find.text(failure), findsNothing);
+    expect(
+      find.byKey(const Key('novel-reader-delayed-loading-surface')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('old vertical seek completion cannot unlock a newer seek', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository(
+      firstParagraphs: List.generate(
+        80,
+        (index) => '定位隔离正文 $index ${'正文' * 12}',
+      ),
+    );
+    final committer = _ControlledPageProgressCommitter(repository);
+    await tester.pumpWidget(
+      _buildReaderApp(repository: repository, progressCommitter: committer),
+    );
+    await _pumpVerticalReaderReady(tester);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NovelReaderPage)),
+      listen: false,
+    );
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    await _showReaderMenu(tester);
+    tester
+        .widget<Slider>(find.byKey(const Key('shared-reader-progress-slider')))
+        .onChangeEnd!(0.2);
+    await tester.pump();
+    expect(committer.flushes, hasLength(1));
+
+    container.invalidate(provider);
+    await tester.runAsync(() => container.read(provider.future));
+    await _pumpVerticalReaderReady(tester);
+    await _showReaderMenu(tester);
+    tester
+        .widget<Slider>(find.byKey(const Key('shared-reader-progress-slider')))
+        .onChangeEnd!(0.7);
+    await tester.pump();
+    expect(committer.flushes, hasLength(2));
+    committer.flushes.first.complete();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<AbsorbPointer>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key('shared-reader-progress-slider')),
+                  matching: find.byType(AbsorbPointer),
+                )
+                .first,
+          )
+          .absorbing,
+      isTrue,
+    );
+    expect(
+      container.read(provider).value!.progressSnapshot.progressPercent,
+      closeTo(0.7, 0.01),
+    );
+
+    committer.flushes.last.complete();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<AbsorbPointer>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key('shared-reader-progress-slider')),
+                  matching: find.byType(AbsorbPointer),
+                )
+                .first,
+          )
+          .absorbing,
+      isFalse,
+    );
+    expect(repository.readingProgress?.progressPercent, closeTo(0.7, 0.01));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'vertical progress survives exit and a new continue-reading session',
@@ -2606,6 +2989,41 @@ Future<void> _showReaderMenu(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _pumpVerticalReaderReady(WidgetTester tester) async {
+  for (var frame = 0; frame < 300; frame++) {
+    // Long HTML may be prepared on a worker isolate, outside the test clock.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+    if (find
+            .byKey(const Key('novel-reader-paragraph-list'))
+            .evaluate()
+            .isNotEmpty &&
+        find
+            .byKey(const Key('novel-reader-delayed-loading-surface'))
+            .evaluate()
+            .isEmpty) {
+      await tester.pumpAndSettle();
+      return;
+    }
+  }
+  expect(
+    find.byKey(const Key('novel-reader-delayed-loading-surface')),
+    findsNothing,
+  );
+  expect(find.byKey(const Key('novel-reader-paragraph-list')), findsOneWidget);
+}
+
+ScrollPosition _verticalPosition(WidgetTester tester) => tester
+    .state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(const Key('novel-reader-paragraph-list')),
+        matching: find.byType(Scrollable),
+      ),
+    )
+    .position;
+
 Future<void> _tapPagedReaderZone(WidgetTester tester, Offset position) async {
   await tester.tapAt(position);
   await tester.pump(ReaderPagedTurnMotion.tapConfirmationDelay);
@@ -2622,6 +3040,7 @@ Finder _readerText(String text) {
 Widget _buildReaderApp({
   required _FakeNovelRepository repository,
   NovelReaderPreferencesRepository? preferencesRepository,
+  NovelReaderProgressCommitter? progressCommitter,
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
@@ -2644,6 +3063,10 @@ Widget _buildReaderApp({
         preferencesRepository ??
             _FakeNovelReaderPreferencesRepository(repository),
       ),
+      if (progressCommitter != null)
+        novelReaderProgressCommitterProvider.overrideWithValue(
+          progressCommitter,
+        ),
       novelChapterUpdateServiceProvider.overrideWithValue(
         chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
       ),
@@ -3082,6 +3505,7 @@ class _FakeNovelRepository implements NovelRepository {
            );
 
   factory _FakeNovelRepository.threeEpisodes({
+    List<String>? firstParagraphs,
     NovelReadingProgress? readingProgress,
     Duration chapterLoadDelay = Duration.zero,
     Set<String> failedEpisodeIds = const <String>{},
@@ -3090,8 +3514,8 @@ class _FakeNovelRepository implements NovelRepository {
     return _FakeNovelRepository(
       preferences: preferences,
       episodes: _threeEpisodes(),
-      contentsByEpisodeId: _contentsForParagraphs(const <String, List<String>>{
-        'novel:49:100:5001': <String>['第一段。', '第二段。'],
+      contentsByEpisodeId: _contentsForParagraphs(<String, List<String>>{
+        'novel:49:100:5001': firstParagraphs ?? <String>['第一段。', '第二段。'],
         'novel:49:100:5002': <String>['第三段。', '第四段。'],
         'novel:49:100:5003': <String>['第五段。', '第六段。'],
       }),
@@ -3149,6 +3573,9 @@ class _FakeNovelRepository implements NovelRepository {
   int upsertPreferencesCallCount = 0;
   double lastSavedOffset = 0;
   final savedProgressEpisodeIds = <String>[];
+  final savedProgressOffsets = <double>[];
+  final chapterLoadEpisodeIds = <String>[];
+  final chapterLoadGates = <String, Completer<void>>{};
   final bookmarks = <NovelReaderBookmark>[];
 
   @override
@@ -3185,6 +3612,9 @@ class _FakeNovelRepository implements NovelRepository {
   Future<NovelChapterContent?> getChapterContent({
     required String episodeId,
   }) async {
+    chapterLoadEpisodeIds.add(episodeId);
+    final gate = chapterLoadGates[episodeId];
+    if (gate != null) await gate.future;
     if (chapterLoadDelay > Duration.zero) {
       await Future<void>.delayed(chapterLoadDelay);
     }
@@ -3247,6 +3677,7 @@ class _FakeNovelRepository implements NovelRepository {
     double progressPercent = 0,
   }) async {
     savedProgressEpisodeIds.add(episodeId);
+    savedProgressOffsets.add(scrollOffset);
     lastSavedOffset = scrollOffset;
     readingProgress = NovelReadingProgress(
       novelId: novelId,
@@ -3411,6 +3842,49 @@ class _FakeNovelReaderPreferencesRepository
     repository.upsertPreferencesCallCount += 1;
     repository.latestPreferences = preferences;
     repository.preferences = preferences;
+  }
+}
+
+class _ControlledPageProgressCommitter implements NovelReaderProgressCommitter {
+  _ControlledPageProgressCommitter(
+    _FakeNovelRepository repository, {
+    this.forwardScheduledCommits = false,
+  }) : _delegate = DefaultNovelReaderProgressCommitter(repository: repository);
+
+  final DefaultNovelReaderProgressCommitter _delegate;
+  final bool forwardScheduledCommits;
+  final flushes = <_PendingPageProgressFlush>[];
+  Future<void> _tail = Future<void>.value();
+
+  @override
+  void schedule(NovelReaderProgressSnapshot snapshot) {
+    if (forwardScheduledCommits) _delegate.schedule(snapshot);
+  }
+
+  @override
+  Future<void> flush(NovelReaderProgressSnapshot snapshot) {
+    final pending = _PendingPageProgressFlush(snapshot);
+    flushes.add(pending);
+    final operation = _tail.then((_) async {
+      await pending.completer.future;
+      await _delegate.flush(snapshot);
+    });
+    _tail = operation.catchError((_) {});
+    return operation;
+  }
+
+  @override
+  void cancel() => _delegate.cancel();
+}
+
+class _PendingPageProgressFlush {
+  _PendingPageProgressFlush(this.snapshot);
+
+  final NovelReaderProgressSnapshot snapshot;
+  final completer = Completer<void>();
+
+  void complete() {
+    if (!completer.isCompleted) completer.complete();
   }
 }
 

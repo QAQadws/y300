@@ -20,6 +20,7 @@ const _pureImageHelpers = <String>{
 const _novelApplicationRoot = 'lib/features/novel/application/';
 const _pureNovelCoordinators = <String>{
   '${_novelApplicationRoot}novel_reader_display_preferences_coordinator.dart',
+  '${_novelApplicationRoot}novel_reader_vertical_session_coordinator.dart',
 };
 
 void main() {
@@ -36,8 +37,11 @@ void main() {
           _violations(source, file.readAsStringSync(encoding: utf8)),
         );
       }
-      for (final path in _internalImageCoordinators) {
-        expect(File(path).existsSync(), isTrue);
+      for (final path in <String>{
+        ..._internalImageCoordinators,
+        ..._pureNovelCoordinators,
+      }) {
+        expect(File(path).existsSync(), isTrue, reason: path);
       }
       expect(violations, isEmpty, reason: violations.join('\n'));
     },

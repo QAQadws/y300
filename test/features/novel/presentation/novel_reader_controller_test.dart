@@ -508,6 +508,357 @@ void main() {
   );
 
   test(
+    'progress flush rejects a snapshot from another novel or episode',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final committer = _FakeNovelReaderProgressCommitter();
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: committer,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(provider.future);
+      await Future<void>.delayed(Duration.zero);
+      final initial = container.read(provider).value!;
+      for (final identity in [
+        (novelId: 'another-novel', episodeId: 'novel:49:100:5001'),
+        (novelId: 'novel:49:100', episodeId: 'novel:49:100:5002'),
+      ]) {
+        await container
+            .read(provider.notifier)
+            .saveCurrentProgressNow(
+              NovelReaderProgressSnapshot(
+                novelId: identity.novelId,
+                episodeId: identity.episodeId,
+                flowMode: NovelReaderFlowMode.vertical,
+                scrollOffset: 42,
+                pageIndex: 0,
+                progressPercent: 0.5,
+              ),
+            );
+      }
+      expect(committer.flushCallCount, 0);
+      expect(container.read(provider).value, same(initial));
+    },
+  );
+
+  for (final retirement in [
+    'chapter',
+    'return',
+    'refresh',
+    'refreshed',
+    'dispose',
+  ]) {
+    test(
+      'a started progress flush does not project after $retirement',
+      () async {
+        final initialProgress = NovelReadingProgress(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+          scrollOffset: 7,
+          updatedAt: DateTime(2026, 6, 1),
+        );
+        final repository = _ControllerNovelRepository(
+          readingProgress: initialProgress,
+        );
+        final committer = _GatedProgressCommitter(repository);
+        final bootstrap = retirement == 'refresh'
+            ? _SequenceNovelReaderBootstrapService()
+            : null;
+        bootstrap?.completeAt(
+          0,
+          _criticalBootstrap(
+            episodeId: 'novel:49:100:5001',
+            readingProgress: initialProgress,
+          ),
+        );
+        final container = _buildContainer(
+          repository: repository,
+          progressCommitter: committer,
+          bootstrapService: bootstrap,
+        );
+        var disposed = false;
+        addTearDown(() {
+          if (!disposed) container.dispose();
+        });
+        const args = NovelReaderArgs(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+        );
+        final provider = novelReaderControllerProvider(args);
+        final subscription = _keepReaderAlive(container, args);
+        addTearDown(() {
+          if (!disposed) subscription.close();
+        });
+        await container.read(provider.future);
+        final controller = container.read(provider.notifier);
+        const snapshot = NovelReaderProgressSnapshot(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+          flowMode: NovelReaderFlowMode.vertical,
+          scrollOffset: 42,
+          pageIndex: 0,
+          progressPercent: 0.5,
+        );
+        final oldFlush = controller.saveCurrentProgressNow(snapshot);
+        expect(committer.flushCallCount, 1);
+        expect(container.read(provider).value!.currentOffset, 42);
+
+        if (retirement == 'refresh') {
+          container.invalidate(provider);
+          final reloaded = container.read(provider.future);
+          expect(container.read(provider.notifier), same(controller));
+          expect(container.read(provider).isLoading, isTrue);
+          await controller.saveCurrentProgressNow(snapshot);
+          expect(
+            committer.flushCallCount,
+            1,
+            reason: 'Loading has no active progress surface.',
+          );
+          committer.gate.complete();
+          await oldFlush;
+          expect(container.read(provider).isLoading, isTrue);
+          bootstrap!.completeAt(
+            1,
+            _criticalBootstrap(
+              episodeId: 'novel:49:100:5001',
+              readingProgress: initialProgress,
+            ),
+          );
+          final fresh = await reloaded;
+          expect(fresh.currentOffset, 7);
+          expect(fresh.readingProgress, same(initialProgress));
+        } else if (retirement == 'dispose') {
+          container.dispose();
+          disposed = true;
+          committer.gate.complete();
+          await oldFlush;
+        } else if (retirement == 'refreshed') {
+          container.invalidate(provider);
+          await container.read(provider.future);
+          expect(container.read(provider.notifier), same(controller));
+          await Future<void>.delayed(Duration.zero);
+          final fresh = container.read(provider).value!;
+          expect(fresh.currentOffset, 7);
+          committer.gate.complete();
+          await oldFlush;
+          final after = container.read(provider).value!;
+          expect(after.progressSnapshot, fresh.progressSnapshot);
+          expect(after.currentOffset, fresh.currentOffset);
+          expect(after.readingProgress, same(fresh.readingProgress));
+        } else {
+          expect(await controller.openEpisode('novel:49:100:5002'), isTrue);
+          if (retirement == 'return') {
+            expect(await controller.openEpisode('novel:49:100:5001'), isTrue);
+          }
+          await Future<void>.delayed(Duration.zero);
+          final fresh = container.read(provider).value!;
+          committer.gate.complete();
+          await oldFlush;
+          final after = container.read(provider).value!;
+          expect(
+            after.currentEpisode.episodeId,
+            fresh.currentEpisode.episodeId,
+          );
+          expect(after.progressSnapshot, fresh.progressSnapshot);
+          expect(after.currentOffset, fresh.currentOffset);
+          expect(after.readingProgress, same(fresh.readingProgress));
+        }
+        // Cancellation retires UI ownership, not the already issued local write.
+        expect(committer.committed, [snapshot]);
+        expect(repository.readingProgress!.scrollOffset, 42);
+      },
+    );
+  }
+
+  for (final dispose in [false, true]) {
+    for (final fail in [false, true]) {
+      test(
+        'late chapter ${fail ? 'failure' : 'success'} is retired by ${dispose ? 'dispose' : 'same-notifier refresh'}',
+        () async {
+          final repository = _ControllerNovelRepository();
+          final bootstrap = _SequenceNovelReaderBootstrapService();
+          bootstrap.completeAt(
+            0,
+            _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+          );
+          final container = _buildContainer(
+            repository: repository,
+            bootstrapService: bootstrap,
+          );
+          var disposed = false;
+          addTearDown(() {
+            if (!disposed) container.dispose();
+          });
+          const args = NovelReaderArgs(
+            novelId: 'novel:49:100',
+            episodeId: 'novel:49:100:5001',
+          );
+          final provider = novelReaderControllerProvider(args);
+          final subscription = _keepReaderAlive(container, args);
+          addTearDown(() {
+            if (!disposed) subscription.close();
+          });
+          await container.read(provider.future);
+          final controller = container.read(provider.notifier);
+          final oldTransition = controller.openEpisode('novel:49:100:5002');
+          expect(bootstrap.contexts, hasLength(2));
+          expect(
+            container.read(provider).value!.transition!.targetEpisodeId,
+            'novel:49:100:5002',
+          );
+          NovelReaderViewState? fresh;
+          if (dispose) {
+            container.dispose();
+            disposed = true;
+          } else {
+            bootstrap.completeAt(
+              2,
+              _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+            );
+            container.invalidate(provider);
+            await container.read(provider.future);
+            expect(container.read(provider.notifier), same(controller));
+            await Future<void>.delayed(Duration.zero);
+            fresh = container.read(provider).value!;
+            expect(fresh.transition, isNull);
+          }
+          if (fail) {
+            bootstrap.failAt(1, StateError('retired chapter load failed'));
+          } else {
+            bootstrap.completeAt(
+              1,
+              _criticalBootstrap(episodeId: 'novel:49:100:5002'),
+            );
+          }
+          expect(await oldTransition, isFalse);
+          if (!dispose) {
+            expect(container.read(provider).value, same(fresh));
+            expect(
+              container.read(provider).value!.currentEpisode.episodeId,
+              'novel:49:100:5001',
+            );
+          }
+        },
+      );
+    }
+  }
+
+  for (final dispose in [false, true]) {
+    for (final fail in [false, true]) {
+      test(
+        'error-view update ${fail ? 'failure' : 'success'} is retired by ${dispose ? 'dispose' : 'same-notifier refresh'}',
+        () async {
+          final bootstrap = _SequenceNovelReaderBootstrapService();
+          bootstrap.failAt(0, StateError('initial chapter unavailable'));
+          final updates = _GatedNovelChapterUpdateService();
+          final container = _buildContainer(
+            repository: _ControllerNovelRepository(),
+            bootstrapService: bootstrap,
+            chapterUpdateService: updates,
+          );
+          var disposed = false;
+          addTearDown(() {
+            if (!disposed) container.dispose();
+          });
+          const args = NovelReaderArgs(
+            novelId: 'novel:49:100',
+            episodeId: 'novel:49:100:5001',
+          );
+          final provider = novelReaderControllerProvider(args);
+          final subscription = _keepReaderAlive(container, args);
+          addTearDown(() {
+            if (!disposed) subscription.close();
+          });
+          await expectLater(container.read(provider.future), throwsStateError);
+          expect(container.read(provider).hasError, isTrue);
+          final controller = container.read(provider.notifier);
+          final oldUpdate = controller.updateWork();
+          expect(updates.started, 1);
+          expect(container.read(provider).isLoading, isTrue);
+          expect(bootstrap.contexts, hasLength(1));
+          NovelReaderViewState? fresh;
+          if (dispose) {
+            container.dispose();
+            disposed = true;
+          } else {
+            bootstrap.completeAt(
+              1,
+              _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+            );
+            container.invalidate(provider);
+            await container.read(provider.future);
+            expect(container.read(provider.notifier), same(controller));
+            await Future<void>.delayed(Duration.zero);
+            fresh = container.read(provider).value!;
+          }
+          updates.complete(fail: fail);
+          expect(await oldUpdate, isFalse);
+          expect(
+            bootstrap.contexts,
+            hasLength(dispose ? 1 : 2),
+            reason: 'A retired update must not start another bootstrap.',
+          );
+          if (!dispose) {
+            expect(container.read(provider).value, same(fresh));
+            expect(container.read(provider).hasError, isFalse);
+          }
+        },
+      );
+    }
+  }
+
+  for (final fail in [false, true]) {
+    test(
+      'active error-view update preserves its ${fail ? 'failure' : 'success'} result',
+      () async {
+        final bootstrap = _SequenceNovelReaderBootstrapService();
+        bootstrap.failAt(0, StateError('initial chapter unavailable'));
+        bootstrap.completeAt(
+          1,
+          _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+        );
+        final updates = _GatedNovelChapterUpdateService();
+        final container = _buildContainer(
+          repository: _ControllerNovelRepository(),
+          bootstrapService: bootstrap,
+          chapterUpdateService: updates,
+        );
+        addTearDown(container.dispose);
+        const args = NovelReaderArgs(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+        );
+        final provider = novelReaderControllerProvider(args);
+        final subscription = _keepReaderAlive(container, args);
+        addTearDown(subscription.close);
+        await expectLater(container.read(provider.future), throwsStateError);
+        final update = container.read(provider.notifier).updateWork();
+        expect(container.read(provider).isLoading, isTrue);
+        updates.complete(fail: fail);
+        expect(await update, !fail);
+        expect(bootstrap.contexts, hasLength(fail ? 1 : 2));
+        if (fail) {
+          expect(container.read(provider).error, isA<StateError>());
+        } else {
+          expect(
+            container.read(provider).value!.currentEpisode.episodeId,
+            'novel:49:100:5001',
+          );
+          expect(container.read(provider).hasError, isFalse);
+        }
+      },
+    );
+  }
+
+  test(
     'NovelReaderController onScrollOffsetChanged schedules progress update',
     () async {
       final repository = _ControllerNovelRepository();
@@ -1567,6 +1918,10 @@ class _SequenceNovelReaderBootstrapService
   void completeAt(int index, NovelReaderCriticalBootstrap value) {
     _sequence.completeAt(index, value);
   }
+
+  void failAt(int index, Object error) {
+    _sequence.completeErrorAt(index, error);
+  }
 }
 
 class _ControlledNovelReaderBootstrapService
@@ -1801,6 +2156,58 @@ class _FakeNovelReaderProgressCommitter
   void schedule(NovelReaderProgressSnapshot snapshot) {
     scheduleCallCount += 1;
     latestScheduledSnapshot = snapshot;
+  }
+}
+
+class _GatedProgressCommitter extends _FakeNovelReaderProgressCommitter {
+  _GatedProgressCommitter(this.repository);
+
+  final _ControllerNovelRepository repository;
+  final gate = Completer<void>();
+  final committed = <NovelReaderProgressSnapshot>[];
+
+  @override
+  Future<void> flush(NovelReaderProgressSnapshot snapshot) async {
+    flushCallCount += 1;
+    latestFlushedSnapshot = snapshot;
+    await gate.future;
+    await repository.saveReadingProgress(
+      novelId: snapshot.novelId,
+      episodeId: snapshot.episodeId,
+      scrollOffset: snapshot.scrollOffset,
+      flowMode: snapshot.flowMode,
+      pageIndex: snapshot.pageIndex,
+      pageCount: snapshot.pageCount,
+      anchorNodeId: snapshot.anchorNodeId,
+      anchorTextOffset: snapshot.anchorTextOffset,
+      paginationKey: snapshot.paginationKey,
+      progressPercent: snapshot.progressPercent,
+    );
+    committed.add(snapshot);
+  }
+}
+
+class _GatedNovelChapterUpdateService
+    extends _RecordingNovelChapterUpdateService {
+  final gate = Completer<void>();
+  int started = 0;
+
+  @override
+  Future<NovelChapterSyncResult> update(
+    String novelId, {
+    NovelChapterUpdateIntent intent = NovelChapterUpdateIntent.normal,
+  }) async {
+    started += 1;
+    await gate.future;
+    return super.update(novelId, intent: intent);
+  }
+
+  void complete({required bool fail}) {
+    if (fail) {
+      gate.completeError(StateError('controlled work update failure'));
+    } else {
+      gate.complete();
+    }
   }
 }
 

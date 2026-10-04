@@ -195,12 +195,18 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
   @override
   FutureOr<NovelReaderViewState> build() async {
+    // Rebuild retires old progress completions before the new load finishes,
+    // including a reload that returns to the same episode on this notifier.
+    final sessionToken = ++_activeSessionToken;
+    _transitionRequestSerial += 1;
     if (_preferenceWritesInFlight > 0) {
       _persistedPreferenceSnapshotDirty = true;
     }
     _preferenceCommitSerial += 1;
     final progressCommitter = ref.read(novelReaderProgressCommitterProvider);
     ref.onDispose(() {
+      _activeSessionToken += 1;
+      _transitionRequestSerial += 1;
       if (_preferenceWritesInFlight > 0) {
         _persistedPreferenceSnapshotDirty = true;
       }
@@ -210,6 +216,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     return _loadInitialCriticalState(
       _args.episodeId,
       openPolicy: _args.openPolicy,
+      sessionToken: sessionToken,
     );
   }
 
@@ -463,8 +470,22 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   Future<void> saveCurrentProgressNow(
     NovelReaderProgressSnapshot snapshot,
   ) async {
+    if (!ref.mounted || state.isLoading) return;
+    final current = state.asData?.value;
+    if (current == null ||
+        snapshot.novelId != _args.novelId ||
+        snapshot.episodeId != current.currentEpisode.episodeId) {
+      return;
+    }
+    final sessionToken = _activeSessionToken;
     _applyProgressSnapshot(snapshot);
     await ref.read(novelReaderProgressCommitterProvider).flush(snapshot);
+    if (!ref.mounted ||
+        state.isLoading ||
+        sessionToken != _activeSessionToken ||
+        state.asData?.value.currentEpisode.episodeId != snapshot.episodeId) {
+      return;
+    }
     _syncPersistedReadingProgress(snapshot);
   }
 
@@ -575,15 +596,37 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   Future<bool> updateWork() async {
     final current = state.value;
     if (current == null) {
+      final serial = ++_transitionRequestSerial;
+      final sessionToken = ++_activeSessionToken;
       state = const AsyncLoading();
-      state = await AsyncValue.guard(() async {
+      try {
         await ref.read(novelChapterUpdateServiceProvider).update(_args.novelId);
-        return _loadInitialCriticalState(
+        if (!ref.mounted ||
+            serial != _transitionRequestSerial ||
+            sessionToken != _activeSessionToken) {
+          return false;
+        }
+        final loaded = await _loadInitialCriticalState(
           _args.episodeId,
           openPolicy: _args.openPolicy,
+          sessionToken: sessionToken,
         );
-      });
-      return state.hasValue;
+        if (!ref.mounted ||
+            serial != _transitionRequestSerial ||
+            sessionToken != _activeSessionToken) {
+          return false;
+        }
+        state = AsyncData(loaded);
+        return true;
+      } catch (error, stackTrace) {
+        if (!ref.mounted ||
+            serial != _transitionRequestSerial ||
+            sessionToken != _activeSessionToken) {
+          return false;
+        }
+        state = AsyncError(error, stackTrace);
+        return false;
+      }
     }
     return _runEpisodeTransition(
       episodeId: current.currentEpisode.episodeId,
@@ -597,7 +640,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     String episodeId, {
     NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
     NovelReadingProgress? preservedProgress,
+    int? sessionToken,
   }) async {
+    final loadingSessionToken = sessionToken ?? ++_activeSessionToken;
     final context = NovelReaderLoadContext(
       novelId: _args.novelId,
       requestedEpisodeId: episodeId,
@@ -605,20 +650,18 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       preservedProgress: preservedProgress,
     );
     final critical = await _loadCriticalBootstrap(context);
+    if (!ref.mounted || loadingSessionToken != _activeSessionToken) {
+      return _initialStateFromCritical(critical);
+    }
     _markBeginningCommitIfNeeded(
       episodeId: critical.currentEpisode.episodeId,
       openPolicy: openPolicy,
     );
-    if (!ref.mounted) {
-      return _initialStateFromCritical(critical);
-    }
-    final sessionToken = _activeSessionToken + 1;
-    _activeSessionToken = sessionToken;
     final viewState = _initialStateFromCritical(critical);
     _scheduleHydrateSupplemental(
       context: context,
       critical: critical,
-      sessionToken: sessionToken,
+      sessionToken: loadingSessionToken,
     );
     return viewState;
   }
@@ -659,7 +702,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     try {
       if (updateWork) {
         await ref.read(novelChapterUpdateServiceProvider).update(_args.novelId);
-        if (!ref.mounted) {
+        if (!ref.mounted || serial != _transitionRequestSerial) {
           return false;
         }
       }
@@ -685,7 +728,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       );
       return true;
     } catch (_) {
-      if (serial != _transitionRequestSerial) {
+      if (!ref.mounted || serial != _transitionRequestSerial) {
         return false;
       }
       final latest = state.value ?? current;
