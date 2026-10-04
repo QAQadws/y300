@@ -62,4 +62,7 @@ Future<void> upgradeAppDatabaseSchema(
   if (oldVersion < 41 && newVersion >= 41) {
     await upgradeCacheFrom40To41(db);
   }
+  if (oldVersion < 42 && newVersion >= 42) {
+    await upgradeNovelFrom41To42(db);
+  }
 }

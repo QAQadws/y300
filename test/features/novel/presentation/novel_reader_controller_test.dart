@@ -59,6 +59,9 @@ void main() {
       episodeId: 'novel:49:100:5002',
       scrollOffset: 88,
       updatedAt: DateTime(2026, 6, 1),
+      anchorFormatVersion: 37,
+      anchorTextIdentity: '  unsupported identity  ',
+      isProgressPercentValid: false,
     );
     final repository = _ControllerNovelRepository(readingProgress: progress);
     final container = _buildContainer(repository: repository);
@@ -76,6 +79,12 @@ void main() {
 
     expect(state.readingProgress?.episodeId, 'novel:49:100:5002');
     expect(state.currentOffset, 88);
+    expect(state.progressSnapshot.anchorFormatVersion, 37);
+    expect(
+      state.progressSnapshot.anchorTextIdentity,
+      '  unsupported identity  ',
+    );
+    expect(state.progressSnapshot.isProgressPercentValid, isFalse);
   });
 
   test(
@@ -493,6 +502,8 @@ void main() {
         scrollOffset: 42,
         pageIndex: 0,
         progressPercent: 0.5,
+        anchorFormatVersion: 37,
+        anchorTextIdentity: '  unsupported identity  ',
       );
 
       await container.read(provider.notifier).saveCurrentProgressNow(snapshot);
@@ -504,6 +515,12 @@ void main() {
       expect(state.currentOffset, 42);
       expect(state.readingProgress?.episodeId, 'novel:49:100:5001');
       expect(state.readingProgress?.scrollOffset, 42);
+      expect(state.readingProgress?.anchorFormatVersion, 37);
+      expect(
+        state.readingProgress?.anchorTextIdentity,
+        '  unsupported identity  ',
+      );
+      expect(state.readingProgress?.isProgressPercentValid, isNull);
     },
   );
 
@@ -925,6 +942,8 @@ void main() {
                 episodeId: 'novel:49:100:5001',
                 nodeId: 'node-2',
                 textOffset: 14,
+                formatVersion: 1,
+                textIdentity: 'semantic-text-v1',
               ),
             ),
           );
@@ -935,8 +954,141 @@ void main() {
       expect(state.progressSnapshot.paginationKey, 'layout-v1');
       expect(state.progressSnapshot.anchorNodeId, 'node-2');
       expect(state.progressSnapshot.anchorTextOffset, 14);
+      expect(state.progressSnapshot.anchorFormatVersion, 1);
+      expect(state.progressSnapshot.anchorTextIdentity, 'semantic-text-v1');
       expect(state.progressSnapshot.progressPercent, 0.4);
+      expect(state.progressSnapshot.isProgressPercentValid, isTrue);
       expect(progressCommitter.scheduleCallCount, 1);
+    },
+  );
+
+  test(
+    'progress committer persists metadata-only changes and deduplicates repeats',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final committer = DefaultNovelReaderProgressCommitter(
+        repository: repository,
+      );
+      addTearDown(committer.cancel);
+      const baseline = NovelReaderProgressSnapshot(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        scrollOffset: 0,
+        pageIndex: 2,
+        anchorNodeId: 'node-2',
+        anchorTextOffset: 14,
+        anchorFormatVersion: 37,
+        anchorTextIdentity: '  unsupported identity  ',
+        progressPercent: 0.4,
+      );
+      for (final changed in <NovelReaderProgressSnapshot>[
+        baseline.copyWith(anchorFormatVersion: 1),
+        baseline.copyWith(anchorTextIdentity: 'semantic-text-v1'),
+        baseline.copyWith(isProgressPercentValid: false),
+      ]) {
+        await committer.flush(baseline);
+        final savesBeforeChange = repository.savedProgressEpisodeIds.length;
+        await committer.flush(changed);
+        await committer.flush(changed.copyWith());
+
+        expect(
+          repository.savedProgressEpisodeIds.length,
+          savesBeforeChange + 1,
+        );
+        expect(
+          repository.readingProgress?.anchorFormatVersion,
+          changed.anchorFormatVersion,
+        );
+        expect(
+          repository.readingProgress?.anchorTextIdentity,
+          changed.anchorTextIdentity,
+        );
+        expect(
+          repository.readingProgress?.isProgressPercentValid,
+          changed.isProgressPercentValid,
+        );
+      }
+    },
+  );
+
+  test(
+    'a newly reported partial position reopens without the previous valid percent',
+    () async {
+      final repository = _ControllerNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+        readingProgress: NovelReadingProgress(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 10, 4),
+          flowMode: NovelReaderFlowMode.pagedLtr,
+          pageIndex: 8,
+          pageCount: 10,
+          anchorNodeId: 'node-8',
+          anchorFormatVersion: 1,
+          anchorTextIdentity: 'semantic-text-v1',
+          progressPercent: 0.8,
+          isProgressPercentValid: true,
+        ),
+      );
+      final committer = DefaultNovelReaderProgressCommitter(
+        repository: repository,
+      );
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: committer,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final loaded = await container.read(provider.future);
+      expect(loaded.progressSnapshot.progressPercent, 0.8);
+      expect(loaded.progressSnapshot.isProgressPercentValid, isTrue);
+
+      final controller = container.read(provider.notifier);
+      controller.onPagedPositionChanged(
+        const NovelReaderPaginationPosition(
+          episodeId: 'novel:49:100:5001',
+          paginationKey: 'layout-v1',
+          pageIndex: 1,
+          pageCount: 2,
+          isPageCountFinal: false,
+          anchor: NovelReaderTextAnchor(
+            episodeId: 'novel:49:100:5001',
+            nodeId: 'node-2',
+            textOffset: 14,
+            formatVersion: 1,
+            textIdentity: 'semantic-text-v1',
+          ),
+        ),
+      );
+      final partial = container.read(provider).value!.progressSnapshot;
+      expect(partial.progressPercent, 0);
+      expect(partial.isProgressPercentValid, isFalse);
+      expect(partial.pageCount, isNull);
+      await controller.saveCurrentProgressNow(partial);
+      expect(repository.readingProgress?.isProgressPercentValid, isFalse);
+      expect(repository.readingProgress?.progressPercent, 0);
+
+      final reopened = _buildContainer(repository: repository);
+      addTearDown(reopened.dispose);
+      final reopenedSubscription = _keepReaderAlive(reopened, args);
+      addTearDown(reopenedSubscription.close);
+      final restored = await reopened.read(provider.future);
+      expect(restored.progressSnapshot.anchorFormatVersion, 1);
+      expect(restored.progressSnapshot.anchorTextIdentity, 'semantic-text-v1');
+      expect(restored.progressSnapshot.anchorTextOffset, 14);
+      expect(restored.progressSnapshot.progressPercent, 0);
+      expect(restored.progressSnapshot.isProgressPercentValid, isFalse);
+      expect(restored.progressSnapshot.pageCount, isNull);
     },
   );
 
@@ -1801,8 +1953,11 @@ class _ControllerNovelRepository implements NovelRepository {
     int? pageCount,
     String? anchorNodeId,
     int anchorTextOffset = 0,
+    int anchorFormatVersion = 0,
+    String? anchorTextIdentity,
     String? paginationKey,
     double progressPercent = 0,
+    bool? isProgressPercentValid,
   }) async {
     savedProgressEpisodeIds.add(episodeId);
     readingProgress = NovelReadingProgress(
@@ -1815,8 +1970,11 @@ class _ControllerNovelRepository implements NovelRepository {
       pageCount: pageCount,
       anchorNodeId: anchorNodeId,
       anchorTextOffset: anchorTextOffset,
+      anchorFormatVersion: anchorFormatVersion,
+      anchorTextIdentity: anchorTextIdentity,
       paginationKey: paginationKey,
       progressPercent: progressPercent,
+      isProgressPercentValid: isProgressPercentValid,
     );
   }
 
@@ -2180,8 +2338,11 @@ class _GatedProgressCommitter extends _FakeNovelReaderProgressCommitter {
       pageCount: snapshot.pageCount,
       anchorNodeId: snapshot.anchorNodeId,
       anchorTextOffset: snapshot.anchorTextOffset,
+      anchorFormatVersion: snapshot.anchorFormatVersion,
+      anchorTextIdentity: snapshot.anchorTextIdentity,
       paginationKey: snapshot.paginationKey,
       progressPercent: snapshot.progressPercent,
+      isProgressPercentValid: snapshot.isProgressPercentValid,
     );
     committed.add(snapshot);
   }

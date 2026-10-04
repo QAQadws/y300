@@ -28,11 +28,11 @@ void main() {
     'shared entry keeps the physical database and single connection',
     () async {
       expect(AppDatabase.dbName, 'comic_shelf.db');
-      expect(AppDatabase.dbVersion, 41);
+      expect(AppDatabase.dbVersion, 42);
       database = await AppDatabase.open(databaseName: databasePath);
       final second = await AppDatabase.open(databaseName: databasePath);
       expect(identical(database, second), isTrue);
-      expect(await database!.getVersion(), 41);
+      expect(await database!.getVersion(), 42);
       expect(await File(databasePath).exists(), isTrue);
       final foreignKeys = await database!.rawQuery('PRAGMA foreign_keys');
       expect(foreignKeys.single.values.single, 1);
@@ -137,7 +137,7 @@ void main() {
       await reopened.query(AppDatabase.favoriteThreadCategoryTable),
       isEmpty,
     );
-    expect(await reopened.getVersion(), 41);
+    expect(await reopened.getVersion(), 42);
     expect((await reopened.rawQuery('PRAGMA foreign_key_check')), isEmpty);
   });
 }

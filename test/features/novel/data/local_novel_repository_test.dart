@@ -8,6 +8,7 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 
 import '../test_support/novel_repository_seed.dart';
@@ -135,6 +136,9 @@ void main() {
         anchorTextOffset: 17,
         paginationKey: 'layout-key-3',
         progressPercent: 0.42,
+        anchorFormatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+        anchorTextIdentity: NovelReaderAnchorFormat.textIdentity('语义正文'),
+        isProgressPercentValid: true,
       );
 
       final progress = await repository.getReadingProgress(
@@ -151,6 +155,15 @@ void main() {
       expect(progress.anchorTextOffset, 17);
       expect(progress.paginationKey, 'layout-key-3');
       expect(progress.progressPercent, 0.42);
+      expect(
+        progress.anchorFormatVersion,
+        NovelReaderAnchorFormat.semanticCodePoints,
+      );
+      expect(
+        progress.anchorTextIdentity,
+        NovelReaderAnchorFormat.textIdentity('语义正文'),
+      );
+      expect(progress.isProgressPercentValid, isTrue);
     });
 
     test('reading progress reads old rows with defaults', () async {
@@ -161,6 +174,9 @@ void main() {
         'scroll_offset': 128.0,
         'updated_at': DateTime(2026, 6, 1).millisecondsSinceEpoch,
       });
+      final beforeRead = (await db.query(
+        AppDatabase.novelReadingProgressTable,
+      )).single;
 
       final progress = await repository.getReadingProgress(
         novelId: 'novel:old:progress',
@@ -176,6 +192,16 @@ void main() {
       expect(progress.anchorTextOffset, 0);
       expect(progress.paginationKey, isNull);
       expect(progress.progressPercent, 0);
+      expect(
+        progress.anchorFormatVersion,
+        NovelReaderAnchorFormat.legacyUnknown,
+      );
+      expect(progress.anchorTextIdentity, isNull);
+      expect(progress.isProgressPercentValid, isNull);
+      expect(
+        (await db.query(AppDatabase.novelReadingProgressTable)).single,
+        beforeRead,
+      );
     });
 
     test('reading progress keeps exactly one row per novel', () async {
@@ -227,6 +253,9 @@ void main() {
           pageIndex: 2,
           scrollOffset: 88,
           progressPercent: 0.5,
+          formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+          textIdentity: NovelReaderAnchorFormat.textIdentity('这是书签片段'),
+          isProgressPercentValid: true,
         ),
         title: '第1章',
         snippet: '这是书签片段',
@@ -243,6 +272,15 @@ void main() {
       expect(bookmarks.single.bookmarkId, 'bookmark-1');
       expect(bookmarks.single.anchor.nodeId, 'node-1');
       expect(bookmarks.single.anchor.pageIndex, 2);
+      expect(
+        bookmarks.single.anchor.formatVersion,
+        NovelReaderAnchorFormat.semanticCodePoints,
+      );
+      expect(
+        bookmarks.single.anchor.textIdentity,
+        bookmark.anchor.textIdentity,
+      );
+      expect(bookmarks.single.anchor.isProgressPercentValid, isTrue);
 
       await repository.removeReaderBookmark(bookmarkId: 'bookmark-1');
       expect(
@@ -255,6 +293,191 @@ void main() {
       bookmarks = await repository.listReaderBookmarks(novelId: 'novel:49:200');
       expect(bookmarks, isEmpty);
     });
+
+    test(
+      'legacy bookmark metadata updates preserve its opaque position',
+      () async {
+        final db = await dbFuture;
+        await seedNovelRepository(
+          db,
+          seed: const NovelSourceSeed(fid: '49', tid: '200'),
+        );
+        final episode = (await repository.getEpisodes(
+          novelId: 'novel:49:200',
+        )).first;
+        await db.insert(AppDatabase.readerBookmarksTable, <String, Object?>{
+          'bookmark_id': 'legacy-bookmark',
+          'novel_id': episode.novelId,
+          'episode_id': episode.episodeId,
+          'node_id': 'legacy-node',
+          'text_offset': -7,
+          'page_index': 3,
+          'scroll_offset': 120.0,
+          'progress_percent': 0.6,
+          'title': '旧书签',
+          'snippet': '旧坐标片段',
+          'created_at': 1,
+          'updated_at': 2,
+        });
+        final beforeRead = (await db.query(
+          AppDatabase.readerBookmarksTable,
+        )).single;
+
+        final bookmark = (await repository.listReaderBookmarks(
+          novelId: episode.novelId,
+        )).single;
+
+        expect(
+          bookmark.anchor.formatVersion,
+          NovelReaderAnchorFormat.legacyUnknown,
+        );
+        expect(bookmark.anchor.textIdentity, isNull);
+        expect(bookmark.anchor.isProgressPercentValid, isNull);
+        expect(bookmark.anchor.textOffset, -7);
+        expect(bookmark.anchor.progressPercent, 0.6);
+        expect(
+          (await db.query(AppDatabase.readerBookmarksTable)).single,
+          beforeRead,
+        );
+
+        await repository.addReaderBookmark(
+          bookmark: NovelReaderBookmark(
+            bookmarkId: bookmark.bookmarkId,
+            novelId: bookmark.novelId,
+            episodeId: bookmark.episodeId,
+            anchor: bookmark.anchor,
+            title: 'updated legacy title',
+            snippet: bookmark.snippet,
+            note: 'updated legacy note',
+            createdAt: bookmark.createdAt,
+            updatedAt: DateTime.fromMillisecondsSinceEpoch(3),
+          ),
+        );
+        expect(
+          (await db.query(AppDatabase.readerBookmarksTable)).single,
+          <String, Object?>{
+            ...beforeRead,
+            'title': 'updated legacy title',
+            'note': 'updated legacy note',
+            'updated_at': 3,
+          },
+        );
+      },
+    );
+
+    test(
+      'position updates preserve unsupported versions and future columns',
+      () async {
+        final db = await dbFuture;
+        await seedNovelRepository(
+          db,
+          seed: const NovelSourceSeed(fid: '49', tid: '200'),
+        );
+        final episode = (await repository.getEpisodes(
+          novelId: 'novel:49:200',
+        )).first;
+        for (final table in <String>[
+          AppDatabase.novelReadingProgressTable,
+          AppDatabase.readerBookmarksTable,
+        ]) {
+          await db.execute(
+            'ALTER TABLE $table ADD COLUMN future_extension TEXT',
+          );
+        }
+        const futureIdentity = ' future-v77|opaque ';
+        const futureOffset = (1 << 35) + 13;
+        await db
+            .insert(AppDatabase.novelReadingProgressTable, <String, Object?>{
+              'novel_id': episode.novelId,
+              'episode_id': episode.episodeId,
+              'scroll_offset': 40.0,
+              'anchor_node_id': 'future-node',
+              'anchor_text_offset': futureOffset,
+              'anchor_format_version': 77,
+              'anchor_text_identity': futureIdentity,
+              'progress_percent': 0.4,
+              'progress_percent_valid': 0,
+              'future_extension': 'progress extension',
+              'updated_at': 1,
+            });
+        await db.insert(AppDatabase.readerBookmarksTable, <String, Object?>{
+          'bookmark_id': 'future-bookmark',
+          'novel_id': episode.novelId,
+          'episode_id': episode.episodeId,
+          'node_id': 'future-node',
+          'text_offset': futureOffset,
+          'anchor_format_version': 77,
+          'anchor_text_identity': futureIdentity,
+          'progress_percent': 0.4,
+          'progress_percent_valid': 0,
+          'future_extension': 'bookmark extension',
+          'title': 'future bookmark',
+          'snippet': 'future snippet',
+          'created_at': 1,
+          'updated_at': 2,
+        });
+
+        final progress = (await repository.getReadingProgress(
+          novelId: episode.novelId,
+        ))!;
+        final bookmark = (await repository.listReaderBookmarks(
+          novelId: episode.novelId,
+        )).single;
+        expect(progress.anchorFormatVersion, 77);
+        expect(progress.anchorTextIdentity, futureIdentity);
+        expect(progress.anchorTextOffset, futureOffset);
+        expect(progress.isProgressPercentValid, isFalse);
+        expect(bookmark.anchor.formatVersion, 77);
+        expect(bookmark.anchor.textIdentity, futureIdentity);
+        expect(bookmark.anchor.textOffset, futureOffset);
+        expect(bookmark.anchor.isProgressPercentValid, isFalse);
+
+        await repository.saveReadingProgress(
+          novelId: progress.novelId,
+          episodeId: progress.episodeId,
+          scrollOffset: 50,
+          anchorNodeId: progress.anchorNodeId,
+          anchorTextOffset: progress.anchorTextOffset,
+          progressPercent: progress.progressPercent,
+          anchorFormatVersion: progress.anchorFormatVersion,
+          anchorTextIdentity: progress.anchorTextIdentity,
+          isProgressPercentValid: progress.isProgressPercentValid,
+        );
+        await repository.addReaderBookmark(
+          bookmark: NovelReaderBookmark(
+            bookmarkId: bookmark.bookmarkId,
+            novelId: bookmark.novelId,
+            episodeId: bookmark.episodeId,
+            anchor: bookmark.anchor,
+            title: bookmark.title,
+            snippet: bookmark.snippet,
+            note: 'updated note',
+            createdAt: bookmark.createdAt,
+            updatedAt: DateTime.fromMillisecondsSinceEpoch(3),
+          ),
+        );
+
+        final progressRow = (await db.query(
+          AppDatabase.novelReadingProgressTable,
+        )).single;
+        final bookmarkRow = (await db.query(
+          AppDatabase.readerBookmarksTable,
+        )).single;
+        for (final row in <Map<String, Object?>>[progressRow, bookmarkRow]) {
+          expect(row['anchor_format_version'], 77);
+          expect(row['anchor_text_identity'], futureIdentity);
+          expect(row['progress_percent_valid'], 0);
+        }
+        expect(progressRow['future_extension'], 'progress extension');
+        expect(progressRow['anchor_text_offset'], futureOffset);
+        expect(progressRow['scroll_offset'], 50.0);
+        expect(bookmarkRow['future_extension'], 'bookmark extension');
+        expect(bookmarkRow['text_offset'], futureOffset);
+        expect(bookmarkRow['note'], 'updated note');
+        expect(bookmarkRow['created_at'], 1);
+        expect(bookmarkRow['updated_at'], 3);
+      },
+    );
 
     test(
       'toggleEpisodeBookmark exposes existing episode bookmark state',

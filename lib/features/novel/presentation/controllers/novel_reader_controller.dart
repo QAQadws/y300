@@ -443,6 +443,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       isPageCountFinal: position.isPageCountFinal,
       anchorNodeId: position.anchor.nodeId,
       anchorTextOffset: position.anchor.textOffset,
+      anchorFormatVersion: position.anchor.formatVersion,
+      anchorTextIdentity: position.anchor.textIdentity,
     );
     final shouldCommitBeginning =
         _pendingBeginningCommitEpisodeId == position.episodeId;
@@ -979,8 +981,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       pageCount: snapshot.pageCount,
       anchorNodeId: snapshot.anchorNodeId,
       anchorTextOffset: snapshot.anchorTextOffset,
+      anchorFormatVersion: snapshot.anchorFormatVersion,
+      anchorTextIdentity: snapshot.anchorTextIdentity,
       paginationKey: snapshot.paginationKey,
       progressPercent: snapshot.progressPercent,
+      isProgressPercentValid: snapshot.isProgressPercentValid,
     );
   }
 

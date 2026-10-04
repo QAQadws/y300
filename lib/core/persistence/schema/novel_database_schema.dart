@@ -102,6 +102,9 @@ Future<void> createNovelReadingProgressTable(Database db) async {
         anchor_text_offset INTEGER NOT NULL DEFAULT 0,
         pagination_key TEXT,
         progress_percent REAL,
+        anchor_format_version INTEGER NOT NULL DEFAULT 0,
+        anchor_text_identity TEXT,
+        progress_percent_valid INTEGER,
         updated_at INTEGER NOT NULL
       )
     ''');
@@ -192,6 +195,9 @@ Future<void> createNovelReaderBookmarksTable(Database db) async {
         page_index INTEGER NOT NULL DEFAULT 0,
         scroll_offset REAL NOT NULL DEFAULT 0,
         progress_percent REAL NOT NULL DEFAULT 0,
+        anchor_format_version INTEGER NOT NULL DEFAULT 0,
+        anchor_text_identity TEXT,
+        progress_percent_valid INTEGER,
         title TEXT NOT NULL,
         snippet TEXT NOT NULL,
         note TEXT,
@@ -300,4 +306,30 @@ Future<void> upgradeNovelFrom34To35(Database db) async {
     column: 'page_count',
     definition: 'INTEGER',
   );
+}
+
+Future<void> upgradeNovelFrom41To42(Database db) async {
+  for (final table in <String>[
+    novelReadingProgressTable,
+    readerBookmarksTable,
+  ]) {
+    await addColumnIfMissing(
+      db,
+      table: table,
+      column: 'anchor_format_version',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await addColumnIfMissing(
+      db,
+      table: table,
+      column: 'anchor_text_identity',
+      definition: 'TEXT',
+    );
+    await addColumnIfMissing(
+      db,
+      table: table,
+      column: 'progress_percent_valid',
+      definition: 'INTEGER',
+    );
+  }
 }

@@ -14,6 +14,7 @@ import 'package:y300/features/library_shared/domain/services/library_cover_asset
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
@@ -663,11 +664,16 @@ class LocalNovelRepository
     int anchorTextOffset = 0,
     String? paginationKey,
     double progressPercent = 0,
+    int anchorFormatVersion = NovelReaderAnchorFormat.legacyUnknown,
+    String? anchorTextIdentity,
+    bool? isProgressPercentValid,
   }) async {
     final db = await _dbFuture;
-    await db.insert(
-      AppDatabase.novelReadingProgressTable,
-      <String, Object?>{
+    await _upsertReaderPositionRow(
+      db,
+      table: AppDatabase.novelReadingProgressTable,
+      primaryKey: 'novel_id',
+      row: <String, Object?>{
         'novel_id': novelId,
         'episode_id': episodeId,
         'scroll_offset': scrollOffset,
@@ -675,12 +681,20 @@ class LocalNovelRepository
         'page_index': pageIndex < 0 ? 0 : pageIndex,
         'page_count': pageCount == null || pageCount <= 0 ? null : pageCount,
         'anchor_node_id': _normalizeNullable(anchorNodeId),
-        'anchor_text_offset': anchorTextOffset.clamp(0, 1 << 30).toInt(),
+        'anchor_text_offset': _readerTextOffset(
+          anchorTextOffset,
+          formatVersion: anchorFormatVersion,
+          textIdentity: anchorTextIdentity,
+        ),
         'pagination_key': _normalizeNullable(paginationKey),
         'progress_percent': progressPercent.clamp(0.0, 1.0).toDouble(),
+        'anchor_format_version': anchorFormatVersion,
+        'anchor_text_identity': anchorTextIdentity,
+        'progress_percent_valid': isProgressPercentValid == null
+            ? null
+            : (isProgressPercentValid ? 1 : 0),
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
-      conflictAlgorithm: ConflictAlgorithm.replace,
     );
     _progressDiagnostics.log(
       'db_save',
@@ -725,6 +739,10 @@ class LocalNovelRepository
       return null;
     }
 
+    final anchorFormatVersion =
+        (row['anchor_format_version'] as num?)?.toInt() ??
+        NovelReaderAnchorFormat.legacyUnknown;
+    final anchorTextIdentity = row['anchor_text_identity'] as String?;
     final progress = NovelReadingProgress(
       novelId: novelId,
       episodeId: episodeId,
@@ -743,13 +761,22 @@ class LocalNovelRepository
         _ => null,
       },
       anchorNodeId: _normalizeNullable(row['anchor_node_id'] as String?),
-      anchorTextOffset: ((row['anchor_text_offset'] as num?)?.toInt() ?? 0)
-          .clamp(0, 1 << 30)
-          .toInt(),
+      anchorTextOffset: _readerTextOffset(
+        (row['anchor_text_offset'] as num?)?.toInt() ?? 0,
+        formatVersion: anchorFormatVersion,
+        textIdentity: anchorTextIdentity,
+      ),
       paginationKey: _normalizeNullable(row['pagination_key'] as String?),
       progressPercent: ((row['progress_percent'] as num?)?.toDouble() ?? 0)
           .clamp(0.0, 1.0)
           .toDouble(),
+      anchorFormatVersion: anchorFormatVersion,
+      anchorTextIdentity: anchorTextIdentity,
+      isProgressPercentValid: switch (row['progress_percent_valid']) {
+        0 => false,
+        1 => true,
+        _ => null,
+      },
     );
     _progressDiagnostics.log(
       'db_load',
@@ -808,16 +835,20 @@ class LocalNovelRepository
     required NovelReaderBookmark bookmark,
   }) async {
     final db = await _dbFuture;
-    await db.insert(
-      AppDatabase.readerBookmarksTable,
-      <String, Object?>{
+    await _upsertReaderPositionRow(
+      db,
+      table: AppDatabase.readerBookmarksTable,
+      primaryKey: 'bookmark_id',
+      row: <String, Object?>{
         'bookmark_id': bookmark.bookmarkId,
         'novel_id': bookmark.novelId,
         'episode_id': bookmark.episodeId,
         'node_id': _normalizeNullable(bookmark.anchor.nodeId),
-        'text_offset': bookmark.anchor.textOffset < 0
-            ? 0
-            : bookmark.anchor.textOffset,
+        'text_offset': _readerTextOffset(
+          bookmark.anchor.textOffset,
+          formatVersion: bookmark.anchor.formatVersion,
+          textIdentity: bookmark.anchor.textIdentity,
+        ),
         'page_index': bookmark.anchor.pageIndex < 0
             ? 0
             : bookmark.anchor.pageIndex,
@@ -827,13 +858,17 @@ class LocalNovelRepository
         'progress_percent': bookmark.anchor.progressPercent
             .clamp(0.0, 1.0)
             .toDouble(),
+        'anchor_format_version': bookmark.anchor.formatVersion,
+        'anchor_text_identity': bookmark.anchor.textIdentity,
+        'progress_percent_valid': bookmark.anchor.isProgressPercentValid == null
+            ? null
+            : (bookmark.anchor.isProgressPercentValid! ? 1 : 0),
         'title': bookmark.title,
         'snippet': bookmark.snippet,
         'note': _normalizeNullable(bookmark.note),
         'created_at': bookmark.createdAt.millisecondsSinceEpoch,
         'updated_at': bookmark.updatedAt.millisecondsSinceEpoch,
       },
-      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
@@ -958,6 +993,10 @@ class LocalNovelRepository
     if (bookmarkId == null || novelId == null || episodeId == null) {
       return null;
     }
+    final anchorFormatVersion =
+        (row['anchor_format_version'] as num?)?.toInt() ??
+        NovelReaderAnchorFormat.legacyUnknown;
+    final anchorTextIdentity = row['anchor_text_identity'] as String?;
     return NovelReaderBookmark(
       bookmarkId: bookmarkId,
       novelId: novelId,
@@ -965,9 +1004,11 @@ class LocalNovelRepository
       anchor: NovelReaderTextAnchor(
         episodeId: episodeId,
         nodeId: _normalizeNullable(row['node_id'] as String?),
-        textOffset: ((row['text_offset'] as num?)?.toInt() ?? 0)
-            .clamp(0, 1 << 30)
-            .toInt(),
+        textOffset: _readerTextOffset(
+          (row['text_offset'] as num?)?.toInt() ?? 0,
+          formatVersion: anchorFormatVersion,
+          textIdentity: anchorTextIdentity,
+        ),
         pageIndex: ((row['page_index'] as num?)?.toInt() ?? 0)
             .clamp(0, 1 << 30)
             .toInt(),
@@ -977,6 +1018,13 @@ class LocalNovelRepository
         progressPercent: ((row['progress_percent'] as num?)?.toDouble() ?? 0)
             .clamp(0.0, 1.0)
             .toDouble(),
+        formatVersion: anchorFormatVersion,
+        textIdentity: anchorTextIdentity,
+        isProgressPercentValid: switch (row['progress_percent_valid']) {
+          0 => false,
+          1 => true,
+          _ => null,
+        },
       ),
       title: (row['title'] as String?) ?? '',
       snippet: (row['snippet'] as String?) ?? '',
@@ -1009,6 +1057,37 @@ class LocalNovelRepository
       createdAt: updatedAt,
       updatedAt: updatedAt,
     );
+  }
+
+  int _readerTextOffset(
+    int offset, {
+    required int formatVersion,
+    required String? textIdentity,
+  }) {
+    // Legacy and future coordinate formats are opaque during metadata updates.
+    return NovelReaderAnchorFormat.isSupported(formatVersion, textIdentity)
+        ? offset.clamp(0, 1 << 30).toInt()
+        : offset;
+  }
+
+  Future<void> _upsertReaderPositionRow(
+    Database db, {
+    required String table,
+    required String primaryKey,
+    required Map<String, Object?> row,
+  }) async {
+    // Updating known columns retains opaque metadata added by a newer client.
+    await db.transaction((txn) async {
+      final changed = await txn.update(
+        table,
+        row,
+        where: '$primaryKey = ?',
+        whereArgs: <Object?>[row[primaryKey]],
+      );
+      if (changed == 0) {
+        await txn.insert(table, row);
+      }
+    });
   }
 
   Future<int> _nextShelfSortOrder(

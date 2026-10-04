@@ -69,6 +69,66 @@ void main() {
     expect(snapshot.progressPercent, 0);
   });
 
+  test('loaded anchor metadata preserves legacy and unsupported evidence', () {
+    for (final (version, identity, validity) in <(int, String?, bool?)>[
+      (0, null, null),
+      (1, 'semantic-text-v1', true),
+      (1, 'semantic-text-v1', false),
+      (37, '  unsupported identity  ', null),
+    ]) {
+      final snapshot = policy.fromReadingProgress(
+        novelId: 'novel:1',
+        episodeId: 'episode-1',
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        progress: NovelReadingProgress(
+          novelId: 'novel:1',
+          episodeId: 'episode-1',
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 10, 4),
+          anchorFormatVersion: version,
+          anchorTextIdentity: identity,
+          isProgressPercentValid: validity,
+        ),
+      );
+
+      expect(snapshot.anchorFormatVersion, version);
+      expect(snapshot.anchorTextIdentity, identity);
+      expect(snapshot.isProgressPercentValid, validity);
+      expect(snapshot.copyWith(), snapshot);
+      expect(snapshot.copyWith().hashCode, snapshot.hashCode);
+    }
+  });
+
+  test('snapshot copy distinguishes changed and cleared anchor metadata', () {
+    const snapshot = NovelReaderProgressSnapshot(
+      novelId: 'novel:1',
+      episodeId: 'episode-1',
+      flowMode: NovelReaderFlowMode.pagedLtr,
+      scrollOffset: 0,
+      pageIndex: 0,
+      anchorFormatVersion: 1,
+      anchorTextIdentity: 'semantic-text-v1',
+      progressPercent: 0,
+      isProgressPercentValid: true,
+    );
+
+    expect(snapshot.copyWith(anchorFormatVersion: 2), isNot(snapshot));
+    expect(
+      snapshot.copyWith(anchorTextIdentity: 'semantic-text-v2'),
+      isNot(snapshot),
+    );
+    expect(snapshot.copyWith(isProgressPercentValid: false), isNot(snapshot));
+    final cleared = snapshot.copyWith(
+      clearAnchorTextIdentity: true,
+      clearProgressPercentValidity: true,
+    );
+    expect(cleared.anchorFormatVersion, 1);
+    expect(cleared.anchorTextIdentity, isNull);
+    expect(cleared.isProgressPercentValid, isNull);
+    expect(snapshot.anchorTextIdentity, 'semantic-text-v1');
+    expect(snapshot.isProgressPercentValid, isTrue);
+  });
+
   test(
     'verticalSnapshot calculates bounded progress without page semantics',
     () {
@@ -125,6 +185,8 @@ void main() {
       paginationKey: 'layout-v1',
       anchorNodeId: 'paragraph-4',
       anchorTextOffset: 18,
+      anchorFormatVersion: 1,
+      anchorTextIdentity: 'semantic-text-v1',
     );
 
     expect(snapshot.scrollOffset, 0);
@@ -133,7 +195,10 @@ void main() {
     expect(snapshot.paginationKey, 'layout-v1');
     expect(snapshot.anchorNodeId, 'paragraph-4');
     expect(snapshot.anchorTextOffset, 18);
+    expect(snapshot.anchorFormatVersion, 1);
+    expect(snapshot.anchorTextIdentity, 'semantic-text-v1');
     expect(snapshot.progressPercent, 0.4);
+    expect(snapshot.isProgressPercentValid, isTrue);
   });
 
   test('incremental page count does not fabricate completion percent', () {
@@ -146,12 +211,17 @@ void main() {
       paginationKey: 'layout-v1',
       isPageCountFinal: false,
       anchorNodeId: 'paragraph-2',
+      anchorFormatVersion: 1,
+      anchorTextIdentity: 'semantic-text-v1',
     );
 
     expect(snapshot.pageIndex, 1);
     expect(snapshot.pageCount, isNull);
     expect(snapshot.anchorNodeId, 'paragraph-2');
+    expect(snapshot.anchorFormatVersion, 1);
+    expect(snapshot.anchorTextIdentity, 'semantic-text-v1');
     expect(snapshot.progressPercent, 0);
+    expect(snapshot.isProgressPercentValid, isFalse);
   });
 
   test(

@@ -1,3 +1,5 @@
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
+
 class NovelReaderTextAnchor {
   const NovelReaderTextAnchor({
     required this.episodeId,
@@ -6,6 +8,9 @@ class NovelReaderTextAnchor {
     this.pageIndex = 0,
     this.scrollOffset = 0,
     this.progressPercent = 0,
+    this.formatVersion = NovelReaderAnchorFormat.legacyUnknown,
+    this.textIdentity,
+    this.isProgressPercentValid,
   });
 
   final String episodeId;
@@ -14,6 +19,14 @@ class NovelReaderTextAnchor {
   final int pageIndex;
   final double scrollOffset;
   final double progressPercent;
+  final int formatVersion;
+  final String? textIdentity;
+
+  /// Null is legacy/unknown, false is unavailable, true describes this position.
+  final bool? isProgressPercentValid;
+
+  bool get hasCanonicalTextOffset =>
+      NovelReaderAnchorFormat.isSupported(formatVersion, textIdentity);
 
   NovelReaderTextAnchor copyWith({
     String? episodeId,
@@ -23,6 +36,11 @@ class NovelReaderTextAnchor {
     int? pageIndex,
     double? scrollOffset,
     double? progressPercent,
+    int? formatVersion,
+    String? textIdentity,
+    bool clearTextIdentity = false,
+    bool? isProgressPercentValid,
+    bool clearProgressPercentValidity = false,
   }) {
     return NovelReaderTextAnchor(
       episodeId: episodeId ?? this.episodeId,
@@ -31,6 +49,13 @@ class NovelReaderTextAnchor {
       pageIndex: pageIndex ?? this.pageIndex,
       scrollOffset: scrollOffset ?? this.scrollOffset,
       progressPercent: progressPercent ?? this.progressPercent,
+      formatVersion: formatVersion ?? this.formatVersion,
+      textIdentity: clearTextIdentity
+          ? null
+          : (textIdentity ?? this.textIdentity),
+      isProgressPercentValid: clearProgressPercentValidity
+          ? null
+          : (isProgressPercentValid ?? this.isProgressPercentValid),
     );
   }
 }

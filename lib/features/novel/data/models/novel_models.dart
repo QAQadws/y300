@@ -1,4 +1,5 @@
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 
 export 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 
@@ -115,6 +116,9 @@ class NovelReadingProgress {
     this.anchorTextOffset = 0,
     this.paginationKey,
     this.progressPercent = 0,
+    this.anchorFormatVersion = NovelReaderAnchorFormat.legacyUnknown,
+    this.anchorTextIdentity,
+    this.isProgressPercentValid,
   });
 
   final String novelId;
@@ -128,6 +132,9 @@ class NovelReadingProgress {
   final int anchorTextOffset;
   final String? paginationKey;
   final double progressPercent;
+  final int anchorFormatVersion;
+  final String? anchorTextIdentity;
+  final bool? isProgressPercentValid;
 }
 
 class NovelShelfCategory {

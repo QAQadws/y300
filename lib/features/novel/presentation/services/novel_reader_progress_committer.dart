@@ -72,8 +72,11 @@ class DefaultNovelReaderProgressCommitter
         pageCount: snapshot.pageCount,
         anchorNodeId: snapshot.anchorNodeId,
         anchorTextOffset: snapshot.anchorTextOffset,
+        anchorFormatVersion: snapshot.anchorFormatVersion,
+        anchorTextIdentity: snapshot.anchorTextIdentity,
         paginationKey: snapshot.paginationKey,
         progressPercent: snapshot.progressPercent,
+        isProgressPercentValid: snapshot.isProgressPercentValid,
       );
       _lastCommittedSnapshot = snapshot;
       if (_pendingSnapshot == snapshot) {

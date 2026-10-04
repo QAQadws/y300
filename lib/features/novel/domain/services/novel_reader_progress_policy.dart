@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 
 class NovelReaderProgressSnapshot {
   const NovelReaderProgressSnapshot({
@@ -12,8 +13,11 @@ class NovelReaderProgressSnapshot {
     this.pageCount,
     this.anchorNodeId,
     this.anchorTextOffset = 0,
+    this.anchorFormatVersion = NovelReaderAnchorFormat.legacyUnknown,
+    this.anchorTextIdentity,
     this.paginationKey,
     required this.progressPercent,
+    this.isProgressPercentValid,
   });
 
   final String novelId;
@@ -24,8 +28,11 @@ class NovelReaderProgressSnapshot {
   final int? pageCount;
   final String? anchorNodeId;
   final int anchorTextOffset;
+  final int anchorFormatVersion;
+  final String? anchorTextIdentity;
   final String? paginationKey;
   final double progressPercent;
+  final bool? isProgressPercentValid;
 
   bool get isPaged => flowMode != NovelReaderFlowMode.vertical;
 
@@ -43,8 +50,11 @@ class NovelReaderProgressSnapshot {
         other.pageCount == pageCount &&
         other.anchorNodeId == anchorNodeId &&
         other.anchorTextOffset == anchorTextOffset &&
+        other.anchorFormatVersion == anchorFormatVersion &&
+        other.anchorTextIdentity == anchorTextIdentity &&
         other.paginationKey == paginationKey &&
-        other.progressPercent == progressPercent;
+        other.progressPercent == progressPercent &&
+        other.isProgressPercentValid == isProgressPercentValid;
   }
 
   @override
@@ -57,8 +67,11 @@ class NovelReaderProgressSnapshot {
     pageCount,
     anchorNodeId,
     anchorTextOffset,
+    anchorFormatVersion,
+    anchorTextIdentity,
     paginationKey,
     progressPercent,
+    isProgressPercentValid,
   );
 
   NovelReaderProgressSnapshot copyWith({
@@ -70,9 +83,14 @@ class NovelReaderProgressSnapshot {
     String? anchorNodeId,
     bool clearAnchorNodeId = false,
     int? anchorTextOffset,
+    int? anchorFormatVersion,
+    String? anchorTextIdentity,
+    bool clearAnchorTextIdentity = false,
     String? paginationKey,
     bool clearPaginationKey = false,
     double? progressPercent,
+    bool? isProgressPercentValid,
+    bool clearProgressPercentValidity = false,
   }) {
     return NovelReaderProgressSnapshot(
       novelId: novelId,
@@ -85,10 +103,17 @@ class NovelReaderProgressSnapshot {
           ? null
           : (anchorNodeId ?? this.anchorNodeId),
       anchorTextOffset: anchorTextOffset ?? this.anchorTextOffset,
+      anchorFormatVersion: anchorFormatVersion ?? this.anchorFormatVersion,
+      anchorTextIdentity: clearAnchorTextIdentity
+          ? null
+          : (anchorTextIdentity ?? this.anchorTextIdentity),
       paginationKey: clearPaginationKey
           ? null
           : (paginationKey ?? this.paginationKey),
       progressPercent: progressPercent ?? this.progressPercent,
+      isProgressPercentValid: clearProgressPercentValidity
+          ? null
+          : (isProgressPercentValid ?? this.isProgressPercentValid),
     );
   }
 }
@@ -133,8 +158,12 @@ class NovelReaderProgressPolicy {
       pageCount: _normalizePageCount(progress.pageCount),
       anchorNodeId: _normalizeAnchor(progress.anchorNodeId),
       anchorTextOffset: math.max(0, progress.anchorTextOffset).toInt(),
+      // Compatibility metadata is evidence, not a value to infer or normalize.
+      anchorFormatVersion: progress.anchorFormatVersion,
+      anchorTextIdentity: progress.anchorTextIdentity,
       paginationKey: _normalizeAnchor(progress.paginationKey),
       progressPercent: _clampPercent(progress.progressPercent),
+      isProgressPercentValid: progress.isProgressPercentValid,
     );
   }
 
@@ -168,6 +197,8 @@ class NovelReaderProgressPolicy {
     bool isPageCountFinal = true,
     String? anchorNodeId,
     int anchorTextOffset = 0,
+    int anchorFormatVersion = 0,
+    String? anchorTextIdentity,
   }) {
     if (flowMode == NovelReaderFlowMode.vertical) {
       throw ArgumentError.value(
@@ -195,8 +226,11 @@ class NovelReaderProgressPolicy {
       pageCount: isPageCountFinal ? safePageCount : null,
       anchorNodeId: _normalizeAnchor(anchorNodeId),
       anchorTextOffset: math.max(0, anchorTextOffset).toInt(),
+      anchorFormatVersion: anchorFormatVersion,
+      anchorTextIdentity: anchorTextIdentity,
       paginationKey: normalizedKey,
       progressPercent: !isPageCountFinal ? 0 : safePageIndex / safePageCount,
+      isProgressPercentValid: isPageCountFinal,
     );
   }
 

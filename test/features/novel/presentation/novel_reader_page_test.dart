@@ -3766,6 +3766,9 @@ class _FakeNovelRepository implements NovelRepository {
     int? pageCount,
     String? anchorNodeId,
     int anchorTextOffset = 0,
+    int anchorFormatVersion = 0,
+    String? anchorTextIdentity,
+    bool? isProgressPercentValid,
     String? paginationKey,
     double progressPercent = 0,
   }) async {
@@ -3782,6 +3785,9 @@ class _FakeNovelRepository implements NovelRepository {
       pageCount: pageCount,
       anchorNodeId: anchorNodeId,
       anchorTextOffset: anchorTextOffset,
+      anchorFormatVersion: anchorFormatVersion,
+      anchorTextIdentity: anchorTextIdentity,
+      isProgressPercentValid: isProgressPercentValid,
       paginationKey: paginationKey,
       progressPercent: progressPercent,
     );

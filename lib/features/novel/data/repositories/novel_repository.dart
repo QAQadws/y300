@@ -4,6 +4,7 @@ import 'package:y300/features/library_shared/domain/models/library_filter_models
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 
 /// 小说仓储：封装小说书架、章节、正文与阅读业务状态。
 abstract class NovelRepository {
@@ -57,6 +58,9 @@ abstract class NovelRepository {
     int anchorTextOffset = 0,
     String? paginationKey,
     double progressPercent = 0,
+    int anchorFormatVersion = NovelReaderAnchorFormat.legacyUnknown,
+    String? anchorTextIdentity,
+    bool? isProgressPercentValid,
   });
 
   Future<NovelReadingProgress?> getReadingProgress({required String novelId});
