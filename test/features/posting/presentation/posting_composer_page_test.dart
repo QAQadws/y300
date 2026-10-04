@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/data/repositories/sticker_picker_preferences_repository.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/network/api_result.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/services/default_composer_draft_attachment_verification_service.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_models.dart';

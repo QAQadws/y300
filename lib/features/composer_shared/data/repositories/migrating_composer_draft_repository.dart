@@ -1,7 +1,7 @@
 import 'package:y300/core/preferences/preference_keys.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/composer_shared/data/preferences/composer_draft_legacy_store.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_draft_snapshot_codec.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 

@@ -22,7 +22,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/services/forum_webview_redirect_resolver.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_draft_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';

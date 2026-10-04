@@ -7,7 +7,7 @@ import 'package:y300/features/cache/domain/models/forum_image_cache_requests.dar
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_unused_image_models.dart';
 import 'package:y300/features/composer_shared/domain/repositories/composer_unused_image_repository.dart';
 

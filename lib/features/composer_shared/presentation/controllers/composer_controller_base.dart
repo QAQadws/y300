@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/application/composer_draft_coordinator.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -25,7 +25,7 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 /// 编辑器（回复 / 发帖）共用的模板方法基类。
 ///
 /// 这里集中处理通用流程：
-/// - 草稿 prune / 恢复 / 防抖落盘 / 显式 flush / 显式 discard
+/// - 通过 draft coordinator 管理恢复、落盘、flush 与 discard
 /// - 图片选择 + 串行上传事件流分发
 /// - submit 调度：sanitize 过期附件 → preflight 校验 → 子类 performSubmit
 ///   → 成功删草稿、失败保留草稿
@@ -39,7 +39,8 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     extends AsyncNotifier<TState> {
   ComposerControllerBase();
 
-  static const Duration defaultSaveDebounce = Duration(milliseconds: 700);
+  static const Duration defaultSaveDebounce =
+      ComposerDraftCoordinator.defaultSaveDebounce;
 
   Duration get saveDebounce => defaultSaveDebounce;
 
@@ -96,9 +97,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   });
 
   // ── 基类内部状态 ─────────────────────────────────────────────
-  Timer? _saveTimer;
-  Future<void> _draftWriteTail = Future<void>.value();
-  ComposerDraftRepository? _draftRepository;
+  ComposerDraftCoordinator<TState>? _draftCoordinator;
+  bool _closed = false;
+  int _sessionGeneration = 0;
   ComposerImagePicker? _imagePicker;
   ComposerImageUploadCoordinator? _imageUploadCoordinator;
   ComposerAttachBbCodeService? _attachBbCodeService;
@@ -123,8 +124,21 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   @override
   FutureOr<TState> build() async {
-    _draftRepository = draftsEnabled
-        ? ref.read(composerDraftRepositoryProvider)
+    final generation = ++_sessionGeneration;
+    final previousWrites = _draftCoordinator?.close();
+    _latestState = null;
+    _closed = false;
+    _draftVerificationInFlight = false;
+    final identity = draftIdentity;
+    final drafts = _draftCoordinator = draftsEnabled && identity != null
+        ? ComposerDraftCoordinator<TState>(
+            repository: ref.read(composerDraftRepositoryProvider),
+            identity: identity,
+            readState: () => _latestState,
+            shouldPersist: shouldPersistDraft,
+            snapshotFor: draftSnapshotFor,
+            debounce: saveDebounce,
+          )
         : null;
     _imagePicker = ref.read(composerImagePickerProvider);
     _imageUploadCoordinator = ref.read(composerImageUploadCoordinatorProvider);
@@ -135,23 +149,23 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     _uploadCacheStorage = ref.read(composerUploadCacheStorageProvider);
 
     ref.onDispose(() {
-      _saveTimer?.cancel();
-      _uploadGeneration += 1;
-      _draftVerificationGeneration += 1;
-      _imageUploadCoordinator?.cancel();
-      unawaited(_imageUploadSubscription?.cancel());
-      _imageUploadSubscription = null;
-      final current = _latestState;
-      if (current != null && draftsEnabled) {
-        unawaited(_saveSnapshot(current));
+      if (generation == _sessionGeneration) {
+        _closed = true;
+        _uploadGeneration += 1;
+        _draftVerificationGeneration += 1;
+        _imageUploadCoordinator?.cancel();
+        unawaited(_imageUploadSubscription?.cancel());
+        _imageUploadSubscription = null;
       }
+      unawaited(drafts?.close());
     });
 
-    await _pruneDraftsIfNeeded();
-    final identity = draftIdentity;
-    final snapshot = draftsEnabled && identity != null
-        ? await _draftRepository!.loadDraft(identity)
-        : null;
+    // Ref invalidation can rebuild this same notifier. Finish its previous
+    // session's final write before loading a replacement draft.
+    await previousWrites;
+    _ensureActiveBuild(generation);
+    final snapshot = await drafts?.restore();
+    _ensureActiveBuild(generation);
     var restored = restoreDraft(
       snapshot != null && !snapshot.isEmpty ? snapshot : null,
     );
@@ -159,20 +173,24 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (restored != null) {
       final beforeVerification = restored;
       final result = await _verifyDraftSnapshot(restored);
+      _ensureActiveBuild(generation);
       restored = result.draft;
       verification = result.verification;
       if (verification.verified &&
           !identical(beforeVerification, result.draft)) {
-        await _draftRepository!.saveDraft(result.draft);
+        await drafts!.saveRestoredSnapshot(result.draft);
       }
     }
+    _ensureActiveBuild(generation);
     final preferences = await ref.read(
       composerPreferencesControllerProvider.future,
     );
+    _ensureActiveBuild(generation);
     final initial = await buildInitialState(
       restoredDraft: restored,
       preferences: preferences,
     );
+    if (!_isSessionActive(generation)) return initial;
     final effectiveInitial = applyPatch(
       initial,
       ComposerStatePatch(draftAttachmentVerification: verification),
@@ -184,6 +202,15 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     );
     onAfterBuild(effectiveInitial);
     return effectiveInitial;
+  }
+
+  bool _isSessionActive(int generation) =>
+      !_closed && generation == _sessionGeneration;
+
+  void _ensureActiveBuild(int generation) {
+    if (!_isSessionActive(generation)) {
+      throw StateError('Composer initialization expired');
+    }
   }
 
   Future<ComposerDraftAttachmentVerificationResult> _verifyDraftSnapshot(
@@ -399,31 +426,15 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
 
   // ── 草稿持久化 ───────────────────────────────────────────────
   Future<void> flushDraft() async {
-    _saveTimer?.cancel();
-    _saveTimer = null;
-    final current = _latestState;
-    if (current == null) {
-      return;
-    }
-    await _saveSnapshot(current);
+    await _draftCoordinator?.flush();
   }
 
   Future<void> discardDraft() async {
-    _saveTimer?.cancel();
-    _saveTimer = null;
     final attachments = List<ComposerImageAttachment>.of(
       _latestState?.imageAttachments ?? const <ComposerImageAttachment>[],
     );
-    final repository = _draftRepository;
-    final identity = draftIdentity;
-    if (repository != null && draftsEnabled && identity != null) {
-      try {
-        await _enqueueDraftWrite(() => repository.deleteDraft(identity));
-      } catch (_) {
-        // A confirmed server submission must not be reported as failed only
-        // because best-effort local draft cleanup could not complete.
-      }
-    }
+    // Best-effort local cleanup must not change a confirmed server outcome.
+    await _draftCoordinator?.discard();
     await _deleteOwnedAttachmentCopiesBestEffort(attachments);
   }
 
@@ -432,15 +443,17 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (current == null || current.isSubmitting) {
       return;
     }
+    final generation = _sessionGeneration;
+    final drafts = _draftCoordinator;
 
-    _saveTimer?.cancel();
-    _saveTimer = null;
+    _draftCoordinator?.cancelPendingSave();
     _uploadGeneration += 1;
     _activeUploadBatch = null;
     _imageUploadCoordinator?.cancel();
     final subscription = _imageUploadSubscription;
     _imageUploadSubscription = null;
     await subscription?.cancel();
+    if (!_isSessionActive(generation)) return;
 
     final reset = resetToBaseline(
       applyPatch(
@@ -468,73 +481,25 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       source: messageForRevisionReset(reset),
       revision: current.messageRevision + 1,
     );
-    final repository = _draftRepository;
-    final identity = draftIdentity;
-    if (repository != null && draftsEnabled && identity != null) {
-      try {
-        await _enqueueDraftWrite(() => repository.deleteDraft(identity));
-      } catch (_) {
-        // 保持 UI 已清空，并通过空快照再次尝试移除持久化草稿。
-        _scheduleDraftSave();
-      }
+    final discarded = await drafts?.discard();
+    if (!_isSessionActive(generation)) return;
+    if (discarded == false) {
+      // 保持 UI 已清空，并通过空快照再次尝试移除持久化草稿。
+      _scheduleDraftSave();
     }
     await _deleteOwnedAttachmentCopiesBestEffort(current.imageAttachments);
   }
 
   void _scheduleDraftSave() {
-    if (!draftsEnabled) {
-      return;
-    }
-    _saveTimer?.cancel();
-    _saveTimer = Timer(saveDebounce, () {
-      unawaited(flushDraft());
-    });
+    _draftCoordinator?.scheduleSave();
   }
 
   Future<void> scheduleDraftSave() async {
     _scheduleDraftSave();
   }
 
-  Future<void> _pruneDraftsIfNeeded() async {
-    if (!draftsEnabled) {
-      return;
-    }
-    try {
-      await _draftRepository?.pruneDrafts();
-    } catch (_) {
-      // 草稿清理失败不阻断编辑器加载，后续保存会继续覆盖当前草稿。
-    }
-  }
-
   Future<void> _saveSnapshot(TState value) async {
-    final repository = _draftRepository;
-    final identity = draftIdentity;
-    if (repository == null || !draftsEnabled || identity == null) {
-      return;
-    }
-    if (!shouldPersistDraft(value)) {
-      try {
-        await _enqueueDraftWrite(() => repository.deleteDraft(identity));
-      } catch (_) {
-        // Draft cleanup is best effort and must not block leaving the editor.
-      }
-      return;
-    }
-    final snapshot = draftSnapshotFor(value);
-    try {
-      await _enqueueDraftWrite(() => repository.saveDraft(snapshot));
-    } catch (_) {
-      // 草稿保存失败不阻断编辑或发送，用户仍可继续完成当前编辑。
-    }
-  }
-
-  Future<void> _enqueueDraftWrite(Future<void> Function() operation) {
-    final next = _draftWriteTail.then((_) => operation());
-    _draftWriteTail = next.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
-    return next;
+    await _draftCoordinator?.saveState(value);
   }
 
   // ── 图片选择 + 上传事件分发 ──────────────────────────────────
@@ -548,10 +513,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (current == null || !canPickImages(current)) {
       return;
     }
+    final generation = _sessionGeneration;
 
     try {
       final pickedImages = await _imagePicker!.pickImagesInOrder();
-      if (pickedImages.isEmpty) {
+      if (!_isSessionActive(generation) || pickedImages.isEmpty) {
         return;
       }
       final latest = state.value ?? current;
@@ -597,6 +563,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
         attachments.skip(existingCount).toList(growable: false),
       );
     } on ComposerImagePickerException catch (_) {
+      if (!_isSessionActive(generation)) return;
       final latest = state.value ?? current;
       _setDataState(
         applyPatch(
@@ -962,8 +929,9 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     if (stateValue == null || stateValue.isSubmitting) {
       return const ComposerSubmitInvocationResult.notSent();
     }
-    _saveTimer?.cancel();
-    _saveTimer = null;
+    final generation = _sessionGeneration;
+    final drafts = _draftCoordinator;
+    _draftCoordinator?.cancelPendingSave();
 
     final marked = applyPatch(
       stateValue,
@@ -971,7 +939,10 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     );
     _setDataState(marked);
 
-    final sanitized = await _sanitizeBeforeSubmit(marked);
+    final sanitized = await _sanitizeBeforeSubmit(marked, generation);
+    if (!_isSessionActive(generation)) {
+      return const ComposerSubmitInvocationResult.notSent();
+    }
 
     final preflight = preflightValidate(sanitized);
     if (preflight != null) {
@@ -990,10 +961,34 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
       state: sanitized,
       uploadedAids: uploadedAids,
     );
+    if (!_isSessionActive(generation)) {
+      if (outcome.success) {
+        // A closed route can finish applied cleanup, but a newer build owns
+        // its own input and must not be deleted by this older submission.
+        if (_closed && generation == _sessionGeneration) {
+          await drafts?.discard();
+          await _deleteOwnedAttachmentCopiesBestEffort(
+            sanitized.imageAttachments,
+          );
+        }
+        return ComposerSubmitInvocationResult.sent(
+          rawDetail: outcome.rawSuccessDetail,
+        );
+      }
+      return ComposerSubmitInvocationResult.notSent(failure: outcome.failure);
+    }
     final afterSubmit = state.value ?? sanitized;
 
     if (outcome.success) {
-      await discardDraft();
+      await drafts?.discard();
+      await _deleteOwnedAttachmentCopiesBestEffort(
+        afterSubmit.imageAttachments,
+      );
+      if (!_isSessionActive(generation)) {
+        return ComposerSubmitInvocationResult.sent(
+          rawDetail: outcome.rawSuccessDetail,
+        );
+      }
       final reset = applyPatch(
         afterSubmit,
         ComposerStatePatch(
@@ -1034,7 +1029,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     return ComposerSubmitInvocationResult.notSent(failure: failure);
   }
 
-  Future<TState> _sanitizeBeforeSubmit(TState current) async {
+  Future<TState> _sanitizeBeforeSubmit(TState current, int generation) async {
     if (!sanitizeAttachmentsBeforeSubmit) {
       return current;
     }
@@ -1062,9 +1057,11 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
     // old cachePath and can safely delete that composer-owned file before it
     // writes the sanitized attachment metadata.
     await _saveSnapshot(current);
+    if (!_isSessionActive(generation)) return current;
     await _deleteOwnedAttachmentCopiesBestEffort(
       result.cacheCleanupAttachments,
     );
+    if (!_isSessionActive(generation)) return current;
     _setDataState(sanitized);
     return sanitized;
   }
@@ -1123,6 +1120,7 @@ abstract class ComposerControllerBase<TState extends ComposerStateBase>
   /// 该方法同步刷新 `_latestState`，确保 `flushDraft` / dispose 时落盘的是最新值。
   /// 名义上是 `protected`，外部不应该调用。
   void setStateValue(TState value) {
+    if (_closed) return;
     _latestState = value;
     state = AsyncData(value);
   }

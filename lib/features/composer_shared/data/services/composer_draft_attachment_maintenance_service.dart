@@ -1,4 +1,4 @@
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 
 abstract class ComposerDraftAttachmentMaintenanceService {
   Future<ComposerDraftAttachmentMaintenanceResult> maintain();

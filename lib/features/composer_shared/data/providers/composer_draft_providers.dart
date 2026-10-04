@@ -5,7 +5,7 @@ import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_database_manager.dart';
 import 'package:y300/features/composer_shared/data/local/composer_draft_local_db.dart';
 import 'package:y300/features/composer_shared/data/preferences/composer_draft_legacy_store.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/repositories/migrating_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/repositories/sqflite_composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_draft_attachment_maintenance_service.dart';

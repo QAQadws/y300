@@ -94,6 +94,19 @@ class _TestComposerController
   );
   Future<ComposerSubmissionOutcome>? outcomeFuture;
   int performSubmitCallCount = 0;
+  int afterBuildCallCount = 0;
+  int resetAfterSuccessCallCount = 0;
+
+  @override
+  void onAfterBuild(_TestComposerState initial) {
+    afterBuildCallCount += 1;
+  }
+
+  @override
+  _TestComposerState resetAfterSuccess(_TestComposerState value) {
+    resetAfterSuccessCallCount += 1;
+    return value;
+  }
 
   @override
   ComposerDraftIdentity get draftIdentity => _args.identity;
@@ -141,9 +154,19 @@ class _TestComposerController
 class _MemoryDraftRepository implements ComposerDraftRepository {
   final Map<String, ComposerDraftSnapshot> _drafts =
       <String, ComposerDraftSnapshot>{};
+  Future<void>? beforeSave;
+  Future<void>? beforeDelete;
+  final savedSnapshots = <ComposerDraftSnapshot>[];
+  int loadCallCount = 0;
+  bool failNextDelete = false;
 
   @override
   Future<void> deleteDraft(ComposerDraftIdentity identity) async {
+    await beforeDelete;
+    if (failNextDelete) {
+      failNextDelete = false;
+      throw StateError('controlled delete failure');
+    }
     _drafts.remove(identity.storageKey);
   }
 
@@ -163,6 +186,7 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
   Future<ComposerDraftSnapshot?> loadDraft(
     ComposerDraftIdentity identity,
   ) async {
+    loadCallCount += 1;
     return _drafts[identity.storageKey];
   }
 
@@ -176,6 +200,8 @@ class _MemoryDraftRepository implements ComposerDraftRepository {
 
   @override
   Future<void> saveDraft(ComposerDraftSnapshot draft) async {
+    await beforeSave;
+    savedSnapshots.add(draft);
     if (draft.isEmpty) {
       _drafts.remove(draft.identity.storageKey);
       return;

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/composer_shared/data/repositories/composer_draft_repository.dart';
+import 'package:y300/features/composer_shared/domain/repositories/composer_draft_repository.dart';
 import 'package:y300/features/composer_shared/data/services/composer_image_picker.dart';
 import 'package:y300/features/composer_shared/data/services/composer_upload_cache_storage.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -22,6 +22,7 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 
 part 'composer_controller_base_test_fakes.dart';
+part 'composer_controller_base_draft_lifecycle_cases.dart';
 
 final _testControllerProvider = AsyncNotifierProvider.autoDispose
     .family<_TestComposerController, _TestComposerState, _TestArgs>(
@@ -30,6 +31,7 @@ final _testControllerProvider = AsyncNotifierProvider.autoDispose
 
 void main() {
   group('ComposerControllerBase', () {
+    _draftLifecycleCases();
     test('restores message and useSignature from draft snapshot', () async {
       final draftRepository = _MemoryDraftRepository();
       const args = _TestArgs(fid: '33', tid: '572063');
@@ -721,5 +723,3 @@ void main() {
     );
   });
 }
-
-/// 占位：本测试目前只覆盖事件循环驱动的简单流程，不需要伪造 fakeAsync。
