@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'forum_html_test_theme.dart';
 
@@ -119,11 +120,55 @@ void main() {
       '<img id="aimg_1" src="data/attachment/forum/page.jpg">',
     );
 
-    final removed = const ForumHtmlImageDeduplicator()
-        .deduplicateAttachmentImagesInFragment(fragment);
+    final removed = ForumHtmlImageDeduplicator(
+      resolveUrl: const SiteUrlResolver().resolve,
+    ).deduplicateAttachmentImagesInFragment(fragment);
 
     expect(removed, 1);
     expect(fragment.querySelectorAll('img'), hasLength(1));
+  });
+
+  test('core pipeline uses neutral resources and the explicit URL origin', () {
+    final origin = Uri.parse('https://origin.example.invalid/base/');
+    final pipeline = ForumHtmlRenderPipeline(
+      imagePolicy: const _ImagePolicy(),
+      resolveUrl: (raw) => origin.resolve(raw).toString(),
+    );
+    final prepared = pipeline.prepare(
+      html:
+          '<img id="aimg_9" src="first.jpg" width="640" height="480">'
+          '<img id="aimg_9" '
+          'src="https://origin.example.invalid/base/first.jpg">'
+          '<img id="aimg_10" src="last.jpg" width="320" height="600">',
+      preferences: ForumHtmlReaderPreferences.defaults(),
+      theme: forumHtmlTestTheme,
+      sourceId: 'neutral-image-pipeline',
+      threadId: null,
+      imageCacheOwnerId: null,
+    );
+    final images = html_parser
+        .parseFragment(prepared.preparedHtml)
+        .querySelectorAll('img');
+
+    expect(images, hasLength(2));
+    expect(prepared.totalImageCount, 2);
+    expect(prepared.sequence.entries.map((entry) => entry.index), [0, 1]);
+    expect(prepared.sequence.entries.map((entry) => entry.cacheKey), [
+      'core-0',
+      'core-1',
+    ]);
+    expect(prepared.sequence.entries.first.resource, isA<_ImageResource>());
+    expect(prepared.sequence.entries.first.rawSrc, 'first.jpg');
+    expect(prepared.sequence.entries.first.url, '${origin}first.jpg');
+    expect(prepared.sequence.entries.first.htmlWidth, 640);
+    expect(prepared.sequence.entries.first.htmlHeight, 480);
+    expect(prepared.sequence.entries.last.url, '${origin}last.jpg');
+    expect(prepared.sequence.entries.last.htmlWidth, 320);
+    expect(prepared.sequence.entries.last.htmlHeight, 600);
+    expect(images.first.attributes[forumHtmlReadableImageIndexAttribute], '0');
+    expect(images.last.attributes[forumHtmlReadableImageIndexAttribute], '1');
+    expect(prepared.attachmentIdsByUrl['${origin}first.jpg'], '9');
+    expect(prepared.attachmentIdsByUrl['${origin}last.jpg'], '10');
   });
 }
 
@@ -154,4 +199,27 @@ final class _CountingFragmentCodec implements ForumHtmlFragmentCodec {
     serializeCount++;
     return _delegate.serialize(fragment);
   }
+}
+
+final class _ImageResource implements ForumHtmlPreparedImageResource {
+  const _ImageResource(this.cacheKey);
+
+  @override
+  final String cacheKey;
+}
+
+final class _ImagePolicy implements ForumHtmlPreparationImagePolicy {
+  const _ImagePolicy();
+
+  @override
+  ForumHtmlPreparedImageResource prepareInline({
+    required Uri url,
+    required String? threadId,
+    required String? imageCacheOwnerId,
+    required int imageIndex,
+    double? htmlWidth,
+    double? htmlHeight,
+    String? alt,
+    String? title,
+  }) => _ImageResource('core-$imageIndex');
 }

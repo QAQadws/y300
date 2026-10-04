@@ -18,17 +18,34 @@ void main() {
   test('large chapter projection finishes on the preparation worker', () async {
     final parent = Isolate.current.hashCode;
     final result = await preparer.prepareAndProject(
-      rawHtml: '<p>${'正文' * 7000}</p>',
+      rawHtml:
+          '<p>${'正文' * 7000}</p>'
+          '<img id="aimg_9" src="data/attachment/forum/worker-page.jpg" '
+          'width="120" height="80">',
       preferences: ForumHtmlReaderPreferences.defaults(),
       theme: _darkTheme,
       sourceId: 'fixture-episode',
       threadId: '100',
       imageCacheOwnerId: '100',
-      project: (chapter) =>
-          (Isolate.current.hashCode, chapter.document.themeSignature),
+      project: (chapter) => (Isolate.current.hashCode, chapter),
     );
     expect(result.$1, isNot(parent));
-    expect(result.$2, _darkTheme.signature);
+    final document = result.$2.document;
+    expect(document.themeSignature, _darkTheme.signature);
+    final image = document.sequence.entries.single;
+    expect(
+      image.url,
+      'https://bbs.yamibo.com/data/attachment/forum/worker-page.jpg',
+    );
+    expect(image.rawSrc, 'data/attachment/forum/worker-page.jpg');
+    expect(image.htmlWidth, 120);
+    expect(image.htmlHeight, 80);
+    expect(image.index, 0);
+    expect(image.attachmentId, '9');
+    expect(
+      image.cacheKey,
+      allOf(startsWith('thread/inline/'), endsWith('/worker-page.jpg')),
+    );
   });
 
   test(

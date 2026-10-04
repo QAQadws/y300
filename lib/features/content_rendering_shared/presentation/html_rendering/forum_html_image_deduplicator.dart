@@ -1,5 +1,4 @@
 import 'package:html/dom.dart' as html_dom;
-import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// Removes duplicated Discuz attachment images from an HTML fragment.
@@ -10,10 +9,10 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 /// untouched.
 class ForumHtmlImageDeduplicator {
   const ForumHtmlImageDeduplicator({
-    SiteUrlResolver urlResolver = const SiteUrlResolver(),
-  }) : _urlResolver = urlResolver;
+    required String? Function(String) resolveUrl,
+  }) : _resolveUrl = resolveUrl;
 
-  final SiteUrlResolver _urlResolver;
+  final String? Function(String) _resolveUrl;
 
   int deduplicateAttachmentImagesInFragment(
     html_dom.DocumentFragment fragment,
@@ -52,7 +51,7 @@ class ForumHtmlImageDeduplicator {
     }
     final normalized = DefaultForumImageSourcePipeline.normalizeImageSource(
       rawUrl,
-      urlResolver: _urlResolver.resolve,
+      urlResolver: _resolveUrl,
     );
     if (normalized == null ||
         !DefaultForumImageSourcePipeline.isHttpImageUrl(normalized) ||

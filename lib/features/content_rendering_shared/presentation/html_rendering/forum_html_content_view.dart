@@ -6,7 +6,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_content_layout.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_widget_post_renderer.dart';

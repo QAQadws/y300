@@ -1,10 +1,6 @@
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_preparation_image_policy.dart';
-import 'package:y300/features/content_rendering_shared/application/host/forum_cache_html_preparation_image_policy.dart';
 import 'package:html/dom.dart' as html_dom;
-import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
-import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_fragment_codec.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_image_deduplicator.dart';
@@ -15,30 +11,25 @@ import 'package:y300/features/content_rendering_shared/presentation/html_renderi
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
-class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
-  const DefaultForumHtmlRenderPreparer({
-    ForumImageRequestResolver imageRequestResolver =
-        const DefaultForumImageRequestResolver(),
-    ForumHtmlImageDeduplicator imageDeduplicator =
-        const ForumHtmlImageDeduplicator(),
+/// Shared preparation pipeline; URL and image ownership are supplied by Host.
+class ForumHtmlRenderPipeline implements ForumHtmlRenderPreparer {
+  const ForumHtmlRenderPipeline({
+    required ForumHtmlPreparationImagePolicy imagePolicy,
+    required String? Function(String) resolveUrl,
+    ForumHtmlImageDeduplicator? imageDeduplicator,
     ForumHtmlFragmentCodec fragmentCodec =
         const HtmlPackageForumHtmlFragmentCodec(),
     ForumHtmlThemeAdapter themeAdapter = const DefaultForumHtmlThemeAdapter(),
-    SiteUrlResolver urlResolver = const SiteUrlResolver(),
-    ForumHtmlPreparationImagePolicy imagePolicy =
-        const ForumCacheHtmlPreparationImagePolicy(),
-  }) : _imageRequestResolver = imageRequestResolver,
-       _imageDeduplicator = imageDeduplicator,
+  }) : _imageDeduplicator = imageDeduplicator,
        _fragmentCodec = fragmentCodec,
        _themeAdapter = themeAdapter,
-       _urlResolver = urlResolver,
+       _resolveUrl = resolveUrl,
        _imagePolicy = imagePolicy;
 
-  final ForumImageRequestResolver _imageRequestResolver;
-  final ForumHtmlImageDeduplicator _imageDeduplicator;
+  final ForumHtmlImageDeduplicator? _imageDeduplicator;
   final ForumHtmlFragmentCodec _fragmentCodec;
   final ForumHtmlThemeAdapter _themeAdapter;
-  final SiteUrlResolver _urlResolver;
+  final String? Function(String) _resolveUrl;
   final ForumHtmlPreparationImagePolicy _imagePolicy;
 
   @override
@@ -61,7 +52,8 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
           policy: ForumHtmlColorAdaptationPolicy.standard,
         )
         .stats;
-    _imageDeduplicator.deduplicateAttachmentImagesInFragment(fragment);
+    (_imageDeduplicator ?? ForumHtmlImageDeduplicator(resolveUrl: _resolveUrl))
+        .deduplicateAttachmentImagesInFragment(fragment);
     final entries = <ForumHtmlReadableImageEntry>[];
     final attachmentIdsByUrl = <String, String>{};
     final readableUrlCounts = <String, int>{};
@@ -79,7 +71,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       final normalizedSrc =
           DefaultForumImageSourcePipeline.normalizeImageSource(
             rawSrc,
-            urlResolver: _urlResolver.resolve,
+            urlResolver: _resolveUrl,
           );
       final resolved = normalizedSrc == null
           ? null
@@ -110,7 +102,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       final index = entries.length;
       final htmlWidth = _parsePositiveDouble(image.attributes['width']);
       final htmlHeight = _parsePositiveDouble(image.attributes['height']);
-      final spec = _imagePolicy.inlineSpec(
+      final resource = _imagePolicy.prepareInline(
         url: resolved,
         threadId: threadId,
         imageCacheOwnerId: imageCacheOwnerId,
@@ -120,8 +112,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         alt: image.attributes['alt'],
         title: image.attributes['title'],
       );
-      final request = _imageRequestResolver.resolveCacheRequest(spec);
-      if (request == null) {
+      if (resource == null) {
         skippedNonNetworkCount++;
         continue;
       }
@@ -135,26 +126,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
           index: index,
           url: resolvedUrl,
           rawSrc: rawSrc,
-          cacheKey: request.cacheKey,
-          spec: ForumImageLoadSpec(
-            kind: spec.kind,
-            url: spec.url,
-            referer: spec.referer,
-            ownerId: spec.ownerId,
-            ownerType: spec.ownerType,
-            episodeId: spec.episodeId,
-            imageIndex: spec.imageIndex,
-            cacheKey: request.cacheKey,
-            retentionClass: request.retentionClass,
-            htmlWidth: spec.htmlWidth,
-            htmlHeight: spec.htmlHeight,
-            displayWidth: spec.displayWidth,
-            displayHeight: spec.displayHeight,
-            alt: spec.alt,
-            title: spec.title,
-            protected: spec.protected,
-            allowReaderOpen: spec.allowReaderOpen,
-          ),
+          resource: resource,
           attachmentId: attachmentId,
           alt: image.attributes['alt'],
           title: image.attributes['title'],

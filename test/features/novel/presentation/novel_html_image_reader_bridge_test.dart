@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
@@ -15,14 +14,7 @@ void main() {
           index: 0,
           url: imageUri.toString(),
           rawSrc: 'data/attachment/forum/novel-page.jpg',
-          cacheKey: 'novel/inline/page-1',
-          spec: ForumImageLoadSpec(
-            kind: ForumImageKind.threadInline,
-            url: imageUri,
-            ownerId: '100',
-            imageIndex: 0,
-            cacheKey: 'novel/inline/page-1',
-          ),
+          resource: const _ImageResource('novel/inline/page-1'),
         ),
       ],
     );
@@ -43,4 +35,11 @@ void main() {
     expect(request!.continuousImages, hasLength(1));
     expect(request.continuousImages.single.spacingAfter, 0);
   });
+}
+
+final class _ImageResource implements ForumHtmlPreparedImageResource {
+  const _ImageResource(this.cacheKey);
+
+  @override
+  final String cacheKey;
 }

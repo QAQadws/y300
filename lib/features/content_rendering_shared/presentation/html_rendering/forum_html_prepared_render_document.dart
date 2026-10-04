@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_prepared_image_resource.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
 
 const forumHtmlReadableImageIndexAttribute = 'data-y300-readable-image-index';
@@ -72,8 +72,7 @@ class ForumHtmlReadableImageEntry {
     required this.index,
     required this.url,
     required this.rawSrc,
-    required this.cacheKey,
-    required this.spec,
+    required this.resource,
     this.attachmentId,
     this.alt,
     this.title,
@@ -84,8 +83,8 @@ class ForumHtmlReadableImageEntry {
   final int index;
   final String url;
   final String rawSrc;
-  final String cacheKey;
-  final ForumImageLoadSpec spec;
+  final ForumHtmlPreparedImageResource resource;
+  String get cacheKey => resource.cacheKey;
   final String? attachmentId;
   final String? alt;
   final String? title;

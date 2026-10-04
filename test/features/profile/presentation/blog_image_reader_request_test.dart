@@ -107,11 +107,7 @@ BlogImageReaderRequest? _build(ForumHtmlImageRequest image) =>
               index: i,
               url: _url,
               rawSrc: _url,
-              cacheKey: ImageCacheKeys.threadInline(_url),
-              spec: ForumImageLoadSpec(
-                kind: ForumImageKind.threadInline,
-                url: Uri.parse(_url),
-              ),
+              resource: _ImageResource(ImageCacheKeys.threadInline(_url)),
               htmlWidth: 120,
               htmlHeight: 80,
             ),
@@ -123,3 +119,10 @@ BlogImageReaderRequest? _build(ForumHtmlImageRequest image) =>
       referer: 'https://example.test/',
       resolver: const DefaultForumImageRequestResolver(),
     );
+
+final class _ImageResource implements ForumHtmlPreparedImageResource {
+  const _ImageResource(this.cacheKey);
+
+  @override
+  final String cacheKey;
+}

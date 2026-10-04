@@ -38,7 +38,16 @@ const _retiredThreadEntries = {
 };
 const _preparationPolicyFiles = {
   '${_sharedRoot}presentation/contracts/forum_html_preparation_image_policy.dart',
+  '${_sharedRoot}presentation/contracts/forum_html_prepared_image_resource.dart',
   '${_sharedRoot}application/host/forum_cache_html_preparation_image_policy.dart',
+  '${_sharedRoot}application/host/cache_forum_html_prepared_image_resource.dart',
+};
+const _cacheNeutralPreparationFiles = {
+  '${_sharedRoot}presentation/contracts/forum_html_preparation_image_policy.dart',
+  '${_sharedRoot}presentation/contracts/forum_html_prepared_image_resource.dart',
+  '${_sharedRoot}presentation/html_rendering/forum_html_prepared_render_document.dart',
+  '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
+  '${_sharedRoot}presentation/html_rendering/forum_html_image_deduplicator.dart',
 };
 
 void main() {
@@ -167,6 +176,26 @@ import 'package:y300/app/content_rendering/native_forum_html_render_theme_factor
       isEmpty,
     );
   });
+
+  test('prepared images and pipeline consume neutral Host contracts', () {
+    for (final source in _cacheNeutralPreparationFiles) {
+      expect(
+        _violationTargets(source, '''
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/core/network/site_url_resolver.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+export '../contracts/forum_html_prepared_image_resource.dart'
+  if (dart.library.io) '../../application/host/new_cache_adapter.dart';
+'''),
+        {
+          'lib/features/cache/domain/models/forum_image_load_spec.dart',
+          'lib/core/network/site_url_resolver.dart',
+          _publicEntry,
+          '${_sharedRoot}application/host/new_cache_adapter.dart',
+        },
+      );
+    }
+  });
 }
 
 Set<String> _violationTargets(String source, String contents) => {
@@ -188,11 +217,23 @@ bool _isForbidden(String source, String target) {
       (target.contains('/data/') || target.contains('/application/host/'))) {
     return true;
   }
+  if (_cacheNeutralPreparationFiles.contains(source) &&
+      (target == _publicEntry ||
+          target.startsWith('lib/features/cache/') ||
+          target.startsWith('lib/core/network/') ||
+          target.contains('/application/') ||
+          target.contains('/data/'))) {
+    return true;
+  }
   final domain = source.startsWith('${_sharedRoot}domain/');
   final policy = _preparationPolicyFiles.contains(source);
   if (domain || policy) {
     if (target.contains('/data/') ||
-        target.contains('/application/') ||
+        (target.contains('/application/') &&
+            !(source ==
+                    '${_sharedRoot}application/host/forum_cache_html_preparation_image_policy.dart' &&
+                target ==
+                    '${_sharedRoot}application/host/cache_forum_html_prepared_image_resource.dart')) ||
         target.startsWith('lib/core/preferences/') ||
         target.startsWith('package:flutter_') ||
         target.startsWith('package:shared_preferences/') ||
