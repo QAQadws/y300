@@ -92,68 +92,77 @@ class ReaderVerticalPositionDriver {
 
     final request = _ActiveVerticalSeek(index);
     _active = request;
-    final directOffset = _exactOffset(index);
-    if (directOffset != null) {
-      final target = _clampOffset(directOffset);
-      _jumpIfNeeded(target);
-      return _finish(
-        request,
-        status: ReaderVerticalSeekStatus.exact,
-        stopwatch: stopwatch,
-        correctionDelta: 0,
-        correctionPasses: 0,
-      );
-    }
-
-    var estimatedOffset = _clampOffset(_estimateOffset(index) ?? 0);
-    _jumpIfNeeded(estimatedOffset);
-    for (var pass = 1; pass <= maxCorrectionPasses; pass++) {
-      await Future.any<void>(<Future<void>>[
-        _waitForLayout(),
-        request.cancelled.future,
-      ]);
-      final cancelled = _cancelledResult(request, stopwatch, pass - 1);
-      if (cancelled != null) {
-        return cancelled;
-      }
-      if (!_isReady()) {
-        return _finish(
-          request,
-          status: ReaderVerticalSeekStatus.unavailable,
-          stopwatch: stopwatch,
-          correctionDelta: 0,
-          correctionPasses: pass,
-        );
-      }
-
-      final exactOffset = _exactOffset(index);
-      if (exactOffset != null) {
-        final correctedOffset = _clampOffset(exactOffset);
-        final correctionDelta = correctedOffset - estimatedOffset;
-        _jumpIfNeeded(correctedOffset);
+    try {
+      final directOffset = _exactOffset(index);
+      if (directOffset != null) {
+        final target = _clampOffset(directOffset);
+        _jumpIfNeeded(target);
         return _finish(
           request,
           status: ReaderVerticalSeekStatus.exact,
           stopwatch: stopwatch,
-          correctionDelta: correctionDelta,
-          correctionPasses: pass,
+          correctionDelta: 0,
+          correctionPasses: 0,
         );
       }
 
-      final refined = _estimateOffset(index);
-      if (refined != null && refined.isFinite) {
-        estimatedOffset = _clampOffset(refined);
-        _jumpIfNeeded(estimatedOffset);
+      var estimatedOffset = _clampOffset(_estimateOffset(index) ?? 0);
+      _jumpIfNeeded(estimatedOffset);
+      for (var pass = 1; pass <= maxCorrectionPasses; pass++) {
+        await Future.any<void>(<Future<void>>[
+          _waitForLayout(),
+          request.cancelled.future,
+        ]);
+        final cancelled = _cancelledResult(request, stopwatch, pass - 1);
+        if (cancelled != null) {
+          return cancelled;
+        }
+        if (!_isReady()) {
+          return _finish(
+            request,
+            status: ReaderVerticalSeekStatus.unavailable,
+            stopwatch: stopwatch,
+            correctionDelta: 0,
+            correctionPasses: pass,
+          );
+        }
+
+        final exactOffset = _exactOffset(index);
+        if (exactOffset != null) {
+          final correctedOffset = _clampOffset(exactOffset);
+          final correctionDelta = correctedOffset - estimatedOffset;
+          _jumpIfNeeded(correctedOffset);
+          return _finish(
+            request,
+            status: ReaderVerticalSeekStatus.exact,
+            stopwatch: stopwatch,
+            correctionDelta: correctionDelta,
+            correctionPasses: pass,
+          );
+        }
+
+        final refined = _estimateOffset(index);
+        if (refined != null && refined.isFinite) {
+          estimatedOffset = _clampOffset(refined);
+          _jumpIfNeeded(estimatedOffset);
+        }
+      }
+
+      return _finish(
+        request,
+        status: ReaderVerticalSeekStatus.estimated,
+        stopwatch: stopwatch,
+        correctionDelta: 0,
+        correctionPasses: maxCorrectionPasses,
+      );
+    } finally {
+      stopwatch.stop();
+      // Resolver/layout failures still release this request. An older seek's
+      // completion must never release a newer request waiting for layout.
+      if (identical(_active, request)) {
+        _active = null;
       }
     }
-
-    return _finish(
-      request,
-      status: ReaderVerticalSeekStatus.estimated,
-      stopwatch: stopwatch,
-      correctionDelta: 0,
-      correctionPasses: maxCorrectionPasses,
-    );
   }
 
   bool cancelActive(ReaderVerticalSeekCancelReason reason) {
