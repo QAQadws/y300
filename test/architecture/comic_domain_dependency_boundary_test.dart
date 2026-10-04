@@ -8,31 +8,7 @@ const _domainRoot = 'lib/features/comic/domain';
 
 // Existing source-to-target debt only. Remove each entry when its dependency
 // moves behind a domain contract; never exempt an entire file or directory.
-const _existingDebt = <String, Set<String>>{
-  'services/comic_post_aggregation_service.dart': {
-    'package:flutter_riverpod/flutter_riverpod.dart',
-    'lib/features/thread/data/providers/forum_image_source_pipeline_provider.dart',
-  },
-  'services/comic_refresh_outcome_applier.dart': {
-    'lib/features/comic/domain/services/comic_services_impl.dart',
-  },
-  'services/comic_search_refresh_queue_models.dart': {
-    'lib/features/comic/domain/services/comic_services_impl.dart',
-  },
-  'services/comic_search_refresh_queue_service.dart': {
-    'lib/features/comic/domain/services/comic_services_impl.dart',
-  },
-  'services/comic_services_impl.dart': {
-    'package:flutter_cache_manager/flutter_cache_manager.dart',
-    'package:flutter_riverpod/flutter_riverpod.dart',
-    'lib/core/network/yamibo_forum_client_provider.dart',
-    'lib/features/cache/data/providers/image_cache_providers.dart',
-    'lib/features/comic/data/services/comic_parser_service.dart',
-    'lib/features/comic/data/providers/comic_providers.dart',
-    'lib/features/comic/data/repositories/forum_tag_comic_catalog_directory_reader.dart',
-    'lib/features/search/data/services/forum_search_coordinator.dart',
-  },
-};
+const _existingDebt = <String, Set<String>>{};
 
 typedef _Dependency = ({String source, String target});
 
@@ -146,6 +122,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../models/comic_models.dart';
+import '../services/comic_post_aggregation_service.dart';
+import '../services/comic_reader_service.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/core/config/app_config.dart';
 const example = """
@@ -181,9 +159,8 @@ bool _isForbidden(String target) {
       target.contains('/providers/') ||
       target.endsWith('_provider.dart') ||
       target.endsWith('_providers.dart') ||
-      // These existing mixed service/wiring files must not gain new callers.
-      target == '$_domainRoot/services/comic_services_impl.dart' ||
-      target == '$_domainRoot/services/comic_post_aggregation_service.dart';
+      // Keep the retired umbrella path forbidden if it is ever reintroduced.
+      target == '$_domainRoot/services/comic_services_impl.dart';
 }
 
 String _resolveTarget(String source, String target) {

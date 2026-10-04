@@ -4,7 +4,7 @@ import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.da
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analysis.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';

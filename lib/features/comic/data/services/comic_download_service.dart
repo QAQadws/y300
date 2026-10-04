@@ -18,7 +18,8 @@ import 'package:y300/features/comic/domain/models/comic_download_queue_models.da
 import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/domain/services/comic_download_service.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_reader_service.dart';
+import 'package:y300/features/comic/data/providers/comic_reader_service_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';

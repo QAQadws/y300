@@ -5,7 +5,8 @@ import 'package:y300/features/comic/data/providers/comic_refresh_workflow_provid
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
+import 'package:y300/features/comic/data/providers/comic_episode_refresh_providers.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/library_shared/domain/models/library_operation_failure.dart';
 import 'package:y300/features/comic/presentation/comic_presentation_models.dart';

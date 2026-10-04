@@ -3,8 +3,7 @@ import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
-import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/data/providers/comic_parsing_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/domain/models/favorite_content_ingest.dart';

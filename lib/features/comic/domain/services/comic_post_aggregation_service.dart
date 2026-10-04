@@ -1,13 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/thread/data/providers/forum_image_source_pipeline_provider.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-
-final comicPostAggregationServiceProvider =
-    Provider<ComicPostAggregationService>((ref) {
-      return ComicPostAggregationService(
-        imageSourcePipeline: ref.watch(forumImageSourcePipelineProvider),
-      );
-    });
 
 /// Comic candidate aggregation rules:
 /// 1. Always include floor 1.

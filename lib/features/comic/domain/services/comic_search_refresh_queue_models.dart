@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
 import 'package:y300/features/search/domain/services/forum_search_timing_policy.dart';
 
 enum ComicSearchRefreshQueueStatus { pending, running, completed, failed }

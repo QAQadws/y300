@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/data/providers/comic_episode_refresh_providers.dart';
+import 'package:y300/features/comic/data/providers/comic_reader_service_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 
 /// Composition-root regression guard. Adapter behavior itself is verified by

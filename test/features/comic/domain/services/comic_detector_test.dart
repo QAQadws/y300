@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/comic/domain/services/rule_based_comic_detector.dart';
 
 void main() {
   group('RuleBasedComicDetector', () {
