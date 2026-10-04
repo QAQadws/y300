@@ -9,17 +9,17 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
-import 'package:y300/features/thread/presentation/html_rendering/widgets/forum_collapse_block.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
+import 'package:y300/features/content_rendering_shared/domain/models/forum_html_content_layout.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_style_policy.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/widgets/forum_collapse_block.dart';
+import 'package:y300/features/content_rendering_shared/presentation/services/forum_html_image_viewport_coordinator.dart';
+import 'package:y300/features/content_rendering_shared/presentation/services/forum_html_body_presentation.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatelessWidget {
@@ -64,7 +64,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
   /// Only the outer chapter may be a sliver; nested collapse content stays a box.
   final RenderMode renderMode;
   final VoidCallback? onBodyBuilt;
-  final ThreadPostBodyPresentation? bodyPresentation;
+  final ForumHtmlBodyPresentation? bodyPresentation;
 
   /// Chapter-owned expansion memory when offscreen sliver children unmount.
   final Map<String, bool>? collapseExpansion;
@@ -82,7 +82,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
     Size size,
   )?
   onBlockImageResolved;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumImageKind contentImageKind;
@@ -174,7 +174,7 @@ class ForumHtmlWidgetPostRenderer extends StatelessWidget {
       contentLayout,
       linkBaseUri,
     );
-    return ThreadPostBodyLayout(
+    return ForumHtmlBodyLayout(
       key: ValueKey((presentation, revision)),
       presentation: presentation,
       sourceId: sourceId ?? 'anonymous',

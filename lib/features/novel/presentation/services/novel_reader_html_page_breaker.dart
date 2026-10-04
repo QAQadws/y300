@@ -11,7 +11,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_prepared_ch
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 abstract interface class NovelReaderPageBreaker {
   Future<NovelReaderPaginationPlan> paginate(

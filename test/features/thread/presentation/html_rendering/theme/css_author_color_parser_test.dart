@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_author_color_style.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   const parser = CsslibAuthorColorParser();

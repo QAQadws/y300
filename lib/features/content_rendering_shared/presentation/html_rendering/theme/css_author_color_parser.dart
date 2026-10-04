@@ -2,8 +2,8 @@ import 'dart:ui';
 
 import 'package:csslib/visitor.dart' as css_ast;
 import 'package:html/dom.dart' as html_dom;
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_author_color_style.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/css_inline_style_declarations.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_author_color_style.dart';
 
 abstract interface class CssAuthorColorParser {
   ForumHtmlAuthorColorStyle parse(html_dom.Element element);

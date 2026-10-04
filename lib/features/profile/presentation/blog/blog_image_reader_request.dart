@@ -2,8 +2,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 /// Immutable snapshot of one rendered article or comment, never a whole feed.
 final class BlogImageReaderRequest {

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/reader_shared/presentation/rich_text/color/rich_text_tone_resolver.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
-import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_palette.dart';
 
 final class ForumHtmlRenderThemeFactory {
   const ForumHtmlRenderThemeFactory({
@@ -11,16 +11,8 @@ final class ForumHtmlRenderThemeFactory {
 
   final RichTextToneResolver _toneResolver;
 
-  /// Native reading surfaces share the post card's quote, code and link colors.
-  ForumHtmlThemeContext fromNativeTheme({required ThemeData theme}) {
-    return fromThreadPalette(
-      palette: ThreadDetailNativePalette.resolve(theme),
-      brightness: theme.brightness,
-    );
-  }
-
-  ForumHtmlThemeContext fromThreadPalette({
-    required ThreadDetailNativePalette palette,
+  ForumHtmlThemeContext fromPalette({
+    required ForumHtmlRenderPalette palette,
     required Brightness brightness,
   }) {
     final surface = _opaqueOver(palette.card, palette.background);

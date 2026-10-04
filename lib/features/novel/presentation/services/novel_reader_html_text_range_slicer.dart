@@ -1,5 +1,5 @@
 import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 /// Slices prepared safe HTML by readable-text rune offsets.
 ///

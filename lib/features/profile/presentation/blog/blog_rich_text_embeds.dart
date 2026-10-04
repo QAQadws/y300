@@ -1,3 +1,4 @@
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -6,8 +7,7 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
 import 'package:y300/features/profile/presentation/blog/blog_quill_html_codec.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 StickerItem blogEditorSticker(String url) => StickerItem(
   code: url,

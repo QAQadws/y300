@@ -10,8 +10,6 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/presentation/rich_text/color/rich_text_color_contrast.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
   const preparer = NovelHtmlChapterRenderPreparer();

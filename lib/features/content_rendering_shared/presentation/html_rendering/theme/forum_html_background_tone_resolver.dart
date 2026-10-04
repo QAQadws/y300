@@ -1,9 +1,9 @@
 import 'dart:ui';
 
 import 'package:material_color_utilities/hct/hct.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_author_color_style.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_author_color_style.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 abstract interface class ForumHtmlBackgroundToneResolver {
   Color resolve({

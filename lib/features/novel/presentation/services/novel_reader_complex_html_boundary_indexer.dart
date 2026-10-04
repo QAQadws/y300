@@ -2,7 +2,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 abstract interface class NovelReaderComplexHtmlBoundaryIndexer {
   NovelReaderComplexHtmlSliceSession prepare({

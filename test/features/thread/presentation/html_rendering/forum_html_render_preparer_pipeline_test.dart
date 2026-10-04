@@ -3,13 +3,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'forum_html_test_theme.dart';
 
 void main() {

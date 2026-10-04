@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
 
 const forumHtmlReadableImageIndexAttribute = 'data-y300-readable-image-index';
 

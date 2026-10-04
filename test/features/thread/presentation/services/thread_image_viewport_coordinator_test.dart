@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   testWidgets('prioritizes visible images and pauses when route is inactive', (
     tester,
   ) async {
-    final coordinator = ThreadImageViewportCoordinator();
+    final coordinator = ForumHtmlImageViewportCoordinator();
     addTearDown(coordinator.dispose);
     final controller = ScrollController();
     addTearDown(controller.dispose);
-    final handles = List<ThreadImageViewportHandle>.generate(
+    final handles = List<ForumHtmlImageViewportHandle>.generate(
       5,
       (_) => coordinator.register(),
     );
@@ -35,13 +35,13 @@ void main() {
 
     expect(
       handles.where(
-        (handle) => handle.value == ThreadImageViewportMode.display,
+        (handle) => handle.value == ForumHtmlImageViewportMode.display,
       ),
       hasLength(2),
     );
     expect(
       handles.where(
-        (handle) => handle.value == ThreadImageViewportMode.prefetch,
+        (handle) => handle.value == ForumHtmlImageViewportMode.prefetch,
       ),
       isEmpty,
     );
@@ -51,21 +51,21 @@ void main() {
     await tester.pump();
     expect(
       handles.where(
-        (handle) => handle.value == ThreadImageViewportMode.prefetch,
+        (handle) => handle.value == ForumHtmlImageViewportMode.prefetch,
       ),
       hasLength(1),
     );
 
     final prefetch = handles.singleWhere(
-      (handle) => handle.value == ThreadImageViewportMode.prefetch,
+      (handle) => handle.value == ForumHtmlImageViewportMode.prefetch,
     );
-    final transitions = <ThreadImageViewportMode>[];
+    final transitions = <ForumHtmlImageViewportMode>[];
     prefetch.addListener(() => transitions.add(prefetch.value));
     for (var i = 1; i <= 30; i++) {
       controller.jumpTo(i.toDouble());
       await tester.pump(const Duration(milliseconds: 16));
     }
-    expect(prefetch.value, ThreadImageViewportMode.prefetch);
+    expect(prefetch.value, ForumHtmlImageViewportMode.prefetch);
     expect(
       transitions,
       isEmpty,
@@ -77,7 +77,7 @@ void main() {
     await tester.pump();
     expect(
       handles.where(
-        (handle) => handle.value == ThreadImageViewportMode.prefetch,
+        (handle) => handle.value == ForumHtmlImageViewportMode.prefetch,
       ),
       isEmpty,
     );
@@ -86,10 +86,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(handles.first.value, ThreadImageViewportMode.dormant);
+    expect(handles.first.value, ForumHtmlImageViewportMode.dormant);
     expect(
       handles.where(
-        (handle) => handle.value == ThreadImageViewportMode.display,
+        (handle) => handle.value == ForumHtmlImageViewportMode.display,
       ),
       isNotEmpty,
     );
@@ -98,7 +98,7 @@ void main() {
     await tester.pump();
     expect(
       handles.every(
-        (handle) => handle.value == ThreadImageViewportMode.dormant,
+        (handle) => handle.value == ForumHtmlImageViewportMode.dormant,
       ),
       isTrue,
     );
@@ -108,7 +108,7 @@ void main() {
 class _BoundImage extends StatelessWidget {
   const _BoundImage({required this.handle, required this.height});
 
-  final ThreadImageViewportHandle handle;
+  final ForumHtmlImageViewportHandle handle;
   final double height;
 
   @override

@@ -16,7 +16,7 @@
 - `lib/core/preferences`：类型化偏好 key、SharedPreferences 访问、provider 和旧偏好迁移。
 - `lib/core/persistence`：共享 SQLite 入口 `AppDatabase`，统一管理连接配置与 schema 生命周期。内部表名 catalog、创建/重建装配、唯一升级链分别独立，SQL 按 comic、novel、favorites、library、cache 五类 schema 职责组织；只有统一入口执行升级，消费者不得导入内部 schema/迁移文件。漫画、小说、收藏、共享书架和缓存消费同一入口；物理数据库仍为 `comic_shelf.db` v41，业务查询和事务继续归各 repository，跨模块批量 read model 保留 SQL join。
 - `lib/core/utils`：跨模块使用的小型解析工具和通用工具。
-- `lib/features`：按业务能力拆分的 feature；跨漫画/小说/收藏的书架能力位于 `library_shared`，跨图片阅读器能力位于 `reader_shared`，发帖/回复/帖子编辑共用编辑器能力位于 `composer_shared`。
+- `lib/features`：按业务能力拆分的 feature；跨漫画/小说/收藏的书架能力位于 `library_shared`，跨图片阅读器能力位于 `reader_shared`，发帖/回复/帖子编辑共用编辑器能力位于 `composer_shared`，通用 HTML 正文能力位于 `content_rendering_shared`。
 - `lib/shared/widgets`：不属于单一 feature 的轻量可复用 UI，包括论坛原生 surface、头像、瞬时反馈、书架视觉组件和帖子正文/编辑器共享的折叠视觉壳。
 - `packages/yamibo_forum_client`：纯 Dart 论坛协议客户端包，不依赖 Flutter 与应用状态。包含 source-neutral 的读取/命令/资源/会话认证契约、Discuz adapter、来源装配计划（source plan）、document/snapshot 缓存端口和 WAF 边界；全部 Yamibo 请求构造、协议解析、成功证据与失败分类都在这里，feature 只消费契约结果。
 
@@ -35,7 +35,7 @@
 - `cache`：统一可再生磁盘缓存。负责图片、原始 HTML、解析快照、受保护封面、retention 分类、统一容量预算/LRU 裁剪、写入通知、缓存自身容量统计/手动导出和论坛图片预加载；受保护图片字节经包 `ForumResourceClient` 流式获取，本模块只做落盘、索引与预算。全应用统计装配与依赖报表的维护 provider 归 app/storage，业务统计归各所有者，cache 不反向导入 app。
 - `comic`：漫画数据、书架、详情和阅读器。仓储/队列契约与目录 URL 写入端口归 domain/repositories，下载、reader/parser 契约与纯 detector/HTML parser/aggregation 归 domain/services；具体 SQLite/文件实现及 network reader/refresh adapter 归 data。装配按 parsing、episode refresh、reader service 三组 data provider 分工，刷新 workflow provider 继续装配 queue/applier/收藏首刷，domain 不导入 provider 或 data。章节目录、帖子发现与标签目录经 forum client 读取契约消费业务投影；负责标题分析、章节发现与 TID 顺序、刷新/搜索 fallback 工作流、重复合并、封面与阅读进度、评论页、持久化下载队列、单章 CBZ 产物和下载图片限速。
 - `composer_shared`：发帖、回复与帖子编辑共用编辑器基础设施。负责 source/Quill surface、BBCode 转换与预览、`collapse=0` grammar/原子 embed/编辑流程、附件语义与预览解析、编辑偏好、通用 controller 基类和错误呈现；表情目录、图片上传权限/上传、未使用附件目录与删除经 forum client 契约执行。草稿能力由调用方决定，帖子编辑明确关闭持久化草稿。
-- `content_rendering_shared`：共享 HTML 阅读偏好的公开入口。不可变偏好、repository 契约与排版限制归 domain，SharedPreferences 实现归 data，repository provider 与偏好 controller 归 application；各消费者通过 `content_rendering.dart` 使用，controller 不依赖具体存储实现，既有 key、迁移和失败回滚保持。
+- `content_rendering_shared`：共享 HTML 准备、prepared document、theme、callbacks、content layout、完整 renderer、折叠、body 布局和图片 viewport 调度。外部消费者统一通过 `content_rendering.dart`，模块不反向依赖 thread/app；不可变偏好、repository 契约与排版限制归 domain，SharedPreferences 实现归 data，provider/controller 归 application。图片准备策略与 UI 图片宿主经公开 port 接入，现有缓存实现只由 application Host adapter 桥接；准备策略保持纯值，可用于小说后台准备。Native 配色由 app/content_rendering adapter 映射唯一 ThreadDetailNativePalette，楼层、帖子动作、历史与图片阅读桥接仍归 thread。既有偏好 key、迁移、失败回滚、缓存与取消时序保持。
 - `favorites`：论坛收藏同步与收藏书架。执行上下文、mode/kind 和 governor 契约归 domain/services，默认串行与 700ms 完成后冷却实现归 data/services，跨 feature 只消费领域端口。收藏目录读取与收藏/取消收藏命令经 forum client 契约（提交后目录回读确认在包内）；负责同步限流、本地持久化、详情上下文加载、内容 ingest 注册表，以及把收藏帖子导入漫画或小说。
 - `forum`：论坛壳、解析模式首页/版块列表和 WebView 模式。首页/版块列表读取经 forum client HTML-first 契约（document/snapshot fallback 在包内）；负责模式偏好、SWR 与轮播聚合、WebView driver/runtime、Cookie bootstrap、网络/视觉策略、链接路由、论坛收藏入口，以及应用前台内不可见的普通 WebView WAF 挑战宿主。
 - `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、Debug 日志和记录页；记录类型覆盖帖子、漫画、小说与日志；日志以作者 ID 和日志 ID 的复合身份保存，继续使用现有 v1 数据库。
@@ -59,7 +59,7 @@
 - 所有 Yamibo 业务请求经 `yamiboForumClientProvider` 的 `YamiboForumClient` 发起，协议构造、解析与成功/失败语义在 `packages/yamibo_forum_client` 内；Host 传输统一由 `core/network` 的 `YamiboHttpGateway` 承担，共享 Cookie、`YamiboSessionStore` 与 formhash。feature 不得绕过 client 自建第二套请求/会话路径；唯一例外是 App-bound 的 `ForumWebViewRedirectResolver`，只用于跟随 WebView 受管站内跳转并返回最终 URI。WebView 登录/浏览产生的 Cookie 通过同步服务回写；feature 不应各自维护第二套会话。检测到 WAF 挑战（同站 HTTP 405）时，由共享 coordinator 在应用处于 `resumed` 时挂载不可见普通 WebView，Cookie 回灌后仍须通过原生探针确认，只允许原业务请求重放一次；页面加载完成或出现 Cookie 不能单独视为成功。
 - 写命令结果统一区分 applied / rejected / notSent / outcomeUnknown / unsupported：只有 applied 才允许更新本地数据、刷新页面或同步书架；结果不确定（outcomeUnknown）不得自动重发；失败呈现使用本地化固定文案，不展示服务器原始消息、JSON、XML/CDATA 或 HTML。
 - 论坛壳根据持久化模式进入解析模式或 WebView。受管站内链接由 forum router 分流到原生帖子、发帖、回复、用户资料等页面；无法原生承接的流程保留 WebView 边界。
-- 帖子详情通过 `ThreadContentClassifier` 使用 fid/typeid/tag 判断内容类型，tag 数据来自 `tags`。正文进入 `thread` 的 HTML-first pipeline，统一处理 DOM、主题颜色、图片来源、折叠块和渲染缓存；漫画评论与小说正文优先复用该渲染能力，不另建低质量 HTML 子集。
+- 帖子详情通过 `ThreadContentClassifier` 使用 fid/typeid/tag 判断内容类型，tag 数据来自 `tags`。正文通过 `content_rendering_shared/content_rendering.dart` 进入共享 HTML-first pipeline，统一处理 DOM、主题颜色、图片来源、折叠块和渲染缓存；漫画评论、小说、profile 和 messages 使用同一公开能力。thread 保留页面和阅读桥接，宿主负责配色、图片 owner/retention 与缓存装配，不另建 HTML 子集。
 - 收藏同步由 `favorites` 保存远端条目，再通过 ingest registry 调用 `comic`/`novel` 的导入服务。成功导入、刷新、删除或阅读状态变化后，通过 `LibraryShelfRefreshBus` 和共享状态 repository 通知对应书架，而不是直接操作页面 controller。
 - 漫画刷新先做当前帖/目录发现与增量合并，直接发现不足时再进入搜索 fallback 或持久化搜索刷新队列。漫画下载入口只向 `ComicDownloadQueue` 入队，worker 串行调用下载服务并写入 CBZ；队列和搜索刷新队列均由 `startup` 恢复。
 - 统一书架和统一详情页依赖 `library_shared` 的 `ShelfModuleAdapter`、`DetailModuleAdapter`、选择动作和 purge 契约，不直接依赖漫画/小说/收藏的私有 repository。跨模块长任务通过 `LibraryTaskProgressHub` 与通知桥接发布进度。

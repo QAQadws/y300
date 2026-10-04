@@ -7,8 +7,6 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
 import 'forum_html_test_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 

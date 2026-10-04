@@ -3,14 +3,14 @@ import 'dart:ui';
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/reader_shared/presentation/rich_text/color/rich_text_color_contrast.dart';
 import 'package:y300/features/reader_shared/presentation/rich_text/color/rich_text_tone_resolver.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_background_tone_resolver.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_author_color_style.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_resolved_color_state.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/css_author_color_parser.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/css_inline_style_declarations.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_background_tone_resolver.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_author_color_style.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_resolved_color_state.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_adaptation_result.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 abstract interface class ForumHtmlThemeAdapter {
   ForumHtmlThemeAdaptationResult adapt({

@@ -24,7 +24,7 @@ import 'package:y300/features/messages/presentation/private_conversation_page.da
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/features/messages/presentation/widgets/message_surface.dart';
 import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';

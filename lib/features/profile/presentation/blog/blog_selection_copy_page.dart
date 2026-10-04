@@ -1,11 +1,11 @@
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_link_navigation.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 

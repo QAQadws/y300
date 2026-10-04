@@ -1,6 +1,6 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 /// A visual chapter prepared by the HTML-first renderer.
 ///

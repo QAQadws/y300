@@ -18,7 +18,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/comic/presentation/widgets/comic_comment_tail_surface.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   testWidgets('vertical tail waits for an explicit load action', (

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
@@ -10,8 +11,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
@@ -19,7 +19,6 @@ import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
@@ -118,7 +117,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   String? _reportedTargetIdentity;
   late ThreadDetailScrollStabilizer _scrollStabilizer;
   late ThreadPostViewportAnchorCoordinator _projectionAnchorCoordinator;
-  ThreadImageViewportCoordinator? _imageViewportCoordinator;
+  ForumHtmlImageViewportCoordinator? _imageViewportCoordinator;
   ValueListenable<TickerModeData>? _tickerModeNotifier;
   final _imageAspectRatioTracker = _ThreadDetailImageAspectRatioTracker();
 
@@ -449,7 +448,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       _imageViewportCoordinator = null;
       return;
     }
-    _imageViewportCoordinator ??= ThreadImageViewportCoordinator();
+    _imageViewportCoordinator ??= ForumHtmlImageViewportCoordinator();
   }
 
   void _handleTickerModeChanged() {

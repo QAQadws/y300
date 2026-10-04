@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 import 'forum_html_test_theme.dart';
@@ -134,7 +130,7 @@ void main() {
   testWidgets('remembered body heights are isolated by content layout', (
     tester,
   ) async {
-    final presentation = ThreadPostBodyPresentation();
+    final presentation = ForumHtmlBodyPresentation();
     final preferences = ForumHtmlReaderPreferences.defaults();
     addTearDown(presentation.dispose);
     const sourceId = 'compact-layout';
@@ -147,7 +143,7 @@ void main() {
       bodyPresentation: presentation,
     );
     final documentRevision = tester
-        .widget<ThreadPostBodyLayout>(find.byType(ThreadPostBodyLayout))
+        .widget<ForumHtmlBodyLayout>(find.byType(ForumHtmlBodyLayout))
         .revision;
     final documentMemoryKey = (
       documentRevision,
@@ -166,7 +162,7 @@ void main() {
       bodyPresentation: presentation,
     );
     final compactRevision = tester
-        .widget<ThreadPostBodyLayout>(find.byType(ThreadPostBodyLayout))
+        .widget<ForumHtmlBodyLayout>(find.byType(ForumHtmlBodyLayout))
         .revision;
     expect(compactRevision, isNot(documentRevision));
     expect(presentation.heightFor(sourceId, documentMemoryKey), isNull);
@@ -238,7 +234,7 @@ Future<void> _pump(
   ForumHtmlRenderCallbacks callbacks = const ForumHtmlRenderCallbacks(),
   double width = _availableWidth,
   double textScale = 1,
-  ThreadPostBodyPresentation? bodyPresentation,
+  ForumHtmlBodyPresentation? bodyPresentation,
 }) async {
   await tester.pumpWidget(
     LocalizedTestApp(

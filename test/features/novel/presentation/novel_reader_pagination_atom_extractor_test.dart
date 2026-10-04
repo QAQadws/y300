@@ -7,7 +7,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_prepared_ch
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   const extractor = NovelReaderPaginationAtomExtractor();

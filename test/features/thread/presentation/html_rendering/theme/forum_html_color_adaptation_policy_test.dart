@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   group('ForumHtmlColorAdaptationPolicy', () {

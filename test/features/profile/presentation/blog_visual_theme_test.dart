@@ -1,3 +1,4 @@
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'package:y300/features/profile/domain/models/blog_draft_snapshot.dart';
 import '../test_support/blog_draft_fixture.dart';
@@ -30,8 +31,6 @@ import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -7,14 +7,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
@@ -68,8 +61,8 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     Size size,
   )?
   onBlockImageResolved;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
-  final ThreadPostBodyPresentation? bodyPresentation;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
@@ -342,8 +335,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
     Size size,
   )?
   onBlockImageResolved;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
-  final ThreadPostBodyPresentation? bodyPresentation;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
   final ThreadHtmlImageReaderBridge imageReaderBridge;

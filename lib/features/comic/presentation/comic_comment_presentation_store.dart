@@ -2,8 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projector.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
@@ -20,7 +19,7 @@ class ComicCommentPresentationStore {
   final ScrollController scrollController;
   final _entries = <String, ComicCommentPostPresentation>{};
   ComicCommentContentProjection? _projection;
-  final imageViewport = ThreadImageViewportCoordinator();
+  final imageViewport = ForumHtmlImageViewportCoordinator();
   bool _disposed = false;
 
   ComicCommentPostPresentation? operator [](String pid) => _entries[pid];
@@ -72,7 +71,7 @@ class ComicCommentPostPresentation extends ChangeNotifier {
   int? renderRevision;
   bool ratingsExpanded = true;
   bool commentsExpanded = true;
-  final body = ThreadPostBodyPresentation();
+  final body = ForumHtmlBodyPresentation();
   final _imageSizes = <String, Size>{};
   ThreadPostRatingsViewState ratings = const ThreadPostRatingsViewState.idle();
   ThreadPostRatingsViewState displayRatings =

@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_color_utilities/hct/hct.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_author_color_style.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_background_tone_resolver.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   const resolver = MaterialForumHtmlBackgroundToneResolver();

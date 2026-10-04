@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
+import 'dart_dependency_directives.dart';
 
 const _domainRoot = 'lib/features/comic/domain';
 
@@ -23,7 +23,7 @@ void main() {
     for (final file in files) {
       actual.addAll(
         _forbiddenDependencies(
-          _normalize(file.path),
+          normalizeDartSourcePath(file.path),
           file.readAsStringSync(encoding: utf8),
         ),
       );
@@ -137,9 +137,12 @@ const rawExample = r"export 'package:flutter/widgets.dart';";
 }
 
 Set<_Dependency> _forbiddenDependencies(String sourcePath, String source) => {
-  for (final uri in _directiveUris(source))
-    if (_isForbidden(_resolveTarget(sourcePath, uri)))
-      (source: sourcePath, target: _resolveTarget(sourcePath, uri)),
+  for (final uri in dartDependencyDirectiveUris(source))
+    if (_isForbidden(resolveDartDependencyTarget(sourcePath, uri)))
+      (
+        source: sourcePath,
+        target: resolveDartDependencyTarget(sourcePath, uri),
+      ),
 };
 
 bool _isForbidden(String target) {
@@ -163,143 +166,5 @@ bool _isForbidden(String target) {
       target == '$_domainRoot/services/comic_services_impl.dart';
 }
 
-String _resolveTarget(String source, String target) {
-  if (target.startsWith('package:y300/')) {
-    return p.posix.normalize('lib/${target.substring('package:y300/'.length)}');
-  }
-  if (Uri.parse(target).hasScheme) return target;
-  return p.posix.normalize(p.posix.join(p.posix.dirname(source), target));
-}
-
-String _normalize(String path) => p.posix.normalize(path.replaceAll('\\', '/'));
-
 List<String> _describe(Set<_Dependency> edges) =>
     edges.map((edge) => '${edge.source} -> ${edge.target}').toList()..sort();
-
-Iterable<String> _directiveUris(String source) sync* {
-  final tokens = _sourceTokens(source).toList();
-  for (var index = 0; index < tokens.length; index++) {
-    final token = tokens[index];
-    if (token.isString || (token.text != 'import' && token.text != 'export')) {
-      continue;
-    }
-    var expectsUri = true;
-    var parentheses = 0;
-    while (++index < tokens.length && tokens[index].text != ';') {
-      final next = tokens[index];
-      if (next.isString) {
-        if (expectsUri && parentheses == 0) yield next.text;
-        expectsUri = false;
-      } else if (next.text == '(') {
-        parentheses++;
-      } else if (next.text == ')') {
-        parentheses--;
-        // A conditional directive's URI follows its closing parenthesis;
-        // string values inside the condition are configuration, not imports.
-        if (parentheses == 0) expectsUri = true;
-      }
-    }
-  }
-}
-
-class _SourceToken {
-  const _SourceToken(this.text, {this.isString = false});
-
-  final String text;
-  final bool isString;
-}
-
-// A small lexer keeps quoted examples and nested comments out of the guard
-// without adding an analyzer dependency just to inspect URI directives.
-Iterable<_SourceToken> _sourceTokens(String source) sync* {
-  var index = 0;
-  while (index < source.length) {
-    if (source.startsWith('//', index)) {
-      final end = source.indexOf('\n', index + 2);
-      index = end < 0 ? source.length : end + 1;
-      continue;
-    }
-    if (source.startsWith('/*', index)) {
-      var depth = 1;
-      index += 2;
-      while (index < source.length && depth > 0) {
-        if (source.startsWith('/*', index)) {
-          depth++;
-          index += 2;
-        } else if (source.startsWith('*/', index)) {
-          depth--;
-          index += 2;
-        } else {
-          index++;
-        }
-      }
-      continue;
-    }
-    final raw =
-        source[index] == 'r' &&
-        index + 1 < source.length &&
-        (source[index + 1] == "'" || source[index + 1] == '"');
-    final quoteIndex = raw ? index + 1 : index;
-    final quote = source[quoteIndex];
-    if (quote == "'" || quote == '"') {
-      final delimiter = source.startsWith(quote * 3, quoteIndex)
-          ? quote * 3
-          : quote;
-      final start = quoteIndex + delimiter.length;
-      index = start;
-      while (index < source.length && !source.startsWith(delimiter, index)) {
-        if (!raw && source[index] == '\\') {
-          index += 2;
-        } else {
-          index++;
-        }
-      }
-      final value = source.substring(
-        start,
-        index < source.length ? index : source.length,
-      );
-      yield _SourceToken(raw ? value : _unescape(value), isString: true);
-      index += delimiter.length;
-      continue;
-    }
-    if (_isIdentifierCode(source.codeUnitAt(index))) {
-      final start = index++;
-      while (index < source.length &&
-          _isIdentifierCode(source.codeUnitAt(index))) {
-        index++;
-      }
-      yield _SourceToken(source.substring(start, index));
-    } else {
-      if (source[index].trim().isNotEmpty) yield _SourceToken(source[index]);
-      index++;
-    }
-  }
-}
-
-bool _isIdentifierCode(int code) =>
-    (code >= 65 && code <= 90) ||
-    (code >= 97 && code <= 122) ||
-    (code >= 48 && code <= 57) ||
-    code == 95 ||
-    code == 36;
-
-String _unescape(String value) => value.replaceAllMapped(
-  RegExp(r'\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)'),
-  (match) {
-    final escape = match[1]!;
-    if (escape.startsWith('u{')) {
-      return String.fromCharCode(
-        int.parse(escape.substring(2, escape.length - 1), radix: 16),
-      );
-    }
-    if (escape.startsWith('u') || escape.startsWith('x')) {
-      return String.fromCharCode(int.parse(escape.substring(1), radix: 16));
-    }
-    return switch (escape) {
-      'n' => '\n',
-      'r' => '\r',
-      't' => '\t',
-      _ => escape,
-    };
-  },
-);

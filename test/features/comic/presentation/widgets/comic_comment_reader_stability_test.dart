@@ -30,7 +30,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/l10n/app_localizations.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 import '../../data/comic_comment_fixtures.dart';

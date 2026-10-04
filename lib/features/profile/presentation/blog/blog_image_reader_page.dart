@@ -5,8 +5,7 @@ import 'package:y300/features/profile/presentation/blog/blog_image_reader_capabi
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_request.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 int _nextBlogImageSession = 0;

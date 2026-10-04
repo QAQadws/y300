@@ -39,7 +39,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_html_docum
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_chapter_interactions_button.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';

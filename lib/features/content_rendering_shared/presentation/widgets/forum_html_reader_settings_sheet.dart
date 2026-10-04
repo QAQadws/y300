@@ -1,9 +1,10 @@
+import 'package:y300/features/content_rendering_shared/application/forum_html_reader_preferences_controller.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlReaderSettingsSheet extends ConsumerWidget {

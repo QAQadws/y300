@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:characters/characters.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 enum NovelReaderHtmlDomProtectedNodeKind { ruby, inlineWidget }
 

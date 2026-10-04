@@ -4,13 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
   testWidgets(

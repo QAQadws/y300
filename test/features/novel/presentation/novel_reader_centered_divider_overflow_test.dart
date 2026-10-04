@@ -12,8 +12,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_html_prep
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 const _contentWidth = 418.0;
 const _contentHeight = 746.8;

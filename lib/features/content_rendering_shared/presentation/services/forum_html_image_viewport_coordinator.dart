@@ -2,15 +2,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter/widgets.dart';
 
-enum ThreadImageViewportMode { dormant, prefetch, display }
+enum ForumHtmlImageViewportMode { dormant, prefetch, display }
 
 /// Page-scoped scheduler for block images embedded inside a post's column.
 ///
 /// The outer sliver cannot lazily build individual images inside one HTML
 /// document, so this coordinator grants work according to each image's actual
 /// scroll position instead of the post widget's build time.
-final class ThreadImageViewportCoordinator {
-  ThreadImageViewportCoordinator({
+final class ForumHtmlImageViewportCoordinator {
+  ForumHtmlImageViewportCoordinator({
     this.prefetchExtentFactor = 0.5,
     this.maxVisibleFirstFrames = 2,
     this.maxPrefetchCandidates = 1,
@@ -19,7 +19,8 @@ final class ThreadImageViewportCoordinator {
   final double prefetchExtentFactor;
   final int maxVisibleFirstFrames;
   final int maxPrefetchCandidates;
-  final Set<ThreadImageViewportHandle> _handles = <ThreadImageViewportHandle>{};
+  final Set<ForumHtmlImageViewportHandle> _handles =
+      <ForumHtmlImageViewportHandle>{};
   ScrollPosition? _position;
   bool _evaluationScheduled = false;
   bool _active = true;
@@ -28,8 +29,8 @@ final class ThreadImageViewportCoordinator {
   @visibleForTesting
   int get registeredImageCount => _handles.length;
 
-  ThreadImageViewportHandle register() {
-    final handle = ThreadImageViewportHandle._(this);
+  ForumHtmlImageViewportHandle register() {
+    final handle = ForumHtmlImageViewportHandle._(this);
     if (!_disposed) {
       _handles.add(handle);
       _scheduleEvaluation();
@@ -44,7 +45,7 @@ final class ThreadImageViewportCoordinator {
     _active = active;
     if (!active) {
       for (final handle in _handles) {
-        handle._applyMode(ThreadImageViewportMode.dormant);
+        handle._applyMode(ForumHtmlImageViewportMode.dormant);
       }
       return;
     }
@@ -74,7 +75,7 @@ final class ThreadImageViewportCoordinator {
     _handles.clear();
   }
 
-  void _bind(ThreadImageViewportHandle handle, BuildContext context) {
+  void _bind(ForumHtmlImageViewportHandle handle, BuildContext context) {
     if (_disposed || handle._disposed) {
       return;
     }
@@ -88,7 +89,7 @@ final class ThreadImageViewportCoordinator {
     _scheduleEvaluation();
   }
 
-  void _unregister(ThreadImageViewportHandle handle) {
+  void _unregister(ForumHtmlImageViewportHandle handle) {
     _handles.remove(handle);
     _scheduleEvaluation();
   }
@@ -115,8 +116,8 @@ final class ThreadImageViewportCoordinator {
     const viewportStart = 0.0;
     final viewportEnd = position.viewportDimension;
     final prefetchExtent = position.viewportDimension * prefetchExtentFactor;
-    final placements = <_ThreadImagePlacement>[];
-    final placedHandles = <ThreadImageViewportHandle>{};
+    final placements = <_ForumHtmlImagePlacement>[];
+    final placedHandles = <ForumHtmlImageViewportHandle>{};
     for (final handle in _handles) {
       final placement = _placementFor(
         handle,
@@ -131,20 +132,20 @@ final class ThreadImageViewportCoordinator {
     }
     for (final handle in _handles) {
       if (!placedHandles.contains(handle)) {
-        handle._applyMode(ThreadImageViewportMode.dormant);
+        handle._applyMode(ForumHtmlImageViewportMode.dormant);
       }
     }
     placements.sort((left, right) => left.distance.compareTo(right.distance));
 
     var waitingVisible = 0;
-    final modes = <ThreadImageViewportHandle, ThreadImageViewportMode>{};
+    final modes = <ForumHtmlImageViewportHandle, ForumHtmlImageViewportMode>{};
     for (final placement in placements) {
       final handle = placement.handle;
-      var mode = ThreadImageViewportMode.dormant;
+      var mode = ForumHtmlImageViewportMode.dormant;
       if (placement.visible) {
         if (handle._firstFrameSettled ||
             waitingVisible < maxVisibleFirstFrames) {
-          mode = ThreadImageViewportMode.display;
+          mode = ForumHtmlImageViewportMode.display;
           if (!handle._firstFrameSettled) {
             waitingVisible += 1;
           }
@@ -167,8 +168,8 @@ final class ThreadImageViewportCoordinator {
       }
       if (!placement.visible &&
           placement.near &&
-          modes[placement.handle] == ThreadImageViewportMode.dormant) {
-        modes[placement.handle] = ThreadImageViewportMode.prefetch;
+          modes[placement.handle] == ForumHtmlImageViewportMode.dormant) {
+        modes[placement.handle] = ForumHtmlImageViewportMode.prefetch;
         prefetched += 1;
       }
     }
@@ -179,8 +180,8 @@ final class ThreadImageViewportCoordinator {
     }
   }
 
-  _ThreadImagePlacement? _placementFor(
-    ThreadImageViewportHandle handle, {
+  _ForumHtmlImagePlacement? _placementFor(
+    ForumHtmlImageViewportHandle handle, {
     required double viewportStart,
     required double viewportEnd,
     required double prefetchExtent,
@@ -212,7 +213,7 @@ final class ThreadImageViewportCoordinator {
         lower <= viewportEnd + prefetchExtent;
     final viewportCenter = (viewportStart + viewportEnd) / 2;
     final imageCenter = (lower + upper) / 2;
-    return _ThreadImagePlacement(
+    return _ForumHtmlImagePlacement(
       handle: handle,
       visible: visible,
       near: near,
@@ -221,12 +222,12 @@ final class ThreadImageViewportCoordinator {
   }
 }
 
-final class ThreadImageViewportHandle
-    extends ValueNotifier<ThreadImageViewportMode> {
-  ThreadImageViewportHandle._(this._coordinator)
-    : super(ThreadImageViewportMode.dormant);
+final class ForumHtmlImageViewportHandle
+    extends ValueNotifier<ForumHtmlImageViewportMode> {
+  ForumHtmlImageViewportHandle._(this._coordinator)
+    : super(ForumHtmlImageViewportMode.dormant);
 
-  final ThreadImageViewportCoordinator _coordinator;
+  final ForumHtmlImageViewportCoordinator _coordinator;
   BuildContext? _context;
   bool _firstFrameSettled = false;
   bool _disposed = false;
@@ -251,11 +252,11 @@ final class ThreadImageViewportHandle
     _coordinator._scheduleEvaluation();
   }
 
-  void _applyMode(ThreadImageViewportMode next) {
+  void _applyMode(ForumHtmlImageViewportMode next) {
     if (_disposed || value == next) {
       return;
     }
-    if (next != ThreadImageViewportMode.display) {
+    if (next != ForumHtmlImageViewportMode.display) {
       _firstFrameSettled = false;
     }
     value = next;
@@ -266,7 +267,7 @@ final class ThreadImageViewportHandle
       return;
     }
     _firstFrameSettled = false;
-    _applyMode(ThreadImageViewportMode.dormant);
+    _applyMode(ForumHtmlImageViewportMode.dormant);
   }
 
   @override
@@ -281,15 +282,15 @@ final class ThreadImageViewportHandle
   }
 }
 
-final class _ThreadImagePlacement {
-  const _ThreadImagePlacement({
+final class _ForumHtmlImagePlacement {
+  const _ForumHtmlImagePlacement({
     required this.handle,
     required this.visible,
     required this.near,
     required this.distance,
   });
 
-  final ThreadImageViewportHandle handle;
+  final ForumHtmlImageViewportHandle handle;
   final bool visible;
   final bool near;
   final double distance;

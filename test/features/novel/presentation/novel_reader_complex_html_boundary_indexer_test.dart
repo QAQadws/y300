@@ -5,7 +5,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   test('indexes once and rebuilds closed nested wrappers for every slice', () {

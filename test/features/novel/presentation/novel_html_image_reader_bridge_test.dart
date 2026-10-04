@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   test('novel image reader requests leave display spacing to the engine', () {

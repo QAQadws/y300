@@ -8,8 +8,7 @@ import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/messages/presentation/conversation_message_presentation.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ConversationMessageTile extends StatelessWidget {

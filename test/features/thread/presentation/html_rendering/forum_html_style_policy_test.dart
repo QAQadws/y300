@@ -3,10 +3,7 @@ import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 void main() {
   testWidgets('builds base text style from preferences', (tester) async {

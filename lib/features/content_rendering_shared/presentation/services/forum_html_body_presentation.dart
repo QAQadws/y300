@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 
 /// Small session-owned values, never a retained HTML/widget tree. Each body
 /// (including nested folds) keeps only its latest completed layout.
-class ThreadPostBodyPresentation {
+class ForumHtmlBodyPresentation {
   final collapseExpansion = <String, bool>{};
   final _layouts = <String, ({Object revision, double height})>{};
   bool _active = true;
@@ -37,8 +37,8 @@ class ThreadPostBodyPresentation {
 /// Restores a measured height only while HtmlWidget is preparing its body.
 /// The real child still lays out, then takes over without a scroll command or
 /// a permanent height constraint. This also wraps async nested fold bodies.
-class ThreadPostBodyLayout extends StatefulWidget {
-  const ThreadPostBodyLayout({
+class ForumHtmlBodyLayout extends StatefulWidget {
+  const ForumHtmlBodyLayout({
     super.key,
     required this.presentation,
     required this.sourceId,
@@ -46,16 +46,16 @@ class ThreadPostBodyLayout extends StatefulWidget {
     required this.builder,
   });
 
-  final ThreadPostBodyPresentation presentation;
+  final ForumHtmlBodyPresentation presentation;
   final String sourceId;
   final Object revision;
   final Widget Function(VoidCallback onBodyBuilt) builder;
 
   @override
-  State<ThreadPostBodyLayout> createState() => _ThreadPostBodyLayoutState();
+  State<ForumHtmlBodyLayout> createState() => _ForumHtmlBodyLayoutState();
 }
 
-class _ThreadPostBodyLayoutState extends State<ThreadPostBodyLayout> {
+class _ForumHtmlBodyLayoutState extends State<ForumHtmlBodyLayout> {
   bool _ready = false;
 
   @override
@@ -79,7 +79,7 @@ class _BodyMeasurement extends SingleChildRenderObjectWidget {
     required super.child,
   });
 
-  final ThreadPostBodyPresentation presentation;
+  final ForumHtmlBodyPresentation presentation;
   final String sourceId;
   final Object revision;
   final bool Function() isReady;
@@ -107,7 +107,7 @@ class _BodyMeasurementBox extends RenderProxyBox {
     this.isReady,
   );
 
-  ThreadPostBodyPresentation presentation;
+  ForumHtmlBodyPresentation presentation;
   String sourceId;
   Object revision;
   bool Function() isReady;

@@ -6,7 +6,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 abstract interface class NovelReaderHtmlFlowUnitExtractor {
   List<NovelReaderFlowUnit> extract({

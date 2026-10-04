@@ -1,28 +1,19 @@
+import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
+import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_preparation_image_policy.dart';
+import 'package:y300/features/content_rendering_shared/application/host/forum_cache_html_preparation_image_policy.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
-import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
-
-abstract interface class ForumHtmlRenderPreparer {
-  ForumHtmlPreparedRenderDocument prepare({
-    required String html,
-    required ForumHtmlReaderPreferences preferences,
-    required ForumHtmlThemeContext theme,
-    required String sourceId,
-    required String? threadId,
-    required String? imageCacheOwnerId,
-  });
-}
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_fragment_codec.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_image_deduplicator.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_style_policy.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
   const DefaultForumHtmlRenderPreparer({
@@ -34,17 +25,21 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         const HtmlPackageForumHtmlFragmentCodec(),
     ForumHtmlThemeAdapter themeAdapter = const DefaultForumHtmlThemeAdapter(),
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
+    ForumHtmlPreparationImagePolicy imagePolicy =
+        const ForumCacheHtmlPreparationImagePolicy(),
   }) : _imageRequestResolver = imageRequestResolver,
        _imageDeduplicator = imageDeduplicator,
        _fragmentCodec = fragmentCodec,
        _themeAdapter = themeAdapter,
-       _urlResolver = urlResolver;
+       _urlResolver = urlResolver,
+       _imagePolicy = imagePolicy;
 
   final ForumImageRequestResolver _imageRequestResolver;
   final ForumHtmlImageDeduplicator _imageDeduplicator;
   final ForumHtmlFragmentCodec _fragmentCodec;
   final ForumHtmlThemeAdapter _themeAdapter;
   final SiteUrlResolver _urlResolver;
+  final ForumHtmlPreparationImagePolicy _imagePolicy;
 
   @override
   ForumHtmlPreparedRenderDocument prepare({
@@ -115,20 +110,15 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       final index = entries.length;
       final htmlWidth = _parsePositiveDouble(image.attributes['width']);
       final htmlHeight = _parsePositiveDouble(image.attributes['height']);
-      final spec = ForumImageLoadSpec(
-        kind: ForumImageKind.threadInline,
+      final spec = _imagePolicy.inlineSpec(
         url: resolved,
-        ownerId: _ownerId(
-          threadId: threadId,
-          imageCacheOwnerId: imageCacheOwnerId,
-        ),
-        ownerType: ImageCacheOwnerType.thread,
+        threadId: threadId,
+        imageCacheOwnerId: imageCacheOwnerId,
         imageIndex: index,
         htmlWidth: htmlWidth,
         htmlHeight: htmlHeight,
         alt: image.attributes['alt'],
         title: image.attributes['title'],
-        allowReaderOpen: true,
       );
       final request = _imageRequestResolver.resolveCacheRequest(spec);
       if (request == null) {
@@ -149,16 +139,21 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
           spec: ForumImageLoadSpec(
             kind: spec.kind,
             url: spec.url,
+            referer: spec.referer,
             ownerId: spec.ownerId,
             ownerType: spec.ownerType,
+            episodeId: spec.episodeId,
             imageIndex: spec.imageIndex,
             cacheKey: request.cacheKey,
             retentionClass: request.retentionClass,
             htmlWidth: spec.htmlWidth,
             htmlHeight: spec.htmlHeight,
+            displayWidth: spec.displayWidth,
+            displayHeight: spec.displayHeight,
             alt: spec.alt,
             title: spec.title,
-            allowReaderOpen: true,
+            protected: spec.protected,
+            allowReaderOpen: spec.allowReaderOpen,
           ),
           attachmentId: attachmentId,
           alt: image.attributes['alt'],
@@ -194,18 +189,6 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
       }
     }
     return duplicates;
-  }
-
-  String _ownerId({
-    required String? threadId,
-    required String? imageCacheOwnerId,
-  }) {
-    final owner = imageCacheOwnerId?.trim();
-    if (owner != null && owner.isNotEmpty) {
-      return owner;
-    }
-    final tid = threadId?.trim();
-    return tid == null || tid.isEmpty ? 'unknown' : tid;
   }
 
   void _recordAttachmentId(

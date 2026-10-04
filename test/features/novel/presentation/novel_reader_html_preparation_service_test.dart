@@ -6,12 +6,10 @@ import 'package:y300/features/novel/presentation/services/novel_html_reader_pref
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   const service = DefaultNovelReaderHtmlPreparationService();

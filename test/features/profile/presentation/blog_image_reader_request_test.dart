@@ -7,8 +7,7 @@ import 'package:y300/features/profile/presentation/blog/blog_image_reader_capabi
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_request.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 const _url = 'https://example.test/picture.png';
 

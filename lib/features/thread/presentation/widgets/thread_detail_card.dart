@@ -137,7 +137,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     Size size,
   )
   onHtmlFirstBlockImageResolved;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
   final ValueChanged<ThreadPost> onOpenPostActions;
 
@@ -426,7 +426,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final List<ThreadPostCommentEntry>? displayExtraComments;
   final bool showEmptyInteractionHint;
   final ValueChanged<int>? onPostBuilt;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
 
   @override

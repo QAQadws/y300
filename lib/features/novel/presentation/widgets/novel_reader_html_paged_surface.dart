@@ -35,12 +35,7 @@ import 'package:y300/features/library_shared/presentation/reader/reader_paged_tu
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 typedef NovelReaderPaginationCoordinatorBuilder =

@@ -1,8 +1,9 @@
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:flutter/material.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 import 'package:y300/l10n/app_localizations.dart';

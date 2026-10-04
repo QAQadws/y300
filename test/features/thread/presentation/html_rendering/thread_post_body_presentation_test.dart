@@ -7,9 +7,7 @@ import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 import 'forum_html_test_theme.dart';
@@ -19,8 +17,8 @@ void main() {
     'delayed image metadata is remembered before remount and remains naturally sized',
     (tester) async {
       final dimensions = _DelayedDimensions();
-      final presentation = ThreadPostBodyPresentation();
-      final viewport = ThreadImageViewportCoordinator()..setActive(false);
+      final presentation = ForumHtmlBodyPresentation();
+      final viewport = ForumHtmlImageViewportCoordinator()..setActive(false);
       final sizes = <String, Size>{};
       addTearDown(presentation.dispose);
       addTearDown(viewport.dispose);
@@ -92,7 +90,7 @@ void main() {
   testWidgets(
     'placeholder height is scoped to content, width and expansion and releases on readiness',
     (tester) async {
-      final memory = ThreadPostBodyPresentation();
+      final memory = ForumHtmlBodyPresentation();
       addTearDown(memory.dispose);
       Widget host({
         bool shown = true,
@@ -108,7 +106,7 @@ void main() {
               child: SizedBox(
                 width: width,
                 child: shown
-                    ? ThreadPostBodyLayout(
+                    ? ForumHtmlBodyLayout(
                         key: ValueKey(revision),
                         presentation: memory,
                         sourceId: 'post',
@@ -125,7 +123,7 @@ void main() {
         ),
       );
       double measured() =>
-          tester.getSize(find.byType(ThreadPostBodyLayout)).height;
+          tester.getSize(find.byType(ForumHtmlBodyLayout)).height;
       await tester.pumpWidget(host());
       await tester.pumpWidget(host(shown: false));
       await tester.pumpWidget(host(ready: false));

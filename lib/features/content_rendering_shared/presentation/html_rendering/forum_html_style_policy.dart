@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:y300/features/content_rendering_shared/domain/models/forum_html_content_layout.dart';
+import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/css_inline_style_declarations.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 enum ForumHtmlBlockSpacingMode { paragraphLikeDivs, discuzLineDivs }
 

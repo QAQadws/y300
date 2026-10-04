@@ -26,7 +26,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_settings_sheet.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
 import 'package:y300/features/thread/presentation/thread_post_comment_projection_provider.dart';
 import 'package:y300/features/thread/presentation/thread_content_projection_providers.dart';

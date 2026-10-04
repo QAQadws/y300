@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
-import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_image_host_provider.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -12,12 +12,11 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_layout_hint_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
-import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_prepared_render_document.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_callbacks.dart';
+import 'package:y300/features/content_rendering_shared/presentation/services/forum_html_image_viewport_coordinator.dart';
 
 const _forumHtmlInlineMediaBorderRadius = BorderRadius.all(Radius.circular(4));
 
@@ -71,7 +70,7 @@ class ForumHtmlCachedImageWidgetFactory extends WidgetFactory {
     Size size,
   )?
   onBlockImageResolved;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumImageLayoutHintResolver layoutHintResolver;
   var _nextImageIndex = 0;
@@ -323,7 +322,7 @@ class _ForumHtmlCachedBlockImageView extends ConsumerStatefulWidget {
   final ForumImageLayoutHint initialHint;
   final ForumImageDimensionIndex? dimensionIndex;
   final ForumImageLayoutHintResolver layoutHintResolver;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumImagePrecacheService? imagePrecacheService;
 
   @override
@@ -338,7 +337,7 @@ class _ForumHtmlCachedBlockImageViewState
   ForumImageLayoutHint? _cachedHint;
   String? _loadedCacheKey;
   int _retryToken = 0;
-  ThreadImageViewportHandle? _viewportHandle;
+  ForumHtmlImageViewportHandle? _viewportHandle;
   ForumImageWorkToken? _prefetchToken;
   String? _prefetchIdentity;
 
@@ -384,7 +383,7 @@ class _ForumHtmlCachedBlockImageViewState
     final viewportHandle = _viewportHandle;
     viewportHandle?.bind(context);
     if (viewportHandle != null) {
-      return ValueListenableBuilder<ThreadImageViewportMode>(
+      return ValueListenableBuilder<ForumHtmlImageViewportMode>(
         valueListenable: viewportHandle,
         builder: (context, mode, child) => _buildForMode(mode),
       );
@@ -392,13 +391,13 @@ class _ForumHtmlCachedBlockImageViewState
     return _buildImage();
   }
 
-  Widget _buildForMode(ThreadImageViewportMode mode) {
-    if (mode == ThreadImageViewportMode.prefetch) {
+  Widget _buildForMode(ForumHtmlImageViewportMode mode) {
+    if (mode == ForumHtmlImageViewportMode.prefetch) {
       _scheduleDiskPrefetch();
-    } else if (mode == ThreadImageViewportMode.dormant) {
+    } else if (mode == ForumHtmlImageViewportMode.dormant) {
       _cancelPrefetch();
     }
-    if (mode != ThreadImageViewportMode.display) {
+    if (mode != ForumHtmlImageViewportMode.display) {
       final hint = _hint;
       return _clipForumHtmlInlineMedia(
         AspectRatio(
@@ -412,22 +411,25 @@ class _ForumHtmlCachedBlockImageViewState
 
   Widget _buildImage() {
     final hint = _hint;
-    final image = CachedLibraryImage(
-      request: widget.request,
-      fit: BoxFit.fitWidth,
-      placeholder: const _ForumHtmlImageSurface(),
-      errorPlaceholder: _ForumHtmlImageErrorPlaceholder(
-        cacheKey: widget.request.cacheKey,
-        onRetry: _retryImage,
-      ),
-      showDelayedLoadingIndicator: true,
-      referer: widget.imageReferer,
-      onImageResolved: _handleImageResolved,
-      onFirstFrameRendered: (_) => _viewportHandle?.reportFirstFrameSettled(),
-      onImageFailed: _viewportHandle?.reportFirstFrameSettled,
-      remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
-      retryToken: _retryToken,
-    );
+    final image = ref
+        .read(forumHtmlImageHostProvider)
+        .buildCachedImage(
+          request: widget.request,
+          fit: BoxFit.fitWidth,
+          placeholder: const _ForumHtmlImageSurface(),
+          errorPlaceholder: _ForumHtmlImageErrorPlaceholder(
+            cacheKey: widget.request.cacheKey,
+            onRetry: _retryImage,
+          ),
+          showDelayedLoadingIndicator: true,
+          referer: widget.imageReferer,
+          onImageResolved: _handleImageResolved,
+          onFirstFrameRendered: () =>
+              _viewportHandle?.reportFirstFrameSettled(),
+          onImageFailed: _viewportHandle?.reportFirstFrameSettled,
+          waitForCacheWrite: true,
+          retryToken: _retryToken,
+        );
     return _clipForumHtmlInlineMedia(
       AspectRatio(aspectRatio: hint.aspectRatio ?? 0.7, child: image),
     );
@@ -573,7 +575,8 @@ class _ForumHtmlCachedBlockImageViewState
     }
     _loadedCacheKey = cacheKey;
     final ForumImageDimensionIndex index =
-        widget.dimensionIndex ?? ref.read(forumImageDimensionIndexProvider);
+        widget.dimensionIndex ??
+        ref.read(forumHtmlImageHostProvider).dimensionIndex;
     final dimensions = await index.getBySpec(widget.spec);
     if (!mounted || _loadedCacheKey != cacheKey || dimensions == null) {
       return;
@@ -648,20 +651,22 @@ class _ForumHtmlCachedStickerImageViewState
   @override
   Widget build(BuildContext context) {
     final size = _hint.displaySize;
-    final child = CachedLibraryImage(
-      request: widget.request,
-      fit: BoxFit.contain,
-      width: size?.width,
-      height: size?.height,
-      placeholder: const SizedBox.shrink(),
-      errorPlaceholder: Icon(
-        Icons.image_not_supported_outlined,
-        size: (size?.shortestSide ?? 14).clamp(12, 18).toDouble(),
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-      referer: widget.imageReferer,
-      onImageResolved: widget.onImageResolved,
-    );
+    final child = ref
+        .read(forumHtmlImageHostProvider)
+        .buildCachedImage(
+          request: widget.request,
+          fit: BoxFit.contain,
+          width: size?.width,
+          height: size?.height,
+          placeholder: const SizedBox.shrink(),
+          errorPlaceholder: Icon(
+            Icons.image_not_supported_outlined,
+            size: (size?.shortestSide ?? 14).clamp(12, 18).toDouble(),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          referer: widget.imageReferer,
+          onImageResolved: widget.onImageResolved,
+        );
     final media = size == null
         ? child
         : SizedBox(width: size.width, height: size.height, child: child);
@@ -678,7 +683,8 @@ class _ForumHtmlCachedStickerImageViewState
     }
     _loadedCacheKey = cacheKey;
     final ForumImageDimensionIndex index =
-        widget.dimensionIndex ?? ref.read(forumImageDimensionIndexProvider);
+        widget.dimensionIndex ??
+        ref.read(forumHtmlImageHostProvider).dimensionIndex;
     final dimensions = await index.getBySpec(widget.spec);
     if (!mounted || _loadedCacheKey != cacheKey || dimensions == null) {
       return;

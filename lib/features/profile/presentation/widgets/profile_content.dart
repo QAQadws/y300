@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_contact_actions.dart';
 import 'package:y300/features/profile/presentation/widgets/profile_identity_card.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 

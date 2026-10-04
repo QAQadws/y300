@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_body_presentation.dart';
-import 'package:y300/features/thread/presentation/services/thread_image_viewport_coordinator.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 
@@ -102,9 +100,9 @@ class ThreadPostRenderContext {
   )?
   onBlockImageResolved;
   final ThreadPostHtmlFirstImageDiagnostics? onImageDiagnostics;
-  final ThreadPostBodyPresentation? Function(ThreadPost post)?
+  final ForumHtmlBodyPresentation? Function(ThreadPost post)?
   bodyPresentationFor;
-  final ThreadImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
 
   static String commentRenderOwner({
     required String sourceTid,

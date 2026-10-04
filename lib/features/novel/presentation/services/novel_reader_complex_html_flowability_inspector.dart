@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 enum NovelReaderComplexHtmlFlowabilityFailure {
   noRenderableText,

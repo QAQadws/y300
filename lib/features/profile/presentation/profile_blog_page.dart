@@ -1,3 +1,4 @@
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
@@ -30,8 +31,7 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 
 import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
 import 'package:y300/features/profile/presentation/profile_user_link.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
