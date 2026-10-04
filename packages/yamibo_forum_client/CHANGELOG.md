@@ -8,6 +8,13 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
+- `ForumResourceMetadataPolicy`, a supported pure helper shared by package and
+  Host image transports for MIME, signature, extension, and cache-lifetime
+  decisions. Resource streaming, Cookie isolation, and WAF ownership are unchanged.
+- Characterization coverage for the complete existing image-signature table and
+  ordered `Cache-Control` combinations. Existing response-order TTL semantics,
+  including a later `max-age` overriding `no-store`, are intentionally preserved;
+  directive-precedence correction remains a separate compatibility-reviewed fix.
 - Optional journal-comment smiley codes and resource references, plus verified
   reply context, supplied by the existing preparation read without extra HTTP.
 - Ordered, typed topic badges shared by forum-display and user-topic/reply

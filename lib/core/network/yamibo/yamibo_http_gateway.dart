@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client.dart'
+    show ForumResourceMetadataPolicy;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
@@ -53,7 +54,6 @@ class YamiboHttpGateway {
 
   static const int _resourceSignatureLimit = 512;
   static const int _maxResourceRedirects = 5;
-  static const Duration _defaultResourceLifetime = Duration(days: 7);
 
   Future<ApiResult<YamiboHttpResponse<String>>> getText(
     Uri uri, {
@@ -248,7 +248,7 @@ class YamiboHttpGateway {
             contentType: response.headers.value('content-type'),
             eTag: response.headers.value('etag'),
             validUntil: _resourceValidUntil(response.headers.map),
-            fileExtension: _resourceExtension(
+            fileExtension: ForumResourceMetadataPolicy.imageFileExtension(
               response.headers.value('content-type'),
               response.realUri,
             ),
@@ -307,7 +307,9 @@ class YamiboHttpGateway {
       }
 
       final contentType = response.headers.value('content-type');
-      if (_hasDeclaredImageContentType(contentType)) {
+      if (ForumResourceMetadataPolicy.hasDeclaredImageContentType(
+        contentType,
+      )) {
         return ApiSuccess(
           YamiboResourceStreamResponse(
             uri: response.realUri,
@@ -317,14 +319,20 @@ class YamiboHttpGateway {
             contentType: contentType,
             eTag: response.headers.value('etag'),
             validUntil: _resourceValidUntil(response.headers.map),
-            fileExtension: _resourceExtension(contentType, response.realUri),
+            fileExtension: ForumResourceMetadataPolicy.imageFileExtension(
+              contentType,
+              response.realUri,
+            ),
           ),
         );
       }
 
       final iterator = StreamIterator<List<int>>(body.stream);
       final prefix = await _readResourcePrefix(iterator);
-      if (!_isSupportedImageResource(contentType, prefix.bytes)) {
+      if (!ForumResourceMetadataPolicy.isSupportedImage(
+        contentType,
+        prefix.bytes,
+      )) {
         await _cancelResourceIteratorBestEffort(iterator);
         return ApiFailure(
           ApiError(
@@ -345,7 +353,7 @@ class YamiboHttpGateway {
           contentType: contentType,
           eTag: response.headers.value('etag'),
           validUntil: _resourceValidUntil(response.headers.map),
-          fileExtension: _resourceExtension(
+          fileExtension: ForumResourceMetadataPolicy.imageFileExtension(
             contentType,
             response.realUri,
             signature: prefix.bytes,
@@ -1081,120 +1089,8 @@ class YamiboHttpGateway {
   }
 
   DateTime _resourceValidUntil(Map<String, List<String>> headers) {
-    var lifetime = _defaultResourceLifetime;
-    final cacheControl = _firstResponseHeader(headers, 'cache-control');
-    if (cacheControl != null) {
-      for (final setting in cacheControl.split(',')) {
-        final value = setting.trim().toLowerCase();
-        if (value == 'no-cache' || value == 'no-store') {
-          lifetime = Duration.zero;
-        } else if (value.startsWith('max-age=')) {
-          final seconds = int.tryParse(value.substring('max-age='.length));
-          if (seconds != null && seconds >= 0) {
-            lifetime = Duration(seconds: seconds);
-          }
-        }
-      }
-    }
+    final lifetime = ForumResourceMetadataPolicy.cacheLifetime(headers);
     return DateTime.now().add(lifetime);
-  }
-
-  String? _firstResponseHeader(Map<String, List<String>> headers, String name) {
-    final expected = name.toLowerCase();
-    for (final entry in headers.entries) {
-      if (entry.key.toLowerCase() == expected && entry.value.isNotEmpty) {
-        return entry.value.first;
-      }
-    }
-    return null;
-  }
-
-  bool _isSupportedImageResource(String? contentType, List<int> prefix) {
-    final mime = contentType?.split(';').first.trim().toLowerCase();
-    return _hasImageSignature(prefix) || mime?.startsWith('image/') == true;
-  }
-
-  bool _hasDeclaredImageContentType(String? contentType) {
-    final mime = contentType?.split(';').first.trim().toLowerCase();
-    return mime?.startsWith('image/') == true;
-  }
-
-  bool _hasImageSignature(List<int> bytes) =>
-      _resourceExtensionFromSignature(bytes).isNotEmpty;
-
-  String _resourceExtension(
-    String? contentType,
-    Uri uri, {
-    List<int>? signature,
-  }) {
-    final fromSignature = signature == null
-        ? ''
-        : _resourceExtensionFromSignature(signature);
-    if (fromSignature.isNotEmpty) return fromSignature;
-    final mime = contentType?.split(';').first.trim().toLowerCase();
-    final fromMime = switch (mime) {
-      'image/jpeg' => '.jpg',
-      'image/png' => '.png',
-      'image/gif' => '.gif',
-      'image/webp' => '.webp',
-      'image/avif' => '.avif',
-      'image/svg+xml' => '.svg',
-      'image/bmp' => '.bmp',
-      'image/x-icon' || 'image/vnd.microsoft.icon' => '.ico',
-      _ => '',
-    };
-    if (fromMime.isNotEmpty) return fromMime;
-    final segment = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
-    final dot = segment.lastIndexOf('.');
-    if (dot < 0) return '';
-    final extension = segment.substring(dot).toLowerCase();
-    return RegExp(r'^\.[a-z0-9]{1,5}$').hasMatch(extension) ? extension : '';
-  }
-
-  String _resourceExtensionFromSignature(List<int> bytes) {
-    bool starts(List<int> signature) {
-      if (bytes.length < signature.length) return false;
-      for (var index = 0; index < signature.length; index += 1) {
-        if (bytes[index] != signature[index]) return false;
-      }
-      return true;
-    }
-
-    if (starts(const <int>[0xff, 0xd8, 0xff])) return '.jpg';
-    if (starts(const <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
-      return '.png';
-    }
-    if (starts(const <int>[0x47, 0x49, 0x46, 0x38])) return '.gif';
-    if (starts(const <int>[0x42, 0x4d])) return '.bmp';
-    if (starts(const <int>[0x00, 0x00, 0x01, 0x00])) return '.ico';
-    if (bytes.length >= 12 &&
-        ascii.decode(bytes.sublist(0, 4), allowInvalid: true) == 'RIFF' &&
-        ascii.decode(bytes.sublist(8, 12), allowInvalid: true) == 'WEBP') {
-      return '.webp';
-    }
-    if (bytes.length >= 12 &&
-        ascii.decode(bytes.sublist(4, 8), allowInvalid: true) == 'ftyp') {
-      final brand = ascii.decode(bytes.sublist(8, 12), allowInvalid: true);
-      if (brand == 'avif' || brand == 'avis') return '.avif';
-      if (const <String>{
-        'heic',
-        'heix',
-        'hevc',
-        'hevx',
-        'mif1',
-        'msf1',
-      }.contains(brand)) {
-        return '.heic';
-      }
-    }
-    final text = utf8
-        .decode(bytes.take(1024).toList(growable: false), allowMalformed: true)
-        .trimLeft()
-        .toLowerCase();
-    return text.startsWith('<svg') ||
-            (text.startsWith('<?xml') && text.contains('<svg'))
-        ? '.svg'
-        : '';
   }
 
   Stream<List<int>> _directResourceStream(Stream<List<int>> source) async* {

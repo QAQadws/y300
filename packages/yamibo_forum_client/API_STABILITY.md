@@ -19,11 +19,21 @@ The following APIs are covered by the compatibility policy in
   `YamiboForumClientBuilder`, `ForumClientConfig`, verified browser identities,
   the standard and ephemeral Dio runtimes,
   Cookie/session/formhash/cache/WAF/network/resource ports, and logging ports;
+- `ForumResourceMetadataPolicy`, exported only by `yamibo_forum_client.dart`,
+  for shared, I/O-free image MIME/signature/extension and cache-lifetime decisions;
 - in-memory store implementations, for tests and ephemeral development use;
 - `ForumClientCachePorts`, `YamiboForumClientBuilder.standardDio`, and
   `YamiboForumClientBuilder.ephemeralDio` as supported third-party composition
   paths, with the ephemeral path explicitly excluded from persistence
   guarantees.
+
+`ForumResourceMetadataPolicy.cacheLifetime` preserves the existing transports'
+response-order handling of the first `Cache-Control` value. For example,
+`no-store, max-age=90` currently yields 90 seconds, while `max-age=90, no-store`
+yields zero. This refactor does not claim HTTP directive-precedence compliance;
+correcting that behavior is a separate change requiring explicit compatibility
+review and regression tests. Image metadata helpers do not manage the Host's
+streams, clock, Cookies, WAF recovery, decoding, or persistent cache.
 
 Command outcome categories, favorite target-state requests/receipts,
 rating/comment/thread-creation/thread-reply/thread-poll-vote/thread-post-edit/image-attachment

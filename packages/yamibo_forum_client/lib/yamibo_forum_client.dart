@@ -21,6 +21,8 @@ export 'src/network/forum_request.dart';
 export 'src/network/forum_response.dart';
 export 'src/network/forum_transport.dart';
 export 'src/network/forum_request_profile.dart';
+export 'src/network/forum_resource_metadata_policy.dart'
+    show ForumResourceMetadataPolicy;
 export 'src/session/forum_cookie_store.dart';
 export 'src/session/forum_session_store.dart';
 export 'src/session/forum_formhash_provider.dart';
