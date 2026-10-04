@@ -11,7 +11,7 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_s
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 

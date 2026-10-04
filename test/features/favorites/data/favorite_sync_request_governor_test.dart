@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/data/services/default_favorite_sync_request_governor.dart';
 
 void main() {
   test('default favorite sync cooldown is 700ms (all sync modes)', () {

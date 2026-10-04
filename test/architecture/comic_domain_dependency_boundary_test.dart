@@ -9,29 +9,18 @@ const _domainRoot = 'lib/features/comic/domain';
 // Existing source-to-target debt only. Remove each entry when its dependency
 // moves behind a domain contract; never exempt an entire file or directory.
 const _existingDebt = <String, Set<String>>{
-  'services/comic_episode_discovery_service.dart': {
-    'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
-  },
-  'services/comic_episode_refresh_service.dart': {
-    'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
-  },
-  'services/comic_first_episode_cover_service.dart': {
-    'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
-  },
   'services/comic_post_aggregation_service.dart': {
     'package:flutter_riverpod/flutter_riverpod.dart',
     'lib/features/thread/data/providers/forum_image_source_pipeline_provider.dart',
   },
   'services/comic_refresh_outcome_applier.dart': {
     'lib/features/comic/domain/services/comic_services_impl.dart',
-    'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
   },
   'services/comic_search_refresh_queue_models.dart': {
     'lib/features/comic/domain/services/comic_services_impl.dart',
   },
   'services/comic_search_refresh_queue_service.dart': {
     'lib/features/comic/domain/services/comic_services_impl.dart',
-    'lib/features/search/data/services/search_rate_limiter.dart',
   },
   'services/comic_services_impl.dart': {
     'package:flutter_cache_manager/flutter_cache_manager.dart',
@@ -41,7 +30,6 @@ const _existingDebt = <String, Set<String>>{
     'lib/features/comic/data/services/comic_parser_service.dart',
     'lib/features/comic/data/providers/comic_providers.dart',
     'lib/features/comic/data/repositories/forum_tag_comic_catalog_directory_reader.dart',
-    'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
     'lib/features/search/data/services/forum_search_coordinator.dart',
   },
 };

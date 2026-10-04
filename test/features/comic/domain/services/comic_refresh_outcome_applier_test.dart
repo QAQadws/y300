@@ -6,7 +6,7 @@ import 'package:y300/features/comic/domain/services/comic_first_episode_cover_se
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 
 void main() {

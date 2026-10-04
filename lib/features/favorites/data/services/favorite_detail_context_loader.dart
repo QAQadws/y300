@@ -1,6 +1,6 @@
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/favorites/domain/models/favorite_detail_context.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';

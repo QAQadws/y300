@@ -3,7 +3,6 @@ import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/providers/favorite_ingest_providers.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/use_cases/favorite_shelf_category_assign_use_case_impl.dart';
 import 'package:y300/features/favorites/data/services/favorite_link_service_impl.dart';
 import 'package:y300/features/favorites/data/services/favorite_shelf_bootstrapper.dart';
@@ -20,6 +19,7 @@ import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/tags/data/providers/tag_providers.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
+import 'package:y300/features/favorites/data/services/default_favorite_sync_request_governor.dart';
 
 export 'package:y300/features/favorites/data/use_cases/unfavorite_use_case_providers.dart';
 

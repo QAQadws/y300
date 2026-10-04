@@ -1,4 +1,5 @@
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
+import 'package:y300/features/search/domain/services/forum_search_timing_policy.dart';
 
 enum ComicSearchRefreshQueueStatus { pending, running, completed, failed }
 
@@ -155,6 +156,6 @@ class ComicSearchRefreshQueueSnapshot {
 
   static const empty = ComicSearchRefreshQueueSnapshot(
     entries: <ComicSearchRefreshQueueEntry>[],
-    cadence: Duration(milliseconds: 10500),
+    cadence: ForumSearchTimingPolicy.defaultCooldown,
   );
 }

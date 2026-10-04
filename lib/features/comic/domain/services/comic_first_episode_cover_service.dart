@@ -3,7 +3,7 @@ import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 
 typedef ComicEpisodeImageFetcher =
     Future<ComicEpisodeImagesFetchResult> Function(String tid);

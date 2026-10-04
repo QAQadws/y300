@@ -34,7 +34,7 @@
 - `cache`：统一可再生磁盘缓存。负责图片、原始 HTML、解析快照、受保护封面、retention 分类、统一容量预算/LRU 裁剪、写入通知、静态容量统计/手动导出和论坛图片预加载；受保护图片字节经包 `ForumResourceClient` 流式获取，本模块只做落盘、索引与预算。
 - `comic`：漫画数据、书架、详情和阅读器。仓储/队列契约与目录 URL 写入端口归 domain/repositories，下载契约归 domain/services，具体 SQLite/文件实现及装配归 data。章节目录、帖子发现与标签目录经 forum client 读取契约消费业务投影；负责标题分析、章节发现与 TID 顺序、刷新/搜索 fallback 工作流、重复合并、封面与阅读进度、评论页、持久化下载队列、单章 CBZ 产物和下载图片限速。
 - `composer_shared`：发帖、回复与帖子编辑共用编辑器基础设施。负责 source/Quill surface、BBCode 转换与预览、`collapse=0` grammar/原子 embed/编辑流程、附件语义与预览解析、编辑偏好、通用 controller 基类和错误呈现；表情目录、图片上传权限/上传、未使用附件目录与删除经 forum client 契约执行。草稿能力由调用方决定，帖子编辑明确关闭持久化草稿。
-- `favorites`：论坛收藏同步与收藏书架。收藏目录读取与收藏/取消收藏命令经 forum client 契约（提交后目录回读确认在包内）；负责同步限流、本地持久化、详情上下文加载、内容 ingest 注册表，以及把收藏帖子导入漫画或小说。
+- `favorites`：论坛收藏同步与收藏书架。执行上下文、mode/kind 和 governor 契约归 domain/services，默认串行与 700ms 完成后冷却实现归 data/services，跨 feature 只消费领域端口。收藏目录读取与收藏/取消收藏命令经 forum client 契约（提交后目录回读确认在包内）；负责同步限流、本地持久化、详情上下文加载、内容 ingest 注册表，以及把收藏帖子导入漫画或小说。
 - `forum`：论坛壳、解析模式首页/版块列表和 WebView 模式。首页/版块列表读取经 forum client HTML-first 契约（document/snapshot fallback 在包内）；负责模式偏好、SWR 与轮播聚合、WebView driver/runtime、Cookie bootstrap、网络/视觉策略、链接路由、论坛收藏入口，以及应用前台内不可见的普通 WebView WAF 挑战宿主。
 - `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、Debug 日志和记录页；记录类型覆盖帖子、漫画、小说与日志；日志以作者 ID 和日志 ID 的复合身份保存，继续使用现有 v1 数据库。
 - `image_loading`：通用应用图片 source/provider/cache manager、预取接口和 `AppImage` 展示封装；不要与业务化的 `cache` 所有权/retention 规则混为一层。
@@ -46,7 +46,7 @@
 - `profile`：当前用户与指定用户资料、账号摘要、每日签到、好友列表、日志列表/详情及原生 HTML 日志编辑器。当前用户资料、账号摘要、公开资料/日志、好友目录/删除和签到经 forum client 契约；好友页包含我的好友、在线会员、最近访客和我的足迹，按已验证账号与会话 revision 隔离路由状态，不持久化目录。提供原生主题／回复、日志、好友目录、消息中心与单人对话入口，完整消息工作流归 `messages`；好友卡片按协议返回的资料链接复用既有 URL 路由，资料链接/私信路由由 `app/navigation/friend_routes.dart` 装配。资料页读取和好友申请／接受／解除经 forum client 契约，并按 viewer、会话代次、取消与请求 generation 隔离。原生日志详情在成功内容可见后经 history 的 recorder 保存浏览记录。新建日志由独立领域快照/repository 和保存协调组件接入账号草稿，SQLite `blog_drafts.db` v1 每账号一份、不自动过期；编辑已有日志和评论不保存草稿。本人资料设置按已验证的服务器目的地址进入绑定账号的受管 WebView。好友操作只在 `applied` 后更新页面，未知结果不重发，临时表单与输入不持久化。
 - `reader_shared`：漫画与帖子图片阅读共用引擎。负责连续/横向分页阅读、owner 会话隔离、真实可见位置、预加载窗口、图片 preparation、长图切片、缩放/手势、阅读偏好、简繁转换、性能诊断和图片导出。
 - `reply`：帖子回复与楼层回复。回复准备与提交经 forum client preparation/command 契约（楼层回复动态字段封装在包内 opaque token）；负责草稿校验，并在 `composer_shared` 之上提供回复 controller/page。
-- `search`：搜索读取经 forum client `forumSearch` 契约（formhash、POST、redirect 校验与结果页解析在包内）；负责搜索调度器、限流、查询 generation 隔离、自动分页搜索页和漫画 fallback 编排。
+- `search`：搜索读取经 forum client `forumSearch` 契约（formhash、POST、redirect 校验与结果页解析在包内）；负责搜索调度器、限流、查询 generation 隔离、自动分页搜索页和漫画 fallback 编排。`ForumSearchTimingPolicy` 归 domain/services，提供调度与漫画持久化搜索队列共用的默认 10.5 秒节奏；限流与调度实现仍归 data。
 - `startup`：可配置导航的懒加载主壳（日志与消息默认隐藏）、跨书架选择操作，以及启动后的 best-effort 任务编排，包括缓存预算维护、漫画刷新/下载队列恢复、系统通知初始化、草稿附件维护和 Yamibo 会话预热（经 client 当前用户资料契约）。
 - `storage`：下载根目录选择、目录/文件名规范化、原子 JSON 写入、漫画 CBZ 定位和下载存储模型；不负责具体业务下载队列。
 - `tags`：论坛标签索引与查询、标签主题页；标签主题列表读取经 forum client 桌面 HTML 契约。为帖子内容分类和漫画/小说识别提供元数据。

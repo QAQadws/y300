@@ -1,3 +1,4 @@
+import 'package:y300/features/search/domain/services/forum_search_timing_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/config/technical_storage_keys.dart';
 
@@ -20,7 +21,8 @@ class SearchRateLimiter {
   }) : _sharedPreferences = sharedPreferences,
        _nowProvider = nowProvider ?? DateTime.now;
 
-  static const Duration defaultCooldown = Duration(milliseconds: 10500);
+  static const Duration defaultCooldown =
+      ForumSearchTimingPolicy.defaultCooldown;
 
   final Duration cooldown;
   final SharedPreferences? _sharedPreferences;

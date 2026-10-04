@@ -8,7 +8,7 @@ import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_pa
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_eligibility_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
 enum EpisodeDiscoveryStrategy { direct, recursive, catalog }

@@ -11,7 +11,7 @@ import 'package:y300/features/comic/domain/services/comic_search_candidate_ranke
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../../../support/search/search_response_fixtures.dart';

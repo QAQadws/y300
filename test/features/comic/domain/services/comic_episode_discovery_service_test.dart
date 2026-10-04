@@ -9,7 +9,7 @@ import 'package:y300/features/comic/domain/services/comic_episode_discovery_serv
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 
 import '../../../../support/fixture_comic_thread_discovery_repository.dart';
 

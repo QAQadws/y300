@@ -7,7 +7,7 @@ import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applie
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
-import 'package:y300/features/search/data/services/search_rate_limiter.dart';
+import 'package:y300/features/search/domain/services/forum_search_timing_policy.dart';
 
 class ComicSearchRefreshRetryPolicy {
   const ComicSearchRefreshRetryPolicy({
@@ -56,7 +56,7 @@ class ComicSearchRefreshQueueService
     required ComicSearchRefreshQueueRepository queueRepository,
     required ComicEpisodeRefreshService refreshService,
     required ComicRefreshOutcomeApplier refreshOutcomeApplier,
-    this.cadence = SearchRateLimiter.defaultCooldown,
+    this.cadence = ForumSearchTimingPolicy.defaultCooldown,
     ComicSearchRefreshRetryPolicy retryPolicy =
         const ComicSearchRefreshRetryPolicy(),
     DateTime Function()? nowProvider,
