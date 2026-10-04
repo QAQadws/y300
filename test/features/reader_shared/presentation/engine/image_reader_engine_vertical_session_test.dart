@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_reader_view.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 
@@ -128,6 +131,97 @@ void main() {
   });
 
   testWidgets(
+    'same-owner refresh ignores old decode and image retry callbacks',
+    (tester) async {
+      final service = _ControlledPrecache();
+      final first = _Capability(count: 1);
+      final active = ValueNotifier(first);
+      addTearDown(active.dispose);
+      await tester.pumpWidget(_host(active, precache: service));
+      await tester.pumpAndSettle();
+      final oldBinding = first.bindings[0]!;
+      final oldRetry = first.retries[0]!;
+      expect(service.pending, hasLength(1));
+
+      final refreshed = _Capability(revision: 1, count: 1);
+      active.value = refreshed;
+      await tester.pumpAndSettle();
+      final currentBinding = refreshed.bindings[0]!;
+      expect(currentBinding.value.generation, oldBinding.value.generation + 1);
+      expect(service.pending, hasLength(2));
+      service.pending.first.complete(
+        const ForumImagePrecacheResult(
+          success: true,
+          decoded: true,
+          localPath: '/cache/retired.jpg',
+        ),
+      );
+      oldRetry();
+      expect(
+        oldBinding.promoteLocalPath('/cache/retired-display.jpg'),
+        isFalse,
+      );
+      await tester.pump();
+      expect(currentBinding.value.status, ReaderImageSessionStatus.idle);
+      expect(currentBinding.value.localPath, isNull);
+      expect(refreshed.retryCalls, 0);
+      expect(service.pending, hasLength(2));
+
+      service.pending.last.complete(
+        const ForumImagePrecacheResult(
+          success: true,
+          decoded: true,
+          localPath: '/cache/current.jpg',
+        ),
+      );
+      await tester.pump();
+      expect(currentBinding.value.status, ReaderImageSessionStatus.decoded);
+      expect(currentBinding.value.localPath, '/cache/current.jpg');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'exit retires dimensions, extent, decode and image retry callbacks',
+    (tester) async {
+      final service = _ControlledPrecache();
+      final first = _Capability(count: 1);
+      final active = ValueNotifier(first);
+      addTearDown(active.dispose);
+      await tester.pumpWidget(_host(active, precache: service));
+      await tester.pumpAndSettle();
+      final staleView = tester.widget<ContinuousImageReaderView>(
+        find.byType(ContinuousImageReaderView),
+      );
+      final oldDimensions = first.dimensions[0]!;
+      final oldBinding = first.bindings[0]!;
+      final oldRetry = first.retries[0]!;
+      expect(service.pending, hasLength(1));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(first.exitCalls, 1);
+      oldDimensions(const Size(100, 500));
+      staleView.onExtentResolved(_extent(first.owner, 5000));
+      oldRetry();
+      expect(
+        oldBinding.promoteLocalPath('/cache/retired-display.jpg'),
+        isFalse,
+      );
+      service.pending.single.complete(
+        const ForumImagePrecacheResult(
+          success: true,
+          decoded: true,
+          localPath: '/cache/retired.jpg',
+        ),
+      );
+      await tester.pump();
+      expect(first.retryCalls, 0);
+      expect(first.exitCalls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'replacing an owner during an initial seek cancels old corrections',
     (tester) async {
       final active = ValueNotifier(_Capability(count: 30, initialIndex: 25));
@@ -210,8 +304,13 @@ ContinuousImageExtent _extent(String owner, double height) =>
 Widget _host(
   ValueNotifier<_Capability> active, {
   double safeBottom = 0,
+  ForumImagePrecacheService? precache,
 }) => ProviderScope(
-  overrides: [forumImagePrecacheServiceProvider.overrideWithValue(_Precache())],
+  overrides: [
+    forumImagePrecacheServiceProvider.overrideWithValue(
+      precache ?? _Precache(),
+    ),
+  ],
   child: LocalizedTestApp(
     home: MediaQuery(
       data: MediaQueryData(
@@ -259,6 +358,10 @@ class _Capability extends ReaderCapability {
   final visible = <int>[];
   final progress = <int>[];
   final dimensions = <int, ValueChanged<Size>>{};
+  final bindings = <int, ReaderImageSessionBinding>{};
+  final retries = <int, VoidCallback>{};
+  int retryCalls = 0;
+  int exitCalls = 0;
 
   @override
   ReaderContent get content => ReaderContent(
@@ -295,6 +398,8 @@ class _Capability extends ReaderCapability {
   @override
   Widget buildImageContent(BuildContext context, ReaderImageBuildSpec spec) {
     dimensions[spec.index] = spec.onDimensionsResolved;
+    bindings[spec.index] = spec.sessionBinding;
+    retries[spec.index] = spec.onRetry;
     return ColoredBox(
       key: Key('image-$owner-${spec.index}'),
       color: Colors.black,
@@ -306,6 +411,19 @@ class _Capability extends ReaderCapability {
   @override
   void onScrollProgress({required int index, required double offset}) =>
       progress.add(index);
+  @override
+  Future<void> beforeImageRetry({
+    required ContinuousImageItem item,
+    required int index,
+  }) async {
+    retryCalls += 1;
+  }
+
+  @override
+  Future<void> onExit() async {
+    exitCalls += 1;
+  }
+
   @override
   ImageCacheRequest cacheRequestFor(ContinuousImageItem item) =>
       ImageCacheRequest(
@@ -380,4 +498,24 @@ class _Precache implements ForumImagePrecacheService {
     required ForumImageLoadSpec spec,
     Size? expectedDisplaySize,
   }) async => const ForumImagePrecacheResult(success: true, decoded: true);
+}
+
+class _ControlledPrecache implements ForumImagePrecacheService {
+  final pending = <Completer<ForumImagePrecacheResult>>[];
+
+  @override
+  Future<ForumImagePrecacheResult> ensureDiskCached(
+    ForumImageLoadSpec spec,
+  ) async => const ForumImagePrecacheResult(success: true);
+
+  @override
+  Future<ForumImagePrecacheResult> precacheDecoded({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    Size? expectedDisplaySize,
+  }) {
+    final completer = Completer<ForumImagePrecacheResult>();
+    pending.add(completer);
+    return completer.future;
+  }
 }

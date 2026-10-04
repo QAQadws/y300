@@ -15,6 +15,7 @@ import 'package:y300/features/reader_shared/presentation/continuous_image/contin
 import 'package:y300/features/reader_shared/presentation/continuous_image/continuous_image_viewport_tracker.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_capability.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_display_settings_sheet.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_image_session_coordinator.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_page_indicator_overlay.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_paged_image_fit_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_position_state.dart';
@@ -92,14 +93,14 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   final Set<int> _reportedVisibleImageIndexes = <int>{};
 
-  String? _lastOwnerId;
-  int? _lastContentRevision;
+  final ReaderImageSessionCoordinator _readerSession =
+      ReaderImageSessionCoordinator();
+  String? get _lastOwnerId => _readerSession.current?.ownerId;
+  int? get _lastContentRevision => _readerSession.current?.revision;
+  int get _readerSessionGeneration => _readerSession.generation;
   ReaderPositionState? _positionState;
   bool _exitFlushed = false;
 
-  // A session generation also isolates viewport callbacks across content
-  // replacements, including refreshed images belonging to the same owner.
-  int _readerSessionGeneration = 0;
   int _verticalViewportPrimedGeneration = -1;
   int _restoreGeneration = 0;
   int _seekGeneration = 0;
@@ -171,6 +172,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   @override
   void dispose() {
+    _readerSession.close();
     if (!_exitFlushed) {
       unawaited(_capability.onExit());
     }
@@ -325,10 +327,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _latestItems = items;
     _syncVerticalItemAnchors(items);
     final verticalTrailing = _buildVerticalTrailingSpec(engineContext);
-    final sessionGeneration = _readerSessionGeneration;
+    final session = _readerSession.current;
     final scrollController = _scrollController;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_isCurrentVerticalSession(sessionGeneration, scrollController)) {
+      if (_isCurrentVerticalSessionToken(session, scrollController)) {
         _syncScrollPositionActivityListener();
         if (_verticalViewportPrimedGeneration != _readerSessionGeneration) {
           // A ListView may build cached rows without scrolling. Resolve the
@@ -346,7 +348,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     });
     final reader = NotificationListener<ScrollNotification>(
       onNotification: (notification) =>
-          _isCurrentVerticalSession(sessionGeneration, scrollController)
+          _isCurrentVerticalSessionToken(session, scrollController)
           ? _onVerticalScrollNotification(notification)
           : false,
       child: ContinuousImageReaderView(
@@ -358,8 +360,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
               widget.flowPolicy.viewportCacheExtentFactor,
         ),
         layoutResolver: _layoutResolver,
-        onExtentResolved: (extent) =>
-            _recordExtent(extent, sessionGeneration: sessionGeneration),
+        onExtentResolved: (extent) => _recordExtent(extent, session: session),
         verticalListKey: widget.listKey,
         slotKeyPrefix: widget.slotKeyPrefix,
         verticalItemAnchorKeyBuilder: (item, _) =>
@@ -386,11 +387,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final items = content.items;
     final tail = _tailSurface;
     final pageController = _pageController;
-    final sessionGeneration = _readerSessionGeneration;
+    final session = _readerSession.current;
     _latestItems = items;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          sessionGeneration == _readerSessionGeneration &&
+      if (_isCurrentImageSession(session) &&
           identical(pageController, _pageController)) {
         _precachePagedWindow(_lastKnownIndex);
       }
@@ -408,11 +408,17 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         reverse: preferences.readerMode == ReaderModePreference.rtl,
         onPageChanged: pageController == null
             ? null
-            : (pageIndex) => _onPageChanged(
-                pageIndex,
-                ownerId: content.ownerId,
-                pageController: pageController,
-              ),
+            : (pageIndex) {
+                if (_isCurrentImageSession(session)) {
+                  unawaited(
+                    _onPageChanged(
+                      pageIndex,
+                      ownerId: content.ownerId,
+                      pageController: pageController,
+                    ),
+                  );
+                }
+              },
         horizontalPageKey: widget.pageKey,
         horizontalPagePadding: EdgeInsets.all(
           preferences.pageSpacing.clamp(0.0, 48.0).toDouble(),
@@ -424,8 +430,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             ? null
             : (context) => _buildPagedAdvance(context, tail),
         layoutResolver: _layoutResolver,
-        onExtentResolved: (extent) =>
-            _recordExtent(extent, sessionGeneration: sessionGeneration),
+        onExtentResolved: (extent) => _recordExtent(extent, session: session),
         itemBuilder: (context, item, index, {required paged}) {
           return _buildImage(item, index, preferences, paged: true);
         },
@@ -571,7 +576,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     required bool paged,
   }) {
     final ownerId = item.ownerId;
-    final sessionGeneration = _readerSessionGeneration;
+    final session = _readerSession.current;
     final pageController = _pageController;
     final aspectRatio = paged
         ? _resolvedDimensionsByItemId[item.id]?.aspectRatioOrNull ??
@@ -597,12 +602,16 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         loadingIndicatorColor: _loadingIndicatorColor(preferences),
         onDimensionsResolved: (size) => _onImageDimensionsResolved(
           ownerId: ownerId,
-          sessionGeneration: sessionGeneration,
+          session: session,
           itemId: item.id,
           paged: paged,
           size: size,
         ),
-        onRetry: () => unawaited(_retrySessionImage(index)),
+        onRetry: () {
+          if (_isCurrentImageSession(session)) {
+            unawaited(_retrySessionImage(index));
+          }
+        },
       ),
     );
     if (!paged) {
@@ -622,7 +631,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       onHorizontalOverflowChanged: (hasOverflow) {
         _onPagedHorizontalOverflowChanged(
           ownerId: ownerId,
-          sessionGeneration: sessionGeneration,
+          session: session,
           pageIndex: index,
           hasOverflow: hasOverflow,
         );
@@ -630,7 +639,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       onEdgeTurnRequested: (intent) {
         _onPagedEdgeTurnRequested(
           ownerId: ownerId,
-          sessionGeneration: sessionGeneration,
+          session: session,
           sourcePageIndex: index,
           expectedPageController: pageController,
           intent: intent,
@@ -644,8 +653,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       activePageIndexListenable: _activePagedIndex,
       pageIndex: index,
       resetToken: '${preferences.pageFit.name}:${preferences.readerMode.name}',
-      onZoomStateChanged: (isZoomed) =>
-          _onPagedImageZoomStateChanged(index, isZoomed),
+      onZoomStateChanged: (isZoomed) {
+        if (_isCurrentImageSession(session)) {
+          _onPagedImageZoomStateChanged(index, isZoomed);
+        }
+      },
       child: fittedImage,
     );
   }
@@ -662,15 +674,13 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   void _onImageDimensionsResolved({
     required String ownerId,
-    required int sessionGeneration,
+    required ReaderImageSessionToken? session,
     required String itemId,
     required bool paged,
     required Size size,
   }) {
-    if (!mounted ||
-        _lastOwnerId != ownerId ||
-        _capability.content.ownerId != ownerId ||
-        _readerSessionGeneration != sessionGeneration ||
+    if (!_isCurrentImageSession(session) ||
+        session?.ownerId != ownerId ||
         !size.width.isFinite ||
         !size.height.isFinite ||
         size.width <= 0 ||
@@ -696,14 +706,11 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   void _onPagedHorizontalOverflowChanged({
     required String ownerId,
-    required int sessionGeneration,
+    required ReaderImageSessionToken? session,
     required int pageIndex,
     required bool hasOverflow,
   }) {
-    if (!mounted ||
-        _lastOwnerId != ownerId ||
-        _capability.content.ownerId != ownerId ||
-        _readerSessionGeneration != sessionGeneration) {
+    if (!_isCurrentImageSession(session) || session?.ownerId != ownerId) {
       return;
     }
     final previous = _pagedHorizontalOverflowByIndex[pageIndex] == true;
@@ -722,21 +729,20 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   void _onPagedEdgeTurnRequested({
     required String ownerId,
-    required int sessionGeneration,
+    required ReaderImageSessionToken? session,
     required int sourcePageIndex,
     required PageController? expectedPageController,
     required ReaderPageTurnIntent intent,
   }) {
     final pageController = _pageController;
     final content = _capability.content;
-    if (!mounted ||
+    if (!_isCurrentImageSession(session) ||
         _zoomGate.value ||
         expectedPageController == null ||
         !identical(pageController, expectedPageController) ||
         !expectedPageController.hasClients ||
-        _lastOwnerId != ownerId ||
+        session?.ownerId != ownerId ||
         content.ownerId != ownerId ||
-        _readerSessionGeneration != sessionGeneration ||
         !_pagedPosition.isImage ||
         _pagedPosition.index != sourcePageIndex ||
         _activePagedIndex.value != sourcePageIndex) {
@@ -1099,11 +1105,27 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
   }
 
-  bool _isCurrentVerticalSession(int generation, ScrollController controller) =>
-      mounted &&
-      generation == _readerSessionGeneration &&
+  bool _isCurrentImageSession(ReaderImageSessionToken? session) {
+    if (!mounted || session == null || !_readerSession.isCurrent(session)) {
+      return false;
+    }
+    final content = _capability.content;
+    return !content.isEmpty &&
+        content.ownerId == session.ownerId &&
+        content.sessionRevision == session.revision;
+  }
+
+  bool _isCurrentVerticalSessionToken(
+    ReaderImageSessionToken? session,
+    ScrollController controller,
+  ) =>
+      _isCurrentImageSession(session) &&
       identical(controller, _scrollController) &&
       _diagnosticMode == ReaderModePreference.vertical;
+
+  bool _isCurrentVerticalSession(int generation, ScrollController controller) =>
+      generation == _readerSessionGeneration &&
+      _isCurrentVerticalSessionToken(_readerSession.current, controller);
 
   ReaderPositionState _resetIfOwnerChanged(
     ReaderContent content,
@@ -1112,7 +1134,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final current = _positionState;
     if (current != null && current.ownerId == content.ownerId) {
       if (_lastContentRevision != content.sessionRevision) {
-        _lastContentRevision = content.sessionRevision;
+        _readerSession.activate(
+          ownerId: content.ownerId,
+          revision: content.sessionRevision,
+        );
         _verticalPositionDriver.cancelActive(
           ReaderVerticalSeekCancelReason.ownerChanged,
         );
@@ -1148,7 +1173,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           readerOwnerId: content.ownerId,
           items: content.items,
         );
-        _readerSessionGeneration += 1;
         return refreshedPosition;
       }
       return current;
@@ -1171,8 +1195,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       initialLogicalIndex: initialIndex,
     );
     _positionState = next;
-    _lastOwnerId = content.ownerId;
-    _lastContentRevision = content.sessionRevision;
+    _readerSession.activate(
+      ownerId: content.ownerId,
+      revision: content.sessionRevision,
+    );
     _latestItems = const <ContinuousImageItem>[];
     _pendingScrollCompensationDelta = 0;
     _resetVerticalPageSpacingTracking();
@@ -1196,7 +1222,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       readerOwnerId: content.ownerId,
       items: content.items,
     );
-    _readerSessionGeneration += 1;
     _verticalViewportPrimedGeneration = -1;
     _restoreGeneration = 0;
     _seekGeneration = 0;
@@ -1616,11 +1641,10 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   void _recordExtent(
     ContinuousImageExtent extent, {
-    required int sessionGeneration,
+    required ReaderImageSessionToken? session,
   }) {
-    if (!mounted ||
-        extent.ownerId != _lastOwnerId ||
-        sessionGeneration != _readerSessionGeneration) {
+    if (!_isCurrentImageSession(session) ||
+        extent.ownerId != session?.ownerId) {
       return;
     }
     final previous = _extentRegistry.extentOf(extent.itemId);
@@ -2297,7 +2321,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     final item = items[index];
     final ownerId = content.ownerId;
     final revision = content.sessionRevision;
-    final generation = _readerSessionGeneration;
+    final session = _readerSession.current;
     final retryIdentity = '$ownerId:$revision:${item.id}';
     if (!_imageRetryInFlight.add(retryIdentity)) {
       return;
@@ -2310,9 +2334,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         // image retry even when the chapter probe cannot be confirmed.
       }
       if (!mounted ||
-          _readerSessionGeneration != generation ||
-          _capability.content.ownerId != ownerId ||
-          _capability.content.sessionRevision != revision ||
+          !_isCurrentImageSession(session) ||
           index >= _latestItems.length) {
         return;
       }
