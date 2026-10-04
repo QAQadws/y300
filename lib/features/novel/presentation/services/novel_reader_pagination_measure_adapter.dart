@@ -4,7 +4,7 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';

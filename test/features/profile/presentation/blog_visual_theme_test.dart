@@ -29,7 +29,7 @@ import 'package:y300/features/profile/presentation/blog/blog_editor_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_theme_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';

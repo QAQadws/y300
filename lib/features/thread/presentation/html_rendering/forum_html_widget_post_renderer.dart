@@ -12,7 +12,7 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_cached_image_widget_factory.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';

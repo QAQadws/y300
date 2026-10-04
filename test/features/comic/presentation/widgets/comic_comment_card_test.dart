@@ -28,7 +28,7 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projection.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_card.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';

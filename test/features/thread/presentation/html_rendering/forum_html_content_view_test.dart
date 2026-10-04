@@ -7,7 +7,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';

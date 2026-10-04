@@ -19,7 +19,7 @@ import 'package:y300/features/profile/presentation/blog/blog_image_reader_capabi
 import 'package:y300/features/profile/presentation/blog/blog_selection_copy_page.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_detail_fixture.dart';

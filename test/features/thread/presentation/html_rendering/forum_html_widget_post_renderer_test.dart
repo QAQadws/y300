@@ -15,7 +15,7 @@ import 'package:y300/features/cache/domain/services/forum_image_request_resolver
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_layout.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_preparer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_render_callbacks.dart';

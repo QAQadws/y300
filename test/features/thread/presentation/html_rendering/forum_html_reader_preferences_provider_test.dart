@@ -1,9 +1,10 @@
+import 'package:y300/features/content_rendering_shared/data/repositories/shared_prefs_forum_html_reader_preferences_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   test('defaults use the production HTML typography baseline', () {

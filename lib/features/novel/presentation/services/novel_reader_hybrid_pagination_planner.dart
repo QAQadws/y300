@@ -27,7 +27,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_text_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_work_slice.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 abstract interface class NovelReaderHybridPaginationPlanner {

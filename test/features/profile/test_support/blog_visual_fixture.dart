@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 const blogVisualTitle = '雨后散步：记录街角的树、书店与难得的晴天';

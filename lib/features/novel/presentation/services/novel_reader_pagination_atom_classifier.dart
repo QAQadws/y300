@@ -6,7 +6,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_flowability_inspector.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_text_style_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_inline_style_declarations.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';

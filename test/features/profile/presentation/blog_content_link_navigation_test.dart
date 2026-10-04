@@ -21,7 +21,7 @@ import 'package:y300/features/profile/presentation/blog/blog_content_link_naviga
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 

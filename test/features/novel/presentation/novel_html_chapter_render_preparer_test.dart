@@ -9,7 +9,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/htm
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/presentation/rich_text/color/rich_text_color_contrast.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/css_author_color_parser.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 

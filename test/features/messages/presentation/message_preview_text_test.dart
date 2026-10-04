@@ -8,7 +8,7 @@ import 'package:y300/features/messages/presentation/widgets/message_preview_text
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../../test_support/localized_test_app.dart';
 

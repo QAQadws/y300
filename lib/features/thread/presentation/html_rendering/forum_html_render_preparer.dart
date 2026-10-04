@@ -7,7 +7,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_fragment_codec.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_image_deduplicator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_style_policy.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_color_adaptation_policy.dart';

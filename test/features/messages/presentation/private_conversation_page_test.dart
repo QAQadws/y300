@@ -10,7 +10,7 @@ import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_content_view.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 import 'package:y300/l10n/app_localizations.dart';
 

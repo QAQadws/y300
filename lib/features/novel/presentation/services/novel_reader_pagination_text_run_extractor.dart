@@ -3,7 +3,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_text_run.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_reader_preferences_provider.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/forum_html_text_style_resolver.dart';
 import 'package:y300/features/thread/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
