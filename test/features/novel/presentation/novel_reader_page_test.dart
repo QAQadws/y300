@@ -1783,8 +1783,7 @@ void main() {
   });
 
   testWidgets(
-    'phase 0 baseline: automatic surface fallback persists vertical mode '
-    '(stage 2 flips this contract)',
+    'explicit scroll mode choice persists across reader reconstruction',
     (tester) async {
       final repository = _FakeNovelRepository(
         preferences: NovelReaderPreferences.defaults().copyWith(
@@ -1797,15 +1796,15 @@ void main() {
       final surface = tester.widget<NovelReaderHtmlPagedSurface>(
         find.byType(NovelReaderHtmlPagedSurface),
       );
-      final savesBeforeFallback = repository.upsertPreferencesCallCount;
+      final savesBeforeChoice = repository.upsertPreferencesCallCount;
       expect(repository.preferences.flowMode, NovelReaderFlowMode.pagedLtr);
 
-      // Surface timer tests cover automatic delivery; this exercises the actual
-      // page callback through its display coordinator and preferences repository.
-      surface.onFallbackToVertical!();
+      // The surface exposes this callback only for an explicit user action.
+      // Exercise its page coordinator and durable preferences repository.
+      surface.onChooseScrollMode!();
       await tester.pumpAndSettle();
 
-      expect(repository.upsertPreferencesCallCount, savesBeforeFallback + 1);
+      expect(repository.upsertPreferencesCallCount, savesBeforeChoice + 1);
       expect(
         repository.latestPreferences?.flowMode,
         NovelReaderFlowMode.vertical,
@@ -1816,23 +1815,23 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(NovelReaderHtmlPagedSurface), findsNothing);
-    },
-  );
+      surface.onChooseScrollMode!();
+      await tester.pumpAndSettle();
+      expect(repository.upsertPreferencesCallCount, savesBeforeChoice + 1);
+      expect(repository.preferences.flowMode, NovelReaderFlowMode.vertical);
 
-  testWidgets(
-    'phase 0 baseline: retired paged fallback cannot save another chapter mode',
-    (tester) async {
-      final repository = _FakeNovelRepository.threeEpisodes(
-        preferences: NovelReaderPreferences.defaults().copyWith(
-          flowMode: NovelReaderFlowMode.pagedLtr,
-        ),
-      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
       await tester.pumpWidget(_buildReaderApp(repository: repository));
       await tester.pumpAndSettle();
-      final oldSurface = tester.widget<NovelReaderHtmlPagedSurface>(
-        find.byType(NovelReaderHtmlPagedSurface),
+
+      expect(repository.upsertPreferencesCallCount, savesBeforeChoice + 1);
+      expect(repository.preferences.flowMode, NovelReaderFlowMode.vertical);
+      expect(
+        find.byKey(const Key('novel-reader-html-document-view')),
+        findsOneWidget,
       );
-      final oldFallback = oldSurface.onFallbackToVertical!;
+      expect(find.byType(NovelReaderHtmlPagedSurface), findsNothing);
       final container = ProviderScope.containerOf(
         tester.element(find.byType(NovelReaderPage)),
         listen: false,
@@ -1841,35 +1840,153 @@ void main() {
         novelId: 'novel:49:100',
         episodeId: 'novel:49:100:5001',
       );
-      final controller = container.read(
-        novelReaderControllerProvider(args).notifier,
-      );
       expect(
-        await tester.runAsync(
-          () => controller.openEpisodeFromCatalog('novel:49:100:5002'),
-        ),
-        isTrue,
+        container
+            .read(novelReaderControllerProvider(args))
+            .value!
+            .currentEpisode
+            .episodeId,
+        surface.episode.episodeId,
       );
+    },
+  );
+
+  testWidgets('retired scroll mode choice cannot save another chapter mode', (
+    tester,
+  ) async {
+    final repository = _FakeNovelRepository.threeEpisodes(
+      preferences: NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+      ),
+    );
+    await tester.pumpWidget(_buildReaderApp(repository: repository));
+    await tester.pumpAndSettle();
+    final oldSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+      find.byType(NovelReaderHtmlPagedSurface),
+    );
+    final oldChoice = oldSurface.onChooseScrollMode!;
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NovelReaderPage)),
+      listen: false,
+    );
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final controller = container.read(
+      novelReaderControllerProvider(args).notifier,
+    );
+    expect(
+      await tester.runAsync(
+        () => controller.openEpisodeFromCatalog('novel:49:100:5002'),
+      ),
+      isTrue,
+    );
+    await tester.pumpAndSettle();
+    final currentSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+      find.byType(NovelReaderHtmlPagedSurface),
+    );
+    expect(currentSurface.episode.episodeId, 'novel:49:100:5002');
+    final savesBeforeLateCallback = repository.upsertPreferencesCallCount;
+
+    oldChoice();
+    await tester.pumpAndSettle();
+
+    expect(repository.upsertPreferencesCallCount, savesBeforeLateCallback);
+    expect(repository.preferences.flowMode, NovelReaderFlowMode.pagedLtr);
+    expect(
+      tester
+          .widget<NovelReaderHtmlPagedSurface>(
+            find.byType(NovelReaderHtmlPagedSurface),
+          )
+          .episode
+          .episodeId,
+      'novel:49:100:5002',
+    );
+  });
+
+  testWidgets(
+    'old scroll mode choices are inert after same chapter mode and layout changes',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+        ),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
       await tester.pumpAndSettle();
-      final currentSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+      final oldLtrSurface = tester.widget<NovelReaderHtmlPagedSurface>(
         find.byType(NovelReaderHtmlPagedSurface),
       );
-      expect(currentSurface.episode.episodeId, 'novel:49:100:5002');
-      final savesBeforeLateCallback = repository.upsertPreferencesCallCount;
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(NovelReaderPage)),
+        listen: false,
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final controller = container.read(provider.notifier);
+      final initial = container.read(provider).value!;
+      final chapterLoads = List<String>.of(repository.chapterLoadEpisodeIds);
+      final rtl = initial.preferences.copyWith(
+        flowMode: NovelReaderFlowMode.pagedRtl,
+      );
+      await controller.commitPreferences(rtl);
+      final savesAfterModeChange = repository.upsertPreferencesCallCount;
+      final progressAfterModeChange = container
+          .read(provider)
+          .value!
+          .progressSnapshot;
 
-      oldFallback();
+      // The provider changed before the page rebuilt; the captured choice must
+      // inspect that live surface rather than the widget still on screen.
+      oldLtrSurface.onChooseScrollMode!();
+      expect(
+        container.read(provider).value!.progressSnapshot,
+        progressAfterModeChange,
+      );
       await tester.pumpAndSettle();
 
-      expect(repository.upsertPreferencesCallCount, savesBeforeLateCallback);
-      expect(repository.preferences.flowMode, NovelReaderFlowMode.pagedLtr);
+      expect(repository.upsertPreferencesCallCount, savesAfterModeChange);
+      expect(repository.preferences, rtl);
+      expect(container.read(provider).value!.preferences, rtl);
+      final oldRtlSurface = tester.widget<NovelReaderHtmlPagedSurface>(
+        find.byType(NovelReaderHtmlPagedSurface),
+      );
+      expect(oldRtlSurface.preferences, rtl);
+      final relayout = rtl.copyWith(fontSize: rtl.fontSize + 2);
+      await controller.commitPreferences(relayout);
+      final savesAfterLayoutChange = repository.upsertPreferencesCallCount;
+      final progressAfterLayoutChange = container
+          .read(provider)
+          .value!
+          .progressSnapshot;
+
+      oldRtlSurface.onChooseScrollMode!();
+      expect(
+        container.read(provider).value!.progressSnapshot,
+        progressAfterLayoutChange,
+      );
+      await tester.pumpAndSettle();
+
+      expect(repository.upsertPreferencesCallCount, savesAfterLayoutChange);
+      expect(repository.preferences, relayout);
+      final current = container.read(provider).value!;
+      expect(current.preferences, relayout);
+      expect(
+        current.currentEpisode.episodeId,
+        initial.currentEpisode.episodeId,
+      );
+      expect(repository.chapterLoadEpisodeIds, chapterLoads);
       expect(
         tester
             .widget<NovelReaderHtmlPagedSurface>(
               find.byType(NovelReaderHtmlPagedSurface),
             )
-            .episode
-            .episodeId,
-        'novel:49:100:5002',
+            .preferences,
+        relayout,
       );
     },
   );

@@ -2281,6 +2281,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelPagedLayoutFailed => '分页布局失败';
 
   @override
+  String get novelPagedWaitingForPage => '正在准备目标页…';
+
+  @override
+  String get novelPagedWaitTimedOut => '目标页尚未准备好，请重试';
+
+  @override
+  String get novelPagedBackgroundPaused => '后续分页已暂停，当前页面仍可阅读';
+
+  @override
   String get novelReturnToScroll => '回到滚动';
 
   @override
@@ -7638,6 +7647,15 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelPagedLayoutFailed => '分頁版面失敗';
+
+  @override
+  String get novelPagedWaitingForPage => '正在準備目標頁…';
+
+  @override
+  String get novelPagedWaitTimedOut => '目標頁尚未準備好，請重試';
+
+  @override
+  String get novelPagedBackgroundPaused => '後續分頁已暫停，目前頁面仍可閱讀';
 
   @override
   String get novelReturnToScroll => '回到滾動';

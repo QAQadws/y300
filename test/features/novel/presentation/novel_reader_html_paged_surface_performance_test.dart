@@ -9,9 +9,11 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
@@ -20,6 +22,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
+import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
@@ -188,229 +192,443 @@ void main() {
     }
   });
 
-  testWidgets('performance policy falls back through the surface callback', (
+  testWidgets('target timeout is recoverable and retry rejects old results', (
     tester,
   ) async {
-    final preferences = NovelReaderPreferences.defaults().copyWith(
-      flowMode: NovelReaderFlowMode.pagedLtr,
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(coordinator);
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('novel-reader-pagination-failure')),
+      findsOneWidget,
     );
-    final theme = ThemeData.light();
-    final palette = const NovelReaderThemeResolver().resolve(
-      preferences: preferences,
-      theme: theme,
+    expect(host.scrollChoices, 0);
+    expect(coordinator.cancelPendingCount, 1);
+    expect(host.positions, isEmpty);
+    await tester.tap(find.byKey(const Key('novel-reader-pagination-retry')));
+    await tester.pump();
+    await tester.pump();
+    expect(coordinator.attempts, hasLength(2));
+    expect(
+      find.byKey(const Key('novel-reader-pagination-failure')),
+      findsNothing,
     );
-    final typography = const NovelReaderTypographyResolver().resolve(
-      preferences: preferences,
-      theme: theme,
-      palette: palette,
+    coordinator.emit(0, pageCount: 3, isComplete: true);
+    coordinator.fail(0);
+    await tester.pump();
+    expect(host.positions, isEmpty);
+    coordinator.emit(1, pageCount: 3, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const Key('novel-reader-paged-page-view')),
+      findsOneWidget,
     );
-    final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
-      palette,
-    );
-    var fallbackCount = 0;
-
-    await tester.pumpWidget(
-      LocalizedTestApp(
-        theme: theme,
-        home: Scaffold(
-          body: NovelReaderHtmlPagedSurface(
-            rawHtml: '<p>${List<String>.filled(80, '自动性能降级验证正文。').join()}</p>',
-            episode: _episode,
-            preferences: preferences,
-            typography: typography,
-            theme: htmlTheme,
-            imageReferer: 'https://bbs.yamibo.com/',
-            progressSnapshot: const NovelReaderProgressSnapshot(
-              novelId: 'performance-novel',
-              episodeId: 'performance-episode',
-              flowMode: NovelReaderFlowMode.pagedLtr,
-              scrollOffset: 0,
-              pageIndex: 0,
-              progressPercent: 0,
-            ),
-            performancePolicy: const NovelReaderPaginationPerformancePolicy(
-              enforceBudgets: true,
-              plainTextBudget: NovelReaderPaginationPerformanceBudget(
-                firstPage: Duration.zero,
-                fullPlan: Duration.zero,
-              ),
-              mixedContentBudget: NovelReaderPaginationPerformanceBudget(
-                firstPage: Duration.zero,
-                fullPlan: Duration.zero,
-              ),
-            ),
-            onFallbackToVertical: () {
-              fallbackCount += 1;
-            },
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // Work slices yield to the event queue without scheduling a UI frame.
-    // Advance that queue before asserting the timeout's post-frame callback.
-    await tester.pump(const Duration(milliseconds: 16));
-    await tester.pumpAndSettle();
-    expect(fallbackCount, 1);
+    expect(host.positions.last.pageIndex, 0);
+    expect(host.scrollChoices, 0);
+    expect(coordinator.clearCount, 0);
+    final reports = host.positions.length;
+    await tester.pumpWidget(const SizedBox.shrink());
+    coordinator.emit(1, pageCount: 3, isComplete: true);
+    coordinator.fail(1);
+    await tester.pump();
+    expect(host.positions, hasLength(reports));
+    expect(host.scrollChoices, 0);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('first-page timeout falls back when a plan emits nothing', (
+  testWidgets('only the explicit scroll button requests another mode', (
     tester,
   ) async {
-    final preferences = NovelReaderPreferences.defaults().copyWith(
-      flowMode: NovelReaderFlowMode.pagedLtr,
-    );
-    final theme = ThemeData.light();
-    final palette = const NovelReaderThemeResolver().resolve(
-      preferences: preferences,
-      theme: theme,
-    );
-    final typography = const NovelReaderTypographyResolver().resolve(
-      preferences: preferences,
-      theme: theme,
-      palette: palette,
-    );
-    final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
-      palette,
-    );
-    final coordinator = _StalledPaginationCoordinator();
-    var fallbackCount = 0;
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(coordinator);
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.pump();
+    expect(host.scrollChoices, 0);
+    await tester.tap(find.byKey(const Key('novel-reader-pagination-fallback')));
+    await tester.pump();
+    expect(host.scrollChoices, 1);
+  });
 
-    await tester.pumpWidget(
-      LocalizedTestApp(
-        theme: theme,
-        home: Scaffold(
-          body: NovelReaderHtmlPagedSurface(
-            rawHtml: '<p>不会产生分页事件的正文</p>',
-            episode: _episode,
-            preferences: preferences,
-            typography: typography,
-            theme: htmlTheme,
-            imageReferer: 'https://bbs.yamibo.com/',
-            progressSnapshot: const NovelReaderProgressSnapshot(
-              novelId: 'performance-novel',
-              episodeId: 'performance-episode',
-              flowMode: NovelReaderFlowMode.pagedLtr,
-              scrollOffset: 0,
-              pageIndex: 0,
-              progressPercent: 0,
-            ),
-            coordinatorBuilder:
-                ({
-                  required BuildContext context,
-                  required ForumHtmlThemeContext theme,
-                  required ForumHtmlReaderPreferences preferences,
-                  required String sourceId,
-                  required String? threadId,
-                  required String? imageCacheOwnerId,
-                  required String? imageReferer,
-                }) => coordinator,
-            performancePolicy: const NovelReaderPaginationPerformancePolicy(
-              enforceBudgets: true,
-              plainTextBudget: NovelReaderPaginationPerformanceBudget(
-                firstPage: Duration(milliseconds: 5),
-                fullPlan: Duration(milliseconds: 20),
-              ),
-              mixedContentBudget: NovelReaderPaginationPerformanceBudget(
-                firstPage: Duration(milliseconds: 5),
-                fullPlan: Duration(milliseconds: 20),
-              ),
-            ),
-            onFallbackToVertical: () {
-              fallbackCount += 1;
-            },
+  testWidgets('preparation retry does not consume a late retired result', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator();
+    final preparation = _GatedPreparationService();
+    final host = _BudgetSurfaceHost(
+      coordinator,
+      preparationService: preparation,
+    );
+    final chapter = await const DefaultNovelReaderHtmlPreparationService()
+        .prepare(
+          rawHtml: _budgetRawHtml,
+          episode: _episode,
+          preferences: const NovelHtmlReaderPreferencesAdapter().map(
+            host.preferences,
           ),
-        ),
-      ),
+          theme: host.htmlTheme,
+          sourceId: _episode.episodeId,
+          threadId: _episode.sourceTid,
+          imageCacheOwnerId: _episode.sourceTid,
+        );
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    expect(preparation.requests, hasLength(1));
+    expect(coordinator.attempts, isEmpty);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('novel-reader-pagination-failure')),
+      findsOneWidget,
     );
+    await tester.tap(find.byKey(const Key('novel-reader-pagination-retry')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 10));
-    await tester.pump();
+    expect(preparation.requests, hasLength(2));
 
-    expect(fallbackCount, 1);
+    preparation.requests.first.complete(chapter);
+    await tester.pump();
+    await tester.pump();
+    expect(coordinator.attempts, isEmpty);
+    expect(host.positions, isEmpty);
+    expect(
+      find.byKey(const Key('novel-reader-paged-preparing')),
+      findsOneWidget,
+    );
+    preparation.requests.last.complete(chapter);
+    await tester.pump();
+    await tester.pump();
+    expect(coordinator.attempts, hasLength(1));
+    coordinator.emit(0, pageCount: 3, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    expect(host.positions.last.pageIndex, 0);
+    expect(host.scrollChoices, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'an uncovered restore target times out despite earlier page events',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(
+        coordinator,
+        targetPageWait: const Duration(milliseconds: 50),
+      );
+      host.snapshot = host.snapshot.copyWith(
+        pageIndex: 99,
+        paginationKey: 'previous-layout',
+        anchorNodeId: 'paragraph-2',
+        anchorFormatVersion: 1,
+        anchorTextIdentity: NovelReaderAnchorFormat.textIdentity('尾页'),
+        isProgressPercentValid: false,
+      );
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 30));
+      coordinator.emit(0, pageCount: 2);
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-paged-restoring-position')),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(milliseconds: 30));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-pagination-failure')),
+        findsOneWidget,
+      );
+      expect(host.positions, isEmpty);
+      expect(host.scrollChoices, 0);
+      await tester.tap(find.byKey(const Key('novel-reader-pagination-retry')));
+      await tester.pump();
+      coordinator.emit(1, pageCount: 3, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      expect(host.positions.last.pageIndex, 2);
+      expect(host.positions.last.isReadOnlyCompatibilityRestore, isFalse);
+    },
+  );
+
+  testWidgets('a changed navigation request receives its own waiting budget', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(coordinator);
+    host.navigationRequest = _budgetNavigation(1, 1);
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    await tester.pump(const Duration(milliseconds: 30));
+    host.navigationRequest = _budgetNavigation(2, 2);
+    await tester.pumpWidget(host.build());
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(
+      find.byKey(const Key('novel-reader-pagination-failure')),
+      findsNothing,
+    );
     expect(coordinator.cancelPendingCount, 0);
+    await tester.pump(const Duration(milliseconds: 30));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('novel-reader-pagination-failure')),
+      findsOneWidget,
+    );
+    expect(coordinator.cancelPendingCount, 1);
+    expect(host.scrollChoices, 0);
   });
 
-  testWidgets('full-plan timeout falls back after a partial page', (
+  testWidgets(
+    'a pending navigation reaches its target without replacing the readable page',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(
+        coordinator,
+        targetPageWait: const Duration(seconds: 1),
+        backgroundIdle: const Duration(seconds: 1),
+      );
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 2);
+      await tester.pump();
+      await tester.pump();
+      expect(host.navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+      final pageElement = tester.element(pageFinder);
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(1, 0.001),
+      );
+
+      host.navigationRequest = _budgetNavigation(1, 2);
+      await tester.pumpWidget(host.build());
+      await tester.pump();
+      expect(tester.element(pageFinder), same(pageElement));
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(1, 0.001),
+      );
+      expect(
+        find.byKey(const Key('novel-reader-pagination-paused')),
+        findsOneWidget,
+      );
+
+      coordinator.emit(0, pageCount: 3);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(tester.element(pageFinder), same(pageElement));
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(2, 0.001),
+      );
+      expect(host.positions.last.pageIndex, 2);
+      expect(host.positions.last.isReadOnlyCompatibilityRestore, isFalse);
+      expect(host.positions.last.isPageCountFinal, isFalse);
+      expect(
+        find.byKey(const Key('novel-reader-pagination-paused')),
+        findsNothing,
+      );
+      expect(host.scrollChoices, 0);
+      expect(coordinator.cancelPendingCount, 0);
+    },
+  );
+
+  for (final stop in ['timeout', 'error']) {
+    testWidgets('background $stop retains the visible page through retry', (
+      tester,
+    ) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(
+        coordinator,
+        backgroundIdle: const Duration(seconds: 1),
+      );
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 2);
+      await tester.pump();
+      await tester.pump();
+      expect(host.navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+      final pageElement = tester.element(pageFinder);
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(1, 0.001),
+      );
+      final reports = host.positions.length;
+      if (stop == 'timeout') {
+        await tester.pump(const Duration(milliseconds: 1100));
+      } else {
+        coordinator.fail(0);
+      }
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-pagination-paused')),
+        findsOneWidget,
+      );
+      expect(tester.element(pageFinder), same(pageElement));
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(1, 0.001),
+      );
+      expect(host.positions, hasLength(reports));
+      expect(host.scrollChoices, 0);
+      await tester.tap(find.byKey(const Key('novel-reader-pagination-retry')));
+      await tester.pump();
+      expect(coordinator.attempts, hasLength(2));
+      expect(tester.element(pageFinder), same(pageElement));
+      coordinator.emit(1, pageCount: 1);
+      await tester.pump();
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(1, 0.001),
+      );
+      coordinator.emit(1, pageCount: 3, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-pagination-paused')),
+        findsNothing,
+      );
+      expect(tester.element(pageFinder), same(pageElement));
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(1, 0.001),
+      );
+      expect(host.positions.last.pageIndex, 1);
+      expect(coordinator.clearCount, 0);
+      expect(host.scrollChoices, 0);
+    });
+  }
+
+  testWidgets('background idle resets only when another stable page arrives', (
     tester,
   ) async {
-    final preferences = NovelReaderPreferences.defaults().copyWith(
-      flowMode: NovelReaderFlowMode.pagedLtr,
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(
+      coordinator,
+      backgroundIdle: const Duration(milliseconds: 50),
     );
-    final theme = ThemeData.light();
-    final palette = const NovelReaderThemeResolver().resolve(
-      preferences: preferences,
-      theme: theme,
-    );
-    final typography = const NovelReaderTypographyResolver().resolve(
-      preferences: preferences,
-      theme: theme,
-      palette: palette,
-    );
-    final htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(
-      palette,
-    );
-    final coordinator = _PartialThenStalledPaginationCoordinator();
-    var fallbackCount = 0;
-
-    await tester.pumpWidget(
-      LocalizedTestApp(
-        theme: theme,
-        home: Scaffold(
-          body: NovelReaderHtmlPagedSurface(
-            rawHtml: '<p>只发布首个稳定页</p>',
-            episode: _episode,
-            preferences: preferences,
-            typography: typography,
-            theme: htmlTheme,
-            imageReferer: 'https://bbs.yamibo.com/',
-            progressSnapshot: const NovelReaderProgressSnapshot(
-              novelId: 'performance-novel',
-              episodeId: 'performance-episode',
-              flowMode: NovelReaderFlowMode.pagedLtr,
-              scrollOffset: 0,
-              pageIndex: 0,
-              progressPercent: 0,
-            ),
-            coordinatorBuilder:
-                ({
-                  required BuildContext context,
-                  required ForumHtmlThemeContext theme,
-                  required ForumHtmlReaderPreferences preferences,
-                  required String sourceId,
-                  required String? threadId,
-                  required String? imageCacheOwnerId,
-                  required String? imageReferer,
-                }) => coordinator,
-            performancePolicy: const NovelReaderPaginationPerformancePolicy(
-              enforceBudgets: true,
-              plainTextBudget: NovelReaderPaginationPerformanceBudget(
-                firstPage: Duration(seconds: 1),
-                fullPlan: Duration(milliseconds: 100),
-              ),
-              mixedContentBudget: NovelReaderPaginationPerformanceBudget(
-                firstPage: Duration(seconds: 1),
-                fullPlan: Duration(milliseconds: 100),
-              ),
-            ),
-            onFallbackToVertical: () {
-              fallbackCount += 1;
-            },
-          ),
-        ),
-      ),
-    );
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 1);
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 30));
+    coordinator.emit(0, pageCount: 2);
     await tester.pump();
-
-    expect(find.byKey(const Key('novel-reader-paged-surface')), findsOneWidget);
-    expect(fallbackCount, 0);
-
-    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(
+      find.byKey(const Key('novel-reader-pagination-paused')),
+      findsNothing,
+    );
+    coordinator.emit(0, pageCount: 2, measurementCount: 123);
     await tester.pump();
-    expect(fallbackCount, 1);
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('novel-reader-pagination-paused')),
+      findsOneWidget,
+    );
+    expect(host.scrollChoices, 0);
   });
+
+  testWidgets('active retry replay can exceed the background idle duration', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(
+      coordinator,
+      backgroundIdle: const Duration(milliseconds: 50),
+    );
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 3);
+    await tester.pump();
+    await tester.pump();
+    final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+    final pageElement = tester.element(pageFinder);
+    coordinator.fail(0);
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('novel-reader-pagination-retry')));
+    await tester.pump();
+    for (var pageCount = 1; pageCount <= 3; pageCount++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      coordinator.emit(1, pageCount: pageCount, isComplete: pageCount == 3);
+      await tester.pump();
+      await tester.pump();
+      expect(tester.element(pageFinder), same(pageElement));
+      expect(
+        tester.widget<PageView>(pageFinder).controller!.page,
+        closeTo(0, 0.001),
+      );
+      expect(
+        find.byKey(const Key('novel-reader-pagination-paused')),
+        findsNothing,
+      );
+    }
+    expect(coordinator.attempts, hasLength(2));
+    expect(coordinator.cancelPendingCount, 2);
+    expect(host.positions.last.isPageCountFinal, isTrue);
+    expect(host.scrollChoices, 0);
+  });
+
+  testWidgets('retry cannot replace a readable prefix with different HTML', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(coordinator);
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 2);
+    await tester.pump();
+    await tester.pump();
+    final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+    final pageElement = tester.element(pageFinder);
+    coordinator.fail(0);
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('novel-reader-pagination-retry')));
+    await tester.pump();
+    coordinator.emit(1, pageCount: 3, isComplete: true, replaceFirstHtml: true);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const Key('novel-reader-pagination-paused')),
+      findsOneWidget,
+    );
+    expect(tester.element(pageFinder), same(pageElement));
+    expect(find.text('被替换的正文', findRichText: true), findsNothing);
+    expect(host.scrollChoices, 0);
+  });
+
+  testWidgets(
+    'disabled budgets keep an active request waiting without changing modes',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      await tester.pump(const Duration(seconds: 10));
+      expect(
+        find.byKey(const Key('novel-reader-pagination-failure')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('novel-reader-paged-layout-loading')),
+        findsOneWidget,
+      );
+      expect(coordinator.cancelPendingCount, 0);
+      expect(host.scrollChoices, 0);
+    },
+  );
 
   testWidgets(
     'incremental restore waits for the saved anchor before reporting progress',
@@ -646,40 +864,163 @@ const _episode = NovelEpisodeItem(
   orderIndex: 0,
 );
 
-final class _StalledPaginationCoordinator
-    implements NovelReaderPaginationCoordinator {
-  int cancelPendingCount = 0;
+const _budgetPageTexts = <String>['第一页', '恢复目标页', '尾页'];
+const _budgetRawHtml = '<p>第一页</p><p>恢复目标页</p><p>尾页</p>';
 
-  @override
-  Future<NovelReaderPaginationPlan> paginate({
-    required NovelReaderPreparedChapter chapter,
-    required NovelReaderPaginationKey key,
-  }) => Completer<NovelReaderPaginationPlan>().future;
+NovelReaderAnchorNavigationRequest _budgetNavigation(
+  int requestId,
+  int index,
+) => NovelReaderAnchorNavigationRequest(
+  requestId: requestId,
+  anchor: NovelReaderTextAnchor(
+    episodeId: _episode.episodeId,
+    nodeId: 'paragraph-$index',
+    formatVersion: 1,
+    textIdentity: NovelReaderAnchorFormat.textIdentity(_budgetPageTexts[index]),
+  ),
+);
 
-  @override
-  Stream<NovelReaderPaginationProgress> paginateIncrementally({
-    required NovelReaderPreparedChapter chapter,
-    required NovelReaderPaginationKey key,
-  }) => const Stream<NovelReaderPaginationProgress>.empty();
-
-  @override
-  bool isCached(NovelReaderPaginationKey key) => false;
-
-  @override
-  void cancelPending() {
-    cancelPendingCount += 1;
-  }
-
-  @override
-  void clear() {}
-
-  @override
-  void clearEpisode(String episodeId) {}
+Future<void> _pumpBudgetHost(
+  WidgetTester tester,
+  _BudgetSurfaceHost host,
+) async {
+  await tester.pumpWidget(host.build());
+  await tester.pump();
+  await tester.pump();
 }
 
-final class _PartialThenStalledPaginationCoordinator
+void _disposeBudgetHost(
+  WidgetTester tester,
+  _BudgetPaginationCoordinator coordinator,
+) {
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await coordinator.close();
+  });
+}
+
+final class _BudgetSurfaceHost {
+  _BudgetSurfaceHost(
+    this.coordinator, {
+    this.targetPageWait = const Duration(milliseconds: 50),
+    this.backgroundIdle = const Duration(milliseconds: 100),
+    this.enforceBudgets = true,
+    this.preparationService,
+  }) {
+    theme = ThemeData.light();
+    final palette = const NovelReaderThemeResolver().resolve(
+      preferences: preferences,
+      theme: theme,
+    );
+    typography = const NovelReaderTypographyResolver().resolve(
+      preferences: preferences,
+      theme: theme,
+      palette: palette,
+    );
+    htmlTheme = const NovelForumHtmlRenderThemeFactory().fromPalette(palette);
+    coordinatorBuilder =
+        ({
+          required BuildContext context,
+          required ForumHtmlThemeContext theme,
+          required ForumHtmlReaderPreferences preferences,
+          required String sourceId,
+          required String? threadId,
+          required String? imageCacheOwnerId,
+          required String? imageReferer,
+        }) => coordinator;
+  }
+
+  final _BudgetPaginationCoordinator coordinator;
+  final Duration targetPageWait;
+  final Duration backgroundIdle;
+  final bool enforceBudgets;
+  final NovelReaderHtmlPreparationService? preparationService;
+  final preferences = NovelReaderPreferences.defaults().copyWith(
+    flowMode: NovelReaderFlowMode.pagedLtr,
+  );
+  late final ThemeData theme;
+  late final NovelReaderTypography typography;
+  late final ForumHtmlThemeContext htmlTheme;
+  late final NovelReaderPaginationCoordinatorBuilder coordinatorBuilder;
+  final positions = <NovelReaderPaginationPosition>[];
+  final navigation = NovelReaderPagedNavigationController();
+  int scrollChoices = 0;
+  NovelReaderAnchorNavigationRequest? navigationRequest;
+  NovelReaderProgressSnapshot snapshot = const NovelReaderProgressSnapshot(
+    novelId: 'performance-novel',
+    episodeId: 'performance-episode',
+    flowMode: NovelReaderFlowMode.pagedLtr,
+    scrollOffset: 0,
+    pageIndex: 0,
+    progressPercent: 0,
+  );
+
+  Widget build() => LocalizedTestApp(
+    theme: theme,
+    home: Scaffold(
+      body: NovelReaderHtmlPagedSurface(
+        rawHtml: _budgetRawHtml,
+        episode: _episode,
+        preferences: preferences,
+        typography: typography,
+        theme: htmlTheme,
+        imageReferer: 'https://bbs.yamibo.com/',
+        progressSnapshot: snapshot,
+        navigationRequest: navigationRequest,
+        navigationController: navigation,
+        coordinatorBuilder: coordinatorBuilder,
+        preparationService: preparationService,
+        performancePolicy: NovelReaderPaginationPerformancePolicy(
+          targetPageWait: targetPageWait,
+          backgroundIdle: backgroundIdle,
+          enforceBudgets: enforceBudgets,
+        ),
+        onPositionChanged: positions.add,
+        onChooseScrollMode: () {
+          scrollChoices += 1;
+        },
+      ),
+    ),
+  );
+}
+
+final class _GatedPreparationService
+    implements NovelReaderHtmlPreparationService {
+  final requests = <Completer<NovelReaderPreparedChapter>>[];
+
+  @override
+  int get legacyMarkupNormalizerRevision => 1;
+
+  @override
+  Future<NovelReaderPreparedChapter> prepare({
+    required String rawHtml,
+    required NovelEpisodeItem episode,
+    required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
+    required String sourceId,
+    required String? threadId,
+    required String? imageCacheOwnerId,
+    NovelReaderDocument? semanticDocument,
+  }) {
+    final request = Completer<NovelReaderPreparedChapter>();
+    requests.add(request);
+    return request.future;
+  }
+}
+
+final class _BudgetPaginationAttempt {
+  _BudgetPaginationAttempt(this.chapter, this.key);
+
+  final NovelReaderPreparedChapter chapter;
+  final NovelReaderPaginationKey key;
+  final controller = StreamController<NovelReaderPaginationProgress>();
+}
+
+final class _BudgetPaginationCoordinator
     implements NovelReaderPaginationCoordinator {
-  StreamController<NovelReaderPaginationProgress>? _controller;
+  final attempts = <_BudgetPaginationAttempt>[];
+  int cancelPendingCount = 0;
+  int clearCount = 0;
 
   @override
   Future<NovelReaderPaginationPlan> paginate({
@@ -692,60 +1033,96 @@ final class _PartialThenStalledPaginationCoordinator
     required NovelReaderPreparedChapter chapter,
     required NovelReaderPaginationKey key,
   }) {
-    late final StreamController<NovelReaderPaginationProgress> controller;
-    controller = StreamController<NovelReaderPaginationProgress>(
-      onListen: () {
-        const start = NovelReaderTextAnchor(
-          episodeId: 'performance-episode',
-          nodeId: 'paragraph-0',
-        );
-        const end = NovelReaderTextAnchor(
-          episodeId: 'performance-episode',
-          nodeId: 'paragraph-0',
-          textOffset: 8,
-        );
-        controller.add(
-          NovelReaderPaginationProgress(
-            plan: NovelReaderPaginationPlan(
-              key: key,
-              episodeId: chapter.episodeId,
-              pages: const <NovelReaderPageFragment>[
-                NovelReaderPageFragment(
-                  index: 0,
-                  html: '<p>只发布首个稳定页</p>',
-                  startAnchor: start,
-                  endAnchor: end,
-                  imageIndices: <int>[],
-                  usedHeight: 100,
-                  availableHeight: 600,
-                ),
-              ],
-              atomCount: 2,
-            ),
-            isComplete: false,
-            processedAtomCount: 1,
-            totalAtomCount: 2,
-          ),
-        );
-      },
+    final attempt = _BudgetPaginationAttempt(chapter, key);
+    attempts.add(attempt);
+    return attempt.controller.stream;
+  }
+
+  void emit(
+    int attemptIndex, {
+    required int pageCount,
+    bool isComplete = false,
+    int measurementCount = 0,
+    bool replaceFirstHtml = false,
+  }) {
+    final attempt = attempts[attemptIndex];
+    final pages = <NovelReaderPageFragment>[
+      for (var index = 0; index < pageCount; index++)
+        _page(attempt, index, replaceFirstHtml: replaceFirstHtml),
+    ];
+    attempt.controller.add(
+      NovelReaderPaginationProgress(
+        plan: NovelReaderPaginationPlan(
+          key: attempt.key,
+          episodeId: attempt.chapter.episodeId,
+          pages: pages,
+          atomCount: 3,
+          measurementCount: measurementCount,
+        ),
+        isComplete: isComplete,
+        processedAtomCount: pageCount,
+        totalAtomCount: 3,
+      ),
     );
-    _controller = controller;
-    return controller.stream;
+  }
+
+  NovelReaderPageFragment _page(
+    _BudgetPaginationAttempt attempt,
+    int index, {
+    required bool replaceFirstHtml,
+  }) {
+    final text = _budgetPageTexts[index];
+    final start = NovelReaderTextAnchor(
+      episodeId: attempt.chapter.episodeId,
+      nodeId: 'paragraph-$index',
+      formatVersion: 1,
+      textIdentity: NovelReaderAnchorFormat.textIdentity(text),
+    );
+    final end = start.copyWith(textOffset: text.runes.length);
+    return NovelReaderPageFragment(
+      index: index,
+      html: replaceFirstHtml && index == 0 ? '<p>被替换的正文</p>' : '<p>$text</p>',
+      startAnchor: start,
+      endAnchor: end,
+      anchorRanges: [NovelReaderPageAnchorRange(start: start, end: end)],
+      imageIndices: const [],
+      usedHeight: 80,
+      availableHeight: 600,
+    );
+  }
+
+  void fail(int attemptIndex) {
+    attempts[attemptIndex].controller.addError(
+      StateError('controlled pagination failure'),
+    );
+  }
+
+  Future<void> close() async {
+    for (final attempt in attempts) {
+      await attempt.controller.close();
+    }
   }
 
   @override
   bool isCached(NovelReaderPaginationKey key) => false;
 
+  // Keep the old source alive so tests can release a success/error after the
+  // surface has retired that computation. The surface owns its subscription.
   @override
   void cancelPending() {
-    unawaited(_controller?.close());
+    cancelPendingCount += 1;
   }
 
   @override
-  void clear() => cancelPending();
+  void clear() {
+    clearCount += 1;
+    cancelPending();
+  }
 
   @override
-  void clearEpisode(String episodeId) => cancelPending();
+  void clearEpisode(String episodeId) {
+    cancelPending();
+  }
 }
 
 final class _ControlledRestorePaginationCoordinator

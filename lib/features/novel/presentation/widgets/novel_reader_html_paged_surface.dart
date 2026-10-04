@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
@@ -100,7 +101,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.onOpenImage,
     this.onImageFallback,
     this.onContentInteraction,
-    this.onFallbackToVertical,
+    this.onChooseScrollMode,
     this.onPositionChanged,
     this.onContentReady,
     this.onContentTerminal,
@@ -149,7 +150,9 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final void Function(ThreadImageOpenRequest request)? onOpenImage;
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final VoidCallback? onContentInteraction;
-  final VoidCallback? onFallbackToVertical;
+
+  /// Invoked only by the reader explicitly choosing the scroll-mode button.
+  final VoidCallback? onChooseScrollMode;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final VoidCallback? onContentReady;
   final VoidCallback? onContentTerminal;
@@ -188,6 +191,17 @@ class _NovelReaderHtmlPagedSurfaceState
   NovelReaderPaginationCoordinator? _coordinator;
   Object? _coordinatorSignature;
   Stream<NovelReaderPaginationProgress>? _planStream;
+  StreamSubscription<NovelReaderPaginationProgress>? _planSubscription;
+  NovelReaderPaginationProgress? _latestProgress;
+  NovelReaderPaginationPlan? _retryPrefix;
+  int _attemptPublishedPageCount = 0;
+  Object? _requestError;
+  int _requestGeneration = 0;
+  bool _hasReadablePage = false;
+  bool _targetReady = false;
+  int _displayInitialPage = 0;
+  bool _displayRestoreReadOnly = false;
+  NovelReaderPaginationPosition? _visiblePosition;
   NovelReaderPaginationKey? _planKey;
   NovelReaderPaginationCache? _ownedCache;
   NovelReaderPaginationMeasureCache? _ownedMeasureCache;
@@ -203,9 +217,8 @@ class _NovelReaderHtmlPagedSurfaceState
   Duration? _firstPageDuration;
   Duration? _firstPublishedPageDuration;
   Duration? _firstVisibleFrameDuration;
-  String? _performanceFallbackKey;
-  Timer? _firstPageBudgetTimer;
-  Timer? _fullPlanBudgetTimer;
+  Timer? _targetWaitTimer;
+  Timer? _backgroundIdleTimer;
   bool _planCompleted = false;
   int _cancelledPlanCount = 0;
   int? _appliedChapterEntryRequestId;
@@ -222,6 +235,26 @@ class _NovelReaderHtmlPagedSurfaceState
   void didUpdateWidget(covariant NovelReaderHtmlPagedSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     _ensurePreparationFuture();
+    if (oldWidget.performancePolicy != widget.performancePolicy) {
+      _cancelPerformanceTimers();
+      if (_requestError == null) {
+        if (_targetReady) {
+          _ensureBackgroundIdleTimer();
+        } else {
+          _startTargetWaitTimer();
+        }
+      }
+    }
+    if (_navigationIdentity(oldWidget) != _navigationIdentity(widget)) {
+      _targetReady = false;
+      _backgroundIdleTimer?.cancel();
+      _backgroundIdleTimer = null;
+      if (_requestError != null && _planKey != null) {
+        _retryPlan();
+      } else {
+        _startTargetWaitTimer();
+      }
+    }
   }
 
   @override
@@ -291,19 +324,30 @@ class _NovelReaderHtmlPagedSurfaceState
             builder: (context, snapshot) {
               final prepared = snapshot.data;
               if (prepared == null) {
-                if (snapshot.hasError) {
+                if (_requestError != null || snapshot.hasError) {
+                  _cancelPerformanceTimers();
                   _scheduleContentTerminal((
                     'preparation-error',
                     _prepareSignature,
                   ));
                   return _NovelReaderPaginationFailureView(
-                    error: snapshot.error!,
-                    onRetry: _retryPreparation,
-                    onFallbackToVertical: widget.onFallbackToVertical,
+                    error: _requestError ?? snapshot.error!,
+                    onRetry: _guardAction(_retryPreparation),
+                    onChooseScrollMode: _guardAction(widget.onChooseScrollMode),
                   );
                 }
-                return const SizedBox.expand(
-                  key: Key('novel-reader-paged-preparing'),
+                return _waitingView('novel-reader-paged-preparing');
+              }
+
+              if (_requestError != null && _planKey == null) {
+                _scheduleContentTerminal((
+                  'preparation-wait',
+                  _prepareSignature,
+                ));
+                return _NovelReaderPaginationFailureView(
+                  error: _requestError!,
+                  onRetry: _guardAction(_retryPreparation),
+                  onChooseScrollMode: _guardAction(widget.onChooseScrollMode),
                 );
               }
 
@@ -332,39 +376,48 @@ class _NovelReaderHtmlPagedSurfaceState
                   bottomChromeInset,
                 ),
               );
-              final planStream = _ensurePlanStream(
+              _ensurePlanStream(
                 context: context,
                 prepared: prepared,
                 key: key,
                 htmlPreferences: htmlPreferences,
               );
-              return StreamBuilder<NovelReaderPaginationProgress>(
-                key: ValueKey<NovelReaderPaginationKey>(key),
-                stream: planStream,
-                builder: (context, planSnapshot) {
-                  final progress = planSnapshot.data;
+              return Builder(
+                builder: (context) {
+                  final progress = _latestProgress;
                   final plan = progress?.plan;
                   if (plan == null) {
-                    if (planSnapshot.hasError) {
+                    if (_requestError != null) {
                       _scheduleContentTerminal((
                         'plan-error',
                         key.cacheIdentity,
                       ));
                       return _NovelReaderPaginationFailureView(
-                        error: planSnapshot.error!,
-                        onRetry: _retryPlan,
-                        onFallbackToVertical: widget.onFallbackToVertical,
+                        error: _requestError!,
+                        onRetry: _guardAction(_retryPlan),
+                        onChooseScrollMode: _guardAction(
+                          widget.onChooseScrollMode,
+                        ),
                       );
                     }
-                    return const SizedBox.expand(
-                      key: Key('novel-reader-paged-layout-loading'),
-                    );
+                    return _waitingView('novel-reader-paged-layout-loading');
                   }
                   if (plan.pages.isEmpty) {
                     if (progress?.isComplete != true) {
-                      return const SizedBox.expand(
-                        key: Key('novel-reader-paged-layout-loading'),
-                      );
+                      if (_requestError != null) {
+                        _scheduleContentTerminal((
+                          'plan-error',
+                          key.cacheIdentity,
+                        ));
+                        return _NovelReaderPaginationFailureView(
+                          error: _requestError!,
+                          onRetry: _guardAction(_retryPlan),
+                          onChooseScrollMode: _guardAction(
+                            widget.onChooseScrollMode,
+                          ),
+                        );
+                      }
+                      return _waitingView('novel-reader-paged-layout-loading');
                     }
                     _scheduleContentTerminal(('empty-plan', key.cacheIdentity));
                     return _NovelReaderPaginationStateView(
@@ -401,30 +454,52 @@ class _NovelReaderHtmlPagedSurfaceState
                         snapshot: widget.progressSnapshot,
                         isPlanComplete: isPlanComplete,
                       );
-                  final initialPage =
+                  final resolvedPage =
                       requestedPage ??
                       entryPage ??
                       restoreResolution?.pageIndex;
-                  if (navigationIsPending ||
+                  final targetIsPending =
+                      navigationIsPending ||
                       entryIsPending ||
-                      initialPage == null) {
-                    return const SizedBox.expand(
-                      key: Key('novel-reader-paged-restoring-position'),
+                      resolvedPage == null;
+                  if (targetIsPending && !_hasReadablePage) {
+                    if (_requestError != null) {
+                      _scheduleContentTerminal((
+                        'target-error',
+                        key.cacheIdentity,
+                      ));
+                      return _NovelReaderPaginationFailureView(
+                        error: _requestError!,
+                        onRetry: _guardAction(_retryPlan),
+                        onChooseScrollMode: _guardAction(
+                          widget.onChooseScrollMode,
+                        ),
+                      );
+                    }
+                    return _waitingView(
+                      'novel-reader-paged-restoring-position',
                     );
                   }
-                  _scheduleContentReady(key);
-                  _firstPageBudgetTimer?.cancel();
-                  _firstPageBudgetTimer = null;
-                  _firstPageDuration ??= _layoutStopwatch?.elapsed;
-                  _ensureFullPlanBudgetTimer(
-                    key: key,
-                    isComplete: isPlanComplete,
-                  );
-                  _schedulePerformanceFallbackIfNeeded(
-                    plan: plan,
-                    key: key,
-                    isComplete: isPlanComplete,
-                  );
+                  if (!targetIsPending) {
+                    if (!_hasReadablePage) {
+                      _displayInitialPage = resolvedPage;
+                      _displayRestoreReadOnly =
+                          requestedPage == null &&
+                          entryPage == null &&
+                          restoreResolution!.isReadOnlyCompatibilityRestore;
+                    }
+                    _hasReadablePage = true;
+                    _targetReady = true;
+                    _targetWaitTimer?.cancel();
+                    _targetWaitTimer = null;
+                    _firstPageDuration ??= _layoutStopwatch?.elapsed;
+                    _scheduleContentReady(key);
+                    _ensureBackgroundIdleTimer();
+                  }
+                  final initialPage =
+                      resolvedPage ??
+                      _visiblePosition?.pageIndex ??
+                      _displayInitialPage;
                   _scheduleDiagnostics(
                     plan: plan,
                     prepared: prepared,
@@ -438,7 +513,8 @@ class _NovelReaderHtmlPagedSurfaceState
                       requestedPage: requestedPage,
                     );
                   }
-                  return Padding(
+                  final requestGeneration = _requestGeneration;
+                  final pagedContent = Padding(
                     key: const Key('novel-reader-paged-surface'),
                     padding: EdgeInsets.fromLTRB(
                       pagePadding,
@@ -452,13 +528,12 @@ class _NovelReaderHtmlPagedSurfaceState
                         height: availableHeight,
                         child: _NovelReaderPagedPageView(
                           key: ValueKey<String>(plan.key.cacheIdentity),
+                          requestGeneration: requestGeneration,
                           plan: plan,
                           isPageCountFinal: isPlanComplete,
                           initialPage: initialPage,
                           isReadOnlyCompatibilityRestore:
-                              requestedPage == null &&
-                              entryPage == null &&
-                              restoreResolution!.isReadOnlyCompatibilityRestore,
+                              _displayRestoreReadOnly,
                           navigationRequest: widget.navigationRequest,
                           pageSeekRequest: widget.pageSeekRequest,
                           navigationController: widget.navigationController,
@@ -491,13 +566,34 @@ class _NovelReaderHtmlPagedSurfaceState
                           onContentInteraction: widget.onContentInteraction,
                           imageReaderBridge: widget.imageReaderBridge,
                           onPositionChanged: (position) {
-                            if (mounted && _planKey == plan.key) {
+                            if (mounted &&
+                                _planKey == plan.key &&
+                                _requestGeneration == requestGeneration) {
+                              _visiblePosition = position;
                               widget.onPositionChanged?.call(position);
                             }
                           },
                         ),
                       ),
                     ),
+                  );
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      pagedContent,
+                      if (_requestError != null || targetIsPending)
+                        Positioned(
+                          top: topChromeInset,
+                          left: pagePadding,
+                          right: pagePadding,
+                          child: _NovelReaderPaginationPauseNotice(
+                            error: _requestError,
+                            onRetry: _requestError == null
+                                ? null
+                                : _guardAction(_retryPlan),
+                          ),
+                        ),
+                    ],
                   );
                 },
               );
@@ -519,6 +615,7 @@ class _NovelReaderHtmlPagedSurfaceState
     }
     if (_planKey != null && _planKey != key) {
       _cancelPendingPagination();
+      _startTargetWaitTimer();
     }
     final coordinatorSignature = (
       theme: widget.theme.signature,
@@ -531,7 +628,10 @@ class _NovelReaderHtmlPagedSurfaceState
       builder: widget.coordinatorBuilder,
     );
     if (_coordinator == null || _coordinatorSignature != coordinatorSignature) {
-      _cancelPendingPagination();
+      if (_coordinator != null) {
+        _cancelPendingPagination();
+        _startTargetWaitTimer();
+      }
       _coordinatorSignature = coordinatorSignature;
       _coordinator =
           widget.coordinatorBuilder?.call(
@@ -556,50 +656,191 @@ class _NovelReaderHtmlPagedSurfaceState
     _firstPageDuration = null;
     _firstPublishedPageDuration = null;
     _firstVisibleFrameDuration = null;
-    _performanceFallbackKey = null;
-    _cancelPerformanceTimers();
     _recordedDiagnosticsStages.clear();
-    final requestGeneration = _layoutGeneration;
-    _planStream = _coordinator!
-        .paginateIncrementally(chapter: prepared, key: key)
-        .map((progress) {
-          // Observe the event before StreamBuilder can coalesce multiple updates.
-          if (_planKey == key &&
-              _layoutGeneration == requestGeneration &&
-              progress.plan.pages.isNotEmpty) {
-            _firstPublishedPageDuration ??= _layoutStopwatch?.elapsed;
-          }
-          return progress;
-        });
+    final requestGeneration = _requestGeneration;
+    _planStream = _coordinator!.paginateIncrementally(
+      chapter: prepared,
+      key: key,
+    );
     _planCompleted = false;
-    _startFirstPageBudgetTimer(key);
+    _attemptPublishedPageCount = 0;
+    _planSubscription = _planStream!.listen(
+      (progress) {
+        if (!mounted ||
+            _planKey != key ||
+            _requestGeneration != requestGeneration) {
+          return;
+        }
+        if (progress.plan.key != key ||
+            progress.plan.episodeId != key.episodeId) {
+          _pausePagination(
+            const NovelReaderPaginationException(
+              code: 'paginationResultMismatch',
+              message: 'Pagination returned a different layout or episode.',
+            ),
+          );
+          return;
+        }
+        if (progress.plan.pages.isNotEmpty) {
+          _firstPublishedPageDuration ??= _layoutStopwatch?.elapsed;
+        }
+        // Replay can make steady progress before it covers the retained view.
+        // Count new sealed pages in this attempt, not repeated metric events.
+        if (!progress.isComplete &&
+            progress.plan.pageCount > _attemptPublishedPageCount) {
+          _attemptPublishedPageCount = progress.plan.pageCount;
+          _backgroundIdleTimer?.cancel();
+          _backgroundIdleTimer = null;
+          _ensureBackgroundIdleTimer();
+        }
+        final previous = _latestProgress;
+        // A retry replays from the start. Keep the readable view until the
+        // replay covers its entire prefix; never splice incompatible pages.
+        if (previous != null &&
+            progress.plan.pageCount < previous.plan.pageCount) {
+          if (progress.isComplete) {
+            _pausePagination(
+              const NovelReaderPaginationException(
+                code: 'paginationPrefixChanged',
+                message:
+                    'The retry did not reproduce the readable page prefix.',
+              ),
+            );
+          }
+          return;
+        }
+        final retryPrefix = _retryPrefix;
+        if (retryPrefix != null &&
+            !_hasSamePrefix(retryPrefix, progress.plan)) {
+          _pausePagination(
+            const NovelReaderPaginationException(
+              code: 'paginationPrefixChanged',
+              message: 'The retry changed an already readable page.',
+            ),
+          );
+          return;
+        }
+        _retryPrefix = null;
+        setState(() {
+          _latestProgress = progress;
+          _planCompleted = progress.isComplete;
+        });
+        if (progress.isComplete) {
+          _cancelPerformanceTimers();
+        }
+      },
+      onError: (Object error, StackTrace stack) {
+        if (mounted &&
+            _planKey == key &&
+            _requestGeneration == requestGeneration) {
+          _pausePagination(error);
+        }
+      },
+      onDone: () {
+        if (mounted &&
+            _planKey == key &&
+            _requestGeneration == requestGeneration &&
+            !_planCompleted) {
+          _pausePagination(
+            const NovelReaderPaginationException(
+              code: 'incompletePaginationStream',
+              message: 'Pagination ended before producing a complete plan.',
+            ),
+          );
+        }
+      },
+    );
+    _ensureBackgroundIdleTimer();
     return _planStream!;
   }
 
+  bool _hasSamePrefix(
+    NovelReaderPaginationPlan previous,
+    NovelReaderPaginationPlan next,
+  ) {
+    for (var index = 0; index < previous.pageCount; index++) {
+      final a = previous.pages[index];
+      final b = next.pages[index];
+      if (a.html != b.html ||
+          _anchorIdentity(a.startAnchor) != _anchorIdentity(b.startAnchor) ||
+          _anchorIdentity(a.endAnchor) != _anchorIdentity(b.endAnchor) ||
+          a.requiresInnerScroll != b.requiresInnerScroll ||
+          a.overflowState != b.overflowState ||
+          !listEquals(a.imageIndices, b.imageIndices) ||
+          !listEquals(
+            a.anchorRanges
+                .map(
+                  (range) => (
+                    _anchorIdentity(range.start),
+                    _anchorIdentity(range.end),
+                  ),
+                )
+                .toList(),
+            b.anchorRanges
+                .map(
+                  (range) => (
+                    _anchorIdentity(range.start),
+                    _anchorIdentity(range.end),
+                  ),
+                )
+                .toList(),
+          )) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Object _anchorIdentity(NovelReaderTextAnchor anchor) => (
+    anchor.episodeId,
+    anchor.nodeId,
+    anchor.textOffset,
+    anchor.pageIndex,
+    anchor.scrollOffset,
+    anchor.progressPercent,
+    anchor.formatVersion,
+    anchor.textIdentity,
+    anchor.isProgressPercentValid,
+  );
+
   void _scheduleContentReady(NovelReaderPaginationKey key) {
-    final identity = key.cacheIdentity;
+    final requestGeneration = _requestGeneration;
+    final navigation = _navigationIdentity(widget);
+    final identity = (key.cacheIdentity, requestGeneration, navigation);
     if (_reportedContentReadyIdentity == identity) {
       return;
     }
     _reportedContentReadyIdentity = identity;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _planKey == key) {
+      if (mounted &&
+          _planKey == key &&
+          _requestGeneration == requestGeneration &&
+          _navigationIdentity(widget) == navigation) {
         widget.onContentReady?.call();
       }
     });
   }
 
   void _scheduleContentTerminal(Object identity) {
-    if (_reportedContentTerminalIdentity == identity) {
+    final terminalIdentity = (
+      identity,
+      _requestGeneration,
+      _navigationIdentity(widget),
+    );
+    if (_reportedContentTerminalIdentity == terminalIdentity) {
       return;
     }
-    _reportedContentTerminalIdentity = identity;
+    _reportedContentTerminalIdentity = terminalIdentity;
     final prepareSignature = _prepareSignature;
     final planKey = _planKey;
+    final requestGeneration = _requestGeneration;
+    final navigation = _navigationIdentity(widget);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           _prepareSignature != prepareSignature ||
-          _planKey != planKey) {
+          _planKey != planKey ||
+          _requestGeneration != requestGeneration ||
+          _navigationIdentity(widget) != navigation) {
         return;
       }
       widget.onContentTerminal?.call();
@@ -618,6 +859,7 @@ class _NovelReaderHtmlPagedSurfaceState
       return;
     }
     final requestGeneration = _layoutGeneration;
+    final attemptGeneration = _requestGeneration;
     final stopwatch = _layoutStopwatch;
     if (isComplete && stopwatch?.isRunning == true) {
       stopwatch!.stop();
@@ -625,7 +867,8 @@ class _NovelReaderHtmlPagedSurfaceState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           _planKey != key ||
-          _layoutGeneration != requestGeneration) {
+          _layoutGeneration != requestGeneration ||
+          _requestGeneration != attemptGeneration) {
         return;
       }
       _firstVisibleFrameDuration ??= _visibleFrameStopwatch?.elapsed;
@@ -716,123 +959,117 @@ class _NovelReaderHtmlPagedSurfaceState
     });
   }
 
-  void _schedulePerformanceFallbackIfNeeded({
-    required NovelReaderPaginationPlan plan,
-    required NovelReaderPaginationKey key,
-    required bool isComplete,
-  }) {
-    final callback = widget.onFallbackToVertical;
-    final firstPageDuration = _firstPageDuration;
-    if (callback == null || firstPageDuration == null) {
-      return;
-    }
-    final reason = widget.performancePolicy.evaluate(
-      plan: plan,
-      firstPageDuration: firstPageDuration,
-      fullPlanDuration: isComplete ? _layoutStopwatch?.elapsed : null,
-    );
-    if (reason == null) {
-      return;
-    }
-    _schedulePerformanceFallback(key: key, reason: reason);
+  Object _navigationIdentity(NovelReaderHtmlPagedSurface surface) => (
+    surface.navigationRequest?.requestId,
+    surface.chapterEntryRequest?.requestId,
+  );
+
+  VoidCallback? _guardAction(VoidCallback? action) {
+    if (action == null) return null;
+    final generation = _requestGeneration;
+    final preparation = _prepareSignature;
+    final key = _planKey;
+    final navigation = _navigationIdentity(widget);
+    return () {
+      if (mounted &&
+          _requestGeneration == generation &&
+          _prepareSignature == preparation &&
+          _planKey == key &&
+          _navigationIdentity(widget) == navigation) {
+        action();
+      }
+    };
   }
 
-  void _startFirstPageBudgetTimer(NovelReaderPaginationKey key) {
-    if (!widget.performancePolicy.enforceBudgets ||
-        widget.onFallbackToVertical == null) {
-      return;
-    }
-    _firstPageBudgetTimer = Timer(
-      widget.performancePolicy.maximumFirstPageBudget,
-      () {
-        if (mounted && _planKey == key && _firstPageDuration == null) {
-          _schedulePerformanceFallback(
-            key: key,
-            reason: NovelReaderPaginationPerformanceFallbackReason
-                .firstPageBudgetExceeded,
-          );
-        }
-      },
-    );
-  }
+  Widget _waitingView(String key) => _NovelReaderPaginationStateView(
+    key: Key(key),
+    icon: Icons.hourglass_empty,
+    message: AppLocalizations.of(context).novelPagedWaitingForPage,
+  );
 
-  void _ensureFullPlanBudgetTimer({
-    required NovelReaderPaginationKey key,
-    required bool isComplete,
-  }) {
-    if (isComplete) {
-      _fullPlanBudgetTimer?.cancel();
-      _fullPlanBudgetTimer = null;
-      return;
-    }
-    if (_fullPlanBudgetTimer != null ||
-        !widget.performancePolicy.enforceBudgets ||
-        widget.onFallbackToVertical == null) {
-      return;
-    }
-    final elapsed = _layoutStopwatch?.elapsed ?? Duration.zero;
-    final budget = widget.performancePolicy.maximumFullPlanBudget;
-    final remaining = budget - elapsed;
-    if (remaining <= Duration.zero) {
-      _schedulePerformanceFallback(
-        key: key,
-        reason: NovelReaderPaginationPerformanceFallbackReason
-            .fullPlanBudgetExceeded,
-      );
-      return;
-    }
-    _fullPlanBudgetTimer = Timer(remaining, () {
-      if (mounted && _planKey == key) {
-        _schedulePerformanceFallback(
-          key: key,
-          reason: NovelReaderPaginationPerformanceFallbackReason
-              .fullPlanBudgetExceeded,
+  void _startTargetWaitTimer() {
+    _targetWaitTimer?.cancel();
+    _targetWaitTimer = null;
+    if (!widget.performancePolicy.enforceBudgets) return;
+    final generation = _requestGeneration;
+    final navigation = _navigationIdentity(widget);
+    _targetWaitTimer = Timer(widget.performancePolicy.targetPageWait, () {
+      if (mounted &&
+          _requestGeneration == generation &&
+          _navigationIdentity(widget) == navigation &&
+          !_targetReady) {
+        _pausePagination(
+          const NovelReaderPaginationException(
+            code: 'targetPageWaitExceeded',
+            message:
+                'The requested page is not available within the waiting budget.',
+          ),
         );
       }
     });
   }
 
-  void _schedulePerformanceFallback({
-    required NovelReaderPaginationKey key,
-    required NovelReaderPaginationPerformanceFallbackReason reason,
-  }) {
-    final callback = widget.onFallbackToVertical;
-    if (callback == null) {
+  void _ensureBackgroundIdleTimer() {
+    if (!_targetReady ||
+        _planCompleted ||
+        _requestError != null ||
+        _backgroundIdleTimer != null ||
+        !widget.performancePolicy.enforceBudgets) {
       return;
     }
-    final fallbackKey = '${key.cacheIdentity}|${reason.name}';
-    if (_performanceFallbackKey == fallbackKey) {
-      return;
-    }
-    _performanceFallbackKey = fallbackKey;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _planKey == key) {
-        callback();
+    final generation = _requestGeneration;
+    _backgroundIdleTimer = Timer(widget.performancePolicy.backgroundIdle, () {
+      if (mounted && _requestGeneration == generation && !_planCompleted) {
+        _pausePagination(
+          const NovelReaderPaginationException(
+            code: 'backgroundPaginationIdle',
+            message: 'Background pagination stopped publishing readable pages.',
+          ),
+        );
       }
     });
-    // A background result/timer can arrive with no frame scheduled. Do not
-    // leave the fallback waiting until the user's next gesture.
-    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _pausePagination(Object error) {
+    if (!mounted || _requestError != null) return;
+    // Invalidate before cancellation can deliver a late error or completion.
+    _requestGeneration += 1;
+    _cancelPerformanceTimers();
+    unawaited(_planSubscription?.cancel());
+    _planSubscription = null;
+    _coordinator?.cancelPending();
+    if (_planStream != null && !_planCompleted) _cancelledPlanCount += 1;
+    setState(() => _requestError = error);
   }
 
   void _cancelPerformanceTimers() {
-    _firstPageBudgetTimer?.cancel();
-    _fullPlanBudgetTimer?.cancel();
-    _firstPageBudgetTimer = null;
-    _fullPlanBudgetTimer = null;
+    _targetWaitTimer?.cancel();
+    _backgroundIdleTimer?.cancel();
+    _targetWaitTimer = null;
+    _backgroundIdleTimer = null;
   }
 
-  void _cancelPendingPagination({bool clearCache = false}) {
+  void _cancelPendingPagination({bool retainProgress = false}) {
+    _requestGeneration += 1;
+    _cancelPerformanceTimers();
     _visibleFrameStopwatch?.stop();
-    if (_planStream != null && !_planCompleted) {
+    unawaited(_planSubscription?.cancel());
+    _planSubscription = null;
+    if (_planStream != null && !_planCompleted && _requestError == null) {
       _cancelledPlanCount += 1;
     }
+    _coordinator?.cancelPending();
     _planCompleted = false;
     _planStream = null;
-    if (clearCache) {
-      _coordinator?.clear();
-    } else {
-      _coordinator?.cancelPending();
+    _requestError = null;
+    if (!retainProgress) {
+      _latestProgress = null;
+      _retryPrefix = null;
+      _hasReadablePage = false;
+      _targetReady = false;
+      _visiblePosition = null;
+      _displayInitialPage = 0;
+      _displayRestoreReadOnly = false;
     }
   }
 
@@ -931,6 +1168,7 @@ class _NovelReaderHtmlPagedSurfaceState
     _coordinatorSignature = null;
     _planStream = null;
     _planKey = null;
+    _startTargetWaitTimer();
   }
 
   String _typographySignature(
@@ -967,6 +1205,7 @@ class _NovelReaderHtmlPagedSurfaceState
       _prepareSignature = null;
       _planStream = null;
       _planKey = null;
+      _ensurePreparationFuture();
     });
   }
 
@@ -974,10 +1213,12 @@ class _NovelReaderHtmlPagedSurfaceState
     if (!mounted) {
       return;
     }
-    _cancelPendingPagination(clearCache: true);
+    _retryPrefix = _latestProgress?.plan;
+    _cancelPendingPagination(retainProgress: true);
     setState(() {
       _planStream = null;
       _planKey = null;
+      if (!_targetReady) _startTargetWaitTimer();
     });
   }
 
@@ -1029,8 +1270,15 @@ class _NovelReaderHtmlPagedSurfaceState
     _appliedChapterEntryRequestId = request.requestId;
     final callback = widget.onChapterEntryApplied;
     if (callback == null) return;
+    final requestGeneration = _requestGeneration;
+    final key = _planKey;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted ||
+          _requestGeneration != requestGeneration ||
+          _planKey != key ||
+          widget.chapterEntryRequest != request) {
+        return;
+      }
       callback(request);
     });
   }
@@ -1074,8 +1322,12 @@ class _NovelReaderHtmlPagedSurfaceState
       return;
     }
     _lastUnavailableNavigationKey = requestKey;
+    final requestGeneration = _requestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _planKey == plan.key) {
+      if (mounted &&
+          _planKey == plan.key &&
+          _requestGeneration == requestGeneration &&
+          widget.navigationRequest == request) {
         widget.onNavigationUnavailable?.call(request);
       }
     });
@@ -1085,6 +1337,7 @@ class _NovelReaderHtmlPagedSurfaceState
 class _NovelReaderPagedPageView extends StatefulWidget {
   const _NovelReaderPagedPageView({
     super.key,
+    required this.requestGeneration,
     required this.plan,
     required this.isPageCountFinal,
     required this.initialPage,
@@ -1116,6 +1369,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   });
 
   final NovelReaderPaginationPlan plan;
+  final int requestGeneration;
   final bool isPageCountFinal;
   final int initialPage;
   final bool isReadOnlyCompatibilityRestore;
@@ -1173,8 +1427,16 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       keepPage: false,
     );
     widget.navigationController?._attach(this);
+    _scheduleInitialPosition();
+  }
+
+  void _scheduleInitialPosition() {
+    final generation = widget.requestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_reportedInitialPage && widget.plan.pageCount > 0) {
+      if (mounted &&
+          widget.requestGeneration == generation &&
+          !_reportedInitialPage &&
+          widget.plan.pageCount > 0) {
         _reportedInitialPage = true;
         _emitPosition(widget.initialPage);
       }
@@ -1184,6 +1446,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   void didUpdateWidget(covariant _NovelReaderPagedPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!_reportedInitialPage) _scheduleInitialPosition();
     if (!identical(
       oldWidget.navigationController,
       widget.navigationController,
@@ -1200,11 +1463,15 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       _chapterTurnRequested = false;
     }
     if (!oldWidget.isPageCountFinal && widget.isPageCountFinal) {
+      final generation = widget.requestGeneration;
+      final navigation = widget.navigationRequest?.requestId;
       final restoredPage = widget.initialPage
           .clamp(0, math.max(0, widget.plan.pageCount - 1))
           .toInt();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
+        if (!mounted ||
+            widget.requestGeneration != generation ||
+            widget.navigationRequest?.requestId != navigation) {
           return;
         }
         if (!_hasUserNavigated && restoredPage != _currentPage) {
@@ -1218,10 +1485,14 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     }
     final oldRequestId = oldWidget.navigationRequest?.requestId;
     final newRequestId = widget.navigationRequest?.requestId;
-    if (oldRequestId != newRequestId && widget.targetPage != null) {
+    if ((oldRequestId != newRequestId ||
+            oldWidget.targetPage != widget.targetPage) &&
+        widget.targetPage != null) {
       final targetPage = widget.targetPage!;
+      final generation = widget.requestGeneration;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted ||
+            widget.requestGeneration != generation ||
             widget.navigationRequest?.requestId != newRequestId ||
             widget.targetPage != targetPage) {
           return;
@@ -1234,8 +1505,10 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     if (oldSeekRequestId == seekRequest?.requestId || seekRequest == null) {
       return;
     }
+    final generation = widget.requestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
+          widget.requestGeneration != generation ||
           widget.pageSeekRequest?.requestId != seekRequest.requestId ||
           seekRequest.episodeId != widget.plan.episodeId ||
           seekRequest.paginationKey != widget.plan.key.layoutFingerprint ||
@@ -1814,16 +2087,59 @@ class _NovelReaderPaginationStateView extends StatelessWidget {
   }
 }
 
+class _NovelReaderPaginationPauseNotice extends StatelessWidget {
+  const _NovelReaderPaginationPauseNotice({
+    required this.error,
+    required this.onRetry,
+  });
+
+  final Object? error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final message = switch (error) {
+      null => l10n.novelPagedWaitingForPage,
+      NovelReaderPaginationException(code: 'backgroundPaginationIdle') =>
+        l10n.novelPagedBackgroundPaused,
+      NovelReaderPaginationException(code: 'targetPageWaitExceeded') =>
+        l10n.novelPagedWaitTimedOut,
+      _ => l10n.novelPagedLayoutFailed,
+    };
+    return Material(
+      key: const Key('novel-reader-pagination-paused'),
+      elevation: 2,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(child: Text(message)),
+            if (onRetry != null)
+              TextButton(
+                key: const Key('novel-reader-pagination-retry'),
+                onPressed: onRetry,
+                child: Text(l10n.commonRetry),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NovelReaderPaginationFailureView extends StatelessWidget {
   const _NovelReaderPaginationFailureView({
     required this.error,
     required this.onRetry,
-    required this.onFallbackToVertical,
+    required this.onChooseScrollMode,
   });
 
   final Object error;
-  final VoidCallback onRetry;
-  final VoidCallback? onFallbackToVertical;
+  final VoidCallback? onRetry;
+  final VoidCallback? onChooseScrollMode;
 
   @override
   Widget build(BuildContext context) {
@@ -1835,7 +2151,13 @@ class _NovelReaderPaginationFailureView extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber_outlined, size: 34),
           const SizedBox(height: 12),
-          Text(l10n.novelPagedLayoutFailed),
+          Text(
+            error is NovelReaderPaginationException &&
+                    (error as NovelReaderPaginationException).code ==
+                        'targetPageWaitExceeded'
+                ? l10n.novelPagedWaitTimedOut
+                : l10n.novelPagedLayoutFailed,
+          ),
           const SizedBox(height: 6),
           Text(
             LibraryErrorSummary.resolve(l10n, error),
@@ -1852,10 +2174,10 @@ class _NovelReaderPaginationFailureView extends StatelessWidget {
                 icon: const Icon(Icons.refresh),
                 label: Text(l10n.commonRetry),
               ),
-              if (onFallbackToVertical != null)
+              if (onChooseScrollMode != null)
                 FilledButton.icon(
                   key: const Key('novel-reader-pagination-fallback'),
-                  onPressed: onFallbackToVertical,
+                  onPressed: onChooseScrollMode,
                   icon: const Icon(Icons.view_agenda_outlined),
                   label: Text(l10n.novelReturnToScroll),
                 ),

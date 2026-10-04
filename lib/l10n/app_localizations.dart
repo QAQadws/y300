@@ -3794,6 +3794,24 @@ abstract class AppLocalizations {
   /// **'分页布局失败'**
   String get novelPagedLayoutFailed;
 
+  /// No description provided for @novelPagedWaitingForPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备目标页…'**
+  String get novelPagedWaitingForPage;
+
+  /// No description provided for @novelPagedWaitTimedOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标页尚未准备好，请重试'**
+  String get novelPagedWaitTimedOut;
+
+  /// No description provided for @novelPagedBackgroundPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'后续分页已暂停，当前页面仍可阅读'**
+  String get novelPagedBackgroundPaused;
+
   /// No description provided for @novelReturnToScroll.
   ///
   /// In zh, this message translates to:

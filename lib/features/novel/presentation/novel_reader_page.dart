@@ -803,9 +803,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           }
         },
         onContentInteraction: _cancelPendingReaderTap,
-        onFallbackToVertical: () {
+        onChooseScrollMode: () {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _fallbackToVertical(
+            _chooseScrollMode(
               ref.read(novelReaderControllerProvider(_args).notifier),
             );
           }
@@ -1591,7 +1591,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
   }
 
-  Future<void> _fallbackToVertical(NovelReaderController controller) async {
+  // Only an explicit user choice changes and persists the reading mode.
+  Future<void> _chooseScrollMode(NovelReaderController controller) async {
     final state = ref.read(novelReaderControllerProvider(_args));
     if (state.isLoading) return;
     final current = state.value;
