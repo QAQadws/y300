@@ -111,6 +111,8 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
     var probeCount = 0;
     var cacheHitCount = 0;
     var budgetExceededCount = 0;
+    var minimumFragmentCount = 0;
+    int? preferredWindowGraphemes;
 
     while (startOffset < sliceSession.textLength) {
       cancellationToken.throwIfCancelled();
@@ -121,6 +123,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           startOffset: startOffset,
           bufferedPageHtml: bufferedPageHtml,
           availableHeight: page.availableHeight,
+          preferredWindowGraphemes: preferredWindowGraphemes,
           context: NovelReaderPaginationMeasureContext(
             session: measureSession,
             chapter: chapter,
@@ -130,7 +133,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           cancellationToken: cancellationToken,
         );
       } on NovelReaderPaginationException catch (error) {
-        if (_isCancellation(error)) {
+        if (_mustPropagate(error)) {
           rethrow;
         }
         return _fallback(
@@ -141,13 +144,14 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           probeCount: probeCount,
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
+          minimumFragmentCount: minimumFragmentCount,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
           boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
           boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
         );
       } catch (error) {
-        if (_isCancellation(error)) {
+        if (_mustPropagate(error)) {
           rethrow;
         }
         return _fallback(
@@ -156,6 +160,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           probeCount: probeCount,
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
+          minimumFragmentCount: minimumFragmentCount,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
           boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
@@ -163,19 +168,39 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
         );
       }
 
+      cancellationToken.throwIfCancelled();
       probeCount += fit.probeCount;
       cacheHitCount += fit.cacheHitCount;
       if (fit.budgetExceeded) {
         budgetExceededCount += 1;
       }
+      // Count admitted indivisible exceptions as well as minimum overflows.
+      if (fit.oversizedMinimumFragment) {
+        minimumFragmentCount += 1;
+      }
       if (!fit.fits) {
+        final isWholeFreshMinimum =
+            startOffset == 0 &&
+            fit.slice.endOffset == sliceSession.textLength &&
+            (bufferedPageHtml.isEmpty || fit.requiresFreshPage) &&
+            !sliceSession.boundaries.any(
+              (boundary) =>
+                  boundary.textOffset > 0 &&
+                  boundary.textOffset < sliceSession.textLength &&
+                  sliceSession.isLegalBoundary(boundary.textOffset),
+            );
         return _fallback(
           NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow,
           boundaryCount: sliceSession.boundaries.length,
           probeCount: probeCount,
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
-          minimumFragmentCount: 1,
+          minimumFragmentCount:
+              minimumFragmentCount + (fit.oversizedMinimumFragment ? 0 : 1),
+          measuredMinimumAtomHeight: isWholeFreshMinimum
+              ? fit.measuredHeight
+              : null,
+          measuredMinimumAtomHtml: isWholeFreshMinimum ? fit.slice.html : null,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
           boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
@@ -191,6 +216,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           probeCount: probeCount,
           cacheHitCount: cacheHitCount,
           budgetExceededCount: budgetExceededCount,
+          minimumFragmentCount: minimumFragmentCount,
           boundaryIndexBuildCount: boundaryIndexBuildCount,
           boundaryIndexBuildDuration: boundaryIndexBuildDuration,
           boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
@@ -206,6 +232,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
           flushAfterAppend: hasRemainder,
         ),
       );
+      preferredWindowGraphemes = slice.endOffset - startOffset;
       startOffset = slice.endOffset;
       bufferedPageHtml = hasRemainder ? '' : '$bufferedPageHtml${slice.html}';
     }
@@ -217,7 +244,7 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       probeCount: probeCount,
       cacheHitCount: cacheHitCount,
       budgetExceededCount: budgetExceededCount,
-      minimumFragmentCount: 0,
+      minimumFragmentCount: minimumFragmentCount,
       boundaryIndexBuildCount: boundaryIndexBuildCount,
       boundaryIndexBuildDuration: boundaryIndexBuildDuration,
       boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
@@ -236,6 +263,8 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
     Duration boundaryIndexBuildDuration = Duration.zero,
     int boundaryIndexCacheHitCount = 0,
     int boundaryIndexSingleFlightHitCount = 0,
+    double? measuredMinimumAtomHeight,
+    String? measuredMinimumAtomHtml,
   }) {
     return NovelReaderFlowableComplexPaginationResult(
       chunks: const <NovelReaderFlowableComplexChunk>[],
@@ -249,6 +278,8 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
       boundaryIndexCacheHitCount: boundaryIndexCacheHitCount,
       boundaryIndexSingleFlightHitCount: boundaryIndexSingleFlightHitCount,
       fallbackReason: reason,
+      measuredMinimumAtomHeight: measuredMinimumAtomHeight,
+      measuredMinimumAtomHtml: measuredMinimumAtomHtml,
     );
   }
 
@@ -272,4 +303,10 @@ final class DefaultNovelReaderFlowableComplexPaginationEngine
     return error is NovelReaderPaginationException &&
         error.code == 'paginationCancelled';
   }
+
+  bool _mustPropagate(Object error) =>
+      _isCancellation(error) ||
+      (error is NovelReaderPaginationException &&
+          (error.code == 'complexFitSearchCandidateLimitExceeded' ||
+              error.code == 'complexFitSearchBudgetUnavailable'));
 }

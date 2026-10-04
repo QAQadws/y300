@@ -13,6 +13,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_search_budget.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
@@ -951,6 +953,34 @@ void main() {
     },
   );
 
+  test(
+    'a safe-path failure cannot swallow the atomic candidate limit',
+    () async {
+      final chapter = await _prepare('<p>${List.filled(9000, '甲').join()}</p>');
+      final adapter = _RecordingMeasureAdapter();
+      final planner = DefaultNovelReaderHybridPaginationPlanner(
+        measureAdapter: adapter,
+        preferences: _preferences,
+        theme: _theme,
+        baseStyle: _baseStyle,
+        textRunExtractor: const NovelReaderPaginationTextRunExtractor(
+          styleResolver: _ThrowingTextStyleResolver(),
+        ),
+      );
+      await expectLater(
+        planner.paginate(chapter, _key(chapter, height: 120)),
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (error) => error.code,
+            'code',
+            'complexFitSearchCandidateLimitExceeded',
+          ),
+        ),
+      );
+      expect(adapter.requests, isEmpty);
+    },
+  );
+
   test('composes safe, flowable complex and safe text on one page', () async {
     final chapter = await _prepare(
       '<p>前文。</p>'
@@ -1156,6 +1186,127 @@ void main() {
       expect(_visibleText(plan.pages.single.html), '复杂正文。');
     },
   );
+
+  for (final limit in ['html', 'nodes']) {
+    test(
+      'a flowable failure cannot remeasure a whole atom beyond the $limit limit',
+      () async {
+        final content = limit == 'html'
+            ? List.filled(9000, '甲').join()
+            : List.filled(160, '<span>甲</span>').join();
+        final chapter = await _prepare(
+          '<p><font face="Fantasy Novel Font">$content</font></p>',
+        );
+        if (limit == 'html') {
+          expect(chapter.html.length, greaterThan(8192));
+        } else {
+          expect(chapter.html.length, lessThanOrEqualTo(8192));
+          expect(
+            NovelReaderComplexHtmlSearchBudget.countDomNodes(chapter.html),
+            greaterThan(256),
+          );
+        }
+        final adapter = _RecordingMeasureAdapter(
+          beforeMeasure: (_) async {
+            throw StateError(
+              'Controlled complex candidate measurement failure.',
+            );
+          },
+        );
+        await expectLater(
+          _planner(adapter).paginate(chapter, _key(chapter, height: 100)),
+          throwsA(
+            isA<NovelReaderPaginationException>().having(
+              (error) => error.code,
+              'code',
+              'complexFitSearchCandidateLimitExceeded',
+            ),
+          ),
+        );
+        expect(adapter.requests, hasLength(1));
+        expect(
+          adapter.requests.single.html.length,
+          lessThan(chapter.html.length),
+        );
+        expect(adapter.requests.single.html.length, lessThanOrEqualTo(8192));
+      },
+    );
+  }
+
+  test(
+    'a measured oversized minimum becomes a dedicated page without a second probe',
+    () async {
+      final text = List.filled(9000, '甲').join();
+      final chapter = await _prepare('<p><ruby>$text<rt>注</rt></ruby></p>');
+      final adapter = _RecordingMeasureAdapter(heightFor: (_, _) => 200);
+      final plan = await _planner(
+        adapter,
+      ).paginate(chapter, _key(chapter, height: 100));
+
+      expect(adapter.requests, hasLength(1));
+      expect(plan.measurementCount, 1);
+      expect(plan.minimumComplexFragmentCount, 1);
+      expect(plan.atomicWidgetPageCount, 1);
+      expect(plan.flowableComplexFragmentCount, 0);
+      expect(plan.pages, hasLength(1));
+      expect(plan.pages.single.requiresInnerScroll, isTrue);
+      expect(plan.pages.single.isDedicatedContentPage, isTrue);
+      expect(plan.pages.single.html, adapter.requests.single.html);
+      expect(_visibleText(plan.pages.single.html), _visibleText(chapter.html));
+      expect(plan.flowabilityFailureReasonCounts, {
+        NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow: 1,
+      });
+    },
+  );
+
+  test(
+    'an indivisible minimum beyond the finite exception limit is not measured',
+    () async {
+      final text = List.filled(40000, '甲').join();
+      final chapter = await _prepare('<p><ruby>$text<rt>注</rt></ruby></p>');
+      final adapter = _RecordingMeasureAdapter();
+      await expectLater(
+        _planner(adapter).paginate(chapter, _key(chapter, height: 100)),
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (error) => error.code,
+            'code',
+            'complexFitSearchCandidateLimitExceeded',
+          ),
+        ),
+      );
+      expect(adapter.requests, isEmpty);
+    },
+  );
+
+  for (final code in [
+    'complexFitSearchCandidateLimitExceeded',
+    'complexFitSearchBudgetUnavailable',
+  ]) {
+    test(
+      'a propagated $code cannot be swallowed into an atomic measurement',
+      () async {
+        final chapter = await _prepare(
+          '<p><font face="Fantasy Novel Font">复杂正文</font></p>',
+        );
+        final adapter = _RecordingMeasureAdapter();
+        await expectLater(
+          _planner(
+            adapter,
+            flowableComplexEngine: _RejectingFlowableEngine(code),
+          ).paginate(chapter, _key(chapter, height: 100)),
+          throwsA(
+            isA<NovelReaderPaginationException>().having(
+              (error) => error.code,
+              'code',
+              code,
+            ),
+          ),
+        );
+        expect(adapter.requests, isEmpty);
+      },
+    );
+  }
 }
 
 String _visibleText(String html) {
@@ -1170,15 +1321,39 @@ String _withoutFormattingWhitespace(String html) {
 }
 
 DefaultNovelReaderHybridPaginationPlanner _planner(
-  NovelReaderPaginationMeasureAdapter adapter,
-) {
+  NovelReaderPaginationMeasureAdapter adapter, {
+  NovelReaderFlowableComplexPaginationEngine? flowableComplexEngine,
+}) {
   return DefaultNovelReaderHybridPaginationPlanner(
     measureAdapter: adapter,
     preferences: _preferences,
     theme: _theme,
     baseStyle: _baseStyle,
+    flowableComplexEngine: flowableComplexEngine,
     validationPolicy: const NovelReaderPaginationValidationPolicy(interval: 8),
   );
+}
+
+final class _RejectingFlowableEngine
+    implements NovelReaderFlowableComplexPaginationEngine {
+  const _RejectingFlowableEngine(this.code);
+
+  final String code;
+
+  @override
+  Future<NovelReaderFlowableComplexPaginationResult> paginate({
+    required NovelReaderClassifiedPaginationAtom atom,
+    required NovelReaderPaginationPageContext page,
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+    required NovelReaderPaginationMeasureSession measureSession,
+    required NovelReaderPaginationCancellationToken cancellationToken,
+  }) async {
+    throw NovelReaderPaginationException(
+      code: code,
+      message: 'Controlled bounded engine failure.',
+    );
+  }
 }
 
 Future<NovelReaderPreparedChapter> _prepare(String html) {

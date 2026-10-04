@@ -6,6 +6,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_fit.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
@@ -14,6 +15,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_prepared_ch
 import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
@@ -97,76 +99,150 @@ void main() {
   });
 
   test(
-    'stage 0 records whole-suffix probes and cumulative candidate cost',
+    'bounded candidates retain near-linear cumulative cost as the atom grows',
     () async {
-      final text = List<String>.filled(96, '甲').join();
-      final session = _RecordingSession(_rangeHeight);
-      final result = await _paginate(
-        text: text,
-        page: const NovelReaderPaginationPageContext(
-          bufferedHtml: '',
-          hasBufferedContent: false,
-          availableHeight: 80,
-        ),
-        chapter: chapter,
-        key: key,
-        session: session,
-      );
-
-      expect(result.requiresAtomicFallback, isFalse);
-      expect(result.chunks, hasLength(12));
-      final firstProbeByStart = <int, NovelReaderPaginationMeasureRequest>{};
-      for (final request in session.requests) {
-        firstProbeByStart.putIfAbsent(request.startOffset!, () => request);
+      final maximumLengths = <int>[];
+      final costsPerPage = <double>[];
+      for (final length in [96, 384, 1536]) {
+        final text = List<String>.filled(length, '甲').join();
+        final session = _RecordingSession(_rangeHeight);
+        final result = await _paginate(
+          text: text,
+          page: const NovelReaderPaginationPageContext(
+            bufferedHtml: '',
+            hasBufferedContent: false,
+            availableHeight: 80,
+          ),
+          chapter: chapter,
+          key: key,
+          session: session,
+        );
+        expect(result.requiresAtomicFallback, isFalse);
+        expect(result.chunks, hasLength(length ~/ 8));
+        expect(
+          result.chunks
+              .map((chunk) => html_parser.parseFragment(chunk.slice.html).text)
+              .join(),
+          text,
+        );
+        expect(
+          session.requests.every(
+            (request) => request.endOffset! - request.startOffset! <= 64,
+          ),
+          isTrue,
+        );
+        final lengths = session.requests.map((request) => request.html.length);
+        final maximum = lengths.reduce((a, b) => a > b ? a : b);
+        final total = lengths.fold<int>(0, (sum, length) => sum + length);
+        maximumLengths.add(maximum);
+        costsPerPage.add(total / result.chunks.length);
+        debugPrint(
+          '[NovelPaginationBounded] text=$length, '
+          'pages=${result.chunks.length}, probes=${session.requests.length}, '
+          'maxHtmlCodeUnits=$maximum, cumulativeHtmlCodeUnits=$total',
+        );
       }
-      final firstProbes = firstProbeByStart.values.toList();
-      expect(
-        firstProbes.map((request) => request.startOffset),
-        result.chunks.map((chunk) => chunk.slice.startOffset),
-      );
-      // Stage 3 replaces this current cost baseline with bounded candidates.
-      expect(
-        firstProbes.every((request) => request.endOffset == text.length),
-        isTrue,
-      );
-      expect(firstProbes.first.startOffset, 0);
-      final candidateLengths = session.requests
-          .map((request) => request.html.length)
-          .toList();
-      final maxCandidateLength = candidateLengths.reduce(
-        (left, right) => left > right ? left : right,
-      );
-      final cumulativeCandidateLength = candidateLengths.fold<int>(
-        0,
-        (total, length) => total + length,
-      );
-      final cumulativeFirstProbeLength = firstProbes.fold<int>(
-        0,
-        (total, request) => total + request.html.length,
-      );
-      final costSummary =
-          'pages=${result.chunks.length}, probes=${candidateLengths.length}, '
-          'maxHtmlCodeUnits=$maxCandidateLength, '
-          'cumulativeHtmlCodeUnits=$cumulativeCandidateLength, '
-          'wholeSuffixHtmlCodeUnits=$cumulativeFirstProbeLength';
-      expect(
-        maxCandidateLength,
-        firstProbes.first.html.length,
-        reason: costSummary,
-      );
-      expect(
-        cumulativeFirstProbeLength,
-        greaterThan(maxCandidateLength * result.chunks.length ~/ 2),
-        reason: costSummary,
-      );
-      expect(
-        cumulativeCandidateLength,
-        greaterThan(cumulativeFirstProbeLength),
-        reason: costSummary,
-      );
-      debugPrint('[NovelPaginationBaseline] $costSummary');
+      expect(maximumLengths.toSet(), hasLength(1));
+      final minimumCost = costsPerPage.reduce((a, b) => a < b ? a : b);
+      final maximumCost = costsPerPage.reduce((a, b) => a > b ? a : b);
+      expect(maximumCost, lessThanOrEqualTo(minimumCost * 1.5));
     },
   );
+
+  test('later chunks receive only the previous verified capacity', () async {
+    final searcher = _RecordingWindowSearcher();
+    final result =
+        await DefaultNovelReaderFlowableComplexPaginationEngine(
+          fitSearcher: searcher,
+        ).paginate(
+          atom: _atom('abcdefghijkl'),
+          page: const NovelReaderPaginationPageContext(
+            bufferedHtml: '',
+            hasBufferedContent: false,
+            availableHeight: 40,
+          ),
+          chapter: chapter,
+          key: key,
+          measureSession: _RecordingSession(_rangeHeight),
+          cancellationToken: NovelReaderPaginationCancellationToken(),
+        );
+    expect(result.chunks, hasLength(3));
+    expect(searcher.preferredWindows, <int?>[null, 4, 4]);
+  });
+
+  for (final code in [
+    'complexFitSearchCandidateLimitExceeded',
+    'complexFitSearchBudgetUnavailable',
+  ]) {
+    test('propagates $code without returning a whole-atom fallback', () async {
+      final session = _RecordingSession(_rangeHeight);
+      await expectLater(
+        DefaultNovelReaderFlowableComplexPaginationEngine(
+          fitSearcher: _FailingFitSearcher(code),
+        ).paginate(
+          atom: _atom('bounded failure'),
+          page: const NovelReaderPaginationPageContext(
+            bufferedHtml: '',
+            hasBufferedContent: false,
+            availableHeight: 100,
+          ),
+          chapter: chapter,
+          key: key,
+          measureSession: session,
+          cancellationToken: NovelReaderPaginationCancellationToken(),
+        ),
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (error) => error.code,
+            'code',
+            code,
+          ),
+        ),
+      );
+      expect(session.requests, isEmpty);
+    });
+  }
+
+  for (final height in [80.0, 200.0]) {
+    test(
+      'an oversized indivisible minimum at height $height is measured once',
+      () async {
+        final text = List.filled(9000, '甲').join();
+        final session = _RecordingSession((_) => height);
+        final result =
+            await const DefaultNovelReaderFlowableComplexPaginationEngine()
+                .paginate(
+                  atom: _atom(
+                    '<ruby>$text<rt>注</rt></ruby>',
+                    route: NovelReaderPaginationRoute.rubyInline,
+                  ),
+                  page: const NovelReaderPaginationPageContext(
+                    bufferedHtml: '',
+                    hasBufferedContent: false,
+                    availableHeight: 100,
+                  ),
+                  chapter: chapter,
+                  key: key,
+                  measureSession: session,
+                  cancellationToken: NovelReaderPaginationCancellationToken(),
+                );
+        expect(session.requests, hasLength(1));
+        expect(result.minimumFragmentCount, 1);
+        if (height < 100) {
+          expect(result.requiresAtomicFallback, isFalse);
+          expect(result.chunks, hasLength(1));
+          expect(result.measuredMinimumAtomHeight, isNull);
+        } else {
+          expect(
+            result.fallbackReason,
+            NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow,
+          );
+          expect(result.measuredMinimumAtomHeight, height);
+          expect(result.measuredMinimumAtomHtml, session.requests.single.html);
+        }
+      },
+    );
+  }
 
   test(
     'retries a whole atom on a fresh page when minimum cannot fit',
@@ -218,6 +294,8 @@ void main() {
         NovelReaderFlowableComplexFallbackReason.minimumFragmentOverflow,
       );
       expect(result.minimumFragmentCount, 1);
+      expect(result.measuredMinimumAtomHeight, isNull);
+      expect(result.measuredMinimumAtomHtml, isNull);
     },
   );
 
@@ -641,6 +719,56 @@ final class _TimedBoundaryIndexer
       stopwatch.stop();
       prepareDuration = stopwatch.elapsed;
     }
+  }
+}
+
+final class _RecordingWindowSearcher
+    implements NovelReaderComplexHtmlFitSearcher {
+  final preferredWindows = <int?>[];
+
+  @override
+  Future<NovelReaderComplexHtmlFitResult> findLargestFittingPrefix({
+    required NovelReaderComplexHtmlSliceSession session,
+    required int startOffset,
+    required String bufferedPageHtml,
+    required double availableHeight,
+    required NovelReaderPaginationMeasureContext context,
+    required NovelReaderPaginationCancellationToken cancellationToken,
+    int? preferredWindowGraphemes,
+  }) {
+    preferredWindows.add(preferredWindowGraphemes);
+    return const DefaultNovelReaderComplexHtmlFitSearcher()
+        .findLargestFittingPrefix(
+          session: session,
+          startOffset: startOffset,
+          bufferedPageHtml: bufferedPageHtml,
+          availableHeight: availableHeight,
+          context: context,
+          cancellationToken: cancellationToken,
+          preferredWindowGraphemes: preferredWindowGraphemes,
+        );
+  }
+}
+
+final class _FailingFitSearcher implements NovelReaderComplexHtmlFitSearcher {
+  const _FailingFitSearcher(this.code);
+
+  final String code;
+
+  @override
+  Future<NovelReaderComplexHtmlFitResult> findLargestFittingPrefix({
+    required NovelReaderComplexHtmlSliceSession session,
+    required int startOffset,
+    required String bufferedPageHtml,
+    required double availableHeight,
+    required NovelReaderPaginationMeasureContext context,
+    required NovelReaderPaginationCancellationToken cancellationToken,
+    int? preferredWindowGraphemes,
+  }) async {
+    throw NovelReaderPaginationException(
+      code: code,
+      message: 'Controlled bounded search failure.',
+    );
   }
 }
 

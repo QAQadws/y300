@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_fit.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
@@ -10,6 +11,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_search_budget.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -173,7 +175,7 @@ void main() {
     },
   );
 
-  test('stops at twelve probes and returns only a verified fit', () async {
+  test('caps expansion independently of total atom length', () async {
     final sliceSession = _sliceSession(List.filled(4096, 'a').join());
     final measurer = _RecordingMeasureSession(_linearHeight);
 
@@ -185,12 +187,210 @@ void main() {
       availableHeight: 20000,
     );
 
-    expect(result.probeCount, 12);
+    expect(result.probeCount, lessThanOrEqualTo(12));
+    expect(measurer.probedOffsets.first, 64);
+    expect(measurer.probedOffsets.every((offset) => offset <= 1024), isTrue);
+    expect(result.slice.endOffset, 1024);
     expect(result.budgetExceeded, isTrue);
     expect(result.fits, isTrue);
     expect(result.measuredHeight, lessThanOrEqualTo(20000.5));
     expect(measurer.probedOffsets, contains(result.slice.endOffset));
   });
+
+  test(
+    'expansion advances across a protected gap without repeat probes',
+    () async {
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html: '<p>A<ruby>${'字' * 200}<rt>reading</rt></ruby>B</p>',
+            startAnchor: const NovelReaderTextAnchor(
+              episodeId: 'episode-1',
+              nodeId: 'node-1',
+            ),
+          );
+      final measurer = _RecordingMeasureSession(_linearHeight);
+      final result = await _search(
+        sliceSession: session,
+        measurer: measurer,
+        chapter: chapter,
+        key: key,
+        availableHeight: 10,
+      );
+      expect(result.slice.endOffset, 1);
+      expect(result.fits, isTrue);
+      expect(measurer.requests, hasLength(2));
+      expect(measurer.probedOffsets.toSet(), hasLength(2));
+      expect(measurer.probedOffsets.last, greaterThan(200));
+      final tailMeasurer = _RecordingMeasureSession(_linearHeight);
+      final tail = await _search(
+        sliceSession: session,
+        measurer: tailMeasurer,
+        chapter: chapter,
+        key: key,
+        startOffset: result.slice.endOffset,
+        availableHeight: 3000,
+      );
+      expect(tail.exhaustedAtom, isTrue);
+      expect(tailMeasurer.requests.length, lessThanOrEqualTo(12));
+      expect(tail.slice.html, contains('<rt>reading</rt>'));
+      expect(
+        html_parser
+            .parseFragment('${result.slice.html}${tail.slice.html}')
+            .text,
+        'A${'字' * 200}readingB',
+      );
+    },
+  );
+
+  test(
+    'uses the last verified page capacity only as a measured hint',
+    () async {
+      final measurer = _RecordingMeasureSession(_linearHeight);
+      final result = await _search(
+        sliceSession: _sliceSession('a' * 300),
+        measurer: measurer,
+        chapter: chapter,
+        key: key,
+        availableHeight: 200,
+        preferredWindowGraphemes: 20,
+      );
+      expect(measurer.probedOffsets.first, 20);
+      expect(result.slice.endOffset, 20);
+      expect(measurer.probedOffsets, contains(40));
+    },
+  );
+
+  test(
+    'combined HTML and node limits shrink to a verified legal prefix',
+    () async {
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html: '<div>${List.filled(200, '<span>中</span>').join()}</div>',
+            startAnchor: const NovelReaderTextAnchor(
+              episodeId: 'episode-1',
+              nodeId: 'node-1',
+            ),
+          );
+      const buffer = '<p>buffer</p>';
+      final measurer = _RecordingMeasureSession((_) => 10);
+      final result = await _search(
+        sliceSession: session,
+        measurer: measurer,
+        chapter: chapter,
+        key: key,
+        availableHeight: 100,
+        bufferedPageHtml: buffer,
+        budget: const NovelReaderComplexHtmlSearchBudget(
+          maxCandidateHtmlCodeUnits: 160,
+          maxCandidateDomNodes: 12,
+        ),
+      );
+      expect(result.fits, isTrue);
+      expect(result.budgetExceeded, isTrue);
+      expect(result.requiresFreshPage, isFalse);
+      expect(measurer.requests, isNotEmpty);
+      for (final request in measurer.requests) {
+        expect(request.html, startsWith(buffer));
+        expect(request.html.length, lessThanOrEqualTo(160));
+        expect(
+          NovelReaderComplexHtmlSearchBudget.countDomNodes(request.html),
+          lessThanOrEqualTo(12),
+        );
+      }
+    },
+  );
+
+  test(
+    'four probes reserve a fresh-page minimum even with overflowing buffer',
+    () async {
+      final measurer = _RecordingMeasureSession(
+        (request) => request.html.startsWith('<p>buffer</p>')
+            ? 1000
+            : _linearHeight(request),
+      );
+      final result = await _search(
+        sliceSession: _sliceSession('a' * 100),
+        measurer: measurer,
+        chapter: chapter,
+        key: key,
+        availableHeight: 15,
+        bufferedPageHtml: '<p>buffer</p>',
+        budget: const NovelReaderComplexHtmlSearchBudget(maxProbeCount: 4),
+      );
+      expect(result.requiresFreshPage, isTrue);
+      expect(result.fits, isTrue);
+      expect(result.slice.endOffset, 1);
+      expect(result.probeCount, lessThanOrEqualTo(4));
+      expect(
+        measurer.requests.any(
+          (r) => !r.html.startsWith('<p>buffer</p>') && r.endOffset == 1,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'finite oversized ruby minimum is measured fresh without splitting',
+    () async {
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html: '<ruby>${'文' * 2000}<rt>reading</rt></ruby>',
+            startAnchor: const NovelReaderTextAnchor(
+              episodeId: 'episode-1',
+              nodeId: 'node-1',
+            ),
+          );
+      final measurer = _RecordingMeasureSession((_) => 500);
+      final result = await _search(
+        sliceSession: session,
+        measurer: measurer,
+        chapter: chapter,
+        key: key,
+        availableHeight: 100,
+        bufferedPageHtml: '<p>buffer</p>',
+      );
+      expect(result.oversizedMinimumFragment, isTrue);
+      expect(result.requiresFreshPage, isTrue);
+      expect(result.fits, isFalse);
+      expect(result.slice.endOffset, session.textLength);
+      expect(result.slice.html, contains('<rt>reading</rt>'));
+      expect(measurer.requests, hasLength(1));
+      expect(measurer.requests.single.html, isNot(startsWith('<p>buffer</p>')));
+    },
+  );
+
+  test(
+    'unmeasurable indivisible minimum is recoverable with zero probes',
+    () async {
+      final session = const DefaultNovelReaderComplexHtmlBoundaryIndexer()
+          .prepare(
+            html: '<ruby>${'文' * 33000}<rt>reading</rt></ruby>',
+            startAnchor: const NovelReaderTextAnchor(
+              episodeId: 'episode-1',
+              nodeId: 'node-1',
+            ),
+          );
+      final measurer = _RecordingMeasureSession((_) => 10);
+      await expectLater(
+        _search(
+          sliceSession: session,
+          measurer: measurer,
+          chapter: chapter,
+          key: key,
+          availableHeight: 100,
+        ),
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (e) => e.code,
+            'code',
+            'complexFitSearchCandidateLimitExceeded',
+          ),
+        ),
+      );
+      expect(measurer.requests, isEmpty);
+    },
+  );
 
   test(
     'checks cancellation after a probe and does not continue searching',
@@ -219,6 +419,39 @@ void main() {
           ),
         ),
       );
+      expect(measurer.requests, hasLength(1));
+    },
+  );
+
+  test(
+    'cancellation releases a pending probe and observes its late success',
+    () async {
+      final token = NovelReaderPaginationCancellationToken();
+      final measurer = _BlockingMeasureSession();
+      final pending = _search(
+        sliceSession: _sliceSession('abc'),
+        measurer: measurer,
+        chapter: chapter,
+        key: key,
+        availableHeight: 100,
+        cancellationToken: token,
+      );
+      await measurer.firstRequestStarted.future;
+      final cancelled = expectLater(
+        pending,
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (e) => e.code,
+            'code',
+            'paginationCancelled',
+          ),
+        ),
+      );
+      token.cancel();
+      await cancelled;
+      expect(measurer.requests, hasLength(1));
+      measurer.release();
+      await Future<void>.delayed(Duration.zero);
       expect(measurer.requests, hasLength(1));
     },
   );
@@ -349,22 +582,28 @@ Future<NovelReaderComplexHtmlFitResult> _search({
   required double availableHeight,
   String bufferedPageHtml = '',
   NovelReaderPaginationCancellationToken? cancellationToken,
+  int startOffset = 0,
+  NovelReaderComplexHtmlSearchBudget budget =
+      const NovelReaderComplexHtmlSearchBudget(),
+  int? preferredWindowGraphemes,
 }) {
-  return const DefaultNovelReaderComplexHtmlFitSearcher()
-      .findLargestFittingPrefix(
-        session: sliceSession,
-        startOffset: 0,
-        bufferedPageHtml: bufferedPageHtml,
-        availableHeight: availableHeight,
-        context: NovelReaderPaginationMeasureContext(
-          session: measurer,
-          chapter: chapter,
-          key: key,
-          atomId: 'complex:1',
-        ),
-        cancellationToken:
-            cancellationToken ?? NovelReaderPaginationCancellationToken(),
-      );
+  return DefaultNovelReaderComplexHtmlFitSearcher(
+    budget: budget,
+  ).findLargestFittingPrefix(
+    session: sliceSession,
+    startOffset: startOffset,
+    bufferedPageHtml: bufferedPageHtml,
+    availableHeight: availableHeight,
+    context: NovelReaderPaginationMeasureContext(
+      session: measurer,
+      chapter: chapter,
+      key: key,
+      atomId: 'complex:1',
+    ),
+    cancellationToken:
+        cancellationToken ?? NovelReaderPaginationCancellationToken(),
+    preferredWindowGraphemes: preferredWindowGraphemes,
+  );
 }
 
 NovelReaderComplexHtmlSliceSession _sliceSession(String text) {

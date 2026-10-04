@@ -12,6 +12,7 @@ final class NovelReaderComplexHtmlFitResult {
     required this.exhaustedAtom,
     required this.requiresFreshPage,
     required this.budgetExceeded,
+    this.oversizedMinimumFragment = false,
   }) : assert(measuredHeight >= 0),
        assert(probeCount >= 0),
        assert(cacheHitCount >= 0);
@@ -32,6 +33,9 @@ final class NovelReaderComplexHtmlFitResult {
   /// The caller must flush its current page before appending [slice].
   final bool requiresFreshPage;
 
-  /// The best verified result was returned after the hard probe limit.
+  /// Search was limited by probes, candidate size or the grapheme window.
   final bool budgetExceeded;
+
+  /// A fresh-page indivisible minimum used the finite exceptional size limit.
+  final bool oversizedMinimumFragment;
 }

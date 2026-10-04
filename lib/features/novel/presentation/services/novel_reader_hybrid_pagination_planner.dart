@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -14,6 +15,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_prepared_ch
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_block_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_search_budget.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_flowable_complex_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_page_breaker.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_incremental_pagination_planner.dart';
@@ -58,6 +61,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
         const DefaultNovelReaderPaginationLayoutPolicyResolver(),
     this.textRunExtractor = const NovelReaderPaginationTextRunExtractor(),
     this.complexBlockEngine = const NovelReaderComplexBlockPaginationEngine(),
+    this.complexSearchBudget = const NovelReaderComplexHtmlSearchBudget(),
     NovelReaderFlowableComplexPaginationEngine? flowableComplexEngine,
     NovelReaderComplexHtmlBoundaryCache? boundaryCache,
     this.validationPolicy = const NovelReaderPaginationValidationPolicy(),
@@ -79,6 +83,9 @@ final class DefaultNovelReaderHybridPaginationPlanner
        flowableComplexEngine =
            flowableComplexEngine ??
            DefaultNovelReaderFlowableComplexPaginationEngine(
+             fitSearcher: DefaultNovelReaderComplexHtmlFitSearcher(
+               budget: complexSearchBudget,
+             ),
              boundaryCache:
                  boundaryCache ?? NovelReaderComplexHtmlBoundaryCache(),
            );
@@ -96,6 +103,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
   final NovelReaderPaginationLayoutPolicyResolver layoutPolicyResolver;
   final NovelReaderPaginationTextRunExtractor textRunExtractor;
   final NovelReaderComplexBlockPaginationEngine complexBlockEngine;
+  final NovelReaderComplexHtmlSearchBudget complexSearchBudget;
   final NovelReaderFlowableComplexPaginationEngine flowableComplexEngine;
   final NovelReaderPaginationValidationPolicy validationPolicy;
   final NovelReaderPaginationMeasureCache measureCache;
@@ -387,12 +395,13 @@ final class DefaultNovelReaderHybridPaginationPlanner
       );
       complexBlockCount += 1;
       final fallback = _atomicFallbackForFlowableAtom(classified);
-      final block = await complexBlockEngine.paginate(
+      final block = await _measureAtomicFallback(
         atom: fallback,
         chapter: chapter,
         key: key,
         measurer: complexMeasurer,
       );
+      cancellationToken.throwIfCancelled();
       composer.appendDedicatedBlock(fallback, block);
       atomicWidgetPageCount += 1;
       processedAtomCount += 1;
@@ -401,20 +410,25 @@ final class DefaultNovelReaderHybridPaginationPlanner
 
     Future<void> fallbackFlowableAtom(
       NovelReaderClassifiedPaginationAtom classified,
-      NovelReaderFlowableComplexFallbackReason reason,
-    ) async {
+      NovelReaderFlowableComplexFallbackReason reason, {
+      double? measuredMinimumAtomHeight,
+      String? measuredMinimumAtomHtml,
+    }) async {
       flowabilityFailureReasonCounts.update(
         reason,
         (value) => value + 1,
         ifAbsent: () => 1,
       );
       final fallback = _atomicFallbackForFlowableAtom(classified);
-      final block = await complexBlockEngine.paginate(
+      final block = await _measureAtomicFallback(
         atom: fallback,
         chapter: chapter,
         key: key,
         measurer: complexMeasurer,
+        measuredMinimumAtomHeight: measuredMinimumAtomHeight,
+        measuredMinimumAtomHtml: measuredMinimumAtomHtml,
       );
+      cancellationToken.throwIfCancelled();
       composer.appendDedicatedBlock(fallback, block);
       atomicWidgetPageCount += 1;
       processedAtomCount += 1;
@@ -710,12 +724,13 @@ final class DefaultNovelReaderHybridPaginationPlanner
                     chunks: accepted.chunks,
                     startIndex: index,
                   );
-                  final block = await complexBlockEngine.paginate(
+                  final block = await _measureAtomicFallback(
                     atom: fallback,
                     chapter: chapter,
                     key: key,
                     measurer: complexMeasurer,
                   );
+                  cancellationToken.throwIfCancelled();
                   composer.appendDedicatedBlock(fallback, block);
                   atomicWidgetPageCount += 1;
                   await publishFinalPages();
@@ -786,7 +801,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                 cancellationToken: cancellationToken,
               );
             } catch (error) {
-              if (_isCancellation(error)) {
+              if (_mustPropagate(error)) {
                 rethrow;
               }
               flowable = NovelReaderFlowableComplexPaginationResult(
@@ -800,6 +815,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
                     NovelReaderFlowableComplexFallbackReason.measurementFailure,
               );
             }
+            cancellationToken.throwIfCancelled();
             complexBoundaryCount += flowable.boundaryCount;
             complexBoundaryIndexBuildCount += flowable.boundaryIndexBuildCount;
             complexBoundaryIndexBuildDuration +=
@@ -818,7 +834,12 @@ final class DefaultNovelReaderHybridPaginationPlanner
             complexSearchBudgetExceededCount += flowable.budgetExceededCount;
             minimumComplexFragmentCount += flowable.minimumFragmentCount;
             if (flowable.fallbackReason case final reason?) {
-              await fallbackFlowableAtom(classified, reason);
+              await fallbackFlowableAtom(
+                classified,
+                reason,
+                measuredMinimumAtomHeight: flowable.measuredMinimumAtomHeight,
+                measuredMinimumAtomHtml: flowable.measuredMinimumAtomHtml,
+              );
               continue;
             }
             for (final chunk in flowable.chunks) {
@@ -972,6 +993,70 @@ final class DefaultNovelReaderHybridPaginationPlanner
         error.code == 'paginationCancelled';
   }
 
+  bool _mustPropagate(Object error) =>
+      _isCancellation(error) ||
+      (error is NovelReaderPaginationException &&
+          (error.code == 'complexFitSearchCandidateLimitExceeded' ||
+              error.code == 'complexFitSearchBudgetUnavailable'));
+
+  Future<NovelReaderComplexBlockPage> _measureAtomicFallback({
+    required NovelReaderClassifiedPaginationAtom atom,
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+    required NovelReaderComplexBlockMeasurer measurer,
+    double? measuredMinimumAtomHeight,
+    String? measuredMinimumAtomHtml,
+  }) {
+    assert(
+      (measuredMinimumAtomHeight == null) == (measuredMinimumAtomHtml == null),
+    );
+    final html = measuredMinimumAtomHtml ?? atom.atom.html;
+    final isMeasuredMinimum = measuredMinimumAtomHeight != null;
+    final maximumHtmlLength = isMeasuredMinimum
+        ? complexSearchBudget.maxOversizedMinimumHtmlCodeUnits
+        : complexSearchBudget.maxCandidateHtmlCodeUnits;
+    // Reject before parsing an arbitrary large whole atom. A measured minimum
+    // is the only evidence that permits the finite indivisible exception.
+    if (html.length > maximumHtmlLength ||
+        !complexSearchBudget.allowsCandidate(
+          html,
+          NovelReaderComplexHtmlSearchBudget.countDomNodes(html),
+          oversizedMinimum: isMeasuredMinimum,
+        )) {
+      throw const NovelReaderPaginationException(
+        code: 'complexFitSearchCandidateLimitExceeded',
+        message:
+            'The atomic fallback exceeds the complex HTML candidate limit.',
+      );
+    }
+    if (measuredMinimumAtomHeight == null) {
+      return complexBlockEngine.paginate(
+        atom: atom,
+        chapter: chapter,
+        key: key,
+        measurer: measurer,
+      );
+    }
+    final oversized = measuredMinimumAtomHeight > key.viewportHeightPx;
+    // Session diagnostics already contain this probe. Do not measure the same
+    // indivisible atom a second time merely to build its dedicated page.
+    return Future.value(
+      NovelReaderComplexBlockPage(
+        html: html,
+        startAnchor: atom.atom.startAnchor,
+        endAnchor: atom.atom.endAnchor,
+        metrics: NovelReaderComplexBlockMetrics(
+          height: measuredMinimumAtomHeight,
+          route: atom.route,
+          isOversized: oversized,
+          requiresInnerScroll: oversized,
+          measurementCacheHit: false,
+          frameWaitCount: 0,
+        ),
+      ),
+    );
+  }
+
   double _minimumLineHeight(List<NovelReaderPaginationTextRun> runs) {
     var minimum = double.infinity;
     for (final run in runs) {
@@ -1102,6 +1187,7 @@ final class DefaultNovelReaderHybridPaginationPlanner
       layoutPolicyResolver: layoutPolicyResolver,
       textRunExtractor: textRunExtractor,
       complexBlockEngine: complexBlockEngine,
+      complexSearchBudget: complexSearchBudget,
       flowableComplexEngine: flowableComplexEngine,
       validationPolicy: validationPolicy,
       measureSessionFactory: _measureSessionFactory,

@@ -368,7 +368,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                rendererRevision: 17,
+                rendererRevision: 18,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),

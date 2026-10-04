@@ -53,6 +53,8 @@ final class NovelReaderFlowableComplexPaginationResult {
     this.boundaryIndexCacheHitCount = 0,
     this.boundaryIndexSingleFlightHitCount = 0,
     this.fallbackReason,
+    this.measuredMinimumAtomHeight,
+    this.measuredMinimumAtomHtml,
   }) : chunks = List<NovelReaderFlowableComplexChunk>.unmodifiable(chunks),
        assert(boundaryCount >= 0),
        assert(probeCount >= 0),
@@ -62,7 +64,19 @@ final class NovelReaderFlowableComplexPaginationResult {
        assert(boundaryIndexBuildCount >= 0),
        assert(boundaryIndexCacheHitCount >= 0),
        assert(boundaryIndexSingleFlightHitCount >= 0),
-       assert(fallbackReason == null || chunks.isEmpty);
+       assert(fallbackReason == null || chunks.isEmpty),
+       assert(
+         measuredMinimumAtomHeight == null ||
+             (measuredMinimumAtomHeight.isFinite &&
+                 measuredMinimumAtomHeight >= 0 &&
+                 fallbackReason ==
+                     NovelReaderFlowableComplexFallbackReason
+                         .minimumFragmentOverflow),
+       ),
+       assert(
+         (measuredMinimumAtomHeight == null) ==
+             (measuredMinimumAtomHtml == null),
+       );
 
   final List<NovelReaderFlowableComplexChunk> chunks;
   final int boundaryCount;
@@ -75,6 +89,15 @@ final class NovelReaderFlowableComplexPaginationResult {
   final int boundaryIndexCacheHitCount;
   final int boundaryIndexSingleFlightHitCount;
   final NovelReaderFlowableComplexFallbackReason? fallbackReason;
+
+  /// The whole atom was the only legal minimum and was measured on a fresh
+  /// page. The host can preserve that indivisible block without measuring it
+  /// again; this is not evidence for an arbitrary whole-atom fallback.
+  final double? measuredMinimumAtomHeight;
+
+  /// Exact serialized candidate corresponding to [measuredMinimumAtomHeight].
+  /// Reusing its height does not assume the original atom serializes identically.
+  final String? measuredMinimumAtomHtml;
 
   bool get requiresAtomicFallback => fallbackReason != null;
 }
