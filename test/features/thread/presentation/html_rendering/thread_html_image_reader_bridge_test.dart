@@ -1,3 +1,4 @@
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';

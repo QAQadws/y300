@@ -1,3 +1,5 @@
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
+
 import 'continuous_image_models.dart';
 
 class ContinuousImagePrefetchPlan {

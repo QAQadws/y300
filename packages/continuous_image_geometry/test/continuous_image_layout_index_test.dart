@@ -1,7 +1,9 @@
 import 'dart:math';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
+import 'package:test/test.dart';
+
+import 'fixtures/geometry_test_item.dart';
 
 void main() {
   test('inclusive image edges, gaps and tail preserve progress semantics', () {
@@ -110,11 +112,7 @@ void main() {
     () {
       final registry = InMemoryContinuousImageExtentRegistry();
       final items = [_item(0), _item(1)];
-      int? visible(
-        List<ContinuousImageItem> items,
-        double width,
-        double offset,
-      ) =>
+      int? visible(List<GeometryTestItem> items, double width, double offset) =>
           ContinuousImageLayoutIndex(
                 items: items,
                 extentRegistry: registry,
@@ -137,13 +135,10 @@ void main() {
   );
 }
 
-ContinuousImageItem _item(int i, {double spacing = 0}) => ContinuousImageItem(
+GeometryTestItem _item(int i, {double spacing = 0}) => GeometryTestItem(
   ownerId: 'chapter',
   id: 'image-$i',
-  url: '',
-  cacheKey: 'image-$i',
   index: i,
-  sourceKind: ContinuousImageSourceKind.comicPage,
   fallbackAspectRatio: 1,
   spacingAfter: spacing,
 );

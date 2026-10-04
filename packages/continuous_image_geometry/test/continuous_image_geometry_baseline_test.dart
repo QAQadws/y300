@@ -1,5 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
+import 'package:test/test.dart';
+
+import 'fixtures/geometry_test_item.dart';
 
 void main() {
   test(
@@ -85,7 +87,7 @@ void main() {
       const targetPosition = 28;
       const withinImage = 37.5;
       const coordinator = ContinuousImageScrollAnchorCoordinator();
-      final items = List<ContinuousImageItem>.generate(
+      final items = List<GeometryTestItem>.generate(
         40,
         (position) => _item(position, spacing: (position % 3) * 2.5),
       );
@@ -115,9 +117,7 @@ void main() {
           nextExtent: next,
           items: items,
           extentRegistry: registry,
-          policy: const ContinuousImageFlowPolicy(
-            allowScrollOffsetCompensation: true,
-          ),
+          allowScrollOffsetCompensation: true,
           metrics: ContinuousImageScrollAnchorMetrics(
             scrollOffset: offset,
             minScrollExtent: 0,
@@ -167,7 +167,7 @@ void main() {
     () {
       const width = 360.0;
       const coordinator = ContinuousImageScrollAnchorCoordinator();
-      final items = <ContinuousImageItem>[_item(0), _item(1)];
+      final items = <GeometryTestItem>[_item(0), _item(1)];
       final registry = InMemoryContinuousImageExtentRegistry();
       final previous = _extent(items.first, width, 120);
       registry.record(previous);
@@ -196,9 +196,7 @@ void main() {
           nextExtent: _extent(items.first, width, 120 + delta),
           items: items,
           extentRegistry: registry,
-          policy: const ContinuousImageFlowPolicy(
-            allowScrollOffsetCompensation: true,
-          ),
+          allowScrollOffsetCompensation: true,
           metrics: ContinuousImageScrollAnchorMetrics(
             scrollOffset: 120,
             minScrollExtent: 0,
@@ -223,13 +221,13 @@ typedef _GeometryRow = ({int index, double start, double end});
 typedef _ReferenceGeometry = ({List<_GeometryRow> rows, double total});
 
 ({
-  List<ContinuousImageItem> items,
+  List<GeometryTestItem> items,
   List<double> heights,
   List<double> estimatedHeights,
   InMemoryContinuousImageExtentRegistry registry,
 })
 _mixedSequence(int count, {required double width}) {
-  final items = <ContinuousImageItem>[];
+  final items = <GeometryTestItem>[];
   final heights = <double>[];
   final estimatedHeights = <double>[];
   final registry = InMemoryContinuousImageExtentRegistry();
@@ -263,19 +261,16 @@ _mixedSequence(int count, {required double width}) {
   );
 }
 
-ContinuousImageItem _item(
+GeometryTestItem _item(
   int position, {
   String owner = 'chapter',
   int? knownHeight,
   double fallbackRatio = 1,
   double spacing = 0,
-}) => ContinuousImageItem(
+}) => GeometryTestItem(
   ownerId: owner,
   id: '$owner-image-$position',
-  url: '',
-  cacheKey: '$owner-image-$position',
   index: 20 + position * 3,
-  sourceKind: ContinuousImageSourceKind.comicPage,
   knownWidth: knownHeight == null ? null : 240,
   knownHeight: knownHeight,
   fallbackAspectRatio: fallbackRatio,
@@ -283,7 +278,7 @@ ContinuousImageItem _item(
 );
 
 ContinuousImageExtent _extent(
-  ContinuousImageItem item,
+  GeometryTestItem item,
   double width,
   double height,
 ) => ContinuousImageExtent(
@@ -299,7 +294,7 @@ ContinuousImageExtent _extent(
 
 // Expected heights come from the fixture, independent of resolver/registry code.
 _ReferenceGeometry _scanGeometry(
-  List<ContinuousImageItem> items,
+  List<GeometryTestItem> items,
   List<double> heights,
 ) {
   final rows = <_GeometryRow>[];
@@ -313,7 +308,7 @@ _ReferenceGeometry _scanGeometry(
 }
 
 void _expectSeekPrefixes(
-  List<ContinuousImageItem> items,
+  List<GeometryTestItem> items,
   InMemoryContinuousImageExtentRegistry registry,
   _ReferenceGeometry reference,
   double width,

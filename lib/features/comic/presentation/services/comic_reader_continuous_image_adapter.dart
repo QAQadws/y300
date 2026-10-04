@@ -1,3 +1,4 @@
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 

@@ -1,12 +1,12 @@
 import 'continuous_image_layout_resolver.dart';
-import 'continuous_image_models.dart';
+import 'continuous_image_geometry_models.dart';
 
 abstract interface class ContinuousImageExtentRegistry {
   ContinuousImageExtent? extentOf(String itemId);
 
   double estimateOffsetForIndex(
     int index,
-    List<ContinuousImageItem> items, {
+    List<ContinuousImageLayoutItem> items, {
     required double crossAxisExtent,
     ContinuousImageLayoutResolver resolver =
         const ContinuousImageLayoutResolver(),
@@ -32,7 +32,7 @@ class InMemoryContinuousImageExtentRegistry
   @override
   double estimateOffsetForIndex(
     int index,
-    List<ContinuousImageItem> items, {
+    List<ContinuousImageLayoutItem> items, {
     required double crossAxisExtent,
     ContinuousImageLayoutResolver resolver =
         const ContinuousImageLayoutResolver(),
@@ -67,7 +67,7 @@ class InMemoryContinuousImageExtentRegistry
   }
 
   double _estimateMainAxisExtent({
-    required ContinuousImageItem item,
+    required ContinuousImageLayoutItem item,
     required double crossAxisExtent,
     required ContinuousImageLayoutResolver resolver,
   }) {

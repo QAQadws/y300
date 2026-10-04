@@ -1,4 +1,4 @@
-import 'continuous_image_models.dart';
+import 'continuous_image_geometry_models.dart';
 
 class ContinuousImageDimensionCandidate {
   const ContinuousImageDimensionCandidate({
@@ -26,7 +26,7 @@ class ContinuousImageLayoutResolver {
   const ContinuousImageLayoutResolver();
 
   ContinuousImageLayoutHint resolveInitialHint({
-    required ContinuousImageItem item,
+    required ContinuousImageLayoutItem item,
     ContinuousImageDimensionCandidate? htmlDimensions,
     ContinuousImageDimensionCandidate? persistedDimensions,
     ContinuousImageDimensionCandidate? probedDimensions,
@@ -78,7 +78,7 @@ class ContinuousImageLayoutResolver {
     );
   }
 
-  ContinuousImageLayoutHint fallbackHint(ContinuousImageItem item) {
+  ContinuousImageLayoutHint fallbackHint(ContinuousImageLayoutItem item) {
     final fallback = item.fallbackAspectRatio;
     return ContinuousImageLayoutHint(
       aspectRatio: fallback.isFinite && fallback > 0 ? fallback : 0.7,

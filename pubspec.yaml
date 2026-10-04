@@ -36,6 +36,8 @@ dependencies:
     path: packages/forum_markup_core
   content_title_core:
     path: packages/content_title_core
+  continuous_image_geometry:
+    path: packages/continuous_image_geometry
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2

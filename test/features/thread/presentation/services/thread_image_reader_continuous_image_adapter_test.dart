@@ -1,3 +1,4 @@
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';

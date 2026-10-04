@@ -1,6 +1,6 @@
 import 'continuous_image_extent_registry.dart';
 import 'continuous_image_layout_resolver.dart';
-import 'continuous_image_models.dart';
+import 'continuous_image_geometry_models.dart';
 
 enum ContinuousImageScrollCompensationTiming { none, immediate, deferred }
 
@@ -92,12 +92,12 @@ class ContinuousImageScrollAnchorCoordinator {
   ContinuousImageScrollCompensationPlan planForExtentChange({
     required ContinuousImageExtent? previousExtent,
     required ContinuousImageExtent nextExtent,
-    required List<ContinuousImageItem> items,
+    required List<ContinuousImageLayoutItem> items,
     required ContinuousImageExtentRegistry extentRegistry,
-    required ContinuousImageFlowPolicy policy,
+    required bool allowScrollOffsetCompensation,
     required ContinuousImageScrollAnchorMetrics metrics,
   }) {
-    if (!policy.allowScrollOffsetCompensation) {
+    if (!allowScrollOffsetCompensation) {
       return ContinuousImageScrollCompensationPlan.none('policyDisabled');
     }
     if (previousExtent == null) {

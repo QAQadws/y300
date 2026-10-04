@@ -1,3 +1,5 @@
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
+
 import 'tall_image/tall_image_policy.dart';
 
 enum ContinuousImageSourceKind {
@@ -7,33 +9,7 @@ enum ContinuousImageSourceKind {
   genericImageReader,
 }
 
-enum ContinuousImageDimensionSource {
-  html,
-  persistedCache,
-  decodedImage,
-  probedHeader,
-  fallback,
-}
-
-enum ContinuousImageScrollDirection { idle, forward, reverse }
-
-class ContinuousImageDimensions {
-  const ContinuousImageDimensions({required this.width, required this.height});
-
-  final int width;
-  final int height;
-
-  bool get isValid => width > 0 && height > 0;
-
-  double? get aspectRatioOrNull {
-    if (!isValid) {
-      return null;
-    }
-    return width / height;
-  }
-}
-
-class ContinuousImageItem {
+class ContinuousImageItem implements ContinuousImageLayoutItem {
   const ContinuousImageItem({
     required this.ownerId,
     required this.id,
@@ -53,19 +29,24 @@ class ContinuousImageItem {
        assert(spacingAfter >= 0);
 
   final String ownerId;
+  @override
   final String id;
   final String url;
   final String cacheKey;
+  @override
   final int index;
   final ContinuousImageSourceKind sourceKind;
   final Uri? referer;
   final int? knownWidth;
   final int? knownHeight;
   final ContinuousImageDimensionSource? knownDimensionSource;
+  @override
   final double fallbackAspectRatio;
+  @override
   final double spacingAfter;
   final Map<String, Object?> extra;
 
+  @override
   ContinuousImageDimensions? get knownDimensions {
     final width = knownWidth;
     final height = knownHeight;
@@ -76,6 +57,7 @@ class ContinuousImageItem {
     return dimensions.isValid ? dimensions : null;
   }
 
+  @override
   ContinuousImageDimensionSource get effectiveKnownDimensionSource {
     return knownDimensionSource ??
         ContinuousImageDimensionSource.persistedCache;
@@ -112,16 +94,6 @@ class ContinuousImageItem {
       extra: extra ?? this.extra,
     );
   }
-}
-
-class ContinuousImageLayoutHint {
-  const ContinuousImageLayoutHint({
-    required this.aspectRatio,
-    required this.source,
-  }) : assert(aspectRatio > 0);
-
-  final double aspectRatio;
-  final ContinuousImageDimensionSource source;
 }
 
 class ContinuousImageFlowPolicy {
@@ -165,50 +137,6 @@ class ContinuousImageFlowPolicy {
   final int prefetchWindowBefore;
   final int prefetchWindowAfter;
   final TallImagePolicy tallImagePolicy;
-}
-
-class ContinuousImageViewportState {
-  const ContinuousImageViewportState({
-    required this.firstVisibleIndex,
-    required this.lastVisibleIndex,
-    required this.lastEndVisibleIndex,
-    required this.scrollOffset,
-    required this.viewportExtent,
-    required this.userScrollDirection,
-  }) : assert(scrollOffset >= 0),
-       assert(viewportExtent >= 0);
-
-  final int? firstVisibleIndex;
-  final int? lastVisibleIndex;
-  final int? lastEndVisibleIndex;
-  final double scrollOffset;
-  final double viewportExtent;
-  final ContinuousImageScrollDirection userScrollDirection;
-}
-
-class ContinuousImageExtent {
-  const ContinuousImageExtent({
-    required this.ownerId,
-    required this.itemId,
-    required this.index,
-    required this.crossAxisExtent,
-    required this.mainAxisExtent,
-    required this.aspectRatio,
-    required this.dimensionSource,
-    required this.measuredAt,
-  }) : assert(index >= 0),
-       assert(crossAxisExtent > 0),
-       assert(mainAxisExtent >= 0),
-       assert(aspectRatio > 0);
-
-  final String ownerId;
-  final String itemId;
-  final int index;
-  final double crossAxisExtent;
-  final double mainAxisExtent;
-  final double aspectRatio;
-  final ContinuousImageDimensionSource dimensionSource;
-  final DateTime measuredAt;
 }
 
 abstract interface class ContinuousImageDimensionSink {

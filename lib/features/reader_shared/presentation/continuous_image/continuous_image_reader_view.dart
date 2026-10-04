@@ -1,3 +1,4 @@
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:y300/features/reader_shared/domain/continuous_image/continuous_image.dart';

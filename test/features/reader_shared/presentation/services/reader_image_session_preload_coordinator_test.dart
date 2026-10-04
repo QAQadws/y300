@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:continuous_image_geometry/continuous_image_geometry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';

@@ -1,13 +1,13 @@
 import 'continuous_image_extent_registry.dart';
 import 'continuous_image_layout_resolver.dart';
-import 'continuous_image_models.dart';
+import 'continuous_image_geometry_models.dart';
 
 /// Geometry for one image layout, independent of its current scroll offset.
 /// Rebuild when items, measured extents or viewport width change, then query
 /// in logarithmic time while scrolling through images and arbitrary tail rows.
 class ContinuousImageLayoutIndex {
   ContinuousImageLayoutIndex({
-    required List<ContinuousImageItem> items,
+    required List<ContinuousImageLayoutItem> items,
     required ContinuousImageExtentRegistry extentRegistry,
     required double crossAxisExtent,
     ContinuousImageLayoutResolver resolver =
