@@ -11,6 +11,7 @@ void main() {
       test(testCase.id, () {
         final result = analyzer.analyze(testCase.rawTitle);
 
+        expect(result.rawTitle, testCase.expectedRawTitle);
         expect(result.cleanBookName, testCase.expectedCleanBookName);
         expect(result.searchKeyword, testCase.expectedSearchKeyword);
         expect(result.authorPrefix, testCase.expectedAuthorPrefix);
@@ -22,14 +23,6 @@ void main() {
         );
       });
     }
-
-    test('search keyword is clipped to 18 runes', () {
-      final result = analyzer.analyze('这是一个非常非常非常非常非常长的漫画标题第1话');
-
-      expect(result.cleanBookName, '这是一个非常非常非常非常非常长的漫画标题');
-      expect(result.searchKeyword.runes.length, 18);
-      expect(result.searchKeyword, '这是一个非常非常非常非常非常长的漫画');
-    });
 
     test('extractTidFromUrl supports query and thread urls', () {
       expect(

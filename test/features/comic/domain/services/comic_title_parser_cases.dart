@@ -161,16 +161,18 @@ class ComicTitleAnalyzerCase {
   const ComicTitleAnalyzerCase({
     required this.id,
     required this.rawTitle,
+    String? expectedRawTitle,
     required this.expectedCleanBookName,
     required this.expectedSearchKeyword,
     this.expectedAuthorPrefix,
     this.expectedEpisodeLabel,
     this.expectedChapterNumber,
     this.expectedPossibleChapterNumbers = const <double>[],
-  });
+  }) : expectedRawTitle = expectedRawTitle ?? rawTitle;
 
   final String id;
   final String rawTitle;
+  final String expectedRawTitle;
   final String expectedCleanBookName;
   final String expectedSearchKeyword;
   final String? expectedAuthorPrefix;
@@ -298,6 +300,42 @@ final List<ComicTitleRuleSummaryCase> stageOneComicTitleRuleSummaryCases =
 /// 搜索词长度裁剪、URL tid 提取等阶段 1 的 P0 规则。
 final List<ComicTitleAnalyzerCase> stageOneComicTitleAnalyzerCases =
     <ComicTitleAnalyzerCase>[
+      const ComicTitleAnalyzerCase(
+        id: 'whitespace_input_returns_empty_analysis',
+        rawTitle: ' \t\r\n　',
+        expectedRawTitle: '',
+        expectedCleanBookName: '',
+        expectedSearchKeyword: '',
+      ),
+      const ComicTitleAnalyzerCase(
+        id: 'raw_title_is_trimmed_without_normalizing_its_contents',
+        rawTitle: ' \t[Ａｕｔｈｏｒ]　漫画标题 第１２話 \r\n',
+        expectedRawTitle: '[Ａｕｔｈｏｒ]　漫画标题 第１２話',
+        expectedCleanBookName: '漫画标题',
+        expectedSearchKeyword: '漫画标题',
+        expectedAuthorPrefix: 'Author',
+        expectedEpisodeLabel: '第12话',
+        expectedChapterNumber: 12,
+        expectedPossibleChapterNumbers: <double>[12],
+      ),
+      const ComicTitleAnalyzerCase(
+        id: 'search_keyword_is_clipped_to_18_runes',
+        rawTitle: '这是一个非常非常非常非常非常长的漫画标题第1话',
+        expectedCleanBookName: '这是一个非常非常非常非常非常长的漫画标题',
+        expectedSearchKeyword: '这是一个非常非常非常非常非常长的漫画',
+        expectedEpisodeLabel: '第1话',
+        expectedChapterNumber: 1,
+        expectedPossibleChapterNumbers: <double>[1],
+      ),
+      const ComicTitleAnalyzerCase(
+        id: 'search_keyword_keeps_a_non_bmp_rune_at_the_18_rune_boundary',
+        rawTitle: '一二三四五六七八九十一二三四五六七😀尾 第1话',
+        expectedCleanBookName: '一二三四五六七八九十一二三四五六七😀尾',
+        expectedSearchKeyword: '一二三四五六七八九十一二三四五六七😀',
+        expectedEpisodeLabel: '第1话',
+        expectedChapterNumber: 1,
+        expectedPossibleChapterNumbers: <double>[1],
+      ),
       const ComicTitleAnalyzerCase(
         id: 'strip_brackets_and_volume_marker',
         rawTitle: '[Scan] Comic Title Vol.2',
