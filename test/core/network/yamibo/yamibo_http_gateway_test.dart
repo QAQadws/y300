@@ -270,6 +270,50 @@ void main() {
       },
     );
 
+    for (final scenario
+        in const <({String name, String? cacheControl, Duration lifetime})>[
+          (name: 'default', cacheControl: null, lifetime: Duration(days: 7)),
+          (
+            name: 'max-age',
+            cacheControl: 'max-age=90',
+            lifetime: Duration(seconds: 90),
+          ),
+          (name: 'no-cache', cacheControl: 'no-cache', lifetime: Duration.zero),
+          (name: 'no-store', cacheControl: 'no-store', lifetime: Duration.zero),
+        ]) {
+      test('image resource cache lifetime honors ${scenario.name}', () async {
+        final adapter = _GatewayTestAdapter.scripted(<_ScriptedResponse>[
+          _ScriptedResponse(
+            bytesBody: const <int>[0xff, 0xd8, 0xff, 0xe0],
+            contentType: 'image/jpeg',
+            headers: <String, List<String>>{
+              if (scenario.cacheControl case final cacheControl?)
+                'cache-control': <String>[cacheControl],
+            },
+          ),
+        ]);
+        final gateway = _buildGateway(adapter: adapter);
+        final before = DateTime.now();
+        final result = await gateway.openImageResource(
+          Uri.parse('https://bbs.yamibo.com/data/attachment/image.jpg'),
+          referer: Uri.parse('https://bbs.yamibo.com/forum.php?mod=viewthread'),
+          userAgent: BrowserUserAgents.desktop,
+        );
+        final after = DateTime.now();
+
+        expect(result.isSuccess, isTrue);
+        final response = result.dataOrNull!;
+        expect(
+          response.validUntil.microsecondsSinceEpoch,
+          inInclusiveRange(
+            before.add(scenario.lifetime).microsecondsSinceEpoch,
+            after.add(scenario.lifetime).microsecondsSinceEpoch,
+          ),
+        );
+        await response.content.drain<void>();
+      });
+    }
+
     test(
       'accepts a signature-proven dynamic image with a misleading MIME type',
       () async {

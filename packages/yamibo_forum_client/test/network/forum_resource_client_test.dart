@@ -96,6 +96,46 @@ void main() {
       );
     });
 
+    for (final scenario
+        in const <({String name, String? cacheControl, Duration lifetime})>[
+          (name: 'default', cacheControl: null, lifetime: Duration(days: 7)),
+          (
+            name: 'max-age',
+            cacheControl: 'max-age=90',
+            lifetime: Duration(seconds: 90),
+          ),
+          (name: 'no-cache', cacheControl: 'no-cache', lifetime: Duration.zero),
+          (name: 'no-store', cacheControl: 'no-store', lifetime: Duration.zero),
+        ]) {
+      test('image resource cache lifetime honors ${scenario.name}', () async {
+        final adapter = _ScriptedResourceAdapter(<_ResourceResponse>[
+          _ResourceResponse(
+            bytes: const <int>[0xff, 0xd8, 0xff, 0xe0],
+            headers: <String, List<String>>{
+              Headers.contentTypeHeader: <String>['image/jpeg'],
+              if (scenario.cacheControl case final cacheControl?)
+                'cache-control': <String>[cacheControl],
+            },
+          ),
+        ]);
+        final network = _network(config, adapter: adapter);
+        final before = DateTime.now();
+        final result = await network.open(_request(siteOrigin, '/image.jpg'));
+        final after = DateTime.now();
+
+        expect(result, isA<ForumResourceSuccess>());
+        final success = result as ForumResourceSuccess;
+        expect(
+          success.validUntil.microsecondsSinceEpoch,
+          inInclusiveRange(
+            before.add(scenario.lifetime).microsecondsSinceEpoch,
+            after.add(scenario.lifetime).microsecondsSinceEpoch,
+          ),
+        );
+        await success.content.drain<void>();
+      });
+    }
+
     test('same-site resource 405 recovers before exposing bytes', () async {
       final cookies = MemoryForumCookieStore();
       await cookies.merge(siteOrigin, const <String, String>{
