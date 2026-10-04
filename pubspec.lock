@@ -161,6 +161,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.19.1"
+  comic_title_core:
+    dependency: "direct main"
+    description:
+      path: "packages/comic_title_core"
+      relative: true
+    source: path
+    version: "0.1.0"
   convert:
     dependency: transitive
     description:
@@ -997,7 +1004,7 @@ packages:
     source: hosted
     version: "0.2.1"
   petitparser:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: petitparser
       sha256: "91bd59303e9f769f108f8df05e371341b15d59e995e6806aefab827b58336675"

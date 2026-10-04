@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/domain/services/title/comic_title_rules.dart';
+import 'package:comic_title_core/comic_title_core.dart';
 
 typedef ComicDuplicateMetadataKey = ({String title, String author});
 

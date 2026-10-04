@@ -2,6 +2,7 @@ import 'dart:io' as io;
 
 import 'dart:async';
 
+import 'package:comic_title_core/comic_title_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -19,7 +20,6 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_service.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_refresh_service.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
-import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';

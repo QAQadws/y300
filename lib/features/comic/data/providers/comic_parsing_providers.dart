@@ -5,7 +5,7 @@ import 'package:y300/features/comic/domain/services/comic_post_aggregation_servi
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/comic/domain/services/html_comic_parser_service.dart';
 import 'package:y300/features/comic/domain/services/rule_based_comic_detector.dart';
-import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
+import 'package:comic_title_core/comic_title_core.dart';
 import 'package:y300/features/thread/data/providers/forum_image_source_pipeline_provider.dart';
 
 final comicDetectorProvider = Provider<ComicDetector>((ref) {

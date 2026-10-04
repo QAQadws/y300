@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
+import 'package:comic_title_core/comic_title_core.dart';
 
 import 'comic_title_parser_cases.dart';
 
