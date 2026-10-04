@@ -1,14 +1,72 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
+  test(
+    'cancellation listeners are scoped and cancelled yields leave no timer',
+    () {
+      fakeAsync((async) {
+        final token = NovelReaderPaginationCancellationToken();
+        var removedCalls = 0;
+        var activeCalls = 0;
+        token.onCancel(() => removedCalls += 1)();
+        token.onCancel(() => activeCalls += 1);
+        Object? error;
+        unawaited(
+          token.yieldToEventLoop().then<void>(
+            (_) {},
+            onError: (Object value) {
+              error = value;
+            },
+          ),
+        );
+        expect(async.nonPeriodicTimerCount, 1);
+
+        token.cancel();
+        token.cancel();
+        async.flushMicrotasks();
+        expect(removedCalls, 0);
+        expect(activeCalls, 1);
+        expect(async.nonPeriodicTimerCount, 0);
+        expect(error, _exceptionCode('paginationCancelled'));
+        token.onCancel(() => activeCalls += 1);
+        expect(activeCalls, 2);
+      });
+    },
+  );
+
+  test(
+    'cancelled waits observe late success and errors without resettling',
+    () async {
+      for (final fail in <bool>[false, true]) {
+        final token = NovelReaderPaginationCancellationToken();
+        final gate = Completer<int>();
+        final result = token.waitFor(gate.future);
+        final cancelled = expectLater(
+          result,
+          throwsA(_exceptionCode('paginationCancelled')),
+        );
+        token.cancel();
+        await cancelled;
+        if (fail) {
+          gate.completeError(StateError('late measurement'));
+        } else {
+          gate.complete(42);
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+    },
+  );
+
   test('coalesces identical in-flight range measurements', () async {
     final delegate = _DelayedMeasureSession();
     final session = NovelReaderCachingPaginationMeasureSession(
@@ -115,6 +173,38 @@ void main() {
     await firstSession.dispose();
     await secondSession.dispose();
   });
+
+  test(
+    'an active shared waiter remeasures when the metric owner exits',
+    () async {
+      final cache = NovelReaderPaginationMeasureCache();
+      final ownerDelegate = _DisposingMeasureSession();
+      final nextDelegate = _CountingMeasureSession();
+      final owner = NovelReaderCachingPaginationMeasureSession(
+        delegate: ownerDelegate,
+        cache: cache,
+      );
+      final next = NovelReaderCachingPaginationMeasureSession(
+        delegate: nextDelegate,
+        cache: cache,
+      );
+      final request = _request(html: '<p>shared owner</p>');
+      final old = owner.measure(request);
+      final fresh = next.measure(request);
+      final oldError = expectLater(
+        old,
+        throwsA(_exceptionCode('measurementSessionDisposed')),
+      );
+      expect(nextDelegate.calls, 0);
+
+      await owner.dispose();
+      await oldError;
+      expect((await fresh).height, request.html.length.toDouble());
+      expect(nextDelegate.calls, 1);
+      expect(cache.length, 1);
+      await next.dispose();
+    },
+  );
 
   test(
     'a disposed caching session cannot serve stale cached metrics',
@@ -248,6 +338,253 @@ void main() {
     );
     await dispose;
   });
+
+  testWidgets(
+    'timeout includes initial frame wait and a new probe can recover',
+    (tester) async {
+      late BuildContext hostContext;
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: Builder(
+            builder: (context) {
+              hostContext = context;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      final chapter = _chapter();
+      final key = _key(chapter);
+      final session = _htmlSession(hostContext, chapter, key);
+      addTearDown(session.dispose);
+      final pending = session.measure(
+        NovelReaderPaginationMeasureRequest(
+          html: '<p>timed out old candidate</p>',
+          chapter: chapter,
+          key: key,
+        ),
+      );
+      var timeoutSettled = false;
+      final timedOut = expectLater(
+        pending,
+        throwsA(_exceptionCode('measurementTimeout')),
+      ).then((_) => timeoutSettled = true);
+      await tester.idle(); // Enter endOfFrame without delivering that frame.
+      await tester.pump(const Duration(milliseconds: 801));
+      await tester.idle();
+      expect(
+        timeoutSettled,
+        isTrue,
+        reason:
+            'The initial host wait must settle at the single-probe deadline.',
+      );
+      await timedOut;
+      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+
+      final fresh = session.measure(
+        NovelReaderPaginationMeasureRequest(
+          html: '<p>fresh candidate</p>',
+          chapter: chapter,
+          key: key,
+        ),
+      );
+      NovelReaderPaginationMeasureResult? freshResult;
+      Object? freshError;
+      unawaited(
+        fresh.then<void>(
+          (result) {
+            freshResult = result;
+          },
+          onError: (Object error, StackTrace stack) {
+            freshError = error;
+          },
+        ),
+      );
+      // Timeout cleanup and the serial tail may finish after the first pump.
+      // Drive host insertion and probe layout with a bounded frame count.
+      for (
+        var frame = 0;
+        frame < 6 && freshResult == null && freshError == null;
+        frame += 1
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(freshError, isNull);
+      expect(
+        freshResult,
+        isNotNull,
+        reason: 'The replacement probe must finish within the driven frames.',
+      );
+      expect(freshResult!.height, greaterThan(0));
+      await session.dispose();
+      await tester.pump();
+      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'dispose releases started frame wait and queued requests without a frame',
+    (tester) async {
+      late BuildContext hostContext;
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: Builder(
+            builder: (context) {
+              hostContext = context;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      final chapter = _chapter();
+      final key = _key(chapter);
+      final session = _htmlSession(hostContext, chapter, key);
+      final waits = <Future<void>>[];
+      for (final html in <String>['<p>first</p>', '<p>queued</p>']) {
+        waits.add(
+          expectLater(
+            session.measure(
+              NovelReaderPaginationMeasureRequest(
+                html: html,
+                chapter: chapter,
+                key: key,
+              ),
+            ),
+            throwsA(_exceptionCode('measurementSessionDisposed')),
+          ),
+        );
+      }
+      await tester.idle();
+      await session.dispose();
+      await Future.wait(waits);
+      await tester.pump(const Duration(milliseconds: 801));
+      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('dispose removes an inserted probe host before its next frame', (
+    tester,
+  ) async {
+    late BuildContext hostContext;
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Builder(
+          builder: (context) {
+            hostContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    final chapter = _chapter();
+    final key = _key(chapter);
+    final session = _htmlSession(hostContext, chapter, key);
+    final error = expectLater(
+      session.measure(
+        NovelReaderPaginationMeasureRequest(
+          html: '<p>old probe</p>',
+          chapter: chapter,
+          key: key,
+        ),
+      ),
+      throwsA(_exceptionCode('measurementSessionDisposed')),
+    );
+    await tester.pump(); // Insert the overlay; the probe has not painted yet.
+    await session.dispose();
+    await error;
+    await tester.pump();
+    expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+
+    final freshSession = _htmlSession(hostContext, chapter, key);
+    addTearDown(freshSession.dispose);
+    final fresh = freshSession.measure(
+      NovelReaderPaginationMeasureRequest(
+        html: '<p>replacement probe</p>',
+        chapter: chapter,
+        key: key,
+      ),
+    );
+    NovelReaderPaginationMeasureResult? freshResult;
+    Object? freshError;
+    unawaited(
+      fresh.then<void>(
+        (result) {
+          freshResult = result;
+        },
+        onError: (Object error, StackTrace stack) {
+          freshError = error;
+        },
+      ),
+    );
+    for (
+      var frame = 0;
+      frame < 6 && freshResult == null && freshError == null;
+      frame += 1
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(freshError, isNull);
+    expect(
+      freshResult,
+      isNotNull,
+      reason: 'The new session probe must finish within the driven frames.',
+    );
+    expect(freshResult!.height, greaterThan(0));
+    await freshSession.dispose();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('host setup errors settle once and leave no timeout behind', (
+    tester,
+  ) async {
+    late BuildContext hostContext;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Builder(
+          builder: (context) {
+            hostContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    final chapter = _chapter();
+    final key = _key(chapter);
+    final session = _htmlSession(hostContext, chapter, key);
+    await expectLater(
+      session.measure(
+        NovelReaderPaginationMeasureRequest(
+          html: '<p>no overlay</p>',
+          chapter: chapter,
+          key: key,
+        ),
+      ),
+      throwsA(_exceptionCode('measurementHostUnavailable')),
+    );
+    await session.dispose();
+    await tester.pump(const Duration(milliseconds: 801));
+    expect(tester.takeException(), isNull);
+  });
+}
+
+Matcher _exceptionCode(String code) => isA<NovelReaderPaginationException>()
+    .having((error) => error.code, 'code', code);
+
+NovelReaderPaginationMeasureSession _htmlSession(
+  BuildContext context,
+  NovelReaderPreparedChapter chapter,
+  NovelReaderPaginationKey key,
+) {
+  return NovelReaderHtmlPaginationMeasureAdapter(
+    hostContext: context,
+    theme: _theme,
+    preferences: ForumHtmlReaderPreferences.defaults(),
+    sourceId: chapter.episodeId,
+  ).create(chapter: chapter, key: key);
 }
 
 NovelReaderPaginationMeasureRequest _request({
@@ -356,4 +693,18 @@ class _CountingMeasureSession implements NovelReaderPaginationMeasureSession {
 
   @override
   Future<void> dispose() async {}
+}
+
+class _DisposingMeasureSession extends _DelayedMeasureSession {
+  @override
+  Future<void> dispose() async {
+    if (!completer.isCompleted) {
+      completer.completeError(
+        const NovelReaderPaginationException(
+          code: 'measurementSessionDisposed',
+          message: 'Controlled owner exit.',
+        ),
+      );
+    }
+  }
 }

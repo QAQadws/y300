@@ -241,7 +241,20 @@ final class DefaultNovelReaderHybridPaginationPlanner
         cache: measureCache,
       ),
       atomKinds: atomKindById,
+      cancellationToken: cancellationToken,
     );
+    Future<void>? cancellationDisposal;
+    final removeCancellationListener = cancellationToken.onCancel(() {
+      cancellationDisposal = session.dispose();
+      // The planning finally block owns the error/result. Observe it here too
+      // because cancellation can occur while an unrelated adapter is pending.
+      unawaited(
+        cancellationDisposal!.then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stack) {},
+        ),
+      );
+    });
     sessionStopwatch.stop();
     final validator = NovelReaderSessionPaginationRendererValidator(session);
     final complexMeasurer = NovelReaderSessionComplexBlockMeasurer(session);
@@ -862,7 +875,8 @@ final class DefaultNovelReaderHybridPaginationPlanner
       await publishFinalPages(isComplete: true);
       return plan;
     } finally {
-      await session.dispose();
+      removeCancellationListener();
+      await (cancellationDisposal ?? session.dispose());
     }
   }
 
@@ -1116,10 +1130,12 @@ final class _TrackedPaginationMeasureSession
   _TrackedPaginationMeasureSession({
     required NovelReaderPaginationMeasureSession delegate,
     required this.atomKinds,
+    required this.cancellationToken,
   }) : _delegate = delegate;
 
   final NovelReaderPaginationMeasureSession _delegate;
   final Map<String, NovelReaderPaginationAtomKind> atomKinds;
+  final NovelReaderPaginationCancellationToken cancellationToken;
   int measurementCount = 0;
   int cacheHitCount = 0;
   int frameWaitCount = 0;
@@ -1134,6 +1150,7 @@ final class _TrackedPaginationMeasureSession
   Future<NovelReaderPaginationMeasureResult> measure(
     NovelReaderPaginationMeasureRequest request,
   ) async {
+    cancellationToken.throwIfCancelled();
     measurementCount += 1;
     final codeUnits = request.html.length;
     totalCandidateHtmlCodeUnits += codeUnits;
@@ -1143,7 +1160,11 @@ final class _TrackedPaginationMeasureSession
     final stopwatch = Stopwatch()..start();
     late final NovelReaderPaginationMeasureResult result;
     try {
-      result = await _delegate.measure(request);
+      result = await cancellationToken.waitFor(_delegate.measure(request));
+      cancellationToken.throwIfCancelled();
+    } catch (_) {
+      cancellationToken.throwIfCancelled();
+      rethrow;
     } finally {
       stopwatch.stop();
       measurementDuration += stopwatch.elapsed;

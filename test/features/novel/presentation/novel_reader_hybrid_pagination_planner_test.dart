@@ -674,6 +674,85 @@ void main() {
     );
   });
 
+  test(
+    'cancelling a pending measurement disposes once and cannot fall back',
+    () async {
+      final chapter = await _prepare(
+        '<font face="Fantasy Novel Font">复杂正文。</font>',
+      );
+      final adapter = _GatedSessionFactory(disposeCompletesError: true);
+      final token = NovelReaderPaginationCancellationToken();
+      final operation = _planner(adapter).plan(
+        chapter: chapter,
+        key: _key(chapter, height: 120),
+        cancellationToken: token,
+      );
+      final cancelled = expectLater(
+        operation,
+        throwsA(
+          isA<NovelReaderPaginationException>().having(
+            (error) => error.code,
+            'code',
+            'paginationCancelled',
+          ),
+        ),
+      );
+      await adapter.session.started.future;
+
+      token.cancel();
+      await cancelled;
+      expect(adapter.session.disposeCalls, 1);
+      expect(
+        adapter.session.measureCalls,
+        1,
+        reason: 'Cancellation must not trigger an atomic measurement fallback.',
+      );
+    },
+  );
+
+  test(
+    'cancel releases a planner even when its adapter ignores disposal',
+    () async {
+      for (final fail in <bool>[false, true]) {
+        final chapter = await _prepare('<table><tr><td>等待正文</td></tr></table>');
+        final adapter = _GatedSessionFactory();
+        final token = NovelReaderPaginationCancellationToken();
+        final operation = _planner(adapter).plan(
+          chapter: chapter,
+          key: _key(chapter, height: 120),
+          cancellationToken: token,
+        );
+        final cancelled = expectLater(
+          operation,
+          throwsA(
+            isA<NovelReaderPaginationException>().having(
+              (error) => error.code,
+              'code',
+              'paginationCancelled',
+            ),
+          ),
+        );
+        await adapter.session.started.future;
+
+        token.cancel();
+        await cancelled; // No renderer completion is required to leave the run.
+        expect(adapter.session.disposeCalls, 1);
+        if (fail) {
+          adapter.session.result.completeError(
+            StateError('late renderer error'),
+          );
+        } else {
+          adapter.session.result.complete(
+            const NovelReaderPaginationMeasureResult(height: 20),
+          );
+        }
+        await Future<void>.delayed(Duration.zero);
+        expect(adapter.session.measureCalls, 1);
+        expect(adapter.session.disposeCalls, 1);
+      }
+    },
+  );
+
   test('publishes only stable pages before the complete plan', () async {
     final chapter = await _prepare(
       '<p>${List<String>.filled(80, '增量分页正文 mixed 123。').join()}</p>',
@@ -1202,6 +1281,60 @@ final class _GatedValidationMeasureAdapter
   void releaseLaterValidation() {
     if (!_laterValidationGate.isCompleted) {
       _laterValidationGate.complete();
+    }
+  }
+}
+
+final class _GatedSessionFactory
+    implements
+        NovelReaderPaginationMeasureAdapter,
+        NovelReaderPaginationMeasureSessionFactory {
+  _GatedSessionFactory({bool disposeCompletesError = false})
+    : session = _GatedLifecycleMeasureSession(disposeCompletesError);
+
+  final _GatedLifecycleMeasureSession session;
+
+  @override
+  NovelReaderPaginationMeasureSession create({
+    required NovelReaderPreparedChapter chapter,
+    required NovelReaderPaginationKey key,
+  }) => session;
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) => session.measure(request);
+}
+
+final class _GatedLifecycleMeasureSession
+    implements NovelReaderPaginationMeasureSession {
+  _GatedLifecycleMeasureSession(this.disposeCompletesError);
+
+  final bool disposeCompletesError;
+  final started = Completer<void>();
+  final result = Completer<NovelReaderPaginationMeasureResult>();
+  int measureCalls = 0;
+  int disposeCalls = 0;
+
+  @override
+  Future<NovelReaderPaginationMeasureResult> measure(
+    NovelReaderPaginationMeasureRequest request,
+  ) {
+    measureCalls += 1;
+    if (!started.isCompleted) started.complete();
+    return result.future;
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls += 1;
+    if (disposeCompletesError && !result.isCompleted) {
+      result.completeError(
+        const NovelReaderPaginationException(
+          code: 'measurementSessionDisposed',
+          message: 'Controlled probe disposal.',
+        ),
+      );
     }
   }
 }
