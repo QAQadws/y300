@@ -10,6 +10,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 
 void main() {
   const service = DefaultNovelReaderHtmlPreparationService();
@@ -250,6 +251,92 @@ void main() {
         imageCacheOwnerId: _episode.sourceTid,
       );
       expect(delegate.calls, 1);
+    },
+  );
+  test(
+    'keeps full Host preferences and theme in prepared cache identity',
+    () async {
+      final preferences = adapter.map(NovelReaderPreferences.defaults());
+      final nextTheme = ForumHtmlThemeContext(
+        brightness: _theme.brightness,
+        surface: _theme.surface,
+        foreground: _theme.foreground,
+        link: _theme.link,
+        quoteSurface: const Color(0xFFEEDDCC),
+        quoteForeground: _theme.quoteForeground,
+        codeSurface: _theme.codeSurface,
+        codeForeground: _theme.codeForeground,
+      );
+      final cases = [
+        (name: 'baseline', preferences: preferences, theme: _theme),
+        (
+          name: 'conversion',
+          preferences: preferences.copyWith(
+            conversionMode: TextConversionMode.toTraditional,
+          ),
+          theme: _theme,
+        ),
+        (
+          name: 'font scale',
+          preferences: preferences.copyWith(
+            typography: preferences.typography.copyWith(fontScale: 1.7),
+          ),
+          theme: _theme,
+        ),
+        (
+          name: 'line height',
+          preferences: preferences.copyWith(
+            typography: preferences.typography.copyWith(lineHeightScale: 2.1),
+          ),
+          theme: _theme,
+        ),
+        (
+          name: 'paragraph spacing',
+          preferences: preferences.copyWith(
+            typography: preferences.typography.copyWith(paragraphSpacing: 28),
+          ),
+          theme: _theme,
+        ),
+        (
+          name: 'author font size',
+          preferences: preferences.copyWith(
+            preserveAuthorFontSize: !preferences.preserveAuthorFontSize,
+          ),
+          theme: _theme,
+        ),
+        (name: 'theme palette', preferences: preferences, theme: nextTheme),
+      ];
+      final delegate = _CountingPreparationService();
+      final service = NovelReaderCachingHtmlPreparationService(
+        delegate: delegate,
+        cache: NovelReaderPreparedChapterCache(capacity: cases.length),
+      );
+      Future<NovelReaderPreparedChapter> prepare(
+        ForumHtmlReaderPreferences preferences,
+        ForumHtmlThemeContext theme,
+      ) => service.prepare(
+        rawHtml: '<p>缓存正文</p>',
+        episode: _episode,
+        preferences: preferences,
+        theme: theme,
+        sourceId: _episode.episodeId,
+        threadId: _episode.sourceTid,
+        imageCacheOwnerId: _episode.sourceTid,
+      );
+      final prepared = <NovelReaderPreparedChapter>[];
+      for (final input in cases) {
+        prepared.add(await prepare(input.preferences, input.theme));
+        expect(delegate.calls, prepared.length, reason: input.name);
+      }
+      for (var index = 0; index < cases.length; index++) {
+        final input = cases[index];
+        expect(
+          await prepare(input.preferences, input.theme),
+          same(prepared[index]),
+          reason: input.name,
+        );
+      }
+      expect(delegate.calls, cases.length);
     },
   );
 }

@@ -26,7 +26,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_stic
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_editor.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_toolbar_action.dart';
 import 'package:y300/l10n/app_localizations.dart';
-import 'package:y300/shared/widgets/forum_collapse_chrome.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 
 void main() {

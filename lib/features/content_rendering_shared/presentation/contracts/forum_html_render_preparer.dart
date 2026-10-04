@@ -1,6 +1,5 @@
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_prepared_render_document.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 abstract interface class ForumHtmlRenderPreparer {
   ForumHtmlPreparedRenderDocument prepare({

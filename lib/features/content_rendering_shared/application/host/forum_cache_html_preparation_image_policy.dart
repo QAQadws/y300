@@ -2,7 +2,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_prepared_image_resource.dart';
-import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_preparation_image_policy.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 /// Keeps the existing prepared-document cache identity, including novel HTML.
 final class ForumCacheHtmlPreparationImagePolicy

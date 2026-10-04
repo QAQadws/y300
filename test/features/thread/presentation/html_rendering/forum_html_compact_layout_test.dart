@@ -210,8 +210,8 @@ void main() {
       '<div class="showcollapse_title"><p>Title</p></div>'
       '<div class="showcollapse_content"><p>Body</p></div></div>',
     );
-    final nested = tester.widgetList<ForumHtmlWidgetPostRenderer>(
-      find.byType(ForumHtmlWidgetPostRenderer),
+    final nested = tester.widgetList<ForumHtmlRenderer>(
+      find.byType(ForumHtmlRenderer),
     );
     expect(nested.length, greaterThan(1));
     expect(

@@ -11,9 +11,8 @@ import 'package:y300/features/composer_shared/domain/services/composer_attach_bb
 import 'package:y300/features/composer_shared/domain/services/sticker_bbcode_tokenizer.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_attachment_preview.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/l10n/app_localizations.dart';
-import 'package:y300/shared/widgets/forum_collapse_chrome.dart';
 
 typedef ForumAttachPreviewImageBuilder = ComposerLocalImageBuilder;
 typedef ForumAttachPreviewFileExists = ComposerLocalFileExists;

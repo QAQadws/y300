@@ -1,4 +1,4 @@
-import 'package:y300/features/reader_shared/domain/rich_text/typography/discuz_font_size_policy.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 /// Flutter Quill's paragraph default is 16px, so Discuz size 3 must map to 16.
 const Map<int, String> composerDiscuzSizeToQuillSize = {

@@ -5,7 +5,7 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_layout_hint_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
-import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_display_image.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 /// Preserves the existing display spec and cache request behind the UI port.
 final class CacheForumHtmlDisplayImage implements ForumHtmlDisplayImage {

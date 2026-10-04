@@ -1,0 +1,24 @@
+name: forum_content_renderer
+description: Flutter HTML preparation and rendering with explicit image Host ports.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+  flutter: ^3.44.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Keep the App's renderer version while extracting its lifecycle behavior.
+  flutter_widget_from_html_core: 0.17.2
+  html: ^0.15.6
+  csslib: ^1.0.2
+  material_color_utilities: ^0.13.0
+  yamibo_forum_client:
+    path: ../yamibo_forum_client
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

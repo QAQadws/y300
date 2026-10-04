@@ -8,8 +8,7 @@ import 'package:y300/features/cache/domain/services/forum_image_request_resolver
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_display_image.dart';
-import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_display_image.dart';
-import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_image_host.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 final class CacheForumHtmlImageHost implements ForumHtmlImageHost {
   const CacheForumHtmlImageHost({

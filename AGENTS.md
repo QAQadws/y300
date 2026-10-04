@@ -23,7 +23,7 @@
 - 漫画/小说纯标题策略位于 `packages/content_title_core`，生产消费者统一使用 `content_title_core.dart` 公开入口。两组规则独立，subject 映射、HTML 准备、provider、搜索/同步与持久化仍归应用；生产代码不得依赖包的测试 fixture。
 - 图片连续阅读几何位于纯 Dart 包 `packages/continuous_image_geometry`，统一使用 `continuous_image_geometry.dart` 公开入口。应用图片模型实现只读 `ContinuousImageLayoutItem`，URL/缓存与业务 FlowPolicy、sequence position、Flutter 控制器、会话失效及实际 preload 仍归应用；不因提包启用未接入的长图/prefetch planner。
 - HTML 准备流水线与 prepared image 只依赖中立 `ForumHtmlPreparedImageResource` 和同步图片准备端口；资源实现保持不可变纯值，可随小说后台准备传递。缓存 spec/request 与默认 URL 装配归 application Host，不把缓存类型放回 prepared document，也不合并准备、显示和阅读器的既有缓存分类。
-- HTML 图片工厂与 viewport 只消费 `ForumHtmlDisplayImage`、布局值及 `ForumHtmlImageHost`，不读取缓存/provider。App adapter 保管显示 spec/request、尺寸索引、预取 scope 和 referer；Host 换绑只更新图片，保留正文测量与折叠状态，迟到尺寸、decode、首帧和失败回调须检查当前绑定与显示代次。完整 renderer 暂保留 App 兼容装配，尚未提为 Flutter 包。
+- HTML 图片工厂与 viewport 只消费 `ForumHtmlDisplayImage`、布局值及 `ForumHtmlImageHost`，不读取缓存/provider。App adapter 保管显示 spec/request、尺寸索引、预取 scope 和 referer；Host 换绑只更新图片，保留正文测量与折叠状态，迟到尺寸、decode、首帧和失败回调须检查当前绑定与显示代次。HTML 准备、theme/style、renderer、body/viewport 与颜色/字号/折叠 helper 的唯一实现位于 Flutter 包 `packages/forum_content_renderer`，使用包公开入口；App feature 继续通过 `content_rendering.dart` 装配。Core 显式接收 prepared document、theme、render options 与折叠 labels，不导入 App/provider/传输。完整偏好、简繁转换与小说章节缓存 identity、默认准备和图片缓存配置仍归 App；更新回调或文案不得重挂正文，完整排版/主题值变化必须使样式缓存失效。
 
 ## 强制约束
 Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，

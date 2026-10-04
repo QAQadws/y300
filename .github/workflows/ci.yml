@@ -45,6 +45,12 @@ jobs:
       - name: Install geometry package dependencies
         working-directory: packages/continuous_image_geometry
         run: dart pub get
+      - name: Install renderer package dependencies
+        working-directory: packages/forum_content_renderer
+        run: flutter pub get
+      - name: Install renderer example dependencies
+        working-directory: packages/forum_content_renderer/example
+        run: flutter pub get
       - name: Analyze app
         run: flutter analyze --no-pub
       - name: Test app
@@ -85,3 +91,15 @@ jobs:
       - name: Run geometry package example
         working-directory: packages/continuous_image_geometry
         run: dart run example/geometry.dart
+      - name: Analyze renderer package
+        working-directory: packages/forum_content_renderer
+        run: flutter analyze --no-pub
+      - name: Test renderer package
+        working-directory: packages/forum_content_renderer
+        run: flutter test --no-pub --reporter expanded
+      - name: Analyze renderer example
+        working-directory: packages/forum_content_renderer/example
+        run: flutter analyze --no-pub
+      - name: Test renderer example widget
+        working-directory: packages/forum_content_renderer/example
+        run: flutter test --no-pub --reporter expanded

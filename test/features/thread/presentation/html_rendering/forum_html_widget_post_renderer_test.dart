@@ -441,22 +441,10 @@ void main() {
     );
     await tester.pump();
 
-    final htmlWidget = tester.widget<HtmlWidget>(
-      find.byKey(const Key('forum-html-renderer-image')),
+    await tester.tap(
+      find.byKey(const Key('thread-post-html-first-readable-image-image-0')),
     );
-    htmlWidget.onTapImage?.call(
-      ImageMetadata(
-        alt: '预览图',
-        title: '图片标题',
-        sources: const [
-          ImageSource(
-            'https://bbs.yamibo.com/data/attachment/forum/month_1110/pic.jpg',
-            width: 640,
-            height: 480,
-          ),
-        ],
-      ),
-    );
+    await tester.pump();
 
     expect(
       tappedImage?.url,
@@ -1467,7 +1455,9 @@ void main() {
           body: ForumHtmlWidgetPostRenderer(
             theme: forumHtmlTestTheme,
             sourceId: 'sticker',
-            html: '<img src="static/image/smiley/gexing/008.gif" alt="">',
+            html:
+                '<img src="static/image/smiley/gexing/008.gif" '
+                'alt="" width="24" height="24">',
             callbacks: ForumHtmlRenderCallbacks(
               onInteraction: () => interactions += 1,
               onTapImage: (request) => tappedImage = request,
@@ -1478,18 +1468,15 @@ void main() {
     );
     await tester.pump();
 
-    final htmlWidget = tester.widget<HtmlWidget>(
-      find.byKey(const Key('forum-html-renderer-sticker')),
-    );
-    htmlWidget.onTapImage?.call(
-      ImageMetadata(
-        sources: const [
-          ImageSource(
-            'https://bbs.yamibo.com/static/image/smiley/gexing/008.gif',
-          ),
-        ],
+    final imageTap = find.descendant(
+      of: find.byKey(const Key('forum-html-renderer-sticker')),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is GestureDetector && widget.onTap != null,
       ),
     );
+    expect(imageTap, findsOneWidget);
+    await tester.tap(imageTap);
+    await tester.pump();
 
     expect(tappedImage?.isSticker, isTrue);
     expect(tappedImage?.attachmentId, isNull);

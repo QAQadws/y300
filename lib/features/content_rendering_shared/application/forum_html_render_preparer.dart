@@ -2,14 +2,9 @@ import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/content_rendering_shared/application/host/forum_cache_html_preparation_image_policy.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
-import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_preparation_image_policy.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_fragment_codec.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_image_deduplicator.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_prepared_render_document.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_render_preparer.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_adapter.dart';
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/theme/forum_html_theme_context.dart';
 
 /// App defaults stay as values so this facade can cross preparation isolates.
 class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {

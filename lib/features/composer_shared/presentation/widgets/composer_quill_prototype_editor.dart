@@ -29,7 +29,7 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_tool
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_group_panel.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
-import 'package:y300/shared/widgets/forum_collapse_chrome.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 const _quillEditorPadding = EdgeInsets.all(
   ForumContentSpacing.quillInnerHorizontal,

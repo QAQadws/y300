@@ -38,6 +38,8 @@ dependencies:
     path: packages/content_title_core
   continuous_image_geometry:
     path: packages/continuous_image_geometry
+  forum_content_renderer:
+    path: packages/forum_content_renderer
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2
