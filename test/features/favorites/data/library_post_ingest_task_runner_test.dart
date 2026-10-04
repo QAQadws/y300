@@ -1,4 +1,4 @@
-import 'package:comic_title_core/comic_title_core.dart';
+import 'package:content_title_core/content_title_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';

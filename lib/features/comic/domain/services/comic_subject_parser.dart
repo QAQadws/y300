@@ -1,5 +1,5 @@
 import 'package:y300/features/comic/domain/models/comic_models.dart';
-import 'package:comic_title_core/comic_title_core.dart';
+import 'package:content_title_core/content_title_core.dart';
 
 /// Parses forum thread subject lines into structured comic metadata.
 ///

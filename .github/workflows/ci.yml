@@ -40,7 +40,7 @@ jobs:
         working-directory: packages/forum_markup_core
         run: dart pub get
       - name: Install title package dependencies
-        working-directory: packages/comic_title_core
+        working-directory: packages/content_title_core
         run: dart pub get
       - name: Analyze app
         run: flutter analyze --no-pub
@@ -65,11 +65,11 @@ jobs:
         working-directory: packages/forum_markup_core
         run: dart run example/basic_markup.dart
       - name: Analyze title package
-        working-directory: packages/comic_title_core
+        working-directory: packages/content_title_core
         run: dart analyze --fatal-infos
       - name: Test title package
-        working-directory: packages/comic_title_core
+        working-directory: packages/content_title_core
         run: dart test --reporter expanded
       - name: Run title package example
-        working-directory: packages/comic_title_core
+        working-directory: packages/content_title_core
         run: dart run example/analyze_title.dart

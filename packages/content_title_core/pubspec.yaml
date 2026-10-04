@@ -1,5 +1,5 @@
-name: comic_title_core
-description: Pure Dart comic title analysis and normalization used by Y300.
+name: content_title_core
+description: Pure Dart comic and novel title policies used by Y300.
 version: 0.1.0
 publish_to: none
 
@@ -7,6 +7,7 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
+  characters: ^1.4.1
   petitparser: ^7.0.2
 
 dev_dependencies:

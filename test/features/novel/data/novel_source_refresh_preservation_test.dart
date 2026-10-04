@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:content_title_core/content_title_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -16,7 +17,6 @@ import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_author_post_episode_builder.dart';
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
-import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../test_support/novel_repository_seed.dart';

@@ -1,7 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:comic_title_core/comic_title_core.dart';
+import 'package:content_title_core/content_title_core.dart';
+import 'package:test/test.dart';
 
-import 'comic_title_parser_cases.dart';
+import '../fixtures/comic_title_fixtures.dart';
 
 void main() {
   const analyzer = PetitComicTitleAnalyzer();

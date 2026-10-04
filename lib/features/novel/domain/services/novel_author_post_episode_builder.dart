@@ -1,7 +1,7 @@
 import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/services/novel_author_post_chapter_eligibility_policy.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_title_candidate_extractor.dart';
-import 'package:y300/features/novel/domain/services/novel_chapter_title_policy.dart';
+import 'package:content_title_core/content_title_core.dart';
 import 'package:y300/features/novel/domain/services/novel_post_attach_html_resolver.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';

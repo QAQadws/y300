@@ -20,6 +20,7 @@
 - 写命令只有 `applied` 才能更新本地状态；`outcomeUnknown` 不得自动重发，也不得展示服务器原始载荷。
 - 异步阅读、同步与缓存流程必须保持 cancellation、single-flight 和 generation/owner 隔离，迟到结果不得污染新状态。
 - 小说作者帖子正文固定通过 `threadAuthorPosts` 使用 `viewthread version=1`，不得改成 `version=4`。
+- 漫画/小说纯标题策略位于 `packages/content_title_core`，生产消费者统一使用 `content_title_core.dart` 公开入口。两组规则独立，subject 映射、HTML 准备、provider、搜索/同步与持久化仍归应用；生产代码不得依赖包的测试 fixture。
 
 ## 强制约束
 Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
@@ -82,6 +83,10 @@ Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
 ## 重要决策
 小说的解析要version=1，而不是version=4，要不然可能会发生格式错误，目前已经实现了，但是我希望你记住而不要乱改
 
-## 笔记
-当要增加comic测试标题时需要加到`test\features\comic\domain\services\comic_title_parser_cases.dart`
-当要增加novel测试标题时需要加到`test\features\novel\test_support\novel_title_fixtures.dart`
+## 标题样本与测试
+
+- 新增漫画纯标题分析样本，添加到 `packages/content_title_core/test/fixtures/comic_title_fixtures.dart`；对应算法测试在包内运行。
+- 新增小说作品标题清洗或纯文本章节标题样本，添加到 `packages/content_title_core/test/fixtures/novel_title_fixtures.dart`；算法样本只维护一份，不放进生产 barrel。
+- 漫画 subject 业务映射、重复匹配和交互样本继续归 `test/features/comic/domain/services/comic_title_parser_cases.dart`。
+- 小说 HTML/分页集成样本继续归应用 `test/features/novel/test_support/`；原 `novel_title_fixtures.dart` 只桥接包内标题样本，并保有 HTML wrapper/分页标识，不复制算法语料。
+- 包内测试不得读取 App 文件或导入 Flutter。App 仅通过上述小说 fixture 桥接复用包内测试数据；新增跨边界测试引用须明确归属并更新对应守护。

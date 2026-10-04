@@ -161,10 +161,10 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.19.1"
-  comic_title_core:
+  content_title_core:
     dependency: "direct main"
     description:
-      path: "packages/comic_title_core"
+      path: "packages/content_title_core"
       relative: true
     source: path
     version: "0.1.0"

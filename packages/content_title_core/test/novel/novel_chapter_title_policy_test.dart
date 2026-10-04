@@ -1,8 +1,8 @@
 import 'package:characters/characters.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/novel/domain/services/novel_chapter_title_policy.dart';
+import 'package:content_title_core/content_title_core.dart';
+import 'package:test/test.dart';
 
-import '../../test_support/novel_title_fixtures.dart';
+import '../fixtures/novel_title_fixtures.dart';
 
 void main() {
   const policy = FirstMeaningfulSentenceNovelChapterTitlePolicy();
@@ -20,7 +20,7 @@ void main() {
     expect(_title(policy, '没有句号的第一行\n第二行'), '没有句号的第一行');
   });
 
-  for (final fixture in novelChapterTitleFixtures) {
+  for (final fixture in novelChapterTitleCases) {
     test('preserves chapter heading punctuation: ${fixture.id}', () {
       expect(
         _title(policy, fixture.normalizedCandidate),

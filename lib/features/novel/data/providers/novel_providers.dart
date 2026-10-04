@@ -29,7 +29,7 @@ import 'package:y300/features/novel/domain/services/novel_first_post_catalog_ext
 import 'package:y300/features/novel/domain/services/novel_intro_section_extractor.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
-import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
+import 'package:content_title_core/content_title_core.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_interaction_preferences_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';

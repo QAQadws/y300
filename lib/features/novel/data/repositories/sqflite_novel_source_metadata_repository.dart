@@ -3,7 +3,7 @@ import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/models/novel_source_catalog_json_codec.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
-import 'package:y300/features/novel/domain/services/novel_title_sanitizer.dart';
+import 'package:content_title_core/content_title_core.dart';
 
 class SqfliteNovelSourceMetadataRepository
     implements NovelSourceMetadataRepository {

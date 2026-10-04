@@ -2,7 +2,7 @@ import 'dart:io' as io;
 
 import 'dart:async';
 
-import 'package:comic_title_core/comic_title_core.dart';
+import 'package:content_title_core/content_title_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
