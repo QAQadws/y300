@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';

@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';

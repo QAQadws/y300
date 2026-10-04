@@ -11,11 +11,12 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
+import 'package:y300/features/comic/domain/services/comic_download_service.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_images_fetch_result.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
@@ -25,25 +26,6 @@ import 'package:y300/features/storage/data/storage_providers.dart';
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
-
-abstract class ComicDownloadService {
-  Future<DownloadedComicEpisode> downloadEpisode({
-    required String comicId,
-    required String episodeId,
-    ComicDownloadProgressObserver? observer,
-    ComicDownloadCancellationToken? cancellationToken,
-  });
-
-  Future<void> deleteEpisodeDownload({
-    required String comicId,
-    required String episodeId,
-  });
-
-  Future<List<ComicEpisodeImageItem>> getDownloadedEpisodeImages({
-    required String comicId,
-    required String episodeId,
-  });
-}
 
 class DefaultComicDownloadService
     implements ComicDownloadService, ComicDownloadAvailabilityChecker {

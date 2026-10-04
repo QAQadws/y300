@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/comic/data/repositories/comic_download_queue_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_download_queue_repository.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_download_queue_repository.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';

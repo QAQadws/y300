@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/repositories/comic_search_refresh_queue_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_search_refresh_queue_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';

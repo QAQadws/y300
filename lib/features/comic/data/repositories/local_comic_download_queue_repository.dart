@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/comic/data/repositories/comic_download_queue_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_download_queue_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 
 final class LocalComicDownloadQueueRepository

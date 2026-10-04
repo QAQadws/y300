@@ -1,3 +1,4 @@
+import 'package:y300/features/comic/domain/services/comic_download_service.dart';
 import 'dart:async';
 import 'dart:io' as io;
 
@@ -10,7 +11,7 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/comic/data/services/comic_download_service.dart';
 import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';

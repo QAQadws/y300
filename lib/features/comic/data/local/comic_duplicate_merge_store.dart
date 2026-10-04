@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:sqflite/sqflite.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/local/comic_local_models.dart';

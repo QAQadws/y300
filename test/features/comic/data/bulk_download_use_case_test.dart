@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/use_cases/bulk_download_use_case_impl.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';

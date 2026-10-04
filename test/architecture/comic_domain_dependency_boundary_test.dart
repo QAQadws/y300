@@ -9,14 +9,6 @@ const _domainRoot = 'lib/features/comic/domain';
 // Existing source-to-target debt only. Remove each entry when its dependency
 // moves behind a domain contract; never exempt an entire file or directory.
 const _existingDebt = <String, Set<String>>{
-  'services/comic_download_queue_service.dart': {
-    'lib/features/comic/data/repositories/comic_download_queue_repository.dart',
-    'lib/features/comic/data/services/comic_download_service.dart',
-    'lib/features/library_shared/data/repositories/library_state_repository.dart',
-  },
-  'services/comic_duplicate_merge_service.dart': {
-    'lib/features/comic/data/repositories/comic_repository.dart',
-  },
   'services/comic_episode_discovery_service.dart': {
     'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
   },
@@ -24,19 +16,13 @@ const _existingDebt = <String, Set<String>>{
     'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
   },
   'services/comic_first_episode_cover_service.dart': {
-    'lib/features/comic/data/repositories/comic_repository.dart',
     'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
   },
   'services/comic_post_aggregation_service.dart': {
     'package:flutter_riverpod/flutter_riverpod.dart',
     'lib/features/thread/data/providers/forum_image_source_pipeline_provider.dart',
   },
-  'services/comic_reading_state_writer.dart': {
-    'lib/features/comic/data/repositories/comic_repository.dart',
-    'lib/features/library_shared/data/repositories/library_state_repository.dart',
-  },
   'services/comic_refresh_outcome_applier.dart': {
-    'lib/features/comic/data/repositories/comic_repository.dart',
     'lib/features/comic/domain/services/comic_services_impl.dart',
     'lib/features/favorites/data/services/favorite_sync_request_governor.dart',
   },
@@ -44,7 +30,6 @@ const _existingDebt = <String, Set<String>>{
     'lib/features/comic/domain/services/comic_services_impl.dart',
   },
   'services/comic_search_refresh_queue_service.dart': {
-    'lib/features/comic/data/repositories/comic_search_refresh_queue_repository.dart',
     'lib/features/comic/domain/services/comic_services_impl.dart',
     'lib/features/search/data/services/search_rate_limiter.dart',
   },
@@ -100,6 +85,9 @@ void main() {
 
   test('new dependencies in an already indebted source are still rejected', () {
     const source = '$_domainRoot/services/comic_services_impl.dart';
+    const fixtureDebt = {
+      'lib/features/comic/data/providers/comic_providers.dart',
+    };
     final actual = _forbiddenDependencies(source, '''
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/data/services/new_storage_adapter.dart';
@@ -111,7 +99,7 @@ import 'package:y300/app/navigation/reader_routes.dart';
     final newTargets = actual
         .map((edge) => edge.target)
         .toSet()
-        .difference(_existingDebt['services/comic_services_impl.dart']!);
+        .difference(fixtureDebt);
 
     expect(newTargets, {
       'lib/features/comic/data/services/new_storage_adapter.dart',

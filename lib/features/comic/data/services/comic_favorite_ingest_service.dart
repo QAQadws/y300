@@ -1,5 +1,5 @@
 import 'package:y300/features/comic/data/services/comic_parser_service.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';

@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:y300/features/favorites/domain/use_cases/unfavorite_use_cases.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/contracts/shelf_selection_action_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -397,5 +397,4 @@ class NovelShelfAdapter
       hasBookmarks: hasBookmarks,
     );
   }
-
 }

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
-import 'package:y300/features/comic/data/repositories/comic_search_refresh_queue_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_search_refresh_queue_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_search_refresh_queue_repository.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';

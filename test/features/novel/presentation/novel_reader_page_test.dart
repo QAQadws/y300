@@ -18,7 +18,7 @@ import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/library_shared/domain/models/reader_corner_dock_side.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';

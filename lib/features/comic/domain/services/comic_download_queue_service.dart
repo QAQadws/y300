@@ -1,12 +1,12 @@
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/comic/data/repositories/comic_download_queue_repository.dart';
-import 'package:y300/features/comic/data/services/comic_download_service.dart';
+import 'package:y300/features/comic/domain/repositories/comic_download_queue_repository.dart';
+import 'package:y300/features/comic/domain/services/comic_download_service.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/services/comic_download_execution.dart';
 import 'package:y300/features/comic/domain/services/comic_download_queue.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/storage/domain/storage_root_access_gate.dart';

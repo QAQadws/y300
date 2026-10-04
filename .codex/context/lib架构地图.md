@@ -32,13 +32,13 @@
 - `app_update`：Gitee Release 更新检查、版本/校验和解析、APK 下载与校验、后台下载事件、安装权限、安装/外部打开和更新弹窗协调。
 - `auth`：API 与 WebView 登录、登录进度和认证状态 controller。公共 `VerifiedSessionOwner` 模型归 domain，认证 controller 与 `verifiedSessionOwnerProvider` 归 application；账号绑定的资料、签到、WebView 和路由共享唯一 `(uid, revision)` 来源，同 UID 退出重登也使旧 owner 失效。会话恢复/校验、密码登录与登出经 forum client 的 `session`/`passwordLogin`/`logout` 契约；formhash 由包内 provider 统一提供，不再由本模块自持。
 - `cache`：统一可再生磁盘缓存。负责图片、原始 HTML、解析快照、受保护封面、retention 分类、统一容量预算/LRU 裁剪、写入通知、静态容量统计/手动导出和论坛图片预加载；受保护图片字节经包 `ForumResourceClient` 流式获取，本模块只做落盘、索引与预算。
-- `comic`：漫画数据、书架、详情和阅读器。章节目录、帖子发现与标签目录经 forum client 读取契约消费业务投影；负责标题分析、章节发现与 TID 顺序、刷新/搜索 fallback 工作流、重复合并、封面与阅读进度、评论页、持久化下载队列、单章 CBZ 产物和下载图片限速。
+- `comic`：漫画数据、书架、详情和阅读器。仓储/队列契约与目录 URL 写入端口归 domain/repositories，下载契约归 domain/services，具体 SQLite/文件实现及装配归 data。章节目录、帖子发现与标签目录经 forum client 读取契约消费业务投影；负责标题分析、章节发现与 TID 顺序、刷新/搜索 fallback 工作流、重复合并、封面与阅读进度、评论页、持久化下载队列、单章 CBZ 产物和下载图片限速。
 - `composer_shared`：发帖、回复与帖子编辑共用编辑器基础设施。负责 source/Quill surface、BBCode 转换与预览、`collapse=0` grammar/原子 embed/编辑流程、附件语义与预览解析、编辑偏好、通用 controller 基类和错误呈现；表情目录、图片上传权限/上传、未使用附件目录与删除经 forum client 契约执行。草稿能力由调用方决定，帖子编辑明确关闭持久化草稿。
 - `favorites`：论坛收藏同步与收藏书架。收藏目录读取与收藏/取消收藏命令经 forum client 契约（提交后目录回读确认在包内）；负责同步限流、本地持久化、详情上下文加载、内容 ingest 注册表，以及把收藏帖子导入漫画或小说。
 - `forum`：论坛壳、解析模式首页/版块列表和 WebView 模式。首页/版块列表读取经 forum client HTML-first 契约（document/snapshot fallback 在包内）；负责模式偏好、SWR 与轮播聚合、WebView driver/runtime、Cookie bootstrap、网络/视觉策略、链接路由、论坛收藏入口，以及应用前台内不可见的普通 WebView WAF 挑战宿主。
 - `history`：浏览记录数据库、记录/查询/分组/清理/保留策略、Debug 日志和记录页；记录类型覆盖帖子、漫画、小说与日志；日志以作者 ID 和日志 ID 的复合身份保存，继续使用现有 v1 数据库。
 - `image_loading`：通用应用图片 source/provider/cache manager、预取接口和 `AppImage` 展示封装；不要与业务化的 `cache` 所有权/retention 规则混为一层。
-- `library_shared`：漫画、小说、收藏共用的书架/详情/选择模式抽象。包含模块 adapter、统一 controller/page、排序筛选、视图偏好、书架状态、刷新总线、任务进度/通知、批量阅读状态、封面预热和作品清理契约。
+- `library_shared`：漫画、小说、收藏共用的书架/详情/选择模式抽象。`LibraryStateRepository` 与可选书签查询端口归 domain/repositories，持久化实现与 provider 归 data。包含模块 adapter、统一 controller/page、排序筛选、视图偏好、书架状态、刷新总线、任务进度/通知、批量阅读状态、封面预热和作品清理契约。
 - `messages`：原生消息目录、单人及已有群组对话、用户名发送、提醒列表与按类型/作者屏蔽。读取和命令经 forum client 契约；负责账号隔离、取消、分页合并、延迟失效刷新、输入生命周期和正文展示。跨 feature 链接由 `app/navigation/message_routes.dart` 装配，不自建协议或持久化私信缓存。
 - `more`：更多页、关于页、外观入口、数据与存储页、统一缓存上限设置、清理/统计/手动导出和 Debug 原型工具。
 - `novel`：小说数据、书架、详情和阅读器。作者帖正文经 forum client `threadAuthorPosts` 契约以 `version=1` 读取；负责来源元数据与章节同步/恢复、帖子章节网关、正文解析、HTML-first 纵向渲染、全新混合分页、分页缓存/取消/性能策略、唯一阅读进度、书签/搜索和显示偏好。

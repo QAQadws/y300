@@ -1,6 +1,6 @@
+import 'package:y300/features/comic/domain/services/comic_download_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/comic/data/services/comic_download_service.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -18,7 +18,7 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_s
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/title/comic_title_analyzer.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -1128,10 +1128,7 @@ class ComicDetailAdapter
     final detail = await repository.getComicDetail(comicId: workId);
     final revision = (detail?.customCoverRevision ?? 0) + 1;
     final asset = LibraryCoverAssetRef(
-      assetId: LibraryCoverAssetIds.custom(
-        ownerType: 'comic',
-        ownerId: workId,
-      ),
+      assetId: LibraryCoverAssetIds.custom(ownerType: 'comic', ownerId: workId),
       revision: revision,
       kind: LibraryCoverAssetKind.custom,
     );

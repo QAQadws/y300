@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/data/services/comic_favorite_auto_refresh_coordinator.dart';
+import 'package:y300/features/comic/domain/repositories/comic_catalog_url_writer.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';

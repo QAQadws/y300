@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
@@ -21,7 +21,7 @@ import 'package:y300/features/comic/domain/services/comic_services_impl.dart';
 import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/comic/presentation/adapters/comic_detail_adapter.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';

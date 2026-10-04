@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_first_episode_cover_service.dart';
 import 'package:y300/features/comic/domain/services/comic_services_impl.dart';

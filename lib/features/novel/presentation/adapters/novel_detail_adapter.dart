@@ -1,4 +1,4 @@
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -291,10 +291,7 @@ class NovelDetailAdapter
     final detail = await repository.getDetail(novelId: workId);
     final revision = (detail?.customCoverRevision ?? 0) + 1;
     final asset = LibraryCoverAssetRef(
-      assetId: LibraryCoverAssetIds.custom(
-        ownerType: 'novel',
-        ownerId: workId,
-      ),
+      assetId: LibraryCoverAssetIds.custom(ownerType: 'novel', ownerId: workId),
       revision: revision,
       kind: LibraryCoverAssetKind.custom,
     );

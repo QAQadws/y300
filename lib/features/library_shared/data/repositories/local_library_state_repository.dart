@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
 

@@ -18,7 +18,7 @@ import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart
 import 'package:y300/features/favorites/domain/services/favorite_shelf_bootstrapper.dart';
 import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
-import 'package:y300/features/library_shared/data/repositories/library_state_repository.dart';
+import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_notification_providers.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' as io;
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/services/comic_download_metadata_store.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_legacy_migrator.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';

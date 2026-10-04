@@ -1,3 +1,4 @@
+import 'package:y300/features/comic/domain/repositories/comic_catalog_url_writer.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/services/comic_catalog_miss_policy.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_outcome_applier.dart';
@@ -11,17 +12,6 @@ import 'package:y300/features/favorites/data/services/favorite_sync_request_gove
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-
-/// 抽象 catalogUrl 持久化接口。
-///
-/// [ComicRepository] 已有 `updateCatalogUrl` 方法，
-/// `LocalComicRepository` 自动满足。
-abstract class CatalogUrlUpdater {
-  Future<void> updateCatalogUrl({
-    required String comicId,
-    required String catalogUrl,
-  });
-}
 
 String? _normalized(String? value) {
   final normalized = value?.trim();

@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 
 class DefaultComicShelfCategoryAssignUseCase

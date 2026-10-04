@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/comic/data/local/comic_local_db.dart';
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/data/services/comic_download_cover_maintenance.dart';
 import 'package:y300/features/comic/data/services/comic_download_metadata_store.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';

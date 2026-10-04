@@ -1,4 +1,4 @@
-import 'package:y300/features/comic/data/repositories/comic_repository.dart';
+import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 import 'package:y300/features/comic/domain/services/bulk_download_use_case.dart';
 import 'package:y300/features/comic/domain/services/comic_download_queue.dart';
