@@ -77,7 +77,10 @@ final class Y300ForumSourceScope {
 
   /// Persistent identity excludes the in-process generation; returning to an
   /// account can reuse its own compatible snapshots, never another account's.
-  String cacheKey(String original) => _cacheKey(original, accountId);
+  /// The startup read adapter may supply an exact Cookie-bound cache owner;
+  /// this does not change this scope's verified identity or write permission.
+  String cacheKey(String original, {String? cacheAccountId}) =>
+      _cacheKey(original, cacheAccountId ?? accountId);
 
   /// Explicit public reads can use the anonymous partition before the first
   /// remote session confirmation. This never permits privileged cache writes.

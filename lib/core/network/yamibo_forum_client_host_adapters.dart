@@ -425,12 +425,15 @@ final class Y300ForumSessionAdapter implements forum.ForumSessionStore {
     this._delegate, {
     bool Function()? isCurrent,
     void Function()? didMutate,
+    Future<void> Function(forum.ForumSessionSnapshot)? didConfirmIdentity,
   }) : _isCurrent = isCurrent,
-       _didMutate = didMutate;
+       _didMutate = didMutate,
+       _didConfirmIdentity = didConfirmIdentity;
 
   final YamiboSessionStore _delegate;
   final bool Function()? _isCurrent;
   final void Function()? _didMutate;
+  final Future<void> Function(forum.ForumSessionSnapshot)? _didConfirmIdentity;
 
   @override
   forum.ForumSessionSnapshot? readCurrent() {
@@ -458,6 +461,9 @@ final class Y300ForumSessionAdapter implements forum.ForumSessionStore {
       ),
     );
     _didMutate?.call();
+    if (snapshot.isLoggedIn && (int.tryParse(snapshot.userId) ?? 0) > 0) {
+      await _didConfirmIdentity?.call(snapshot);
+    }
   }
 
   @override

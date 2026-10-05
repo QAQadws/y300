@@ -3,6 +3,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
+import 'package:y300/core/network/yamibo_forum_home_cache_owner.dart';
 import 'package:y300/core/network/yamibo_forum_source.dart';
 import 'package:y300/core/network/yamibo_forum_source_cache.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -83,6 +84,7 @@ final yamiboForumCookieStoreProvider = Provider<ForumCookieStore>((ref) {
 final yamiboForumSessionStoreProvider = Provider<ForumSessionStore>((ref) {
   var scope = ref.watch(yamiboForumSourceScopeProvider);
   final runtime = ref.watch(yamiboForumSourceRuntimeProvider);
+  final homeCacheOwners = ref.watch(yamiboForumHomeCacheOwnerStoreProvider);
   return Y300ForumSessionAdapter(
     ref.watch(yamiboSessionStoreProvider),
     isCurrent: () => scope.isCurrent,
@@ -90,6 +92,15 @@ final yamiboForumSessionStoreProvider = Provider<ForumSessionStore>((ref) {
     // preflight and confirmation. External identity changes still invalidate
     // this adapter; only its own successful mutation advances its owner.
     didMutate: () => scope = runtime.current,
+    didConfirmIdentity: (identity) {
+      final confirmedScope = scope;
+      return homeCacheOwners.remember(
+        accountId: identity.userId,
+        isCurrent: () =>
+            confirmedScope.isCurrent &&
+            confirmedScope.accountId == identity.userId,
+      );
+    },
   );
 });
 
@@ -101,6 +112,7 @@ final yamiboForumDocumentStoreProvider = Provider<ForumDocumentStore>((ref) {
       isCurrent: () => scope.isCurrent,
     ),
     scope,
+    homeCacheOwners: ref.watch(yamiboForumHomeCacheOwnerStoreProvider),
   );
 });
 
@@ -112,6 +124,7 @@ final yamiboForumSnapshotStoreProvider = Provider<ForumSnapshotStore>((ref) {
       isCurrent: () => scope.isCurrent,
     ),
     scope,
+    homeCacheOwners: ref.watch(yamiboForumHomeCacheOwnerStoreProvider),
   );
 });
 

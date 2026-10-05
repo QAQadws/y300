@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
@@ -9,6 +10,8 @@ import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo_forum_source_cache.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo_forum_home_cache_owner.dart';
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
 import 'package:y300/core/persistence/app_database.dart';
@@ -49,6 +52,35 @@ void main() {
     expect(runtime.current.accountId, '43');
     expect(runtime.current.generation, original.generation + 1);
   });
+
+  test(
+    'only current remote identity confirmations remember a startup owner',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final site = Uri.parse('https://bbs.example.invalid');
+      final cookies = CookieStore();
+      await cookies.saveCookies(site, {'fixture_auth': 'session-42'});
+      final owners = Y300ForumHomeCacheOwnerStore(
+        cookies: cookies,
+        siteUri: site,
+      );
+      final sessions = YamiboSessionStore();
+      final container = ProviderContainer.test(
+        overrides: [
+          yamiboSessionStoreProvider.overrideWithValue(sessions),
+          yamiboForumHomeCacheOwnerStoreProvider.overrideWithValue(owners),
+        ],
+      );
+      final adapter = container.read(yamiboForumSessionStoreProvider);
+      await adapter.merge(_packageIdentity('42'));
+      expect((await owners.restore(isCurrent: () => true))?.accountId, '42');
+      sessions.saveExtracted(_identity('43'));
+      await cookies.saveCookies(site, {'fixture_auth': 'session-43'});
+      await adapter.merge(_packageIdentity('42'));
+      expect(sessions.readCurrent()?.uid, '43');
+      expect(await owners.restore(isCurrent: () => true), isNull);
+    },
+  );
 
   test(
     'authentication may confirm its own identity but not another flow',
@@ -282,6 +314,122 @@ void main() {
   );
 
   test(
+    'cold authenticated home reuses its exact cookie owner without verifying session',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final site = Uri.parse('https://bbs.example.invalid');
+      final cookies = CookieStore();
+      await cookies.saveCookies(site, {'fixture_auth': 'session-42'});
+      final owners = Y300ForumHomeCacheOwnerStore(
+        cookies: cookies,
+        siteUri: site,
+      );
+      await owners.remember(accountId: '42', isCurrent: () => true);
+      final documents = forum.MemoryForumDocumentStore();
+      final snapshots = forum.MemoryForumSnapshotStore();
+      final document = _keys().forumHome();
+      final snapshot = _keys().forumHomeSnapshot();
+      final previous = _runtime(
+        YamiboSessionStore()..saveExtracted(_identity('42')),
+      );
+      await Y300ScopedForumDocumentStore(
+        documents,
+        previous.current,
+        homeCacheOwners: owners,
+      ).put(_document(document, 'account-42-home'));
+      await Y300ScopedForumSnapshotStore(
+        snapshots,
+        previous.current,
+        homeCacheOwners: owners,
+      ).put(snapshot, 'account-42-snapshot', _homeCodec, policy: _policy);
+      final sessions = YamiboSessionStore();
+      final cold = _runtime(sessions);
+      final coldDocuments = Y300ScopedForumDocumentStore(
+        documents,
+        cold.current,
+        homeCacheOwners: owners,
+      );
+      final coldSnapshots = Y300ScopedForumSnapshotStore(
+        snapshots,
+        cold.current,
+        homeCacheOwners: owners,
+      );
+      expect((await coldDocuments.get(document))?.body, 'account-42-home');
+      expect(
+        (await coldSnapshots.get(snapshot, _homeCodec))?.value,
+        'account-42-snapshot',
+      );
+      expect(sessions.readCurrent(), isNull);
+      expect(cold.current.hasVerifiedIdentity, isFalse);
+      await coldDocuments.put(_document(document, 'unverified-write'));
+      await coldSnapshots.put(
+        snapshot,
+        'unverified-write',
+        _homeCodec,
+        policy: _policy,
+      );
+      expect((await coldDocuments.get(document))?.body, 'account-42-home');
+      expect(
+        (await coldSnapshots.get(snapshot, _homeCodec))?.value,
+        'account-42-snapshot',
+      );
+
+      // The startup permission does not extend to other privileged surfaces.
+      final thread = _keys().threadDetail(tid: '100', page: 1);
+      await Y300ScopedForumDocumentStore(
+        documents,
+        previous.current,
+      ).put(_document(thread, 'private-thread'));
+      expect(await coldDocuments.get(thread), isNull);
+      final threadSnapshot = _keys().threadDetailSnapshot(tid: '100', page: 1);
+      await Y300ScopedForumSnapshotStore(
+        snapshots,
+        previous.current,
+      ).put(threadSnapshot, 'private-thread', _threadCodec, policy: _policy);
+      expect(await coldSnapshots.get(threadSnapshot, _threadCodec), isNull);
+      final revised = _runtime(
+        sessions,
+        profile: const Y300ForumSourceProfile(id: 'parsing', revision: 2),
+      );
+      expect(
+        await Y300ScopedForumDocumentStore(
+          documents,
+          revised.current,
+          homeCacheOwners: owners,
+        ).get(document),
+        isNull,
+      );
+      await cookies.saveCookies(site, {'fixture_auth': 'session-43'});
+      expect(await coldDocuments.get(document), isNull);
+      expect(await coldSnapshots.get(snapshot, _homeCodec), isNull);
+    },
+  );
+
+  test('cold home discards a delayed read after cookies change', () async {
+    SharedPreferences.setMockInitialValues({});
+    final site = Uri.parse('https://bbs.example.invalid');
+    final cookies = CookieStore();
+    await cookies.saveCookies(site, {'fixture_auth': 'session-42'});
+    final owners = Y300ForumHomeCacheOwnerStore(
+      cookies: cookies,
+      siteUri: site,
+    );
+    await owners.remember(accountId: '42', isCurrent: () => true);
+    final cold = _runtime(YamiboSessionStore());
+    final delegate = _DelayedDocumentStore();
+    final descriptor = _keys().forumHome();
+    final read = Y300ScopedForumDocumentStore(
+      delegate,
+      cold.current,
+      homeCacheOwners: owners,
+    ).get(descriptor);
+    await delegate.started.future;
+    await cookies.saveCookies(site, {'fixture_auth': 'session-43'});
+    delegate.result.complete(_document(descriptor, 'account-42-home'));
+    expect(await read, isNull);
+  });
+
+  test(
     'unverified session does not read or persist privileged cache',
     () async {
       final runtime = _runtime(YamiboSessionStore());
@@ -484,10 +632,15 @@ forum.ForumSessionSnapshot _packageIdentity(String uid) =>
 
 final class _DelayedDocumentStore implements forum.ForumDocumentStore {
   final result = Completer<forum.ForumCachedDocument?>();
+  final started = Completer<void>();
   @override
   Future<forum.ForumCachedDocument?> get(
     forum.ForumDocumentDescriptor descriptor,
-  ) => result.future;
+  ) {
+    if (!started.isCompleted) started.complete();
+    return result.future;
+  }
+
   @override
   Future<void> put(forum.ForumCachedDocument document) async {}
   @override

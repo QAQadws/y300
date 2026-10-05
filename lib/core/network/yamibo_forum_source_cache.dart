@@ -1,23 +1,44 @@
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
+import 'package:y300/core/network/yamibo_forum_home_cache_owner.dart';
 import 'package:y300/core/network/yamibo_forum_source.dart';
 
 /// Decorates existing cache ports without changing on-disk payload codecs.
 final class Y300ScopedForumDocumentStore implements ForumDocumentStore {
-  const Y300ScopedForumDocumentStore(this.delegate, this.scope);
+  const Y300ScopedForumDocumentStore(
+    this.delegate,
+    this.scope, {
+    this.homeCacheOwners,
+  });
 
   final ForumDocumentStore delegate;
   final Y300ForumSourceScope scope;
+  final Y300ForumHomeCacheOwnerStore? homeCacheOwners;
 
   bool get _canAccess => scope.isCurrent && scope.hasVerifiedIdentity;
 
   @override
   Future<ForumCachedDocument?> get(ForumDocumentDescriptor descriptor) async {
-    if (!_canRead(descriptor.cacheKey, scope)) return null;
-    var cached = await delegate.get(_descriptor(descriptor));
+    final owner = await _restoreHomeOwner(
+      descriptor.ownerType,
+      descriptor.ownerId,
+      descriptor.cacheKey,
+      scope,
+      homeCacheOwners,
+    );
+    if (!_canRead(descriptor.cacheKey, scope) && owner == null) return null;
+    var cached = await delegate.get(
+      _descriptor(descriptor, cacheAccountId: owner?.accountId),
+    );
     if (cached == null && _legacyAnonymous(descriptor.cacheKey, scope)) {
       cached = await delegate.get(descriptor);
     }
-    if (!_canRead(descriptor.cacheKey, scope) || cached == null) return null;
+    if (!scope.isCurrent ||
+        (owner != null
+            ? !owner.isCurrent
+            : !_canRead(descriptor.cacheKey, scope)) ||
+        cached == null) {
+      return null;
+    }
     return _document(cached, descriptor);
   }
 
@@ -42,21 +63,28 @@ final class Y300ScopedForumDocumentStore implements ForumDocumentStore {
     }
   }
 
-  ForumDocumentDescriptor _descriptor(ForumDocumentDescriptor value) =>
-      ForumDocumentDescriptor(
-        cacheKey: _scopedKey(value.cacheKey, scope),
-        ownerType: value.ownerType,
-        ownerId: value.ownerId,
-        sourceUri: value.sourceUri,
-        requestProfile: value.requestProfile,
-      );
+  ForumDocumentDescriptor _descriptor(
+    ForumDocumentDescriptor value, {
+    String? cacheAccountId,
+  }) => ForumDocumentDescriptor(
+    cacheKey: _scopedKey(value.cacheKey, scope, cacheAccountId: cacheAccountId),
+    ownerType: value.ownerType,
+    ownerId: value.ownerId,
+    sourceUri: value.sourceUri,
+    requestProfile: value.requestProfile,
+  );
 }
 
 final class Y300ScopedForumSnapshotStore implements ForumSnapshotStore {
-  const Y300ScopedForumSnapshotStore(this.delegate, this.scope);
+  const Y300ScopedForumSnapshotStore(
+    this.delegate,
+    this.scope, {
+    this.homeCacheOwners,
+  });
 
   final ForumSnapshotStore delegate;
   final Y300ForumSourceScope scope;
+  final Y300ForumHomeCacheOwnerStore? homeCacheOwners;
 
   bool get _canAccess => scope.isCurrent && scope.hasVerifiedIdentity;
 
@@ -65,12 +93,28 @@ final class Y300ScopedForumSnapshotStore implements ForumSnapshotStore {
     ForumSnapshotDescriptor descriptor,
     ForumSnapshotCodec<T> codec,
   ) async {
-    if (!_canRead(descriptor.cacheKey, scope)) return null;
-    var cached = await delegate.get(_descriptor(descriptor), codec);
+    final owner = await _restoreHomeOwner(
+      descriptor.ownerType,
+      descriptor.ownerId,
+      descriptor.cacheKey,
+      scope,
+      homeCacheOwners,
+    );
+    if (!_canRead(descriptor.cacheKey, scope) && owner == null) return null;
+    var cached = await delegate.get(
+      _descriptor(descriptor, cacheAccountId: owner?.accountId),
+      codec,
+    );
     if (cached == null && _legacyAnonymous(descriptor.cacheKey, scope)) {
       cached = await delegate.get(descriptor, codec);
     }
-    if (!_canRead(descriptor.cacheKey, scope) || cached == null) return null;
+    if (!scope.isCurrent ||
+        (owner != null
+            ? !owner.isCurrent
+            : !_canRead(descriptor.cacheKey, scope)) ||
+        cached == null) {
+      return null;
+    }
     return ForumCachedSnapshot<T>(
       descriptor: descriptor,
       codecVersion: cached.codecVersion,
@@ -108,16 +152,22 @@ final class Y300ScopedForumSnapshotStore implements ForumSnapshotStore {
     }
   }
 
-  ForumSnapshotDescriptor _descriptor(ForumSnapshotDescriptor value) =>
-      ForumSnapshotDescriptor(
-        cacheKey: _scopedKey(value.cacheKey, scope),
-        ownerType: value.ownerType,
-        ownerId: value.ownerId,
-        snapshotType: value.snapshotType,
-        sourceDocumentKey: value.sourceDocumentKey == null
-            ? null
-            : _scopedKey(value.sourceDocumentKey!, scope),
-      );
+  ForumSnapshotDescriptor _descriptor(
+    ForumSnapshotDescriptor value, {
+    String? cacheAccountId,
+  }) => ForumSnapshotDescriptor(
+    cacheKey: _scopedKey(value.cacheKey, scope, cacheAccountId: cacheAccountId),
+    ownerType: value.ownerType,
+    ownerId: value.ownerId,
+    snapshotType: value.snapshotType,
+    sourceDocumentKey: value.sourceDocumentKey == null
+        ? null
+        : _scopedKey(
+            value.sourceDocumentKey!,
+            scope,
+            cacheAccountId: cacheAccountId,
+          ),
+  );
 }
 
 // Legacy logged-in entries have no proven UID and must never migrate into a
@@ -136,10 +186,34 @@ bool _canRead(String key, Y300ForumSourceScope scope) =>
     (scope.hasVerifiedIdentity && _matchesAudience(key, scope) ||
         key.contains('|anonymous|'));
 
-String _scopedKey(String key, Y300ForumSourceScope scope) =>
-    !scope.hasVerifiedIdentity && key.contains('|anonymous|')
+String _scopedKey(
+  String key,
+  Y300ForumSourceScope scope, {
+  String? cacheAccountId,
+}) =>
+    cacheAccountId == null &&
+        !scope.hasVerifiedIdentity &&
+        key.contains('|anonymous|')
     ? scope.anonymousCacheKey(key)
-    : scope.cacheKey(key);
+    : scope.cacheKey(key, cacheAccountId: cacheAccountId);
+
+bool _isAuthenticatedHome(String ownerType, String ownerId, String key) =>
+    ownerType == 'forum' && ownerId == 'home' && key.contains('|logged_in|');
+
+Future<Y300ForumHomeCacheOwner?> _restoreHomeOwner(
+  String ownerType,
+  String ownerId,
+  String key,
+  Y300ForumSourceScope scope,
+  Y300ForumHomeCacheOwnerStore? owners,
+) async {
+  if (!scope.isCurrent ||
+      scope.hasVerifiedIdentity ||
+      !_isAuthenticatedHome(ownerType, ownerId, key)) {
+    return null;
+  }
+  return owners?.restore(isCurrent: () => scope.isCurrent);
+}
 
 ForumCachedDocument _document(
   ForumCachedDocument value,

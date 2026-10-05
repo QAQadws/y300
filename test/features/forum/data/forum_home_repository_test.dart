@@ -1,8 +1,15 @@
+import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
+import 'package:y300/core/network/cookie_store.dart';
+import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/core/network/yamibo_forum_home_cache_owner.dart';
+import 'package:y300/core/network/yamibo_forum_source_cache.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
@@ -13,6 +20,9 @@ import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_dimension_resolver.dart';
+import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
+import 'package:y300/features/forum/presentation/forum_home_controller.dart';
+import 'package:y300/features/auth/application/auth_session_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -146,6 +156,117 @@ void main() {
         contains(DocumentRequestProfile.loggedIn.id),
       );
     });
+
+    test(
+      'real authenticated cache publishes before auth and WAF transport complete',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final site = Uri.parse('https://bbs.yamibo.com');
+        final cookies = CookieStore();
+        await cookies.saveCookies(site, {'fixture_auth': 'session-10'});
+        final owners = Y300ForumHomeCacheOwnerStore(
+          cookies: cookies,
+          siteUri: site,
+        );
+        await owners.remember(accountId: '10', isCurrent: () => true);
+        final documents = forum.MemoryForumDocumentStore();
+        final snapshots = forum.MemoryForumSnapshotStore();
+        final network = _HomeNetwork();
+        final identity = YamiboSessionSnapshot(
+          isLoggedIn: true,
+          uid: '10',
+          username: 'fixture',
+          formhash: 'fixture',
+          updatedAt: DateTime.now(),
+          source: 'test',
+        );
+        final previous = Y300ForumSourceRuntime(
+          profile: Y300ForumSourceProfile.parsing,
+          sessions: YamiboSessionStore()..saveExtracted(identity),
+        );
+        addTearDown(previous.dispose);
+        ForumHomeHtmlRepository repository(Y300ForumSourceScope scope) {
+          final client = forum.YamiboForumClientBuilder(
+            config: forum.ForumClientConfig(
+              siteOrigin: site,
+              apiOrigin: Uri.parse('https://api.yamibo.com/mobile/index.php'),
+            ),
+            network: network,
+            documentStore: Y300ScopedForumDocumentStore(
+              documents,
+              scope,
+              homeCacheOwners: owners,
+            ),
+            snapshotStore: Y300ScopedForumSnapshotStore(
+              snapshots,
+              scope,
+              homeCacheOwners: owners,
+            ),
+          ).buildStandardClient();
+          return ForumHomeHtmlRepository(
+            repository: client.forumHome!,
+            directoryRepository: client.forumDirectory!,
+            dimensionResolver: ForumHomeCarouselDimensionResolver(
+              dimensionIndex: _RecordingForumImageDimensionIndex(null),
+            ),
+          );
+        }
+
+        await repository(previous.current).getForumHomePayload(
+          requestProfileOverride: DocumentRequestProfile.loggedIn,
+        );
+        final pending = Completer<void>();
+        network.pending = pending.future;
+        network.homeHtml = _mobileHomeHtml.replaceFirst('今日 5', '今日 9');
+        final auth = _PendingAuthController();
+        final sessions = YamiboSessionStore();
+        final container = ProviderContainer.test(
+          overrides: [
+            yamiboSessionStoreProvider.overrideWithValue(sessions),
+            authSessionControllerProvider.overrideWith(() => auth),
+            forumHomeRequestProfileResolverProvider.overrideWithValue(
+              CookieForumHomeRequestProfileResolver(
+                cookieStore: cookies,
+                siteUri: site,
+              ),
+            ),
+            forumHomeRepositoryProvider.overrideWith(
+              (ref) => repository(ref.watch(yamiboForumSourceScopeProvider)),
+            ),
+          ],
+        );
+        container.listen(forumHomeControllerProvider, (_, _) {});
+        final cached = await container.read(forumHomeControllerProvider.future);
+        expect(cached.requestProfile, DocumentRequestProfile.loggedIn);
+        expect(cached.viewData.sections.last.items.first.todayPosts, 5);
+        expect(cached.isRefreshing, isTrue);
+        expect(sessions.readCurrent(), isNull);
+        expect(container.read(authSessionControllerProvider).isLoading, isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(network.documentRequests, 2);
+        expect(
+          container
+              .read(forumHomeControllerProvider)
+              .requireValue
+              .viewData
+              .sections
+              .last
+              .items
+              .first
+              .todayPosts,
+          5,
+        );
+
+        pending.complete();
+        await Future<void>.delayed(Duration.zero);
+        final refreshed = container
+            .read(forumHomeControllerProvider)
+            .requireValue;
+        expect(refreshed.viewData.sections.last.items.first.todayPosts, 9);
+        expect(refreshed.isRefreshing, isFalse);
+        expect(network.documentRequests, 2);
+      },
+    );
   });
 }
 
@@ -210,6 +331,8 @@ final class _HomeNetwork implements forum.ForumClientNetwork {
   int documentRequests = 0;
   bool failDocuments = false;
   forum.ForumRequest? lastRequest;
+  Future<void>? pending;
+  String homeHtml = _mobileHomeHtml;
 
   @override
   Future<forum.ForumTransportResult<forum.ForumResponse<Object?>>> send(
@@ -217,6 +340,7 @@ final class _HomeNetwork implements forum.ForumClientNetwork {
   ) async {
     documentRequests += 1;
     lastRequest = request;
+    await pending;
     if (failDocuments) {
       return const forum.ForumTransportError(
         forum.ForumTransportFailure(
@@ -232,10 +356,17 @@ final class _HomeNetwork implements forum.ForumClientNetwork {
         headers: const {
           'content-type': ['text/html'],
         },
-        body: _mobileHomeHtml,
+        body: homeHtml,
       ),
     );
   }
+}
+
+final class _PendingAuthController extends AuthSessionController {
+  final pending = Completer<AuthSessionViewState>();
+
+  @override
+  Future<AuthSessionViewState> build() => pending.future;
 }
 
 final class _RecordingForumImageDimensionIndex

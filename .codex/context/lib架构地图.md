@@ -12,7 +12,7 @@
 - `lib/app`：应用顶层装配；`navigation` 负责跨 feature 路由，`settings` 负责外观设置，`theme` 负责主题 token、语义色和组件主题，`localization` 负责语言解析，`storage` 组合各业务统计 adapter、统一报表与缓存维护 provider，`startup` 组合主壳启动协调、跨 feature 维护与账号/任务通知 Host；`Y300App` 还装配更新提示和后台 WAF 恢复宿主。
 - `lib/core/config`：应用配置、稳定存储 key 和技术性存储 key。
 - `lib/core/media`：封面裁剪/焦点、图片降采样、显示 provider 和 Flutter 图片内存缓存调优。
-- `lib/core/network`：共享网络基础设施与 forum client Host 边界。包括 `ApiResult`、`YamiboHttpGateway`（唯一 Host 传输：Cookie、会话与 formhash 存储、WAF 挑战检测/恢复协调、敏感 URI 日志脱敏）、WebView Cookie 同步、图片请求头和 URL 解析；`yamibo_forum_client_provider.dart`、`yamibo_forum_transport_providers.dart`、`yamibo_forum_client_host_adapters.dart` 负责把 Host 传输、Cookie、会话、document/snapshot 缓存和表情目录存储注入 `YamiboForumClient`。
+- `lib/core/network`：共享网络基础设施与 forum client Host 边界。包括 `ApiResult`、`YamiboHttpGateway`（唯一 Host 传输：Cookie、会话与 formhash 存储、WAF 挑战检测/恢复协调、敏感 URI 日志脱敏）、WebView Cookie 同步、图片请求头和 URL 解析；`yamibo_forum_client_provider.dart`、`yamibo_forum_transport_providers.dart`、`yamibo_forum_client_host_adapters.dart` 负责把 Host 传输、Cookie、会话、document/snapshot 缓存和表情目录存储注入 `YamiboForumClient`。`Y300ForumHomeCacheOwnerStore` 保存远端确认的 UID 与登录 Cookie 摘要，允许未验证冷启动只读同凭据账号的首页缓存；它不恢复认证身份或放宽其他缓存/写入权限，scope 与 Cookie revision 共同拒绝迟到结果。
 - `lib/core/preferences`：类型化偏好 key、SharedPreferences 访问、provider 和旧偏好迁移。
 - `lib/core/persistence`：共享 SQLite 入口 `AppDatabase`，统一管理连接配置与 schema 生命周期。内部表名 catalog、创建/重建装配、唯一升级链分别独立，SQL 按 comic、novel、favorites、library、cache 五类 schema 职责组织；只有统一入口执行升级，消费者不得导入内部 schema/迁移文件。漫画、小说、收藏、共享书架和缓存消费同一入口；物理数据库仍为 `comic_shelf.db` v42（小说位置格式字段，旧行不回填），业务查询和事务继续归各 repository，跨模块批量 read model 保留 SQL join。
 - `lib/core/utils`：跨模块使用的小型解析工具和通用工具。
