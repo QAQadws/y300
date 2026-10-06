@@ -65,7 +65,7 @@
 - 写命令结果统一区分 applied / rejected / notSent / outcomeUnknown / unsupported：只有 applied 才允许更新本地数据、刷新页面或同步书架；结果不确定（outcomeUnknown）不得自动重发；失败呈现使用本地化固定文案，不展示服务器原始消息、JSON、XML/CDATA 或 HTML。
 - 论坛壳根据持久化模式进入解析模式或 WebView。受管站内链接由 forum router 分流到原生帖子、发帖、回复、用户资料等页面；无法原生承接的流程保留 WebView 边界。
 - 帖子详情通过 `ThreadContentClassifier` 使用 fid/typeid/tag 判断内容类型，tag 数据来自 `tags`。正文通过 `content_rendering_shared/content_rendering.dart` 进入共享 HTML-first pipeline，统一处理 DOM、主题颜色、图片来源、折叠块和渲染缓存；漫画评论、小说、profile 和 messages 使用同一公开能力。thread 保留页面和阅读桥接，宿主负责配色、图片 owner/retention 与缓存装配，不另建 HTML 子集。
-- 收藏同步由 `favorites` 保存远端条目，再通过 ingest registry 调用 `comic`/`novel` 的导入服务。成功导入、刷新、删除或阅读状态变化后，通过 `LibraryShelfRefreshBus` 和共享状态 repository 通知对应书架，而不是直接操作页面 controller。
+- 收藏同步由 `favorites` 保存远端条目，再通过 ingest registry 调用 `comic`/`novel` 的导入服务。漫画收藏与手动入库共用 `ComicInitialEpisodeAssembler`：目录依据 parsed catalog URL 判定；无目录且取得图片时，自身章节与历史链接按 TID 去重合并并排序，以有效源帖 URL 入库，章节原位更新且图片引用补入不覆盖阅读状态/离线缓存。成功导入、刷新、删除或阅读状态变化后，通过 `LibraryShelfRefreshBus` 和共享状态 repository 通知对应书架，而不是直接操作页面 controller。
 - 漫画刷新先做当前帖/目录发现与增量合并，直接发现不足时再进入搜索 fallback 或持久化搜索刷新队列。搜索 fallback 保留第一页全部章节结果参与去重合并，不再计算标题相关度；正文只选去重并排除源帖后的最高三个数值 TID，已被源帖或此前正文发现链接覆盖的候选跳过且不补取第四个。漫画下载入口只向 `ComicDownloadQueue` 入队，worker 串行调用下载服务并写入 CBZ；队列和搜索刷新队列均由 `startup` 恢复。
 - 统一书架和统一详情页依赖 `library_shared` 的 `ShelfModuleAdapter`、`DetailModuleAdapter`、选择动作和 purge 契约，不直接依赖漫画/小说/收藏的私有 repository。跨模块长任务通过 `LibraryTaskProgressHub` 与通知桥接发布进度。
 - 漫画与帖子图片阅读通过 capability/adapter 接入 `reader_shared` 的 `ImageReaderEngine`；连续布局几何由 continuous_image_geometry 计算，控制器与补偿执行留引擎；图片缓存与预加载通过 `cache` 服务完成。owner/session generation 是章节或帖子切换的异步边界，旧回调不得污染新内容。

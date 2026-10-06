@@ -409,46 +409,20 @@ class ComicEpisodeStore {
     return false;
   }
 
-  /// 把单帖漫画的内容图片落地到唯一一话上。
-  ///
-  /// 使用约束：仅在调用方已确认该帖**不存在 catalog 章节链接**时才能进入；
-  /// 否则会与 [upsertParsedEpisodeLinksInTxn] 产生 orderIndex=-1 的孤儿记录。
-  /// 命名策略不属于存储层职责，由调用方通过 [episodeTitle] 注入
-  /// （参见 `ComicSingleThreadEpisodeNamer`）。
-  Future<void> seedSingleThreadEpisodeInTxn(
+  /// Adds known image references to an existing chapter without replacing
+  /// cached image metadata or the chapter's reading state on repeated ingest.
+  Future<void> seedEpisodeImagesInTxn(
     DatabaseExecutor executor, {
-    required String comicId,
-    required String sourceTid,
-    required String episodeTitle,
+    required String episodeId,
     required List<String> imageUrls,
   }) async {
-    if (imageUrls.isEmpty) {
-      return;
-    }
-
-    final defaultEpisodeId = '$comicId:$sourceTid';
-    await executor.insert(
-      AppDatabase.episodesTable,
-      EpisodeRecord.resolved(
-        episodeId: defaultEpisodeId,
-        comicId: comicId,
-        sourceEpisodeTitle: episodeTitle,
-        sourceTid: sourceTid,
-        sourceUrl: '',
-        orderIndex: 0,
-        publishTimeText: null,
-      ).toMap(),
-      // 只在缺行时插入，既有行上的自定义名与隐藏状态因此不会被这里覆盖。
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
-
     for (var imageIndex = 0; imageIndex < imageUrls.length; imageIndex++) {
       final image = EpisodeImageRecord(
-        episodeId: defaultEpisodeId,
+        episodeId: episodeId,
         imageUrl: imageUrls[imageIndex],
         imageIndex: imageIndex,
         stableCacheKey: buildEpisodeImageCacheKey(
-          episodeId: defaultEpisodeId,
+          episodeId: episodeId,
           imageIndex: imageIndex,
         ),
         lastSourceUrl: imageUrls[imageIndex],

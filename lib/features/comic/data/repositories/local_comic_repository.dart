@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/local/comic_cover_store.dart';
@@ -12,6 +13,8 @@ import 'package:y300/features/comic/data/local/comic_snapshot_store.dart';
 import 'package:y300/features/comic/domain/models/comic_detail_models.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/models/comic_shelf_models.dart';
+import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
+import 'package:y300/features/comic/domain/services/comic_initial_episode_assembler.dart';
 import 'package:y300/features/comic/domain/services/comic_single_thread_episode_namer.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
@@ -57,6 +60,10 @@ class LocalComicRepository
       coverStore: _coverStore,
       subjectParser: _subjectParser,
     );
+    _initialEpisodeAssembler = ComicInitialEpisodeAssembler(
+      linkMerger: DefaultComicEpisodeLinkMerger(subjectParser: _subjectParser),
+      episodeNamer: _singleThreadEpisodeNamer,
+    );
     _readingProgressStore = ComicReadingProgressStore(_dbFuture);
     _duplicateMergeStore = ComicDuplicateMergeStore(
       _dbFuture,
@@ -77,6 +84,7 @@ class LocalComicRepository
   late final ComicDetailStore _detailStore;
   late final ComicCoverStore _coverStore;
   late final ComicEpisodeStore _episodeStore;
+  late final ComicInitialEpisodeAssembler _initialEpisodeAssembler;
   late final ComicReadingProgressStore _readingProgressStore;
   late final ComicDuplicateMergeStore _duplicateMergeStore;
   late final ComicSnapshotStore _snapshotStore;
@@ -312,6 +320,16 @@ class LocalComicRepository
   }) async {
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final episodeLinks = _initialEpisodeAssembler.assemble(
+      parsedPost: parsedPost,
+      subjectMetadata:
+          parsedPost.subjectMetadata ?? _subjectParser.parse(title),
+      sourceTitle: title,
+      sourceUrl: Uri.parse(AppConfig.siteBaseUrl)
+          .resolve('forum.php')
+          .replace(queryParameters: {'mod': 'viewthread', 'tid': tid.trim()})
+          .toString(),
+    );
 
     await db.transaction((txn) async {
       await _detailStore.upsertComicFromParsedPostInTxn(
@@ -329,20 +347,17 @@ class LocalComicRepository
         txn,
         comicId: comicId,
         fallbackSourceTid: tid,
-        episodeLinks: parsedPost.episodeLinks,
+        episodeLinks: episodeLinks,
       );
-      // 仅在「单帖漫画」语义下种入唯一一话——即 catalog 解析未抓到任何章节
-      // 链接。否则让 upsertParsedEpisodeLinksInTxn 主导章节列表，避免给纯
-      // 目录贴留下永远拉不到内容的孤儿记录（sourceUrl 空、orderIndex<0）。
-      if (parsedPost.episodeLinks.isEmpty) {
-        await _episodeStore.seedSingleThreadEpisodeInTxn(
+      // 只有未解析出目录时，正文图片才归属于源帖自身章节。章节行已经由
+      // assembler 合并写入，图片补入不得替换阅读位置或既有离线缓存。
+      if (!(parsedPost.catalogUrl?.trim().isNotEmpty ?? false) &&
+          episodeLinks.any(
+            (link) => _episodeStore.extractTid(link.url) == tid.trim(),
+          )) {
+        await _episodeStore.seedEpisodeImagesInTxn(
           txn,
-          comicId: comicId,
-          sourceTid: tid,
-          episodeTitle: _singleThreadEpisodeNamer.resolve(
-            metadata: parsedPost.subjectMetadata,
-            fallbackComicTitle: title,
-          ),
+          episodeId: '$comicId:${tid.trim()}',
           imageUrls: parsedPost.imageUrls,
         );
       }

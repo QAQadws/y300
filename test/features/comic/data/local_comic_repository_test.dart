@@ -2,8 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
+import 'package:y300/features/comic/data/services/comic_favorite_ingest_service.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_post_aggregation_service.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
+import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
+import 'package:y300/features/comic/domain/services/html_comic_parser_service.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
@@ -412,15 +417,147 @@ void main() {
       expect(episodes.first.episodeTitle, '整本就一话漫画');
     });
 
-    test('addToShelf 解析到 catalog 章节链接时不再种入"首楼"影子记录', () async {
+    test(
+      'favorite DEATHPAIR ingest includes its own act before search',
+      () async {
+        const comicId = 'yamibo:$deathpairSourceTid';
+        const sourceEpisodeId = '$comicId:$deathpairSourceTid';
+        final service = RepositoryComicFavoriteIngestService(
+          repository: repository,
+          parserService: HtmlComicParserService(),
+          subjectParser: const RuleBasedComicSubjectParser(),
+          aggregationService: const ComicPostAggregationService(),
+        );
+        final detail = ThreadDetailData(
+          tid: deathpairSourceTid,
+          fid: '30',
+          typeid: '398',
+          subject: deathpairSourceSubject,
+          author: 'Author',
+          replies: 0,
+          views: 1,
+          currentPage: 1,
+          perPage: 20,
+          posts: [
+            ThreadPost(
+              pid: '1',
+              author: 'Author',
+              authorId: '1',
+              message:
+                  '$deathpairPreviousChaptersHtml'
+                  '<img src="https://img.test/source-30.jpg" />',
+              number: 1,
+              isFirst: true,
+              dateline: '',
+            ),
+          ],
+        );
+
+        await service.upsertFromThreadDetail(
+          detail: detail,
+          favoriteAddedAt: DateTime(2026, 10, 6),
+        );
+
+        final episodes = await repository.getComicEpisodes(
+          comicId: comicId,
+          descending: false,
+        );
+        expect(
+          episodes.map((episode) => episode.sourceTid),
+          deathpairChapterTids,
+        );
+        expect(episodes.last.episodeTitle, '第30话');
+        expect(episodes.last.orderIndex, 29);
+        expect(
+          const ForumReferenceResolver().extractTid(episodes.last.sourceUrl),
+          deathpairSourceTid,
+        );
+        expect(
+          (await repository.getEpisodeImages(
+            episodeId: sourceEpisodeId,
+          )).single.imageUrl,
+          'https://img.test/source-30.jpg',
+        );
+
+        await repository.updateLastReadProgress(
+          comicId: comicId,
+          episodeId: sourceEpisodeId,
+          imageIndex: 0,
+          scrollOffset: 42,
+        );
+        await repository.updateEpisodeImageCacheMetadata(
+          episodeId: sourceEpisodeId,
+          imageUrl: 'https://img.test/source-30.jpg',
+          localPath: '/cache/source-30.jpg',
+        );
+        await service.upsertFromThreadDetail(
+          detail: detail,
+          favoriteAddedAt: DateTime(2026, 10, 6),
+        );
+        expect(
+          (await repository.getComicEpisodes(comicId: comicId)),
+          hasLength(30),
+        );
+        expect(
+          (await repository.getReadingProgresses(
+            comicId: comicId,
+          )).single.scrollOffset,
+          42,
+        );
+        expect(
+          (await repository.getEpisodeImages(
+            episodeId: sourceEpisodeId,
+          )).single.localPath,
+          '/cache/source-30.jpg',
+        );
+      },
+    );
+
+    test('manual ingest keeps an already linked source chapter once', () async {
+      final parsed = HtmlComicParserService().parse(
+        message:
+            '$deathpairPreviousChaptersHtml'
+            '<img src="https://img.test/source-30.jpg" />',
+      );
+      await repository.addToShelf(
+        comicId: 'yamibo:$deathpairSourceTid',
+        tid: deathpairSourceTid,
+        fid: '30',
+        title: deathpairSourceSubject,
+        parsedPost: parsed.copyWith(
+          subjectMetadata: const RuleBasedComicSubjectParser().parse(
+            deathpairSourceSubject,
+          ),
+          episodeLinks: [
+            ...parsed.episodeLinks,
+            const ComicEpisodeLink(
+              url: 'thread-$deathpairSourceTid-1-1.html',
+              rawText: '第三十幕',
+            ),
+          ],
+        ),
+      );
+
+      final episodes = await repository.getComicEpisodes(
+        comicId: 'yamibo:$deathpairSourceTid',
+        descending: false,
+      );
+      expect(
+        episodes.map((episode) => episode.sourceTid),
+        deathpairChapterTids,
+      );
+      expect(episodes.last.episodeTitle, '第三十幕');
+    });
+
+    test('addToShelf 解析出目录时不种入自身影子章节', () async {
       await repository.addToShelf(
         comicId: 'yamibo:catalog-only',
         tid: '400',
         fid: '30',
         title: '【某汉化组】目录贴漫画',
         parsedPost: const ParsedComicPost(
-          // 即使 OP 里有横幅图，只要 catalog 链接非空就不该种入 source tid
-          // 上的孤儿话——避免后续显示 sourceUrl 空、永远拉不到内容的章节。
+          // 目录已识别时，横幅图不能让目录帖成为章节。
+          catalogUrl: 'https://bbs.yamibo.com/misc.php?mod=tag&id=1',
           imageUrls: <String>['https://img.test/catalog-banner.jpg'],
           episodeLinks: <ComicEpisodeLink>[
             ComicEpisodeLink(
@@ -450,6 +587,47 @@ void main() {
       );
       expect(episodes.any((episode) => episode.sourceTid == '400'), isFalse);
     });
+
+    for (final hasHistoricalLinks in [false, true]) {
+      test(
+        'catalog excludes source content with history=$hasHistoricalLinks',
+        () async {
+          final parsed = HtmlComicParserService().parse(
+            message:
+                '${hasHistoricalLinks ? deathpairPreviousChaptersHtml : ''}'
+                '<a href="https://bbs.yamibo.com/misc.php?mod=tag&id=1">目录</a>'
+                '<img src="https://img.test/banner.jpg" />',
+          );
+          await repository.addFavoriteToShelf(
+            comicId: 'yamibo:$deathpairSourceTid',
+            tid: deathpairSourceTid,
+            fid: '30',
+            title: deathpairSourceSubject,
+            favoriteAddedAt: DateTime(2026, 10, 6),
+            parsedPost: parsed.copyWith(
+              subjectMetadata: const RuleBasedComicSubjectParser().parse(
+                deathpairSourceSubject,
+              ),
+            ),
+          );
+
+          final episodes = await repository.getComicEpisodes(
+            comicId: 'yamibo:$deathpairSourceTid',
+            descending: false,
+          );
+          expect(
+            episodes.map((episode) => episode.sourceTid),
+            hasHistoricalLinks ? deathpairChapterTids.take(29) : isEmpty,
+          );
+          expect(
+            await repository.getEpisodeImages(
+              episodeId: 'yamibo:$deathpairSourceTid:$deathpairSourceTid',
+            ),
+            isEmpty,
+          );
+        },
+      );
+    }
 
     test(
       'removeFromShelf only removes shelf entry and keeps comic data',
@@ -482,6 +660,10 @@ void main() {
           imageIndex: 0,
           scrollOffset: 18,
         );
+        final originalEpisodes = await repository.getComicEpisodes(
+          comicId: 'yamibo:remove-only',
+          descending: false,
+        );
 
         await repository.removeFromShelf(comicId: 'yamibo:remove-only');
 
@@ -504,12 +686,9 @@ void main() {
         expect(inShelf, isFalse);
         expect(shelfItems, isEmpty);
         expect(detail, isNotNull);
-        // catalog 章节链接已抓到时不再种入 "首楼" 影子记录，
-        // 详见 ComicSingleThreadEpisodeNamer 的语义说明。
-        expect(episodes, hasLength(1));
         expect(
-          episodes.map((episode) => episode.episodeTitle).toList(),
-          <String?>['第1话'],
+          episodes.map((episode) => episode.episodeId),
+          originalEpisodes.map((episode) => episode.episodeId),
         );
         expect(images, hasLength(1));
         expect(progress, isNotNull);
@@ -566,6 +745,10 @@ void main() {
           scrollOffset: 64,
         );
 
+        final originalRemainingEpisodes = await repository.getComicEpisodes(
+          comicId: 'yamibo:purge-b',
+          descending: false,
+        );
         await repository.purgeWork(comicId: 'yamibo:purge-a');
 
         final db = await dbFuture;
@@ -622,10 +805,9 @@ void main() {
         );
         expect(purgedProgress, isNull);
         expect(remainingDetail, isNotNull);
-        expect(remainingEpisodes, hasLength(1));
         expect(
-          remainingEpisodes.map((episode) => episode.episodeTitle).toList(),
-          <String?>['第1话'],
+          remainingEpisodes.map((episode) => episode.episodeId),
+          originalRemainingEpisodes.map((episode) => episode.episodeId),
         );
         expect(
           await db.query(
