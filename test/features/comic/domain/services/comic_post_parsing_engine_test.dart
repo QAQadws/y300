@@ -1,8 +1,44 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 
+import 'deathpair_discovery_fixture.dart';
+
 void main() {
   group('ComicPostParsingEngine', () {
+    test('recognizes the 29 act links in the DEATHPAIR source post', () {
+      final result = ComicPostParsingEngine().parse(
+        messageHtml: deathpairPreviousChaptersHtml,
+      );
+
+      expect(
+        result.episodes.map((episode) => episode.tid),
+        deathpairChapterTids.take(29),
+      );
+      expect(result.episodes.first.titleRaw, '第一幕');
+      expect(result.episodes.last.titleRaw, '第二十九幕');
+      expect(result.catalogLinks, isEmpty);
+    });
+
+    test(
+      'recognizes bare and final act links without promoting discussion',
+      () {
+        final result = ComicPostParsingEngine().parse(
+          messageHtml: '''
+<a href="thread-201-1-1.html">14幕</a>
+<a href="thread-202-1-1.html">终幕</a>
+<a href="thread-203-1-1.html">終幕</a>
+<a href="thread-204-1-1.html">幕后访谈</a>
+''',
+        );
+
+        expect(result.episodes.map((episode) => episode.tid), [
+          '201',
+          '202',
+          '203',
+        ]);
+      },
+    );
+
     test(
       'extracts thread/viewthread/damaged tid links and deduplicates by tid',
       () {

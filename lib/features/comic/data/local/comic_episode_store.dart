@@ -318,14 +318,6 @@ class ComicEpisodeStore {
         final sourceTid = extractTid(link.url) ?? fallbackSourceTid;
         final episodeId = '$comicId:$sourceTid';
 
-        final existing = await txn.query(
-          AppDatabase.episodesTable,
-          columns: <String>['episode_id'],
-          where: 'episode_id = ?',
-          whereArgs: <Object>[episodeId],
-          limit: 1,
-        );
-
         final override = overrides[episodeId];
         final record = EpisodeRecord.resolved(
           episodeId: episodeId,
@@ -342,16 +334,10 @@ class ComicEpisodeStore {
           isHidden: override?.isHidden ?? false,
         );
 
-        await txn.insert(
-          AppDatabase.episodesTable,
-          record.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-
-        if (existing.isEmpty) {
-          inserted++;
-        } else {
+        if (await _upsertEpisodeRecordInTxn(txn, record)) {
           updated++;
+        } else {
+          inserted++;
         }
       }
 
@@ -399,12 +385,28 @@ class ComicEpisodeStore {
         isHidden: override?.isHidden ?? false,
       );
 
-      await executor.insert(
-        AppDatabase.episodesTable,
-        episode.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await _upsertEpisodeRecordInTxn(executor, episode);
     }
+  }
+
+  Future<bool> _upsertEpisodeRecordInTxn(
+    DatabaseExecutor executor,
+    EpisodeRecord episode,
+  ) async {
+    // REPLACE deletes the old row and cascades into reading progress/images.
+    // Both refresh and favorite ingest must update existing chapter rows in place.
+    final values = episode.toMap();
+    final updated = await executor.update(
+      AppDatabase.episodesTable,
+      values,
+      where: 'episode_id = ?',
+      whereArgs: <Object>[episode.episodeId],
+    );
+    if (updated > 0) {
+      return true;
+    }
+    await executor.insert(AppDatabase.episodesTable, values);
+    return false;
   }
 
   /// 把单帖漫画的内容图片落地到唯一一话上。
@@ -461,9 +463,8 @@ class ComicEpisodeStore {
 
   /// 读取章节上属于用户的状态：隐藏标记与自定义章节名。
   ///
-  /// 解析 upsert 用 `ConflictAlgorithm.replace` 整行覆盖，这些列会被解析结果
-  /// 冲掉；刷新不应该把用户隐藏过的章节重新显示出来，也不应该把重命名改回
-  /// 来源名，所以写入前先取回来再一起写进新行。
+  /// 来源解析更新章节时不应冲掉隐藏和自定义名；先取回这些字段，再随来源
+  /// 元数据一起写入。子表中的阅读位置和图片记录由原位更新自然保留。
   Future<Map<String, _EpisodeUserOverrides>> _loadEpisodeUserOverrides(
     DatabaseExecutor executor,
     String comicId,

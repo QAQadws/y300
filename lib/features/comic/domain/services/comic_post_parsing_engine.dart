@@ -27,11 +27,11 @@ class ComicPostParsingEngine {
            ];
 
   static final RegExp _ordinalPattern = RegExp(
-    r'(^\d+(\.\d+)?\s*[话話].*|^\d+(\.\d+)?$|第\s*.+\s*[话話])',
+    r'(^\d+(\.\d+)?\s*[话話幕].*|^\d+(\.\d+)?$|第\s*.+\s*[话話幕])',
     caseSensitive: false,
   );
   static final RegExp _specialPattern = RegExp(
-    r'(特典|附录|番外)',
+    r'(特典|附录|番外|终幕|終幕)',
     caseSensitive: false,
   );
   static final RegExp _catalogTextPattern = RegExp(

@@ -17,9 +17,76 @@ import 'package:y300/features/favorites/domain/services/favorite_sync_request_go
 import 'package:y300/features/search/data/services/forum_search_coordinator.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../../../support/search/search_response_fixtures.dart';
+import 'deathpair_discovery_fixture.dart';
 
 void main() {
   group('NetworkComicEpisodeRefreshService', () {
+    test(
+      'combines DEATHPAIR body acts with first-page search and final act',
+      () async {
+        final repository = _RecordingDiscoveryRepository({
+          deathpairSourceTid: _threadDetail(
+            tid: deathpairSourceTid,
+            subject: deathpairSourceSubject,
+            message: deathpairPreviousChaptersHtml,
+          ),
+          for (final tid in [deathpairFinalTid, '575648', '575647'])
+            tid: _threadDetail(
+              tid: tid,
+              subject: '圣少女默示录 DEATHPAIR',
+              message: '',
+            ),
+        });
+        final service = _buildService(
+          discoveryService: ComicEpisodeDiscoveryService(
+            repository: repository,
+            opPostParser: ComicConsecutiveOpPostParser(
+              engine: ComicPostParsingEngine(),
+            ),
+            catalogDirectoryReader: _NoopCatalogDirectoryReader(),
+          ),
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: SearchTestResponse(
+              items: [
+                const SearchTestTopic(
+                  tid: deathpairFinalTid,
+                  title: deathpairFinalSubject,
+                  url:
+                      'https://bbs.yamibo.com/thread-$deathpairFinalTid-1-1.html',
+                  fid: '30',
+                ),
+                for (var chapter = 30; chapter >= 12; chapter--)
+                  SearchTestTopic(
+                    tid: deathpairChapterTids[chapter - 1],
+                    title: '圣少女默示录 DEATHPAIR 第$chapter幕',
+                    url:
+                        'https://bbs.yamibo.com/thread-${deathpairChapterTids[chapter - 1]}-1-1.html',
+                    fid: '30',
+                  ),
+              ],
+              rateLimited: false,
+            ),
+          ),
+        );
+
+        final outcome = await service.fetchSearchAndCurrentOnly(
+          const ComicEpisodeRefreshRequest(sourceTid: deathpairSourceTid),
+        );
+
+        const references = ForumReferenceResolver();
+        expect(outcome.links.map((link) => references.extractTid(link.url)), [
+          ...deathpairChapterTids,
+          deathpairFinalTid,
+        ]);
+        expect(outcome.links.last.episodeTitle, '最终话');
+        expect(
+          repository.requestedTids.where((tid) => tid == deathpairSourceTid),
+          hasLength(1),
+        );
+        expect(repository.requestedTids, hasLength(4));
+      },
+    );
+
     test(
       'follows the newest chapter chain outside the relevance top-k',
       () async {

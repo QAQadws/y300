@@ -3,11 +3,14 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
+import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 import 'package:y300/features/library_shared/data/repositories/local_library_state_repository.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import '../../../test_support/unavailable_library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+
+import '../domain/services/deathpair_discovery_fixture.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -943,6 +946,138 @@ void main() {
       expect(detail.episodeCount, greaterThanOrEqualTo(2));
       expect(episodes.first.episodeTitle, contains('2'));
     });
+
+    test(
+      'repairs DEATHPAIR older acts while preserving existing reading state',
+      () async {
+        const comicId = 'yamibo:$deathpairSourceTid';
+        const readEpisodeId = '$comicId:570879';
+        await repository.addToShelf(
+          comicId: comicId,
+          tid: deathpairSourceTid,
+          fid: '30',
+          title: deathpairSourceSubject,
+          parsedPost: ParsedComicPost(
+            imageUrls: const [],
+            episodeLinks: [
+              for (var chapter = 12; chapter <= 30; chapter++)
+                ComicEpisodeLink(
+                  url: 'thread-${deathpairChapterTids[chapter - 1]}-1-1.html',
+                  rawText: '第$chapter话',
+                  episodeTitle: '第$chapter话',
+                ),
+            ],
+            plainTextSummary: '',
+          ),
+        );
+        final stateRepository = LocalLibraryStateRepository(dbFuture);
+        await stateRepository.upsertEpisodeState(
+          moduleKey: LibraryModuleKey.comic,
+          episodeId: readEpisodeId,
+          workId: comicId,
+          isRead: true,
+        );
+        await repository.updateLastReadProgress(
+          comicId: comicId,
+          episodeId: readEpisodeId,
+          imageIndex: 3,
+          scrollOffset: 42,
+        );
+        await repository.saveEpisodeImages(
+          episodeId: readEpisodeId,
+          imageUrls: ['https://img.test/deathpair-12.jpg'],
+        );
+        await repository.updateEpisodeImageCacheMetadata(
+          episodeId: readEpisodeId,
+          imageUrl: 'https://img.test/deathpair-12.jpg',
+          localPath: '/cache/deathpair-12.jpg',
+        );
+        final parsed = ComicPostParsingEngine().parse(
+          messageHtml: deathpairPreviousChaptersHtml,
+        );
+
+        final result = await repository.mergeEpisodesFromLinks(
+          comicId: comicId,
+          fallbackSourceTid: deathpairSourceTid,
+          episodeLinks: [
+            for (final episode in parsed.episodes)
+              ComicEpisodeLink(
+                url: episode.url,
+                rawText: episode.titleRaw,
+                episodeTitle: episode.titleNormalized,
+              ),
+            const ComicEpisodeLink(
+              url: 'thread-$deathpairSourceTid-1-1.html',
+              rawText: deathpairSourceSubject,
+            ),
+            const ComicEpisodeLink(
+              url: 'thread-$deathpairFinalTid-1-1.html',
+              rawText: deathpairFinalSubject,
+            ),
+          ],
+        );
+
+        final episodes = await repository.getComicEpisodes(
+          comicId: comicId,
+          descending: false,
+        );
+        final progresses = await repository.getReadingProgresses(
+          comicId: comicId,
+        );
+        final images = await repository.getEpisodeImages(
+          episodeId: readEpisodeId,
+        );
+        final snapshot = await repository.queryShelfSnapshot(
+          filters: LibraryFilterSet.defaults,
+          sortOption: LibraryShelfSortOption.defaults,
+          keyword: '',
+        );
+        expect(result.insertedCount, 12);
+        expect(episodes.map((episode) => episode.sourceTid), [
+          ...deathpairChapterTids,
+          deathpairFinalTid,
+        ]);
+        expect(episodes.last.episodeTitle, '最终话');
+        expect(progresses.single.episodeId, readEpisodeId);
+        expect(progresses.single.imageIndex, 3);
+        expect(progresses.single.scrollOffset, 42);
+        expect(images.single.localPath, '/cache/deathpair-12.jpg');
+        expect(snapshot.itemsByCategory['default']!.single.readChapterCount, 1);
+
+        // Favorite ingest reuses the same chapter writes on later syncs.
+        await repository.addFavoriteToShelf(
+          comicId: comicId,
+          tid: deathpairSourceTid,
+          fid: '30',
+          title: deathpairSourceSubject,
+          parsedPost: ParsedComicPost(
+            imageUrls: const [],
+            episodeLinks: [
+              for (final episode in parsed.episodes)
+                ComicEpisodeLink(
+                  url: episode.url,
+                  rawText: episode.titleRaw,
+                  episodeTitle: episode.titleNormalized,
+                ),
+            ],
+            plainTextSummary: '',
+          ),
+          favoriteAddedAt: DateTime(2026, 8, 27),
+        );
+        expect(
+          (await repository.getReadingProgresses(
+            comicId: comicId,
+          )).single.imageIndex,
+          3,
+        );
+        expect(
+          (await repository.getEpisodeImages(
+            episodeId: readEpisodeId,
+          )).single.localPath,
+          '/cache/deathpair-12.jpg',
+        );
+      },
+    );
 
     test('mergeEpisodesFromLinks can insert and update episodes', () async {
       await repository.addToShelf(

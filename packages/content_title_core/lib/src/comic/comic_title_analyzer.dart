@@ -44,7 +44,7 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
     '中篇',
   ];
   static final RegExp _finalMarkerPattern = RegExp(
-    r'(最终话|最終話|最终回|最終回|大结局|大結局)',
+    r'(最终话|最終話|最终回|最終回|大结局|大結局|终幕|終幕)',
     caseSensitive: false,
   );
   // `第` 引导的章节，章节单位可选；同样接受 `第6-1话` 这种小节号形式（取主章节）。
