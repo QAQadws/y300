@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
@@ -5,8 +6,51 @@ import 'package:y300/features/novel/domain/services/novel_reader_document_parser
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'chapter conversion never dispatches native work on the UI thread',
+    () async {
+      const channel = MethodChannel('flutter_open_chinese_convert');
+      final nativeCalls = <MethodCall>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        nativeCalls.add(call);
+        return (call.arguments as List<Object?>).first as String;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final document =
+          await AdaptiveNovelReaderDocumentBuildService(
+            parser: const DiscuzNovelReaderDocumentParser(),
+            executor: _RecordingBuildExecutor(),
+          ).build(
+            NovelReaderDocumentBuildRequest(
+              episodeId: 'converted-chapter',
+              rawHtml: '<p>繁简正文</p>',
+              fallbackParagraphs: List.generate(100, (index) => '繁简段落$index'),
+            ),
+            converter: resolveTextConverter(TextConversionMode.toTraditional),
+          );
+
+      expect(document.plainText, '繁简正文');
+      expect(
+        document.textConversionIdentity,
+        TextConversionMode.toTraditional.name,
+      );
+      expect(nativeCalls, isNotEmpty);
+      for (final call in nativeCalls) {
+        final arguments = call.arguments as List<Object?>;
+        expect(arguments[1], 's2t');
+        expect(arguments[2], isTrue);
+      }
+    },
+  );
+
   test(
     'real isolate returns the same document without UI DTO reconstruction',
     () async {

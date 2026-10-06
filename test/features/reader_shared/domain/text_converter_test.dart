@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/opencc_text_converter.dart';
@@ -5,6 +6,8 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('IdentityTextConverter', () {
     const converter = IdentityTextConverter();
 
@@ -27,6 +30,54 @@ void main() {
   });
 
   group('OpenccTextConverter', () {
+    const channel = MethodChannel('flutter_open_chinese_convert');
+    late List<MethodCall> nativeCalls;
+
+    setUp(() {
+      nativeCalls = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            nativeCalls.add(call);
+            return (call.arguments as List<Object?>).first as String;
+          });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    for (final direction in [
+      (TextConversionMode.toTraditional, 's2t'),
+      (TextConversionMode.toSimplified, 't2s'),
+    ]) {
+      test(
+        '${direction.$2} delegates long text to the native worker',
+        () async {
+          final converter = resolveTextConverter(direction.$1);
+          final html = '<p>${'繁简正文' * 4000}</p>';
+
+          expect(await converter.convertHtml(html), html);
+          final call = nativeCalls.single;
+          expect(call.method, 'convert');
+          final arguments = call.arguments as List<Object?>;
+          expect(arguments[0], html);
+          expect(arguments[1], direction.$2);
+          // This chooses the plugin's native worker, not its UI-thread branch.
+          expect(arguments[2], isTrue);
+        },
+      );
+    }
+
+    test('empty input does not dispatch native work', () async {
+      const converter = OpenccTextConverter(
+        mode: TextConversionMode.toTraditional,
+      );
+
+      expect(await converter.convertHtml(''), '');
+      expect(nativeCalls, isEmpty);
+    });
+
     test('toTraditional has s2t in id', () {
       const converter = OpenccTextConverter(
         mode: TextConversionMode.toTraditional,
