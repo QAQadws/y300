@@ -83,12 +83,15 @@ void main() {
           repository.requestedTids.where((tid) => tid == deathpairSourceTid),
           hasLength(1),
         );
-        expect(repository.requestedTids, hasLength(4));
+        expect(repository.requestedTids, [
+          deathpairSourceTid,
+          deathpairFinalTid,
+        ]);
       },
     );
 
     test(
-      'follows the newest chapter chain outside the relevance top-k',
+      'follows newer bodies before older hits in the search result page',
       () async {
         final repository = _RecordingDiscoveryRepository(
           <String, ThreadDetailData>{
@@ -160,10 +163,14 @@ void main() {
           repository.requestedTids.where((tid) => tid == '100'),
           hasLength(1),
         );
-        expect(
-          repository.requestedTids,
-          containsAllInOrder(['600', '500', '400']),
-        );
+        expect(repository.requestedTids, [
+          '100',
+          '999',
+          '600',
+          '500',
+          '400',
+          '203',
+        ]);
         expect(
           outcome.links.any((link) => link.url.contains('tid=999')),
           isFalse,
@@ -232,7 +239,7 @@ void main() {
     });
 
     test(
-      'keeps the discovery budget when newest chapter is less relevant',
+      'inspects only the three highest tids and merges the whole search page',
       () async {
         final discovery = _FakeDiscoveryService(byTid: {});
         final service = _buildService(
@@ -265,7 +272,7 @@ void main() {
           const ComicEpisodeRefreshRequest(sourceTid: '100'),
         );
 
-        expect(discovery.requestedTids, ['100', '600', '201', '202']);
+        expect(discovery.requestedTids, ['100', '600', '204', '203']);
         expect(outcome.links, hasLength(5));
       },
     );
@@ -347,6 +354,110 @@ void main() {
       },
     );
 
+    test(
+      'skips both covered candidates without reading older search bodies',
+      () async {
+        final discovery = _FakeDiscoveryService(
+          byTid: {
+            '600': const [
+              ComicEpisodeLink(
+                url: 'forum.php?mod=viewthread&tid=500&page=2#pid123',
+                rawText: '第5话',
+              ),
+              ComicEpisodeLink(url: 'thread-400-1-1.html', rawText: '第4话'),
+            ],
+          },
+        );
+        final service = _buildService(
+          discoveryService: discovery,
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: _searchResponseForTids([
+              '200',
+              '500',
+              '100',
+              '600',
+              '400',
+              '600',
+            ]),
+          ),
+          threadSeedFetcher: (_) async => const ThreadSeed(subject: '测试漫画 第1话'),
+        );
+
+        final outcome = await service.fetchSearchAndCurrentOnly(
+          const ComicEpisodeRefreshRequest(sourceTid: '100'),
+        );
+
+        expect(discovery.requestedTids, ['100', '600']);
+        const references = ForumReferenceResolver();
+        expect(outcome.links.map((link) => references.extractTid(link.url)), [
+          '100',
+          '200',
+          '400',
+          '500',
+          '600',
+        ]);
+      },
+    );
+
+    test('continues with the uncovered third candidate', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: {
+          '600': const [
+            ComicEpisodeLink(url: 'thread-500-1-1.html', rawText: '第5话'),
+          ],
+          '400': const [
+            ComicEpisodeLink(url: 'thread-300-1-1.html', rawText: '第3话'),
+          ],
+        },
+      );
+      final service = _buildService(
+        discoveryService: discovery,
+        searchCoordinator: _FakeForumSearchCoordinator(
+          response: _searchResponseForTids(['200', '500', '100', '600', '400']),
+        ),
+        threadSeedFetcher: (_) async => const ThreadSeed(subject: '测试漫画 第1话'),
+      );
+
+      final outcome = await service.fetchSearchAndCurrentOnly(
+        const ComicEpisodeRefreshRequest(sourceTid: '100'),
+      );
+
+      expect(discovery.requestedTids, ['100', '600', '400']);
+      const references = ForumReferenceResolver();
+      expect(outcome.links.map((link) => references.extractTid(link.url)), [
+        '100',
+        '200',
+        '300',
+        '400',
+        '500',
+        '600',
+      ]);
+    });
+
+    test('also skips candidates covered by the second body', () async {
+      final discovery = _FakeDiscoveryService(
+        byTid: {
+          '500': const [
+            ComicEpisodeLink(url: 'thread-400-1-1.html', rawText: '第4话'),
+          ],
+        },
+      );
+      final service = _buildService(
+        discoveryService: discovery,
+        searchCoordinator: _FakeForumSearchCoordinator(
+          response: _searchResponseForTids(['400', '500', '600', '200']),
+        ),
+        threadSeedFetcher: (_) async => const ThreadSeed(subject: '测试漫画 第1话'),
+      );
+
+      final outcome = await service.fetchSearchAndCurrentOnly(
+        const ComicEpisodeRefreshRequest(sourceTid: '100'),
+      );
+
+      expect(discovery.requestedTids, ['100', '600', '500']);
+      expect(outcome.links, hasLength(4));
+    });
+
     test('returns empty when search is rate limited', () async {
       final discovery = _FakeDiscoveryService(
         byTid: <String, List<ComicEpisodeLink>>{
@@ -376,12 +487,12 @@ void main() {
       expect(links, isEmpty);
     });
 
-    test('does not merge low-score search candidates', () async {
+    test('trusts server matches without rescoring titles', () async {
       final discovery = _FakeDiscoveryService(
         byTid: <String, List<ComicEpisodeLink>>{
           '100': const <ComicEpisodeLink>[],
           '401': const <ComicEpisodeLink>[
-            ComicEpisodeLink(url: 'thread-401-1-1.html', rawText: '低分误匹配'),
+            ComicEpisodeLink(url: 'thread-401-1-1.html', rawText: '第1话'),
           ],
         },
       );
@@ -409,8 +520,8 @@ void main() {
 
       final links = await service.fetchEpisodeLinksFromTid('100');
 
-      expect(links, isEmpty);
-      expect(discovery.requestedTids, <String>['100']);
+      expect(links.single.url, contains('tid=401'));
+      expect(discovery.requestedTids, <String>['100', '401']);
     });
 
     test(
@@ -620,7 +731,7 @@ void main() {
           '第2话',
           '第3话',
         ]);
-        expect(discovery.requestedTids, <String>['571256', '570088', '568759']);
+        expect(discovery.requestedTids, <String>['571256']);
       },
     );
 
@@ -680,7 +791,7 @@ void main() {
           '第2话',
           '第3话',
         ]);
-        expect(discovery.requestedTids, <String>['568759', '571256', '570088']);
+        expect(discovery.requestedTids, <String>['568759', '571256']);
       },
     );
 
@@ -1449,7 +1560,6 @@ void main() {
             ComicSearchCandidate(
               tid: searchItem.tid,
               title: searchItem.title,
-              score: 1,
               searchIndex: 0,
             ),
           ],
@@ -1485,8 +1595,6 @@ void main() {
         expect(keywordResolver.lastRequest?.sourceTid, '100');
         expect(keywordResolver.lastSubject, '测试漫画 第1话');
         expect(candidateRanker.callCount, 1);
-        expect(candidateRanker.lastThreadSubject, '测试漫画 第1话');
-        expect(candidateRanker.lastKeyword?.value, '测试漫画');
         expect(
           candidateRanker.lastItems.map((item) => item.tid).toList(),
           <String>['301'],
@@ -1618,6 +1726,20 @@ void main() {
     );
   });
 }
+
+SearchTestResponse _searchResponseForTids(List<String> tids) =>
+    SearchTestResponse(
+      items: [
+        for (final tid in tids)
+          SearchTestTopic(
+            tid: tid,
+            title: '测试漫画 第${int.parse(tid) ~/ 100}话',
+            url: 'https://bbs.yamibo.com/thread-$tid-1-1.html',
+            fid: '30',
+          ),
+      ],
+      rateLimited: false,
+    );
 
 NetworkComicEpisodeRefreshService _buildService({
   required ComicEpisodeDiscoveryService discoveryService,
@@ -1964,19 +2086,13 @@ class _RecordingCandidateRanker implements ComicSearchCandidateRanker {
   int get discoveryTopK => 3;
 
   int callCount = 0;
-  String? lastThreadSubject;
-  ComicRefreshKeyword? lastKeyword;
   List<ForumSearchTopicSummary> lastItems = const <ForumSearchTopicSummary>[];
 
   @override
   List<ComicSearchCandidate> rank({
-    required String threadSubject,
-    required ComicRefreshKeyword keyword,
     required List<ForumSearchTopicSummary> items,
   }) {
     callCount++;
-    lastThreadSubject = threadSubject;
-    lastKeyword = keyword;
     lastItems = items;
     return candidates;
   }

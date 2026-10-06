@@ -50,18 +50,8 @@ void main() {
     test('builds thread urls at the application boundary', () {
       final links = merger.fromSearchCandidates(
         const <ComicSearchCandidate>[
-          ComicSearchCandidate(
-            tid: '101',
-            title: '测试漫画 第1话',
-            score: 1,
-            searchIndex: 0,
-          ),
-          ComicSearchCandidate(
-            tid: '102',
-            title: '测试漫画 目录合集',
-            score: 1,
-            searchIndex: 1,
-          ),
+          ComicSearchCandidate(tid: '101', title: '测试漫画 第1话', searchIndex: 0),
+          ComicSearchCandidate(tid: '102', title: '测试漫画 目录合集', searchIndex: 1),
         ],
         threadUrlBuilder: (tid) =>
             'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid',

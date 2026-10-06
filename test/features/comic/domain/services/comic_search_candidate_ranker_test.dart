@@ -1,69 +1,61 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
   group('DefaultComicSearchCandidateRanker', () {
-    test('filters out candidates below adaptive threshold', () {
+    test('keeps all server matches without filtering titles', () {
       const ranker = DefaultComicSearchCandidateRanker();
 
       final candidates = ranker.rank(
-        threadSubject: 'abc 第1话',
-        keyword: const ComicRefreshKeyword(
-          source: ComicRefreshKeywordSource.customTitle,
-          value: 'abc',
-        ),
         items: const <ForumSearchTopicSummary>[
           ForumSearchTopicSummary(tid: '301', title: 'abc 第2话'),
-          ForumSearchTopicSummary(tid: '302', title: 'abd 第2话'),
+          ForumSearchTopicSummary(tid: '302', title: '完全不同的标题 第1话'),
         ],
       );
 
-      expect(candidates, hasLength(1));
-      expect(candidates.single.tid, '301');
+      expect(candidates.map((candidate) => candidate.tid), ['302', '301']);
+      expect(candidates.first.title, '完全不同的标题 第1话');
     });
 
-    test('keeps score desc then search index asc ordering', () {
+    test('orders the whole page by numeric tid descending', () {
       const ranker = DefaultComicSearchCandidateRanker();
 
       final candidates = ranker.rank(
-        threadSubject: 'abc 第1话',
-        keyword: const ComicRefreshKeyword(
-          source: ComicRefreshKeywordSource.customTitle,
-          value: 'abc',
-        ),
         items: const <ForumSearchTopicSummary>[
-          ForumSearchTopicSummary(tid: '401', title: 'abc 特典'),
-          ForumSearchTopicSummary(tid: '402', title: 'abc 第2话'),
-          ForumSearchTopicSummary(tid: '403', title: 'ab 第2话'),
+          ForumSearchTopicSummary(tid: '9', title: '测试漫画 第1话'),
+          ForumSearchTopicSummary(tid: '700', title: '测试漫画 第3话'),
+          ForumSearchTopicSummary(tid: '80', title: '测试漫画 第2话'),
+          ForumSearchTopicSummary(tid: '6000', title: '测试漫画 第4话'),
         ],
       );
 
       expect(candidates.map((candidate) => candidate.tid).toList(), <String>[
-        '401',
-        '402',
+        '6000',
+        '700',
+        '80',
+        '9',
       ]);
-      expect(candidates.first.searchIndex, 0);
-      expect(candidates.last.searchIndex, 1);
+      expect(candidates.map((candidate) => candidate.searchIndex), [
+        3,
+        1,
+        2,
+        0,
+      ]);
     });
 
-    test('uses 0.50 floor when current subject score is zero', () {
+    test('normalizes tids and preserves search order for equal tids', () {
       const ranker = DefaultComicSearchCandidateRanker();
 
       final candidates = ranker.rank(
-        threadSubject: 'zzz',
-        keyword: const ComicRefreshKeyword(
-          source: ComicRefreshKeywordSource.customTitle,
-          value: 'abc',
-        ),
         items: const <ForumSearchTopicSummary>[
-          ForumSearchTopicSummary(tid: '501', title: 'abd'),
-          ForumSearchTopicSummary(tid: '502', title: 'qqq'),
+          ForumSearchTopicSummary(tid: ' 401 ', title: '测试漫画 第1话'),
+          ForumSearchTopicSummary(tid: '401', title: '测试漫画 第一话'),
         ],
       );
 
-      expect(candidates.map((candidate) => candidate.tid), <String>['501']);
+      expect(candidates.map((candidate) => candidate.tid), ['401', '401']);
+      expect(candidates.map((candidate) => candidate.searchIndex), [0, 1]);
     });
 
     test('exposes discoveryTopK as 3 by default', () {
