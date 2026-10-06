@@ -21,6 +21,16 @@ final class NovelReaderPaginationRestoreResolution {
 final class NovelReaderPaginationRestorePolicy {
   const NovelReaderPaginationRestorePolicy();
 
+  /// A nonzero percentage needs a final page count only until a readable
+  /// restore target is found. A verified beginning is independent of totals.
+  bool requiresCompletePageCount({
+    required NovelReaderProgressSnapshot snapshot,
+    required bool isRestoreTargetPending,
+  }) =>
+      isRestoreTargetPending &&
+      _hasUsableProgressPercent(snapshot) &&
+      snapshot.progressPercent > 0;
+
   /// Resolves a page only when an incremental plan already contains enough
   /// stable information to restore it without displaying a temporary page.
   /// A complete plan can use the existing percentage and legacy fallbacks.
@@ -48,6 +58,15 @@ final class NovelReaderPaginationRestorePolicy {
           pageIndex: pageIndex,
           isReadOnlyCompatibilityRestore: exactPage == null,
         );
+    // Unlike a nonzero percentage, a verified 0% needs no final page count.
+    // Conversion can invalidate its old node; retain compatibility read-only
+    // status unless that node actually proves the displayed first page.
+    if (_hasUsableProgressPercent(snapshot) && snapshot.progressPercent == 0) {
+      return NovelReaderPaginationRestoreResolution(
+        pageIndex: 0,
+        isReadOnlyCompatibilityRestore: exactPage != 0,
+      );
+    }
     // A newly prepared plan may have a different page count or layout key.
     // Once the complete plan is available, the persisted percentage is the
     // stable position contract and must win over stale page/anchor hints.
@@ -97,6 +116,12 @@ final class NovelReaderPaginationRestorePolicy {
           isReadOnlyCompatibilityRestore: exactPage == null,
         );
 
+    if (_hasUsableProgressPercent(snapshot) && snapshot.progressPercent == 0) {
+      return NovelReaderPaginationRestoreResolution(
+        pageIndex: 0,
+        isReadOnlyCompatibilityRestore: exactPage != 0,
+      );
+    }
     final percentPage = _pageFromProgressPercent(snapshot, pageCount);
     if (percentPage != null) {
       return resolution(percentPage);
@@ -126,11 +151,7 @@ final class NovelReaderPaginationRestorePolicy {
     NovelReaderProgressSnapshot snapshot,
     int pageCount,
   ) {
-    if (snapshot.isProgressPercentValid == false ||
-        !snapshot.progressPercent.isFinite ||
-        snapshot.progressPercent < 0 ||
-        (snapshot.progressPercent == 0 &&
-            snapshot.isProgressPercentValid != true)) {
+    if (!_hasUsableProgressPercent(snapshot)) {
       return null;
     }
     final scale =
@@ -143,6 +164,12 @@ final class NovelReaderPaginationRestorePolicy {
         .clamp(0, pageCount - 1)
         .toInt();
   }
+
+  bool _hasUsableProgressPercent(NovelReaderProgressSnapshot snapshot) =>
+      snapshot.isProgressPercentValid != false &&
+      snapshot.progressPercent.isFinite &&
+      snapshot.progressPercent >= 0 &&
+      (snapshot.progressPercent > 0 || snapshot.isProgressPercentValid == true);
 
   NovelReaderTextAnchor? _anchorFromSnapshot(
     NovelReaderProgressSnapshot snapshot,

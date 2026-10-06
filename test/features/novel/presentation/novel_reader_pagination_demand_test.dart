@@ -5,8 +5,122 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 
 void main() {
+  test(
+    'percentage restore releases foreground work once a readable target and neighbors exist',
+    () {
+      fakeAsync((clock) {
+        const snapshot = NovelReaderProgressSnapshot(
+          novelId: 'novel',
+          episodeId: 'episode',
+          flowMode: NovelReaderFlowMode.pagedLtr,
+          scrollOffset: 0,
+          pageIndex: 4,
+          pageCount: 10,
+          progressPercent: 0.4,
+          isProgressPercentValid: true,
+        );
+        const restore = NovelReaderPaginationRestorePolicy();
+        final idle = _ControlledIdle();
+        final demand = NovelReaderPaginationDemand(
+          idleScheduler: idle.schedule,
+        );
+        final token = NovelReaderPaginationCancellationToken();
+        final lease = demand.start(token);
+        void updateRestore(
+          bool pending,
+          NovelReaderProgressSnapshot position,
+        ) => demand.update(
+          targetPending: pending,
+          pageIndex: position.pageIndex,
+          requireComplete: restore.requiresCompletePageCount(
+            snapshot: position,
+            isRestoreTargetPending: pending,
+          ),
+        );
+        updateRestore(true, snapshot);
+        final restoring = _observe(lease.afterPublication(5));
+        clock.flushMicrotasks();
+        expect(restoring.done, isTrue);
+        expect(idle.gates, isEmpty);
+
+        updateRestore(false, snapshot);
+        final neighbor = _observe(lease.afterPublication(6));
+        clock.flushMicrotasks();
+        expect(neighbor.done, isTrue);
+        final background = _observe(lease.afterPublication(7));
+        clock.flushMicrotasks();
+        expect(background.done, isFalse);
+        expect(demand.isDeferring, isTrue);
+        expect(idle.gates, hasLength(1));
+        updateRestore(true, snapshot.copyWith(pageIndex: 8));
+        clock.flushMicrotasks();
+        expect(background.done, isTrue);
+        expect(demand.isDeferring, isFalse);
+        demand.dispose();
+        idle.gates.single.complete();
+        clock.flushMicrotasks();
+        expect(clock.nonPeriodicTimerCount, 0);
+      });
+    },
+  );
+
+  test(
+    'only an unresolved usable nonzero percentage requires final page count',
+    () {
+      const restore = NovelReaderPaginationRestorePolicy();
+      const original = NovelReaderProgressSnapshot(
+        novelId: 'novel',
+        episodeId: 'episode',
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        scrollOffset: 0,
+        pageIndex: 4,
+        progressPercent: 0.4,
+        isProgressPercentValid: true,
+      );
+      for (final sample in [
+        original.copyWith(progressPercent: 0),
+        original.copyWith(progressPercent: 0.8, isProgressPercentValid: false),
+        original.copyWith(progressPercent: double.nan),
+        original.copyWith(progressPercent: double.infinity),
+        original.copyWith(progressPercent: -1),
+      ]) {
+        expect(
+          restore.requiresCompletePageCount(
+            snapshot: sample,
+            isRestoreTargetPending: true,
+          ),
+          isFalse,
+        );
+      }
+      expect(
+        restore.requiresCompletePageCount(
+          snapshot: original,
+          isRestoreTargetPending: true,
+        ),
+        isTrue,
+      );
+      expect(
+        restore.requiresCompletePageCount(
+          snapshot: original.copyWith(clearProgressPercentValidity: true),
+          isRestoreTargetPending: true,
+        ),
+        isTrue,
+      );
+      expect(
+        restore.requiresCompletePageCount(
+          snapshot: original,
+          isRestoreTargetPending: false,
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test(
     'target, complete and adjacent-page demand proceed without idle waits',
     () {

@@ -1093,13 +1093,13 @@ class _NovelReaderHtmlPagedSurfaceState
     final snapshot = widget.progressSnapshot;
     final percentNeedsComplete =
         snapshot.episodeId == widget.episode.episodeId &&
-        snapshot.isProgressPercentValid != false &&
-        snapshot.progressPercent.isFinite &&
-        snapshot.progressPercent >= 0 &&
-        (snapshot.progressPercent > 0 ||
-            snapshot.isProgressPercentValid == true);
+        widget.restorePolicy.requiresCompletePageCount(
+          snapshot: snapshot,
+          isRestoreTargetPending: _restoreTargetPending,
+        );
     final entry = widget.chapterEntryRequest;
     final endNeedsComplete =
+        _restoreTargetPending &&
         entry?.episodeId == widget.episode.episodeId &&
         entry?.edge == NovelReaderChapterEdge.end;
     final pending = _pendingForwardPage;
@@ -1109,7 +1109,8 @@ class _NovelReaderHtmlPagedSurfaceState
           (pending != null &&
               pending >= (_latestProgress?.plan.pageCount ?? 0)),
       pageIndex: pending ?? _demandPageIndex,
-      // A percentage or end entry cannot be resolved from a provisional total.
+      // Once a readable target exists, remaining pages yield to Flutter idle;
+      // a saved percentage must not keep the whole chapter in foreground work.
       requireComplete: percentNeedsComplete || endNeedsComplete,
     );
   }

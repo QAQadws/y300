@@ -37,6 +37,92 @@ import 'package:y300/features/library_shared/presentation/reader/reader_models.d
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
+  for (final format in [1, 37]) {
+    testWidgets(
+      'verified beginning with an invalidated conversion anchor format $format renders before the whole chapter',
+      (tester) async {
+        final coordinator = _BudgetPaginationCoordinator();
+        final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+        host.snapshot = host.snapshot.copyWith(
+          anchorNodeId: 'before-conversion-node',
+          anchorTextIdentity: 'before-conversion-text',
+          anchorFormatVersion: format,
+          anchorTextOffset: 777,
+          paginationKey: 'before-conversion-layout',
+          isProgressPercentValid: true,
+        );
+        _disposeBudgetHost(tester, coordinator);
+        await _pumpBudgetHost(tester, host);
+        coordinator.emit(0, pageCount: 1);
+        await tester.pump();
+        await tester.pump();
+        final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
+        expect(pageView, findsOneWidget);
+        expect(
+          find.byKey(const Key('novel-reader-paged-restoring-position')),
+          findsNothing,
+        );
+        expect(host.positions.single.pageIndex, 0);
+        expect(host.positions.single.isReadOnlyCompatibilityRestore, isTrue);
+        final firstBody = tester.element(pageView);
+        coordinator.emit(0, pageCount: 3, isComplete: true);
+        await tester.pump();
+        await tester.pump();
+        expect(tester.element(pageView), same(firstBody));
+        expect(host.positions.last.pageIndex, 0);
+        expect(
+          host.positions.every(
+            (position) => position.isReadOnlyCompatibilityRestore,
+          ),
+          isTrue,
+        );
+        expect(host.snapshot.anchorTextOffset, 777);
+        expect(host.snapshot.anchorFormatVersion, format);
+        expect(host.snapshot.anchorTextIdentity, 'before-conversion-text');
+      },
+    );
+  }
+
+  testWidgets(
+    'a nonzero position with an invalidated conversion anchor still restores by the final percentage',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      host.snapshot = host.snapshot.copyWith(
+        anchorNodeId: 'before-conversion-node',
+        anchorTextIdentity: 'before-conversion-text',
+        anchorFormatVersion: 1,
+        anchorTextOffset: 777,
+        paginationKey: 'before-conversion-layout',
+        progressPercent: 0.4,
+        pageCount: 10,
+        pageIndex: 4,
+        isProgressPercentValid: true,
+      );
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 1);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-paged-restoring-position')),
+        findsOneWidget,
+      );
+      expect(host.positions, isEmpty);
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+        findsOneWidget,
+      );
+      expect(host.positions.single.pageIndex, 1);
+      expect(host.positions.single.isReadOnlyCompatibilityRestore, isTrue);
+      expect(host.snapshot.pageIndex, 4);
+      expect(host.snapshot.anchorTextOffset, 777);
+    },
+  );
+
   testWidgets('remounting the paged surface hits the reader session plan', (
     tester,
   ) async {

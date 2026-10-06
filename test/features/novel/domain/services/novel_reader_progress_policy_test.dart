@@ -468,6 +468,38 @@ void main() {
           ),
       ],
     );
+    // A verified 0% remains the beginning after text conversion invalidates
+    // the old node. Unknown/invalid zero values are not equivalent evidence.
+    for (final validity in [true, false, null]) {
+      final beginning = sameLayout.copyWith(
+        pageIndex: 0,
+        paginationKey: 'before-conversion',
+        anchorNodeId: 'before-conversion-node',
+        anchorFormatVersion: 37,
+        anchorTextIdentity: 'before-conversion-text',
+        anchorTextOffset: 777,
+        isProgressPercentValid: validity,
+        clearProgressPercentValidity: validity == null,
+      );
+      final resolution = restorePolicy.resolveAvailablePage(
+        plan: partialPlan,
+        snapshot: beginning,
+        isPlanComplete: false,
+      );
+      expect(resolution?.pageIndex, validity == true ? 0 : null);
+      if (resolution != null) {
+        expect(resolution.isReadOnlyCompatibilityRestore, isTrue);
+        expect(
+          restorePolicy
+              .resolveInitialPage(plan: plan, snapshot: beginning)
+              .isReadOnlyCompatibilityRestore,
+          isTrue,
+        );
+      }
+      expect(beginning.anchorTextOffset, 777);
+      expect(beginning.anchorFormatVersion, 37);
+      expect(beginning.anchorTextIdentity, 'before-conversion-text');
+    }
     final exact = changedLayout.copyWith(
       anchorFormatVersion: 1,
       anchorTextIdentity: 'text:paragraph-2',
@@ -534,6 +566,18 @@ void main() {
           )
           .pageIndex,
       0,
+    );
+    expect(
+      restorePolicy
+          .resolveInitialPage(
+            plan: canonicalPlan,
+            snapshot: exact.copyWith(
+              progressPercent: 0,
+              isProgressPercentValid: true,
+            ),
+          )
+          .isReadOnlyCompatibilityRestore,
+      isTrue,
     );
   });
 
