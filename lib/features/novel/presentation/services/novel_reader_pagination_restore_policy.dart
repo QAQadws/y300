@@ -38,6 +38,7 @@ final class NovelReaderPaginationRestorePolicy {
     required NovelReaderPaginationPlan plan,
     required NovelReaderProgressSnapshot snapshot,
     required bool isPlanComplete,
+    NovelReaderTextAnchor? conversionAnchor,
   }) {
     final pageCount = plan.pageCount;
     if (pageCount <= 0) {
@@ -48,6 +49,21 @@ final class NovelReaderPaginationRestorePolicy {
         pageIndex: 0,
         isReadOnlyCompatibilityRestore: true,
       );
+    }
+    if (conversionAnchor != null) {
+      final convertedPage = plan.pageIndexForAnchor(
+        conversionAnchor,
+        isPlanComplete: isPlanComplete,
+      );
+      if (convertedPage != null) {
+        return NovelReaderPaginationRestoreResolution(
+          pageIndex: convertedPage,
+          isReadOnlyCompatibilityRestore: true,
+        );
+      }
+      // Wait for actual coverage of the converted position, not final totals.
+      // A terminal plan that cannot cover it retains the legacy fallback.
+      if (!isPlanComplete) return null;
     }
     final anchor = _anchorFromSnapshot(snapshot);
     final exactPage = anchor == null

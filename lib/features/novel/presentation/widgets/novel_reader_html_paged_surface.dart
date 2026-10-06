@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_conversion_restore_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
@@ -92,6 +94,8 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     required this.imageReferer,
     required this.progressSnapshot,
     this.semanticDocument,
+    this.conversionPosition,
+    this.onConversionPositionChanged,
     this.navigationRequest,
     this.pageSeekRequest,
     this.navigationController,
@@ -133,6 +137,9 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final String imageReferer;
   final NovelReaderProgressSnapshot progressSnapshot;
   final NovelReaderDocument? semanticDocument;
+  final NovelReaderConversionPosition? conversionPosition;
+  final ValueChanged<NovelReaderConversionPosition>?
+  onConversionPositionChanged;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final NovelReaderPageSeekRequest? pageSeekRequest;
   final NovelReaderPagedNavigationController? navigationController;
@@ -190,6 +197,7 @@ class _NovelReaderHtmlPagedSurfaceState
     extends State<NovelReaderHtmlPagedSurface> {
   Future<NovelReaderPreparedChapter>? _prepareFuture;
   Object? _prepareSignature;
+  int _conversionRestoreGeneration = 0;
   bool _refreshPreparation = false;
   NovelReaderPaginationCoordinator? _coordinator;
   Object? _coordinatorSignature;
@@ -231,6 +239,7 @@ class _NovelReaderHtmlPagedSurfaceState
   bool _restoreTargetPending = true;
   int _demandPageIndex = 0;
   int? _pendingForwardPage;
+  NovelReaderTextAnchor? _conversionRestoreAnchor;
 
   @override
   void initState() {
@@ -262,6 +271,8 @@ class _NovelReaderHtmlPagedSurfaceState
       }
     }
     if (_navigationIdentity(oldWidget) != _navigationIdentity(widget)) {
+      _conversionRestoreGeneration++;
+      _conversionRestoreAnchor = null;
       _pendingForwardPage = null;
       _restoreTargetPending = true;
       _targetReady = false;
@@ -275,6 +286,8 @@ class _NovelReaderHtmlPagedSurfaceState
     }
     if (oldWidget.pageSeekRequest?.requestId !=
         widget.pageSeekRequest?.requestId) {
+      _conversionRestoreGeneration++;
+      _conversionRestoreAnchor = null;
       _cancelPendingForwardPage(rebuild: false);
     }
   }
@@ -492,6 +505,7 @@ class _NovelReaderHtmlPagedSurfaceState
                         plan: plan,
                         snapshot: widget.progressSnapshot,
                         isPlanComplete: isPlanComplete,
+                        conversionAnchor: _conversionRestoreAnchor,
                       );
                   final resolvedPage =
                       requestedPage ??
@@ -642,8 +656,31 @@ class _NovelReaderHtmlPagedSurfaceState
                                 _planKey == plan.key &&
                                 _requestGeneration == requestGeneration) {
                               _visiblePosition = position;
+                              if (!position.isReadOnlyCompatibilityRestore) {
+                                _conversionRestoreGeneration++;
+                                _conversionRestoreAnchor = null;
+                              }
                               _demandPageIndex = position.pageIndex;
                               _syncWorkDemand();
+                              widget.onConversionPositionChanged?.call(
+                                NovelReaderConversionPosition(
+                                  rawHtml: widget.rawHtml,
+                                  conversionIdentity:
+                                      widget.preferences.conversionMode.name,
+                                  chapter: prepared,
+                                  // Consecutive previews retain the mapped
+                                  // point, rather than each new page's start.
+                                  anchor:
+                                      _conversionRestoreAnchor != null &&
+                                          plan.pageIndexForAnchor(
+                                                _conversionRestoreAnchor!,
+                                                isPlanComplete: isPlanComplete,
+                                              ) ==
+                                              position.pageIndex
+                                      ? _conversionRestoreAnchor!
+                                      : position.anchor,
+                                ),
+                              );
                               widget.onPositionChanged?.call(position);
                             }
                           },
@@ -1092,6 +1129,7 @@ class _NovelReaderHtmlPagedSurfaceState
   void _syncWorkDemand() {
     final snapshot = widget.progressSnapshot;
     final percentNeedsComplete =
+        _conversionRestoreAnchor == null &&
         snapshot.episodeId == widget.episode.episodeId &&
         widget.restorePolicy.requiresCompletePageCount(
           snapshot: snapshot,
@@ -1303,6 +1341,8 @@ class _NovelReaderHtmlPagedSurfaceState
       return;
     }
     _prepareSignature = signature;
+    final conversionRestoreGeneration = ++_conversionRestoreGeneration;
+    _conversionRestoreAnchor = null;
     _cancelPendingPagination();
     final preparationService = NovelReaderCachingHtmlPreparationService(
       delegate:
@@ -1313,17 +1353,39 @@ class _NovelReaderHtmlPagedSurfaceState
           (_ownedPreparedCache ??= NovelReaderPreparedChapterCache()),
     );
     final stopwatch = Stopwatch()..start();
-    final future = preparationService.prepare(
-      rawHtml: widget.rawHtml,
-      episode: widget.episode,
-      preferences: htmlPreferences,
-      theme: widget.theme,
-      sourceId: widget.episode.episodeId,
-      threadId: widget.episode.sourceTid,
-      imageCacheOwnerId: widget.episode.sourceTid,
-      semanticDocument: widget.semanticDocument,
-      refresh: _refreshPreparation,
-    );
+    final conversionPosition = widget.conversionPosition;
+    final rawHtml = widget.rawHtml;
+    final conversionIdentity = widget.preferences.conversionMode.name;
+    final future = preparationService
+        .prepare(
+          rawHtml: widget.rawHtml,
+          episode: widget.episode,
+          preferences: htmlPreferences,
+          theme: widget.theme,
+          sourceId: widget.episode.episodeId,
+          threadId: widget.episode.sourceTid,
+          imageCacheOwnerId: widget.episode.sourceTid,
+          semanticDocument: widget.semanticDocument,
+          refresh: _refreshPreparation,
+        )
+        .then((prepared) async {
+          final anchor =
+              conversionPosition == null ||
+                  conversionPosition.conversionIdentity == conversionIdentity
+              ? null
+              : await const NovelReaderConversionRestoreService()
+                    .projectInBackground(
+                      source: conversionPosition,
+                      rawHtml: rawHtml,
+                      conversionIdentity: conversionIdentity,
+                      target: prepared,
+                    );
+          if (mounted &&
+              _conversionRestoreGeneration == conversionRestoreGeneration) {
+            _conversionRestoreAnchor = anchor;
+          }
+          return prepared;
+        });
     _refreshPreparation = false;
     _prepareFuture = future;
     unawaited(

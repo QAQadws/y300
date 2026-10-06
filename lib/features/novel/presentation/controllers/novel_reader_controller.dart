@@ -483,8 +483,16 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         _pendingBeginningCommitEpisodeId == position.episodeId;
     final hasPersistedPosition =
         current.readingProgress?.episodeId == position.episodeId;
+    // Debounced live progress can already be canonical even when bootstrap
+    // had no saved row. A conversion preview must preserve that position too.
+    final hasCanonicalLivePosition =
+        current.progressSnapshot.anchorNodeId != null &&
+        NovelReaderAnchorFormat.isSupported(
+          current.progressSnapshot.anchorFormatVersion,
+          current.progressSnapshot.anchorTextIdentity,
+        );
     if (position.isReadOnlyCompatibilityRestore &&
-        hasPersistedPosition &&
+        (hasPersistedPosition || hasCanonicalLivePosition) &&
         !shouldCommitBeginning) {
       _isPagedRestoreReadOnly = true;
       return;

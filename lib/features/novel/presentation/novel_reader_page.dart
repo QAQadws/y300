@@ -32,6 +32,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_chapter_tur
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
@@ -102,6 +103,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _isProgressSeekInFlight = false;
   String? _progressControlOwner;
   String? _readyReaderSurfaceIdentity;
+  NovelReaderConversionPosition? _conversionPosition;
   final _postRouteSession = ThreadPostNavigationSession();
   String? _postRouteOwner;
   String? _chapterInteractionsPendingOwner;
@@ -248,6 +250,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           data: (viewState) {
             final systemPadding = MediaQuery.paddingOf(context);
             final readerSurfaceIdentity = _readerSurfaceIdentity(viewState);
+            if (viewState.preferences.flowMode ==
+                    NovelReaderFlowMode.vertical ||
+                _conversionPosition?.chapter.episodeId !=
+                    viewState.currentEpisode.episodeId ||
+                _conversionPosition?.rawHtml !=
+                    viewState.currentContent.rawHtml) {
+              _conversionPosition = null;
+            }
             if (_postRouteOwner != readerSurfaceIdentity) {
               _postRouteOwner = readerSurfaceIdentity;
               _postRouteSession.invalidate();
@@ -760,6 +770,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (_paginationSessionController == null) {
       _paginationSessionController = controller;
     } else if (!identical(_paginationSessionController, controller)) {
+      _conversionPosition = null;
       _paginationSessionCache.dispose();
       _paginationSessionCache = NovelReaderPaginationSessionCache();
       _paginationSessionController = controller;
@@ -793,6 +804,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         progressSnapshot: viewState.progressSnapshot,
         chromeInsets: chromeInsets,
         semanticDocument: viewState.document,
+        conversionPosition: _conversionPosition,
+        onConversionPositionChanged: (position) {
+          if (_isCurrentReaderSurface(surfaceIdentity)) {
+            _conversionPosition = position;
+          }
+        },
         pageSeekRequest: _pendingPageSeekRequest,
         navigationController: _pagedNavigationController,
         chapterEntryRequest: _pendingChapterEntryRequest,

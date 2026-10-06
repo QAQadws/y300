@@ -53,6 +53,143 @@ import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
   for (final flowMode in [
+    NovelReaderFlowMode.pagedLtr,
+    NovelReaderFlowMode.pagedRtl,
+  ]) {
+    testWidgets(
+      'middle conversion in ${flowMode.name} preserves the visible point across consecutive previews and keeps persisted progress',
+      (tester) async {
+        const channel = MethodChannel('flutter_open_chinese_convert');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          final arguments = call.arguments as List<Object?>;
+          final text = arguments.first as String;
+          return arguments[1] == 't2s'
+              ? text.replaceAll('臺', '台')
+              : text.replaceAll('台', '臺');
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final paragraphs = ['開頭：${List.filled(1000, '臺正文').join()}。'];
+        final repository = _FakeNovelRepository(
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: flowMode,
+          ),
+          firstParagraphs: paragraphs,
+          firstRawHtml: paragraphs.map((text) => '<p>$text</p>').join(),
+        );
+        await tester.pumpWidget(_buildReaderApp(repository: repository));
+        await _pumpPagedCacheReady(tester);
+        final surfaces = find.byType(NovelReaderHtmlPagedSurface);
+        for (var turn = 0; turn < 3; turn++) {
+          expect(
+            tester
+                .widget<NovelReaderHtmlPagedSurface>(surfaces)
+                .navigationController!
+                .turnNext(),
+            isTrue,
+          );
+          await tester.pumpAndSettle();
+        }
+        await tester.pump(const Duration(milliseconds: 300));
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(NovelReaderPage)),
+          listen: false,
+        );
+        const args = NovelReaderArgs(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+        );
+        final provider = novelReaderControllerProvider(args);
+        final controller = container.read(provider.notifier);
+        final original = tester
+            .widget<NovelReaderHtmlPagedSurface>(surfaces)
+            .conversionPosition!;
+        expect(original.anchor.textOffset, greaterThan(0));
+        final saved = container.read(provider).value!.progressSnapshot;
+        expect(saved.pageIndex, greaterThan(0));
+        final persisted = repository.readingProgress!;
+        final chapterLoads = List<String>.of(repository.chapterLoadEpisodeIds);
+        for (final mode in [
+          NovelReaderConversionMode.toSimplified,
+          NovelReaderConversionMode.toTraditional,
+          NovelReaderConversionMode.none,
+        ]) {
+          controller.previewPreferences(
+            container
+                .read(provider)
+                .value!
+                .preferences
+                .copyWith(conversionMode: mode),
+          );
+          for (var frame = 0; frame < 200; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            final surface = tester.widget<NovelReaderHtmlPagedSurface>(
+              surfaces,
+            );
+            if (surface.conversionPosition?.conversionIdentity == mode.name &&
+                find
+                    .byKey(const Key('novel-reader-paged-page-view'))
+                    .evaluate()
+                    .isNotEmpty) {
+              break;
+            }
+          }
+          final converted = tester
+              .widget<NovelReaderHtmlPagedSurface>(surfaces)
+              .conversionPosition!;
+          expect(converted.conversionIdentity, mode.name);
+          expect(converted.anchor.nodeId, original.anchor.nodeId);
+          expect(converted.anchor.textOffset, original.anchor.textOffset);
+          expect(
+            _progressFields(container.read(provider).value!.progressSnapshot),
+            _progressFields(saved),
+          );
+          expect(
+            repository.readingProgress!.anchorTextIdentity,
+            persisted.anchorTextIdentity,
+          );
+          expect(
+            repository.readingProgress!.anchorTextOffset,
+            persisted.anchorTextOffset,
+          );
+          final body = tester.element(
+            find.byKey(const Key('novel-reader-paged-page-view')),
+          );
+          for (var frame = 0; frame < 30; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            expect(
+              tester.element(
+                find.byKey(const Key('novel-reader-paged-page-view')),
+              ),
+              same(body),
+            );
+          }
+          expect(container.read(provider).value!.progressSnapshot, saved);
+        }
+        expect(repository.chapterLoadEpisodeIds, chapterLoads);
+        expect(
+          tester
+              .widget<NovelReaderHtmlPagedSurface>(surfaces)
+              .navigationController!
+              .turnNext(),
+          isTrue,
+        );
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(container.read(provider).value!.progressSnapshot, isNot(saved));
+        expect(
+          repository.readingProgress!.pageIndex,
+          greaterThan(saved.pageIndex),
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final flowMode in [
     NovelReaderFlowMode.vertical,
     NovelReaderFlowMode.pagedLtr,
     NovelReaderFlowMode.pagedRtl,
@@ -3585,6 +3722,19 @@ Finder _readerText(String text) {
     return widget is RichText && widget.text.toPlainText().contains(text);
   });
 }
+
+List<Object?> _progressFields(NovelReaderProgressSnapshot snapshot) => [
+  snapshot.flowMode,
+  snapshot.pageIndex,
+  snapshot.pageCount,
+  snapshot.anchorNodeId,
+  snapshot.anchorTextOffset,
+  snapshot.anchorFormatVersion,
+  snapshot.anchorTextIdentity,
+  snapshot.paginationKey,
+  snapshot.progressPercent,
+  snapshot.isProgressPercentValid,
+];
 
 Widget _buildReaderApp({
   required _FakeNovelRepository repository,
