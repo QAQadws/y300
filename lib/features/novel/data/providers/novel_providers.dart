@@ -42,6 +42,10 @@ import 'package:y300/features/novel/domain/services/novel_source_metadata_recove
 import 'package:y300/features/novel/domain/services/novel_sync_request_governor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/thread/data/providers/forum_image_source_pipeline_provider.dart';
@@ -199,6 +203,19 @@ final novelReaderDocumentBuildServiceProvider =
     Provider<NovelReaderDocumentBuildService>((ref) {
       return AdaptiveNovelReaderDocumentBuildService(
         parser: ref.watch(novelReaderDocumentParserProvider),
+        htmlConversionService: ref.watch(htmlTextNodeConversionServiceProvider),
+        paragraphConversionService: ref.watch(
+          plainTextBatchConversionServiceProvider,
+        ),
+      );
+    });
+
+final novelReaderHtmlPreparationServiceProvider =
+    Provider<NovelReaderHtmlPreparationService>((ref) {
+      return DefaultNovelReaderHtmlPreparationService(
+        preparer: NovelHtmlChapterRenderPreparer(
+          conversionService: ref.watch(htmlTextNodeConversionServiceProvider),
+        ),
       );
     });
 

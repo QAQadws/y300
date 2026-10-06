@@ -14,7 +14,10 @@ import 'package:y300/features/novel/domain/services/novel_reader_text_coordinate
 import 'package:y300/features/novel/presentation/models/novel_reader_transition_state.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
 
 class NovelReaderArgs {
   const NovelReaderArgs({
@@ -115,6 +118,15 @@ class NovelReaderViewState {
 
   NovelReaderPreferences get preferences => effectivePreferences;
 
+  /// A preview may request a conversion while its semantic document is still
+  /// being built. Keep the visible surface on its verified conversion until
+  /// both can switch together, instead of preparing an unanchored layout.
+  NovelReaderPreferences get renderPreferences => effectivePreferences.copyWith(
+    conversionMode: NovelReaderConversionModeCodec.fromStorage(
+      document.textConversionIdentity,
+    ),
+  );
+
   Set<String> get bookmarkEpisodeIds {
     return bookmarks.map((bookmark) => bookmark.episodeId).toSet();
   }
@@ -195,12 +207,18 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   int _preferenceWritesInFlight = 0;
   // A refreshed state may load its baseline before an older write reaches disk.
   bool _persistedPreferenceSnapshotDirty = false;
+  final Map<
+    (int, NovelChapterContent, NovelReaderConversionMode),
+    Future<NovelReaderDocument>
+  >
+  _preferenceDocumentFlights = {};
 
   @override
   FutureOr<NovelReaderViewState> build() async {
     // Rebuild retires old progress completions before the new load finishes,
     // including a reload that returns to the same episode on this notifier.
     final sessionToken = ++_activeSessionToken;
+    _preferenceDocumentFlights.clear();
     _transitionRequestSerial += 1;
     if (_preferenceWritesInFlight > 0) {
       _persistedPreferenceSnapshotDirty = true;
@@ -209,6 +227,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final progressCommitter = ref.read(novelReaderProgressCommitterProvider);
     ref.onDispose(() {
       _activeSessionToken += 1;
+      _preferenceDocumentFlights.clear();
       _transitionRequestSerial += 1;
       if (_preferenceWritesInFlight > 0) {
         _persistedPreferenceSnapshotDirty = true;
@@ -233,10 +252,19 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       current.effectivePreferences,
       effectiveNext,
     );
-    if (!diff.hasChanges) {
-      return;
+    if (diff.hasChanges) {
+      state = AsyncData(current.copyWith(effectivePreferences: effectiveNext));
     }
-    state = AsyncData(current.copyWith(effectivePreferences: effectiveNext));
+    if (current.document.textConversionIdentity !=
+        effectiveNext.conversionMode.name) {
+      // Persistence owns error presentation; preview work must not produce an
+      // unhandled error or delay the next selection/reader session.
+      unawaited(
+        _resolvePreferenceDocument(
+          effectiveNext,
+        ).then<void>((_) {}, onError: (Object error, StackTrace stack) {}),
+      );
+    }
   }
 
   Future<void> commitPreferences(NovelReaderPreferences next) async {
@@ -244,6 +272,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
+    final commitSerial = ++_preferenceCommitSerial;
+    final sessionToken = _activeSessionToken;
     final persistedDiff = _preferenceImpactAnalyzer.compare(
       current.persistedPreferences,
       next,
@@ -252,15 +282,18 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         !_persistedPreferenceSnapshotDirty &&
         _preferenceWritesInFlight == 0) {
       final persistedEffective = current.persistedPreferences;
-      if (current.effectivePreferences == persistedEffective) {
-        return;
-      }
-      state = AsyncData(
-        current.copyWith(effectivePreferences: persistedEffective),
-      );
+      previewPreferences(persistedEffective);
       return;
     }
-    final commitSerial = ++_preferenceCommitSerial;
+    NovelReaderDocument? convertedDocument;
+    if (current.document.textConversionIdentity != next.conversionMode.name) {
+      convertedDocument = await _resolvePreferenceDocument(next);
+      if (!ref.mounted ||
+          commitSerial != _preferenceCommitSerial ||
+          sessionToken != _activeSessionToken) {
+        return;
+      }
+    }
     _preferenceWritesInFlight += 1;
     try {
       await ref.read(novelReaderPreferencesRepositoryProvider).save(next);
@@ -277,61 +310,73 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     _persistedPreferenceSnapshotDirty = _preferenceWritesInFlight > 0;
     final latest = state.value ?? current;
     final effectivePreferences =
-        latest.effectivePreferences == current.effectivePreferences
+        sessionToken == _activeSessionToken &&
+            latest.effectivePreferences == current.effectivePreferences
         ? next
         : latest.effectivePreferences;
     state = AsyncData(
       latest.copyWith(
         persistedPreferences: next,
         effectivePreferences: effectivePreferences,
+        document:
+            sessionToken == _activeSessionToken &&
+                identical(latest.currentContent, current.currentContent) &&
+                effectivePreferences.conversionMode == next.conversionMode
+            ? convertedDocument
+            : null,
       ),
     );
-
-    // A traditional/simplified conversion change requires re-building the
-    // source document; reload the current episode through the bootstrap path
-    // so conversion is re-applied. Other impacts are pure relayout/repaint
-    // handled by the render layer reading the updated preferences.
-    if (persistedDiff.impacts.contains(
-      NovelReaderPreferenceImpact.contentRebuild,
-    )) {
-      await _rebuildCurrentEpisodeDocument(commitSerial);
-    }
   }
 
-  /// Reloads the current episode document so preference-driven content
-  /// transforms (e.g. text conversion) take effect without leaving the page.
-  Future<void> _rebuildCurrentEpisodeDocument(int commitSerial) async {
-    final current = state.value;
-    if (current == null) {
-      return;
+  Future<NovelReaderDocument> _resolvePreferenceDocument(
+    NovelReaderPreferences preferences,
+  ) {
+    final current = state.value!;
+    final mode = preferences.conversionMode;
+    if (current.document.textConversionIdentity == mode.name) {
+      return Future.value(current.document);
     }
-    // Leaving and returning to the same episode still starts a new session.
     final sessionToken = _activeSessionToken;
-    final episodeId = current.currentEpisode.episodeId;
-    final context = NovelReaderLoadContext(
-      novelId: _args.novelId,
-      requestedEpisodeId: episodeId,
-      preservedProgress: _readingProgressFromSnapshot(current.progressSnapshot),
-    );
-    final critical = await _loadCriticalBootstrap(context);
-    if (!ref.mounted || commitSerial != _preferenceCommitSerial) {
-      return;
+    final content = current.currentContent;
+    final key = (sessionToken, content, mode);
+    final existing = _preferenceDocumentFlights[key];
+    if (existing != null) return existing;
+    late final Future<NovelReaderDocument> future;
+    future = ref
+        .read(novelReaderDocumentBuildServiceProvider)
+        .build(
+          NovelReaderDocumentBuildRequest(
+            episodeId: content.episodeId,
+            rawHtml: content.rawHtml,
+            fallbackParagraphs: content.paragraphs,
+          ),
+          converter: resolveTextConverter(preferences.sharedConversionMode),
+        )
+        .then((document) {
+          final latest = ref.mounted ? state.value : null;
+          if (latest != null &&
+              sessionToken == _activeSessionToken &&
+              identical(latest.currentContent, content) &&
+              latest.effectivePreferences.conversionMode == mode &&
+              !identical(latest.document, document)) {
+            state = AsyncData(latest.copyWith(document: document));
+          }
+          return document;
+        });
+    _preferenceDocumentFlights[key] = future;
+    void removeFlight() {
+      if (identical(_preferenceDocumentFlights[key], future)) {
+        _preferenceDocumentFlights.remove(key);
+      }
     }
-    final latest = state.value;
-    if (latest == null ||
-        !_canApplySupplemental(
-          current: latest,
-          sessionToken: sessionToken,
-          episodeId: episodeId,
-        )) {
-      return;
-    }
-    state = AsyncData(
-      latest.copyWith(
-        currentContent: critical.currentContent,
-        document: critical.document,
+
+    unawaited(
+      future.then<void>(
+        (_) => removeFlight(),
+        onError: (Object error, StackTrace stack) => removeFlight(),
       ),
     );
+    return future;
   }
 
   void revertPreferencePreview() {
@@ -343,9 +388,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current.effectivePreferences == persistedEffective) {
       return;
     }
-    state = AsyncData(
-      current.copyWith(effectivePreferences: persistedEffective),
-    );
+    previewPreferences(persistedEffective);
   }
 
   Future<bool> openEpisode(String episodeId) async {

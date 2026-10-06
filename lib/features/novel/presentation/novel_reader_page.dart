@@ -24,6 +24,7 @@ import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
@@ -419,7 +420,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     return '${viewState.currentEpisode.episodeId}|'
         '${viewState.document.rawHtmlHash}|'
         '${viewState.preferences.flowMode.name}|'
-        '${viewState.preferences.hashCode}';
+        '${viewState.renderPreferences.hashCode}';
   }
 
   void _suspendVerticalSurface({
@@ -776,13 +777,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }) {
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return NovelReaderHtmlPagedSurface(
+        preparationService: ref.watch(
+          novelReaderHtmlPreparationServiceProvider,
+        ),
         paginationCache: _paginationSessionCache.paginationCache,
         paginationMeasureCache: _paginationSessionCache.measureCache,
         paginationBoundaryCache: _paginationSessionCache.boundaryCache,
         preparedChapterCache: _preparedChapterCache,
         rawHtml: viewState.currentContent.rawHtml,
         episode: viewState.currentEpisode,
-        preferences: viewState.preferences,
+        preferences: viewState.renderPreferences,
         typography: typography,
         theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),
@@ -874,11 +878,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
     final children = <Widget>[
       NovelReaderHtmlDocumentView(
+        preparationService: ref.watch(
+          novelReaderHtmlPreparationServiceProvider,
+        ),
         asSliver: true,
         preparedChapterCache: _preparedChapterCache,
         rawHtml: viewState.currentContent.rawHtml,
         episode: viewState.currentEpisode,
-        preferences: viewState.preferences,
+        preferences: viewState.renderPreferences,
         typography: typography,
         theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),

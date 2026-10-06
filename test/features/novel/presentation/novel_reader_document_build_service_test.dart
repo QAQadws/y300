@@ -42,7 +42,8 @@ void main() {
         document.textConversionIdentity,
         TextConversionMode.toTraditional.name,
       );
-      expect(nativeCalls, isNotEmpty);
+      // One HTML text batch and one fallback batch, regardless of paragraph count.
+      expect(nativeCalls, hasLength(2));
       for (final call in nativeCalls) {
         final arguments = call.arguments as List<Object?>;
         expect(arguments[1], 's2t');

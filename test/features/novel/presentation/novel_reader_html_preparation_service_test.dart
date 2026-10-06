@@ -1,6 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/data/providers/novel_providers.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
@@ -14,8 +18,70 @@ import 'package:y300/features/novel/presentation/models/novel_reader_prepared_ch
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   const service = DefaultNovelReaderHtmlPreparationService();
   const adapter = NovelHtmlReaderPreferencesAdapter();
+
+  test(
+    'production semantic and visual preparation share conversion and retain canonical nodes',
+    () async {
+      const channel = MethodChannel('flutter_open_chinese_convert');
+      final nativeCalls = <MethodCall>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        nativeCalls.add(call);
+        return ((call.arguments as List<Object?>).first as String).replaceAll(
+          '臺',
+          '台',
+        );
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      const rawHtml = '<p title="臺属性">臺正文</p><pre><code>臺代码</code></pre>';
+      final semantic = await container
+          .read(novelReaderDocumentBuildServiceProvider)
+          .build(
+            NovelReaderDocumentBuildRequest(
+              episodeId: _episode.episodeId,
+              rawHtml: rawHtml,
+              fallbackParagraphs: List.generate(100, (index) => '臺回退段落$index'),
+            ),
+            converter: resolveTextConverter(TextConversionMode.toSimplified),
+          );
+      expect(semantic.plainText, contains('台正文'));
+      expect(semantic.plainText, contains('臺代码'));
+      expect(nativeCalls, hasLength(2));
+      final prepared = await container
+          .read(novelReaderHtmlPreparationServiceProvider)
+          .prepare(
+            rawHtml: rawHtml,
+            episode: _episode,
+            preferences: adapter.map(
+              NovelReaderPreferences.defaults().copyWith(
+                conversionMode: NovelReaderConversionMode.toSimplified,
+              ),
+            ),
+            theme: _theme,
+            sourceId: _episode.episodeId,
+            threadId: _episode.sourceTid,
+            imageCacheOwnerId: _episode.sourceTid,
+            semanticDocument: semantic,
+          );
+      expect(nativeCalls, hasLength(2));
+      expect(prepared.renderDocument.preparedHtml, contains('title="臺属性"'));
+      expect(prepared.renderDocument.preparedHtml, contains('臺代码'));
+      expect(
+        prepared.flowUnits.first.startAnchor.nodeId,
+        semantic.blocks.first.anchorId,
+      );
+      expect(
+        prepared.flowUnits.first.startAnchor.hasCanonicalTextOffset,
+        isTrue,
+      );
+    },
+  );
 
   test(
     'converted text cannot acquire a different semantic node through a spelling collision',

@@ -18,6 +18,10 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -369,6 +373,276 @@ void main() {
     },
   );
 
+  test(
+    'conversion preview switches document and rendering together and save reuses it',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final builder = _ControlledConversionDocumentBuildService();
+      final container = _buildContainer(
+        repository: repository,
+        documentBuildService: builder,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final initial = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      final next = initial.preferences.copyWith(
+        conversionMode: NovelReaderConversionMode.toTraditional,
+      );
+
+      controller.previewPreferences(next);
+      final commit = controller.commitPreferences(next);
+      final waiting = container.read(provider).value!;
+      expect(waiting.preferences, next);
+      expect(
+        waiting.renderPreferences.conversionMode,
+        NovelReaderConversionMode.none,
+      );
+      expect(waiting.document, same(initial.document));
+      expect(repository.upsertPreferencesCallCount, 0);
+      expect(builder.requests, hasLength(1));
+
+      builder.completeAt(0);
+      await commit;
+      final converted = container.read(provider).value!;
+      expect(converted.renderPreferences, next);
+      expect(
+        converted.document.textConversionIdentity,
+        next.conversionMode.name,
+      );
+      expect(converted.progressSnapshot, same(initial.progressSnapshot));
+      expect(repository.upsertPreferencesCallCount, 1);
+      await controller.commitPreferences(next);
+      expect(
+        container.read(provider).value!.document,
+        same(converted.document),
+      );
+      expect(builder.requests, hasLength(1));
+      expect(repository.upsertPreferencesCallCount, 1);
+    },
+  );
+
+  test(
+    'returning to persisted conversion retires a pending conversion commit',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final builder = _ControlledConversionDocumentBuildService();
+      final container = _buildContainer(
+        repository: repository,
+        documentBuildService: builder,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final initial = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      final next = initial.preferences.copyWith(
+        conversionMode: NovelReaderConversionMode.toTraditional,
+      );
+      controller.previewPreferences(next);
+      final pendingCommit = controller.commitPreferences(next);
+      controller.previewPreferences(initial.preferences);
+      await controller.commitPreferences(initial.preferences);
+      builder.completeAt(0);
+      await pendingCommit;
+      final state = container.read(provider).value!;
+      expect(state.document, same(initial.document));
+      expect(state.renderPreferences, initial.preferences);
+      expect(state.persistedPreferences, initial.preferences);
+      expect(repository.upsertPreferencesCallCount, 0);
+    },
+  );
+
+  test(
+    'out of order conversion previews keep the latest selected document',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final builder = _ControlledConversionDocumentBuildService();
+      final container = _buildContainer(
+        repository: repository,
+        documentBuildService: builder,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final initial = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      controller.previewPreferences(
+        initial.preferences.copyWith(
+          conversionMode: NovelReaderConversionMode.toTraditional,
+        ),
+      );
+      final latest = initial.preferences.copyWith(
+        conversionMode: NovelReaderConversionMode.toSimplified,
+      );
+      controller.previewPreferences(latest);
+      builder.completeAt(1);
+      await Future<void>.delayed(Duration.zero);
+      final converted = container.read(provider).value!;
+      expect(converted.renderPreferences, latest);
+      builder.completeAt(0);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        container.read(provider).value!.document,
+        same(converted.document),
+      );
+      await controller.commitPreferences(latest);
+      expect(builder.requests, hasLength(2));
+      expect(repository.latestPreferences, latest);
+    },
+  );
+
+  test(
+    'failed conversion keeps readable content and does not persist its mode',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final builder = _ControlledConversionDocumentBuildService();
+      final container = _buildContainer(
+        repository: repository,
+        documentBuildService: builder,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final initial = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      final next = initial.preferences.copyWith(
+        conversionMode: NovelReaderConversionMode.toTraditional,
+      );
+      controller.previewPreferences(next);
+      final commit = controller.commitPreferences(next);
+      final failure = expectLater(commit, throwsStateError);
+      builder.failAt(0);
+      await failure;
+      controller.revertPreferencePreview();
+      expect(container.read(provider).value!.document, same(initial.document));
+      expect(
+        container.read(provider).value!.renderPreferences,
+        initial.preferences,
+      );
+      expect(repository.upsertPreferencesCallCount, 0);
+    },
+  );
+
+  test(
+    'conversion save crossing a chapter transition does not replace its document or preview',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final preferencesRepository = _DelayedPreferencesRepository(repository);
+      final builder = _ControlledConversionDocumentBuildService();
+      final bootstrap = _SequenceNovelReaderBootstrapService();
+      bootstrap.completeAt(
+        0,
+        _criticalBootstrap(episodeId: 'novel:49:100:5001'),
+      );
+      final container = _buildContainer(
+        repository: repository,
+        preferencesRepository: preferencesRepository,
+        documentBuildService: builder,
+        bootstrapService: bootstrap,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final initial = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      final next = initial.preferences.copyWith(
+        conversionMode: NovelReaderConversionMode.toTraditional,
+      );
+      final commit = controller.commitPreferences(next);
+      builder.completeAt(0);
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.upsertPreferencesCallCount, 1);
+      final transition = controller.openEpisodeFromCatalog('novel:49:100:5002');
+      bootstrap.completeAt(
+        1,
+        _criticalBootstrap(
+          episodeId: 'novel:49:100:5002',
+          paragraphText: '第二章当前正文。',
+        ),
+      );
+      expect(await transition, isTrue);
+      final current = container.read(provider).value!;
+      preferencesRepository.saveGate.complete();
+      await commit;
+      final state = container.read(provider).value!;
+      expect(state.document, same(current.document));
+      expect(state.effectivePreferences, current.effectivePreferences);
+      expect(state.renderPreferences, current.renderPreferences);
+      expect(state.progressSnapshot, same(current.progressSnapshot));
+      expect(repository.latestPreferences, next);
+    },
+  );
+
+  test(
+    'returning to the original mode after a completed preview restores source text',
+    () async {
+      final repository = _ControllerNovelRepository();
+      final builder = _ControlledConversionDocumentBuildService();
+      final container = _buildContainer(
+        repository: repository,
+        documentBuildService: builder,
+      );
+      addTearDown(container.dispose);
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      final initial = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      controller.previewPreferences(
+        initial.preferences.copyWith(
+          conversionMode: NovelReaderConversionMode.toTraditional,
+        ),
+      );
+      builder.completeAt(0);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        container.read(provider).value!.renderPreferences.conversionMode,
+        NovelReaderConversionMode.toTraditional,
+      );
+      await controller.commitPreferences(initial.persistedPreferences);
+      await Future<void>.delayed(Duration.zero);
+      final state = container.read(provider).value!;
+      expect(state.renderPreferences, initial.preferences);
+      expect(state.document.plainText, initial.document.plainText);
+      expect(
+        state.document.textConversionIdentity,
+        NovelReaderConversionMode.none.name,
+      );
+      expect(repository.upsertPreferencesCallCount, 0);
+    },
+  );
+
   for (final returnToOriginal in [false, true]) {
     test(
       returnToOriginal
@@ -376,6 +650,7 @@ void main() {
           : 'late converted document cannot replace the next episode',
       () async {
         final repository = _ControllerNovelRepository();
+        final builder = _ControlledConversionDocumentBuildService();
         final bootstrap = _SequenceNovelReaderBootstrapService();
         bootstrap.completeAt(
           0,
@@ -384,6 +659,7 @@ void main() {
         final container = _buildContainer(
           repository: repository,
           bootstrapService: bootstrap,
+          documentBuildService: builder,
         );
         addTearDown(container.dispose);
         const args = NovelReaderArgs(
@@ -401,16 +677,13 @@ void main() {
         controller.previewPreferences(next);
         final commit = controller.commitPreferences(next);
         await Future<void>.delayed(Duration.zero);
-        expect(bootstrap.contexts, hasLength(2));
-        expect(
-          bootstrap.contexts[1].requestedEpisodeId,
-          initial.currentEpisode.episodeId,
-        );
+        expect(bootstrap.contexts, hasLength(1));
+        expect(builder.requests, hasLength(1));
         final transition = controller.openEpisodeFromCatalog(
           'novel:49:100:5002',
         );
         bootstrap.completeAt(
-          2,
+          1,
           _criticalBootstrap(
             episodeId: 'novel:49:100:5002',
             paragraphText: '第二章当前正文。',
@@ -423,7 +696,7 @@ void main() {
             'novel:49:100:5001',
           );
           bootstrap.completeAt(
-            3,
+            2,
             _criticalBootstrap(
               episodeId: 'novel:49:100:5001',
               paragraphText: '第一章新会话正文。',
@@ -433,14 +706,7 @@ void main() {
           expect(await returnTransition, isTrue);
         }
         final current = container.read(provider).value!;
-        bootstrap.completeAt(
-          1,
-          _criticalBootstrap(
-            episodeId: 'novel:49:100:5001',
-            paragraphText: '迟到的旧转换正文。',
-            preferences: next,
-          ),
-        );
+        builder.completeAt(0);
         await commit;
 
         final state = container.read(provider).value!;
@@ -2402,6 +2668,54 @@ class _DelayedPreferencesRepository
   }
 }
 
+class _ControlledConversionDocumentBuildService
+    implements NovelReaderDocumentBuildService {
+  final requests = <NovelReaderDocumentBuildRequest>[];
+  final modes = <TextConversionMode>[];
+  final completions = <Completer<NovelReaderDocument>>[];
+
+  @override
+  Future<NovelReaderDocument> build(
+    NovelReaderDocumentBuildRequest request, {
+    TextConverter converter = const IdentityTextConverter(),
+  }) async {
+    if (converter.mode == TextConversionMode.none) {
+      return const DiscuzNovelReaderDocumentParser().parse(
+        episodeId: request.episodeId,
+        rawHtml: request.rawHtml,
+        fallbackParagraphs: request.fallbackParagraphs,
+      );
+    }
+    requests.add(request);
+    modes.add(converter.mode);
+    final completion = Completer<NovelReaderDocument>();
+    completions.add(completion);
+    return completion.future;
+  }
+
+  void completeAt(int index) {
+    final request = requests[index];
+    final parsed = const DiscuzNovelReaderDocumentParser().parse(
+      episodeId: request.episodeId,
+      rawHtml: request.rawHtml,
+      fallbackParagraphs: request.fallbackParagraphs,
+    );
+    completions[index].complete(
+      NovelReaderDocument(
+        episodeId: parsed.episodeId,
+        rawHtmlHash: parsed.rawHtmlHash,
+        body: parsed.body,
+        plainText: parsed.plainText,
+        wordCount: parsed.wordCount,
+        textConversionIdentity: modes[index].name,
+      ),
+    );
+  }
+
+  void failAt(int index) =>
+      completions[index].completeError(StateError('conversion failed'));
+}
+
 class _SequenceNovelReaderBootstrapService
     implements NovelReaderBootstrapService {
   final contexts = <NovelReaderLoadContext>[];
@@ -2568,6 +2882,7 @@ NovelReaderCriticalBootstrap _criticalBootstrap({
       ),
       plainText: paragraphText,
       wordCount: paragraphText.length,
+      textConversionIdentity: resolvedPreferences.conversionMode.name,
     ),
     persistedPreferences: resolvedPreferences,
     effectivePreferences: resolvedPreferences,

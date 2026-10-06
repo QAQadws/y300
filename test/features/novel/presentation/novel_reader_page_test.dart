@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,146 @@ import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
+  for (final flowMode in [
+    NovelReaderFlowMode.vertical,
+    NovelReaderFlowMode.pagedLtr,
+    NovelReaderFlowMode.pagedRtl,
+  ]) {
+    testWidgets(
+      'conversion in ${flowMode.name} keeps content while pending and does not reload after save',
+      (tester) async {
+        const channel = MethodChannel('flutter_open_chinese_convert');
+        final nativeCalls = <MethodCall>[];
+        final conversionGate = Completer<void>();
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          nativeCalls.add(call);
+          await conversionGate.future;
+          return ((call.arguments as List<Object?>).first as String).replaceAll(
+            '臺',
+            '台',
+          );
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final repository = _FakeNovelRepository(
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: flowMode,
+          ),
+          firstRawHtml: '<p>臺正文第一段。</p><p>臺正文第二段。</p>',
+          firstParagraphs: ['臺回退第一段。', '臺回退第二段。'],
+        );
+        final preferenceStore = _ControlledPagePreferencesRepository(
+          repository,
+        );
+        await tester.pumpWidget(
+          _buildReaderApp(
+            repository: repository,
+            preferencesRepository: preferenceStore,
+          ),
+        );
+        if (flowMode == NovelReaderFlowMode.vertical) {
+          await _pumpVerticalReaderReady(tester);
+        } else {
+          await _pumpPagedCacheReady(tester);
+        }
+        final body = find.byKey(
+          Key(
+            flowMode == NovelReaderFlowMode.vertical
+                ? 'novel-reader-html-document-view'
+                : 'novel-reader-paged-page-view',
+          ),
+        );
+        final initialBody = tester.element(body);
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(NovelReaderPage)),
+          listen: false,
+        );
+        const args = NovelReaderArgs(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+        );
+        final provider = novelReaderControllerProvider(args);
+        await _showReaderMenu(tester);
+        await tester.tap(
+          find.byKey(const Key('shared-reader-bottom-action-display')),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(NovelReaderPage)),
+        );
+        final option = find.descendant(
+          of: find.byKey(const Key('novel-reader-conversion-mode-control')),
+          matching: find.text(l10n.novelConversionSimplified),
+        );
+        await tester.ensureVisible(option);
+        await tester.tap(option);
+        await tester.pump(const Duration(milliseconds: 650));
+        expect(tester.element(body), same(initialBody));
+        expect(
+          container.read(provider).value!.renderPreferences.conversionMode,
+          NovelReaderConversionMode.none,
+        );
+        expect(preferenceStore.saves, isEmpty);
+        expect(nativeCalls, hasLength(1));
+
+        conversionGate.complete();
+        if (flowMode == NovelReaderFlowMode.vertical) {
+          await _pumpVerticalReaderReady(tester);
+        } else {
+          await _pumpPagedCacheReady(tester);
+        }
+        expect(
+          container.read(provider).value!.document.plainText,
+          contains('台正文'),
+        );
+        expect(
+          container.read(provider).value!.renderPreferences.conversionMode,
+          NovelReaderConversionMode.toSimplified,
+        );
+        expect(nativeCalls, hasLength(2));
+        final convertedDocument = container.read(provider).value!.document;
+        final convertedBody = tester.element(body);
+        final convertedText = tester.element(_readerText('台正文第一段。').first);
+        expect(preferenceStore.saves, hasLength(1));
+        preferenceStore.saves.single.complete();
+        for (var frame = 0; frame < 20; frame++) {
+          await tester.pump(const Duration(milliseconds: 60));
+          expect(tester.element(body), same(convertedBody));
+          expect(
+            tester.element(_readerText('台正文第一段。').first),
+            same(convertedText),
+          );
+          expect(
+            find.byKey(const Key('novel-reader-html-loading')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const Key('novel-reader-paged-layout-loading')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const Key('novel-reader-delayed-loading-surface')),
+            findsNothing,
+          );
+        }
+        expect(
+          container.read(provider).value!.document,
+          same(convertedDocument),
+        );
+        expect(repository.chapterLoadEpisodeIds, ['novel:49:100:5001']);
+        expect(nativeCalls, hasLength(2));
+        expect(
+          repository.latestPreferences?.conversionMode,
+          NovelReaderConversionMode.toSimplified,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
   testWidgets(
     'reader session caches survive a paged scroll paged mode round trip',
     (tester) async {

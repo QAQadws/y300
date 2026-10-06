@@ -20,14 +20,33 @@ void main() {
       final document = await service.build(
         const NovelReaderDocumentBuildRequest(
           episodeId: 'ep1',
-          rawHtml: '<p>abc</p>',
-          fallbackParagraphs: <String>['abc'],
+          rawHtml: '<p>汉abc</p>',
+          fallbackParagraphs: <String>['汉abc'],
         ),
-        converter: _UppercaseConverter(),
+        converter: _TraditionalConverter(),
       );
 
-      expect((document.blocks.first as RichTextBlock).novelPlainText, 'ABC');
+      expect((document.blocks.first as RichTextBlock).novelPlainText, '漢abc');
     });
+
+    test(
+      'converted fallback preserves paragraph order duplicates and non-Han text',
+      () async {
+        final service = AdaptiveNovelReaderDocumentBuildService(
+          parser: const DiscuzNovelReaderDocumentParser(),
+          executor: _ThrowingExecutor(),
+        );
+        final document = await service.build(
+          const NovelReaderDocumentBuildRequest(
+            episodeId: 'ep1',
+            rawHtml: '',
+            fallbackParagraphs: ['汉第一', 'abc', '汉第二', '汉第一'],
+          ),
+          converter: _TraditionalConverter(),
+        );
+        expect(document.plainText, '漢第一\nabc\n漢第二\n漢第一');
+      },
+    );
 
     test('identity converter leaves content unchanged', () async {
       final service = AdaptiveNovelReaderDocumentBuildService(
@@ -142,15 +161,15 @@ void main() {
   });
 }
 
-class _UppercaseConverter implements TextConverter {
+class _TraditionalConverter implements TextConverter {
   @override
-  String get id => 'test:uppercase';
+  String get id => 'test:traditional';
 
   @override
   TextConversionMode get mode => TextConversionMode.toTraditional;
 
   @override
-  Future<String> convertHtml(String html) async => html.toUpperCase();
+  Future<String> convertHtml(String html) async => html.replaceAll('汉', '漢');
 }
 
 class _ThrowingExecutor implements NovelReaderDocumentBuildExecutor {

@@ -3,6 +3,8 @@ import 'dart:isolate';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 
@@ -54,14 +56,20 @@ class AdaptiveNovelReaderDocumentBuildService
     required NovelReaderDocumentParser parser,
     NovelReaderDocumentBuildExecutor executor =
         const IsolateNovelReaderDocumentBuildExecutor(),
+    HtmlTextNodeConversionService? htmlConversionService,
+    PlainTextBatchConversionService? paragraphConversionService,
   }) : _parser = parser,
-       _executor = executor;
+       _executor = executor,
+       _htmlConversionService = htmlConversionService,
+       _paragraphConversionService = paragraphConversionService;
 
   static const int rawHtmlLengthThreshold = 12000;
   static const int fallbackParagraphCountThreshold = 80;
 
   final NovelReaderDocumentParser _parser;
   final NovelReaderDocumentBuildExecutor _executor;
+  final HtmlTextNodeConversionService? _htmlConversionService;
+  final PlainTextBatchConversionService? _paragraphConversionService;
 
   @override
   Future<NovelReaderDocument> build(
@@ -98,14 +106,21 @@ class AdaptiveNovelReaderDocumentBuildService
     if (converter.mode == TextConversionMode.none) {
       return request;
     }
-    final convertedHtml = await converter.convertHtml(request.rawHtml);
-    final convertedParagraphs = <String>[
-      for (final paragraph in request.fallbackParagraphs)
-        await converter.convertHtml(paragraph),
-    ];
+    // Semantic and visible HTML must use the same text-node conversion policy.
+    // The injected service also lets visual preparation reuse this conversion.
+    final convertedHtml =
+        await (_htmlConversionService ?? DomHtmlTextNodeConversionService())
+            .convert(html: request.rawHtml, converter: converter);
+    final convertedParagraphs =
+        await (_paragraphConversionService ??
+                DefaultPlainTextBatchConversionService())
+            .convertAll(
+              sources: request.fallbackParagraphs,
+              converter: converter,
+            );
     return NovelReaderDocumentBuildRequest(
       episodeId: request.episodeId,
-      rawHtml: convertedHtml,
+      rawHtml: convertedHtml.html,
       fallbackParagraphs: convertedParagraphs,
     );
   }
