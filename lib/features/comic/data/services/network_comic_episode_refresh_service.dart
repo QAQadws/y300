@@ -312,11 +312,16 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
 
       var collectedLinks = const <ComicEpisodeLink>[];
       String? collectedCatalogUrl;
-      final sourceTid = request.sourceTid.trim();
-      final candidateBatch = topicCandidates
-          .where((item) => item.tid.trim() != sourceTid)
-          .take(_candidateRanker.discoveryTopK)
-          .toList(growable: false);
+      final searchCandidateLinks = _mergeSearchTopics(topicCandidates);
+      final candidateBatch = _selectDiscoveryCandidates(
+        topicCandidates,
+        chapterLinks: searchCandidateLinks,
+        sourceTid: request.sourceTid.trim(),
+      );
+      _logRefresh(
+        request,
+        'discovery=${candidateBatch.map((item) => item.tid).join(',')}',
+      );
       for (final candidate in candidateBatch) {
         final result = await _discoveryService.discoverFromTidWithPreference(
           tid: candidate.tid,
@@ -332,7 +337,6 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
           );
         }
       }
-      final searchCandidateLinks = _mergeSearchTopics(topicCandidates);
       final mergedSearchLinks = _episodeLinkMerger.merge(
         collectedLinks,
         searchCandidateLinks,
@@ -401,6 +405,36 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       candidates,
       threadUrlBuilder: _buildThreadUrl,
     );
+  }
+
+  List<ComicSearchCandidate> _selectDiscoveryCandidates(
+    List<ComicSearchCandidate> candidates, {
+    required List<ComicEpisodeLink> chapterLinks,
+    required String sourceTid,
+  }) {
+    final chapterUrls = chapterLinks.map((link) => link.url).toSet();
+    ComicSearchCandidate? newestChapter;
+    var newestTid = 0;
+    for (final candidate in candidates) {
+      final tid = candidate.tid.trim();
+      final numericTid = int.tryParse(tid);
+      if (tid != sourceTid &&
+          numericTid != null &&
+          numericTid > newestTid &&
+          chapterUrls.contains(_buildThreadUrl(tid))) {
+        newestChapter = candidate;
+        newestTid = numericTid;
+      }
+    }
+
+    // Search order/relevance can put bumped older threads ahead of new releases.
+    // Reserve a bounded discovery slot for the newest chapter (Discuz TID order)
+    // so its previous-chapter chain is read, not just its search title.
+    final selectedTids = <String>{sourceTid};
+    return <ComicSearchCandidate>[?newestChapter, ...candidates]
+        .where((candidate) => selectedTids.add(candidate.tid.trim()))
+        .take(_candidateRanker.discoveryTopK)
+        .toList(growable: false);
   }
 
   Future<ThreadSeed?> _fetchThreadDetail(

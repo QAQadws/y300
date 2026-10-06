@@ -5,6 +5,7 @@ import 'package:y300/features/comic/domain/services/comic_consecutive_op_post_pa
 import 'package:y300/features/comic/domain/services/comic_episode_discovery_service.dart';
 import 'package:y300/features/comic/domain/services/comic_episode_link_merger.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
+import 'package:y300/features/comic/domain/services/comic_recursive_thread_request_governor.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_refresh_keyword_resolver.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
@@ -19,6 +20,90 @@ import '../../../../support/search/search_response_fixtures.dart';
 
 void main() {
   group('NetworkComicEpisodeRefreshService', () {
+    test(
+      'follows the newest chapter chain outside the relevance top-k',
+      () async {
+        final repository = _RecordingDiscoveryRepository(
+          <String, ThreadDetailData>{
+            for (final tid in <String>['100', '201', '202', '203', '999'])
+              tid: _threadDetail(tid: tid, subject: '测试漫画 第1话', message: ''),
+            '600': _threadDetail(
+              tid: '600',
+              subject: '测试漫画 第6话',
+              message: '<a href="thread-500-1-1.html">上一话</a>',
+            ),
+            '500': _threadDetail(
+              tid: '500',
+              subject: '测试漫画 第5话',
+              message: '<a href="thread-400-1-1.html">上一话</a>',
+            ),
+            '400': _threadDetail(
+              tid: '400',
+              subject: '测试漫画 第4话',
+              message: '<a href="thread-203-1-1.html">上一话</a>',
+            ),
+          },
+        );
+        final service = _buildService(
+          discoveryService: ComicEpisodeDiscoveryService(
+            repository: repository,
+            opPostParser: ComicConsecutiveOpPostParser(
+              engine: ComicPostParsingEngine(),
+            ),
+            catalogDirectoryReader: _NoopCatalogDirectoryReader(),
+            recursiveRequestGovernor:
+                DefaultComicRecursiveThreadRequestGovernor(
+                  cooldown: Duration.zero,
+                ),
+          ),
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: SearchTestResponse(
+              items: <SearchTestTopic>[
+                for (final entry in <String, String>{
+                  '201': '测试漫画 第1话',
+                  '202': '测试漫画 第2话',
+                  '203': '测试漫画 第3话',
+                  '600': '测试漫画 第6话',
+                  '999': '测试漫画 讨论',
+                }.entries)
+                  SearchTestTopic(
+                    tid: entry.key,
+                    title: entry.value,
+                    url:
+                        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=${entry.key}',
+                    fid: '30',
+                  ),
+              ],
+              rateLimited: false,
+            ),
+          ),
+        );
+
+        final outcome = await service.fetchSearchAndCurrentOnly(
+          const ComicEpisodeRefreshRequest(sourceTid: '100'),
+        );
+
+        expect(
+          outcome.links.map(
+            (link) => Uri.parse(link.url).queryParameters['tid'],
+          ),
+          containsAll(<String>['201', '202', '203', '400', '500', '600']),
+        );
+        expect(
+          repository.requestedTids.where((tid) => tid == '100'),
+          hasLength(1),
+        );
+        expect(
+          repository.requestedTids,
+          containsAllInOrder(['600', '500', '400']),
+        );
+        expect(
+          outcome.links.any((link) => link.url.contains('tid=999')),
+          isFalse,
+        );
+      },
+    );
+
     test('uses search fallback top-k when discovery returns empty', () async {
       final discovery = _FakeDiscoveryService(
         byTid: <String, List<ComicEpisodeLink>>{
@@ -78,6 +163,45 @@ void main() {
       expect(searchCoordinator.queries.single.normalizedForumId, '30');
       expect(discovery.requestedTids, containsAll(<String>['301']));
     });
+
+    test(
+      'keeps the discovery budget when newest chapter is less relevant',
+      () async {
+        final discovery = _FakeDiscoveryService(byTid: {});
+        final service = _buildService(
+          discoveryService: discovery,
+          searchCoordinator: _FakeForumSearchCoordinator(
+            response: SearchTestResponse(
+              items: <SearchTestTopic>[
+                for (final entry in <String, String>{
+                  '201': '测试漫画 第1话',
+                  '202': '测试漫画 第2话',
+                  '203': '测试漫画 第3话',
+                  '204': '测试漫画 第4话',
+                  '600': '测试漫話 第6话',
+                }.entries)
+                  SearchTestTopic(
+                    tid: entry.key,
+                    title: entry.value,
+                    url:
+                        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=${entry.key}',
+                    fid: '30',
+                  ),
+              ],
+              rateLimited: false,
+            ),
+          ),
+          threadSeedFetcher: (_) async => const ThreadSeed(subject: '测试漫画 第1话'),
+        );
+
+        final outcome = await service.fetchCatalogThenFallback(
+          const ComicEpisodeRefreshRequest(sourceTid: '100'),
+        );
+
+        expect(discovery.requestedTids, ['100', '600', '201', '202']);
+        expect(outcome.links, hasLength(5));
+      },
+    );
 
     test(
       'uses matched search results when candidate discovery finds no links',
@@ -1548,6 +1672,43 @@ final class _UnusedComicThreadDiscoveryRepository
   >
   load(ComicThreadDiscoveryRequest request) {
     throw UnimplementedError();
+  }
+}
+
+final class _RecordingDiscoveryRepository
+    implements ComicThreadDiscoveryRepository {
+  _RecordingDiscoveryRepository(this.details);
+
+  final Map<String, ThreadDetailData> details;
+  final List<String> requestedTids = <String>[];
+
+  @override
+  ComicThreadDiscoverySourceCapabilities get capabilities =>
+      ComicThreadDiscoverySourceCapabilities(
+        DataCapabilitySet.supported(ComicThreadDiscoveryCapability.values),
+      );
+
+  @override
+  Future<
+    DataReadResult<
+      ComicThreadDiscoveryDocument,
+      ComicThreadDiscoveryCapabilities
+    >
+  >
+  load(ComicThreadDiscoveryRequest request) async {
+    requestedTids.add(request.sourceTid);
+    final detail = details[request.sourceTid];
+    if (detail == null) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.business,
+        diagnosticMessage: 'fixture_not_found',
+      );
+    }
+    return DataReadSuccess(
+      data: const ComicThreadDiscoveryProjector().project(detail),
+      capabilities: ComicThreadDiscoveryCapabilities(capabilities.values),
+      metadata: const DataReadMetadata.network(),
+    );
   }
 }
 
