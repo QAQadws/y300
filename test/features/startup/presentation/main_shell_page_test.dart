@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ForumHomeRepository, ForumHomeFavoriteForum;
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
@@ -10,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
+import 'package:y300/app/navigation/main_destination_page.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_navigation_settings_repository.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
@@ -68,6 +71,104 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
+
+  testWidgets(
+    'cached forum stays mounted while covers wait and only shelves are gated',
+    (tester) async {
+      final covers = Completer<void>();
+      final network = Completer<ForumHomeReadResult>();
+      final repository = _FakeForumHomeRepository(
+        cachedEntry: ForumHomeCacheEntry(
+          payload: ForumHomePayload(
+            directory: const ForumDirectoryData(
+              sections: [
+                ForumDirectorySection(
+                  identity: 'cached',
+                  title: 'Last home',
+                  forums: [
+                    ForumDirectoryForum(
+                      fid: '16',
+                      title: 'Cached forum',
+                      description: '',
+                      todayPosts: 5,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            isLoggedIn: false,
+            favoriteForums: [],
+          ),
+          capabilities: forumHomeTestCapabilities,
+          metadata: const DataReadMetadata.network(),
+          updatedAt: DateTime(2026),
+          cacheAccountId: 'anonymous',
+        ),
+        network: network.future,
+      );
+      final queue = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+        ComicSearchRefreshQueueSnapshot.empty,
+      );
+      final selection = ShelfSelectionHostController();
+      addTearDown(queue.dispose);
+      addTearDown(selection.dispose);
+      await _pumpSelectionShell(
+        tester,
+        queueSnapshot: queue,
+        selectionHost: selection,
+        webViewDriver: _FakeForumWebViewDriver(),
+        homeRepository: repository,
+        libraryReady: covers.future,
+      );
+      expect(covers.isCompleted, isFalse);
+      expect(find.text('Cached forum'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      final before = tester.element(find.byKey(const Key('forum-home-list')));
+      // Standalone shelves from navigation management use the same barrier.
+      final route = ProviderScope.containerOf(
+        before,
+      ).read(mainDestinationRouteFactoryProvider)(MainShellDestination.comic);
+      final navigator = Navigator.of(before);
+      unawaited(navigator.push(route));
+      await _pumpShellTab(tester);
+      expect(
+        find.byKey(const Key('main-shell-library-loading')),
+        findsOneWidget,
+      );
+      expect(find.byType(UnifiedShelfPage), findsNothing);
+      navigator.pop();
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(MainShellPage)),
+      );
+      await tester.tap(find.text(l10n.appNavigationComic).last);
+      await _pumpShellTab(tester);
+      expect(
+        find.byKey(const Key('main-shell-library-loading')),
+        findsOneWidget,
+      );
+      expect(find.byType(UnifiedShelfPage), findsNothing);
+      await tester.tap(find.text(l10n.appNavigationForum).last);
+      await _pumpShellTab(tester);
+      final reads = repository.cacheReads;
+      covers.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.element(find.byKey(const Key('forum-home-list'))),
+        same(before),
+      );
+      expect(repository.cacheReads, reads);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      network.complete(forumHomeReadSuccess(repository.cachedEntry!.payload));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.appNavigationComic).last);
+      await _pumpShellTab(tester);
+      expect(find.byKey(const Key('main-shell-library-loading')), findsNothing);
+      expect(find.byType(UnifiedShelfPage), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'management opens hidden shelves with isolated working selection bars',
@@ -1135,6 +1236,8 @@ Future<void> _pumpShellTab(WidgetTester tester) async {
   // bounded frame window for the tab transition, not global quiescence.
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
+  // A newly mounted shelf first passes its own cover-readiness FutureBuilder.
+  await tester.pump();
 }
 
 Future<void> _pumpSelectionShell(
@@ -1142,6 +1245,8 @@ Future<void> _pumpSelectionShell(
   required ValueNotifier<ComicSearchRefreshQueueSnapshot> queueSnapshot,
   required ShelfSelectionHostController selectionHost,
   required _FakeForumWebViewDriver webViewDriver,
+  ForumHomeRepository? homeRepository,
+  Future<void>? libraryReady,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -1160,7 +1265,9 @@ Future<void> _pumpSelectionShell(
         comicSearchRefreshQueueSnapshotProvider.overrideWithValue(
           queueSnapshot,
         ),
-        mainShellBackgroundTaskStarterProvider.overrideWithValue((_) async {}),
+        mainShellBackgroundTaskStarterProvider.overrideWithValue((_) async {
+          await libraryReady;
+        }),
         mainShellNotificationInitializerProvider.overrideWithValue(
           (_) async {},
         ),
@@ -1168,7 +1275,7 @@ Future<void> _pumpSelectionShell(
         ...forumAuthOverrides(_FakeAuthRepository()),
         shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
         forumHomeRepositoryProvider.overrideWithValue(
-          _FakeForumHomeRepository(),
+          homeRepository ?? _FakeForumHomeRepository(),
         ),
         forumWebViewDriverFactoryProvider.overrideWithValue(
           () => webViewDriver,
@@ -2092,20 +2199,29 @@ class _FakeLibraryStateRepository implements LibraryStateRepository {
 }
 
 class _FakeForumHomeRepository implements ForumHomeRepository {
+  _FakeForumHomeRepository({this.cachedEntry, this.network});
+  final ForumHomeCacheEntry? cachedEntry;
+  final Future<ForumHomeReadResult>? network;
+  int cacheReads = 0;
   @override
   Future<ForumHomeCacheEntry?> readCachedPayload({
     required DocumentRequestProfile requestProfile,
-  }) async => null;
+  }) async {
+    cacheReads++;
+    return cachedEntry;
+  }
 
   @override
   Future<ForumHomeReadResult> getForumHomePayload({
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
     DocumentRequestProfile? requestProfileOverride,
-  }) async => forumHomeReadSuccess(
-    ForumHomePayload(
-      directory: const ForumDirectoryData(sections: []),
-      isLoggedIn: false,
-      favoriteForums: [],
-    ),
-  );
+  }) async =>
+      network ??
+      forumHomeReadSuccess(
+        ForumHomePayload(
+          directory: const ForumDirectoryData(sections: []),
+          isLoggedIn: false,
+          favoriteForums: [],
+        ),
+      );
 }

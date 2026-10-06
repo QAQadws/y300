@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
@@ -5,6 +6,7 @@ import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/core/persistence/app_database.dart';
+import 'package:y300/features/cache/data/services/forum_home_snapshot_mirror.dart';
 
 class LocalParsedSnapshotCacheService
     implements
@@ -15,22 +17,29 @@ class LocalParsedSnapshotCacheService
     Future<Database> dbFuture, {
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     DateTime Function()? now,
+    ForumHomeSnapshotMirror? homeMirror,
   }) : _dbFutureFactory = (() => dbFuture),
        _mutationReporter = mutationReporter,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _homeMirror = homeMirror;
 
   LocalParsedSnapshotCacheService.lazy(
     Future<Database> Function() dbFutureFactory, {
     CacheMutationReporter mutationReporter = const NoopCacheMutationReporter(),
     DateTime Function()? now,
+    ForumHomeSnapshotMirror? homeMirror,
   }) : _dbFutureFactory = dbFutureFactory,
        _mutationReporter = mutationReporter,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _homeMirror = homeMirror;
 
   final Future<Database> Function() _dbFutureFactory;
   Future<Database>? _dbFuture;
   final CacheMutationReporter _mutationReporter;
   final DateTime Function() _now;
+  final ForumHomeSnapshotMirror? _homeMirror;
+  int _homeGeneration = 0;
+  int _homeInvalidations = 0;
 
   Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
 
@@ -39,6 +48,19 @@ class LocalParsedSnapshotCacheService
     SnapshotCacheDescriptor descriptor,
     SnapshotCodec<T> codec,
   ) async {
+    final mirrorGeneration = _homeMirror?.generation;
+    final homeGeneration = _homeGeneration;
+    bool canReadHome() =>
+        homeGeneration == _homeGeneration && _homeInvalidations == 0;
+    if (_isHome(descriptor)) {
+      if (!canReadHome()) return null;
+      final row = await _homeMirror?.read(cacheKey: descriptor.cacheKey);
+      if (!canReadHome()) return null;
+      if (row != null) {
+        final snapshot = _decode(row, codec, retainExpired: true);
+        if (snapshot != null) return snapshot;
+      }
+    }
     final db = await _db;
     final rows = await db.query(
       AppDatabase.cachedSnapshotsTable,
@@ -49,30 +71,55 @@ class LocalParsedSnapshotCacheService
     if (rows.isEmpty) {
       return null;
     }
-    final row = rows.first;
-    final rowCodecVersion = row['codec_version'] as int? ?? -1;
-    final rowParserVersion = row['parser_version'] as int? ?? -1;
-    final canDecodeVersion = codec is SnapshotCodecVersionCompatibility
-        ? (codec as SnapshotCodecVersionCompatibility).canDecodeVersion(
-            codecVersion: rowCodecVersion,
-            parserVersion: rowParserVersion,
-          )
-        : rowCodecVersion == codec.codecVersion &&
-              rowParserVersion == codec.parserVersion;
-    if ((row['snapshot_type'] as String? ?? '') != codec.snapshotType ||
-        !canDecodeVersion) {
-      return null;
+    if (_isHome(descriptor) && !canReadHome()) return null;
+    final snapshot = _decode(
+      rows.first,
+      codec,
+      retainExpired: _isHome(descriptor),
+    );
+    if (snapshot != null) {
+      // Access bookkeeping must not delay publication of an already decoded
+      // snapshot, especially while startup maintenance holds the DB queue.
+      if (_isHome(descriptor)) {
+        unawaited(_promoteHome(rows.first, mirrorGeneration, canReadHome));
+      } else {
+        try {
+          await touch(descriptor.cacheKey, _now());
+        } catch (_) {
+          return null;
+        }
+      }
     }
-    final now = _now();
-    final expiresAt = _toDateTime(row['expires_at']);
-    if (expiresAt != null && !now.isBefore(expiresAt)) {
-      return null;
-    }
+    return snapshot;
+  }
 
+  CachedSnapshot<T>? _decode<T>(
+    Map<String, Object?> row,
+    SnapshotCodec<T> codec, {
+    bool retainExpired = false,
+  }) {
     try {
+      final rowCodecVersion = row['codec_version'] as int? ?? -1;
+      final rowParserVersion = row['parser_version'] as int? ?? -1;
+      final canDecodeVersion = codec is SnapshotCodecVersionCompatibility
+          ? (codec as SnapshotCodecVersionCompatibility).canDecodeVersion(
+              codecVersion: rowCodecVersion,
+              parserVersion: rowParserVersion,
+            )
+          : rowCodecVersion == codec.codecVersion &&
+                rowParserVersion == codec.parserVersion;
+      if ((row['snapshot_type'] as String? ?? '') != codec.snapshotType ||
+          !canDecodeVersion) {
+        return null;
+      }
+      final now = _now();
+      final expiresAt = _toDateTime(row['expires_at']);
+      if (!retainExpired && expiresAt != null && !now.isBefore(expiresAt)) {
+        return null;
+      }
+
       final decoded = jsonDecode(row['payload_json'] as String);
       final snapshot = _fromRow(row, codec.decode(decoded));
-      await touch(descriptor.cacheKey, now);
       return snapshot;
     } catch (_) {
       return null;
@@ -104,47 +151,65 @@ class LocalParsedSnapshotCacheService
     required bool Function() isCurrent,
   }) async {
     if (!isCurrent()) return false;
+    final mirrorGeneration = _homeMirror?.generation;
+    final homeGeneration = _homeGeneration;
+    bool canWrite() =>
+        isCurrent() &&
+        (!_isHome(descriptor) ||
+            (mirrorGeneration == _homeMirror?.generation &&
+                homeGeneration == _homeGeneration &&
+                _homeInvalidations == 0));
     final db = await _db;
+    Map<String, Object?>? persistedRow;
     try {
       await db.transaction((transaction) async {
-        if (!isCurrent()) throw const _ExpiredSnapshotWrite();
+        if (!canWrite()) throw const _ExpiredSnapshotWrite();
         final existing = await _getRawByKey(transaction, descriptor.cacheKey);
-        if (!isCurrent()) throw const _ExpiredSnapshotWrite();
+        if (!canWrite()) throw const _ExpiredSnapshotWrite();
         final now = _now();
         final createdAt =
             _toDateTime(existing?['created_at']) ??
             _toDateTime(existing?['updated_at']) ??
             now;
         final payloadJson = jsonEncode(codec.encode(value));
+        final retainLongTerm = policy.retainLongTerm || _isHome(descriptor);
+        persistedRow = <String, Object?>{
+          'cache_key': descriptor.cacheKey,
+          'owner_type': descriptor.ownerType.id,
+          'owner_id': descriptor.ownerId,
+          'snapshot_type': codec.snapshotType,
+          'codec_version': codec.codecVersion,
+          'parser_version': codec.parserVersion,
+          'source_document_key': _normalizeNullable(
+            descriptor.sourceDocumentKey,
+          ),
+          'payload_json': payloadJson,
+          'payload_bytes': utf8.encode(payloadJson).length,
+          'created_at': createdAt.millisecondsSinceEpoch,
+          'updated_at': now.millisecondsSinceEpoch,
+          'last_accessed_at': now.millisecondsSinceEpoch,
+          'stale_at': now.add(policy.freshFor).millisecondsSinceEpoch,
+          'retain_long_term': retainLongTerm ? 1 : 0,
+          'expires_at': retainLongTerm
+              ? null
+              : now.add(policy.keepStaleFor).millisecondsSinceEpoch,
+        };
         await transaction.insert(
           AppDatabase.cachedSnapshotsTable,
-          <String, Object?>{
-            'cache_key': descriptor.cacheKey,
-            'owner_type': descriptor.ownerType.id,
-            'owner_id': descriptor.ownerId,
-            'snapshot_type': codec.snapshotType,
-            'codec_version': codec.codecVersion,
-            'parser_version': codec.parserVersion,
-            'source_document_key': _normalizeNullable(
-              descriptor.sourceDocumentKey,
-            ),
-            'payload_json': payloadJson,
-            'payload_bytes': utf8.encode(payloadJson).length,
-            'created_at': createdAt.millisecondsSinceEpoch,
-            'updated_at': now.millisecondsSinceEpoch,
-            'last_accessed_at': now.millisecondsSinceEpoch,
-            'stale_at': now.add(policy.freshFor).millisecondsSinceEpoch,
-            'retain_long_term': policy.retainLongTerm ? 1 : 0,
-            'expires_at': policy.retainLongTerm
-                ? null
-                : now.add(policy.keepStaleFor).millisecondsSinceEpoch,
-          },
+          persistedRow!,
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
-        if (!isCurrent()) throw const _ExpiredSnapshotWrite();
+        if (!canWrite()) throw const _ExpiredSnapshotWrite();
       });
     } on _ExpiredSnapshotWrite {
       return false;
+    }
+    if (_isHome(descriptor) && persistedRow != null) {
+      await _homeMirror?.save(
+        persistedRow!,
+        generation: mirrorGeneration!,
+        isCurrent: canWrite,
+      );
     }
     _mutationReporter.reportMutation(CacheNamespace.snapshot);
     return true;
@@ -165,26 +230,39 @@ class LocalParsedSnapshotCacheService
   Future<int> deleteByOwner({
     required CacheOwnerType ownerType,
     required String ownerId,
-  }) async {
-    final db = await _db;
-    return db.delete(
-      AppDatabase.cachedSnapshotsTable,
-      where: 'owner_type = ? AND owner_id = ?',
-      whereArgs: <Object>[ownerType.id, ownerId],
-    );
-  }
+  }) => _deleteOwner(ownerType, ownerId, prefix: false);
 
   @override
   Future<int> deleteByOwnerPrefix({
     required CacheOwnerType ownerType,
     required String ownerIdPrefix,
+  }) => _deleteOwner(ownerType, ownerIdPrefix, prefix: true);
+
+  Future<int> _deleteOwner(
+    CacheOwnerType ownerType,
+    String ownerId, {
+    required bool prefix,
   }) async {
-    final db = await _db;
-    return db.delete(
-      AppDatabase.cachedSnapshotsTable,
-      where: 'owner_type = ? AND owner_id LIKE ?',
-      whereArgs: <Object>[ownerType.id, '$ownerIdPrefix%'],
-    );
+    final home =
+        ownerType == CacheOwnerType.forum &&
+        (prefix ? 'home'.startsWith(ownerId) : ownerId == 'home');
+    if (home) {
+      _homeGeneration++;
+      _homeInvalidations++;
+    }
+    try {
+      await _homeMirror?.deleteOwner(ownerType.id, ownerId, prefix: prefix);
+      final db = await _db;
+      return await db.delete(
+        AppDatabase.cachedSnapshotsTable,
+        where: prefix
+            ? 'owner_type = ? AND owner_id LIKE ?'
+            : 'owner_type = ? AND owner_id = ?',
+        whereArgs: <Object>[ownerType.id, prefix ? '$ownerId%' : ownerId],
+      );
+    } finally {
+      if (home) _homeInvalidations--;
+    }
   }
 
   @override
@@ -207,23 +285,36 @@ class LocalParsedSnapshotCacheService
       GROUP BY snapshot_type, retain_long_term
       ORDER BY snapshot_type ASC
       ''');
-    final slices = rows
-        .map((row) {
-          final snapshotType = row['snapshot_type'] as String? ?? '';
-          final count = row['count'] as int? ?? 0;
-          return StorageUsageSlice(
-            id: 'snapshot:$snapshotType',
-            labelRef: StorageUsageLabelRef(
-              kind: StorageUsageLabelKind.snapshotType,
-              code: snapshotType,
-              count: count,
-            ),
-            bytes: row['total'] as int? ?? 0,
-            protected: row['retain_long_term'] == 1,
-          );
-        })
-        .where((slice) => slice.bytes > 0)
-        .toList(growable: false);
+    final mirrorBytes = await _homeMirror?.bytes() ?? 0;
+    final slices = [
+      ...rows
+          .map((row) {
+            final snapshotType = row['snapshot_type'] as String? ?? '';
+            final count = row['count'] as int? ?? 0;
+            return StorageUsageSlice(
+              id: 'snapshot:$snapshotType',
+              labelRef: StorageUsageLabelRef(
+                kind: StorageUsageLabelKind.snapshotType,
+                code: snapshotType,
+                count: count,
+              ),
+              bytes: row['total'] as int? ?? 0,
+              protected: row['retain_long_term'] == 1,
+            );
+          })
+          .where((slice) => slice.bytes > 0),
+      if (mirrorBytes > 0)
+        StorageUsageSlice(
+          id: 'startup:forum.home',
+          labelRef: const StorageUsageLabelRef(
+            kind: StorageUsageLabelKind.snapshotType,
+            code: 'forum.home',
+            count: 1,
+          ),
+          bytes: mirrorBytes,
+          protected: true,
+        ),
+    ];
     final total = slices.fold<int>(0, (sum, slice) => sum + slice.bytes);
     return StorageUsageSection(
       bucket: StorageBucket.pageCache,
@@ -252,7 +343,9 @@ class LocalParsedSnapshotCacheService
     return CacheParticipantUsage(
       clearableBytes: bytes,
       budgetedBytes: bytes,
-      longTermBytes: rows.first['long_term'] as int? ?? 0,
+      longTermBytes:
+          (rows.first['long_term'] as int? ?? 0) +
+          (await _homeMirror?.bytes() ?? 0),
     );
   }
 
@@ -368,6 +461,42 @@ class LocalParsedSnapshotCacheService
   String? _normalizeNullable(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  bool _isHome(SnapshotCacheDescriptor descriptor) =>
+      descriptor.ownerType == CacheOwnerType.forum &&
+      descriptor.ownerId == 'home' &&
+      descriptor.snapshotType == 'forum.home';
+
+  Future<void> _promoteHome(
+    Map<String, Object?> row,
+    int? generation,
+    bool Function() isCurrent,
+  ) async {
+    try {
+      final retained = {...row, 'retain_long_term': 1, 'expires_at': null};
+      await _homeMirror?.save(
+        retained,
+        generation: generation!,
+        isCurrent: isCurrent,
+      );
+      final db = await _db;
+      if (!isCurrent()) return;
+      // A legacy hit is protected after publication. Match its version so a
+      // concurrent refresh or explicit deletion cannot be overwritten.
+      await db.update(
+        AppDatabase.cachedSnapshotsTable,
+        {
+          'retain_long_term': 1,
+          'expires_at': null,
+          'last_accessed_at': _now().millisecondsSinceEpoch,
+        },
+        where: 'cache_key = ? AND updated_at = ?',
+        whereArgs: [row['cache_key'], row['updated_at']],
+      );
+    } catch (_) {
+      // Cache hit publication does not depend on mirror/LRU bookkeeping.
+    }
   }
 }
 

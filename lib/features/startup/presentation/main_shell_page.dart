@@ -6,6 +6,7 @@ import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
 import 'package:y300/app/startup/main_shell_startup_coordinator.dart';
 import 'package:y300/app/startup/main_shell_startup_host.dart';
+import 'package:y300/app/startup/main_shell_library_gate.dart';
 import 'package:y300/app/startup/main_shell_startup_providers.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_bottom_bar.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
@@ -40,17 +41,24 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    return MainShellStartupHost(
-      child: FutureBuilder<void>(
-        future: _coverMigrationReady,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+    return ProviderScope(
+      overrides: [
+        mainShellLibraryReadinessProvider.overrideWithValue(
+          _coverMigrationReady,
+        ),
+      ],
+      child: MainShellStartupHost(
+        child: FutureBuilder<void>(
+          future: _coverMigrationReady,
+          builder: (context, snapshot) {
+            final libraryReady =
+                snapshot.connectionState == ConnectionState.done;
+            return MainShellReadyTaskHost(
+              isReady: libraryReady,
+              child: _buildReadyShell(context),
             );
-          }
-          return MainShellReadyTaskHost(child: _buildReadyShell(context));
-        },
+          },
+        ),
       ),
     );
   }

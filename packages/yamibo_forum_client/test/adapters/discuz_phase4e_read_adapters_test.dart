@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:test/test.dart';
@@ -8,6 +9,19 @@ import 'package:yamibo_forum_client/src/adapters/thread_detail_snapshot_codec.da
 
 import '../support/data_source_contracts/repository_contract_suites.dart';
 import '../fixtures/thread_post_navigation_fixtures.dart';
+
+final class _PendingTouchDocumentStore implements ForumDocumentStore {
+  final delegate = MemoryForumDocumentStore();
+  final touchPending = Completer<void>();
+  @override
+  Future<ForumCachedDocument?> get(ForumDocumentDescriptor descriptor) =>
+      delegate.get(descriptor);
+  @override
+  Future<void> put(ForumCachedDocument document) => delegate.put(document);
+  @override
+  Future<void> touch(ForumDocumentDescriptor descriptor, DateTime accessedAt) =>
+      touchPending.future;
+}
 
 void main() {
   late ForumClientConfig config;
@@ -121,6 +135,30 @@ void main() {
     expect(data.carousel.single.imageUri.path, '/banner.jpg');
     expect(data.favoriteForums.single.fid, '16');
   });
+
+  test(
+    'cached home HTML publishes before access bookkeeping completes',
+    () async {
+      final documents = _PendingTouchDocumentStore();
+      final network = _FixtureNetwork((_) => _forumHomeHtml);
+      final repository = ForumClientAdapterFactory(
+        config: config,
+        network: network,
+        documentStore: documents,
+      ).createHtmlForumHome().home;
+      await repository.loadHome(const ForumHomeQuery());
+      final cached = await repository
+          .readCached(const ForumHomeQuery())
+          .timeout(const Duration(seconds: 1));
+      expect(cached?.data.directory.sections.single.forums.single.fid, '30');
+      expect(documents.touchPending.isCompleted, isFalse);
+      expect(network.requests, hasLength(1));
+      documents.touchPending.completeError(
+        StateError('bookkeeping unavailable'),
+      );
+      await Future<void>.delayed(Duration.zero);
+    },
+  );
 
   test(
     'forum home snapshot codec reads legacy layout and ignores aspect ratio',

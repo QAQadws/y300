@@ -10,6 +10,8 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/yamibo_forum_source.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -1003,6 +1005,98 @@ void main() {
     );
 
     testWidgets(
+      'exact owner confirmation preserves the home element, another UID hides it',
+      (tester) async {
+        final auth = _PendingAuthRepository(
+          session: _loggedInSession(uid: '10'),
+        );
+        final firstRefresh = Completer<ForumHomeReadResult>();
+        final nextRefresh = Completer<ForumHomeReadResult>();
+        final otherCache = Completer<ForumHomeCacheEntry?>();
+        final sessions = YamiboSessionStore();
+        var calls = 0;
+        final entry = ForumHomeCacheEntry(
+          payload: _loggedInPayloadWithFavorites(),
+          capabilities: forumHomeTestCapabilities,
+          metadata: const DataReadMetadata.network(),
+          updatedAt: DateTime(2026),
+          cacheAccountId: '10',
+        );
+        final repository = _FakeForumHomeRepository(
+          () => ++calls == 1 ? firstRefresh.future : nextRefresh.future,
+          cacheLoader: () async =>
+              sessions.readCurrent()?.uid == '20' ? otherCache.future : entry,
+        );
+        final container = ProviderContainer(
+          overrides: [
+            ..._overrides(
+              repository,
+              authRepository: auth,
+              requestProfileResolver:
+                  const _FakeForumHomeRequestProfileResolver(
+                    DocumentRequestProfile.loggedIn,
+                  ),
+            ),
+            yamiboSessionStoreProvider.overrideWithValue(sessions),
+          ],
+        );
+        addTearDown(container.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const LocalizedTestApp(home: ForumHomePage()),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final before = tester.element(find.byKey(const Key('forum-home-list')));
+        final oldScope = container.read(yamiboForumSourceScopeProvider);
+        expect(oldScope.accountId, 'unverified');
+        void confirm(String uid) => sessions.saveExtracted(
+          YamiboSessionSnapshot(
+            isLoggedIn: true,
+            uid: uid,
+            username: 'fixture',
+            formhash: '',
+            updatedAt: DateTime.now(),
+            source: 'test',
+          ),
+        );
+        confirm('10');
+        auth.complete();
+        for (var frame = 0; frame < 4; frame++) {
+          await tester.pump();
+          expect(find.byKey(const Key('forum-home-blank-body')), findsNothing);
+          expect(
+            tester.element(find.byKey(const Key('forum-home-list'))),
+            same(before),
+          );
+        }
+        expect(oldScope.isCurrent, isFalse);
+        expect(repository.cachedRequestProfiles, hasLength(1));
+        await tester.pump(Duration.zero);
+        expect(calls, 2);
+        firstRefresh.complete(
+          forumHomeReadSuccess(_loggedOutPayloadWithTodayCount(1)),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.element(find.byKey(const Key('forum-home-list'))),
+          same(before),
+        );
+        nextRefresh.complete(
+          forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
+        );
+        await tester.pumpAndSettle();
+        confirm('20');
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('forum-home-blank-body')), findsOneWidget);
+        expect(find.byKey(const Key('forum-home-list')), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'background cache refresh keeps today subtree and applies updated value',
       (tester) async {
         final refreshCompleter = Completer<ForumHomeReadResult>();
@@ -1426,7 +1520,8 @@ ForumHomePayload _loggedInPayloadWithChromeFavoriteDescriptions() {
 }
 
 class _FakeForumHomeRepository implements ForumHomeRepository {
-  _FakeForumHomeRepository(this._loader, {this.cachedEntry});
+  _FakeForumHomeRepository(this._loader, {this.cachedEntry, this.cacheLoader});
+  final Future<ForumHomeCacheEntry?> Function()? cacheLoader;
 
   final Future<ForumHomeReadResult> Function() _loader;
   final ForumHomeCacheEntry? cachedEntry;
@@ -1439,7 +1534,7 @@ class _FakeForumHomeRepository implements ForumHomeRepository {
     required DocumentRequestProfile requestProfile,
   }) async {
     cachedRequestProfiles.add(requestProfile);
-    return cachedEntry;
+    return cacheLoader == null ? cachedEntry : await cacheLoader!();
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     as forum;
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/core/network/yamibo_forum_home_cache_owner.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
@@ -40,11 +41,13 @@ class ForumHomeCacheEntry {
     required this.capabilities,
     required this.metadata,
     required this.updatedAt,
+    this.cacheAccountId,
   });
   final ForumHomePayload payload;
   final forum.ForumDirectoryReadCapabilities capabilities;
   final forum.DataReadMetadata metadata;
   final DateTime updatedAt;
+  final String? cacheAccountId;
 }
 
 abstract class ForumHomeRepository {
@@ -69,15 +72,18 @@ final class ForumHomeHtmlRepository
     required forum.ForumDirectoryRepository directoryRepository,
     required ForumHomeCarouselDimensionResolver dimensionResolver,
     YamiboSessionStore? sessionStore,
+    Future<String?> Function()? cacheAccountId,
   }) : _repository = repository,
        _directoryRepository = directoryRepository,
        _dimensionResolver = dimensionResolver,
-       _sessionStore = sessionStore;
+       _sessionStore = sessionStore,
+       _cacheAccountId = cacheAccountId;
 
   final forum.ForumHomeRepository _repository;
   final forum.ForumDirectoryRepository _directoryRepository;
   final ForumHomeCarouselDimensionResolver _dimensionResolver;
   final YamiboSessionStore? _sessionStore;
+  final Future<String?> Function()? _cacheAccountId;
 
   @override
   forum.ForumDirectorySourceCapabilities get capabilities =>
@@ -105,12 +111,16 @@ final class ForumHomeHtmlRepository
     if (value == null) return null;
     final payload = await _withResolvedCarouselAspectRatio(
       _project(value.data, requestProfile: requestProfile),
+      cached: true,
     );
     return ForumHomeCacheEntry(
       payload: payload,
       capabilities: _directoryCapabilities,
       metadata: value.metadata,
       updatedAt: value.updatedAt,
+      cacheAccountId: requestProfile == DocumentRequestProfile.anonymous
+          ? 'anonymous'
+          : await _cacheAccountId?.call(),
     );
   }
 
@@ -209,11 +219,14 @@ final class ForumHomeHtmlRepository
   }
 
   Future<ForumHomePayload> _withResolvedCarouselAspectRatio(
-    ForumHomePayload payload,
-  ) async {
+    ForumHomePayload payload, {
+    bool cached = false,
+  }) async {
     if (payload.chromeData.carouselItems.isEmpty) return payload;
     final first = payload.chromeData.carouselItems.first;
-    final ratio = await _dimensionResolver.resolveAspectRatio(first.imageUrl);
+    final ratio = cached
+        ? await _dimensionResolver.resolveCachedAspectRatio(first.imageUrl)
+        : await _dimensionResolver.resolveAspectRatio(first.imageUrl);
     if (ratio == null) return payload;
     return ForumHomePayload(
       directory: payload.directory,
@@ -231,10 +244,15 @@ final class ForumHomeHtmlRepository
 
 final forumHomeRepositoryProvider = Provider<ForumHomeRepository>((ref) {
   final client = ref.watch(yamiboForumClientProvider);
+  final scope = ref.watch(yamiboForumSourceScopeProvider);
+  final owners = ref.watch(yamiboForumHomeCacheOwnerStoreProvider);
   return ForumHomeHtmlRepository(
     repository: client.forumHome!,
     directoryRepository: client.forumDirectory!,
     sessionStore: ref.watch(yamiboSessionStoreProvider),
+    cacheAccountId: () async => scope.hasVerifiedIdentity
+        ? scope.accountId
+        : (await owners.restore(isCurrent: () => scope.isCurrent))?.accountId,
     dimensionResolver: ForumHomeCarouselDimensionResolver(
       dimensionIndex: ref.watch(forumImageDimensionIndexProvider),
     ),

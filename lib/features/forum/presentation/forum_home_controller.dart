@@ -22,13 +22,47 @@ final forumHomeControllerProvider =
 /// 论坛首页状态控制器：负责拉取数据和映射为 UI 模型
 class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
   int _backgroundRefreshGeneration = 0;
+  Y300ForumSourceScope? _publishedScope;
+  String? _publishedAccountId;
 
   @override
-  Future<ForumHomePageState> build() async {
+  FutureOr<ForumHomePageState> build() {
     final scope = ref.watch(yamiboForumSourceScopeProvider);
     final repository = ref.watch(forumHomeRepositoryProvider);
     final generation = ++_backgroundRefreshGeneration;
     ref.onDispose(() => _backgroundRefreshGeneration++);
+    final previous = _publishedScope;
+    final current = state.value;
+    if (previous != null &&
+        current != null &&
+        !previous.hasVerifiedIdentity &&
+        scope.hasVerifiedIdentity &&
+        _publishedAccountId == scope.accountId &&
+        previous.profile.id == scope.profile.id &&
+        previous.profile.revision == scope.profile.revision) {
+      // Remote confirmation of the exact cached owner retires old requests,
+      // but does not retire the already visible homepage or its scroll state.
+      _publishedScope = scope;
+      unawaited(
+        _refreshCachedHomeAfterPublish(
+          requestProfile: current.requestProfile,
+          generation: generation,
+          repository: repository,
+          scope: scope,
+        ),
+      );
+      return current.copyWith(isRefreshing: true, clearHint: true);
+    }
+    _publishedScope = null;
+    _publishedAccountId = null;
+    return _buildFromCache(repository, scope, generation);
+  }
+
+  Future<ForumHomePageState> _buildFromCache(
+    ForumHomeRepository repository,
+    Y300ForumSourceScope scope,
+    int generation,
+  ) async {
     final requestProfile = await _resolveRequestProfile();
     _ensureCurrent(scope);
     ForumHomeCacheEntry? cached;
@@ -40,6 +74,10 @@ class ForumHomeController extends AsyncNotifier<ForumHomePageState> {
       // Cache corruption/unavailability is a miss, not a startup failure.
     }
     _ensureCurrent(scope);
+    if (_isCurrent(scope, generation) && cached != null) {
+      _publishedScope = scope;
+      _publishedAccountId = cached.cacheAccountId;
+    }
     if (cached == null) {
       return _fetchForumHome(
         cachePolicy: CacheLoadPolicy.cacheFirst,

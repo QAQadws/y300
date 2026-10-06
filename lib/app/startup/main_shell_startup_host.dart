@@ -20,12 +20,20 @@ class MainShellStartupHost extends ConsumerWidget {
 
 /// Assembles task presentation only after the custom-cover readiness barrier.
 class MainShellReadyTaskHost extends ConsumerWidget {
-  const MainShellReadyTaskHost({required this.child, super.key});
+  const MainShellReadyTaskHost({
+    required this.child,
+    this.isReady = true,
+    super.key,
+  });
 
   final Widget child;
+  final bool isReady;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the foreground subtree mounted while only library task assembly
+    // waits for cover recovery. Forum startup does not consume cover assets.
+    if (!isReady) return child;
     final l10n = AppLocalizations.of(context);
     ref.watch(favoriteSyncTaskProgressRegistrationProvider);
     ref.watch(comicSearchQueueTaskProgressRegistrationProvider);

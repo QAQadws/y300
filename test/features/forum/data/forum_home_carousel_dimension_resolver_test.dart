@@ -1,13 +1,37 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/forum/data/services/forum_home_carousel_dimension_resolver.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   group('ForumHomeCarouselDimensionResolver', () {
+    test(
+      'cold cache restores exact URL layout without querying SQLite',
+      () async {
+        final first = ForumHomeCarouselDimensionResolver(
+          dimensionIndex: _FakeDimensionIndex(
+            const ForumImageDimensions(
+              width: 1200,
+              height: 400,
+              source: ForumImageDimensionSource.cacheMetadata,
+            ),
+          ),
+        );
+        const url = 'https://bbs.yamibo.com/banner.jpg';
+        await first.resolveAspectRatio(url);
+        final cold = ForumHomeCarouselDimensionResolver(
+          dimensionIndex: _ThrowingDimensionIndex(),
+        );
+        expect(await cold.resolveCachedAspectRatio(url), 3);
+        expect(await cold.resolveCachedAspectRatio('$url?new'), isNull);
+      },
+    );
     test('restores the current or latest home carousel dimensions', () async {
       final index = _FakeDimensionIndex(
         const ForumImageDimensions(

@@ -1,5 +1,7 @@
 // ignore_for_file: public_member_api_docs
 
+import 'dart:async';
+
 import '../cache/forum_cache.dart';
 import '../cache/forum_cache_key_canonicalizer.dart';
 import '../client/forum_client_config.dart';
@@ -99,7 +101,7 @@ final class DiscuzForumHomeHtmlRepository
       if (document == null) return null;
       final data = _parser.parse(document.body);
       if (!_valid(data)) return null;
-      await documentStore?.touch(documentDescriptor, _now());
+      unawaited(_touchDocument(documentDescriptor));
       return ForumHomeCachedRead(
         data: data,
         capabilities: homeCapabilities.toReadCapabilities(),
@@ -111,6 +113,14 @@ final class DiscuzForumHomeHtmlRepository
       );
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<void> _touchDocument(ForumDocumentDescriptor descriptor) async {
+    try {
+      await documentStore?.touch(descriptor, _now());
+    } catch (_) {
+      // A cached first frame does not depend on access bookkeeping.
     }
   }
 

@@ -21,6 +21,7 @@ import 'package:y300/features/cache/data/services/image_cache_access_recorder.da
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
+import 'package:y300/features/cache/data/services/forum_home_snapshot_mirror.dart';
 import 'package:y300/features/cache/data/services/protected_cover_file_store.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
@@ -91,11 +92,16 @@ final documentCacheServiceProvider = Provider<DocumentCacheService>((ref) {
   );
 });
 
+final forumHomeSnapshotMirrorProvider = Provider<ForumHomeSnapshotMirror>(
+  (ref) => ForumHomeSnapshotMirror(),
+);
+
 final parsedSnapshotCacheServiceProvider = Provider<ParsedSnapshotCacheService>(
   (ref) {
     return LocalParsedSnapshotCacheService.lazy(
       () => AppDatabase.open(),
       mutationReporter: ref.watch(cacheMutationBusProvider),
+      homeMirror: ref.watch(forumHomeSnapshotMirrorProvider),
     );
   },
 );

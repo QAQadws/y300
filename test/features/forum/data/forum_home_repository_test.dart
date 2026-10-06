@@ -4,6 +4,11 @@ import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:y300/core/persistence/app_database.dart';
+import 'package:y300/features/cache/data/services/forum_home_snapshot_mirror.dart';
+import 'package:y300/features/cache/data/services/parsed_snapshot_cache_service.dart';
+import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart' as forum;
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/cookie_store.dart';
@@ -26,6 +31,7 @@ import 'package:y300/features/auth/application/auth_session_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('ForumHomeHtmlRepository', () {
     test(
@@ -158,7 +164,7 @@ void main() {
     });
 
     test(
-      'real authenticated cache publishes before auth and WAF transport complete',
+      'real authenticated snapshot publishes with database, auth and WAF pending',
       () async {
         SharedPreferences.setMockInitialValues({});
         final site = Uri.parse('https://bbs.yamibo.com');
@@ -169,8 +175,19 @@ void main() {
           siteUri: site,
         );
         await owners.remember(accountId: '10', isCurrent: () => true);
-        final documents = forum.MemoryForumDocumentStore();
-        final snapshots = forum.MemoryForumSnapshotStore();
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+        final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
+        addTearDown(db.close);
+        forum.ForumDocumentStore documents = Y300ForumDocumentStoreAdapter(
+          LocalDocumentCacheService(Future.value(db)),
+        );
+        forum.ForumSnapshotStore snapshots = Y300ForumSnapshotStoreAdapter(
+          LocalParsedSnapshotCacheService(
+            Future.value(db),
+            homeMirror: ForumHomeSnapshotMirror(),
+          ),
+        );
         final network = _HomeNetwork();
         final identity = YamiboSessionSnapshot(
           isLoggedIn: true,
@@ -215,6 +232,19 @@ void main() {
         await repository(previous.current).getForumHomePayload(
           requestProfileOverride: DocumentRequestProfile.loggedIn,
         );
+        expect(await db.query(AppDatabase.cachedSnapshotsTable), hasLength(1));
+        expect(await ForumHomeSnapshotMirror().read(), isNotNull);
+        var databaseOpens = 0;
+        final pendingDatabase = Completer<Database>();
+        documents = Y300ForumDocumentStoreAdapter(
+          LocalDocumentCacheService.lazy(() => pendingDatabase.future),
+        );
+        snapshots = Y300ForumSnapshotStoreAdapter(
+          LocalParsedSnapshotCacheService.lazy(() {
+            databaseOpens++;
+            return pendingDatabase.future;
+          }, homeMirror: ForumHomeSnapshotMirror()),
+        );
         final pending = Completer<void>();
         network.pending = pending.future;
         network.homeHtml = _mobileHomeHtml.replaceFirst('今日 5', '今日 9');
@@ -236,10 +266,13 @@ void main() {
           ],
         );
         container.listen(forumHomeControllerProvider, (_, _) {});
-        final cached = await container.read(forumHomeControllerProvider.future);
+        final cached = await container
+            .read(forumHomeControllerProvider.future)
+            .timeout(const Duration(seconds: 3));
         expect(cached.requestProfile, DocumentRequestProfile.loggedIn);
         expect(cached.viewData.sections.last.items.first.todayPosts, 5);
         expect(cached.isRefreshing, isTrue);
+        expect(databaseOpens, 0);
         expect(sessions.readCurrent(), isNull);
         expect(container.read(authSessionControllerProvider).isLoading, isTrue);
         await Future<void>.delayed(Duration.zero);
