@@ -2,9 +2,55 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/comic/domain/services/comic_post_parsing_engine.dart';
 
 import 'deathpair_discovery_fixture.dart';
+import 'magical_girl_discovery_fixture.dart';
 
 void main() {
   group('ComicPostParsingEngine', () {
+    test(
+      'keeps a combined chapter link in the supplied nested numeric list',
+      () {
+        final result = ComicPostParsingEngine().parse(
+          messageHtml: magicalGirlPreviousChaptersHtml,
+        );
+
+        expect(
+          result.episodes.map((episode) => episode.tid),
+          magicalGirlPreviousChapterAnchors.map((chapter) => chapter.$1),
+        );
+        expect(result.episodes[1].titleRaw, '02-03');
+        expect(result.episodes[1].titleNormalized, '02-03');
+        expect(
+          result.episodes.every((episode) => episode.groupId != null),
+          isTrue,
+        );
+        expect(result.catalogLinks, isEmpty);
+      },
+    );
+
+    test(
+      'range semantics require the whole anchor label and a thread target',
+      () {
+        final result = ComicPostParsingEngine().parse(
+          messageHtml: '''
+<a href="thread-101-1-1.html">07～12</a>
+<a href="thread-102-1-1.html">20 — 22話</a>
+<a href="thread-108-1-1.html">07~12話上</a>
+<a href="thread-103-1-1.html">2026-07-22</a>
+<a href="thread-104-1-1.html">RX02-03</a>
+<a href="thread-105-1-1.html">讨论 02-03</a>
+<a href="thread-106-1-1.html">03-02</a>
+<a href="https://example.com/thread-107-1-1.html">02-03</a>
+''',
+        );
+
+        expect(result.episodes.map((episode) => episode.tid), [
+          '101',
+          '102',
+          '108',
+        ]);
+      },
+    );
+
     test('recognizes the 29 act links in the DEATHPAIR source post', () {
       final result = ComicPostParsingEngine().parse(
         messageHtml: deathpairPreviousChaptersHtml,

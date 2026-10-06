@@ -234,6 +234,14 @@ final List<ComicTitleParserCase> currentComicSubjectParserCases =
         expectedEpisodeLabel: '16~25话',
       ),
       const ComicTitleParserCase(
+        id: 'bare_chapter_range_maps_group_author_and_source_label',
+        rawTitle: '【星愿汉化组】【らる・ぶらん】魔法少女与前邪恶女干部 15-16',
+        expectedNormalizedTitle: '魔法少女与前邪恶女干部',
+        expectedTranslationGroup: '星愿汉化组',
+        expectedAuthor: 'らる・ぶらん',
+        expectedEpisodeLabel: '15-16',
+      ),
+      const ComicTitleParserCase(
         id: 'numbered_subtitle_then_position_marker',
         rawTitle: '【提灯喵汉化组】[柴田康平]和魔女的吸活 09 魔女和变容 后篇',
         expectedNormalizedTitle: '和魔女的吸活',

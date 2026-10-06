@@ -77,5 +77,16 @@ void main() {
         '番外',
       ]);
     });
+
+    test('sorts combined chapters by range start regardless of thread ids', () {
+      final sorted = merger.sort(const <ComicEpisodeLink>[
+        ComicEpisodeLink(url: 'thread-200-1-1.html', rawText: '04'),
+        ComicEpisodeLink(url: 'thread-900-1-1.html', rawText: '02-03'),
+        ComicEpisodeLink(url: 'thread-950-1-1.html', rawText: '02.5'),
+        ComicEpisodeLink(url: 'thread-100-1-1.html', rawText: '01'),
+      ]);
+
+      expect(sorted.map((link) => link.rawText), ['01', '02-03', '02.5', '04']);
+    });
   });
 }

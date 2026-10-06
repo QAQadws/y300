@@ -17,6 +17,7 @@ void main() {
         expect(result.authorPrefix, testCase.expectedAuthorPrefix);
         expect(result.episodeLabel, testCase.expectedEpisodeLabel);
         expect(result.chapterNumber, testCase.expectedChapterNumber);
+        expect(result.isChapterRange, testCase.expectedIsChapterRange);
         expect(
           result.possibleChapterNumbers,
           testCase.expectedPossibleChapterNumbers,

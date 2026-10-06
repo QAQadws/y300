@@ -6,6 +6,7 @@ class ComicTitleAnalysis {
     this.authorPrefix,
     this.episodeLabel,
     this.chapterNumber,
+    this.isChapterRange = false,
     this.possibleChapterNumbers = const <double>[],
   });
 
@@ -15,6 +16,9 @@ class ComicTitleAnalysis {
   final String? authorPrefix;
   final String? episodeLabel;
   final double? chapterNumber;
+
+  /// The parsed label denotes a range, rather than alternative chapter numbers.
+  final bool isChapterRange;
   final List<double> possibleChapterNumbers;
 
   static const ComicTitleAnalysis empty = ComicTitleAnalysis(

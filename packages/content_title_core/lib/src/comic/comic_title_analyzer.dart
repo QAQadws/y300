@@ -24,6 +24,7 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
   // 中文章节标记字符。Kotlin 源使用 `话話织回章节幕折更`；这里保留同样的集合，
   // 顺带兼容繁体 `話`，让 `第N织` / `19话` / `5幕` 都能识别。
   static const String _chapterUnitCharacters = '话話织回章节幕折更';
+  static const String _rangeSeparatorCharacters = '-~～〜－–—';
 
   // 特殊/位置标记关键词匹配。
   // 不限制前缀边界——后处理逻辑通过回溯吸收尾部数字/卷号前缀，
@@ -63,7 +64,7 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
   // 通过 lookbehind 排除前面紧贴 ASCII 数字/字母的情况，避免把版本号或尺寸误识别。
   static final RegExp _bareChapterLabelPattern = RegExp(
     '((?<![A-Za-z0-9])([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?)'
-    '(?:\\s*[~～-]\\s*([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?))?'
+    '(?:\\s*[$_rangeSeparatorCharacters]\\s*([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?))?'
     '\\s*[$_chapterUnitCharacters]\\s*'
     '(上篇|中篇|下篇|前篇|后篇|上|中|下|前|后)?\\s*[①②③④⑤⑥⑦⑧⑨]?)',
     caseSensitive: false,
@@ -80,6 +81,16 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
   static final RegExp _trailingNumberPattern = RegExp(
     '([${ComicTitleRules.numberTokenCharacters}]+(?:\\.[0-9]+)?)\\s*\$',
     caseSensitive: false,
+  );
+  static final RegExp _trailingNumberRangePattern = RegExp(
+    r'(\d+(?:\.\d+)?)\s*'
+    '[$_rangeSeparatorCharacters]'
+    r'\s*(\d+(?:\.\d+)?)\s*$',
+  );
+  static final RegExp _rangePrefixContinuationPattern = RegExp(
+    r'(?:[A-Za-z0-9.]|\d\s*'
+    '[$_rangeSeparatorCharacters]'
+    r'\s*)$',
   );
   static final RegExp _circledDigitPattern = RegExp(r'[①②③④⑤⑥⑦⑧⑨]');
   static final RegExp _leadingComiketPattern = RegExp(
@@ -121,6 +132,7 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
       authorPrefix: authorPrefix,
       episodeLabel: chapter.episodeLabel,
       chapterNumber: chapter.chapterNumber,
+      isChapterRange: chapter.isChapterRange,
       possibleChapterNumbers: chapter.possibleChapterNumbers,
     );
   }
@@ -185,7 +197,11 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
 
   String _cleanupBookName(String input) {
     var value = ComicTitleRules.trimOuterSeparators(input);
-    value = value.replaceAll(RegExp(r'[\s_\-:：]+\d+$'), '');
+    // Range extraction owns both endpoints; do not strip only the final one
+    // from an unclassified title or an anchor consisting solely of a range.
+    if (!_trailingNumberRangePattern.hasMatch(value)) {
+      value = value.replaceAll(RegExp(r'[\s_\-:：]+\d+$'), '');
+    }
     value = value.replaceAll(RegExp(r'[\s_\-:：]+$'), '');
     value = value.replaceAll(RegExp(r'[!！?？,，.。．、…]+$'), '');
     return value.trim();
@@ -369,6 +385,7 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
             ? _canonicalizeChapterLabel(base, part, label)
             : label,
         chapterNumber: adjusted,
+        isChapterRange: base != null && endNumber != null && endNumber > base,
         possibleChapterNumbers: possibleNumbers,
       );
     }
@@ -390,6 +407,28 @@ class PetitComicTitleAnalyzer implements ComicTitleAnalyzer {
         chapterNumber: episodeNumber,
         possibleChapterNumbers: possibleNumbers,
       );
+    }
+
+    final rangeMatch = _trailingNumberRangePattern.firstMatch(input);
+    if (rangeMatch != null) {
+      final startNumber = _numberParser.parseNumber(rangeMatch.group(1)!);
+      final endNumber = _numberParser.parseNumber(rangeMatch.group(2)!);
+      final prefix = input.substring(0, rangeMatch.start);
+      if (startNumber != null &&
+          endNumber != null &&
+          endNumber > startNumber &&
+          !_rangePrefixContinuationPattern.hasMatch(prefix)) {
+        return _ChapterExtraction(
+          bookSegment: prefix,
+          episodeLabel: rangeMatch.group(0)!.trim(),
+          chapterNumber: startNumber,
+          isChapterRange: true,
+          possibleChapterNumbers: [startNumber, endNumber],
+        );
+      }
+      // A date, identifier or reversed span cannot be reinterpreted as a
+      // standalone chapter by falling through to its final numeric token.
+      return _ChapterExtraction(bookSegment: input);
     }
 
     final trailingMatch = _standaloneTrailingNumberMatch(input);
@@ -691,11 +730,13 @@ class _ChapterExtraction {
     required this.bookSegment,
     this.episodeLabel,
     this.chapterNumber,
+    this.isChapterRange = false,
     this.possibleChapterNumbers = const <double>[],
   });
 
   final String bookSegment;
   final String? episodeLabel;
   final double? chapterNumber;
+  final bool isChapterRange;
   final List<double> possibleChapterNumbers;
 }

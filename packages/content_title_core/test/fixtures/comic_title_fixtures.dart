@@ -8,6 +8,7 @@ class ComicTitleAnalyzerCase {
     this.expectedAuthorPrefix,
     this.expectedEpisodeLabel,
     this.expectedChapterNumber,
+    this.expectedIsChapterRange = false,
     this.expectedPossibleChapterNumbers = const <double>[],
   }) : expectedRawTitle = expectedRawTitle ?? rawTitle;
 
@@ -19,6 +20,7 @@ class ComicTitleAnalyzerCase {
   final String? expectedAuthorPrefix;
   final String? expectedEpisodeLabel;
   final double? expectedChapterNumber;
+  final bool expectedIsChapterRange;
   final List<double> expectedPossibleChapterNumbers;
 }
 
@@ -473,9 +475,83 @@ final List<ComicTitleAnalyzerCase> stageOneComicTitleAnalyzerCases =
         expectedSearchKeyword: '大崎与小森',
         expectedAuthorPrefix: '犬山あむ',
         expectedEpisodeLabel: '16~25话',
+        expectedIsChapterRange: true,
         expectedChapterNumber: 16,
         expectedPossibleChapterNumbers: <double>[16, 25],
       ),
+      const ComicTitleAnalyzerCase(
+        id: 'bare_range_label_keeps_both_endpoints',
+        rawTitle: '02-03',
+        expectedCleanBookName: '02-03',
+        expectedSearchKeyword: '02-03',
+        expectedEpisodeLabel: '02-03',
+        expectedIsChapterRange: true,
+        expectedChapterNumber: 2,
+        expectedPossibleChapterNumbers: <double>[2, 3],
+      ),
+      const ComicTitleAnalyzerCase(
+        id: 'real_sample_trailing_range_without_chapter_unit',
+        rawTitle: '【星愿汉化组】【らる・ぶらん】魔法少女与前邪恶女干部 15-16',
+        expectedCleanBookName: '魔法少女与前邪恶女干部',
+        expectedSearchKeyword: '魔法少女与前邪恶女干部',
+        expectedAuthorPrefix: 'らる・ぶらん',
+        expectedEpisodeLabel: '15-16',
+        expectedIsChapterRange: true,
+        expectedChapterNumber: 15,
+        expectedPossibleChapterNumbers: <double>[15, 16],
+      ),
+      for (final separator in <(String, String)>[
+        ('-', '-'),
+        ('~', '~'),
+        ('～', '~'),
+        ('－', '－'),
+        ('–', '–'),
+        ('—', '—'),
+        ('〜', '〜'),
+      ])
+        for (final unit in <String>['', '話'])
+          ComicTitleAnalyzerCase(
+            id: 'range_separator_${separator.$1}_unit_$unit',
+            rawTitle: '漫画标题 ０７ ${separator.$1} １２$unit',
+            expectedCleanBookName: '漫画标题',
+            expectedSearchKeyword: '漫画标题',
+            expectedEpisodeLabel: '07 ${separator.$2} 12$unit',
+            expectedIsChapterRange: true,
+            expectedChapterNumber: 7,
+            expectedPossibleChapterNumbers: <double>[7, 12],
+          ),
+      const ComicTitleAnalyzerCase(
+        id: 'decimal_range_attached_to_cjk_book_name',
+        rawTitle: '漫画标题2.5~3.5',
+        expectedCleanBookName: '漫画标题',
+        expectedSearchKeyword: '漫画标题',
+        expectedEpisodeLabel: '2.5~3.5',
+        expectedIsChapterRange: true,
+        expectedChapterNumber: 2.5,
+        expectedPossibleChapterNumbers: <double>[2.5, 3.5],
+      ),
+      const ComicTitleAnalyzerCase(
+        id: 'range_semantics_are_independent_of_modifier_number_alternatives',
+        rawTitle: '漫画标题 07~12話上',
+        expectedCleanBookName: '漫画标题',
+        expectedSearchKeyword: '漫画标题',
+        expectedEpisodeLabel: '07~12話上',
+        expectedIsChapterRange: true,
+        expectedChapterNumber: 7.1,
+        expectedPossibleChapterNumbers: <double>[7.1, 12, 7],
+      ),
+      for (final invalid in <String>[
+        '03-02',
+        '2026-07-22',
+        'RX02-03',
+        '01-02-03',
+      ])
+        ComicTitleAnalyzerCase(
+          id: 'does_not_split_invalid_range_$invalid',
+          rawTitle: '漫画标题 $invalid',
+          expectedCleanBookName: '漫画标题 $invalid',
+          expectedSearchKeyword: '漫画标题 $invalid',
+        ),
       const ComicTitleAnalyzerCase(
         id: 'real_sample_numbered_subtitle_then_position_marker',
         rawTitle: '【提灯喵汉化组】[柴田康平]和魔女的吸活 09 魔女和变容 后篇',

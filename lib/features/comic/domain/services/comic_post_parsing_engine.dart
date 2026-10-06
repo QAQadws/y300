@@ -1,5 +1,7 @@
 import 'dart:collection';
 
+import 'package:content_title_core/content_title_core.dart';
+
 import 'package:y300/features/comic/domain/models/comic_parsing_debug_models.dart';
 import 'package:y300/features/comic/domain/models/comic_post_parsing_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -30,6 +32,7 @@ class ComicPostParsingEngine {
     r'(^\d+(\.\d+)?\s*[话話幕].*|^\d+(\.\d+)?$|第\s*.+\s*[话話幕])',
     caseSensitive: false,
   );
+  static const _titleAnalyzer = PetitComicTitleAnalyzer();
   static final RegExp _specialPattern = RegExp(
     r'(特典|附录|番外|终幕|終幕)',
     caseSensitive: false,
@@ -131,7 +134,7 @@ class ComicPostParsingEngine {
         normalizedUrl: anchor.normalizedUrl,
       );
       final features = ParsedAnchorFeatures(
-        containsOrdinal: _ordinalPattern.hasMatch(text),
+        containsOrdinal: _ordinalPattern.hasMatch(text) || _isRangeLabel(text),
         containsSpecial: _specialPattern.hasMatch(text),
         containsCatalog: containsCatalog,
       );
@@ -153,6 +156,14 @@ class ComicPostParsingEngine {
   bool _isCatalogAnchor({required String text, required String normalizedUrl}) {
     return _catalogTextPattern.hasMatch(text.trim()) &&
         _references.isTagCatalogUrl(normalizedUrl);
+  }
+
+  bool _isRangeLabel(String text) {
+    final normalized = ComicTitleRules.normalizeForMatching(text);
+    final analysis = _titleAnalyzer.analyze(normalized);
+    // Only a complete chapter label is evidence here; a discussion title
+    // ending in numbers must not become an episode merely by sharing a suffix.
+    return analysis.isChapterRange && analysis.episodeLabel == normalized;
   }
 
   List<int?> _detectSequentialGroups(List<ParsedAnchor> anchors) {

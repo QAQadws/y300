@@ -1,3 +1,4 @@
+import 'package:content_title_core/content_title_core.dart';
 import 'package:y300/features/comic/domain/models/comic_models.dart';
 import 'package:y300/features/comic/domain/services/comic_search_candidate_ranker.dart';
 import 'package:y300/features/comic/domain/services/comic_subject_parser.dart';
@@ -196,6 +197,17 @@ class _EpisodeSortKey implements Comparable<_EpisodeSortKey> {
     }
     final match = _episodePattern.firstMatch(title);
     if (match == null) {
+      final analysis = const PetitComicTitleAnalyzer().analyze(title);
+      if (analysis.isChapterRange &&
+          analysis.chapterNumber != null &&
+          analysis.episodeLabel ==
+              ComicTitleRules.normalizeForMatching(title)) {
+        return _EpisodeSortKey(
+          group: 0,
+          number: analysis.chapterNumber!,
+          suffixRank: 10,
+        );
+      }
       return null;
     }
     final number = double.tryParse(match.group(1) ?? '');

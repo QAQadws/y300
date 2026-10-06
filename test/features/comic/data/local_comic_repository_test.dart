@@ -16,6 +16,7 @@ import '../../../test_support/unavailable_library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 
 import '../domain/services/deathpair_discovery_fixture.dart';
+import '../domain/services/magical_girl_discovery_fixture.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -512,6 +513,61 @@ void main() {
         );
       },
     );
+
+    test('favorite ingest preserves both combined chapter entries', () async {
+      const comicId = 'yamibo:$magicalGirlSourceTid';
+      final service = RepositoryComicFavoriteIngestService(
+        repository: repository,
+        parserService: HtmlComicParserService(),
+        subjectParser: const RuleBasedComicSubjectParser(),
+        aggregationService: const ComicPostAggregationService(),
+      );
+      await service.upsertFromThreadDetail(
+        detail: ThreadDetailData(
+          tid: magicalGirlSourceTid,
+          fid: '30',
+          typeid: '69',
+          subject: magicalGirlSourceSubject,
+          author: 'fixture',
+          replies: 0,
+          views: 1,
+          currentPage: 1,
+          perPage: 20,
+          posts: [
+            ThreadPost(
+              pid: '1',
+              author: 'fixture',
+              authorId: '1',
+              message:
+                  '$magicalGirlPreviousChaptersHtml'
+                  '<img src="https://img.test/source-15-16.jpg">',
+              number: 1,
+              isFirst: true,
+              dateline: '',
+            ),
+          ],
+        ),
+        favoriteAddedAt: DateTime(2026, 10, 6),
+      );
+
+      final episodes = await repository.getComicEpisodes(
+        comicId: comicId,
+        descending: false,
+      );
+      expect(episodes.map((episode) => episode.sourceTid), [
+        ...magicalGirlPreviousChapterAnchors.map((chapter) => chapter.$1),
+        magicalGirlSourceTid,
+      ]);
+      expect(episodes[1].episodeTitle, '02-03');
+      expect(episodes[1].orderIndex, 1);
+      expect(episodes.last.episodeTitle, '15-16');
+      expect(
+        (await repository.getEpisodeImages(
+          episodeId: '$comicId:$magicalGirlSourceTid',
+        )).single.imageUrl,
+        'https://img.test/source-15-16.jpg',
+      );
+    });
 
     test('manual ingest keeps an already linked source chapter once', () async {
       final parsed = HtmlComicParserService().parse(

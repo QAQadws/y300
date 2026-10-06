@@ -28,6 +28,10 @@ final title = sanitizer.sanitize('[Author] Novel Title Vol.2');
   analyzer 的 `grammar` / `numberParser` 命名构造参数及 const 用法保持。
 - 多语言章节、特殊标签、候选章节号顺序及 `extractTidFromUrl` 的宽容字符串提取保持。
   TID 提取只提供现有辅助能力，不验证 URL 的来源或请求权限。
+- 章节范围保留完整 `episodeLabel`，`chapterNumber` 取范围起点并沿用分段修饰；
+  `isChapterRange` 显式区分范围与候选数字，不通过候选号数量推断。裸范围和带章节单位
+  的范围共用分隔符规则，日期、型号及无效裸范围不回退为最后一个数字。App 正文识别
+  要求整个链接文字都是范围标签，合并仍按 TID 去重，一个帖子保留一个章节入口。
 
 ## 小说策略
 
