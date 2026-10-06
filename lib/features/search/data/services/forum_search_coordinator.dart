@@ -30,6 +30,8 @@ abstract interface class ForumSearchCoordinator {
   Future<ForumSearchExecution> search(
     ForumSearchQuery query, {
     bool enforceRateLimit = true,
+    // Background work stays queued through cooldown instead of returning early.
+    bool waitForRateLimit = false,
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   });
 
@@ -101,10 +103,11 @@ final class ForumSearchReadScheduler
   Future<ForumSearchExecution> search(
     ForumSearchQuery query, {
     bool enforceRateLimit = true,
+    bool waitForRateLimit = false,
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     final normalized = query.normalized();
-    if (enforceRateLimit) {
+    if (enforceRateLimit && !waitForRateLimit) {
       final limit = await _rateLimiter.check();
       if (!limit.isAllowed) {
         return ForumSearchExecution.rateLimited(limit.retryAfter);
@@ -118,7 +121,10 @@ final class ForumSearchReadScheduler
       _running = true;
       _publishSnapshot();
       try {
-        await _waitForCadence();
+        await _waitForCadence(
+          keyword: normalized.keyword,
+          waitForRateLimit: enforceRateLimit && waitForRateLimit,
+        );
         _lastStartedAt = _nowProvider();
         final result = await _repository.load(
           normalized,
@@ -151,14 +157,40 @@ final class ForumSearchReadScheduler
     return ForumSearchExecution.read(result);
   }
 
-  Future<void> _waitForCadence() async {
-    final lastStartedAt = _lastStartedAt;
-    if (lastStartedAt == null) {
-      return;
-    }
-    final elapsed = _nowProvider().difference(lastStartedAt);
-    if (elapsed < interval) {
-      await _delay(interval - elapsed);
+  Future<void> _waitForCadence({
+    required String keyword,
+    required bool waitForRateLimit,
+  }) async {
+    while (true) {
+      var remaining = Duration.zero;
+      final lastStartedAt = _lastStartedAt;
+      if (lastStartedAt != null) {
+        final elapsed = _nowProvider().difference(lastStartedAt);
+        if (elapsed < interval) {
+          remaining = interval - elapsed;
+        }
+      }
+      if (waitForRateLimit) {
+        // Check inside the serialized job, after earlier searches have marked
+        // their cooldown. This also preserves cooldown across app restarts.
+        final limit = await _rateLimiter.check();
+        if (!limit.isAllowed && limit.retryAfter > remaining) {
+          remaining = limit.retryAfter;
+        }
+      }
+      if (remaining <= Duration.zero) {
+        return;
+      }
+      if (!kReleaseMode) {
+        debugPrint(
+          '[ForumSearchQueue] wait keyword=$keyword '
+          'remainingMs=${remaining.inMilliseconds}',
+        );
+      }
+      await _delay(remaining);
+      if (!waitForRateLimit) {
+        return;
+      }
     }
   }
 

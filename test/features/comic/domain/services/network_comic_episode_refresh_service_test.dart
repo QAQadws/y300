@@ -458,34 +458,41 @@ void main() {
       expect(outcome.links, hasLength(4));
     });
 
-    test('returns empty when search is rate limited', () async {
-      final discovery = _FakeDiscoveryService(
-        byTid: <String, List<ComicEpisodeLink>>{
-          '100': const <ComicEpisodeLink>[],
-        },
-      );
-      final searchCoordinator = _FakeForumSearchCoordinator(
-        response: const SearchTestResponse(
-          items: <SearchTestTopic>[],
-          rateLimited: true,
-          retryAfter: Duration(seconds: 6),
-        ),
-      );
-      final service = _buildService(
-        discoveryService: discovery,
-        searchCoordinator: searchCoordinator,
-        subjectParser: const RuleBasedComicSubjectParser(),
-        threadSeedFetcher: (tid) async {
-          return ThreadSeed(
-            subject: const <String, String>{'100': '【提黄灯喵汉化组】百合情结 第14话'}[tid]!,
-          );
-        },
-      );
+    test(
+      'does not treat a rejected search as a completed empty result',
+      () async {
+        final discovery = _FakeDiscoveryService(
+          byTid: <String, List<ComicEpisodeLink>>{
+            '100': const <ComicEpisodeLink>[],
+          },
+        );
+        final searchCoordinator = _FakeForumSearchCoordinator(
+          response: const SearchTestResponse(
+            items: <SearchTestTopic>[],
+            rateLimited: true,
+            retryAfter: Duration(seconds: 6),
+          ),
+        );
+        final service = _buildService(
+          discoveryService: discovery,
+          searchCoordinator: searchCoordinator,
+          subjectParser: const RuleBasedComicSubjectParser(),
+          threadSeedFetcher: (tid) async {
+            return ThreadSeed(
+              subject: const <String, String>{
+                '100': '【提黄灯喵汉化组】百合情结 第14话',
+              }[tid]!,
+            );
+          },
+        );
 
-      final links = await service.fetchEpisodeLinksFromTid('100');
-
-      expect(links, isEmpty);
-    });
+        await expectLater(
+          service.fetchEpisodeLinksFromTid('100'),
+          throwsStateError,
+        );
+        expect(searchCoordinator.waitPolicies, [true]);
+      },
+    );
 
     test('trusts server matches without rescoring titles', () async {
       final discovery = _FakeDiscoveryService(
@@ -1924,15 +1931,18 @@ class _FakeForumSearchCoordinator implements ForumSearchCoordinator {
   final SearchTestResponse _response;
   final List<String> calledKeywords = <String>[];
   final List<ForumSearchQuery> queries = <ForumSearchQuery>[];
+  final List<bool> waitPolicies = <bool>[];
 
   @override
   Future<ForumSearchExecution> search(
     ForumSearchQuery query, {
     bool enforceRateLimit = true,
+    bool waitForRateLimit = false,
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     calledKeywords.add(query.normalizedKeyword);
     queries.add(query);
+    waitPolicies.add(waitForRateLimit);
     return _execution(query);
   }
 
@@ -2023,6 +2033,7 @@ class _SequencedForumSearchCoordinator implements ForumSearchCoordinator {
   Future<ForumSearchExecution> search(
     ForumSearchQuery query, {
     bool enforceRateLimit = true,
+    bool waitForRateLimit = false,
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     calledKeywords.add(query.normalizedKeyword);

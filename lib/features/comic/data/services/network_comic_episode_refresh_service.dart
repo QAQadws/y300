@@ -283,23 +283,14 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
       // 搜索本身由 ForumSearchReadScheduler 持有 ~10.5s 节流 + 等待队列；这里
       // 不再叠加 favorite governor 槽，让搜索请求只受调度器约束，并通过队列
       // 进度向通知栏汇报。
-      final search = await _searchForComic(keyword.value);
+      final topics = await _searchForComic(keyword.value);
       usedSearch = true;
-      if (search.rateLimited || search.topics.isEmpty) {
-        _logRefresh(
-          request,
-          'keyword=${keyword.value} candidates=0 rateLimited=${search.rateLimited}',
-        );
-        if (search.rateLimited) {
-          return const _SearchFallbackResult(
-            links: <ComicEpisodeLink>[],
-            usedSearch: true,
-          );
-        }
+      if (topics.isEmpty) {
+        _logRefresh(request, 'keyword=${keyword.value} candidates=0');
         continue;
       }
 
-      final topicCandidates = _candidateRanker.rank(items: search.topics);
+      final topicCandidates = _candidateRanker.rank(items: topics);
       _logRefresh(
         request,
         'keyword=${keyword.value} candidates=${topicCandidates.length} '
@@ -362,7 +353,7 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
     );
   }
 
-  Future<_ComicSearchExecution> _searchForComic(String keyword) async {
+  Future<List<ForumSearchTopicSummary>> _searchForComic(String keyword) async {
     final execution = await _searchService.search(
       ForumSearchQuery(
         keyword: keyword,
@@ -370,13 +361,16 @@ class NetworkComicEpisodeRefreshService implements ComicEpisodeRefreshService {
         forumId: '30',
       ),
       enforceRateLimit: true,
+      waitForRateLimit: true,
     );
     if (execution.isRateLimited) {
-      return const _ComicSearchExecution.rateLimited();
+      // A rejected read is not an empty search result. Let the queue retain it
+      // for retry if an alternate coordinator cannot honor the waiting policy.
+      throw StateError('Forum search deferred by rate limit');
     }
     final result = execution.readResult!;
     return result.when(
-      success: (data, _, _) => _ComicSearchExecution(topics: data.topics),
+      success: (data, _, _) => data.topics,
       failure: (failure) => throw StateError(
         'Forum search failed: ${failure.code ?? failure.kind.name}',
       ),
@@ -483,16 +477,4 @@ class _SearchFallbackResult {
   final List<ComicEpisodeLink> links;
   final bool usedSearch;
   final String? catalogUrl;
-}
-
-final class _ComicSearchExecution {
-  const _ComicSearchExecution({this.topics = const <ForumSearchTopicSummary>[]})
-    : rateLimited = false;
-
-  const _ComicSearchExecution.rateLimited()
-    : topics = const <ForumSearchTopicSummary>[],
-      rateLimited = true;
-
-  final List<ForumSearchTopicSummary> topics;
-  final bool rateLimited;
 }

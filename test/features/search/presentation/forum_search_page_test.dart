@@ -126,6 +126,7 @@ final class _FakeForumSearchCoordinator
   Future<ForumSearchExecution> search(
     ForumSearchQuery query, {
     bool enforceRateLimit = true,
+    bool waitForRateLimit = false,
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     queries.add(query);

@@ -46,6 +46,140 @@ void main() {
     });
 
     test(
+      'interactive search reports cooldown without entering the queue',
+      () async {
+        var now = DateTime(2026, 10, 6, 12);
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final preferences = await SharedPreferences.getInstance();
+        final repository = _RecordingForumSearchRepository(
+          nowProvider: () => now,
+        );
+        final scheduler = ForumSearchReadScheduler(
+          repository: repository,
+          rateLimiter: SearchRateLimiter(
+            sharedPreferences: preferences,
+            nowProvider: () => now,
+          ),
+          nowProvider: () => now,
+          delay: (_) async =>
+              fail('Interactive cooldown must return immediately'),
+        );
+        addTearDown(scheduler.dispose);
+
+        await scheduler.search(const ForumSearchQuery(keyword: 'alpha'));
+        now = now.add(const Duration(seconds: 4));
+        final blocked = await scheduler.search(
+          const ForumSearchQuery(keyword: 'beta'),
+        );
+
+        expect(blocked.retryAfter, const Duration(milliseconds: 6500));
+        expect(repository.startedKeywords, ['alpha']);
+        expect(scheduler.snapshot.value.active, isFalse);
+      },
+    );
+
+    test(
+      'queued searches wait for the preceding completed search cooldown',
+      () async {
+        var now = DateTime(2026, 10, 6, 12);
+        final delays = <Duration>[];
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final preferences = await SharedPreferences.getInstance();
+        final repository = _RecordingForumSearchRepository(
+          nowProvider: () => now,
+          onLoad: () async {
+            now = now.add(const Duration(seconds: 2));
+          },
+        );
+        final scheduler = ForumSearchReadScheduler(
+          repository: repository,
+          rateLimiter: SearchRateLimiter(
+            sharedPreferences: preferences,
+            nowProvider: () => now,
+          ),
+          nowProvider: () => now,
+          delay: (duration) async {
+            delays.add(duration);
+            now = now.add(duration);
+          },
+        );
+        addTearDown(scheduler.dispose);
+
+        final results = await Future.wait([
+          for (final keyword in ['alpha', 'beta', 'gamma'])
+            scheduler.search(
+              ForumSearchQuery(keyword: keyword),
+              waitForRateLimit: true,
+            ),
+        ]);
+
+        expect(
+          results.every((result) => result.readResult?.isSuccess ?? false),
+          isTrue,
+        );
+        expect(repository.startedKeywords, ['alpha', 'beta', 'gamma']);
+        expect(delays, List.filled(2, SearchRateLimiter.defaultCooldown));
+        for (var index = 1; index < repository.startedAt.length; index++) {
+          expect(
+            repository.startedAt[index].difference(
+              repository.startedAt[index - 1],
+            ),
+            const Duration(milliseconds: 12500),
+          );
+        }
+        expect(scheduler.snapshot.value.active, isFalse);
+      },
+    );
+
+    test(
+      'new scheduler honors remaining persisted cooldown for queued work',
+      () async {
+        var now = DateTime(2026, 10, 6, 12);
+        final delays = <Duration>[];
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final preferences = await SharedPreferences.getInstance();
+        final rateLimiter = SearchRateLimiter(
+          sharedPreferences: preferences,
+          nowProvider: () => now,
+        );
+        final repository = _RecordingForumSearchRepository(
+          nowProvider: () => now,
+        );
+        final firstScheduler = ForumSearchReadScheduler(
+          repository: repository,
+          rateLimiter: rateLimiter,
+          nowProvider: () => now,
+        );
+        await firstScheduler.search(const ForumSearchQuery(keyword: 'alpha'));
+        firstScheduler.dispose();
+        now = now.add(const Duration(seconds: 4));
+        final restoredScheduler = ForumSearchReadScheduler(
+          repository: repository,
+          rateLimiter: rateLimiter,
+          nowProvider: () => now,
+          delay: (duration) async {
+            delays.add(duration);
+            now = now.add(duration);
+          },
+        );
+        addTearDown(restoredScheduler.dispose);
+
+        final result = await restoredScheduler.search(
+          const ForumSearchQuery(keyword: 'beta'),
+          waitForRateLimit: true,
+        );
+
+        expect(result.readResult?.isSuccess, isTrue);
+        expect(delays, [const Duration(milliseconds: 6500)]);
+        expect(repository.startedKeywords, ['alpha', 'beta']);
+        expect(
+          repository.startedAt[1].difference(repository.startedAt[0]),
+          SearchRateLimiter.defaultCooldown,
+        );
+      },
+    );
+
+    test(
       'loadNextPage delegates the opaque page identity to the repository',
       () async {
         SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -70,10 +204,13 @@ void main() {
 }
 
 final class _RecordingForumSearchRepository implements ForumSearchRepository {
-  _RecordingForumSearchRepository({DateTime Function()? nowProvider})
-    : _nowProvider = nowProvider ?? DateTime.now;
+  _RecordingForumSearchRepository({
+    DateTime Function()? nowProvider,
+    this.onLoad,
+  }) : _nowProvider = nowProvider ?? DateTime.now;
 
   final DateTime Function() _nowProvider;
+  final Future<void> Function()? onLoad;
   final List<String> startedKeywords = <String>[];
   final List<DateTime> startedAt = <DateTime>[];
   int nextPageCalls = 0;
@@ -85,6 +222,7 @@ final class _RecordingForumSearchRepository implements ForumSearchRepository {
   }) async {
     startedKeywords.add(query.normalizedKeyword);
     startedAt.add(_nowProvider());
+    await onLoad?.call();
     return _success(query, currentPage: 1);
   }
 
