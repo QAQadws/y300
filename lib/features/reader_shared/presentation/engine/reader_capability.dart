@@ -225,7 +225,7 @@ abstract class ReaderCapability {
   /// 内容区顶部提示条（漫画：离线/错误提示；帖子图片：null）。
   String? topHint(ReaderEngineContext context) => null;
 
-  /// 退出阅读器时回传给上一页的结果（漫画：阅读进度/已读集合；帖子图片：null）。
+  /// 退出阅读器时回传的业务结果（漫画进度/已读集合；帖子图片的临时位置）。
   Object? get exitResult => null;
 
   /// 进入垂直模式时的初始滚动偏移（漫画用于恢复阅读进度）；null 表示从顶部开始。
@@ -245,7 +245,7 @@ abstract class ReaderCapability {
     onScrollProgress(index: index, offset: offset);
   }
 
-  /// 退出阅读器时回调（漫画用于 flush 阅读进度；帖子图片可空实现）。
+  /// 退出前回调：漫画 flush 进度；帖子图片可等待来源正文定位完成。
   Future<void> onExit() async {}
 
   /// Optional business recovery that runs before a failed image is retried.

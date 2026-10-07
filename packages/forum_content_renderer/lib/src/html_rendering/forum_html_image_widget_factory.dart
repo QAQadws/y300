@@ -11,11 +11,15 @@ import '../contracts/forum_html_image_predecode_host.dart';
 import 'forum_html_prepared_render_document.dart';
 import 'forum_html_render_callbacks.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
+import '../services/forum_html_image_anchor_controller.dart';
 
 typedef ForumHtmlImageFactoryBinding = ({
   ForumHtmlImageHost? host,
   ForumHtmlImageViewportCoordinator? viewport,
   bool handlesImageTap,
+  ForumHtmlImageAnchorController? imageAnchors,
+  Object? imageAnchorRevision,
+  String sourceId,
 });
 
 Widget _clipMedia(Widget child) => ClipRRect(
@@ -106,6 +110,7 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
           element: tree.element,
           readableIndex: readableIndex,
           isSticker: isSticker,
+          binding: binding,
         );
       },
     );
@@ -124,6 +129,7 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
         element: tree.element,
         readableIndex: _readableIndex(tree),
         isSticker: _isSticker(urlFull(src.url) ?? src.url),
+        binding: binding,
       ),
     );
   }
@@ -136,9 +142,10 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
     required html_dom.Element element,
     required int? readableIndex,
     required bool isSticker,
+    required ForumHtmlImageFactoryBinding binding,
   }) {
     final callback = onTapImageRequest;
-    return GestureDetector(
+    final gesture = GestureDetector(
       key: readableIndex == null
           ? null
           : Key(
@@ -161,6 +168,18 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
               ),
             ),
       child: child,
+    );
+    final anchors = binding.imageAnchors;
+    if (image == null || readableIndex == null || isSticker) {
+      return gesture;
+    }
+    return ForumHtmlImageAnchor(
+      controller: anchors,
+      sourceId: binding.sourceId,
+      index: readableIndex,
+      cacheKey: image.cacheKey,
+      url: image.sourceUrl,
+      child: gesture,
     );
   }
 

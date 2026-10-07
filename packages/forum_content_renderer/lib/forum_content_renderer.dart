@@ -41,3 +41,5 @@ export 'src/html_rendering/widgets/forum_collapse_block.dart';
 export 'src/services/forum_html_body_presentation.dart';
 export 'src/services/forum_html_image_viewport_coordinator.dart';
 export 'src/services/forum_html_image_predecode_policy.dart';
+export 'src/services/forum_html_image_anchor_controller.dart'
+    show ForumHtmlImageAnchorController;

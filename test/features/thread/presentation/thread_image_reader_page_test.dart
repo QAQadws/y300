@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:continuous_image_geometry/continuous_image_geometry.dart';
@@ -17,6 +18,7 @@ import 'package:y300/features/reader_shared/presentation/continuous_image/contin
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/thread_image_reader_exit_result.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -25,6 +27,184 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'reader_pref_mode': 'vertical',
     });
+  });
+
+  for (final systemBack in <bool>[false, true]) {
+    final exit = systemBack ? 'system' : 'toolbar';
+    testWidgets(
+      '$exit back returns the last read image after backward reading',
+      (tester) async {
+        final route = await _pumpReaderRoute(tester);
+        await _tapReaderZone(tester, const Key('shared-reader-right-tap-zone'));
+        await _tapReaderZone(tester, const Key('shared-reader-right-tap-zone'));
+        await _tapReaderZone(tester, const Key('shared-reader-left-tap-zone'));
+        expect(_pageController(tester).page, closeTo(3, 0.01));
+        if (systemBack) {
+          await tester.binding.handlePopRoute();
+        } else {
+          await _openReaderMenu(tester);
+          await tester.tap(
+            find.byKey(const Key('shared-reader-top-back-button')),
+          );
+        }
+        await _pumpReaderUiTransition(tester);
+        final result = await route.result;
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(result?.tid, '100');
+        expect(result?.pid, 'p1');
+        expect(result?.indexInPost, 3);
+        expect(result?.cacheKey, 'thread/inline/page-4');
+        expect(
+          result?.url,
+          'https://bbs.yamibo.com/data/attachment/forum/page-4.jpg',
+        );
+        expect(find.byType(ThreadImageReaderPage), findsNothing);
+      },
+    );
+  }
+
+  testWidgets('returning to the opening image preserves the body position', (
+    tester,
+  ) async {
+    final route = await _pumpReaderRoute(tester);
+    await _tapReaderZone(tester, const Key('shared-reader-right-tap-zone'));
+    await _tapReaderZone(tester, const Key('shared-reader-left-tap-zone'));
+    await tester.binding.handlePopRoute();
+    await _pumpReaderUiTransition(tester);
+    expect(await route.result, isNull);
+  });
+
+  testWidgets('opening a reader without navigation reports no return target', (
+    tester,
+  ) async {
+    final route = await _pumpReaderRoute(tester);
+    await tester.binding.handlePopRoute();
+    await _pumpReaderUiTransition(tester);
+    expect(await route.result, isNull);
+  });
+
+  testWidgets('vertical initial viewport and menu interaction keep the body', (
+    tester,
+  ) async {
+    final route = await _pumpReaderRoute(
+      tester,
+      mode: 'vertical',
+      request: _request(count: 10),
+    );
+    await _openReaderMenu(tester);
+    await tester.binding.handlePopRoute();
+    await _pumpReaderUiTransition(tester);
+    expect(await route.result, isNull);
+  });
+
+  testWidgets(
+    'vertical dragging returns the current image shown by the reader',
+    (tester) async {
+      final route = await _pumpReaderRoute(
+        tester,
+        mode: 'vertical',
+        request: _request(count: 10),
+      );
+      await tester.drag(
+        find.byKey(const Key('thread-image-reader-list')),
+        const Offset(0, -1300),
+      );
+      await _pumpReaderUiTransition(tester);
+      await _openReaderMenu(tester);
+      final currentPage = int.parse(
+        tester
+            .widget<Text>(find.byKey(const Key('shared-reader-top-subtitle')))
+            .data!
+            .split(' / ')
+            .first,
+      );
+      expect(currentPage, greaterThan(1));
+      await tester.binding.handlePopRoute();
+      await _pumpReaderUiTransition(tester);
+      expect((await route.result)?.indexInPost, currentPage - 1);
+    },
+  );
+
+  testWidgets(
+    'system back prepares the body before popping and ignores repeats',
+    (tester) async {
+      final gate = Completer<void>();
+      var preparations = 0;
+      final route = await _pumpReaderRoute(
+        tester,
+        onBeforeExit: (_) async {
+          preparations++;
+          await gate.future;
+        },
+      );
+      await _tapReaderZone(tester, const Key('shared-reader-right-tap-zone'));
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(preparations, 1);
+      expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(preparations, 1);
+      expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+      gate.complete();
+      await _pumpReaderUiTransition(tester);
+      expect((await route.result)?.indexInPost, 3);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(ThreadImageReaderPage), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'repeated toolbar back awaits preparation without popping parent',
+    (tester) async {
+      final gate = Completer<void>();
+      var preparations = 0;
+      final route = await _pumpReaderRoute(
+        tester,
+        onBeforeExit: (_) async {
+          preparations++;
+          await gate.future;
+        },
+      );
+      await _tapReaderZone(tester, const Key('shared-reader-right-tap-zone'));
+      await _openReaderMenu(tester);
+      final back = find.byKey(const Key('shared-reader-top-back-button'));
+      await tester.tap(back);
+      await tester.pump();
+      await tester.tap(back);
+      await tester.pump();
+      expect(preparations, 1);
+      expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+      gate.complete();
+      await _pumpReaderUiTransition(tester);
+      expect((await route.result)?.indexInPost, 3);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(ThreadImageReaderPage), findsNothing);
+      expect(find.byType(Scaffold), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('localization rebuild preserves engine and return progress', (
+    tester,
+  ) async {
+    final locale = ValueNotifier(const Locale('zh'));
+    addTearDown(locale.dispose);
+    final route = await _pumpReaderRoute(tester, locale: locale);
+    final engine = tester.element(
+      find.byKey(const Key('thread-image-reader-engine')),
+    );
+    await _tapReaderZone(tester, const Key('shared-reader-right-tap-zone'));
+    locale.value = const Locale('en');
+    await _pumpReaderUiTransition(tester);
+    expect(
+      tester.element(find.byKey(const Key('thread-image-reader-engine'))),
+      same(engine),
+    );
+    expect(_pageController(tester).page, closeTo(3, 0.01));
+    await tester.binding.handlePopRoute();
+    await _pumpReaderUiTransition(tester);
+    expect((await route.result)?.indexInPost, 3);
   });
 
   testWidgets('ThreadImageReaderPage renders continuous image list', (
@@ -809,15 +989,75 @@ ThreadImageOpenRequest _request({int initialIndex = 0, int count = 5}) {
     pid: 'p1',
     postNumber: 1,
     referer: 'https://bbs.yamibo.com/thread-100-1-1.html',
-    group: const ThreadPostImageGroup(
+    group: ThreadPostImageGroup(
       tid: '100',
       pid: 'p1',
       postNumber: 1,
-      entries: <ThreadPostImageEntry>[],
+      entries: List.generate(
+        items.length,
+        (index) => ThreadPostImageEntry(
+          url: items[index].url,
+          rawUrl: items[index].url,
+          indexInPost: index,
+          cacheKey: items[index].cacheKey,
+        ),
+      ),
     ),
     initialIndex: initialIndex,
     continuousImages: items,
   );
+}
+
+Future<({Future<ThreadImageReaderExitResult?> result})> _pumpReaderRoute(
+  WidgetTester tester, {
+  Future<void> Function(ThreadImageReaderExitResult result)? onBeforeExit,
+  ValueNotifier<Locale>? locale,
+  String mode = 'ltr',
+  ThreadImageOpenRequest? request,
+}) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'reader_pref_mode': mode,
+  });
+  tester.view.physicalSize = const Size(1200, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final navigator = GlobalKey<NavigatorState>();
+  Widget app(Locale selectedLocale) => LocalizedTestApp(
+    navigatorKey: navigator,
+    locale: selectedLocale,
+    home: const Scaffold(body: SizedBox.shrink()),
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        imageCacheServiceProvider.overrideWithValue(
+          _RecordingImageCacheService(),
+        ),
+        forumImagePrecacheServiceProvider.overrideWithValue(
+          _RecordingForumImagePrecacheService(),
+        ),
+      ],
+      child: locale == null
+          ? app(const Locale('zh'))
+          : ValueListenableBuilder<Locale>(
+              valueListenable: locale,
+              builder: (context, selectedLocale, child) => app(selectedLocale),
+            ),
+    ),
+  );
+  final openingRequest = request ?? _request(initialIndex: 2);
+  final result = navigator.currentState!.push<ThreadImageReaderExitResult>(
+    MaterialPageRoute(
+      builder: (_) => ThreadImageReaderPage(
+        request: openingRequest,
+        onBeforeExit: onBeforeExit,
+      ),
+    ),
+  );
+  await _pumpReaderUiTransition(tester);
+  await tester.pump(const Duration(milliseconds: 20));
+  return (result: result);
 }
 
 Future<void> _pumpHorizontalReader(

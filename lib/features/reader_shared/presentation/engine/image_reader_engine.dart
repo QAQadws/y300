@@ -104,6 +104,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   int get _readerSessionGeneration => _readerSession.generation;
   ReaderPositionState? _positionState;
   bool _exitFlushed = false;
+  Future<void>? _exitFlushFuture;
 
   int _verticalViewportPrimedGeneration = -1;
   ReaderModePreference _diagnosticMode = ReaderModePreference.vertical;
@@ -2783,11 +2784,15 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   }
 
   Future<void> _popReader([Object? result]) async {
-    if (!_exitFlushed) {
-      _exitFlushed = true;
-      await _capability.onExit();
-    }
-    if (!mounted) {
+    final route = ModalRoute.of(context);
+    _exitFlushed = true;
+    _exitFlushFuture ??= Future<void>.sync(_capability.onExit);
+    // Every back action waits for the same preparation. A repeated toolbar tap
+    // must neither reveal an unprepared body nor pop its route afterwards.
+    await _exitFlushFuture;
+    if (!mounted ||
+        ModalRoute.of(context) != route ||
+        !(route?.isCurrent ?? false)) {
       return;
     }
     Navigator.of(context).pop(result);

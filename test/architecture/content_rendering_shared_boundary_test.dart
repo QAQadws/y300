@@ -61,6 +61,7 @@ const _cacheNeutralDisplayFiles = {
   '${_packageLib}src/html_rendering/forum_html_render_callbacks.dart',
   '${_packageLib}src/services/forum_html_image_viewport_coordinator.dart',
   '${_packageLib}src/services/forum_html_image_predecode_policy.dart',
+  '${_packageLib}src/services/forum_html_image_anchor_controller.dart',
 };
 
 void main() {

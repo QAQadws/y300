@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,10 +8,203 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_image_session_store.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/thread_image_reader_exit_result.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_capability.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
+  ThreadImageReaderCapability positionCapability({
+    ThreadImageOpenRequest? request,
+    Future<void> Function(ThreadImageReaderExitResult)? onBeforeExit,
+  }) {
+    final l10n = AppLocalizationsZh();
+    return ThreadImageReaderCapability(
+      request: request ?? _positionRequest(),
+      imageReferer: null,
+      title: l10n.threadImageReaderTitle,
+      displayLabel: l10n.threadImageDisplay,
+      downloadLabel: l10n.threadImageDownload,
+      onBeforeExit: onBeforeExit,
+    );
+  }
+
+  test('opening and initial viewport reports do not relocate the body', () {
+    final capability = positionCapability();
+    expect(capability.exitResult, isNull);
+    capability.onImageVisible(1);
+    capability.onScrollProgress(index: 1, offset: 0);
+    expect(capability.exitResult, isNull);
+    capability.noteInteraction();
+    capability.onScrollProgress(index: 1, offset: 12);
+    expect(capability.exitResult, isNull);
+  });
+
+  test('exit reports the current image after navigation and backtracking', () {
+    final capability = positionCapability();
+    capability.noteInteraction();
+    capability.onScrollProgress(index: 2, offset: 500);
+    capability.onScrollProgress(index: 1, offset: 300);
+    // A delayed first-visibility callback must not undo backward navigation.
+    capability.onImageVisible(2);
+    expect(
+      capability.exitResult,
+      const ThreadImageReaderExitResult(
+        tid: '100',
+        pid: 'p1',
+        indexInPost: 1,
+        cacheKey: 'thread/page-1',
+        url: 'https://example.com/page-1.jpg',
+      ),
+    );
+    capability.onScrollProgress(index: 0, offset: 0);
+    expect(capability.exitResult, isNull);
+  });
+
+  test('invalid indexes do not replace the last reported image', () {
+    final capability = positionCapability();
+    capability.noteInteraction();
+    capability.onScrollProgress(index: 1, offset: 300);
+    capability.onScrollProgress(index: -1, offset: 0);
+    capability.onScrollProgress(index: 99, offset: 0);
+    expect(capability.exitResult?.indexInPost, 1);
+  });
+
+  test('seek reports its confirmed destination', () async {
+    final capability = positionCapability();
+    capability.noteInteraction();
+    await capability.onSeek(index: 2, offset: 600);
+    expect(capability.exitResult?.indexInPost, 2);
+  });
+
+  test(
+    'explicit seek confirms an image already reported by initial layout',
+    () async {
+      final capability = positionCapability();
+      capability.onScrollProgress(index: 1, offset: 0);
+      expect(capability.exitResult, isNull);
+      await capability.onSeek(index: 1, offset: 0);
+      expect(capability.exitResult?.indexInPost, 1);
+    },
+  );
+
+  test('inconsistent opening identity returns no relocation', () {
+    final request = _positionRequest();
+    final capability = positionCapability(
+      request: ThreadImageOpenRequest(
+        tid: request.tid,
+        pid: request.pid,
+        postNumber: request.postNumber,
+        referer: request.referer,
+        group: ThreadPostImageGroup(
+          tid: request.tid,
+          pid: 'other-post',
+          postNumber: request.postNumber,
+          entries: request.group.entries,
+        ),
+        initialIndex: request.initialIndex,
+        continuousImages: request.continuousImages,
+      ),
+    );
+    capability.noteInteraction();
+    capability.onScrollProgress(index: 2, offset: 600);
+    expect(capability.exitResult, isNull);
+  });
+
+  test('mismatched image mapping returns no relocation', () {
+    final request = _positionRequest();
+    final entries = request.group.entries.toList();
+    entries[1] = const ThreadPostImageEntry(
+      url: 'https://example.com/replaced.jpg',
+      rawUrl: 'https://example.com/replaced.jpg',
+      indexInPost: 1,
+      cacheKey: 'different-cache-key',
+    );
+    final capability = positionCapability(
+      request: ThreadImageOpenRequest(
+        tid: request.tid,
+        pid: request.pid,
+        postNumber: request.postNumber,
+        referer: request.referer,
+        group: ThreadPostImageGroup(
+          tid: request.tid,
+          pid: request.pid,
+          postNumber: request.postNumber,
+          entries: entries,
+        ),
+        initialIndex: request.initialIndex,
+        continuousImages: request.continuousImages,
+      ),
+    );
+    capability.noteInteraction();
+    capability.onScrollProgress(index: 1, offset: 300);
+    expect(capability.exitResult, isNull);
+  });
+
+  test('exit freezes position and prepares the body only once', () async {
+    final gate = Completer<void>();
+    final received = <ThreadImageReaderExitResult>[];
+    final capability = positionCapability(
+      onBeforeExit: (result) async {
+        received.add(result);
+        await gate.future;
+      },
+    );
+    capability.noteInteraction();
+    capability.onScrollProgress(index: 1, offset: 300);
+    final first = capability.onExit();
+    final second = capability.onExit();
+    expect(identical(first, second), isTrue);
+    capability.onScrollProgress(index: 2, offset: 600);
+    await Future<void>.delayed(Duration.zero);
+    expect(received, hasLength(1));
+    expect(received.single.indexInPost, 1);
+    expect(capability.exitResult?.indexInPost, 1);
+    gate.complete();
+    await first;
+    await capability.onExit();
+    expect(received, hasLength(1));
+  });
+
+  test(
+    'retired binding rejects progress and does not prepare a return',
+    () async {
+      var calls = 0;
+      final capability = positionCapability(onBeforeExit: (_) async => calls++);
+      capability.noteInteraction();
+      capability.onScrollProgress(index: 1, offset: 300);
+      capability.retire();
+      capability.onScrollProgress(index: 2, offset: 600);
+      await capability.onExit();
+      expect(capability.exitResult, isNull);
+      expect(calls, 0);
+    },
+  );
+
+  test(
+    'retiring before the exit microtask prevents stale preparation',
+    () async {
+      var calls = 0;
+      final capability = positionCapability(onBeforeExit: (_) async => calls++);
+      capability.noteInteraction();
+      capability.onScrollProgress(index: 1, offset: 300);
+      final exit = capability.onExit();
+      capability.retire();
+      await exit;
+      expect(calls, 0);
+      expect(capability.exitResult, isNull);
+    },
+  );
+
+  test('failed optional return preparation still completes exit', () async {
+    final capability = positionCapability(
+      onBeforeExit: (_) async => throw StateError('return layout unavailable'),
+    );
+    capability.noteInteraction();
+    capability.onScrollProgress(index: 1, offset: 300);
+    await capability.onExit();
+    expect(capability.exitResult?.indexInPost, 1);
+  });
+
   const item = ContinuousImageItem(
     ownerId: 'thread:573279:post:8899',
     id: 'thread-image-0',
@@ -129,4 +324,40 @@ void main() {
 
     expect(find.byType(AspectRatio), findsNothing);
   });
+}
+
+ThreadImageOpenRequest _positionRequest() {
+  final entries = List<ThreadPostImageEntry>.generate(
+    3,
+    (index) => ThreadPostImageEntry(
+      url: 'https://example.com/page-$index.jpg',
+      rawUrl: 'https://example.com/page-$index.jpg',
+      indexInPost: index,
+      cacheKey: 'thread/page-$index',
+    ),
+  );
+  return ThreadImageOpenRequest(
+    tid: '100',
+    pid: 'p1',
+    postNumber: 1,
+    referer: 'https://example.com/thread-100.html',
+    group: ThreadPostImageGroup(
+      tid: '100',
+      pid: 'p1',
+      postNumber: 1,
+      entries: entries,
+    ),
+    initialIndex: 0,
+    continuousImages: List.generate(
+      entries.length,
+      (index) => ContinuousImageItem(
+        ownerId: 'thread:100:post:p1',
+        id: 'image-$index',
+        url: entries[index].url,
+        cacheKey: entries[index].cacheKey,
+        index: index,
+        sourceKind: ContinuousImageSourceKind.threadImageReader,
+      ),
+    ),
+  );
 }

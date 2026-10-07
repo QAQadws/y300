@@ -35,6 +35,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
+    this.imageAnchorController,
     this.bodyPresentation,
     this.imagePrecacheService,
     this.fallback,
@@ -62,6 +63,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   )?
   onBlockImageResolved;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
@@ -154,6 +156,7 @@ class _ThreadPostHtmlFirstBodyState
           imageFallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
           onBlockImageResolved: widget.onBlockImageResolved,
           imageViewportCoordinator: widget.imageViewportCoordinator,
+          imageAnchorController: widget.imageAnchorController,
           bodyPresentation: widget.bodyPresentation,
           collapseExpansion: widget.bodyPresentation?.collapseExpansion,
           imagePrecacheService: widget.imagePrecacheService,
@@ -310,6 +313,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
+    this.imageAnchorController,
     this.bodyPresentation,
     this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
@@ -336,6 +340,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   )?
   onBlockImageResolved;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
@@ -357,6 +362,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       imageFallbackAspectRatioFor: imageFallbackAspectRatioFor,
       onBlockImageResolved: onBlockImageResolved,
       imageViewportCoordinator: imageViewportCoordinator,
+      imageAnchorController: imageAnchorController,
       bodyPresentation: bodyPresentation,
       imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,

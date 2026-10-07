@@ -71,6 +71,7 @@ import 'package:y300/features/thread/data/repositories/thread_post_ratings_repos
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/thread_image_reader_exit_result.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/presentation/thread_detail_controller.dart';
@@ -2412,6 +2413,262 @@ void main() {
         );
       },
     );
+
+    testWidgets('image reader return prepares the last read body image', (
+      tester,
+    ) async {
+      final repository = _imageReturnRepository(_imageReturnMessage());
+      await _openImageReturnReader(tester, repository);
+      final origin = _imageReturnScrollable(tester).position.pixels;
+      final viewportHeight = tester
+          .getSize(
+            find.byKey(const Key('thread-detail-list'), skipOffstage: false),
+          )
+          .height;
+
+      await _readImageReturnPages(tester, 9);
+      await tester.tapAt(
+        tester.getCenter(
+          find.byKey(const Key('shared-reader-center-tap-zone')),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 330));
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.tap(find.byKey(const Key('shared-reader-top-back-button')));
+      await _pumpImageReturnTransition(tester);
+
+      expect(find.byType(ThreadImageReaderPage), findsNothing);
+      expect(
+        tester.getTopLeft(_imageReturnBodyImage(9)).dy,
+        closeTo(
+          tester.getTopLeft(find.byKey(const Key('thread-detail-list'))).dy,
+          1,
+        ),
+      );
+      expect(
+        _imageReturnScrollable(tester).position.pixels,
+        greaterThan(origin + viewportHeight),
+      );
+    });
+
+    testWidgets('image reader system return distinguishes duplicate URLs', (
+      tester,
+    ) async {
+      final repository = _imageReturnRepository(
+        _imageReturnMessage(duplicateFirstPair: true),
+      );
+      final reader = await _openImageReturnReader(tester, repository);
+      expect(
+        reader.request.group.entries[0].url,
+        reader.request.group.entries[1].url,
+      );
+
+      await _readImageReturnPages(tester, 1);
+      await tester.binding.handlePopRoute();
+      await _pumpImageReturnTransition(tester);
+
+      expect(find.byType(ThreadImageReaderPage), findsNothing);
+      final viewportTop = tester
+          .getTopLeft(find.byKey(const Key('thread-detail-list')))
+          .dy;
+      expect(
+        tester.getTopLeft(_imageReturnBodyImage(1)).dy,
+        closeTo(viewportTop, 1),
+      );
+      expect(
+        tester.getTopLeft(_imageReturnBodyImage(0)).dy,
+        lessThan(viewportTop - 100),
+      );
+    });
+
+    testWidgets('image reader return without navigation preserves the origin', (
+      tester,
+    ) async {
+      final repository = _imageReturnRepository(_imageReturnMessage());
+      await _openImageReturnReader(tester, repository, initialIndex: 2);
+      final origin = _imageReturnScrollable(tester).position.pixels;
+      expect(origin, greaterThan(100));
+
+      await tester.binding.handlePopRoute();
+      await _pumpImageReturnTransition(tester);
+
+      expect(find.byType(ThreadImageReaderPage), findsNothing);
+      expect(
+        _imageReturnScrollable(tester).position.pixels,
+        closeTo(origin, 0.1),
+      );
+    });
+
+    testWidgets('image reader return positions the body before route removal', (
+      tester,
+    ) async {
+      final repository = _imageReturnRepository(_imageReturnMessage());
+      final reader = await _openImageReturnReader(tester, repository);
+      await _prepareImageReturn(tester, reader, _imageReturnResult(reader, 9));
+
+      // The reader still covers the body: return must be ready before it is
+      // removed, rather than exposing the old position for a visible frame.
+      expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+      expect(
+        tester.getTopLeft(_imageReturnBodyImage(9, skipOffstage: false)).dy,
+        closeTo(
+          tester
+              .getTopLeft(
+                find.byKey(
+                  const Key('thread-detail-list'),
+                  skipOffstage: false,
+                ),
+              )
+              .dy,
+          1,
+        ),
+      );
+
+      await tester.binding.handlePopRoute();
+      await _pumpImageReturnTransition(tester);
+      expect(
+        tester.getTopLeft(_imageReturnBodyImage(9)).dy,
+        closeTo(
+          tester.getTopLeft(find.byKey(const Key('thread-detail-list'))).dy,
+          1,
+        ),
+      );
+    });
+
+    testWidgets('image reader return rejects malformed and unchanged targets', (
+      tester,
+    ) async {
+      final repository = _imageReturnRepository(_imageReturnMessage());
+      final reader = await _openImageReturnReader(
+        tester,
+        repository,
+        initialIndex: 2,
+      );
+      final origin = _imageReturnScrollable(tester).position.pixels;
+      final target = _imageReturnResult(reader, 9);
+      final invalidResults = [
+        _imageReturnResult(reader, 2),
+        ThreadImageReaderExitResult(
+          tid: 'other-thread',
+          pid: target.pid,
+          indexInPost: target.indexInPost,
+          cacheKey: target.cacheKey,
+          url: target.url,
+        ),
+        ThreadImageReaderExitResult(
+          tid: target.tid,
+          pid: 'missing-post',
+          indexInPost: target.indexInPost,
+          cacheKey: target.cacheKey,
+          url: target.url,
+        ),
+        ThreadImageReaderExitResult(
+          tid: target.tid,
+          pid: target.pid,
+          indexInPost: target.indexInPost,
+          cacheKey: 'stale-image-key',
+          url: target.url,
+        ),
+        ThreadImageReaderExitResult(
+          tid: target.tid,
+          pid: target.pid,
+          indexInPost: target.indexInPost,
+          cacheKey: target.cacheKey,
+          url: 'https://example.com/changed.jpg',
+        ),
+        ThreadImageReaderExitResult(
+          tid: target.tid,
+          pid: target.pid,
+          indexInPost: 999,
+          cacheKey: target.cacheKey,
+          url: target.url,
+        ),
+      ];
+      for (final result in invalidResults) {
+        await _prepareImageReturn(tester, reader, result);
+        expect(
+          _imageReturnScrollable(tester).position.pixels,
+          closeTo(origin, 0.1),
+        );
+      }
+
+      await tester.binding.handlePopRoute();
+      await _pumpImageReturnTransition(tester);
+      expect(
+        _imageReturnScrollable(tester).position.pixels,
+        closeTo(origin, 0.1),
+      );
+    });
+
+    testWidgets('image reader return preserves origin for a closed fold target', (
+      tester,
+    ) async {
+      final repository = _imageReturnRepository(
+        '<img src="https://example.com/visible.jpg">'
+        '<div class="showcollapse_box">'
+        '<div class="showcollapse_title">Hidden pages</div>'
+        '<div class="showcollapse_content"><img src="https://example.com/hidden.jpg"></div>'
+        '</div><p>After the fold</p>',
+      );
+      final reader = await _openImageReturnReader(tester, repository);
+      expect(reader.request.group.entries, hasLength(2));
+      expect(_imageReturnBodyImage(1, skipOffstage: false), findsNothing);
+      final origin = _imageReturnScrollable(tester).position.pixels;
+
+      await _prepareImageReturn(tester, reader, _imageReturnResult(reader, 1));
+      expect(
+        _imageReturnScrollable(tester).position.pixels,
+        closeTo(origin, 0.1),
+      );
+      await tester.binding.handlePopRoute();
+      await _pumpImageReturnTransition(tester);
+      expect(
+        _imageReturnScrollable(tester).position.pixels,
+        closeTo(origin, 0.1),
+      );
+      expect(_imageReturnBodyImage(1), findsNothing);
+    });
+
+    testWidgets('image reader return rejects a refreshed source snapshot', (
+      tester,
+    ) async {
+      var message = _imageReturnMessage();
+      final repository = _FakeThreadRepository((tid, page, query) async {
+        return ApiSuccess(
+          _threadDetailData(tid: tid, posts: [_imageReturnPost(message)]),
+        );
+      });
+      final reader = await _openImageReturnReader(tester, repository);
+      final oldResult = _imageReturnResult(reader, 9);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ThreadDetailPage, skipOffstage: false)),
+      );
+      final controller = container.read(
+        threadDetailControllerProvider(
+          const ThreadDetailArgs(tid: '100', subject: '测试主题'),
+        ).notifier,
+      );
+      message = _imageReturnMessage().replaceAll(
+        'page-9.jpg',
+        'replacement-9.jpg',
+      );
+      await controller.refresh();
+      await _pumpImageReturnTransition(tester);
+      final refreshedOrigin = _imageReturnScrollable(tester).position.pixels;
+
+      await _prepareImageReturn(tester, reader, oldResult);
+      expect(
+        _imageReturnScrollable(tester).position.pixels,
+        closeTo(refreshedOrigin, 0.1),
+      );
+      await tester.binding.handlePopRoute();
+      await _pumpImageReturnTransition(tester);
+      expect(find.byType(ThreadImageReaderPage), findsNothing);
+      expect(
+        _imageReturnScrollable(tester).position.pixels,
+        closeTo(refreshedOrigin, 0.1),
+      );
+    });
 
     testWidgets('HTML-first smiley taps do not open image reader', (
       tester,
@@ -6594,6 +6851,127 @@ Finder _richTextContaining(String text) {
   return find.byWidgetPredicate((widget) {
     return widget is RichText && widget.text.toPlainText().contains(text);
   });
+}
+
+ThreadPost _imageReturnPost(String message) => ThreadPost(
+  pid: 'p1',
+  author: 'alice',
+  authorId: '1',
+  message: message,
+  number: 1,
+  isFirst: true,
+  dateline: 'today',
+);
+
+String _imageReturnMessage({bool duplicateFirstPair = false}) => [
+  for (var index = 0; index < 14; index++)
+    '<img src="https://example.com/page-${duplicateFirstPair && index == 1 ? 0 : index}.jpg" width="300" height="180">',
+  for (var index = 0; index < 20; index++) '<p>Remaining post text $index</p>',
+].join();
+
+ThreadRepository _imageReturnRepository(String message) =>
+    _FakeThreadRepository(
+      (tid, page, query) async => ApiSuccess(
+        _threadDetailData(tid: tid, posts: [_imageReturnPost(message)]),
+      ),
+    );
+
+Finder _imageReturnBodyImage(int index, {bool skipOffstage = true}) =>
+    find.byKey(
+      Key('thread-post-html-first-readable-image-p1-$index'),
+      skipOffstage: skipOffstage,
+    );
+
+ScrollableState _imageReturnScrollable(WidgetTester tester) =>
+    tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(const Key('thread-detail-list'), skipOffstage: false),
+        matching: find.byType(Scrollable, skipOffstage: false),
+        skipOffstage: false,
+      ),
+    );
+
+Future<ThreadImageReaderPage> _openImageReturnReader(
+  WidgetTester tester,
+  ThreadRepository repository, {
+  int initialIndex = 0,
+}) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'reader_pref_mode': 'ltr',
+  });
+  tester.view.physicalSize = const Size(450, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    _buildTestApp(
+      repository,
+      imageCacheService: _FailedThreadInlineImageCacheService(),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 120));
+  await _tapVisibleTop(tester, _imageReturnBodyImage(initialIndex));
+  await _pumpThreadUiTransition(tester);
+  final reader = tester.widget<ThreadImageReaderPage>(
+    find.byType(ThreadImageReaderPage),
+  );
+  expect(reader.onBeforeExit, isNotNull);
+  return reader;
+}
+
+ThreadImageReaderExitResult _imageReturnResult(
+  ThreadImageReaderPage reader,
+  int index,
+) {
+  final entry = reader.request.group.entries[index];
+  return ThreadImageReaderExitResult(
+    tid: reader.request.tid,
+    pid: reader.request.pid,
+    indexInPost: entry.indexInPost,
+    cacheKey: entry.cacheKey,
+    url: entry.url,
+  );
+}
+
+Future<void> _prepareImageReturn(
+  WidgetTester tester,
+  ThreadImageReaderPage reader,
+  ThreadImageReaderExitResult result,
+) async {
+  var completed = false;
+  final preparation = reader.onBeforeExit!(result).then(
+    (_) => completed = true,
+  );
+  for (var attempt = 0; attempt < 20 && !completed; attempt++) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  expect(
+    completed,
+    isTrue,
+    reason: 'Body positioning must finish within a bounded number of frames',
+  );
+  await preparation;
+}
+
+Future<void> _readImageReturnPages(WidgetTester tester, int count) async {
+  for (var index = 0; index < count; index++) {
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const Key('shared-reader-right-tap-zone'))),
+    );
+    await tester.pump(const Duration(milliseconds: 330));
+    await _pumpThreadUiTransition(tester);
+  }
+  final pageView = tester.widget<PageView>(
+    find.byKey(const Key('thread-image-reader-page-view')),
+  );
+  expect(pageView.controller!.page, closeTo(count, 0.01));
+}
+
+Future<void> _pumpImageReturnTransition(WidgetTester tester) async {
+  for (var frame = 0; frame < 10; frame++) {
+    await tester.pump(const Duration(milliseconds: 80));
+  }
 }
 
 /// Taps near a widget's visible top edge instead of its center.

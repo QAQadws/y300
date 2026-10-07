@@ -1,4 +1,5 @@
 import 'package:y300/features/thread/presentation/services/thread_post_navigation.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_reader_return_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
 import 'dart:async';
 
@@ -77,6 +78,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
 
 class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   late final ScrollController _scrollController;
+  late final ThreadImageReaderReturnCoordinator _imageReaderReturnCoordinator;
   late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
   Timer? _highlightClearTimer;
   String? _highlightPostPid;
@@ -94,6 +96,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _imageReaderReturnCoordinator = ThreadImageReaderReturnCoordinator(
+      scrollController: _scrollController,
+    );
     _quickScrollCoordinator = ThreadDetailQuickScrollCoordinator(
       scrollController: _scrollController,
     );
@@ -123,6 +128,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     _postRouteSession.dispose();
     _highlightClearTimer?.cancel();
     _quickScrollCoordinator.dispose();
+    _imageReaderReturnCoordinator.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -311,6 +317,8 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                     : ForumPullToRefresh(
                         onRefresh: () => controller.refresh(forceNetwork: true),
                         child: ThreadDetailContent(
+                          imageReaderReturnCoordinator:
+                              _imageReaderReturnCoordinator,
                           state: state,
                           projection: projection,
                           displayExtraCommentsByPostId: extraComments,
@@ -622,7 +630,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     isCurrent: () => mounted,
   );
   void _openPostImages(ThreadPost post, ThreadImageOpenRequest request) =>
-      _postNavigation.openImages(post, request);
+      _postNavigation.openImages(
+        post,
+        request,
+        onBeforeExit: _imageReaderReturnCoordinator.beforeExitFor(request),
+      );
 
   Future<void> _openPostActions(
     ThreadDetailArgs args,

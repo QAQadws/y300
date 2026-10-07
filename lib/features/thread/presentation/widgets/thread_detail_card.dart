@@ -109,6 +109,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.onHtmlFirstBlockImageResolved,
     required this.onOpenPostActions,
     required this.imageViewportCoordinator,
+    this.imageAnchorController,
     required this.imagePrecacheService,
   });
 
@@ -138,6 +139,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   )
   onHtmlFirstBlockImageResolved;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
   final ValueChanged<ThreadPost> onOpenPostActions;
 
@@ -184,6 +186,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             onBlockImageResolved: (spec, request, size) =>
                 onHtmlFirstBlockImageResolved(sourcePost, spec, request, size),
             imageViewportCoordinator: imageViewportCoordinator,
+            imageAnchorController: imageAnchorController,
             imagePrecacheService: imagePrecacheService,
           ),
         ),
@@ -384,6 +387,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     this.showEmptyInteractionHint = false,
     required this.onPostBuilt,
     required this.imageViewportCoordinator,
+    this.imageAnchorController,
     required this.imagePrecacheService,
   });
 
@@ -427,6 +431,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final bool showEmptyInteractionHint;
   final ValueChanged<int>? onPostBuilt;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
 
   @override
@@ -486,6 +491,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           onHtmlFirstBlockImageResolved: widget.onHtmlFirstBlockImageResolved,
           onOpenPostActions: widget.onOpenPostActions,
           imageViewportCoordinator: widget.imageViewportCoordinator,
+          imageAnchorController: widget.imageAnchorController,
           imagePrecacheService: widget.imagePrecacheService,
         ),
         _ThreadPostCardFooterEntry(

@@ -14,6 +14,7 @@ import 'package:y300/features/thread/domain/services/thread_post_navigation_sess
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+import 'package:y300/features/thread/domain/models/thread_image_reader_exit_result.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_floor_link_builder.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -47,7 +48,11 @@ class ThreadPostNavigation {
     if (context.mounted && isCurrent()) showTransientSnackBar(context, text);
   }
 
-  void openImages(ThreadPost post, ThreadImageOpenRequest request) {
+  void openImages(
+    ThreadPost post,
+    ThreadImageOpenRequest request, {
+    Future<void> Function(ThreadImageReaderExitResult)? onBeforeExit,
+  }) {
     if (request.continuousImages.isEmpty) {
       copyUrl(
         '${post.number}# ${AppLocalizations.of(context).threadDetailImageLink}',
@@ -56,9 +61,12 @@ class ThreadPostNavigation {
       return;
     }
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            ThreadImageReaderPage(request: request, imageReferer: imageReferer),
+      MaterialPageRoute<ThreadImageReaderExitResult>(
+        builder: (_) => ThreadImageReaderPage(
+          request: request,
+          imageReferer: imageReferer,
+          onBeforeExit: onBeforeExit,
+        ),
       ),
     );
   }

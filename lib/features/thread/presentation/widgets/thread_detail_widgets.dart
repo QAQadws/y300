@@ -21,6 +21,7 @@ import 'package:y300/features/thread/presentation/thread_post_interaction_models
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_preload_policy.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_reader_return_coordinator.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
@@ -48,6 +49,7 @@ class ThreadDetailContent extends StatefulWidget {
     required this.state,
     this.projection,
     this.scrollController,
+    this.imageReaderReturnCoordinator,
     this.highlightPostPid,
     this.targetPid,
     this.landing = ThreadPostLanding.top,
@@ -75,6 +77,7 @@ class ThreadDetailContent extends StatefulWidget {
   final ThreadDetailPageState state;
   final ThreadDetailContentProjection? projection;
   final ScrollController? scrollController;
+  final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
   final String? highlightPostPid;
   final String? targetPid;
   final ThreadPostLanding landing;
@@ -214,6 +217,14 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   Widget build(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    widget.imageReaderReturnCoordinator?.updatePage(
+      tid: widget.state.tid,
+      page: widget.state.currentPage,
+      bodyHtmlByPid: {
+        for (final projection in _postProjections)
+          projection.sourcePost.pid: projection.displayPost.message,
+      },
+    );
     final entries = _entryPlanner.buildProjectionEntries(
       posts: _postProjections,
       targetPid: widget.targetPid,
@@ -499,6 +510,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
                 _fallbackAspectRatioForBlockImage,
             onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
             imageViewportCoordinator: _imageViewportCoordinator,
+            imageAnchorController: widget.imageReaderReturnCoordinator
+                ?.anchorsFor(entry.sourcePost!.pid),
             imagePrecacheService: widget.htmlImagePrecacheService,
             onOpenPostActions: widget.onOpenPostActions,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
@@ -552,6 +565,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
               _fallbackAspectRatioForBlockImage,
           onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
           imageViewportCoordinator: _imageViewportCoordinator,
+          imageAnchorController: widget.imageReaderReturnCoordinator
+              ?.anchorsFor(entry.sourcePost!.pid),
           imagePrecacheService: widget.htmlImagePrecacheService,
           onOpenPostActions: widget.onOpenPostActions,
         );

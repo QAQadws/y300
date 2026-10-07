@@ -38,6 +38,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     this.imageFallbackAspectRatioFor,
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
+    this.imageAnchorController,
     this.imagePrecacheService,
     this.imageHost,
     this.preparedDocument,
@@ -80,6 +81,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   )?
   onBlockImageResolved;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
 
   /// Explicit display port; default cache configuration stays in the App facade.
@@ -161,6 +163,7 @@ class _ForumHtmlWidgetPostRendererState
             widget.imagePrecacheService,
           ),
       imageViewportCoordinator: widget.imageViewportCoordinator,
+      imageAnchorController: widget.imageAnchorController,
       buildAsync: widget.buildAsync,
       enableCaching: widget.enableCaching,
       renderMode: widget.renderMode,

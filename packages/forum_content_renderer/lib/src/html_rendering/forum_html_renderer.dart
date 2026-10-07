@@ -10,6 +10,7 @@ import '../contracts/forum_html_collapse_labels.dart';
 import '../contracts/forum_html_image_host.dart';
 import '../services/forum_html_body_presentation.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
+import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_html_image_widget_factory.dart';
 import 'forum_html_prepared_render_document.dart';
 import 'forum_html_render_callbacks.dart';
@@ -31,6 +32,7 @@ class ForumHtmlRenderer extends StatefulWidget {
     this.imageHost,
     this.imageHostRevision,
     this.imageViewportCoordinator,
+    this.imageAnchorController,
     this.buildAsync,
     this.enableCaching,
     this.renderMode = RenderMode.column,
@@ -58,6 +60,7 @@ class ForumHtmlRenderer extends StatefulWidget {
   /// Stable identity for a Host assembled on each build. Defaults to the Host.
   final Object? imageHostRevision;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final bool? buildAsync;
   final bool? enableCaching;
   final RenderMode renderMode;
@@ -78,6 +81,9 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     host: widget.imageHost,
     viewport: widget.imageViewportCoordinator,
     handlesImageTap: widget.callbacks.onTapImage != null,
+    imageAnchors: widget.imageAnchorController,
+    imageAnchorRevision: widget.imageAnchorController?.bindingIdentity,
+    sourceId: widget.preparedDocument.sequence.sourceId,
   ));
   // fwfh retains its factory and cached custom widgets. Events read current
   // values; folds listen for config updates without losing expansion state.
@@ -85,8 +91,27 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
   VoidCallback? _onReady;
 
   @override
+  void initState() {
+    super.initState();
+    widget.imageAnchorController?.bindSequence(
+      widget.preparedDocument.sequence,
+    );
+    _binding.value = (
+      host: widget.imageHost,
+      viewport: widget.imageViewportCoordinator,
+      handlesImageTap: widget.callbacks.onTapImage != null,
+      imageAnchors: widget.imageAnchorController,
+      imageAnchorRevision: widget.imageAnchorController?.bindingIdentity,
+      sourceId: widget.preparedDocument.sequence.sourceId,
+    );
+  }
+
+  @override
   void didUpdateWidget(covariant ForumHtmlRenderer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    widget.imageAnchorController?.bindSequence(
+      widget.preparedDocument.sequence,
+    );
     final hostChanged =
         (oldWidget.imageHostRevision ?? oldWidget.imageHost) !=
         (widget.imageHostRevision ?? widget.imageHost);
@@ -96,11 +121,23 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
         !identical(
           oldWidget.imageViewportCoordinator,
           widget.imageViewportCoordinator,
-        )) {
+        ) ||
+        !identical(
+          oldWidget.imageAnchorController,
+          widget.imageAnchorController,
+        ) ||
+        !identical(
+          _binding.value.imageAnchorRevision,
+          widget.imageAnchorController?.bindingIdentity,
+        ) ||
+        _binding.value.sourceId != widget.preparedDocument.sequence.sourceId) {
       _binding.value = (
         host: hostChanged ? widget.imageHost : _binding.value.host,
         viewport: widget.imageViewportCoordinator,
         handlesImageTap: widget.callbacks.onTapImage != null,
+        imageAnchors: widget.imageAnchorController,
+        imageAnchorRevision: widget.imageAnchorController?.bindingIdentity,
+        sourceId: widget.preparedDocument.sequence.sourceId,
       );
     }
     _configuration.value = widget;
