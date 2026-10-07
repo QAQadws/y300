@@ -68,6 +68,8 @@ class ThreadPoll {
     required this.options,
     this.canVote = true,
     this.maxChoices,
+    this.participantCount,
+    this.rulesText,
     this.deadlineText,
     this.statusText,
   });
@@ -83,6 +85,14 @@ class ThreadPoll {
 
   /// Source-provided poll prompt or summary.
   final String summary;
+
+  /// Source-confirmed number of voters, independent of option vote totals.
+  /// Null means the source does not expose a recognized participation count.
+  final int? participantCount;
+
+  /// Source-provided rules with a recognized participant clause removed.
+  /// Null preserves [summary] as the fallback; an empty string means no rules.
+  final String? rulesText;
 
   /// Source-provided deadline text, when available.
   final String? deadlineText;

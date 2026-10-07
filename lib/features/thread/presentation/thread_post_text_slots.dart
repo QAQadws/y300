@@ -148,6 +148,7 @@ final class _AttachmentSlots {
 final class _PollSlots {
   const _PollSlots({
     required this.summary,
+    required this.rulesText,
     required this.deadlineText,
     required this.statusText,
     required this.options,
@@ -159,6 +160,9 @@ final class _PollSlots {
   ) {
     return _PollSlots(
       summary: collector.add(source.summary),
+      rulesText: source.rulesText?.trim().isEmpty == true
+          ? null
+          : collector.addOptional(source.rulesText),
       deadlineText: collector.addOptional(source.deadlineText),
       statusText: collector.addOptional(source.statusText),
       options: [
@@ -169,6 +173,7 @@ final class _PollSlots {
   }
 
   final ThreadTextSlot summary;
+  final ThreadTextSlot? rulesText;
   final ThreadTextSlot? deadlineText;
   final ThreadTextSlot? statusText;
   final List<_PollOptionSlots> options;
@@ -177,6 +182,8 @@ final class _PollSlots {
     return ThreadPoll(
       isMultipleChoice: source.isMultipleChoice,
       summary: summary.value(values),
+      participantCount: source.participantCount,
+      rulesText: rulesText?.value(values) ?? source.rulesText,
       options: [
         for (var index = 0; index < source.options.length; index += 1)
           options[index].build(source.options[index], values),

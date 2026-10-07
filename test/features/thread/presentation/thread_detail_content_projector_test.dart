@@ -90,6 +90,8 @@ void main() {
         expect(display.commentUrl, '/comment?pid=1');
 
         expect(display.poll?.summary, 'P:投票摘要');
+        expect(display.poll?.rulesText, 'P:单选投票');
+        expect(display.poll?.participantCount, 2);
         expect(display.poll?.deadlineText, 'P:截止时间');
         expect(display.poll?.statusText, 'P:投票状态');
         expect(display.poll?.options.single.label, 'P:投票选项');
@@ -125,6 +127,71 @@ void main() {
         expect(event.toString(), isNot(contains('服务器用户名')));
       },
     );
+
+    test('poll metadata participates in conversion revision identity', () {
+      final base = ThreadDetailContentProjector.sourceRevisionFor(_source());
+      for (final poll in [
+        const ThreadPoll(
+          isMultipleChoice: false,
+          summary: '投票摘要',
+          rulesText: '单选投票',
+          participantCount: 3,
+          deadlineText: '截止时间',
+          statusText: '投票状态',
+          options: [
+            ThreadPollOption(
+              id: 'option-1',
+              label: '投票选项',
+              voteCount: 3,
+              percent: 50,
+            ),
+          ],
+        ),
+        const ThreadPoll(
+          isMultipleChoice: false,
+          summary: '投票摘要',
+          rulesText: '新投票规则',
+          participantCount: 2,
+          deadlineText: '截止时间',
+          statusText: '投票状态',
+          options: [
+            ThreadPollOption(
+              id: 'option-1',
+              label: '投票选项',
+              voteCount: 3,
+              percent: 50,
+            ),
+          ],
+        ),
+      ]) {
+        expect(
+          ThreadDetailContentProjector.sourceRevisionFor(_source(poll: poll)),
+          isNot(base),
+        );
+      }
+    });
+
+    test('conversion preserves explicitly empty poll rules', () async {
+      final projection =
+          await ThreadDetailContentProjector(
+            plainTextBatchConversionService: _PrefixPlainService(),
+            htmlTextNodeConversionService: _RecordingHtmlService(),
+            diagnosticRecorder: _RecordingDiagnosticRecorder(),
+          ).project(
+            _source(
+              poll: const ThreadPoll(
+                isMultipleChoice: false,
+                summary: '共有 0 人参与投票',
+                participantCount: 0,
+                rulesText: '',
+                options: [],
+              ),
+            ),
+            converter: const _TestConverter(),
+          );
+      expect(projection.posts.single.displayPost.poll?.rulesText, '');
+      expect(projection.posts.single.displayPost.poll?.participantCount, 0);
+    });
 
     test('plain failure discards the whole converted surface', () async {
       final source = _source();
@@ -289,7 +356,7 @@ void main() {
   });
 }
 
-ThreadDetailPageState _source({String? message}) {
+ThreadDetailPageState _source({String? message, ThreadPoll? poll}) {
   final post = ThreadPost(
     pid: '1',
     author: '服务器用户名',
@@ -321,20 +388,24 @@ ThreadDetailPageState _source({String? message}) {
         ext: 'jpg',
       ),
     ],
-    poll: const ThreadPoll(
-      isMultipleChoice: false,
-      summary: '投票摘要',
-      deadlineText: '截止时间',
-      statusText: '投票状态',
-      options: <ThreadPollOption>[
-        ThreadPollOption(
-          id: 'option-1',
-          label: '投票选项',
-          voteCount: 3,
-          percent: 50,
+    poll:
+        poll ??
+        const ThreadPoll(
+          isMultipleChoice: false,
+          summary: '投票摘要',
+          rulesText: '单选投票',
+          participantCount: 2,
+          deadlineText: '截止时间',
+          statusText: '投票状态',
+          options: <ThreadPollOption>[
+            ThreadPollOption(
+              id: 'option-1',
+              label: '投票选项',
+              voteCount: 3,
+              percent: 50,
+            ),
+          ],
         ),
-      ],
-    ),
     comments: const <ThreadPostCommentEntry>[
       ThreadPostCommentEntry(
         author: '点评用户名',

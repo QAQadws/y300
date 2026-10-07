@@ -192,6 +192,8 @@ final class ThreadDetailContentProjector {
     final poll = post.poll;
     if (poll != null) {
       yield _textHash(poll.summary);
+      yield poll.participantCount;
+      yield _textHash(poll.rulesText);
       yield _textHash(poll.deadlineText);
       yield _textHash(poll.statusText);
       for (final option in poll.options) {

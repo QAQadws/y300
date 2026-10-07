@@ -3146,6 +3146,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadPollSubmit => '提交';
 
   @override
+  String get threadPollSubmitting => '投票中…';
+
+  @override
+  String threadPollSelectedCount(int count) {
+    return '已选 $count 项';
+  }
+
+  @override
+  String threadPollParticipants(int count) {
+    return '$count 人参与';
+  }
+
+  @override
   String threadPollMaxChoices(int count) {
     return '最多可选 $count 项';
   }
@@ -8532,6 +8545,19 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadPollSubmit => '提交';
+
+  @override
+  String get threadPollSubmitting => '投票中…';
+
+  @override
+  String threadPollSelectedCount(int count) {
+    return '已選 $count 項';
+  }
+
+  @override
+  String threadPollParticipants(int count) {
+    return '$count 人參與';
+  }
 
   @override
   String threadPollMaxChoices(int count) {

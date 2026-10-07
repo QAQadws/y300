@@ -1324,6 +1324,15 @@
   "threadPollDeadline": "截止时间",
   "threadPollResults": "投票结果",
   "threadPollSubmit": "提交",
+  "threadPollSubmitting": "投票中…",
+  "threadPollSelectedCount": "已选 {count} 项",
+  "@threadPollSelectedCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "threadPollParticipants": "{count} 人参与",
+  "@threadPollParticipants": {
+    "placeholders": { "count": { "type": "int" } }
+  },
   "threadPollMaxChoices": "最多可选 {count} 项",
   "@threadPollMaxChoices": {
     "placeholders": {"count": {"type": "int"}}

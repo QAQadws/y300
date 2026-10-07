@@ -4,6 +4,7 @@ import '../cache/forum_cache.dart';
 import '../cache/forum_cache_key_canonicalizer.dart';
 import '../contracts/thread_detail_models.dart';
 import '../parsing/loose_json.dart';
+import 'discuz_thread_poll_summary_parser.dart';
 
 class ThreadDetailSnapshotCodec
     implements ForumSnapshotCodec<ThreadDetailData> {
@@ -150,6 +151,8 @@ class ThreadDetailSnapshotCodec
       'canVote': value.canVote,
       'maxChoices': value.maxChoices,
       'summary': value.summary,
+      'participantCount': value.participantCount,
+      'rulesText': value.rulesText,
       'deadlineText': value.deadlineText,
       'statusText': value.statusText,
       'options': value.options.map(_encodePollOption).toList(growable: false),
@@ -161,11 +164,22 @@ class ThreadDetailSnapshotCodec
     if (map.isEmpty) {
       return null;
     }
+    final summary = LooseJson.string(map['summary']);
+    // Additive metadata keeps old snapshots readable without a network reload.
+    final legacyMetadata = parseDiscuzThreadPollSummary(summary);
     return ThreadPoll(
       isMultipleChoice: LooseJson.boolean(map['isMultipleChoice']),
       canVote: LooseJson.boolean(map['canVote'], fallback: true),
       maxChoices: _nullableInt(map['maxChoices']),
-      summary: LooseJson.string(map['summary']),
+      summary: summary,
+      participantCount: map.containsKey('participantCount')
+          ? _nullableInt(map['participantCount'])
+          : legacyMetadata.participantCount,
+      rulesText: map.containsKey('rulesText')
+          ? (map['rulesText'] is String
+                ? (map['rulesText'] as String).trim()
+                : null)
+          : legacyMetadata.rulesText,
       deadlineText: _nullableString(map['deadlineText']),
       statusText: _nullableString(map['statusText']),
       options: LooseJson.list(map['options'])

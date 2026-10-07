@@ -1476,6 +1476,8 @@ void main() {
                   poll: const ThreadPoll(
                     isMultipleChoice: false,
                     summary: '单选投票 , 投票后结果可见, 共有 2 人参与投票',
+                    participantCount: 2,
+                    rulesText: '单选投票 , 投票后结果可见',
                     options: <ThreadPollOption>[
                       ThreadPollOption(id: '1', label: '选项A'),
                       ThreadPollOption(id: '2', label: '选项B'),
@@ -1592,10 +1594,8 @@ void main() {
       final pollCardDecoration = pollCard.decoration as BoxDecoration;
       expect(pollCardDecoration.color, detailPalette.panelBackground);
       expect(pollCardDecoration.border, isNull);
-      final pollSummaryText = tester.widget<Text>(
-        find.text('单选投票 , 投票后结果可见, 共有 2 人参与投票'),
-      );
-      expect(pollSummaryText.style?.fontWeight, FontWeight.w500);
+      final pollSummaryText = tester.widget<Text>(find.text('单选投票 , 投票后结果可见'));
+      expect(pollSummaryText.style?.fontWeight, FontWeight.w400);
       final pollOptionText = tester.widget<Text>(find.text('选项A'));
       expect(pollOptionText.style?.fontWeight, FontWeight.w400);
 

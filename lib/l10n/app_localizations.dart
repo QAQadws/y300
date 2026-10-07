@@ -5249,6 +5249,24 @@ abstract class AppLocalizations {
   /// **'提交'**
   String get threadPollSubmit;
 
+  /// No description provided for @threadPollSubmitting.
+  ///
+  /// In zh, this message translates to:
+  /// **'投票中…'**
+  String get threadPollSubmitting;
+
+  /// No description provided for @threadPollSelectedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count} 项'**
+  String threadPollSelectedCount(int count);
+
+  /// No description provided for @threadPollParticipants.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 人参与'**
+  String threadPollParticipants(int count);
+
   /// No description provided for @threadPollMaxChoices.
   ///
   /// In zh, this message translates to:

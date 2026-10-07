@@ -2,6 +2,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import '../contracts/thread_detail_models.dart';
 import '../url/forum_uri_resolver.dart';
+import 'discuz_thread_poll_summary_parser.dart';
 
 /// Source-neutral thread detail html parser.
 class ThreadDetailHtmlParser {
@@ -604,6 +605,7 @@ class ThreadDetailHtmlParser {
       return null;
     }
     final maxMatch = RegExp(r'最多可选\s*(\d+)\s*项').firstMatch(summary);
+    final summaryMetadata = parseDiscuzThreadPollSummary(summary);
     return ThreadPoll(
       isMultipleChoice:
           pollRoot.querySelector('input[type="checkbox"]') != null ||
@@ -611,6 +613,8 @@ class ThreadDetailHtmlParser {
       canVote: hasVoteInputs && !_isAlreadyVotedStatus(statusText),
       maxChoices: int.tryParse(maxMatch?.group(1) ?? ''),
       summary: summary,
+      participantCount: summaryMetadata.participantCount,
+      rulesText: summaryMetadata.rulesText,
       deadlineText: deadlineText.isEmpty ? null : deadlineText,
       statusText: statusText.isEmpty ? null : statusText,
       options: List<ThreadPollOption>.unmodifiable(options),
@@ -847,6 +851,7 @@ class ThreadDetailHtmlParser {
     final hasVoteInputs = _hasValidPollVoteInputs(pollRoot, options);
     final canVote = hasVoteInputs && !_isAlreadyVotedStatus(statusText);
     final maxMatch = RegExp(r'最多可选\s*(\d+)\s*项').firstMatch(summary);
+    final summaryMetadata = parseDiscuzThreadPollSummary(summary);
     return ThreadPoll(
       isMultipleChoice:
           pollRoot.querySelector('input[type="checkbox"]') != null ||
@@ -854,6 +859,8 @@ class ThreadDetailHtmlParser {
       canVote: canVote,
       maxChoices: int.tryParse(maxMatch?.group(1) ?? ''),
       summary: summary,
+      participantCount: summaryMetadata.participantCount,
+      rulesText: summaryMetadata.rulesText,
       deadlineText: deadlineText.isEmpty ? null : deadlineText,
       statusText: statusText.isEmpty ? null : statusText,
       options: List<ThreadPollOption>.unmodifiable(options),

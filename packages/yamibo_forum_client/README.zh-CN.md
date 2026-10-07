@@ -86,6 +86,8 @@ final client = builder.buildStandardClient(
 
 版块列表和用户主题／回复摘要通过 `badges` 保留有序的独立标识；每枚标识提供来源中立的 kind 与服务器原文 `sourceLabel`。Host 对已知 kind 使用本地化文案，未知标识保留原文。版块摘要继续保留 `badgeLabel`、`isLocked`，通过 `effectiveBadges` 兼容旧调用。版块快照使用 codec/parser v2；旧快照在有原始 HTML 缓存时重新解析，避免只留下第一枚标识。
 
+帖子投票保留完整原始 `summary`，另提供可选的 `participantCount` 与 `rulesText`。Discuz adapter 独立识别人数子句，不使用多选选项票数求和推断参与人数；`rulesText` 去掉已识别的人数子句，为 null 时保留原始摘要作为未知格式的回退。这些新增字段随详情快照保存，旧快照由同一解析器从原摘要恢复，保持现有版本可读。
+
 ## 认证与命令
 
 Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。标准客户端支持密码登录、会话解析和标准登出；登录只有在 profile 回读证明稳定非零 uid 后才算 applied。

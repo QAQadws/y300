@@ -135,6 +135,14 @@ and preserve unknown source wording. Forum summaries retain `badgeLabel` and
 use codec/parser version 2; older snapshots are reparsed from the cached HTML
 document when available, rather than retaining an incomplete single marker.
 
+Thread polls retain the original `summary` and expose optional
+`participantCount` and `rulesText` metadata. The Discuz adapters extract the
+recognized voters-count clause independently of option vote totals; multiple
+choices must never be summed to infer participation. `rulesText` omits that
+clause, while null preserves the original summary as a fallback for unknown
+formats. These additive fields round-trip through detail snapshots; older
+snapshots derive them from the same source summary without invalidation.
+
 Command callers must distinguish five outcomes:
 
 - `DataCommandApplied`: the postcondition was proved;
