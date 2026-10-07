@@ -96,6 +96,10 @@ void main() {
     final item = result.dataOrNull!.items.single;
     expect(item.threadId, '42');
     expect(item.title, 'Title & punctuation');
+    expect(item.titleStyle.colorHex, isNull);
+    expect(item.titleStyle.bold, isFalse);
+    expect(item.titleStyle.italic, isFalse);
+    expect(item.titleStyle.underline, isFalse);
     expect(item.badges.map((badge) => badge.kind), [
       ForumThreadBadgeKind.poll,
       ForumThreadBadgeKind.sticky,
@@ -167,6 +171,67 @@ void main() {
     );
     expect(result.dataOrNull!.pagination.hasNext, isTrue);
   });
+
+  for (final replies in [false, true]) {
+    for (final (label, css, color, bold, italic, underline) in [
+      ('color only', 'color: #3C9D40', '#3C9D40', false, false, false),
+      (
+        'Discuz combined highlight',
+        'font-weight: bold;font-style: italic;text-decoration: underline;color: #EE1B2E',
+        '#EE1B2E',
+        true,
+        true,
+        true,
+      ),
+      (
+        'case and shorthand color',
+        'COLOR: #aB3 !important; FONT-WEIGHT: 700; font-style: italic; text-decoration: underline line-through',
+        '#AABB33',
+        true,
+        true,
+        true,
+      ),
+      (
+        'invalid and unrelated declarations',
+        'background-color: #EE1B2E; color: url(bad); font-weight: normal; font-style: normal; text-decoration: none; font-size: 90px',
+        null,
+        false,
+        false,
+        false,
+      ),
+    ]) {
+      test('$label is independent of badges: replies=$replies', () async {
+        final row = (replies ? _replyRow() : _topicRow)
+            .replaceFirst('<em>', '<em style="$css">')
+            .replaceFirst(
+              'class="micon"',
+              'class="micon" style="color: #2B65B7"',
+            );
+        final result = await load(
+          _document(replies: replies, rows: row),
+          query: replies ? _replies : _topics,
+        );
+        expect(result.failureOrNull, isNull);
+        final item = result.dataOrNull!.items.single;
+        expect(item.title, replies ? 'Reply topic' : 'Title & punctuation');
+        expect(item.titleStyle.colorHex, color);
+        expect(item.titleStyle.bold, bold);
+        expect(item.titleStyle.italic, italic);
+        expect(item.titleStyle.underline, underline);
+        expect(item.badges, isNotEmpty);
+        expect(
+          (result
+                  as DataReadSuccess<
+                    UserThreadDirectoryData,
+                    UserThreadDirectoryReadCapabilities
+                  >)
+              .capabilities
+              .supports(UserThreadDirectoryCapability.titleStyle),
+          isTrue,
+        );
+      });
+    }
+  }
 
   test(
     'simple pager proves both directions without a total or current node',

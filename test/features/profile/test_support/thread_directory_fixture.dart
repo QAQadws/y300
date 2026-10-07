@@ -86,9 +86,11 @@ List<UserThreadSummary> threadItems(UserThreadDirectoryType type) => [
 UserThreadSummary threadSummary(
   String id, {
   List<String> replies = const [],
+  UserThreadTitleStyle titleStyle = const UserThreadTitleStyle(),
 }) => UserThreadSummary(
   threadId: id,
   title: 'Thread $id: a source title with enough words to wrap on phones',
+  titleStyle: titleStyle,
   uri: Uri.parse('https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$id'),
   authorName: 'Source author',
   forumName: 'Source forum',

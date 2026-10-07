@@ -79,6 +79,55 @@ void main() {
     },
   );
 
+  test('merged reply groups use the latest advertised title style', () async {
+    final repository = ThreadDirectoryFixture();
+    final controller = _controller(repository, UserThreadDirectoryType.replies);
+    addTearDown(controller.dispose);
+    var pending = controller.setActive(true);
+    repository.succeed(
+      0,
+      items: [
+        threadSummary('100', replies: ['501']),
+      ],
+      hasMore: true,
+    );
+    await pending;
+    const highlighted = UserThreadTitleStyle(
+      colorHex: '#EE1B2E',
+      bold: true,
+      italic: true,
+      underline: true,
+    );
+    pending = controller.loadMore();
+    repository.succeed(
+      1,
+      items: [
+        threadSummary('100', replies: ['502'], titleStyle: highlighted),
+      ],
+      hasMore: true,
+    );
+    await pending;
+    expect(controller.value.data!.items.single.titleStyle, same(highlighted));
+    pending = controller.loadMore();
+    repository.succeed(
+      2,
+      items: [
+        threadSummary('100', replies: ['503']),
+      ],
+    );
+    await pending;
+    final item = controller.value.data!.items.single;
+    expect(item.replyPreviews.map((reply) => reply.postId), [
+      '501',
+      '502',
+      '503',
+    ]);
+    expect(item.titleStyle.colorHex, isNull);
+    expect(item.titleStyle.bold, isFalse);
+    expect(item.titleStyle.italic, isFalse);
+    expect(item.titleStyle.underline, isFalse);
+  });
+
   test('failed pagination retains content and retries the same page', () async {
     final repository = ThreadDirectoryFixture();
     final controller = _controller(repository);

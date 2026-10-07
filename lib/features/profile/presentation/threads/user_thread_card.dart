@@ -45,13 +45,20 @@ class UserThreadCard extends ConsumerWidget {
         metadata.isNotEmpty ||
         item.avatarUrl?.trim().isNotEmpty == true;
     final excerpt = item.excerpt?.trim() ?? '';
+    final sourceTitleStyle = item.titleStyle;
     final title = Text(
       item.title,
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
       style: theme.textTheme.titleMedium?.copyWith(
-        color: palette.title,
-        fontWeight: FontWeight.w800,
+        color: _titleColor(sourceTitleStyle.colorHex) ?? palette.title,
+        fontWeight: sourceTitleStyle.bold ? FontWeight.w800 : FontWeight.w600,
+        fontStyle: sourceTitleStyle.italic
+            ? FontStyle.italic
+            : FontStyle.normal,
+        decoration: sourceTitleStyle.underline
+            ? TextDecoration.underline
+            : TextDecoration.none,
         height: 1.24,
       ),
     );
@@ -251,6 +258,11 @@ class UserThreadCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+Color? _titleColor(String? hex) {
+  if (hex == null || !RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(hex)) return null;
+  return Color(0xFF000000 | int.parse(hex.substring(1), radix: 16));
 }
 
 class _UserThreadHeadingRow extends StatelessWidget {

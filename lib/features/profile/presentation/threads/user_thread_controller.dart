@@ -321,6 +321,7 @@ UserThreadDirectoryData _mergeMore(
     items[item.threadId] = UserThreadSummary(
       threadId: item.threadId,
       title: item.title,
+      titleStyle: item.titleStyle,
       uri: item.uri,
       authorName: item.authorName,
       authorUserId: item.authorUserId,

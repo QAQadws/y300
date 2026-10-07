@@ -57,6 +57,7 @@ final class UserThreadSummary {
     required this.threadId,
     required this.title,
     required this.uri,
+    this.titleStyle = const UserThreadTitleStyle(),
     this.authorName,
     this.authorUserId,
     this.avatarUrl,
@@ -76,6 +77,9 @@ final class UserThreadSummary {
 
   /// Topic title without status badges or markup.
   final String title;
+
+  /// Source-advertised title emphasis, independent of topic badges.
+  final UserThreadTitleStyle titleStyle;
 
   /// Validated topic destination.
   final Uri uri;
@@ -115,6 +119,29 @@ final class UserThreadSummary {
 
   /// Independently advertised topic markers in source order.
   final List<ForumThreadBadge> badges;
+}
+
+/// Supported title emphasis without carrying arbitrary HTML or CSS to hosts.
+final class UserThreadTitleStyle {
+  /// Creates immutable title metadata; omitted emphasis uses host defaults.
+  const UserThreadTitleStyle({
+    this.colorHex,
+    this.bold = false,
+    this.italic = false,
+    this.underline = false,
+  });
+
+  /// Opaque RGB color in normalized `#RRGGBB` form, when advertised.
+  final String? colorHex;
+
+  /// Whether the source explicitly emphasizes the title with bold weight.
+  final bool bold;
+
+  /// Whether the source explicitly displays the title in italics.
+  final bool italic;
+
+  /// Whether the source explicitly underlines the title.
+  final bool underline;
 }
 
 /// One reply and its exact server-provided post location.
@@ -211,6 +238,9 @@ enum UserThreadDirectoryCapability {
 
   /// Independently advertised topic markers.
   badges,
+
+  /// Source-advertised title color, bold, italic, and underline emphasis.
+  titleStyle,
 }
 
 /// Declared source capabilities.

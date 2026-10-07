@@ -366,6 +366,14 @@ replies by `postId`; each reply retains its own find-post destination. Missing
 dates, counts, or author metadata remain unknown instead of being inferred
 from the account.
 
+`UserThreadSummary.title` remains plain text, with independently advertised
+status markers in `badges`. `titleStyle` retains source title color (normalized
+`#RRGGBB`), bold, italic, and underline metadata from the touch template's
+highlight attribute. Unsupported declarations are ignored rather than passed
+to hosts as HTML or CSS. Hosts apply these values to their native title text,
+use theme defaults when no emphasis is advertised, and retain the latest
+style when merging repeated topic groups across pages.
+
 ## Y300 parity and unmigrated APIs
 
 This package is a forum client core, not a complete Discuz SDK. The following

@@ -14,6 +14,7 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_card.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
@@ -22,6 +23,82 @@ import 'package:y300/shared/widgets/forum_thread_badges.dart';
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
+  for (final type in UserThreadDirectoryType.values) {
+    for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+      testWidgets('$type preserves title emphasis in ${theme.brightness}', (
+        tester,
+      ) async {
+        final item = UserThreadSummary(
+          threadId: '100',
+          title: 'Highlighted source title',
+          uri: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+          ),
+          titleStyle: const UserThreadTitleStyle(
+            colorHex: '#EE1B2E',
+            bold: true,
+            italic: true,
+            underline: true,
+          ),
+          badges: const [
+            ForumThreadBadge(
+              kind: ForumThreadBadgeKind.digest,
+              sourceLabel: '',
+            ),
+          ],
+        );
+        await _pumpBadgeCard(tester, item: item, type: type, theme: theme);
+        final title = tester.widget<Text>(find.text(item.title));
+        expect(title.style!.color, const Color(0xFFEE1B2E));
+        expect(title.style!.fontWeight, FontWeight.w800);
+        expect(title.style!.fontStyle, FontStyle.italic);
+        expect(title.style!.decoration, TextDecoration.underline);
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(UserThreadCard)),
+        );
+        expect(find.text(l10n.forumThreadBadgeDigest), findsOneWidget);
+
+        final plain = UserThreadSummary(
+          threadId: '100',
+          title: item.title,
+          uri: item.uri,
+        );
+        await _pumpBadgeCard(tester, item: plain, type: type, theme: theme);
+        final plainTitle = tester.widget<Text>(find.text(item.title));
+        expect(
+          plainTitle.style!.color,
+          ThreadDetailNativePalette.resolve(theme).title,
+        );
+        expect(plainTitle.style!.fontWeight, FontWeight.w600);
+        expect(plainTitle.style!.fontStyle, FontStyle.normal);
+        expect(plainTitle.style!.decoration, TextDecoration.none);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('unsupported title color falls back to the native palette', (
+    tester,
+  ) async {
+    final theme = AppTheme.light();
+    final item = UserThreadSummary(
+      threadId: '100',
+      title: 'A source title',
+      uri: Uri.parse('https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100'),
+      titleStyle: const UserThreadTitleStyle(colorHex: 'invalid'),
+    );
+    await _pumpBadgeCard(
+      tester,
+      item: item,
+      type: UserThreadDirectoryType.threads,
+    );
+    expect(
+      tester.widget<Text>(find.text(item.title)).style!.color,
+      ThreadDetailNativePalette.resolve(theme).title,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final type in UserThreadDirectoryType.values) {
     for (final width in [320.0, 393.0]) {
       for (final scale in [1.0, 2.0]) {
@@ -429,6 +506,7 @@ Future<void> _pumpBadgeCard(
   required UserThreadSummary item,
   required UserThreadDirectoryType type,
   double scale = 1,
+  ThemeData? theme,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -437,7 +515,7 @@ Future<void> _pumpBadgeCard(
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       ],
       child: LocalizedTestApp(
-        theme: AppTheme.light(),
+        theme: theme ?? AppTheme.light(),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,
