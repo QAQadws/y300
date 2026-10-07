@@ -26,6 +26,7 @@ import 'package:y300/features/novel/presentation/controllers/novel_chapter_hydra
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_open_mode_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_chapter_hydration_panel.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_chapter_open_mode_control.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -82,7 +83,6 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     final hydrationProvider = novelChapterHydrationControllerProvider(
       widget.novelId,
     );
@@ -148,26 +148,10 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         );
         await historyRecorder.record(draft);
       },
-      chapterModeControl: SegmentedButton<NovelChapterOpenMode>(
+      chapterModeControl: NovelChapterOpenModeControl(
         key: const Key('novel-chapter-open-mode-control'),
-        segments: <ButtonSegment<NovelChapterOpenMode>>[
-          ButtonSegment<NovelChapterOpenMode>(
-            value: NovelChapterOpenMode.reader,
-            icon: const Icon(Icons.book_outlined, size: 18),
-            label: Text(l10n.novelOpenInReader),
-          ),
-          ButtonSegment<NovelChapterOpenMode>(
-            value: NovelChapterOpenMode.sourcePost,
-            icon: const Icon(Icons.chat_bubble_outline, size: 18),
-            label: Text(l10n.novelOpenSourcePost),
-          ),
-        ],
-        selected: <NovelChapterOpenMode>{openMode},
-        showSelectedIcon: false,
-        style: _chapterOpenModeStyle(Theme.of(context).colorScheme),
-        onSelectionChanged: openModeState.isLoading
-            ? null
-            : (selection) => _updateOpenMode(selection.first),
+        selectedMode: openMode,
+        onChanged: openModeState.isLoading ? null : _updateOpenMode,
       ),
       onOpenChapter: _openChapter,
       onContinue: _openContinue,
@@ -181,41 +165,6 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       },
       onOpenReader: _openReader,
       onOpenThread: _openThread,
-    );
-  }
-
-  ButtonStyle _chapterOpenModeStyle(ColorScheme scheme) {
-    return ButtonStyle(
-      visualDensity: VisualDensity.compact,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      minimumSize: const WidgetStatePropertyAll<Size>(Size(0, 36)),
-      padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
-        EdgeInsets.symmetric(horizontal: 10),
-      ),
-      shape: WidgetStatePropertyAll<OutlinedBorder>(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      side: WidgetStatePropertyAll<BorderSide>(
-        BorderSide(color: scheme.outlineVariant),
-      ),
-      backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-        if (states.contains(WidgetState.selected)) {
-          return scheme.primary.withValues(alpha: 0.10);
-        }
-        return Colors.transparent;
-      }),
-      foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-        if (states.contains(WidgetState.disabled)) {
-          return scheme.onSurface.withValues(alpha: 0.38);
-        }
-        if (states.contains(WidgetState.selected)) {
-          return scheme.primary;
-        }
-        return scheme.onSurfaceVariant;
-      }),
-      overlayColor: WidgetStatePropertyAll<Color>(
-        scheme.primary.withValues(alpha: 0.08),
-      ),
     );
   }
 

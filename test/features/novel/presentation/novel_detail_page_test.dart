@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Tristate;
 import 'package:y300/l10n/app_localizations.dart';
 
 import 'package:flutter/material.dart';
@@ -264,6 +265,9 @@ void main() {
   testWidgets('chapter open mode selection is persisted globally', (
     tester,
   ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 740);
+    addTearDown(tester.view.reset);
     final preferences = _MemoryNovelInteractionPreferencesRepository();
     await _pumpNovelDetail(
       tester,
@@ -277,33 +281,60 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    final segmentedButton = tester
-        .widget<SegmentedButton<NovelChapterOpenMode>>(control);
-    expect(
-      segmentedButton.style?.minimumSize?.resolve(<WidgetState>{}),
-      const Size(0, 36),
-    );
-    final shape = segmentedButton.style?.shape?.resolve(<WidgetState>{});
-    expect(shape, isA<RoundedRectangleBorder>());
-    expect(
-      (shape! as RoundedRectangleBorder).borderRadius,
-      BorderRadius.circular(8),
-    );
-    expect(
-      find.descendant(of: control, matching: find.byIcon(Icons.book_outlined)),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: control,
-        matching: find.byIcon(Icons.chat_bubble_outline),
-      ),
-      findsOneWidget,
-    );
-    await tester.tap(find.descendant(of: control, matching: find.text('原帖')));
     await tester.pumpAndSettle();
+    final semantics = tester.ensureSemantics();
+    try {
+      final l10n = AppLocalizations.of(tester.element(control));
+      final reader = find.descendant(
+        of: control,
+        matching: find.widgetWithText(TextButton, l10n.novelOpenInReader),
+      );
+      final source = find.descendant(
+        of: control,
+        matching: find.widgetWithText(TextButton, l10n.novelOpenSourcePost),
+      );
+      final readerRect = tester.getRect(reader);
+      final sourceRect = tester.getRect(source);
+      final indicator = find.byKey(
+        const Key('novel-chapter-open-mode-indicator'),
+      );
+      final initialIndicatorX = tester.getCenter(indicator).dx;
+      expect(readerRect.size.width, greaterThanOrEqualTo(48));
+      expect(readerRect.size.height, greaterThanOrEqualTo(48));
+      expect(sourceRect.size.width, greaterThanOrEqualTo(48));
+      expect(sourceRect.size.height, greaterThanOrEqualTo(48));
+      expect(
+        tester.getSemantics(reader).flagsCollection.isSelected,
+        Tristate.isTrue,
+      );
+      await tester.tap(source);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 90));
+      final movingIndicatorX = tester.getCenter(indicator).dx;
+      expect(movingIndicatorX, greaterThan(initialIndicatorX));
+      expect(movingIndicatorX, lessThan(sourceRect.center.dx));
+      expect(tester.getRect(reader), readerRect);
+      expect(tester.getRect(source), sourceRect);
+      await tester.pumpAndSettle();
 
-    expect(preferences.mode, NovelChapterOpenMode.sourcePost);
+      expect(preferences.mode, NovelChapterOpenMode.sourcePost);
+      expect(
+        tester.getSemantics(source).flagsCollection.isSelected,
+        Tristate.isTrue,
+      );
+      expect(
+        tester.getSemantics(reader).flagsCollection.isSelected,
+        Tristate.isFalse,
+      );
+      expect(tester.getRect(reader), readerRect);
+      expect(tester.getRect(source), sourceRect);
+      expect(
+        tester.getCenter(indicator).dx,
+        closeTo(sourceRect.center.dx, 0.5),
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('source-post mode opens located ordinary page and target PID', (
