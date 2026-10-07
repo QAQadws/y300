@@ -8,6 +8,107 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
+  testWidgets('late dimension hints preserve the mounted visible image', (
+    tester,
+  ) async {
+    final dimensions = _Dimensions(deferred: true);
+    final host = _ImageHost(dimensions);
+    final viewport = ForumHtmlImageViewportCoordinator();
+    addTearDown(viewport.dispose);
+    await tester.pumpWidget(
+      _host(
+        host,
+        viewport: viewport,
+        html: '<img src="https://example.invalid/unknown.jpg">',
+      ),
+    );
+    await _frames(tester);
+    final image = find.byType(_DisplayedImage);
+    final element = tester.element(image);
+    tester.widget<_DisplayedImage>(image).onFirstFrame!();
+    dimensions.pending.single.complete((
+      size: const Size(400, 200),
+      layout: const ForumHtmlImageLayout(aspectRatio: 2),
+    ));
+    for (var frame = 0; frame < 4; frame++) {
+      await tester.pump();
+      expect(image, findsOneWidget);
+      expect(tester.element(image), same(element));
+      expect(
+        tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
+        2,
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final change in ['inactive', 'unmounted', 'Host', 'width', 'DPR']) {
+    testWidgets('predecode rejects late results after $change changes', (
+      tester,
+    ) async {
+      final host = _PredecodeHost();
+      final viewport = ForumHtmlImageViewportCoordinator(
+        predecodePolicy: const ForumHtmlImagePredecodePolicy(
+          maxDecodedBytesPerImage: 1000000,
+        ),
+      );
+      addTearDown(viewport.dispose);
+      await tester.pumpWidget(
+        _host(host, viewport: viewport, imageCount: 3, height: 150),
+      );
+      await _frames(tester);
+      expect(host.work, hasLength(1));
+      final old = host.work.single;
+      expect(old.scope.isActive, isTrue);
+      expect(old.size.width, 200);
+      expect(old.size.height, 200);
+      switch (change) {
+        case 'inactive':
+          viewport.setActive(false);
+        case 'unmounted':
+          await tester.pumpWidget(
+            _host(host, shown: false, viewport: viewport),
+          );
+        case 'Host':
+          await tester.pumpWidget(
+            _host(
+              _PredecodeHost(),
+              viewport: viewport,
+              imageCount: 3,
+              height: 150,
+            ),
+          );
+        case 'width':
+          await tester.pumpWidget(
+            _host(
+              host,
+              viewport: viewport,
+              imageCount: 3,
+              height: 150,
+              width: 180,
+            ),
+          );
+        case 'DPR':
+          addTearDown(tester.view.resetDevicePixelRatio);
+          tester.view.devicePixelRatio = tester.view.devicePixelRatio * 2;
+      }
+      await _frames(tester);
+      expect(old.scope.isActive, isFalse);
+      old.result.complete(ForumHtmlImagePreparationOutcome.decoded);
+      await _frames(tester);
+      expect(tester.takeException(), isNull);
+      if (change == 'inactive' || change == 'unmounted') {
+        expect(host.work, hasLength(1));
+      } else if (change == 'width' || change == 'DPR') {
+        expect(host.work, hasLength(2));
+        expect(host.work.last.size.width, change == 'width' ? 180 : 200);
+        host.work.last.result.complete(
+          ForumHtmlImagePreparationOutcome.decoded,
+        );
+      }
+    });
+  }
+
   testWidgets('dimension lookup failure leaves the displayed fallback intact', (
     tester,
   ) async {
@@ -328,6 +429,7 @@ Widget _host(
   int imageCount = 1,
   String imagePrefix = 'image',
   double height = 300,
+  double width = 200,
   String? html,
   ForumHtmlBodyPresentation? bodyPresentation,
   VoidCallback? onBodyBuilt,
@@ -337,7 +439,7 @@ Widget _host(
     body: Align(
       alignment: Alignment.topLeft,
       child: SizedBox(
-        width: 200,
+        width: width,
         height: height,
         child: SingleChildScrollView(
           child: shown
@@ -440,6 +542,40 @@ final class _ImageHost implements ForumHtmlImageHost {
     onFirstFrame: onFirstFrameRendered,
     onFailed: onImageFailed,
   );
+}
+
+final class _PredecodeHost extends _ImageHost
+    implements ForumHtmlImagePredecodeHost {
+  _PredecodeHost() : super(_Dimensions());
+  @override
+  bool canRetainDisplayedImage({
+    required ForumHtmlDisplayImage image,
+    required Size intrinsicSize,
+    required Size displaySize,
+    required double devicePixelRatio,
+    required int maxDecodedBytes,
+  }) => true;
+
+  final work =
+      <
+        ({
+          ForumHtmlImageWorkScope scope,
+          Size size,
+          Completer<ForumHtmlImagePreparationOutcome> result,
+        })
+      >[];
+  @override
+  Future<ForumHtmlImagePreparationOutcome> predecodeImage({
+    required ForumHtmlDisplayImage image,
+    required BuildContext context,
+    required Size displaySize,
+    required ForumHtmlImageWorkScope scope,
+    required int maxDecodedBytes,
+  }) {
+    final result = Completer<ForumHtmlImagePreparationOutcome>();
+    work.add((scope: scope, size: displaySize, result: result));
+    return result.future;
+  }
 }
 
 final class _ImageBinding implements ForumHtmlDisplayImage {

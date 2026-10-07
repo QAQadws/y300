@@ -30,6 +30,20 @@ abstract interface class ScopedForumImagePrecacheService {
   });
 }
 
+/// Optional admission limit for nearby HTML images. Legacy callers and test
+/// Hosts keep their existing unbounded API until they opt in to this port.
+abstract interface class BoundedForumImagePrecacheService
+    implements ScopedForumImagePrecacheService {
+  @override
+  Future<ForumImagePrecacheResult> precacheDecodedScoped({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    required ForumImageWorkScope scope,
+    Size? expectedDisplaySize,
+    int? maxDecodedBytes,
+  });
+}
+
 abstract interface class ForumImageWorkScope {
   bool get isActive;
 }

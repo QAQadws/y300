@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
+import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -20,6 +20,7 @@ import 'package:y300/features/thread/presentation/thread_post_rate_form_projecti
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_preload_policy.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
@@ -118,6 +119,10 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   late ThreadDetailScrollStabilizer _scrollStabilizer;
   late ThreadPostViewportAnchorCoordinator _projectionAnchorCoordinator;
   ForumHtmlImageViewportCoordinator? _imageViewportCoordinator;
+  late final _imagePreloadPolicy = ThreadImagePreloadPolicy(
+    imageCacheBudgetBytes: PaintingBinding.instance.imageCache.maximumSizeBytes,
+    isLowRamDevice: DeviceMemoryProfileStore.current?.isLowRamDevice ?? false,
+  );
   ValueListenable<TickerModeData>? _tickerModeNotifier;
   final _imageAspectRatioTracker = _ThreadDetailImageAspectRatioTracker();
 
@@ -249,7 +254,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           ForumContentSpacing.pageHorizontal,
           ForumContentSpacing.listBottom,
         ),
-        scrollCacheExtent: const ScrollCacheExtent.pixels(900),
+        scrollCacheExtent: _imagePreloadPolicy.layoutCacheExtent,
         itemCount: entries.length,
         itemBuilder: (context, index) {
           final entry = entries[index];
@@ -323,7 +328,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
                 physics: ForumPullToRefresh.scrollPhysics,
                 center: _targetCenterKey,
                 anchor: height <= 0 ? 0 : reveal / height,
-                scrollCacheExtent: const ScrollCacheExtent.pixels(900),
+                scrollCacheExtent: _imagePreloadPolicy.layoutCacheExtent,
                 semanticChildCount: entries.length,
                 slivers: [
                   _buildTargetEntrySliver(
@@ -448,7 +453,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       _imageViewportCoordinator = null;
       return;
     }
-    _imageViewportCoordinator ??= ForumHtmlImageViewportCoordinator();
+    _imageViewportCoordinator ??= ForumHtmlImageViewportCoordinator(
+      predecodePolicy: _imagePreloadPolicy.predecode,
+    );
   }
 
   void _handleTickerModeChanged() {

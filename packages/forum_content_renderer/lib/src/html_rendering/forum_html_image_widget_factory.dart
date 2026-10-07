@@ -7,6 +7,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_host.dart';
+import '../contracts/forum_html_image_predecode_host.dart';
 import 'forum_html_prepared_render_document.dart';
 import 'forum_html_render_callbacks.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
@@ -229,13 +230,16 @@ class _ForumHtmlImageView extends StatefulWidget {
 
 class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   ForumHtmlImageLayout? _cachedLayout;
+  Size? _intrinsicSize;
+  bool _firstFrameRendered = false;
   int _bindingRevision = 0;
   int _callbackRevision = 0;
   int _retryToken = 0;
   ForumHtmlImageViewportHandle? _viewportHandle;
   ForumHtmlImageViewportMode? _lastMode;
-  ForumHtmlImageWorkToken? _prefetchToken;
+  ForumHtmlImageViewportWork? _prefetchToken;
   Object? _prefetchIdentity;
+  Size _displaySize = Size.zero;
 
   ForumHtmlImageLayout get _layout =>
       _cachedLayout ?? widget.image.initialLayout;
@@ -272,6 +276,8 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       _viewportHandle?.reportLoadStarted();
       _cancelPrefetch();
       _cachedLayout = null;
+      _intrinsicSize = null;
+      _firstFrameRendered = false;
       _loadDimensions();
     }
   }
@@ -279,28 +285,55 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   @override
   Widget build(BuildContext context) {
     final handle = _viewportHandle;
-    handle?.bind(context);
     if (handle == null) return _buildImage();
-    return ValueListenableBuilder<ForumHtmlImageViewportMode>(
-      valueListenable: handle,
-      builder: (context, mode, child) {
-        if (_lastMode != mode) {
-          _lastMode = mode;
-          _callbackRevision++;
-        }
-        if (mode == ForumHtmlImageViewportMode.prefetch) {
-          _schedulePrefetch();
-        } else if (mode == ForumHtmlImageViewportMode.dormant) {
-          _cancelPrefetch();
-        }
-        return mode == ForumHtmlImageViewportMode.display
-            ? _buildImage()
-            : _clipMedia(
-                AspectRatio(
-                  aspectRatio: _layout.aspectRatio ?? 0.7,
-                  child: const _ImageSurface(),
-                ),
-              );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        _displaySize = Size(width, width / (_layout.aspectRatio ?? 0.7));
+        handle.configureWork(
+          identity: (
+            widget.host,
+            widget.image.identity,
+            // Block images decode by width. Intrinsic-height recovery only
+            // changes layout and must not retire an already displayed frame.
+            width,
+            MediaQuery.devicePixelRatioOf(context),
+          ),
+          canPredecode:
+              widget.host is ForumHtmlImagePredecodeHost &&
+              width.isFinite &&
+              width > 0,
+        );
+        handle.bind(context);
+        return ValueListenableBuilder<ForumHtmlImageViewportMode>(
+          valueListenable: handle,
+          builder: (context, mode, child) {
+            if (_lastMode != mode) {
+              if (_lastMode?.keepsImageMounted != mode.keepsImageMounted) {
+                _callbackRevision++;
+                if (!mode.keepsImageMounted) _firstFrameRendered = false;
+              }
+              _lastMode = mode;
+            }
+            if (mode == ForumHtmlImageViewportMode.prefetch ||
+                mode == ForumHtmlImageViewportMode.predecode) {
+              _schedulePrefetch();
+            } else {
+              _cancelPrefetch();
+            }
+            return mode.keepsImageMounted
+                ? TickerMode(
+                    enabled: mode == ForumHtmlImageViewportMode.display,
+                    child: _buildImage(),
+                  )
+                : _clipMedia(
+                    AspectRatio(
+                      aspectRatio: _layout.aspectRatio ?? 0.7,
+                      child: const _ImageSurface(),
+                    ),
+                  );
+          },
+        );
       },
     );
   }
@@ -308,16 +341,23 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   bool _acceptCallback(int revision) =>
       mounted &&
       revision == _callbackRevision &&
-      (_viewportHandle == null ||
-          _viewportHandle!.value == ForumHtmlImageViewportMode.display);
+      (_viewportHandle == null || _viewportHandle!.value.keepsImageMounted);
 
   Widget _buildImage() {
     final revision = _callbackRevision;
     final sticker = widget.image.isSticker;
     final size = _layout.displaySize;
-    void settle() {
+    void firstFrameRendered() {
       if (_acceptCallback(revision)) {
-        _viewportHandle?.reportFirstFrameSettled();
+        _firstFrameRendered = true;
+        _reportRenderedFrame();
+      }
+    }
+
+    void failed() {
+      if (_acceptCallback(revision)) {
+        _firstFrameRendered = false;
+        _viewportHandle?.reportImageFailed();
       }
     }
 
@@ -345,10 +385,13 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
         widget.onImageResolved?.call(size);
         if (!_acceptCallback(revision) || sticker) return;
         widget.host.onBlockImageResolved(widget.image, size);
-        if (_acceptCallback(revision)) _promoteDecodedSize(size);
+        if (!_acceptCallback(revision)) return;
+        _intrinsicSize = _validSize(size) ? size : null;
+        _reportRenderedFrame();
+        _promoteDecodedSize(size);
       },
-      onFirstFrameRendered: sticker ? null : settle,
-      onImageFailed: sticker ? null : settle,
+      onFirstFrameRendered: sticker ? null : firstFrameRendered,
+      onImageFailed: sticker ? null : failed,
       waitForCacheWrite: !sticker,
       retryToken: _retryToken,
     );
@@ -361,18 +404,48 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     );
   }
 
+  void _reportRenderedFrame() {
+    if (!_firstFrameRendered || !_acceptCallback(_callbackRevision)) return;
+    final host = widget.host;
+    final size = _intrinsicSize;
+    // An optional predecode may already have admitted this frame. Missing
+    // display metadata leaves that decision intact until its probe completes.
+    final admission = host is ForumHtmlImagePredecodeHost && size != null
+        ? (host as ForumHtmlImagePredecodeHost).canRetainDisplayedImage(
+            image: widget.image,
+            intrinsicSize: size,
+            displaySize: _displaySize,
+            devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+            maxDecodedBytes: _viewportHandle?.maxDecodedBytes ?? 0,
+          )
+        : null;
+    _viewportHandle?.reportFirstFrameRendered(canRetain: admission);
+  }
+
   void _schedulePrefetch() {
-    final identity = widget.image.identity;
+    final handle = _viewportHandle!;
+    final mode = handle.value;
+    final identity = (
+      widget.host,
+      widget.image.identity,
+      mode,
+      _displaySize.width,
+      MediaQuery.devicePixelRatioOf(context),
+    );
     if (_prefetchIdentity == identity) return;
     _cancelPrefetch();
     _prefetchIdentity = identity;
-    final token = ForumHtmlImageWorkToken();
+    final token = handle.beginWork();
     _prefetchToken = token;
     final host = widget.host;
     final image = widget.image;
+    final displaySize = _displaySize;
+    final maxDecodedBytes = handle.maxDecodedBytes;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && token.isActive && _prefetchIdentity == identity) {
-        unawaited(_prefetch(host, image, token));
+        unawaited(_prefetch(host, image, token, displaySize, maxDecodedBytes));
+      } else {
+        token.complete(ForumHtmlImagePreparationOutcome.cancelled);
       }
     });
   }
@@ -380,12 +453,29 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   Future<void> _prefetch(
     ForumHtmlImageHost host,
     ForumHtmlDisplayImage image,
-    ForumHtmlImageWorkScope scope,
+    ForumHtmlImageViewportWork scope,
+    Size displaySize,
+    int maxDecodedBytes,
   ) async {
+    var outcome = ForumHtmlImagePreparationOutcome.failed;
     try {
-      await host.prefetchDisk(image, scope: scope);
+      if (scope.mode == ForumHtmlImageViewportMode.predecode &&
+          host is ForumHtmlImagePredecodeHost) {
+        outcome = await (host as ForumHtmlImagePredecodeHost).predecodeImage(
+          image: image,
+          context: context,
+          displaySize: displaySize,
+          scope: scope,
+          maxDecodedBytes: maxDecodedBytes,
+        );
+      } else {
+        await host.prefetchDisk(image, scope: scope);
+        outcome = ForumHtmlImagePreparationOutcome.diskOnly;
+      }
     } catch (_) {
       // Look-ahead is optional; display owns its failure and retry UI.
+    } finally {
+      scope.complete(outcome);
     }
   }
 
@@ -407,6 +497,7 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   void _retryImage() {
     if (!mounted) return;
     _callbackRevision++;
+    _firstFrameRendered = false;
     _viewportHandle?.reportLoadStarted();
     setState(() => _retryToken++);
   }
@@ -428,6 +519,8 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     if (!mounted || revision != _bindingRevision || dimensions == null) return;
     if (!image.isSticker) host.onBlockImageResolved(image, dimensions.size);
     if (!mounted || revision != _bindingRevision) return;
+    _intrinsicSize = _validSize(dimensions.size) ? dimensions.size : null;
+    _reportRenderedFrame();
     if (_cachedLayout != dimensions.layout) {
       setState(() => _cachedLayout = dimensions!.layout);
     }

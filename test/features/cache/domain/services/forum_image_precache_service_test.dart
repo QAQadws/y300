@@ -10,8 +10,158 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/services/default_forum_image_precache_service.dart';
+import 'package:y300/core/media/encoded_image_dimension_probe.dart';
+import 'package:y300/core/media/image_display_provider.dart';
 
 void main() {
+  for (final intrinsic in [const Size(2000, 1000), const Size(2000, 100000)]) {
+    testWidgets('bounded decode admits by encoded dimensions $intrinsic', (
+      tester,
+    ) async {
+      final decodedProviders = <ImageProvider>[];
+      final probe = _DimensionProbe(intrinsic);
+      final service = DefaultForumImagePrecacheService(
+        imageCacheService: _RecordingImageCacheService(),
+        imageRequestResolver: const DefaultForumImageRequestResolver(),
+        dimensionProbe: probe,
+        precacheInvoker: (provider, _) async => decodedProviders.add(provider),
+      );
+      late BuildContext context;
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: Builder(
+            builder: (value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      final result = await service.precacheDecodedScoped(
+        context: context,
+        spec: _threadSpec(),
+        scope: ForumImageWorkToken(),
+        expectedDisplaySize: const Size(320, double.nan),
+        maxDecodedBytes: 2 * 1024 * 1024,
+      );
+      expect(result.success, isTrue);
+      expect(probe.calls, 1);
+      final allowed = intrinsic.height < 100000;
+      expect(result.decoded, allowed);
+      expect(result.decodePrecacheAttempted, allowed);
+      expect(decodedProviders, hasLength(allowed ? 1 : 0));
+      if (allowed) {
+        final display = resolveDownscaledFileImageProvider(
+          localPath: result.localPath!,
+          fit: BoxFit.fitWidth,
+          displaySize: const Size(320, 160),
+          devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+        );
+        expect(
+          await decodedProviders.single.obtainKey(ImageConfiguration.empty),
+          await display.obtainKey(ImageConfiguration.empty),
+        );
+      }
+    });
+  }
+
+  testWidgets('bounded unknown width never decodes at original size', (
+    tester,
+  ) async {
+    final probe = _DimensionProbe(const Size(400, 200));
+    var decoded = 0;
+    final service = DefaultForumImagePrecacheService(
+      imageCacheService: _RecordingImageCacheService(),
+      imageRequestResolver: const DefaultForumImageRequestResolver(),
+      dimensionProbe: probe,
+      precacheInvoker: (_, _) async => decoded++,
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Builder(
+          builder: (value) {
+            context = value;
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    final result = await service.precacheDecodedScoped(
+      context: context,
+      spec: _threadSpec(),
+      scope: ForumImageWorkToken(),
+      maxDecodedBytes: 1000000,
+    );
+    expect(result.success, isTrue);
+    expect(result.decoded, isFalse);
+    expect(decoded, 0);
+    expect(probe.calls, 0);
+  });
+
+  test('cancelled queued disk work does not download', () async {
+    final disk = Completer<CachedImageResult>();
+    final cache = _RecordingImageCacheService(ensureCompleter: disk);
+    final service = DefaultForumImagePrecacheService(
+      imageCacheService: cache,
+      imageRequestResolver: const DefaultForumImageRequestResolver(),
+      maxConcurrentDiskTasks: 1,
+    );
+    final first = service.ensureDiskCached(_threadSpec());
+    final token = ForumImageWorkToken();
+    final second = service.ensureDiskCachedScoped(
+      ForumImageLoadSpec(
+        kind: ForumImageKind.threadInline,
+        url: Uri.parse('https://bbs.yamibo.com/second.jpg'),
+        ownerId: '573279',
+      ),
+      scope: token,
+    );
+    token.cancel();
+    disk.complete(const CachedImageResult(success: true, localPath: 'file'));
+    await first;
+    expect((await second).failureReason, 'cancelled_before_decode');
+    expect(cache.ensureRequests, hasLength(1));
+  });
+
+  testWidgets('cancelled admission probe skips decode', (tester) async {
+    final probe = _DimensionProbe(
+      const Size(400, 200),
+      pending: Completer<Size>(),
+    );
+    var decoded = 0;
+    final service = DefaultForumImagePrecacheService(
+      imageCacheService: _RecordingImageCacheService(),
+      imageRequestResolver: const DefaultForumImageRequestResolver(),
+      dimensionProbe: probe,
+      precacheInvoker: (_, _) async => decoded++,
+    );
+    late BuildContext context;
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Builder(
+          builder: (value) {
+            context = value;
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    final token = ForumImageWorkToken();
+    final work = service.precacheDecodedScoped(
+      context: context,
+      spec: _threadSpec(),
+      scope: token,
+      expectedDisplaySize: const Size(320, double.nan),
+      maxDecodedBytes: 1000000,
+    );
+    await tester.pump();
+    token.cancel();
+    probe.pending!.complete(const Size(400, 200));
+    expect((await work).failureReason, 'cancelled_before_decode');
+    expect(decoded, 0);
+  });
+
   test(
     'ensureDiskCached resolves cache request and delegates to service',
     () async {
@@ -283,6 +433,21 @@ void main() {
   });
 }
 
+class _DimensionProbe implements EncodedImageDimensionProbe {
+  _DimensionProbe(this.size, {this.pending});
+  final Size size;
+  final Completer<Size>? pending;
+  int calls = 0;
+  @override
+  Future<Size> probe({
+    required String cacheKey,
+    required String localPath,
+  }) async {
+    calls++;
+    return pending == null ? size : pending!.future;
+  }
+}
+
 Future<ForumImagePrecacheResult> _pumpAndPrecache(
   WidgetTester tester,
   ForumImagePrecacheService service,
@@ -378,6 +543,11 @@ class _FakeImageProvider extends ImageProvider<_FakeImageProvider> {
   const _FakeImageProvider(this.id);
 
   final String id;
+  @override
+  bool operator ==(Object other) =>
+      other is _FakeImageProvider && other.id == id;
+  @override
+  int get hashCode => id.hashCode;
 
   @override
   Future<_FakeImageProvider> obtainKey(ImageConfiguration configuration) {

@@ -1,8 +1,19 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter/widgets.dart';
+import '../contracts/forum_html_display_image.dart';
+import '../contracts/forum_html_image_predecode_host.dart';
+import 'forum_html_image_predecode_policy.dart';
 
-enum ForumHtmlImageViewportMode { dormant, prefetch, display }
+enum ForumHtmlImageViewportMode {
+  dormant,
+  prefetch,
+  predecode,
+  retained,
+  display;
+
+  bool get keepsImageMounted => this == display || this == retained;
+}
 
 /// Page-scoped scheduler for block images embedded inside a post's column.
 ///
@@ -14,17 +25,22 @@ final class ForumHtmlImageViewportCoordinator {
     this.prefetchExtentFactor = 0.5,
     this.maxVisibleFirstFrames = 2,
     this.maxPrefetchCandidates = 1,
+    this.predecodePolicy,
   });
 
   final double prefetchExtentFactor;
   final int maxVisibleFirstFrames;
   final int maxPrefetchCandidates;
+  final ForumHtmlImagePredecodePolicy? predecodePolicy;
+  final Set<ForumHtmlImageViewportWork> _runningWork = {};
   final Set<ForumHtmlImageViewportHandle> _handles =
       <ForumHtmlImageViewportHandle>{};
   ScrollPosition? _position;
   bool _evaluationScheduled = false;
   bool _active = true;
   bool _disposed = false;
+  double? _lastPixels;
+  bool _towardsBottom = true;
 
   @visibleForTesting
   int get registeredImageCount => _handles.length;
@@ -45,7 +61,7 @@ final class ForumHtmlImageViewportCoordinator {
     _active = active;
     if (!active) {
       for (final handle in _handles) {
-        handle._applyMode(ForumHtmlImageViewportMode.dormant);
+        handle._reset();
       }
       return;
     }
@@ -68,11 +84,13 @@ final class ForumHtmlImageViewportCoordinator {
     }
     _disposed = true;
     _position?.removeListener(_scheduleEvaluation);
+    _position?.isScrollingNotifier.removeListener(_scheduleEvaluation);
     _position = null;
     for (final handle in _handles.toList(growable: false)) {
       handle.dispose();
     }
     _handles.clear();
+    _runningWork.clear();
   }
 
   void _bind(ForumHtmlImageViewportHandle handle, BuildContext context) {
@@ -83,8 +101,11 @@ final class ForumHtmlImageViewportCoordinator {
     final position = Scrollable.maybeOf(context)?.position;
     if (!identical(position, _position)) {
       _position?.removeListener(_scheduleEvaluation);
+      _position?.isScrollingNotifier.removeListener(_scheduleEvaluation);
       _position = position;
       _position?.addListener(_scheduleEvaluation);
+      _position?.isScrollingNotifier.addListener(_scheduleEvaluation);
+      _lastPixels = position?.hasPixels == true ? position!.pixels : null;
     }
     _scheduleEvaluation();
   }
@@ -115,7 +136,20 @@ final class ForumHtmlImageViewportCoordinator {
     }
     const viewportStart = 0.0;
     final viewportEnd = position.viewportDimension;
-    final prefetchExtent = position.viewportDimension * prefetchExtentFactor;
+    final pixels = position.pixels;
+    if (_lastPixels case final double previous when pixels != previous) {
+      _towardsBottom =
+          (pixels > previous) == (position.axisDirection != AxisDirection.up);
+    }
+    _lastPixels = pixels;
+    final policy = predecodePolicy;
+    final prefetchExtent =
+        position.viewportDimension *
+        (policy == null
+            ? prefetchExtentFactor
+            : (policy.forwardDiskExtentFactor > policy.backwardDiskExtentFactor
+                  ? policy.forwardDiskExtentFactor
+                  : policy.backwardDiskExtentFactor));
     final placements = <_ForumHtmlImagePlacement>[];
     final placedHandles = <ForumHtmlImageViewportHandle>{};
     for (final handle in _handles) {
@@ -132,6 +166,7 @@ final class ForumHtmlImageViewportCoordinator {
     }
     for (final handle in _handles) {
       if (!placedHandles.contains(handle)) {
+        handle._setWindow(false);
         handle._applyMode(ForumHtmlImageViewportMode.dormant);
       }
     }
@@ -161,22 +196,110 @@ final class ForumHtmlImageViewportCoordinator {
       0,
       maxPrefetchCandidates,
     );
-    var prefetched = 0;
-    for (final placement in placements) {
-      if (prefetched >= prefetchLimit) {
-        break;
-      }
-      if (!placement.visible &&
-          placement.near &&
-          modes[placement.handle] == ForumHtmlImageViewportMode.dormant) {
-        modes[placement.handle] = ForumHtmlImageViewportMode.prefetch;
-        prefetched += 1;
+    if (policy != null) {
+      _scheduleLookAhead(placements, modes, position, waitingVisible, policy);
+    } else {
+      var prefetched = 0;
+      for (final placement in placements) {
+        if (prefetched >= prefetchLimit) break;
+        if (!placement.visible &&
+            placement.near &&
+            modes[placement.handle] == ForumHtmlImageViewportMode.dormant) {
+          modes[placement.handle] = ForumHtmlImageViewportMode.prefetch;
+          prefetched += 1;
+        }
       }
     }
     // Commit once: an unchanged prefetch must not emit dormant/prefetch on
     // every scroll tick and rebuild its image placeholder again.
     for (final entry in modes.entries) {
       entry.key._applyMode(entry.value);
+    }
+  }
+
+  void _scheduleLookAhead(
+    List<_ForumHtmlImagePlacement> placements,
+    Map<ForumHtmlImageViewportHandle, ForumHtmlImageViewportMode> modes,
+    ScrollPosition position,
+    int waitingVisible,
+    ForumHtmlImagePredecodePolicy policy,
+  ) {
+    final ahead =
+        placements
+            .where((p) => !p.visible && (p.below == _towardsBottom))
+            .toList()
+          ..sort((a, b) => a.edgeDistance.compareTo(b.edgeDistance));
+    final behind =
+        placements
+            .where((p) => !p.visible && (p.below != _towardsBottom))
+            .toList()
+          ..sort((a, b) => a.edgeDistance.compareTo(b.edgeDistance));
+    final candidates =
+        <(ForumHtmlImageViewportHandle, ForumHtmlImageViewportMode)>[];
+    // Crossing the visible edge does not retire an admitted frame. Its widget
+    // stays mounted while it remains one of the bounded neighboring targets.
+    final window = {
+      for (final p in placements)
+        if (p.visible) p.handle,
+    };
+    void collect(
+      List<_ForumHtmlImagePlacement> items,
+      int count,
+      double diskFactor,
+    ) {
+      var decoded = 0;
+      for (final p in items) {
+        if (p.edgeDistance > position.viewportDimension * diskFactor) continue;
+        final handle = p.handle;
+        window.add(handle);
+        final decode =
+            handle._canPredecode &&
+            policy.maxDecodedBytesPerImage > 0 &&
+            p.edgeDistance <=
+                position.viewportDimension * policy.decodeExtentFactor &&
+            decoded < count;
+        if (decode) decoded++;
+        if (decode && handle._decoded) {
+          modes[handle] = ForumHtmlImageViewportMode.retained;
+          continue;
+        }
+        candidates.add((
+          handle,
+          decode
+              ? ForumHtmlImageViewportMode.predecode
+              : ForumHtmlImageViewportMode.prefetch,
+        ));
+      }
+    }
+
+    collect(ahead, policy.forwardImageCount, policy.forwardDiskExtentFactor);
+    collect(behind, policy.backwardImageCount, policy.backwardDiskExtentFactor);
+    for (final p in placements) {
+      p.handle._setWindow(window.contains(p.handle));
+    }
+    final ordered = [
+      ...candidates.where((c) => c.$2 == ForumHtmlImageViewportMode.predecode),
+      ...candidates.where((c) => c.$2 == ForumHtmlImageViewportMode.prefetch),
+    ];
+    final running = _runningWork.where((w) => w.isActive).firstOrNull;
+    if (running != null &&
+        candidates.any(
+          (c) => c.$1 == running._handle && c.$2 == running.mode,
+        )) {
+      modes[running._handle] = running.mode;
+      return;
+    }
+    if (_runningWork.isNotEmpty || waitingVisible >= maxVisibleFirstFrames) {
+      return;
+    }
+    for (final (handle, mode) in ordered) {
+      if (handle._finished(mode)) continue;
+      if (mode == ForumHtmlImageViewportMode.predecode &&
+          position.recommendDeferredLoading(handle._context!)) {
+        continue;
+      }
+      modes[handle] = mode;
+      break;
     }
   }
 
@@ -218,6 +341,12 @@ final class ForumHtmlImageViewportCoordinator {
       visible: visible,
       near: near,
       distance: (imageCenter - viewportCenter).abs(),
+      below: lower > viewportEnd,
+      edgeDistance: visible
+          ? 0
+          : lower > viewportEnd
+          ? lower - viewportEnd
+          : viewportStart - upper,
     );
   }
 }
@@ -231,6 +360,51 @@ final class ForumHtmlImageViewportHandle
   BuildContext? _context;
   bool _firstFrameSettled = false;
   bool _disposed = false;
+  Object? _workIdentity;
+  bool _canPredecode = false;
+  bool _inWindow = false;
+  bool _diskFinished = false;
+  bool _decodeFinished = false;
+  bool _decoded = false;
+  int _generation = 0;
+  ForumHtmlImageViewportWork? _work;
+
+  int get maxDecodedBytes =>
+      _coordinator.predecodePolicy?.maxDecodedBytesPerImage ?? 0;
+
+  void configureWork({required Object identity, required bool canPredecode}) {
+    if (_workIdentity != identity || _canPredecode != canPredecode) {
+      _reset();
+      _workIdentity = identity;
+      _canPredecode = canPredecode;
+      _coordinator._scheduleEvaluation();
+    }
+  }
+
+  ForumHtmlImageViewportWork beginWork() {
+    final work = ForumHtmlImageViewportWork._(this, value, _generation);
+    _work = work;
+    _coordinator._runningWork.add(work);
+    return work;
+  }
+
+  bool _finished(ForumHtmlImageViewportMode mode) =>
+      mode == ForumHtmlImageViewportMode.predecode
+      ? _decodeFinished
+      : _diskFinished;
+
+  void _setWindow(bool active) {
+    if (_inWindow && !active) _clearWork();
+    _inWindow = active;
+  }
+
+  void _clearWork() {
+    _generation++;
+    _work?.cancel();
+    _diskFinished = false;
+    _decodeFinished = false;
+    _decoded = false;
+  }
 
   void bind(BuildContext context) {
     _coordinator._bind(this, context);
@@ -244,10 +418,29 @@ final class ForumHtmlImageViewportHandle
     _coordinator._scheduleEvaluation();
   }
 
+  void reportFirstFrameRendered({bool? canRetain}) {
+    if (_disposed) return;
+    final changed = canRetain != null && _decoded != canRetain;
+    if (canRetain != null) _decoded = canRetain;
+    reportFirstFrameSettled();
+    if (changed) _coordinator._scheduleEvaluation();
+  }
+
+  void reportImageFailed() {
+    if (_disposed) return;
+    _decoded = false;
+    // A display failure must not become a new automatic look-ahead retry.
+    _diskFinished = true;
+    _decodeFinished = true;
+    reportFirstFrameSettled();
+    _coordinator._scheduleEvaluation();
+  }
+
   void reportLoadStarted() {
-    if (_disposed || !_firstFrameSettled) {
+    if (_disposed) {
       return;
     }
+    _decoded = false;
     _firstFrameSettled = false;
     _coordinator._scheduleEvaluation();
   }
@@ -256,9 +449,10 @@ final class ForumHtmlImageViewportHandle
     if (_disposed || value == next) {
       return;
     }
-    if (next != ForumHtmlImageViewportMode.display) {
+    if (!next.keepsImageMounted) {
       _firstFrameSettled = false;
     }
+    if (_work?.mode != next) _work?.cancel();
     value = next;
   }
 
@@ -267,6 +461,7 @@ final class ForumHtmlImageViewportHandle
       return;
     }
     _firstFrameSettled = false;
+    _clearWork();
     _applyMode(ForumHtmlImageViewportMode.dormant);
   }
 
@@ -276,6 +471,7 @@ final class ForumHtmlImageViewportHandle
       return;
     }
     _disposed = true;
+    _clearWork();
     _context = null;
     _coordinator._unregister(this);
     super.dispose();
@@ -288,10 +484,49 @@ final class _ForumHtmlImagePlacement {
     required this.visible,
     required this.near,
     required this.distance,
+    required this.below,
+    required this.edgeDistance,
   });
 
   final ForumHtmlImageViewportHandle handle;
   final bool visible;
   final bool near;
   final double distance;
+  final bool below;
+  final double edgeDistance;
+}
+
+/// A single optional-operation lease. Cancellation retires callbacks immediately;
+/// capacity is released when the operation actually completes, including I/O.
+final class ForumHtmlImageViewportWork implements ForumHtmlImageWorkScope {
+  ForumHtmlImageViewportWork._(this._handle, this.mode, this._generation);
+  final ForumHtmlImageViewportHandle _handle;
+  final ForumHtmlImageViewportMode mode;
+  final int _generation;
+  bool _cancelled = false;
+  bool _completed = false;
+
+  @override
+  bool get isActive =>
+      !_cancelled &&
+      !_completed &&
+      !_handle._disposed &&
+      _generation == _handle._generation;
+
+  void cancel() => _cancelled = true;
+
+  void complete(ForumHtmlImagePreparationOutcome outcome) {
+    if (_completed) return;
+    if (isActive && outcome != ForumHtmlImagePreparationOutcome.cancelled) {
+      _handle._diskFinished = true;
+      _handle._decoded = outcome == ForumHtmlImagePreparationOutcome.decoded;
+      if (mode == ForumHtmlImageViewportMode.predecode ||
+          outcome == ForumHtmlImagePreparationOutcome.failed) {
+        _handle._decodeFinished = true;
+      }
+    }
+    _completed = true;
+    _handle._coordinator._runningWork.remove(this);
+    _handle._coordinator._scheduleEvaluation();
+  }
 }

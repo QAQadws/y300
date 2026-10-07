@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/core/media/image_downscale_policy.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
@@ -10,7 +11,8 @@ import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_display_image.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-final class CacheForumHtmlImageHost implements ForumHtmlImageHost {
+final class CacheForumHtmlImageHost
+    implements ForumHtmlImageHost, ForumHtmlImagePredecodeHost {
   const CacheForumHtmlImageHost({
     required ForumImageDimensionIndex dimensionIndex,
   }) : this._(dimensionIndex: dimensionIndex);
@@ -137,6 +139,72 @@ final class CacheForumHtmlImageHost implements ForumHtmlImageHost {
   }
 
   @override
+  bool canRetainDisplayedImage({
+    required ForumHtmlDisplayImage image,
+    required Size intrinsicSize,
+    required Size displaySize,
+    required double devicePixelRatio,
+    required int maxDecodedBytes,
+  }) {
+    if (image is! CacheForumHtmlDisplayImage ||
+        image.isSticker ||
+        maxDecodedBytes <= 0 ||
+        imageRequestResolver.resolveRenderPolicy(image.spec).downscaleMode !=
+            ForumImageDownscaleMode.widthBound) {
+      return false;
+    }
+    final isBlock = switch (image.spec.kind) {
+      ForumImageKind.threadInline ||
+      ForumImageKind.threadAttachment ||
+      ForumImageKind.blogInline ||
+      ForumImageKind.externalInline => true,
+      _ => false,
+    };
+    if (!isBlock) return false;
+    final bytes = estimateWidthBoundDecodedBytes(
+      intrinsicSize: intrinsicSize,
+      displaySize: displaySize,
+      devicePixelRatio: devicePixelRatio,
+    );
+    return bytes != null && bytes <= maxDecodedBytes;
+  }
+
+  @override
+  Future<ForumHtmlImagePreparationOutcome> predecodeImage({
+    required ForumHtmlDisplayImage image,
+    required BuildContext context,
+    required Size displaySize,
+    required ForumHtmlImageWorkScope scope,
+    required int maxDecodedBytes,
+  }) async {
+    if (!scope.isActive || !context.mounted) {
+      return ForumHtmlImagePreparationOutcome.cancelled;
+    }
+    final service = imagePrecacheService;
+    if (service is! BoundedForumImagePrecacheService) {
+      await prefetchDisk(image, scope: scope);
+      return scope.isActive
+          ? ForumHtmlImagePreparationOutcome.diskOnly
+          : ForumHtmlImagePreparationOutcome.cancelled;
+    }
+    final bounded = service as BoundedForumImagePrecacheService;
+    final result = await bounded.precacheDecodedScoped(
+      context: context,
+      spec: (image as CacheForumHtmlDisplayImage).spec,
+      scope: _CacheImageWorkScope(scope),
+      expectedDisplaySize: displaySize,
+      maxDecodedBytes: maxDecodedBytes,
+    );
+    if (!scope.isActive || !context.mounted) {
+      return ForumHtmlImagePreparationOutcome.cancelled;
+    }
+    if (!result.success) return ForumHtmlImagePreparationOutcome.failed;
+    return result.decoded
+        ? ForumHtmlImagePreparationOutcome.decoded
+        : ForumHtmlImagePreparationOutcome.diskOnly;
+  }
+
+  @override
   Future<void> prefetchDisk(
     ForumHtmlDisplayImage image, {
     required ForumHtmlImageWorkScope scope,
@@ -144,13 +212,17 @@ final class CacheForumHtmlImageHost implements ForumHtmlImageHost {
     final service = imagePrecacheService;
     if (service == null || !scope.isActive) return;
     final cachedImage = image as CacheForumHtmlDisplayImage;
+    final ForumImagePrecacheResult result;
     if (service case final ScopedForumImagePrecacheService scoped) {
-      await scoped.ensureDiskCachedScoped(
+      result = await scoped.ensureDiskCachedScoped(
         cachedImage.spec,
         scope: _CacheImageWorkScope(scope),
       );
     } else {
-      await service.ensureDiskCached(cachedImage.spec);
+      result = await service.ensureDiskCached(cachedImage.spec);
+    }
+    if (scope.isActive && !result.success) {
+      throw StateError('image_prefetch_failed');
     }
   }
 

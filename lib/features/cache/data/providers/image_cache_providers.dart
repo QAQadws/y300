@@ -180,6 +180,7 @@ final forumImagePrecacheServiceProvider = Provider<ForumImagePrecacheService>((
   return DefaultForumImagePrecacheService(
     imageCacheService: ref.watch(imageCacheServiceProvider),
     imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
+    dimensionProbe: ref.watch(encodedImageDimensionProbeProvider),
   );
 });
 

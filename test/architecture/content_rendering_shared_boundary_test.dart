@@ -55,10 +55,12 @@ const _cacheNeutralPreparationFiles = {
 };
 const _cacheNeutralDisplayFiles = {
   '${_packageLib}src/contracts/forum_html_image_host.dart',
+  '${_packageLib}src/contracts/forum_html_image_predecode_host.dart',
   '${_packageLib}src/contracts/forum_html_display_image.dart',
   '${_packageLib}src/html_rendering/forum_html_image_widget_factory.dart',
   '${_packageLib}src/html_rendering/forum_html_render_callbacks.dart',
   '${_packageLib}src/services/forum_html_image_viewport_coordinator.dart',
+  '${_packageLib}src/services/forum_html_image_predecode_policy.dart',
 };
 
 void main() {

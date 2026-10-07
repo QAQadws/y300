@@ -16,6 +16,143 @@ import '../../../test_support/localized_test_app.dart';
 import '../../thread/presentation/html_rendering/forum_html_test_theme.dart';
 
 void main() {
+  test('display retention is bounded without starting disk or decode work', () {
+    final service = _BoundedPrecache();
+    final host = CacheForumHtmlImageHost(
+      dimensionIndex: _NoDimensions(),
+    ).forContent(threadId: '100', imagePrecacheService: service);
+    final image = host.resolveImage(
+      url: _source,
+      imageIndex: 0,
+      isSticker: false,
+    )!;
+    bool admitted({
+      Size intrinsic = const Size(2000, 1000),
+      Size display = const Size(320, 160),
+      double dpr = 2,
+      int budget = 819200,
+    }) => host.canRetainDisplayedImage(
+      image: image,
+      intrinsicSize: intrinsic,
+      displaySize: display,
+      devicePixelRatio: dpr,
+      maxDecodedBytes: budget,
+    );
+
+    expect(admitted(), isTrue);
+    expect(admitted(budget: 819199), isFalse);
+    expect(admitted(display: const Size(320, 10000)), isTrue);
+    expect(admitted(intrinsic: const Size(2000, 100000)), isFalse);
+    expect(admitted(intrinsic: Size.zero), isFalse);
+    expect(admitted(display: const Size(double.nan, 160)), isFalse);
+    expect(admitted(dpr: double.infinity), isFalse);
+    expect(admitted(dpr: 3), isFalse);
+    expect(admitted(budget: 0), isFalse);
+    expect(service.specs, isEmpty);
+    expect(service.legacyCalls, 0);
+    expect(service.decodeCalls, 0);
+    expect(service.decodeScope, isNull);
+  });
+
+  test('display retention rejects stickers and other downscale policies', () {
+    final base = CacheForumHtmlImageHost(dimensionIndex: _NoDimensions());
+    for (final mode in ForumImageDownscaleMode.values) {
+      final host = base.forContent(
+        threadId: '100',
+        imageRequestResolver: _DownscaleResolver(mode),
+      );
+      for (final sticker in [false, true]) {
+        final image = host.resolveImage(
+          url: _source,
+          imageIndex: 0,
+          isSticker: sticker,
+        )!;
+        expect(
+          host.canRetainDisplayedImage(
+            image: image,
+            intrinsicSize: const Size(400, 200),
+            displaySize: const Size(320, 160),
+            devicePixelRatio: 2,
+            maxDecodedBytes: 1000000,
+          ),
+          !sticker && mode == ForumImageDownscaleMode.widthBound,
+        );
+      }
+    }
+    final avatarHost = base.forContent(
+      threadId: '100',
+      contentImageKind: ForumImageKind.avatar,
+      imageRequestResolver: const _DownscaleResolver(
+        ForumImageDownscaleMode.widthBound,
+      ),
+    );
+    expect(
+      avatarHost.canRetainDisplayedImage(
+        image: avatarHost.resolveImage(
+          url: _source,
+          imageIndex: 0,
+          isSticker: false,
+        )!,
+        intrinsicSize: const Size(400, 200),
+        displaySize: const Size(320, 160),
+        devicePixelRatio: 2,
+        maxDecodedBytes: 1000000,
+      ),
+      isFalse,
+    );
+  });
+
+  for (final cancelled in [false, true]) {
+    testWidgets(
+      'bounded Host forwards target and rejects cancelled=$cancelled',
+      (tester) async {
+        final service = _BoundedPrecache();
+        final host = CacheForumHtmlImageHost(
+          dimensionIndex: _NoDimensions(),
+        ).forContent(threadId: '100', imagePrecacheService: service);
+        late BuildContext context;
+        await tester.pumpWidget(
+          LocalizedTestApp(
+            home: Builder(
+              builder: (value) {
+                context = value;
+                return const SizedBox();
+              },
+            ),
+          ),
+        );
+        final image = host.resolveImage(
+          url: _source,
+          imageIndex: 1,
+          isSticker: false,
+        )!;
+        final token = ForumHtmlImageWorkToken();
+        final future = host.predecodeImage(
+          image: image,
+          context: context,
+          displaySize: const Size(320, double.nan),
+          scope: token,
+          maxDecodedBytes: 123456,
+        );
+        expect(service.decodeScope!.isActive, isTrue);
+        expect(service.target!.width, 320);
+        expect(service.budget, 123456);
+        expect(service.specs.single, same(image.spec));
+        if (cancelled) token.cancel();
+        service.result.complete(
+          const ForumImagePrecacheResult(success: true, decoded: true),
+        );
+        expect(
+          await future,
+          cancelled
+              ? ForumHtmlImagePreparationOutcome.cancelled
+              : ForumHtmlImagePreparationOutcome.decoded,
+        );
+        expect(service.legacyCalls, 0);
+      },
+    );
+  }
+
   test(
     'display classification stays separate from preparation and referer',
     () {
@@ -276,6 +413,28 @@ final class _ScopedDiskPrecache
   );
 }
 
+final class _BoundedPrecache extends _ScopedDiskPrecache
+    implements BoundedForumImagePrecacheService {
+  final result = Completer<ForumImagePrecacheResult>();
+  ForumImageWorkScope? decodeScope;
+  Size? target;
+  int? budget;
+  @override
+  Future<ForumImagePrecacheResult> precacheDecodedScoped({
+    required BuildContext context,
+    required ForumImageLoadSpec spec,
+    required ForumImageWorkScope scope,
+    Size? expectedDisplaySize,
+    int? maxDecodedBytes,
+  }) {
+    specs.add(spec);
+    decodeScope = scope;
+    target = expectedDisplaySize;
+    budget = maxDecodedBytes;
+    return result.future;
+  }
+}
+
 final class _TransportUrlResolver implements ForumImageRequestResolver {
   const _TransportUrlResolver(this.transportUrl);
   final String transportUrl;
@@ -293,6 +452,25 @@ final class _TransportUrlResolver implements ForumImageRequestResolver {
   @override
   ForumImageRenderPolicy resolveRenderPolicy(ForumImageLoadSpec spec) =>
       const DefaultForumImageRequestResolver().resolveRenderPolicy(spec);
+}
+
+final class _DownscaleResolver implements ForumImageRequestResolver {
+  const _DownscaleResolver(this.mode);
+  final ForumImageDownscaleMode mode;
+
+  @override
+  ImageCacheRequest? resolveCacheRequest(ForumImageLoadSpec spec) =>
+      const DefaultForumImageRequestResolver().resolveCacheRequest(spec);
+
+  @override
+  ForumImageRenderPolicy resolveRenderPolicy(ForumImageLoadSpec spec) =>
+      ForumImageRenderPolicy(
+        layoutMode: ForumImageLayoutMode.blockWithFallbackAspectRatio,
+        precacheMode: ForumImagePrecacheMode.firstViewportLight,
+        allowReaderOpen: true,
+        retentionHint: ImageRetentionClass.ephemeral,
+        downscaleMode: mode,
+      );
 }
 
 /// Exercises the real factory/tap mapping without starting cache I/O.

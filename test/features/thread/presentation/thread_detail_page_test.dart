@@ -4150,7 +4150,7 @@ void main() {
       final list = tester.widget<ListView>(
         find.byKey(const Key('thread-detail-list')),
       );
-      expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(900));
+      expect(list.scrollCacheExtent, const ScrollCacheExtent.viewport(2));
       expect(find.byKey(const Key('thread-post-card-bulk-0')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-card-bulk-79')), findsNothing);
     });

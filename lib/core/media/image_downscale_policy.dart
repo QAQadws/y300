@@ -63,3 +63,40 @@ class WidthBoundImageDownscalePolicy extends ImageDownscalePolicy {
     return ImageDecodeTarget(cacheWidth: target);
   }
 }
+
+/// Estimates one RGBA frame using the same width target as the display provider.
+/// Layout height is deliberately ignored: encoded dimensions determine the
+/// decoded aspect ratio, including long images and images without HTML sizes.
+int? estimateWidthBoundDecodedBytes({
+  required Size intrinsicSize,
+  required Size displaySize,
+  required double devicePixelRatio,
+}) {
+  if (!intrinsicSize.width.isFinite ||
+      !intrinsicSize.height.isFinite ||
+      intrinsicSize.width <= 0 ||
+      intrinsicSize.height <= 0 ||
+      !displaySize.width.isFinite ||
+      displaySize.width <= 0 ||
+      !devicePixelRatio.isFinite ||
+      !(displaySize.width * (devicePixelRatio <= 0 ? 1 : devicePixelRatio))
+          .isFinite) {
+    return null;
+  }
+  final target = const WidthBoundImageDownscalePolicy().resolve(
+    displaySize: displaySize,
+    devicePixelRatio: devicePixelRatio,
+  );
+  final targetWidth = target.cacheWidth;
+  if (targetWidth == null) return null;
+  // ResizeImage does not upscale a source smaller than the requested width.
+  final width = intrinsicSize.width < targetWidth
+      ? intrinsicSize.width
+      : targetWidth.toDouble();
+  final height = intrinsicSize.height * (width / intrinsicSize.width);
+  if (!height.isFinite || height <= 0) return null;
+  final bytes = width.ceilToDouble() * height.ceilToDouble() * 4;
+  // Avoid overflowing integer estimates for malformed, extreme metadata.
+  if (!bytes.isFinite || bytes > 0x1fffffffffffff) return null;
+  return bytes.toInt();
+}
