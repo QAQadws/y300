@@ -211,6 +211,42 @@ abstract class AppLocalizations {
   /// **'从好友中选择'**
   String get messageRecipientChooseFriends;
 
+  /// No description provided for @messageRecipients.
+  ///
+  /// In zh, this message translates to:
+  /// **'收件人'**
+  String get messageRecipients;
+
+  /// No description provided for @messageChooseRecipients.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择收件人'**
+  String get messageChooseRecipients;
+
+  /// No description provided for @messageRecipientSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索好友或输入完整用户名'**
+  String get messageRecipientSearchHint;
+
+  /// No description provided for @messageRecipientCountCompact.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count}/20'**
+  String messageRecipientCountCompact(int count);
+
+  /// No description provided for @messageComposeEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'从上方选择收件人，在下方输入私信'**
+  String get messageComposeEmptyHint;
+
+  /// No description provided for @messageComposeSelectedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'私信会分别发送给所选收件人'**
+  String get messageComposeSelectedHint;
+
   /// No description provided for @messageRecipientSelectedCount.
   ///
   /// In zh, this message translates to:

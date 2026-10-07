@@ -68,6 +68,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageRecipientChooseFriends => '从好友中选择';
 
   @override
+  String get messageRecipients => '收件人';
+
+  @override
+  String get messageChooseRecipients => '请选择收件人';
+
+  @override
+  String get messageRecipientSearchHint => '搜索好友或输入完整用户名';
+
+  @override
+  String messageRecipientCountCompact(int count) {
+    return '$count/20';
+  }
+
+  @override
+  String get messageComposeEmptyHint => '从上方选择收件人，在下方输入私信';
+
+  @override
+  String get messageComposeSelectedHint => '私信会分别发送给所选收件人';
+
+  @override
   String messageRecipientSelectedCount(int count) {
     return '已选 $count/20 人';
   }
@@ -5434,6 +5454,26 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageRecipientChooseFriends => '從好友中選擇';
+
+  @override
+  String get messageRecipients => '收件人';
+
+  @override
+  String get messageChooseRecipients => '請選擇收件人';
+
+  @override
+  String get messageRecipientSearchHint => '搜尋好友或輸入完整使用者名稱';
+
+  @override
+  String messageRecipientCountCompact(int count) {
+    return '$count/20';
+  }
+
+  @override
+  String get messageComposeEmptyHint => '從上方選擇收件人，在下方輸入私訊';
+
+  @override
+  String get messageComposeSelectedHint => '私訊會分別傳送給所選收件人';
 
   @override
   String messageRecipientSelectedCount(int count) {

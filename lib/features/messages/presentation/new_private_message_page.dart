@@ -13,9 +13,16 @@ class NewPrivateMessagePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(messageAccountIdProvider);
     final l10n = AppLocalizations.of(context);
+    final palette = Theme.of(context).y300NativeContent;
     return Scaffold(
-      backgroundColor: Theme.of(context).y300NativeContent.background,
-      appBar: AppBar(title: Text(l10n.messageNew)),
+      backgroundColor: palette.background,
+      appBar: AppBar(
+        title: Text(l10n.messageNew),
+        backgroundColor: palette.card,
+        foregroundColor: palette.itemTitle,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: account == null
           ? const MessageLoginPrompt()
           : PrivateMessageBatchComposer(

@@ -20,12 +20,14 @@ class MessageFriendPickerSheet extends ConsumerStatefulWidget {
     required this.controller,
     required this.selection,
     required this.onSelectionChanged,
+    this.allowManualRecipients = false,
   });
 
   final String accountId;
   final MessageFriendDirectoryController controller;
   final PrivateMessageRecipientSelection selection;
   final VoidCallback onSelectionChanged;
+  final bool allowManualRecipients;
 
   @override
   ConsumerState<MessageFriendPickerSheet> createState() =>
@@ -36,6 +38,7 @@ class _MessageFriendPickerSheetState
     extends ConsumerState<MessageFriendPickerSheet> {
   late final TextEditingController _search;
   bool _closeScheduled = false;
+  AddPrivateMessageRecipientResult? _recipientNotice;
 
   bool get _ownsAccount =>
       mounted && ref.read(messageAccountIdProvider) == widget.accountId;
@@ -76,7 +79,27 @@ class _MessageFriendPickerSheetState
               ) ==
               AddPrivateMessageRecipientResult.added;
     if (!changed) return;
-    setState(() {});
+    setState(() => _recipientNotice = null);
+    widget.onSelectionChanged();
+  }
+
+  void _addUsername() {
+    if (!_ownsAccount || !widget.allowManualRecipients) return;
+    final result = widget.selection.addUsername(_search.text);
+    setState(() => _recipientNotice = result);
+    if (result == AddPrivateMessageRecipientResult.added ||
+        result == AddPrivateMessageRecipientResult.duplicate) {
+      _search.clear();
+      widget.controller.setSearchQuery('');
+    }
+    if (result == AddPrivateMessageRecipientResult.added) {
+      widget.onSelectionChanged();
+    }
+  }
+
+  void _remove(PrivateMessageRecipientChoice choice) {
+    if (!_ownsAccount || !widget.selection.remove(choice)) return;
+    setState(() => _recipientNotice = null);
     widget.onSelectionChanged();
   }
 
@@ -91,14 +114,13 @@ class _MessageFriendPickerSheetState
       // Do not paint the previous owner's names during the closing frame.
       return const SizedBox.shrink();
     }
-    final theme = Theme.of(context);
-    final palette = theme.y300NativeContent;
+    final palette = Theme.of(context).y300NativeContent;
     final l10n = AppLocalizations.of(context);
     final media = MediaQuery.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = math.min(
-          media.size.height * 0.8,
+          math.min(media.size.height * 0.6, 520.0),
           math.max(0.0, constraints.maxHeight - media.viewInsets.bottom),
         );
         return Padding(
@@ -122,35 +144,7 @@ class _MessageFriendPickerSheetState
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          l10n.messageRecipientChooseFriends,
-                                          style: theme.textTheme.titleLarge
-                                              ?.copyWith(
-                                                color: palette.itemTitle,
-                                              ),
-                                        ),
-                                      ),
-                                      IconButton(
-                                        onPressed: _close,
-                                        tooltip: l10n.commonClose,
-                                        icon: const Icon(Icons.close),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    key: const Key('message-friends-search'),
-                                    controller: _search,
-                                    style: TextStyle(color: palette.body),
-                                    onChanged: widget.controller.setSearchQuery,
-                                    decoration: InputDecoration(
-                                      hintText: l10n.messageFriendSearch,
-                                      prefixIcon: const Icon(Icons.search),
-                                    ),
-                                  ),
+                                  _searchField(context),
                                   const SizedBox(height: 12),
                                   Text(
                                     l10n.messageRecipientSelectedCount(
@@ -160,6 +154,44 @@ class _MessageFriendPickerSheetState
                                       color: palette.supportingText,
                                     ),
                                   ),
+                                  if (widget.allowManualRecipients &&
+                                      !widget.selection.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: Row(
+                                          children: [
+                                            for (final choice
+                                                in widget.selection.items) ...[
+                                              InputChip(
+                                                key: Key(
+                                                  'message-recipient-chip-${choice.username}',
+                                                ),
+                                                label: ConstrainedBox(
+                                                  constraints: BoxConstraints(
+                                                    maxWidth: math.max(
+                                                      48,
+                                                      media.size.width - 160,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    choice.username,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                deleteButtonTooltipMessage:
+                                                    l10n.commonRemove,
+                                                onDeleted: () =>
+                                                    _remove(choice),
+                                              ),
+                                              const SizedBox(width: 8),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   if (widget.selection.length >=
                                       PrivateMessageRecipientSelection
                                           .maxRecipients)
@@ -302,6 +334,65 @@ class _MessageFriendPickerSheetState
                     ),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _searchField(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final palette = Theme.of(context).y300NativeContent;
+    final error = switch (_recipientNotice) {
+      AddPrivateMessageRecipientResult.invalid => l10n.messageRecipientInvalid,
+      AddPrivateMessageRecipientResult.full =>
+        l10n.messageRecipientLimitReached,
+      AddPrivateMessageRecipientResult.duplicate =>
+        l10n.messageRecipientAlreadySelected,
+      _ => null,
+    };
+    return KeyedSubtree(
+      key: const Key('message-friends-search'),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextField(
+              key: widget.allowManualRecipients
+                  ? const Key('message-recipient')
+                  : null,
+              controller: _search,
+              style: TextStyle(color: palette.body),
+              autocorrect: false,
+              textInputAction: widget.allowManualRecipients
+                  ? TextInputAction.done
+                  : TextInputAction.search,
+              onChanged: (query) {
+                setState(() => _recipientNotice = null);
+                widget.controller.setSearchQuery(query);
+              },
+              onSubmitted: widget.allowManualRecipients
+                  ? (_) => _addUsername()
+                  : null,
+              decoration: InputDecoration(
+                hintText: widget.allowManualRecipients
+                    ? l10n.messageRecipientSearchHint
+                    : l10n.messageFriendSearch,
+                prefixIcon: const Icon(Icons.search),
+                errorText: error,
+                errorMaxLines: 3,
+              ),
+            ),
+          ),
+          if (widget.allowManualRecipients) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              key: const Key('message-recipient-add'),
+              tooltip: l10n.messageRecipientAdd,
+              color: palette.accent,
+              onPressed: _addUsername,
+              icon: const Icon(Icons.add),
+            ),
+          ],
+        ],
       ),
     );
   }

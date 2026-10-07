@@ -33,6 +33,7 @@ import 'package:y300/shared/widgets/native_primary_tab_bar.dart';
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_test_repository.dart';
 import '../support/message_input_test_helper.dart';
+import '../support/message_recipient_test_helper.dart';
 import '../support/message_avatar_test_cache.dart';
 
 // Ordinary regression runs require no local font or screenshot directory.
@@ -530,17 +531,14 @@ MessageCenterPage _center() => MessageCenterPage(
 void _ignoreLink(BuildContext context, String url) {}
 
 Future<void> _addRecipient(_Harness harness, String username) async {
-  final input = find.byKey(const Key('message-recipient'));
-  await harness.tester.ensureVisible(input);
-  await harness.tester.enterText(input, username);
-  await harness.tester.tap(find.byKey(const Key('message-recipient-add')));
-  await harness.tester.pumpAndSettle();
+  await addMessageRecipient(harness.tester, username);
 }
 
 Future<void> _captureBatchCompose(_Harness harness) async {
   final tester = harness.tester;
   await harness.show(const NewPrivateMessagePage());
   await tester.pumpAndSettle();
+  await harness.capture('compose-unselected');
   await _addRecipient(harness, '一起读书的朋友');
   await _addRecipient(harness, '不接收私信的朋友');
   _expectInputTheme(tester, harness.theme, singleLine: true);
@@ -553,6 +551,7 @@ Future<void> _captureBatchCompose(_Harness harness) async {
   await tester.pumpAndSettle();
   _expectInputTheme(tester, harness.theme);
   await harness.capture('compose');
+  final originalInput = tester.element(find.byKey(const Key('message-input')));
   tester.view.viewInsets = const FakeViewPadding(bottom: 260);
   addTearDown(tester.view.resetViewInsets);
   await enterMessageText(tester, '刚读完这一章。\n想分享几句感想，\n周末一起聊！');
@@ -561,6 +560,13 @@ Future<void> _captureBatchCompose(_Harness harness) async {
   await tester.pumpAndSettle();
   _expectInputTheme(tester, harness.theme);
   await harness.capture('compose-multiline-keyboard');
+  expect(
+    identical(
+      originalInput,
+      tester.element(find.byKey(const Key('message-input'))),
+    ),
+    isTrue,
+  );
   tester.view.resetViewInsets();
   await enterMessageText(tester, '你好，想和你聊聊最近读到的故事。');
   await tester.pumpAndSettle();
@@ -730,10 +736,30 @@ void _expectInputTheme(
     decoration.contentPadding,
     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
   );
-  expect(
-    (decoration.enabledBorder! as OutlineInputBorder).borderRadius,
-    BorderRadius.circular(12),
-  );
+  final composeDock = find
+      .ancestor(
+        of: input,
+        matching: find.byKey(const Key('message-compose-dock')),
+      )
+      .evaluate()
+      .isNotEmpty;
+  if (composeDock) {
+    expect(decoration.enabledBorder, InputBorder.none);
+    final dock = tester.getRect(find.byKey(const Key('message-compose-dock')));
+    final safeArea = find
+        .ancestor(of: input, matching: find.byType(SafeArea))
+        .first;
+    final media = MediaQuery.of(tester.element(safeArea));
+    expect(
+      dock.bottom,
+      closeTo(tester.getRect(safeArea).bottom - media.padding.bottom - 12, 1),
+    );
+  } else {
+    expect(
+      (decoration.enabledBorder! as OutlineInputBorder).borderRadius,
+      BorderRadius.circular(12),
+    );
+  }
   final inputRect = tester.getRect(surface);
   final editorRect = tester.getRect(input);
   final container = InputDecorator.containerOf(tester.element(input));
@@ -785,13 +811,18 @@ void _expectInputTheme(
   expect(sendRect.bottom, lessThanOrEqualTo(visibleBottom));
   final sendWidget = tester.widget<IconButton>(send);
   final background = sendWidget.style?.backgroundColor?.resolve({});
-  expect(background?.a ?? 0, 0);
+  expect(
+    background,
+    composeDock ? theme.y300NativeContent.accent : Colors.transparent,
+  );
   if (sendWidget.onPressed != null) {
     final iconFinder = find.descendant(of: send, matching: find.byType(Icon));
     final icon = tester.widget<Icon>(iconFinder);
     expect(
       icon.color ?? IconTheme.of(tester.element(iconFinder)).color,
-      theme.y300NativeContent.accent,
+      composeDock
+          ? theme.y300NativeContent.onAccent
+          : theme.y300NativeContent.accent,
     );
   }
 }

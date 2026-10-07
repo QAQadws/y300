@@ -9,11 +9,13 @@ class MessageComposerRow extends StatelessWidget {
     required this.input,
     required this.busy,
     required this.onSend,
+    this.emphasized = false,
   });
 
   final Widget input;
   final bool busy;
   final VoidCallback? onSend;
+  final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
@@ -32,23 +34,30 @@ class MessageComposerRow extends StatelessWidget {
             onPressed: onSend,
             style: IconButton.styleFrom(
               padding: EdgeInsets.zero,
-              foregroundColor: palette.accent,
+              foregroundColor: emphasized ? palette.onAccent : palette.accent,
               disabledForegroundColor: palette.disabled,
-              backgroundColor: Colors.transparent,
-              disabledBackgroundColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              backgroundColor: emphasized ? palette.accent : Colors.transparent,
+              disabledBackgroundColor: emphasized
+                  ? palette.panelBackground
+                  : Colors.transparent,
+              shape: emphasized
+                  ? const CircleBorder()
+                  : RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
             ),
             icon: busy
                 ? SizedBox.square(
                     dimension: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: palette.accent,
+                      color: emphasized ? palette.onAccent : palette.accent,
                     ),
                   )
-                : const Icon(Icons.send_outlined, size: 28),
+                : Icon(
+                    emphasized ? Icons.arrow_upward : Icons.send_outlined,
+                    size: 28,
+                  ),
           ),
         ),
       ],

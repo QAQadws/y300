@@ -16,6 +16,7 @@ class ComposerStickerInput extends StatefulWidget {
     this.enabled = true,
     this.hintText,
     this.semanticLabel,
+    this.inputBorder,
     this.keyPrefix = 'message',
     this.minLines = 1,
     this.maxLines = 5,
@@ -27,6 +28,7 @@ class ComposerStickerInput extends StatefulWidget {
   final bool enabled;
   final String? hintText;
   final String? semanticLabel;
+  final InputBorder? inputBorder;
   final String keyPrefix;
   final int minLines;
   final int maxLines;
@@ -98,10 +100,12 @@ class _ComposerStickerInputState extends State<ComposerStickerInput> {
     )..layout();
     final lineHeight = painter.height;
     painter.dispose();
-    final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
-    );
+    final border =
+        widget.inputBorder ??
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+        );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -134,12 +138,14 @@ class _ComposerStickerInputState extends State<ComposerStickerInput> {
               ),
               border: border,
               enabledBorder: border,
-              focusedBorder: border.copyWith(
-                borderSide: BorderSide(
-                  color: theme.y300NativeContent.accent,
-                  width: 1.2,
-                ),
-              ),
+              focusedBorder:
+                  widget.inputBorder ??
+                  border.copyWith(
+                    borderSide: BorderSide(
+                      color: theme.y300NativeContent.accent,
+                      width: 1.2,
+                    ),
+                  ),
             ).applyDefaults(theme.inputDecorationTheme),
             // A scrolling editor has no stable text baseline. Treat it as a
             // box so decoration/hint baseline alignment cannot move its viewport.

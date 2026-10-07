@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -12,7 +14,10 @@ import 'package:y300/features/messages/presentation/private_message_batch_send_c
 import 'package:y300/features/messages/presentation/widgets/message_friend_picker_sheet.dart';
 import 'package:y300/features/messages/presentation/widgets/message_composer_row.dart';
 import 'package:y300/features/messages/presentation/widgets/private_message_batch_result_view.dart';
+import 'package:y300/features/messages/presentation/widgets/private_message_compose_canvas.dart';
+import 'package:y300/features/messages/presentation/widgets/private_message_recipient_bar.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 /// A route/account-owned draft; only the immutable send snapshot crosses into
 /// the command controller. No message or recipient selection is persisted.
@@ -27,12 +32,10 @@ class PrivateMessageBatchComposer extends ConsumerStatefulWidget {
 
 class _PrivateMessageBatchComposerState
     extends ConsumerState<PrivateMessageBatchComposer> {
-  final _username = TextEditingController();
   final _selection = PrivateMessageRecipientSelection();
   final _friendControllers = <MessageFriendDirectoryController>{};
   late final PrivateMessageBatchSendController _sender;
   String _message = '';
-  AddPrivateMessageRecipientResult? _recipientNotice;
   bool _confirming = false;
   bool _friendSheetOpen = false;
   bool _allowPop = false;
@@ -42,8 +45,7 @@ class _PrivateMessageBatchComposerState
       mounted && ref.read(messageAccountIdProvider) == widget.accountId;
   bool get _blocked =>
       _sender.value.isSending || _confirming || _friendSheetOpen;
-  bool get _dirty =>
-      _message.isNotEmpty || _username.text.isNotEmpty || !_selection.isEmpty;
+  bool get _dirty => _message.isNotEmpty || !_selection.isEmpty;
 
   @override
   void initState() {
@@ -69,27 +71,7 @@ class _PrivateMessageBatchComposerState
       controller.dispose();
     }
     _friendControllers.clear();
-    _username.dispose();
     super.dispose();
-  }
-
-  bool _addRecipient({bool sending = false}) {
-    if (!_ownsAccount || _blocked) return false;
-    if (_username.text.isEmpty && sending) return true;
-    final result = _selection.addUsername(_username.text);
-    setState(() {
-      _recipientNotice =
-          result == AddPrivateMessageRecipientResult.added ||
-              sending && result == AddPrivateMessageRecipientResult.duplicate
-          ? null
-          : result;
-      if (result == AddPrivateMessageRecipientResult.added ||
-          result == AddPrivateMessageRecipientResult.duplicate) {
-        _username.clear();
-      }
-    });
-    return result == AddPrivateMessageRecipientResult.added ||
-        result == AddPrivateMessageRecipientResult.duplicate;
   }
 
   Future<void> _openFriends() async {
@@ -107,13 +89,14 @@ class _PrivateMessageBatchComposerState
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        showDragHandle: true,
+        showDragHandle: false,
         backgroundColor: Theme.of(context).y300NativeContent.background,
         builder: (_) => MessageFriendPickerSheet(
           accountId: widget.accountId,
           controller: controller,
           selection: _selection,
           onSelectionChanged: _changed,
+          allowManualRecipients: true,
         ),
       );
     } finally {
@@ -188,7 +171,6 @@ class _PrivateMessageBatchComposerState
     if (!_ownsAccount || _blocked) return;
     final previous = _sender.value.snapshot;
     if (repeatSnapshot && previous == null) return;
-    if (!repeatSnapshot && !_addRecipient(sending: true)) return;
     final usernames = repeatSnapshot
         ? previous!.usernames
         : _selection.usernameSnapshot();
@@ -223,7 +205,6 @@ class _PrivateMessageBatchComposerState
       if (receipt.confirmsSingleRecipient) {
         setState(() {
           _message = '';
-          _username.clear();
           _selection.clear();
         });
         _finish();
@@ -263,7 +244,7 @@ class _PrivateMessageBatchComposerState
                             ? null
                             : () => _send(repeatSnapshot: true),
                       )
-                    : _form(context, width),
+                    : _form(context, constraints.maxHeight),
               ),
             );
           },
@@ -272,121 +253,78 @@ class _PrivateMessageBatchComposerState
     );
   }
 
-  Widget _form(BuildContext context, double width) {
+  Widget _form(BuildContext context, double height) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final palette = theme.y300NativeContent;
     final error = privateMessageCommandText(l10n, _sender.value.result);
-    final recipientError = switch (_recipientNotice) {
-      AddPrivateMessageRecipientResult.invalid => l10n.messageRecipientInvalid,
-      AddPrivateMessageRecipientResult.full =>
-        l10n.messageRecipientLimitReached,
-      AddPrivateMessageRecipientResult.duplicate =>
-        l10n.messageRecipientAlreadySelected,
-      _ => null,
-    };
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            l10n.messageRecipientSelectedCount(_selection.length),
-            style: TextStyle(color: palette.supportingText),
-          ),
-          if (!_selection.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final choice in _selection.items)
-                    InputChip(
-                      key: Key('message-recipient-chip-${choice.username}'),
-                      label: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: (width - 100).clamp(24.0, 740.0),
-                        ),
-                        child: Text(choice.username, softWrap: true),
-                      ),
-                      deleteButtonTooltipMessage: l10n.commonRemove,
-                      onDeleted: _blocked
-                          ? null
-                          : () => setState(() {
-                              _selection.remove(choice);
-                              _recipientNotice = null;
-                            }),
-                    ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextField(
-                  key: const Key('message-recipient'),
-                  controller: _username,
-                  enabled: !_blocked,
-                  autocorrect: false,
-                  textInputAction: TextInputAction.done,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: palette.body,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: l10n.messageRecipient,
-                    hintText: l10n.messageRecipientHint,
-                    errorText: recipientError,
-                    errorMaxLines: 3,
-                  ),
-                  onChanged: (_) => setState(() => _recipientNotice = null),
-                  onSubmitted: (_) => _addRecipient(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
+              SliverToBoxAdapter(
+                child: PrivateMessageRecipientBar(
+                  selection: _selection,
+                  onPressed: _blocked ? null : _openFriends,
                 ),
               ),
-              IconButton(
-                key: const Key('message-recipient-add'),
-                tooltip: l10n.messageRecipientAdd,
-                onPressed: _blocked ? null : _addRecipient,
-                icon: const Icon(Icons.add),
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: PrivateMessageComposeCanvas(
+                  hasRecipients: !_selection.isEmpty,
+                  error: error,
+                ),
               ),
             ],
           ),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              key: const Key('message-friends-open'),
-              onPressed: _blocked ? null : _openFriends,
-              icon: const Icon(Icons.people_outline),
-              label: Text(l10n.messageRecipientChooseFriends),
-            ),
+        ),
+        // Keep the input mounted outside the scrollable canvas. Scaffold owns
+        // keyboard avoidance; only the editor's internal viewport may shrink.
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: math.min(height, math.max(80, height * 0.55)),
           ),
-          const SizedBox(height: 12),
-          if (error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Semantics(
-                liveRegion: true,
-                child: Text(
-                  error,
-                  style: TextStyle(color: theme.colorScheme.error),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
+              ),
+              child: Material(
+                key: const Key('message-compose-dock'),
+                color: palette.card,
+                borderRadius: BorderRadius.circular(24),
+                clipBehavior: Clip.antiAlias,
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: MessageComposerRow(
+                    input: ComposerStickerInput(
+                      value: _message,
+                      enabled: !_blocked,
+                      semanticLabel: l10n.messageInput,
+                      inputBorder: InputBorder.none,
+                      onChanged: (message) =>
+                          setState(() => _message = message),
+                    ),
+                    emphasized: true,
+                    busy: _sender.value.isSending,
+                    onSend:
+                        _blocked ||
+                            _selection.isEmpty ||
+                            _message.trim().isEmpty
+                        ? null
+                        : _send,
+                  ),
                 ),
               ),
             ),
-          MessageComposerRow(
-            input: ComposerStickerInput(
-              value: _message,
-              enabled: !_blocked,
-              semanticLabel: l10n.messageInput,
-              onChanged: (message) => setState(() => _message = message),
-            ),
-            busy: _sender.value.isSending,
-            onSend: _blocked || _message.trim().isEmpty ? null : _send,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

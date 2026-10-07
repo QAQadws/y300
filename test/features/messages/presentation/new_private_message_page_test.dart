@@ -13,6 +13,7 @@ import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_input_test_helper.dart';
+import '../support/message_recipient_test_helper.dart';
 
 void main() {
   late _ComposeRepository repository;
@@ -63,14 +64,7 @@ void main() {
       AppLocalizations.of(tester.element(find.byType(NewPrivateMessagePage)));
 
   Future<void> addUsername(WidgetTester tester, String username) async {
-    await tester.enterText(
-      find.byKey(const Key('message-recipient')),
-      username,
-    );
-    final add = find.byKey(const Key('message-recipient-add'));
-    await tester.ensureVisible(add);
-    await tester.tap(add);
-    await tester.pump();
+    await addMessageRecipient(tester, username);
   }
 
   Future<void> submit(WidgetTester tester, String message) async {
@@ -81,14 +75,72 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('search text is never adopted as a recipient when closing', (
+    tester,
+  ) async {
+    await openPage(tester);
+    await enterMessageText(tester, 'draft');
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('message-send')))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.byKey(const Key('message-friends-open')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('message-recipient')), 'Alice');
+    await tester.tap(find.byKey(const Key('message-friends-done')));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n(tester).messageChooseRecipients), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('message-send')))
+          .onPressed,
+      isNull,
+    );
+    expect(messageInputValue(tester), 'draft');
+    expect(repository.sends, isEmpty);
+    await addUsername(tester, 'Alice');
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('message-send')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+    'removing the final recipient preserves the draft and disables send',
+    (tester) async {
+      await openPage(tester);
+      await addUsername(tester, 'Alice');
+      await enterMessageText(tester, 'keep this message');
+      await tester.tap(find.byKey(const Key('message-friends-open')));
+      await tester.pumpAndSettle();
+      final chip = tester.widget<InputChip>(
+        find.byKey(const Key('message-recipient-chip-Alice')),
+      );
+      chip.onDeleted!();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('message-friends-done')));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n(tester).messageChooseRecipients), findsOneWidget);
+      expect(messageInputValue(tester), 'keep this message');
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('message-send')))
+            .onPressed,
+        isNull,
+      );
+      expect(repository.sends, isEmpty);
+    },
+  );
+
   testWidgets(
     'one exact username uses batch command and only proven success exits',
     (tester) async {
       await openPage(tester);
-      await tester.enterText(
-        find.byKey(const Key('message-recipient')),
-        ' Alice ',
-      );
+      await addUsername(tester, ' Alice ');
       await submit(tester, '原样 <text> [smile]');
       expect(repository.sends, hasLength(1));
       expect(repository.sends.single.submission.usernames, ['Alice']);
@@ -111,14 +163,7 @@ void main() {
       await openPage(tester);
       await addUsername(tester, 'Alice');
       await addUsername(tester, 'Bob');
-      expect(
-        find.byKey(const Key('message-recipient-chip-Alice')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('message-recipient-chip-Bob')),
-        findsOneWidget,
-      );
+      expect(find.text('Alice、Bob'), findsOneWidget);
       await submit(tester, 'hello group');
       expect(repository.sends.single.submission.usernames, ['Alice', 'Bob']);
       repository.sends.single.succeed(accepted: 1, excluded: ['Bob']);
@@ -170,10 +215,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(messageInputValue(tester), 'uncertain draft');
-      expect(
-        find.byKey(const Key('message-recipient-chip-Alice')),
-        findsOneWidget,
-      );
+      expect(find.text('Alice'), findsOneWidget);
       expect(find.text(l10n(tester).messageUnknownOutcome), findsOneWidget);
       expect(find.textContaining('SECRET'), findsNothing);
       expect(events, isEmpty);
@@ -211,10 +253,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(messageInputValue(tester), 'uncertain draft');
-      expect(
-        find.byKey(const Key('message-recipient-chip-Alice')),
-        findsOneWidget,
-      );
+      expect(find.text('Alice'), findsOneWidget);
       expect(find.text(l10n(tester).messageBatchOnlyFriends), findsOneWidget);
       expect(find.textContaining('SECRET'), findsNothing);
       expect(events, isEmpty);
@@ -234,10 +273,7 @@ void main() {
       ]);
       await tester.pump();
       expect(old.submission.cancellation!.isCancelled, isTrue);
-      expect(
-        find.byKey(const Key('message-recipient-chip-Alice')),
-        findsNothing,
-      );
+      expect(find.text('Alice'), findsNothing);
       expect(messageInputValue(tester), isEmpty);
       old.succeed(accepted: 1);
       await tester.pump();
@@ -327,8 +363,22 @@ class _ComposeRepository implements PrivateMessageComposeRepository {
   }
 
   @override
-  Future<FriendDirectoryRead> loadFriends(ForumFriendDirectoryQuery query) =>
-      throw UnimplementedError();
+  Future<FriendDirectoryRead> loadFriends(
+    ForumFriendDirectoryQuery query,
+  ) async => DataReadSuccess(
+    data: const ForumFriendDirectoryPage(
+      items: [],
+      page: 1,
+      perPage: 20,
+      count: 0,
+    ),
+    capabilities: ForumFriendDirectoryReadCapabilities(
+      values: DataCapabilitySet.supported(
+        ForumFriendDirectoryCapability.values,
+      ),
+    ),
+    metadata: const DataReadMetadata.network(),
+  );
 }
 
 class _BatchSend {

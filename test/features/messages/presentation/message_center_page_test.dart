@@ -21,6 +21,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_test_repository.dart';
 import '../support/message_input_test_helper.dart';
+import '../support/message_recipient_test_helper.dart';
 
 void main() {
   late MessageTestRepository repository;
@@ -447,10 +448,7 @@ void main() {
       await tester.tap(find.byTooltip(l10n(tester).messageNew));
       await tester.pumpAndSettle();
       expect(find.byType(NewPrivateMessagePage), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const Key('message-recipient')),
-        'Alice',
-      );
+      await addMessageRecipient(tester, 'Alice');
       await enterMessageText(tester, 'hello');
       await tester.pump();
       await tester.tap(find.byKey(const Key('message-send')));
