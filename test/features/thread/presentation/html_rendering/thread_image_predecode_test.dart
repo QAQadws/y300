@@ -22,6 +22,130 @@ import '../../../../test_support/localized_test_app.dart';
 import 'forum_html_test_theme.dart';
 
 void main() {
+  testWidgets('first PNG keeps its bounds while delayed loading settles', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2100);
+    addTearDown(tester.view.resetPhysicalSize);
+    final ready = Completer<void>();
+    final probe = _ControlledDimensionProbe();
+    final fixture = await _mountVisibleImage(
+      tester,
+      intrinsicSize: const Size(1000, 1501),
+      displayWidth: 340,
+      viewportHeight: 650,
+      devicePixelRatio: 3,
+      waitForFile: ready.future,
+      waitForFirstFrame: false,
+      dimensionProbe: probe,
+      htmlPrefix:
+          '<font size="5"><span style="background-color:#eeeeaa">'
+          '翻译：译者<br>校对：校对者<br>嵌字：嵌字者</span></font><br><br>',
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byKey(const Key('cached-library-image-loading-indicator')),
+      findsOneWidget,
+    );
+    final placeholderBounds = tester.getRect(fixture.imageRoot);
+    expect(fixture.frame, findsNothing);
+    ready.complete();
+
+    var renderedFrames = 0;
+    for (var pump = 0; pump < 40; pump++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump();
+      final bounds = tester.getRect(fixture.imageRoot);
+      expect(bounds.top, closeTo(placeholderBounds.top, 0.001));
+      expect(bounds.width, closeTo(placeholderBounds.width, 0.001));
+      if (fixture.frame.evaluate().isEmpty) continue;
+      final bitmap = tester.widget<RawImage>(fixture.frame).image;
+      if (bitmap == null) continue;
+      final paint = _imagePaintGeometry(tester, fixture.frame);
+      expect(paint.destination.top, closeTo(placeholderBounds.top, 0.001));
+      expect(paint.destination.width, closeTo(placeholderBounds.width, 0.001));
+      renderedFrames++;
+      if (renderedFrames == 1) {
+        expect(
+          find.byKey(const Key('cached-library-image-loading-indicator')),
+          findsOneWidget,
+        );
+        probe.complete(const Size(1000, 1501));
+      }
+    }
+    expect(renderedFrames, greaterThan(1));
+    expect(
+      find.byKey(const Key('cached-library-image-loading-indicator')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final originalSize in [const Size(1000, 1501), const Size(1001, 600)]) {
+    testWidgets(
+      'first PNG painted top stays anchored when '
+      '${originalSize.width.toInt()}x${originalSize.height.toInt()} dimensions arrive',
+      (tester) async {
+        final probe = _ControlledDimensionProbe();
+        final fixture = await _mountVisibleImage(
+          tester,
+          dimensionProbe: probe,
+          intrinsicSize: originalSize,
+          displayWidth: 360,
+          devicePixelRatio: 2,
+          maxDecodedBytesPerImage: 4000000,
+        );
+        final imageElement = tester.element(fixture.image);
+        final bitmap = tester.widget<RawImage>(fixture.frame).image!;
+        final provider = tester.widget<Image>(fixture.image).image;
+        final key = await provider.obtainKey(ImageConfiguration.empty);
+        final top = tester.getTopLeft(fixture.imageRoot).dy;
+        expect(probe.requests, 1);
+        expect(bitmap.width, 720);
+        final firstPaint = _imagePaintGeometry(tester, fixture.frame);
+        expect(firstPaint.destination.top, closeTo(top, 0.001));
+        expect(
+          firstPaint.source.top,
+          closeTo(0, 0.001),
+          reason: 'fallback height must not crop away the original top',
+        );
+
+        // The encoded ratio recovers after the first frame; integer resize
+        // dimensions differ slightly from it. Compare painting, not just layout.
+        probe.complete(originalSize);
+        for (var frame = 0; frame < 8; frame++) {
+          await tester.pump();
+          expect(tester.getTopLeft(fixture.imageRoot).dy, closeTo(top, 0.001));
+          final paint = _imagePaintGeometry(tester, fixture.frame);
+          expect(
+            paint.destination.top,
+            closeTo(top, 0.001),
+            reason: 'the recovered height must not shift the painted top',
+          );
+          expect(paint.source.top, closeTo(0, 0.001));
+          expect(tester.element(fixture.image), same(imageElement));
+          expect(tester.widget<RawImage>(fixture.frame).image, same(bitmap));
+          expect(
+            await tester
+                .widget<Image>(fixture.image)
+                .image
+                .obtainKey(ImageConfiguration.empty),
+            key,
+          );
+        }
+        expect(
+          tester.getSize(fixture.imageRoot).height,
+          closeTo(360 / originalSize.aspectRatio, 0.001),
+        );
+        expect(probe.requests, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'visible PNG keeps its first frame while missing dimensions arrive',
     (tester) async {
@@ -325,20 +449,28 @@ Future<_VisibleImageFixture> _mountVisibleImage(
   bool failLoad = false,
   int maxDecodedBytesPerImage = 1000000,
   EncodedImageDimensionProbe? dimensionProbe,
+  Size intrinsicSize = const Size(400, 200),
+  double displayWidth = 200,
+  double viewportHeight = 250,
+  double devicePixelRatio = 1,
+  Future<void>? waitForFile,
+  bool waitForFirstFrame = true,
+  String htmlPrefix = '',
 }) async {
-  tester.view.devicePixelRatio = 1;
+  tester.view.devicePixelRatio = devicePixelRatio;
   addTearDown(tester.view.resetDevicePixelRatio);
   final directory = (await tester.runAsync(
     () => Directory.systemTemp.createTemp('y300-visible-frame-'),
   ))!;
   final path = (await tester.runAsync(() async {
-    final bytes = await _imageBytes(animated: false);
+    final bytes = await _imageBytes(animated: false, size: intrinsicSize);
     return (await File('${directory.path}/image.png').writeAsBytes(bytes)).path;
   }))!;
   final cache = _FileCache(
     [path],
-    intrinsicSize: explicitDimensions ? const Size(400, 200) : null,
+    intrinsicSize: explicitDimensions ? intrinsicSize : null,
     failRequests: failLoad,
+    waitForFile: waitForFile,
   );
   final host = CacheForumHtmlImageHost(
     dimensionIndex: CacheRecordForumImageDimensionIndex(
@@ -377,16 +509,16 @@ Future<_VisibleImageFixture> _mountVisibleImage(
           body: Align(
             alignment: Alignment.topLeft,
             child: SizedBox(
-              width: 200,
-              height: 250,
+              width: displayWidth,
+              height: viewportHeight,
               child: SingleChildScrollView(
                 controller: controller,
                 child: Column(
                   children: [
                     ForumHtmlWidgetPostRenderer(
                       html:
-                          '<img src="https://example.invalid/0.png" '
-                          '${explicitDimensions ? 'width="200" height="100"' : ''}>',
+                          '$htmlPrefix<img src="https://example.invalid/0.png" '
+                          '${explicitDimensions ? 'width="${intrinsicSize.width}" height="${intrinsicSize.height}"' : ''}>',
                       sourceId: 'visible-frame',
                       theme: forumHtmlTestTheme,
                       buildAsync: false,
@@ -403,7 +535,7 @@ Future<_VisibleImageFixture> _mountVisibleImage(
       ),
     ),
   );
-  for (var i = 0; i < 30; i++) {
+  for (var i = 0; waitForFirstFrame && i < 30; i++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 10)),
     );
@@ -414,13 +546,32 @@ Future<_VisibleImageFixture> _mountVisibleImage(
   );
   final image = find.descendant(of: imageRoot, matching: find.byType(Image));
   final frame = find.descendant(of: imageRoot, matching: find.byType(RawImage));
-  if (failLoad) {
+  if (!waitForFirstFrame || failLoad) {
     expect(frame, findsNothing);
   } else {
     expect(image, findsOneWidget);
     expect(tester.widget<RawImage>(frame).image, isNotNull);
   }
   return _VisibleImageFixture(controller, imageRoot, image, frame);
+}
+
+({Rect source, Rect destination}) _imagePaintGeometry(
+  WidgetTester tester,
+  Finder frame,
+) {
+  final raw = tester.widget<RawImage>(frame);
+  final bitmap = raw.image!;
+  final sourceSize = Size(bitmap.width / raw.scale, bitmap.height / raw.scale);
+  final fitted = applyBoxFit(raw.fit!, sourceSize, tester.getSize(frame));
+  final alignment = raw.alignment.resolve(TextDirection.ltr);
+  final destination = alignment.inscribe(
+    fitted.destination,
+    Offset.zero & tester.getSize(frame),
+  );
+  return (
+    source: alignment.inscribe(fitted.source, Offset.zero & sourceSize),
+    destination: destination.shift(tester.getTopLeft(frame)),
+  );
 }
 
 class _VisibleImageFixture {
@@ -450,7 +601,10 @@ class _ControlledDimensionProbe implements EncodedImageDimensionProbe {
   }
 }
 
-Future<List<int>> _imageBytes({required bool animated}) async {
+Future<List<int>> _imageBytes({
+  required bool animated,
+  Size size = const Size(400, 200),
+}) async {
   if (animated) {
     // A looping 1x1 red/green GIF with two 100 ms frames.
     final bytes = Uint8List.fromList([
@@ -510,11 +664,9 @@ Future<List<int>> _imageBytes({required bool animated}) async {
     return bytes;
   }
   final recorder = ui.PictureRecorder();
-  Canvas(
-    recorder,
-  ).drawRect(const Rect.fromLTWH(0, 0, 400, 200), Paint()..color = Colors.red);
+  Canvas(recorder).drawRect(Offset.zero & size, Paint()..color = Colors.red);
   final picture = recorder.endRecording();
-  final image = await picture.toImage(400, 200);
+  final image = await picture.toImage(size.width.toInt(), size.height.toInt());
   final data = await image.toByteData(format: ui.ImageByteFormat.png);
   image.dispose();
   picture.dispose();
@@ -526,26 +678,31 @@ class _FileCache implements ImageCacheService {
     this.paths, {
     required this.intrinsicSize,
     this.failRequests = false,
+    this.waitForFile,
   });
   final List<String> paths;
   final Size? intrinsicSize;
   final bool failRequests;
+  final Future<void>? waitForFile;
   final records = <String, CachedImageResult>{};
   @override
-  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async =>
-      failRequests
-      ? CachedImageResult.failed
-      : records.putIfAbsent(
-          request.cacheKey,
-          () => CachedImageResult(
-            success: true,
-            cacheKey: request.cacheKey,
-            localPath: paths[request.imageIndex!],
-            width: intrinsicSize?.width.toInt(),
-            height: intrinsicSize?.height.toInt(),
-            fromCache: true,
-          ),
-        );
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    await waitForFile;
+    return failRequests
+        ? CachedImageResult.failed
+        : records.putIfAbsent(
+            request.cacheKey,
+            () => CachedImageResult(
+              success: true,
+              cacheKey: request.cacheKey,
+              localPath: paths[request.imageIndex!],
+              width: intrinsicSize?.width.toInt(),
+              height: intrinsicSize?.height.toInt(),
+              fromCache: true,
+            ),
+          );
+  }
+
   @override
   Future<CachedImageResult?> getCached(String cacheKey) async =>
       records[cacheKey];

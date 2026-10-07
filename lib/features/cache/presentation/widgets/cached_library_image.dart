@@ -22,6 +22,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     required this.fit,
     this.width,
     this.height,
+    this.alignment = Alignment.center,
     this.preferredLocalPath,
     this.localFileFallbackPredicate,
     this.localFileFallback,
@@ -47,6 +48,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+  final AlignmentGeometry alignment;
   final String? preferredLocalPath;
 
   /// Selects [localFileFallback] before a cached or preferred file is decoded.
@@ -166,6 +168,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
               fit: widget.fit,
               width: widget.width,
               height: widget.height,
+              alignment: widget.alignment,
               decodeDisplaySize: widget.decodeDisplaySize,
               placeholder: widget.placeholder,
               errorPlaceholder: widget.errorPlaceholder,

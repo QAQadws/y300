@@ -244,6 +244,11 @@ final class CacheForumHtmlImageHost
   }) => CachedLibraryImage(
     request: (image as CacheForumHtmlDisplayImage).request,
     fit: fit,
+    // Keep the readable top anchored while intrinsic height is recovered.
+    // Centering also exposes subpixel gaps from integer downsample dimensions.
+    alignment: !image.isSticker && fit == BoxFit.fitWidth
+        ? Alignment.topCenter
+        : Alignment.center,
     placeholder: placeholder,
     width: width,
     height: height,

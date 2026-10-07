@@ -249,6 +249,8 @@ void main() {
       expect(stickerWidget.showDelayedLoadingIndicator, isFalse);
       expect(stickerWidget.width, 30);
       expect(stickerWidget.height, 20);
+      expect(blockWidget.alignment, Alignment.topCenter);
+      expect(stickerWidget.alignment, Alignment.center);
     },
   );
 
