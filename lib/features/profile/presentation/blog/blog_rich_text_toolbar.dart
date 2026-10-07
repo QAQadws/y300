@@ -159,18 +159,21 @@ class BlogRichTextToolbar extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (var value = 1; value <= 7; value++)
-                    ChoiceChip(
-                      key: Key('blog-font-size-$value'),
-                      label: Text('$value'),
-                      selected: selected == '$value',
-                      onSelected: (_) => Navigator.pop(context, value),
-                    ),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var value = 1; value <= 7; value++) ...[
+                      ChoiceChip(
+                        key: Key('blog-font-size-$value'),
+                        label: Text('$value'),
+                        selected: selected == '$value',
+                        onSelected: (_) => Navigator.pop(context, value),
+                      ),
+                      if (value != 7) const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, 0),
