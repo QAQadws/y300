@@ -656,6 +656,9 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   String _chapterSubtitle(LibraryChapterItem chapter) {
+    if (!chapter.showSourceIdentifier) {
+      return chapter.publishTimeText?.trim() ?? '';
+    }
     final date = chapter.publishTimeText ?? '-';
     final sourcePid = chapter.sourcePid?.trim();
     if (sourcePid != null && sourcePid.isNotEmpty) {

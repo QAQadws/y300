@@ -252,7 +252,7 @@ class LibraryDetailHeader {
 }
 
 /// 通用章节阅读进度展示模型。
-enum LibraryChapterProgressKind { currentPage, lastRead }
+enum LibraryChapterProgressKind { currentPage, lastRead, percentage }
 
 class LibraryChapterProgressInfo {
   const LibraryChapterProgressInfo({
@@ -286,6 +286,7 @@ class LibraryChapterItem {
     this.isDownloaded = false,
     this.isBookmarked = false,
     this.progressInfo,
+    this.showSourceIdentifier = true,
   });
 
   final String episodeId;
@@ -301,4 +302,7 @@ class LibraryChapterItem {
   final bool isDownloaded;
   final bool isBookmarked;
   final LibraryChapterProgressInfo? progressInfo;
+
+  /// Source identity remains available for routing even when metadata omits it.
+  final bool showSourceIdentifier;
 }

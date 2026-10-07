@@ -1275,7 +1275,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('上次阅读'), findsOneWidget);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(NovelReaderPage)),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('novel-reader-chapter-novel:49:100:5003')),
+        matching: find.textContaining(l10n.libraryChapterLastRead),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('NovelReaderPage catalog opens near current chapter', (

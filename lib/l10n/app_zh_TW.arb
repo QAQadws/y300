@@ -437,6 +437,8 @@
   "libraryChapterMarkRead": "標記為已讀",
   "libraryChapterCurrentPage": "第 {page} 頁",
   "libraryChapterLastRead": "上次閱讀",
+  "libraryChapterProgressPercent": "{percent}%",
+  "libraryChapterLastReadPercent": "上次閱讀 {percent}%",
   "libraryChapterProgressSemantics": "{subtitle}，{progress}",
   "libraryChapterFilterAny": "不限",
   "libraryChapterFilterOnly": "只看{label}",

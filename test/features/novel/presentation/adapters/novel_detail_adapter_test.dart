@@ -52,7 +52,7 @@ void main() {
     ]);
   });
 
-  test('loadChapters maps paged novel progress to page label', () async {
+  test('loadChapters maps paged novel progress to percentage', () async {
     final adapter = NovelDetailAdapter(
       _FakeNovelRepository(
         progress: NovelReadingProgress(
@@ -77,7 +77,7 @@ void main() {
       (chapter) => chapter.episodeId == 'novel:1:2',
     );
 
-    expect(current.progressInfo?.kind, LibraryChapterProgressKind.lastRead);
+    expect(current.progressInfo?.kind, LibraryChapterProgressKind.percentage);
     expect(current.progressInfo?.fraction, 0.35);
     expect(current.progressInfo?.isCurrent, isTrue);
   });
@@ -105,9 +105,154 @@ void main() {
       (chapter) => chapter.episodeId == 'novel:1:1',
     );
 
-    expect(current.progressInfo?.kind, LibraryChapterProgressKind.lastRead);
+    expect(current.progressInfo?.kind, LibraryChapterProgressKind.percentage);
     expect(current.progressInfo?.fraction, 0.42);
+    expect(current.progressInfo?.isCurrent, isTrue);
+    expect(
+      chapters
+          .singleWhere((chapter) => chapter.episodeId == 'novel:1:2')
+          .progressInfo,
+      isNull,
+    );
   });
+
+  test(
+    'hidden source identifiers remain available for sorting and routing',
+    () async {
+      final adapter = NovelDetailAdapter(
+        _FakeNovelRepository(),
+        stateRepository: _RecordingLibraryStateRepository(),
+      );
+
+      final chapters = await adapter.loadChapters(
+        workId: 'novel:1',
+        filters: const LibraryFilterSet(),
+        sortOption: LibraryChapterSortOption.defaults,
+      );
+
+      expect(chapters.map((chapter) => chapter.sourcePid), <String?>[
+        '2',
+        '10',
+      ]);
+      expect(chapters.every((chapter) => chapter.sourceTid == '100'), isTrue);
+      expect(
+        chapters.every((chapter) => !chapter.showSourceIdentifier),
+        isTrue,
+      );
+      expect(chapters.map((chapter) => chapter.title), <String>['第二章', '第一章']);
+    },
+  );
+
+  for (final sample in <({String name, double fraction, bool? valid})>[
+    (name: 'legacy zero', fraction: 0, valid: null),
+    (name: 'explicitly invalid partial progress', fraction: 0.42, valid: false),
+    (name: 'non-finite progress', fraction: double.nan, valid: true),
+    (name: 'negative progress', fraction: -0.1, valid: true),
+    (name: 'out-of-range progress', fraction: 1.1, valid: true),
+  ]) {
+    test(
+      'loadChapters keeps ${sample.name} as a last-read marker only',
+      () async {
+        final adapter = NovelDetailAdapter(
+          _FakeNovelRepository(
+            progress: NovelReadingProgress(
+              novelId: 'novel:1',
+              episodeId: 'novel:1:1',
+              scrollOffset: 120,
+              updatedAt: DateTime(2026, 10, 7),
+              progressPercent: sample.fraction,
+              isProgressPercentValid: sample.valid,
+            ),
+          ),
+          stateRepository: _RecordingLibraryStateRepository(),
+        );
+
+        final chapters = await adapter.loadChapters(
+          workId: 'novel:1',
+          filters: const LibraryFilterSet(),
+          sortOption: LibraryChapterSortOption.defaults,
+        );
+        final current = chapters.singleWhere(
+          (chapter) => chapter.episodeId == 'novel:1:1',
+        );
+
+        expect(
+          current.progressInfo?.kind,
+          LibraryChapterProgressKind.percentage,
+        );
+        expect(current.progressInfo?.fraction, isNull);
+        expect(current.progressInfo?.isCurrent, isTrue);
+        expect(current.isRead, isFalse);
+      },
+    );
+  }
+
+  test(
+    'loadChapters displays explicitly valid zero without marking completion',
+    () async {
+      final adapter = NovelDetailAdapter(
+        _FakeNovelRepository(
+          progress: NovelReadingProgress(
+            novelId: 'novel:1',
+            episodeId: 'novel:1:1',
+            scrollOffset: 0,
+            updatedAt: DateTime(2026, 10, 7),
+            progressPercent: 0,
+            isProgressPercentValid: true,
+          ),
+        ),
+        stateRepository: _RecordingLibraryStateRepository(),
+      );
+
+      final chapters = await adapter.loadChapters(
+        workId: 'novel:1',
+        filters: const LibraryFilterSet(),
+        sortOption: LibraryChapterSortOption.defaults,
+      );
+      final current = chapters.singleWhere(
+        (chapter) => chapter.episodeId == 'novel:1:1',
+      );
+
+      expect(current.progressInfo?.kind, LibraryChapterProgressKind.percentage);
+      expect(current.progressInfo?.fraction, 0);
+      expect(current.isRead, isFalse);
+    },
+  );
+
+  for (final identity in <({String name, String novelId, String episodeId})>[
+    (name: 'another work', novelId: 'novel:2', episodeId: 'novel:1:1'),
+    (name: 'missing chapter', novelId: 'novel:1', episodeId: 'removed:chapter'),
+  ]) {
+    test(
+      'loadChapters ignores a saved position for ${identity.name}',
+      () async {
+        final adapter = NovelDetailAdapter(
+          _FakeNovelRepository(
+            progress: NovelReadingProgress(
+              novelId: identity.novelId,
+              episodeId: identity.episodeId,
+              scrollOffset: 120,
+              updatedAt: DateTime(2026, 10, 7),
+              progressPercent: 0.42,
+              isProgressPercentValid: true,
+            ),
+          ),
+          stateRepository: _RecordingLibraryStateRepository(),
+        );
+
+        final chapters = await adapter.loadChapters(
+          workId: 'novel:1',
+          filters: const LibraryFilterSet(),
+          sortOption: LibraryChapterSortOption.defaults,
+        );
+
+        expect(
+          chapters.every((chapter) => chapter.progressInfo == null),
+          isTrue,
+        );
+      },
+    );
+  }
 
   test(
     'loadChapters keeps last-read marker independent from read completion',
@@ -134,7 +279,7 @@ void main() {
             .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
             .progressInfo
             ?.kind,
-        LibraryChapterProgressKind.lastRead,
+        LibraryChapterProgressKind.percentage,
       );
 
       final readAdapter = NovelDetailAdapter(
@@ -161,7 +306,7 @@ void main() {
             .singleWhere((chapter) => chapter.episodeId == 'novel:1:1')
             .progressInfo
             ?.kind,
-        LibraryChapterProgressKind.lastRead,
+        LibraryChapterProgressKind.percentage,
       );
       expect(
         readChapters

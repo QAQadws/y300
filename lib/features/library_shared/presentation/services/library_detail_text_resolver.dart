@@ -80,12 +80,33 @@ abstract final class LibraryDetailTextResolver {
 
   static String chapterProgress(
     AppLocalizations l10n,
-    LibraryChapterProgressInfo progress,
-  ) {
+    LibraryChapterProgressInfo progress, {
+    bool isRead = false,
+  }) {
     return switch (progress.kind) {
       LibraryChapterProgressKind.currentPage => _currentPage(l10n, progress),
       LibraryChapterProgressKind.lastRead => l10n.libraryChapterLastRead,
+      LibraryChapterProgressKind.percentage => _percentage(
+        l10n,
+        progress,
+        isRead: isRead,
+      ),
     };
+  }
+
+  static String chapterSubtitle(
+    AppLocalizations l10n, {
+    required String subtitle,
+    LibraryChapterProgressInfo? progress,
+    bool isRead = false,
+  }) {
+    final metadata = subtitle.trim();
+    final label = progress == null
+        ? ''
+        : chapterProgress(l10n, progress, isRead: isRead);
+    if (metadata.isEmpty) return label;
+    if (label.isEmpty) return metadata;
+    return '$metadata  ·  $label';
   }
 
   static String manualChapterInputError(
@@ -181,6 +202,26 @@ abstract final class LibraryDetailTextResolver {
   ) {
     final page = progress.currentPage ?? 1;
     return l10n.libraryChapterCurrentPage(page);
+  }
+
+  static String _percentage(
+    AppLocalizations l10n,
+    LibraryChapterProgressInfo progress, {
+    required bool isRead,
+  }) {
+    final fraction = progress.fraction;
+    if (isRead ||
+        fraction == null ||
+        !fraction.isFinite ||
+        fraction < 0 ||
+        fraction > 1) {
+      return progress.isCurrent ? l10n.libraryChapterLastRead : '';
+    }
+    // Display rounding must not turn an unfinished position into 100%.
+    final percent = (fraction * 100).floor();
+    return progress.isCurrent
+        ? l10n.libraryChapterLastReadPercent(percent)
+        : l10n.libraryChapterProgressPercent(percent);
   }
 
   static String _manualUnexpectedHost(

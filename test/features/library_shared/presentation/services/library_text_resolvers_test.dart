@@ -178,6 +178,80 @@ void main() {
         traditional.libraryChapterCurrentPage(3),
       );
     });
+
+    test(
+      'localizes percentage and recent markers without rounding to complete',
+      () {
+        for (final locale in <AppLocalizationsZh>[simplified, traditional]) {
+          for (final recent in <bool>[false, true]) {
+            final progress = LibraryChapterProgressInfo(
+              kind: LibraryChapterProgressKind.percentage,
+              isCurrent: recent,
+              fraction: 0.9999,
+            );
+            expect(
+              LibraryDetailTextResolver.chapterProgress(locale, progress),
+              recent
+                  ? locale.libraryChapterLastReadPercent(99)
+                  : locale.libraryChapterProgressPercent(99),
+            );
+            expect(
+              LibraryDetailTextResolver.chapterProgress(
+                locale,
+                progress,
+                isRead: true,
+              ),
+              recent ? locale.libraryChapterLastRead : '',
+            );
+          }
+        }
+      },
+    );
+
+    test('unknown or malformed fractions keep only a recent marker', () {
+      for (final fraction in <double?>[
+        null,
+        double.nan,
+        double.infinity,
+        -0.1,
+        1.1,
+      ]) {
+        for (final recent in <bool>[false, true]) {
+          final progress = LibraryChapterProgressInfo(
+            kind: LibraryChapterProgressKind.percentage,
+            isCurrent: recent,
+            fraction: fraction,
+          );
+          expect(
+            LibraryDetailTextResolver.chapterProgress(simplified, progress),
+            recent ? simplified.libraryChapterLastRead : '',
+          );
+        }
+      }
+    });
+
+    test('empty metadata adds no leading separator to a progress label', () {
+      const progress = LibraryChapterProgressInfo(
+        kind: LibraryChapterProgressKind.percentage,
+        isCurrent: true,
+        fraction: 0,
+      );
+      expect(
+        LibraryDetailTextResolver.chapterSubtitle(
+          traditional,
+          subtitle: '  ',
+          progress: progress,
+        ),
+        traditional.libraryChapterLastReadPercent(0),
+      );
+      expect(
+        LibraryDetailTextResolver.chapterSubtitle(
+          traditional,
+          subtitle: ' 2026-10-07 ',
+        ),
+        '2026-10-07',
+      );
+    });
   });
 
   group('LibraryTaskTextResolver', () {

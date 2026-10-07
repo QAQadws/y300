@@ -95,6 +95,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
                       subtitle,
                       episodeId: chapter.episodeId,
                       progress: chapter.progressInfo,
+                      isRead: chapter.isRead,
                       style:
                           theme.textTheme.bodySmall?.copyWith(
                             color: subtitleColor,
@@ -355,20 +356,30 @@ class _ChapterSubtitle extends StatelessWidget {
     this.subtitle, {
     required this.episodeId,
     required this.progress,
+    required this.isRead,
     required this.style,
   });
 
   final String episodeId;
   final String subtitle;
   final LibraryChapterProgressInfo? progress;
+  final bool isRead;
   final TextStyle style;
 
   @override
   Widget build(BuildContext context) {
-    final progress = this.progress;
-    if (progress == null) {
+    final l10n = AppLocalizations.of(context);
+    final metadata = subtitle.trim();
+    final progressLabel = progress == null
+        ? ''
+        : LibraryDetailTextResolver.chapterProgress(
+            l10n,
+            progress!,
+            isRead: isRead,
+          );
+    if (progressLabel.isEmpty) {
       return Text(
-        subtitle,
+        metadata,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: style,
@@ -379,18 +390,17 @@ class _ChapterSubtitle extends StatelessWidget {
       color: (style.color ?? Theme.of(context).colorScheme.onSurfaceVariant)
           .withAlpha(150),
     );
-    final progressLabel = LibraryDetailTextResolver.chapterProgress(
-      AppLocalizations.of(context),
-      progress,
-    );
     final text = RichText(
+      textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       text: TextSpan(
         style: style,
         children: [
-          TextSpan(text: subtitle),
-          const TextSpan(text: '  ·  '),
+          if (metadata.isNotEmpty) ...[
+            TextSpan(text: metadata),
+            const TextSpan(text: '  ·  '),
+          ],
           TextSpan(text: progressLabel, style: progressStyle),
         ],
       ),
@@ -399,9 +409,9 @@ class _ChapterSubtitle extends StatelessWidget {
       key: ValueKey<String>(
         'unified-detail-chapter-inline-progress-$episodeId',
       ),
-      label: AppLocalizations.of(
-        context,
-      ).libraryChapterProgressSemantics(subtitle, progressLabel),
+      label: metadata.isEmpty
+          ? progressLabel
+          : l10n.libraryChapterProgressSemantics(metadata, progressLabel),
       child: ExcludeSemantics(child: text),
     );
   }

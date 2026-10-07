@@ -13,6 +13,7 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
+import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
 import 'package:y300/features/library_shared/domain/models/reader_corner_dock_side.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock_location.dart';
@@ -34,6 +35,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_chapter_progress_projector.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
@@ -2140,14 +2142,14 @@ class _NovelReaderChapterListSheetState
                     )
                   : ListView.builder(
                       controller: _keyword.isEmpty ? _scrollController : null,
-                      itemExtent: NovelReaderChapterListSheet.itemExtent,
+                      itemExtent: _chapterItemExtent(context),
                       itemCount: filteredEpisodes.length,
                       itemBuilder: (context, index) {
                         return _ChapterListTile(
                           episode: filteredEpisodes[index],
                           currentEpisodeId: viewState.currentEpisode.episodeId,
-                          readingProgressEpisodeId:
-                              viewState.readingProgress?.episodeId,
+                          readingProgress: viewState.readingProgress,
+                          progressSnapshot: viewState.progressSnapshot,
                           bookmarkEpisodeIds: viewState.bookmarkEpisodeIds,
                         );
                       },
@@ -2177,7 +2179,24 @@ class _NovelReaderChapterListSheetState
       return 0;
     }
     final anchoredIndex = currentIndex <= 2 ? 0 : currentIndex - 2;
-    return anchoredIndex * NovelReaderChapterListSheet.itemExtent;
+    return anchoredIndex * _chapterItemExtent(context);
+  }
+
+  double _chapterItemExtent(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final scaler = MediaQuery.textScalerOf(context);
+    final title = textTheme.bodyLarge;
+    final subtitle = textTheme.bodyMedium;
+    // Keep fixed-extent navigation, with room for a wrapping progress subtitle
+    // under accessibility scaling instead of clipping it inside a 72px row.
+    return math.max(
+      NovelReaderChapterListSheet.itemExtent,
+      16 +
+          scaler.scale(title?.fontSize ?? 16) * (title?.height ?? 1.5) +
+          2 *
+              scaler.scale(subtitle?.fontSize ?? 14) *
+              (subtitle?.height ?? 1.5),
+    );
   }
 
   List<NovelEpisodeItem> _filteredEpisodes() {
@@ -2199,26 +2218,41 @@ class _ChapterListTile extends StatelessWidget {
   const _ChapterListTile({
     required this.episode,
     required this.currentEpisodeId,
-    required this.readingProgressEpisodeId,
+    required this.readingProgress,
+    required this.progressSnapshot,
     required this.bookmarkEpisodeIds,
   });
 
   final NovelEpisodeItem episode;
   final String currentEpisodeId;
-  final String? readingProgressEpisodeId;
+  final NovelReadingProgress? readingProgress;
+  final NovelReaderProgressSnapshot progressSnapshot;
   final Set<String> bookmarkEpisodeIds;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isCurrent = episode.episodeId == currentEpisodeId;
-    final isLastRead =
-        !isCurrent && episode.episodeId == readingProgressEpisodeId;
     final isBookmarked = bookmarkEpisodeIds.contains(episode.episodeId);
+    final progress = NovelChapterProgressProjector.project(
+      novelId: episode.novelId,
+      episodeId: episode.episodeId,
+      progress: readingProgress,
+      liveSnapshot: isCurrent ? progressSnapshot : null,
+    );
+    final subtitle = LibraryDetailTextResolver.chapterSubtitle(
+      l10n,
+      subtitle: episode.datelineText ?? '',
+      progress: progress,
+    );
     return ListTile(
       key: Key('novel-reader-chapter-${episode.episodeId}'),
       selected: isCurrent,
       leading: Icon(
+        key: isBookmarked
+            ? Key('novel-reader-chapter-bookmark-${episode.episodeId}')
+            : null,
+        semanticLabel: isBookmarked ? l10n.novelBookmark : null,
         isBookmarked
             ? Icons.bookmark
             : isCurrent
@@ -2234,27 +2268,19 @@ class _ChapterListTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: episode.datelineText == null
+      subtitle: subtitle.isEmpty
           ? null
-          : Text(
-              episode.datelineText!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          : Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+      trailing: !isCurrent
+          ? null
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 80),
+              child: Text(
+                l10n.novelCurrent,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-      trailing: Wrap(
-        spacing: 6,
-        children: [
-          if (isBookmarked)
-            Text(
-              l10n.novelBookmark,
-              key: Key('novel-reader-chapter-bookmark-${episode.episodeId}'),
-            ),
-          if (isCurrent)
-            Text(l10n.novelCurrent)
-          else if (isLastRead)
-            Text(l10n.novelLastRead),
-        ],
-      ),
       onTap: () => Navigator.of(context).pop(episode),
     );
   }

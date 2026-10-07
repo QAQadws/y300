@@ -626,6 +626,10 @@
   "libraryChapterCurrentPage": "第 {page} 页",
   "@libraryChapterCurrentPage": {"placeholders": {"page": {"type": "int"}}},
   "libraryChapterLastRead": "上次阅读",
+  "libraryChapterProgressPercent": "{percent}%",
+  "@libraryChapterProgressPercent": {"placeholders": {"percent": {"type": "int"}}},
+  "libraryChapterLastReadPercent": "上次阅读 {percent}%",
+  "@libraryChapterLastReadPercent": {"placeholders": {"percent": {"type": "int"}}},
   "libraryChapterProgressSemantics": "{subtitle}，{progress}",
   "@libraryChapterProgressSemantics": {
     "description": "章节进度语义；subtitle 和 progress 都由共享 presentation 生成，章节数据保持原样",

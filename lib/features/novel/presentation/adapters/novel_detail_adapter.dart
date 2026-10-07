@@ -8,10 +8,10 @@ import 'package:y300/features/library_shared/domain/services/library_source_id_c
 import 'package:y300/features/library_shared/domain/services/library_cover_asset_factory.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
-import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_chapter_progress_projector.dart';
 
 /// 小说详情适配器（Phase 6）。
 class NovelDetailAdapter
@@ -123,9 +123,11 @@ class NovelDetailAdapter
           sourceTid: item.sourceTid,
           sourcePid: item.sourcePid,
           publishTimeText: item.datelineText,
+          showSourceIdentifier: false,
           isRead: false,
           isBookmarked: state?.isBookmarked ?? false,
-          progressInfo: _progressInfoForEpisode(
+          progressInfo: NovelChapterProgressProjector.project(
+            novelId: workId,
             episodeId: item.episodeId,
             progress: progress,
           ),
@@ -135,22 +137,6 @@ class NovelDetailAdapter
 
     final filtered = _applyFilters(mapped, filters);
     return _sortChapters(filtered, sortOption);
-  }
-
-  LibraryChapterProgressInfo? _progressInfoForEpisode({
-    required String episodeId,
-    required NovelReadingProgress? progress,
-  }) {
-    if (progress == null || progress.episodeId != episodeId) {
-      return null;
-    }
-
-    final fraction = progress.progressPercent.clamp(0.0, 1.0).toDouble();
-    return LibraryChapterProgressInfo(
-      kind: LibraryChapterProgressKind.lastRead,
-      isCurrent: true,
-      fraction: fraction,
-    );
   }
 
   @override

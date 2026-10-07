@@ -2297,6 +2297,18 @@ abstract class AppLocalizations {
   /// **'上次阅读'**
   String get libraryChapterLastRead;
 
+  /// No description provided for @libraryChapterProgressPercent.
+  ///
+  /// In zh, this message translates to:
+  /// **'{percent}%'**
+  String libraryChapterProgressPercent(int percent);
+
+  /// No description provided for @libraryChapterLastReadPercent.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次阅读 {percent}%'**
+  String libraryChapterLastReadPercent(int percent);
+
   /// 章节进度语义；subtitle 和 progress 都由共享 presentation 生成，章节数据保持原样
   ///
   /// In zh, this message translates to:
