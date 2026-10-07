@@ -20,6 +20,7 @@ import 'package:y300/features/messages/domain/private_message_compose_repository
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
+import 'package:y300/features/messages/presentation/widgets/message_friend_picker_sheet.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/features/messages/presentation/widgets/message_surface.dart';
@@ -421,8 +422,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('message-friends-done')), findsNothing);
     expect(
-      find.byKey(const Key('message-friends-done')).hitTestable(),
+      find.byKey(const Key('message-recipient-add')).hitTestable(),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
@@ -539,6 +541,17 @@ Future<void> _captureBatchCompose(_Harness harness) async {
   await harness.show(const NewPrivateMessagePage());
   await tester.pumpAndSettle();
   await harness.capture('compose-unselected');
+  harness.composeRepository.friendItems = const [];
+  await tester.tap(find.byKey(const Key('message-friends-open')));
+  await tester.pumpAndSettle();
+  expect(find.text(harness.l10n.messageFriendEmpty), findsOneWidget);
+  expect(
+    tester.getSize(find.byType(MessageFriendPickerSheet)).height,
+    lessThan(300),
+  );
+  await harness.capture('compose-friends-empty');
+  await dismissMessageRecipientPicker(tester);
+  harness.composeRepository.friendItems = _friends;
   await _addRecipient(harness, '一起读书的朋友');
   await _addRecipient(harness, '不接收私信的朋友');
   _expectInputTheme(tester, harness.theme, singleLine: true);
@@ -595,8 +608,7 @@ Future<void> _captureBatchCompose(_Harness harness) async {
         .value,
     isTrue,
   );
-  await tester.tap(find.byKey(const Key('message-friends-done')));
-  await tester.pumpAndSettle();
+  await dismissMessageRecipientPicker(tester);
   final sendButton = find.byKey(const Key('message-send'));
   await tester.ensureVisible(sendButton);
   await tester.tap(sendButton);
@@ -994,13 +1006,14 @@ class _Harness {
 class _VisualComposeRepository implements PrivateMessageComposeRepository {
   final reads = <ForumFriendDirectoryQuery>[];
   final sends = <_VisualBatchSend>[];
+  List<ForumFriendDirectoryItem> friendItems = _friends;
 
   @override
   Future<FriendDirectoryRead> loadFriends(
     ForumFriendDirectoryQuery query,
   ) async {
     reads.add(query);
-    final items = _friends
+    final items = friendItems
         .where((friend) => friend.username.startsWith(query.username))
         .toList();
     return DataReadSuccess(

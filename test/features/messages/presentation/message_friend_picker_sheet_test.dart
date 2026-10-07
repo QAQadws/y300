@@ -12,6 +12,7 @@ import 'package:y300/features/messages/presentation/widgets/message_friend_picke
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../support/message_recipient_test_helper.dart';
 
 void main() {
   testWidgets('empty and failed reads stay inside the sheet and retry', (
@@ -34,9 +35,10 @@ void main() {
     harness.repository.reads.last.result.complete(_page([]));
     await tester.pumpAndSettle();
     expect(find.text(harness.strings.messageFriendEmpty), findsOneWidget);
+    expect(find.byKey(const Key('message-friends-done')), findsNothing);
     expect(
-      find.byKey(const Key('message-friends-done')).hitTestable(),
-      findsOneWidget,
+      tester.getSize(find.byType(MessageFriendPickerSheet)).height,
+      lessThan(300),
     );
   });
 
@@ -69,6 +71,64 @@ void main() {
     expect(find.byKey(const Key('message-friend-2')), findsOneWidget);
   });
 
+  testWidgets('short directories shrink and longer results remain scrollable', (
+    tester,
+  ) async {
+    final harness = await _Harness.open(tester);
+    harness.repository.reads.single.result.complete(_page([1]));
+    await tester.pumpAndSettle();
+    final sheet = find.byType(MessageFriendPickerSheet);
+    final shortHeight = tester.getSize(sheet).height;
+    expect(shortHeight, lessThan(300));
+    await tester.enterText(
+      find.byKey(const Key('message-friends-search')),
+      'friend',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    harness.repository.reads.last.result.complete(
+      _page(List.generate(20, (index) => index + 1)),
+    );
+    await tester.pumpAndSettle();
+    final longHeight = tester.getSize(sheet).height;
+    expect(longHeight, greaterThan(shortHeight));
+    expect(
+      longHeight,
+      lessThanOrEqualTo(
+        tester.getSize(find.byType(Scaffold).first).height * 0.6,
+      ),
+    );
+    final lastFriend = find.byKey(const Key('message-friend-20'));
+    await tester.scrollUntilVisible(
+      lastFriend,
+      160,
+      scrollable: find
+          .descendant(of: sheet, matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(lastFriend.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'system back cancels a pending read and ignores its late result',
+    (tester) async {
+      final harness = await _Harness.open(tester);
+      final pending = harness.repository.reads.single;
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(MessageFriendPickerSheet), findsNothing);
+      expect(harness.disposed, isTrue);
+      expect(pending.query.cancellation!.isCancelled, isTrue);
+      pending.result.complete(_page([1]));
+      await tester.pumpAndSettle();
+      expect(harness.selectionChanges, 0);
+      expect(harness.selection.isEmpty, isTrue);
+      expect(find.text('friend1'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'the cap disables new choices while selected friends remain removable',
     (tester) async {
@@ -98,18 +158,21 @@ void main() {
   );
 
   testWidgets(
-    'closing during debounce cancels the pending search and keeps selection',
+    'selection applies immediately and outside dismissal retires search',
     (tester) async {
       final harness = await _Harness.open(tester);
       harness.repository.reads.single.result.complete(_page([1]));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('message-friend-1')));
+      await tester.pump();
+      expect(harness.selection.usernameSnapshot(), ['friend1']);
+      expect(harness.selectionChanges, 1);
+      expect(find.byType(MessageFriendPickerSheet), findsOneWidget);
       await tester.enterText(
         find.byKey(const Key('message-friends-search')),
         'friend',
       );
-      await tester.tap(find.byKey(const Key('message-friends-done')));
-      await tester.pumpAndSettle();
+      await dismissMessageRecipientPicker(tester);
       await tester.pump(const Duration(milliseconds: 400));
       expect(harness.repository.reads, hasLength(1));
       expect(harness.disposed, isTrue);

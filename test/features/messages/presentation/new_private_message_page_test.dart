@@ -89,8 +89,7 @@ void main() {
     await tester.tap(find.byKey(const Key('message-friends-open')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('message-recipient')), 'Alice');
-    await tester.tap(find.byKey(const Key('message-friends-done')));
-    await tester.pumpAndSettle();
+    await dismissMessageRecipientPicker(tester);
     expect(find.text(l10n(tester).messageChooseRecipients), findsOneWidget);
     expect(
       tester
@@ -122,8 +121,7 @@ void main() {
       );
       chip.onDeleted!();
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('message-friends-done')));
-      await tester.pumpAndSettle();
+      await dismissMessageRecipientPicker(tester);
       expect(find.text(l10n(tester).messageChooseRecipients), findsOneWidget);
       expect(messageInputValue(tester), 'keep this message');
       expect(

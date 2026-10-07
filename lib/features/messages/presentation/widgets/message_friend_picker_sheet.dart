@@ -119,184 +119,189 @@ class _MessageFriendPickerSheetState
     final media = MediaQuery.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = math.min(
-          math.min(media.size.height * 0.6, 520.0),
-          math.max(0.0, constraints.maxHeight - media.viewInsets.bottom),
+        // Bound content by the route's actual space above the keyboard so a
+        // dismissible area remains even in split-screen or constrained hosts.
+        final availableHeight = math.max(
+          0.0,
+          constraints.maxHeight - media.viewInsets.bottom,
         );
+        final height = math.min(availableHeight * 0.6, 520.0);
         return Padding(
           padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-          child: SizedBox(
-            height: height,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: height),
             child: SafeArea(
               top: false,
               child: ValueListenableBuilder<MessageFriendDirectoryState>(
                 valueListenable: widget.controller,
-                builder: (context, state, _) => Column(
-                  children: [
-                    Expanded(
-                      child: CustomScrollView(
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        slivers: [
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                            sliver: SliverToBoxAdapter(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _searchField(context),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    l10n.messageRecipientSelectedCount(
-                                      widget.selection.length,
-                                    ),
-                                    style: TextStyle(
-                                      color: palette.supportingText,
-                                    ),
-                                  ),
-                                  if (widget.allowManualRecipients &&
-                                      !widget.selection.isEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(
-                                          children: [
-                                            for (final choice
-                                                in widget.selection.items) ...[
-                                              InputChip(
-                                                key: Key(
-                                                  'message-recipient-chip-${choice.username}',
-                                                ),
-                                                label: ConstrainedBox(
-                                                  constraints: BoxConstraints(
-                                                    maxWidth: math.max(
-                                                      48,
-                                                      media.size.width - 160,
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    choice.username,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                deleteButtonTooltipMessage:
-                                                    l10n.commonRemove,
-                                                onDeleted: () =>
-                                                    _remove(choice),
-                                              ),
-                                              const SizedBox(width: 8),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  if (widget.selection.length >=
-                                      PrivateMessageRecipientSelection
-                                          .maxRecipients)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        l10n.messageRecipientLimitReached,
-                                        style: TextStyle(
-                                          color: palette.supportingText,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                builder: (context, state, _) => CustomScrollView(
+                  shrinkWrap: true,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _searchField(context),
+                            const SizedBox(height: 12),
+                            Text(
+                              l10n.messageRecipientSelectedCount(
+                                widget.selection.length,
                               ),
+                              style: TextStyle(color: palette.supportingText),
                             ),
-                          ),
-                          if (state.items.isEmpty)
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: _emptyStatus(context, state),
-                            )
-                          else ...[
-                            SliverList.builder(
-                              itemCount: state.items.length,
-                              itemBuilder: (context, index) {
-                                final friend = state.items[index];
-                                final selected = widget.selection
-                                    .containsFriend(
-                                      friend.userId,
-                                      friend.username,
-                                    );
-                                final enabled =
-                                    selected ||
-                                    widget.selection.length <
-                                        PrivateMessageRecipientSelection
-                                            .maxRecipients;
-                                return CheckboxListTile(
-                                  key: Key('message-friend-${friend.userId}'),
-                                  value: selected,
-                                  selected: selected,
-                                  activeColor: palette.accent,
-                                  selectedTileColor: palette.accent.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                  onChanged: enabled
-                                      ? (_) => _toggle(friend)
-                                      : null,
-                                  title: Text(
-                                    friend.username,
-                                    style: TextStyle(color: palette.body),
-                                  ),
-                                  secondary: MessageAvatar(
-                                    userId: friend.userId,
-                                    imageUrl: friend.avatarUrl,
-                                  ),
-                                );
-                              },
-                            ),
-                            if (state.hasMore || state.failure != null)
-                              SliverToBoxAdapter(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: state.isBusy
-                                      ? Center(
-                                          child: CircularProgressIndicator(
-                                            color: palette.accent,
+                            if (widget.allowManualRecipients &&
+                                !widget.selection.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      for (final choice
+                                          in widget.selection.items) ...[
+                                        InputChip(
+                                          key: Key(
+                                            'message-recipient-chip-${choice.username}',
                                           ),
-                                        )
-                                      : Column(
-                                          children: [
-                                            if (state.failure != null)
-                                              Text(
-                                                l10n.messageFriendLoadFailed,
-                                                style: TextStyle(
-                                                  color: palette.supportingText,
-                                                ),
-                                              ),
-                                            TextButton(
-                                              onPressed:
-                                                  widget.controller.loadMore,
-                                              child: Text(
-                                                state.failure != null
-                                                    ? l10n.commonRetry
-                                                    : l10n.messageLoadMore,
+                                          label: ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxWidth: math.max(
+                                                48,
+                                                constraints.maxWidth - 112,
                                               ),
                                             ),
-                                          ],
+                                            child: Text(
+                                              choice.username,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          deleteButtonTooltipMessage:
+                                              l10n.commonRemove,
+                                          deleteIcon: const Icon(
+                                            Icons.remove,
+                                            size: 16,
+                                          ),
+                                          backgroundColor: palette.accent
+                                              .withValues(alpha: 0.08),
+                                          side: BorderSide.none,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          labelStyle: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(color: palette.accent),
+                                          onDeleted: () => _remove(choice),
                                         ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            if (widget.selection.length >=
+                                PrivateMessageRecipientSelection.maxRecipients)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  l10n.messageRecipientLimitReached,
+                                  style: TextStyle(
+                                    color: palette.supportingText,
+                                  ),
                                 ),
                               ),
                           ],
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          key: const Key('message-friends-done'),
-                          onPressed: _close,
-                          child: Text(l10n.messageBatchDone),
                         ),
                       ),
                     ),
+                    if (state.items.isEmpty)
+                      SliverToBoxAdapter(child: _emptyStatus(context, state))
+                    else ...[
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                        sliver: SliverList.builder(
+                          itemCount: state.items.length,
+                          itemBuilder: (context, index) {
+                            final friend = state.items[index];
+                            final selected = widget.selection.containsFriend(
+                              friend.userId,
+                              friend.username,
+                            );
+                            final enabled =
+                                selected ||
+                                widget.selection.length <
+                                    PrivateMessageRecipientSelection
+                                        .maxRecipients;
+                            return CheckboxListTile(
+                              key: Key('message-friend-${friend.userId}'),
+                              value: selected,
+                              selected: selected,
+                              activeColor: palette.accent,
+                              checkColor: palette.onAccent,
+                              checkboxShape: const CircleBorder(),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              selectedTileColor: palette.accent.withValues(
+                                alpha: 0.08,
+                              ),
+                              onChanged: enabled
+                                  ? (_) => _toggle(friend)
+                                  : null,
+                              title: Text(
+                                friend.username,
+                                style: TextStyle(color: palette.body),
+                              ),
+                              secondary: MessageAvatar(
+                                userId: friend.userId,
+                                imageUrl: friend.avatarUrl,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      if (state.hasMore || state.failure != null)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: state.isBusy
+                                ? Center(
+                                    child: CircularProgressIndicator(
+                                      color: palette.accent,
+                                    ),
+                                  )
+                                : Column(
+                                    children: [
+                                      if (state.failure != null)
+                                        Text(
+                                          l10n.messageFriendLoadFailed,
+                                          style: TextStyle(
+                                            color: palette.supportingText,
+                                          ),
+                                        ),
+                                      TextButton(
+                                        onPressed: widget.controller.loadMore,
+                                        child: Text(
+                                          state.failure != null
+                                              ? l10n.commonRetry
+                                              : l10n.messageLoadMore,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -310,14 +315,30 @@ class _MessageFriendPickerSheetState
   Widget _emptyStatus(BuildContext context, MessageFriendDirectoryState state) {
     final palette = Theme.of(context).y300NativeContent;
     final l10n = AppLocalizations.of(context);
-    return Center(
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 124),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
         child: state.isBusy
-            ? CircularProgressIndicator(color: palette.accent)
+            ? Center(
+                heightFactor: 1,
+                child: SizedBox.square(
+                  dimension: 24,
+                  child: CircularProgressIndicator(color: palette.accent),
+                ),
+              )
             : Column(
                 mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  Icon(
+                    state.failure != null
+                        ? Icons.wifi_off_outlined
+                        : Icons.people_outline,
+                    size: 26,
+                    color: palette.muted,
+                  ),
+                  const SizedBox(height: 12),
                   Text(
                     state.failure != null
                         ? l10n.messageFriendLoadFailed
@@ -349,50 +370,58 @@ class _MessageFriendPickerSheetState
         l10n.messageRecipientAlreadySelected,
       _ => null,
     };
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: BorderSide.none,
+    );
     return KeyedSubtree(
       key: const Key('message-friends-search'),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: TextField(
-              key: widget.allowManualRecipients
-                  ? const Key('message-recipient')
-                  : null,
-              controller: _search,
-              style: TextStyle(color: palette.body),
-              autocorrect: false,
-              textInputAction: widget.allowManualRecipients
-                  ? TextInputAction.done
-                  : TextInputAction.search,
-              onChanged: (query) {
-                setState(() => _recipientNotice = null);
-                widget.controller.setSearchQuery(query);
-              },
-              onSubmitted: widget.allowManualRecipients
-                  ? (_) => _addUsername()
-                  : null,
-              decoration: InputDecoration(
-                hintText: widget.allowManualRecipients
-                    ? l10n.messageRecipientSearchHint
-                    : l10n.messageFriendSearch,
-                prefixIcon: const Icon(Icons.search),
-                errorText: error,
-                errorMaxLines: 3,
-              ),
-            ),
+      child: TextField(
+        key: widget.allowManualRecipients
+            ? const Key('message-recipient')
+            : null,
+        controller: _search,
+        style: TextStyle(color: palette.body),
+        autocorrect: false,
+        textInputAction: widget.allowManualRecipients
+            ? TextInputAction.done
+            : TextInputAction.search,
+        onChanged: (query) {
+          setState(() => _recipientNotice = null);
+          widget.controller.setSearchQuery(query);
+        },
+        onSubmitted: widget.allowManualRecipients
+            ? (_) => _addUsername()
+            : null,
+        decoration: InputDecoration(
+          hintText: widget.allowManualRecipients
+              ? l10n.messageRecipientSearchHint
+              : l10n.messageFriendSearch,
+          isDense: true,
+          filled: true,
+          fillColor: palette.body.withValues(alpha: 0.045),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
           ),
-          if (widget.allowManualRecipients) ...[
-            const SizedBox(width: 4),
-            IconButton(
-              key: const Key('message-recipient-add'),
-              tooltip: l10n.messageRecipientAdd,
-              color: palette.accent,
-              onPressed: _addUsername,
-              icon: const Icon(Icons.add),
-            ),
-          ],
-        ],
+          border: border,
+          enabledBorder: border,
+          focusedBorder: border.copyWith(
+            borderSide: BorderSide(color: palette.accent),
+          ),
+          prefixIcon: Icon(Icons.search, size: 20, color: palette.muted),
+          suffixIcon: widget.allowManualRecipients
+              ? IconButton(
+                  key: const Key('message-recipient-add'),
+                  tooltip: l10n.messageRecipientAdd,
+                  color: palette.accent,
+                  onPressed: _addUsername,
+                  icon: const Icon(Icons.add),
+                )
+              : null,
+          errorText: error,
+          errorMaxLines: 3,
+        ),
       ),
     );
   }
