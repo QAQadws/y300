@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -13,7 +14,7 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
-import 'package:y300/features/library_shared/presentation/services/library_detail_text_resolver.dart';
+
 import 'package:y300/features/library_shared/domain/models/reader_corner_dock_side.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_corner_dock_location.dart';
@@ -35,7 +36,11 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
-import 'package:y300/features/novel/presentation/services/novel_chapter_progress_projector.dart';
+
+import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_catalog_row.dart';
+
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
@@ -73,6 +78,16 @@ class NovelReaderPage extends ConsumerStatefulWidget {
 class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     with WidgetsBindingObserver {
   late final NovelReaderScrollController _scrollController;
+  NovelReadingBodyGeometry? _bodyGeometry;
+  String? _bodyGeometryOwner;
+  int _bodyContentRevision = 0;
+  double _bodyTopInset = 0;
+  double _bodyBottomInset = 0;
+  bool _readingObservationScheduled = false;
+  bool _imagesReady = true;
+  bool _readingScrolling = false;
+  bool _userScrollActive = false;
+  bool _resumed = true;
   late final ReaderOverlayController _overlayController;
   late final ReaderGestureCoordinator _readerGestureCoordinator;
   late final NovelReaderPagedNavigationController _pagedNavigationController;
@@ -117,6 +132,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   bool get _hasRestoredOffset => _verticalSession.hasRestoredOffset;
 
+  bool get _isReadingVisible =>
+      _resumed &&
+      _readerSemanticsSuspendCount == 0 &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
+
   NovelReaderArgs get _args => NovelReaderArgs(
     novelId: widget.novelId,
     episodeId: widget.initialEpisodeId,
@@ -141,6 +161,28 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
     _pagedNavigationController = NovelReaderPagedNavigationController();
     _scrollController = NovelReaderScrollController()..addListener(_onScroll);
+    _resumed =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncReadingVisibility();
+  }
+
+  void _syncReadingVisibility() {
+    if (!mounted) return;
+    ref
+        .read(novelReaderControllerProvider(_args).notifier)
+        .updateReadingVisibility(
+          frontmost:
+              (ModalRoute.of(context)?.isCurrent ?? true) &&
+              _readerSemanticsSuspendCount == 0,
+          resumed: _resumed,
+        );
+    _observeReadingSurface();
   }
 
   @override
@@ -162,9 +204,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
-      unawaited(_saveVisibleProgressNow(reason: 'lifecycle_${state.name}'));
+    _resumed = state == AppLifecycleState.resumed;
+    if (!_resumed) {
+      ref
+          .read(novelReaderControllerProvider(_args).notifier)
+          .cancelPendingCompletion();
+      unawaited(() async {
+        try {
+          await _saveVisibleProgressNow(reason: 'lifecycle_${state.name}');
+        } finally {
+          if (mounted) _syncReadingVisibility();
+        }
+      }());
+    } else {
+      _syncReadingVisibility();
     }
   }
 
@@ -287,6 +340,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               _readerGestureCoordinator.cancelPendingTap();
               _progressControlOwner = paginationGeometryOwner;
               _pagedPosition = null;
+              _bodyGeometry = null;
+              _bodyGeometryOwner = null;
+              _imagesReady = true;
+              _readingScrolling = false;
+              _userScrollActive = false;
               _pendingPageSeekRequest = null;
               _progressSliderPreview = null;
               _isProgressSeekInFlight = false;
@@ -430,6 +488,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   String _readerSurfaceIdentity(NovelReaderViewState viewState) {
     return '${viewState.currentEpisode.episodeId}|'
+        '${viewState.readingSurfaceRevision}|'
         '${viewState.document.rawHtmlHash}|'
         '${viewState.preferences.flowMode.name}|'
         '${viewState.renderPreferences.hashCode}';
@@ -497,6 +556,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _readyReaderSurfaceIdentity = identity;
     });
     _scheduleVerticalDockUpdate(identity);
+    _publishPagedPosition();
+    _observeReadingSurface();
   }
 
   bool _isCurrentReaderSurface(String identity) {
@@ -703,7 +764,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     final fraction = value.clamp(0.0, 1.0).toDouble();
     final maxScrollExtent = _scrollController.position.maxScrollExtent;
-    final targetOffset = fraction * maxScrollExtent;
+    final geometry = _currentBodyGeometry(viewState);
+    if (geometry == null || !geometry.isUsable || !_isReadingVisible) return;
+    final targetOffset =
+        (geometry.bodyTop - _bodyTopInset + fraction * geometry.bodyRange)
+            .clamp(0.0, maxScrollExtent)
+            .toDouble();
     _progressDiagnostics.log(
       'slider_seek',
       fields: <String, Object?>{
@@ -722,14 +788,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _isProgrammaticScrollChange = true;
     try {
       _scrollController.jumpTo(targetOffset);
-      await controller.saveCurrentProgressNow(
-        _progressPolicy.verticalSnapshot(
-          novelId: widget.novelId,
-          episodeId: viewState.currentEpisode.episodeId,
-          scrollOffset: targetOffset,
-          maxScrollExtent: maxScrollExtent,
-        ),
+      final snapshot = _visibleBodySnapshot(viewState);
+      await controller.onScrollOffsetChanged(
+        targetOffset,
+        bodySnapshot: snapshot,
       );
+      if (snapshot != null) await controller.saveCurrentProgressNow(snapshot);
     } finally {
       if (identical(_verticalSeekRequest, request)) {
         _verticalSeekRequest = null;
@@ -739,6 +803,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             _isProgressSeekInFlight = false;
             _progressSliderPreview = null;
           });
+          _observeReadingSurface();
         }
       }
     }
@@ -870,9 +935,21 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             }
           });
           _overlayController.hideMenu();
-          ref
-              .read(novelReaderControllerProvider(_args).notifier)
-              .onPagedPositionChanged(position);
+          _publishPagedPosition();
+          _observeReadingSurface();
+        },
+        onImagesReadyChanged: (ready) {
+          if (_isCurrentReaderSurface(surfaceIdentity)) {
+            _imagesReady = ready;
+            _publishPagedPosition();
+            _observeReadingSurface();
+          }
+        },
+        onScrollActivityChanged: (scrolling) {
+          if (_isCurrentReaderSurface(surfaceIdentity)) {
+            _readingScrolling = scrolling;
+            _observeReadingSurface();
+          }
         },
         onNavigationUnavailable: (_) {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
@@ -896,60 +973,88 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           : null,
     );
     final children = <Widget>[
-      NovelReaderHtmlDocumentView(
-        preparationService: ref.watch(
-          novelReaderHtmlPreparationServiceProvider,
+      NovelReadingBodySliver(
+        effectiveViewportHeight: math.max(
+          0,
+          MediaQuery.sizeOf(context).height -
+              chromeInsets.topInset -
+              chromeInsets.persistentBottomInset,
         ),
-        asSliver: true,
-        preparedChapterCache: _preparedChapterCache,
-        rawHtml: viewState.currentContent.rawHtml,
-        episode: viewState.currentEpisode,
-        preferences: viewState.renderPreferences,
-        typography: typography,
-        theme: htmlTheme,
-        imageReferer: _imageRefererFor(viewState),
-        onLinkTap: (link) {
+        layoutIdentity: (surfaceIdentity, _bodyContentRevision),
+        onGeometry: (geometry) {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _openReaderLink(link, externalLauncher);
+            _bodyGeometry = geometry;
+            _bodyGeometryOwner = surfaceIdentity;
+            _bodyTopInset = chromeInsets.topInset;
+            _bodyBottomInset = chromeInsets.persistentBottomInset;
+            _scheduleVerticalRestoreAttempt(
+              session: session,
+              trigger: 'body_geometry',
+            );
+            _observeReadingSurface();
           }
         },
-        onOpenImage: (request) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _openHtmlReaderImage(request);
-          }
-        },
-        onImageFallback: (request) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _copyNovelImageUrl(request.url);
-          }
-        },
-        onContentInteraction: _cancelPendingReaderTap,
-        onContentReady: () {
-          if (_isSuspendedVerticalContent(session)) {
-            _verticalSession.markSuspendedContent(session);
-            return;
-          }
-          _restoreVerticalOffsetAfterThemeUpdate(request: themeRequest);
-          _restoreVerticalOffsetAfterContentReady(session: session);
-        },
-        onContentTerminal: () {
-          if (_isSuspendedVerticalContent(session)) {
-            _verticalSession.markSuspendedContent(session, terminal: true);
-            return;
-          }
-          if (!_isCurrentVerticalSession(session) ||
-              !_verticalSession.ownsTheme(themeRequest)) {
-            return;
-          }
-          _verticalSession.clearThemeRestore(themeRequest);
-          _verticalSession.markContentTerminal(session);
-          _markReaderSurfaceReady(surfaceIdentity);
-        },
-        onRetry: () {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            ref.invalidate(novelReaderControllerProvider(_args));
-          }
-        },
+        sliver: NovelReaderHtmlDocumentView(
+          preparationService: ref.watch(
+            novelReaderHtmlPreparationServiceProvider,
+          ),
+          asSliver: true,
+          preparedChapterCache: _preparedChapterCache,
+          rawHtml: viewState.currentContent.rawHtml,
+          episode: viewState.currentEpisode,
+          preferences: viewState.renderPreferences,
+          typography: typography,
+          theme: htmlTheme,
+          imageReferer: _imageRefererFor(viewState),
+          onLinkTap: (link) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _openReaderLink(link, externalLauncher);
+            }
+          },
+          onOpenImage: (request) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _openHtmlReaderImage(request);
+            }
+          },
+          onImageFallback: (request) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _copyNovelImageUrl(request.url);
+            }
+          },
+          onContentInteraction: _cancelPendingReaderTap,
+          onImagesReadyChanged: (ready) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _imagesReady = ready;
+              _observeReadingSurface();
+            }
+          },
+          onContentReady: () {
+            if (_isSuspendedVerticalContent(session)) {
+              _verticalSession.markSuspendedContent(session);
+              return;
+            }
+            _restoreVerticalOffsetAfterThemeUpdate(request: themeRequest);
+            _restoreVerticalOffsetAfterContentReady(session: session);
+          },
+          onContentTerminal: () {
+            if (_isSuspendedVerticalContent(session)) {
+              _verticalSession.markSuspendedContent(session, terminal: true);
+              return;
+            }
+            if (!_isCurrentVerticalSession(session) ||
+                !_verticalSession.ownsTheme(themeRequest)) {
+              return;
+            }
+            _verticalSession.clearThemeRestore(themeRequest);
+            _verticalSession.markContentTerminal(session);
+            _markReaderSurfaceReady(surfaceIdentity);
+          },
+          onRetry: () {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              ref.invalidate(novelReaderControllerProvider(_args));
+            }
+          },
+        ),
       ),
       if (viewState.nextEpisode != null)
         SliverToBoxAdapter(
@@ -974,6 +1079,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     ];
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
+        if (notification.depth == 0 && _isCurrentVerticalSession(session)) {
+          if (notification is ScrollStartNotification) {
+            _readingScrolling = true;
+            _userScrollActive = notification.dragDetails != null;
+            _observeReadingSurface();
+          }
+          if (notification is ScrollEndNotification) {
+            _readingScrolling = false;
+            _userScrollActive = false;
+            _observeReadingSurface();
+          }
+        }
         if (notification.depth == 0 &&
             notification is ScrollStartNotification &&
             notification.dragDetails != null &&
@@ -1141,10 +1258,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final session = _verticalSession.session;
     if (session == null ||
         !_isCurrentVerticalSession(session) ||
-        !_scrollController.hasClients) {
+        !_scrollController.hasClients ||
+        !_isReadingVisible) {
       return;
     }
     _scheduleVerticalDockUpdate(session.surfaceIdentity);
+    _observeReadingSurface();
     if (_isProgrammaticScrollChange) {
       return;
     }
@@ -1157,12 +1276,162 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     _overlayController.hideMenu();
+    // Only drag/seek callbacks confirm navigation. Layout-driven offset changes
+    // may update the view but must not create a new recorded visit.
+    if (_userScrollActive) {
+      final viewState = ref
+          .read(novelReaderControllerProvider(_args))
+          .asData
+          ?.value;
+      if (viewState != null) {
+        ref
+            .read(novelReaderControllerProvider(_args).notifier)
+            .onScrollOffsetChanged(
+              _scrollController.offset,
+              maxScrollExtent: _scrollController.position.maxScrollExtent,
+              bodySnapshot: _visibleBodySnapshot(viewState),
+            );
+      }
+    }
+  }
+
+  NovelReadingBodyGeometry? _currentBodyGeometry(
+    NovelReaderViewState viewState,
+  ) {
+    final geometry = _bodyGeometry;
+    if (geometry == null ||
+        _bodyGeometryOwner != _readerSurfaceIdentity(viewState) ||
+        !_scrollController.hasClients) {
+      return null;
+    }
+    final viewportTop = _scrollController.offset + _bodyTopInset;
+    final viewportHeight = math.max(
+      0.0,
+      _scrollController.position.viewportDimension -
+          _bodyTopInset -
+          _bodyBottomInset,
+    );
+    final visible = math.max(
+      0.0,
+      math.min(
+            geometry.bodyTop + geometry.bodyHeight,
+            viewportTop + viewportHeight,
+          ) -
+          math.max(geometry.bodyTop, viewportTop),
+    );
+    return NovelReadingBodyGeometry(
+      bodyTop: geometry.bodyTop,
+      bodyHeight: geometry.bodyHeight,
+      viewportTop: viewportTop,
+      effectiveViewportHeight: viewportHeight,
+      visibleBodyExtent: visible,
+      finalBoundaryKnown: geometry.finalBoundaryKnown,
+    );
+  }
+
+  NovelReaderProgressSnapshot? _visibleBodySnapshot(
+    NovelReaderViewState viewState,
+  ) {
+    final geometry = _currentBodyGeometry(viewState);
+    if (geometry == null) return null;
+    final percent = geometry.progressPercent;
+    return _progressPolicy
+        .verticalSnapshot(
+          novelId: widget.novelId,
+          episodeId: viewState.currentEpisode.episodeId,
+          scrollOffset: _scrollController.offset,
+        )
+        .copyWith(
+          progressPercent: percent ?? 0,
+          isProgressPercentValid: percent != null,
+          percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        );
+  }
+
+  void _observeReadingSurface() {
+    if (!mounted) return;
+    if (!_isReadingVisible) {
+      ref
+          .read(novelReaderControllerProvider(_args).notifier)
+          .cancelPendingCompletion();
+      return;
+    }
+    // Route dependencies and layout can change during build. Publish facts
+    // after layout rather than mutating Riverpod state from a build callback.
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks) {
+      if (!_readingObservationScheduled) {
+        _readingObservationScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _readingObservationScheduled = false;
+          if (mounted) _observeReadingSurface();
+        });
+      }
+      return;
+    }
+    final viewState = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    if (viewState == null) return;
+    final controller = ref.read(novelReaderControllerProvider(_args).notifier);
+    final identity = _readerSurfaceIdentity(viewState);
+    final vertical =
+        viewState.preferences.flowMode == NovelReaderFlowMode.vertical;
+    final geometry = vertical ? _currentBodyGeometry(viewState) : null;
+    final position = _pagedPosition;
+    controller.observeReadingSurface(
+      bodyReady:
+          _imagesReady &&
+          _readyReaderSurfaceIdentity == identity &&
+          (vertical ? _verticalSession.contentReady : position != null),
+      restoreSettled: vertical ? _hasRestoredOffset : position != null,
+      finalBoundaryKnown: vertical
+          ? geometry?.finalBoundaryKnown == true
+          : position?.isPageCountFinal == true,
+      atBodyEnd: vertical
+          ? geometry?.atBodyEnd == true
+          : position != null &&
+                position.pageIndex == position.pageCount - 1 &&
+                position.isBodyEndVisible,
+      wholeBodyVisible: vertical
+          ? geometry?.wholeBodyVisible == true
+          : position?.pageCount == 1 && position?.isWholeBodyVisible == true,
+      idle:
+          !_readingScrolling &&
+          !_isProgressSeekInFlight &&
+          !_isProgrammaticScrollChange &&
+          !_verticalSession.hasPendingThemeRestore,
+      geometryIdentity: vertical
+          ? geometry?.layoutIdentity
+          : position == null
+          ? null
+          : (
+              identity,
+              position.paginationKey,
+              position.pageCount,
+              position.isPageCountFinal,
+            ),
+      bodySnapshot: vertical ? _visibleBodySnapshot(viewState) : null,
+    );
+  }
+
+  void _publishPagedPosition() {
+    if (!_isReadingVisible || !_imagesReady) return;
+    final position = _pagedPosition;
+    final viewState = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    if (position == null ||
+        viewState == null ||
+        _readyReaderSurfaceIdentity != _readerSurfaceIdentity(viewState)) {
+      return;
+    }
     ref
         .read(novelReaderControllerProvider(_args).notifier)
-        .onScrollOffsetChanged(
-          _scrollController.offset,
-          maxScrollExtent: _scrollController.position.maxScrollExtent,
-        );
+        .onPagedPositionChanged(position);
   }
 
   void _restoreVerticalOffsetAfterThemeUpdate({
@@ -1184,11 +1453,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _verticalSession.clearThemeRestore(request);
     }
     if (!_isCurrentVerticalSession(request.session)) return;
-    unawaited(
-      ref
-          .read(novelReaderControllerProvider(_args).notifier)
-          .onScrollOffsetChanged(restoredOffset, maxScrollExtent: max),
-    );
+    _observeReadingSurface();
   }
 
   void _restoreVerticalOffsetAfterContentReady({
@@ -1207,6 +1472,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       );
       return;
     }
+    // Body-built can precede the renderer's final sliver layout. Discard the
+    // loading/empty measurement and request a fresh sample for this content.
+    setState(() {
+      _bodyContentRevision += 1;
+      _bodyGeometry = null;
+      _bodyGeometryOwner = null;
+    });
     final current = ref
         .read(novelReaderControllerProvider(_args))
         .asData!
@@ -1307,12 +1579,28 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     final max = _scrollController.position.maxScrollExtent;
+    final body = _currentBodyGeometry(current);
+    final usesBodyBasis =
+        snapshot.percentBasis == NovelProgressPercentBasis.bodyGeometryV1 ||
+        snapshot.percentBasis == NovelProgressPercentBasis.pagedStartV1;
+    if (override == null &&
+        usesBodyBasis &&
+        snapshot.isProgressPercentValid == true &&
+        snapshot.progressPercent > 0 &&
+        (body == null || !body.isUsable || body.bodyHeight <= 0)) {
+      _verticalSession.finishRestore(request, applied: false);
+      return;
+    }
     final offset =
         override ??
         _progressPolicy.restoreScrollOffset(
           snapshot,
           maxScrollExtent: max,
           viewportDimension: _scrollController.position.viewportDimension,
+          bodyTop: body?.bodyTop,
+          bodyHeight: body?.bodyHeight,
+          effectiveViewportHeight: body?.effectiveViewportHeight,
+          viewportTopInset: _bodyTopInset,
         );
     _progressDiagnostics.log(
       'restore_apply',
@@ -1341,6 +1629,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             snapshot,
             maxScrollExtent: metrics.maxScrollExtent,
             viewportDimension: metrics.viewportDimension,
+            bodyTop: body?.bodyTop,
+            bodyHeight: body?.bodyHeight,
+            effectiveViewportHeight: body?.effectiveViewportHeight,
+            viewportTopInset: _bodyTopInset,
           );
     });
     final applied =
@@ -1348,15 +1640,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         _isCurrentVerticalSession(session) &&
         _scrollController.hasClients;
     if (!_verticalSession.finishRestore(request, applied: applied)) return;
-    unawaited(
-      ref
-          .read(novelReaderControllerProvider(_args).notifier)
-          .onScrollOffsetChanged(
-            _scrollController.offset,
-            maxScrollExtent: _scrollController.position.maxScrollExtent,
-          ),
-    );
     _notifyVerticalContentReady(session);
+    _observeReadingSurface();
   }
 
   void _logVerticalRestoreWait({
@@ -1383,10 +1668,21 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   void _notifyVerticalContentReady(NovelReaderVerticalSessionToken session) {
     if (!_isCurrentVerticalSession(session)) return;
     _markReaderSurfaceReady(session.surfaceIdentity);
+    if (!_isReadingVisible) return;
     unawaited(
       ref
           .read(novelReaderControllerProvider(_args).notifier)
-          .onVerticalContentReady(session.episodeId),
+          .onVerticalContentReady(
+            session.episodeId,
+            bodySnapshot: _imagesReady
+                ? _visibleBodySnapshot(
+                    ref
+                        .read(novelReaderControllerProvider(_args))
+                        .asData!
+                        .value,
+                  )
+                : null,
+          ),
     );
   }
 
@@ -1590,18 +1886,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       await controller.saveCurrentProgressNow(viewState.progressSnapshot);
       return;
     }
-    final offset = _scrollController.hasClients
-        ? _scrollController.offset
-        : 0.0;
-    final maxScrollExtent = _scrollController.hasClients
-        ? _scrollController.position.maxScrollExtent
-        : 0.0;
-    final snapshot = _progressPolicy.verticalSnapshot(
-      novelId: widget.novelId,
-      episodeId: viewState.currentEpisode.episodeId,
-      scrollOffset: offset,
-      maxScrollExtent: maxScrollExtent,
-    );
+    final maxScrollExtent = _scrollController.position.maxScrollExtent;
+    final snapshot =
+        _visibleBodySnapshot(viewState) ?? viewState.progressSnapshot;
     _logVisibleFlush(
       reason: reason,
       snapshot: snapshot,
@@ -1668,6 +1955,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   Future<T> _runWithReaderSemanticsSuspended<T>(
     Future<T> Function() action,
   ) async {
+    await _saveVisibleProgressNow(reason: 'reader_overlay');
     _suspendReaderSemantics();
     try {
       return await action();
@@ -1684,6 +1972,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     setState(() {
       _readerSemanticsSuspendCount += 1;
     });
+    _syncReadingVisibility();
   }
 
   void _resumeReaderSemantics() {
@@ -1697,33 +1986,57 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     setState(() {
       _readerSemanticsSuspendCount -= 1;
     });
+    _syncReadingVisibility();
   }
 
   Future<void> _showChapterListSheet(
     NovelReaderViewState viewState,
     NovelReaderController controller,
   ) async {
+    await controller.refreshReadingState();
     await _runWithReaderSemanticsSuspended(() async {
-      final selected = await showModalBottomSheet<NovelEpisodeItem>(
+      final selected = await showModalBottomSheet<_NovelReaderCatalogSelection>(
         context: context,
         builder: (context) => Consumer(
           builder: (context, ref, _) {
             final latest =
                 ref.watch(novelReaderControllerProvider(_args)).value ??
                 viewState;
-            return NovelReaderChapterListSheet(viewState: latest);
+            return NovelReaderChapterListSheet(
+              viewState: latest,
+              onToggleReadState:
+                  ref.read(novelReadingStateRepositoryProvider) == null
+                  ? null
+                  : (episodeId, isRead) async {
+                      try {
+                        await controller.setChapterRead(episodeId, isRead);
+                      } catch (_) {
+                        if (mounted) {
+                          _showReaderSnackBar(
+                            AppLocalizations.of(
+                              this.context,
+                            ).libraryDetailReadStateUpdateFailed,
+                          );
+                        }
+                      }
+                    },
+            );
           },
         ),
       );
       if (selected == null ||
-          selected.episodeId == viewState.currentEpisode.episodeId) {
+          (!selected.fromBeginning &&
+              selected.episode.episodeId ==
+                  viewState.currentEpisode.episodeId)) {
         return;
       }
       if (!mounted) {
         return;
       }
       await _openDifferentEpisode(
-        () => controller.openEpisodeFromCatalog(selected.episodeId),
+        () => selected.fromBeginning
+            ? controller.openEpisodeFromBeginning(selected.episode.episodeId)
+            : controller.openEpisodeFromCatalog(selected.episode.episodeId),
       );
     });
   }
@@ -2072,9 +2385,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 }
 
 class NovelReaderChapterListSheet extends StatefulWidget {
-  const NovelReaderChapterListSheet({super.key, required this.viewState});
+  const NovelReaderChapterListSheet({
+    super.key,
+    required this.viewState,
+    this.onToggleReadState,
+  });
 
   final NovelReaderViewState viewState;
+  final Future<void> Function(String episodeId, bool isRead)? onToggleReadState;
 
   static const double itemExtent = 72;
 
@@ -2145,12 +2463,53 @@ class _NovelReaderChapterListSheetState
                       itemExtent: _chapterItemExtent(context),
                       itemCount: filteredEpisodes.length,
                       itemBuilder: (context, index) {
-                        return _ChapterListTile(
+                        final episode = filteredEpisodes[index];
+                        return NovelReaderCatalogRow(
                           episode: filteredEpisodes[index],
                           currentEpisodeId: viewState.currentEpisode.episodeId,
                           readingProgress: viewState.readingProgress,
                           progressSnapshot: viewState.progressSnapshot,
                           bookmarkEpisodeIds: viewState.bookmarkEpisodeIds,
+                          readingState: viewState.readingState,
+                          onTap: () => Navigator.of(
+                            context,
+                          ).pop(_NovelReaderCatalogSelection(episode)),
+                          onLongPress: () async {
+                            final fromBeginning =
+                                await showModalBottomSheet<bool>(
+                                  context: context,
+                                  builder: (context) => SafeArea(
+                                    child: ListTile(
+                                      leading: const Icon(Icons.restart_alt),
+                                      title: Text(
+                                        AppLocalizations.of(
+                                          context,
+                                        ).libraryDetailStartFromBeginning,
+                                      ),
+                                      onTap: () =>
+                                          Navigator.of(context).pop(true),
+                                    ),
+                                  ),
+                                );
+                            if (mounted && fromBeginning == true) {
+                              Navigator.of(this.context).pop(
+                                _NovelReaderCatalogSelection(
+                                  episode,
+                                  fromBeginning: true,
+                                ),
+                              );
+                            }
+                          },
+                          onToggleReadState: widget.onToggleReadState == null
+                              ? null
+                              : () => widget.onToggleReadState!(
+                                  episode.episodeId,
+                                  viewState
+                                          .readingState
+                                          ?.episodeStates[episode.episodeId]
+                                          ?.isRead !=
+                                      true,
+                                ),
                         );
                       },
                     ),
@@ -2214,76 +2573,13 @@ class _NovelReaderChapterListSheetState
   }
 }
 
-class _ChapterListTile extends StatelessWidget {
-  const _ChapterListTile({
-    required this.episode,
-    required this.currentEpisodeId,
-    required this.readingProgress,
-    required this.progressSnapshot,
-    required this.bookmarkEpisodeIds,
+class _NovelReaderCatalogSelection {
+  const _NovelReaderCatalogSelection(
+    this.episode, {
+    this.fromBeginning = false,
   });
-
   final NovelEpisodeItem episode;
-  final String currentEpisodeId;
-  final NovelReadingProgress? readingProgress;
-  final NovelReaderProgressSnapshot progressSnapshot;
-  final Set<String> bookmarkEpisodeIds;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final isCurrent = episode.episodeId == currentEpisodeId;
-    final isBookmarked = bookmarkEpisodeIds.contains(episode.episodeId);
-    final progress = NovelChapterProgressProjector.project(
-      novelId: episode.novelId,
-      episodeId: episode.episodeId,
-      progress: readingProgress,
-      liveSnapshot: isCurrent ? progressSnapshot : null,
-    );
-    final subtitle = LibraryDetailTextResolver.chapterSubtitle(
-      l10n,
-      subtitle: episode.datelineText ?? '',
-      progress: progress,
-    );
-    return ListTile(
-      key: Key('novel-reader-chapter-${episode.episodeId}'),
-      selected: isCurrent,
-      leading: Icon(
-        key: isBookmarked
-            ? Key('novel-reader-chapter-bookmark-${episode.episodeId}')
-            : null,
-        semanticLabel: isBookmarked ? l10n.novelBookmark : null,
-        isBookmarked
-            ? Icons.bookmark
-            : isCurrent
-            ? Icons.radio_button_checked
-            : Icons.radio_button_unchecked,
-      ),
-      title: Text(
-        NovelTextResolver.chapterTitle(
-          l10n,
-          episode.episodeTitle,
-          episode.sourceTid,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: subtitle.isEmpty
-          ? null
-          : Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
-      trailing: !isCurrent
-          ? null
-          : ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 80),
-              child: Text(
-                l10n.novelCurrent,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-      onTap: () => Navigator.of(context).pop(episode),
-    );
-  }
+  final bool fromBeginning;
 }
 
 class NovelReaderNextChapterTransition extends StatelessWidget {

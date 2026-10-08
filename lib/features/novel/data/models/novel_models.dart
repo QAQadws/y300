@@ -1,5 +1,4 @@
-import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
-import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
+export 'package:y300/features/novel/domain/models/novel_reading_progress.dart';
 
 export 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 
@@ -101,40 +100,6 @@ class NovelChapterContent {
   final String rawHtml;
   final String plainText;
   final List<String> paragraphs;
-}
-
-class NovelReadingProgress {
-  const NovelReadingProgress({
-    required this.novelId,
-    required this.episodeId,
-    required this.scrollOffset,
-    required this.updatedAt,
-    this.flowMode = NovelReaderFlowMode.vertical,
-    this.pageIndex = 0,
-    this.pageCount,
-    this.anchorNodeId,
-    this.anchorTextOffset = 0,
-    this.paginationKey,
-    this.progressPercent = 0,
-    this.anchorFormatVersion = NovelReaderAnchorFormat.legacyUnknown,
-    this.anchorTextIdentity,
-    this.isProgressPercentValid,
-  });
-
-  final String novelId;
-  final String episodeId;
-  final double scrollOffset;
-  final DateTime updatedAt;
-  final NovelReaderFlowMode flowMode;
-  final int pageIndex;
-  final int? pageCount;
-  final String? anchorNodeId;
-  final int anchorTextOffset;
-  final String? paginationKey;
-  final double progressPercent;
-  final int anchorFormatVersion;
-  final String? anchorTextIdentity;
-  final bool? isProgressPercentValid;
 }
 
 class NovelShelfCategory {

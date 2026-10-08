@@ -15,13 +15,13 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
-import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
-
-const _progressDiagnostics = NovelReaderProgressDiagnostics();
+import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
+import 'sqflite_novel_reading_state_repository.dart';
 
 class LocalNovelRepository
     implements
         NovelRepository,
+        NovelReadingStateRepository,
         NovelShelfSnapshotRepository,
         NovelCoverCacheWriter,
         NovelCustomMetadataWriter,
@@ -34,6 +34,8 @@ class LocalNovelRepository
            stateRepository ?? LocalLibraryStateRepository(_dbFuture);
 
   final Future<Database> _dbFuture;
+  late final NovelReadingStateRepository _readingState =
+      SqfliteNovelReadingStateRepository(_dbFuture);
   final LibraryStateRepository _stateRepository;
 
   static const String _contentType = 'novel';
@@ -644,6 +646,12 @@ class LocalNovelRepository
         where: 'novel_id = ?',
         whereArgs: <Object>[novelId],
       );
+      await txn.update(
+        AppDatabase.libraryWorkStateTable,
+        <String, Object?>{'last_read_episode_id': null, 'last_read_at': null},
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: [_contentType, novelId],
+      );
       await txn.delete(
         AppDatabase.worksTable,
         where: 'work_id = ? AND content_type = ?',
@@ -668,130 +676,76 @@ class LocalNovelRepository
     String? anchorTextIdentity,
     bool? isProgressPercentValid,
   }) async {
-    final db = await _dbFuture;
-    await _upsertReaderPositionRow(
-      db,
-      table: AppDatabase.novelReadingProgressTable,
-      primaryKey: 'novel_id',
-      row: <String, Object?>{
-        'novel_id': novelId,
-        'episode_id': episodeId,
-        'scroll_offset': scrollOffset,
-        'flow_mode': flowMode.storageValue,
-        'page_index': pageIndex < 0 ? 0 : pageIndex,
-        'page_count': pageCount == null || pageCount <= 0 ? null : pageCount,
-        'anchor_node_id': _normalizeNullable(anchorNodeId),
-        'anchor_text_offset': _readerTextOffset(
-          anchorTextOffset,
-          formatVersion: anchorFormatVersion,
-          textIdentity: anchorTextIdentity,
-        ),
-        'pagination_key': _normalizeNullable(paginationKey),
-        'progress_percent': progressPercent.clamp(0.0, 1.0).toDouble(),
-        'anchor_format_version': anchorFormatVersion,
-        'anchor_text_identity': anchorTextIdentity,
-        'progress_percent_valid': isProgressPercentValid == null
-            ? null
-            : (isProgressPercentValid ? 1 : 0),
-        'updated_at': DateTime.now().millisecondsSinceEpoch,
-      },
-    );
-    _progressDiagnostics.log(
-      'db_save',
-      fields: <String, Object?>{
-        'novelId': novelId,
-        'episodeId': episodeId,
-        'flowMode': flowMode.name,
-        'scrollOffset': scrollOffset.toStringAsFixed(2),
-        'progressPercent': progressPercent.toStringAsFixed(4),
-        'pageIndex': pageIndex,
-        'pageCount': pageCount,
-      },
+    await commitProgress(
+      progress: NovelReadingProgress(
+        novelId: novelId,
+        episodeId: episodeId,
+        scrollOffset: scrollOffset,
+        updatedAt: DateTime.now(),
+        flowMode: flowMode,
+        pageIndex: pageIndex,
+        pageCount: pageCount,
+        anchorNodeId: anchorNodeId,
+        anchorTextOffset: anchorTextOffset,
+        paginationKey: paginationKey,
+        progressPercent: progressPercent,
+        anchorFormatVersion: anchorFormatVersion,
+        anchorTextIdentity: anchorTextIdentity,
+        isProgressPercentValid: isProgressPercentValid,
+      ),
     );
   }
 
   @override
   Future<NovelReadingProgress?> getReadingProgress({
     required String novelId,
-  }) async {
-    final db = await _dbFuture;
-    final rows = await db.query(
-      AppDatabase.novelReadingProgressTable,
-      where: 'novel_id = ?',
-      whereArgs: <Object>[novelId],
-      limit: 1,
-    );
-    if (rows.isEmpty) {
-      _progressDiagnostics.log(
-        'db_load_miss',
-        fields: <String, Object?>{'novelId': novelId},
-      );
-      return null;
-    }
+  }) async => (await loadWorkState(novelId: novelId)).recentProgress;
 
-    final row = rows.first;
-    final episodeId = (row['episode_id'] as String?) ?? '';
-    if (episodeId.isEmpty) {
-      _progressDiagnostics.log(
-        'db_load_invalid',
-        fields: <String, Object?>{'novelId': novelId},
-      );
-      return null;
-    }
+  @override
+  Future<NovelReadingStateSnapshot> loadWorkState({required String novelId}) =>
+      _readingState.loadWorkState(novelId: novelId);
 
-    final anchorFormatVersion =
-        (row['anchor_format_version'] as num?)?.toInt() ??
-        NovelReaderAnchorFormat.legacyUnknown;
-    final anchorTextIdentity = row['anchor_text_identity'] as String?;
-    final progress = NovelReadingProgress(
-      novelId: novelId,
-      episodeId: episodeId,
-      scrollOffset: (row['scroll_offset'] as num?)?.toDouble() ?? 0,
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(
-        (row['updated_at'] as int?) ?? 0,
-      ),
-      flowMode: NovelReaderFlowModeCodec.fromStorage(
-        row['flow_mode'] as String?,
-      ),
-      pageIndex: ((row['page_index'] as num?)?.toInt() ?? 0)
-          .clamp(0, 1 << 30)
-          .toInt(),
-      pageCount: switch ((row['page_count'] as num?)?.toInt()) {
-        final value? when value > 0 => value,
-        _ => null,
-      },
-      anchorNodeId: _normalizeNullable(row['anchor_node_id'] as String?),
-      anchorTextOffset: _readerTextOffset(
-        (row['anchor_text_offset'] as num?)?.toInt() ?? 0,
-        formatVersion: anchorFormatVersion,
-        textIdentity: anchorTextIdentity,
-      ),
-      paginationKey: _normalizeNullable(row['pagination_key'] as String?),
-      progressPercent: ((row['progress_percent'] as num?)?.toDouble() ?? 0)
-          .clamp(0.0, 1.0)
-          .toDouble(),
-      anchorFormatVersion: anchorFormatVersion,
-      anchorTextIdentity: anchorTextIdentity,
-      isProgressPercentValid: switch (row['progress_percent_valid']) {
-        0 => false,
-        1 => true,
-        _ => null,
-      },
-    );
-    _progressDiagnostics.log(
-      'db_load',
-      fields: <String, Object?>{
-        'novelId': progress.novelId,
-        'episodeId': progress.episodeId,
-        'flowMode': progress.flowMode.name,
-        'scrollOffset': progress.scrollOffset.toStringAsFixed(2),
-        'progressPercent': progress.progressPercent.toStringAsFixed(4),
-        'pageIndex': progress.pageIndex,
-        'pageCount': progress.pageCount,
-      },
-    );
-    return progress;
-  }
+  @override
+  Future<NovelReadingProgress?> getChapterProgress({
+    required String novelId,
+    required String episodeId,
+  }) =>
+      _readingState.getChapterProgress(novelId: novelId, episodeId: episodeId);
+
+  @override
+  Future<bool> commitProgress({
+    required NovelReadingProgress progress,
+    bool markCompleted = false,
+    bool Function()? canCommit,
+  }) => _readingState.commitProgress(
+    progress: progress,
+    markCompleted: markCompleted,
+    canCommit: canCommit,
+  );
+
+  @override
+  Future<bool> setChapterRead({
+    required String novelId,
+    required String episodeId,
+    required bool isRead,
+    bool Function()? canCommit,
+  }) => _readingState.setChapterRead(
+    novelId: novelId,
+    episodeId: episodeId,
+    isRead: isRead,
+    canCommit: canCommit,
+  );
+
+  @override
+  Future<bool> resetChapter({
+    required String novelId,
+    required String episodeId,
+    bool Function()? canCommit,
+  }) => _readingState.resetChapter(
+    novelId: novelId,
+    episodeId: episodeId,
+    canCommit: canCommit,
+  );
 
   @override
   Future<List<NovelReaderBookmark>> listReaderBookmarks({

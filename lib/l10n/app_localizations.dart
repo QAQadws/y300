@@ -2309,6 +2309,12 @@ abstract class AppLocalizations {
   /// **'上次阅读 {percent}%'**
   String libraryChapterLastReadPercent(int percent);
 
+  /// No description provided for @libraryDetailStartFromBeginning.
+  ///
+  /// In zh, this message translates to:
+  /// **'从头阅读'**
+  String get libraryDetailStartFromBeginning;
+
   /// 章节进度语义；subtitle 和 progress 都由共享 presentation 生成，章节数据保持原样
   ///
   /// In zh, this message translates to:

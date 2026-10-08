@@ -127,9 +127,8 @@ abstract interface class DetailFullRefreshAdapter {
 
 /// Optional chapter read-state capability.
 ///
-/// Modules such as novels that cannot reliably infer read completion do not
-/// implement this contract. Shared detail UI must discover the capability
-/// before exposing read filters or mutations.
+/// Shared detail UI discovers this capability before exposing read filters or
+/// mutations; work-wide resets and shelf actions remain separate capabilities.
 abstract interface class DetailChapterReadStateAdapter {
   Future<void> markChapterRead({
     required String workId,

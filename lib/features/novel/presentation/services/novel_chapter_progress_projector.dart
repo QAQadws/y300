@@ -10,18 +10,20 @@ abstract final class NovelChapterProgressProjector {
     required String episodeId,
     required NovelReadingProgress? progress,
     NovelReaderProgressSnapshot? liveSnapshot,
+    bool? isRecentChapter,
   }) {
-    final isRecent =
+    final hasRecordedPosition =
         progress != null &&
         progress.novelId == novelId &&
         progress.episodeId == episodeId;
+    final isRecent = hasRecordedPosition && (isRecentChapter ?? true);
     final live =
         liveSnapshot?.novelId == novelId && liveSnapshot?.episodeId == episodeId
         ? liveSnapshot
         : null;
     final fraction = live != null
         ? _usableFraction(live.progressPercent, live.isProgressPercentValid)
-        : isRecent
+        : hasRecordedPosition
         ? _usableFraction(
             progress.progressPercent,
             progress.isProgressPercentValid,

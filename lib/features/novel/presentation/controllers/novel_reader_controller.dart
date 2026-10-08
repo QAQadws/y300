@@ -4,6 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
+import 'package:y300/features/novel/application/novel_reading_session_coordinator.dart';
+import 'package:y300/features/novel/domain/models/novel_reading_session.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
+import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
@@ -64,6 +70,8 @@ class NovelReaderViewState {
     this.searchKeyword = '',
     this.transition,
     this.isHydratingSupplemental = false,
+    this.readingState,
+    this.readingSurfaceRevision = 0,
   });
 
   final NovelItem? novel;
@@ -83,6 +91,8 @@ class NovelReaderViewState {
   final String searchKeyword;
   final NovelReaderTransitionState? transition;
   final bool isHydratingSupplemental;
+  final NovelReadingStateSnapshot? readingState;
+  final int readingSurfaceRevision;
 
   int get currentEpisodeIndex {
     return episodes.indexWhere(
@@ -148,6 +158,8 @@ class NovelReaderViewState {
     NovelReaderPreferences? persistedPreferences,
     NovelReaderPreferences? effectivePreferences,
     NovelReadingProgress? readingProgress,
+    NovelReadingStateSnapshot? readingState,
+    int? readingSurfaceRevision,
     bool clearReadingProgress = false,
     NovelReaderProgressSnapshot? progressSnapshot,
     double? currentOffset,
@@ -171,6 +183,9 @@ class NovelReaderViewState {
       readingProgress: clearReadingProgress
           ? null
           : (readingProgress ?? this.readingProgress),
+      readingState: readingState ?? this.readingState,
+      readingSurfaceRevision:
+          readingSurfaceRevision ?? this.readingSurfaceRevision,
       progressSnapshot: progressSnapshot ?? this.progressSnapshot,
       currentOffset: currentOffset ?? this.currentOffset,
       bookmarks: bookmarks ?? this.bookmarks,
@@ -202,7 +217,12 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   String? _pendingBeginningCommitEpisodeId;
   bool _isPagedRestoreReadOnly = false;
   int _activeSessionToken = 0;
+  final _readingSession = NovelReadingSessionCoordinator();
+  int _readingBarrierRevision = 0;
+  bool _surfaceFrontmost = true;
+  bool _surfaceResumed = true;
   int _transitionRequestSerial = 0;
+  int _readingRefreshSerial = 0;
   int _preferenceCommitSerial = 0;
   int _preferenceWritesInFlight = 0;
   // A refreshed state may load its baseline before an older write reaches disk.
@@ -218,6 +238,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     // Rebuild retires old progress completions before the new load finishes,
     // including a reload that returns to the same episode on this notifier.
     final sessionToken = ++_activeSessionToken;
+    _readingSession.retire();
     _preferenceDocumentFlights.clear();
     _transitionRequestSerial += 1;
     if (_preferenceWritesInFlight > 0) {
@@ -233,7 +254,12 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         _persistedPreferenceSnapshotDirty = true;
       }
       _preferenceCommitSerial += 1;
-      progressCommitter.cancel();
+      // Scoped queues validate their own lease; a shared committer must not
+      // cancel a different frontmost reader when this owner is disposed.
+      if (progressCommitter is! ScopedNovelReaderProgressCommitter) {
+        progressCommitter.cancel();
+      }
+      _readingSession.retire();
     });
     return _loadInitialCriticalState(
       _args.episodeId,
@@ -406,8 +432,26 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   }
 
   Future<bool> openEpisodeFromCatalog(String episodeId) {
-    return openEpisode(episodeId);
+    final current = state.value;
+    if (current == null) return Future.value(false);
+    if (current.currentEpisode.episodeId == episodeId) {
+      return Future.value(true);
+    }
+    return _runEpisodeTransition(
+      episodeId: episodeId,
+      kind: NovelReaderTransitionKind.switchingEpisode,
+      openPolicy: current.readingState?.episodeStates[episodeId]?.isRead == true
+          ? NovelEpisodeOpenPolicy.startAtBeginning
+          : NovelEpisodeOpenPolicy.resumeLastRead,
+    );
   }
+
+  Future<bool> openEpisodeFromBeginning(String episodeId) =>
+      _runEpisodeTransition(
+        episodeId: episodeId,
+        kind: NovelReaderTransitionKind.switchingEpisode,
+        openPolicy: NovelEpisodeOpenPolicy.startAtBeginning,
+      );
 
   Future<bool> goToPreviousEpisode() async {
     final current = state.value;
@@ -436,38 +480,45 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   Future<void> onScrollOffsetChanged(
     double offset, {
     double maxScrollExtent = 0,
+    NovelReaderProgressSnapshot? bodySnapshot,
+    bool userNavigation = true,
   }) async {
     final current = state.value;
     if (current == null) {
       return;
     }
-    final snapshot = _progressPolicy.verticalSnapshot(
-      novelId: _args.novelId,
-      episodeId: current.currentEpisode.episodeId,
-      scrollOffset: offset,
-      maxScrollExtent: maxScrollExtent,
-    );
+    final snapshot =
+        bodySnapshot ??
+        _progressPolicy.verticalSnapshot(
+          novelId: _args.novelId,
+          episodeId: current.currentEpisode.episodeId,
+          scrollOffset: offset,
+          maxScrollExtent: maxScrollExtent,
+        );
+    _prepareReadingAuthority(userNavigation: userNavigation);
     _clearPendingBeginningCommit(snapshot.episodeId);
     _applyProgressSnapshot(snapshot);
-    ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
+    _scheduleProgress(snapshot);
   }
 
-  Future<void> onVerticalContentReady(String episodeId) async {
+  Future<void> onVerticalContentReady(
+    String episodeId, {
+    NovelReaderProgressSnapshot? bodySnapshot,
+  }) async {
     final current = state.value;
     if (current == null ||
         current.currentEpisode.episodeId != episodeId ||
-        current.preferences.flowMode != NovelReaderFlowMode.vertical ||
-        _pendingBeginningCommitEpisodeId != episodeId) {
+        current.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return;
     }
+    _prepareReadingAuthority(userNavigation: false);
+    final hasRecord = current.readingState != null
+        ? current.readingState!.progressByEpisode.containsKey(episodeId)
+        : current.readingProgress?.episodeId == episodeId;
+    if (_pendingBeginningCommitEpisodeId != episodeId && hasRecord) return;
+    if (bodySnapshot == null) return;
     _pendingBeginningCommitEpisodeId = null;
-    await saveCurrentProgressNow(
-      _progressPolicy.initialSnapshot(
-        novelId: _args.novelId,
-        episodeId: episodeId,
-        flowMode: NovelReaderFlowMode.vertical,
-      ),
-    );
+    await saveCurrentProgressNow(bodySnapshot);
   }
 
   void onPagedPositionChanged(NovelReaderPaginationPosition position) {
@@ -481,8 +532,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
     final shouldCommitBeginning =
         _pendingBeginningCommitEpisodeId == position.episodeId;
-    final hasPersistedPosition =
-        current.readingProgress?.episodeId == position.episodeId;
+    final hasPersistedPosition = current.readingState != null
+        ? current.readingState!.progressByEpisode.containsKey(
+            position.episodeId,
+          )
+        : current.readingProgress?.episodeId == position.episodeId;
     // Debounced live progress can already be canonical even when bootstrap
     // had no saved row. A conversion preview must preserve that position too.
     final hasCanonicalLivePosition =
@@ -494,10 +548,15 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (position.isReadOnlyCompatibilityRestore &&
         (hasPersistedPosition || hasCanonicalLivePosition) &&
         !shouldCommitBeginning) {
+      _prepareReadingAuthority(userNavigation: false, readOnly: true);
       _isPagedRestoreReadOnly = true;
       return;
     }
     _isPagedRestoreReadOnly = false;
+    _prepareReadingAuthority(
+      userNavigation: position.hasUserNavigated,
+      readOnly: position.isReadOnlyCompatibilityRestore,
+    );
     final snapshot = _progressPolicy.pagedSnapshot(
       novelId: _args.novelId,
       episodeId: position.episodeId,
@@ -518,7 +577,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (shouldCommitBeginning) {
       unawaited(saveCurrentProgressNow(snapshot));
     } else {
-      ref.read(novelReaderProgressCommitterProvider).schedule(snapshot);
+      _scheduleProgress(snapshot);
     }
   }
 
@@ -549,8 +608,24 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     final sessionToken = _activeSessionToken;
+    final lease = _readingSession.session == null
+        ? null
+        : _readingSession.positionLease(
+            _readingSession.session!,
+            positionIdentity: snapshot,
+          );
+    if (lease == null) return;
     _applyProgressSnapshot(snapshot);
-    await ref.read(novelReaderProgressCommitterProvider).flush(snapshot);
+    final committer = ref.read(novelReaderProgressCommitterProvider);
+    final guard = _readingGuard(lease);
+    final applied = committer is ScopedNovelReaderProgressCommitter
+        ? await (committer as ScopedNovelReaderProgressCommitter).flushScoped(
+            snapshot,
+            scope: (lease.token, lease.revision),
+            canCommit: guard,
+          )
+        : await _flushLegacy(committer, snapshot, guard);
+    if (!applied || !guard()) return;
     if (!ref.mounted ||
         state.isLoading ||
         sessionToken != _activeSessionToken ||
@@ -728,6 +803,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       episodeId: critical.currentEpisode.episodeId,
       openPolicy: openPolicy,
     );
+    _beginReadingSession(critical, openPolicy);
     final viewState = _initialStateFromCritical(critical);
     _scheduleHydrateSupplemental(
       context: context,
@@ -754,6 +830,12 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return false;
     }
     final serial = ++_transitionRequestSerial;
+    try {
+      await saveCurrentProgressNow(current.progressSnapshot);
+    } catch (_) {
+      return false;
+    }
+    if (!ref.mounted || serial != _transitionRequestSerial) return false;
     final context = NovelReaderLoadContext(
       novelId: _args.novelId,
       requestedEpisodeId: episodeId,
@@ -788,6 +870,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         critical: critical,
       );
       state = AsyncData(nextState);
+      _beginReadingSession(critical, openPolicy);
       _markBeginningCommitIfNeeded(
         episodeId: critical.currentEpisode.episodeId,
         openPolicy: openPolicy,
@@ -977,6 +1060,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       persistedPreferences: critical.persistedPreferences,
       effectivePreferences: critical.effectivePreferences,
       readingProgress: critical.readingProgress,
+      readingState: critical.readingState,
       progressSnapshot: critical.progressSnapshot,
       currentOffset: critical.currentOffset,
       currentEpisodeBookmarks: const <NovelReaderBookmark>[],
@@ -997,6 +1081,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       critical.currentEpisode.episodeId,
     );
     return previous.copyWith(
+      readingSurfaceRevision: previous.readingSurfaceRevision + 1,
       episodes: critical.episodes,
       currentEpisode: critical.currentEpisode,
       currentContent: critical.currentContent,
@@ -1004,6 +1089,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       persistedPreferences: critical.persistedPreferences,
       effectivePreferences: critical.effectivePreferences,
       readingProgress: critical.readingProgress,
+      readingState: critical.readingState,
       progressSnapshot: critical.progressSnapshot,
       currentOffset: critical.currentOffset,
       currentEpisodeBookmarks: currentEpisodeBookmarks,
@@ -1017,7 +1103,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
   void _applyProgressSnapshot(NovelReaderProgressSnapshot snapshot) {
     final current = state.value;
-    if (current == null) {
+    if (current == null || current.progressSnapshot == snapshot) {
       return;
     }
     state = AsyncData(
@@ -1034,7 +1120,316 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       return;
     }
     final readingProgress = _readingProgressFromSnapshot(snapshot);
-    state = AsyncData(current.copyWith(readingProgress: readingProgress));
+    final previous = current.readingState;
+    state = AsyncData(
+      current.copyWith(
+        readingProgress: readingProgress,
+        readingState: previous == null
+            ? null
+            : NovelReadingStateSnapshot(
+                novelId: _args.novelId,
+                progressByEpisode: {
+                  ...previous.progressByEpisode,
+                  snapshot.episodeId: readingProgress,
+                },
+                episodeStates: previous.episodeStates,
+                recentEpisodeId: snapshot.episodeId,
+              ),
+      ),
+    );
+    ref
+        .read(libraryShelfRefreshBusProvider)
+        .notify(
+          modules: {LibraryModuleKey.novel},
+          reason: 'novel_reading_progress',
+          source: LibraryMutationSource.novelRefresh,
+          workId: _args.novelId,
+        );
+  }
+
+  void _beginReadingSession(
+    NovelReaderCriticalBootstrap critical,
+    NovelEpisodeOpenPolicy policy,
+  ) {
+    final episodeId = critical.currentEpisode.episodeId;
+    final recorded = critical.readingState != null
+        ? critical.readingState!.progressByEpisode.containsKey(episodeId)
+        : critical.readingProgress?.episodeId == episodeId;
+    final token = _readingSession.begin(
+      novelId: _args.novelId,
+      episodeId: episodeId,
+      entry: policy == NovelEpisodeOpenPolicy.startAtBeginning
+          ? NovelReadingSessionEntry.explicitStart
+          : recorded
+          ? NovelReadingSessionEntry.resume
+          : NovelReadingSessionEntry.firstStart,
+    );
+    _readingBarrierRevision = ref
+        .read(novelReadingMutationBarrierProvider)
+        .capture(_args.novelId, episodeId);
+    _readingSession.updateVisibility(
+      frontmost: _surfaceFrontmost,
+      resumed: _surfaceResumed,
+    );
+    if (recorded && policy != NovelEpisodeOpenPolicy.startAtBeginning) {
+      _readingSession.updateReadiness(
+        token,
+        bodyReady: false,
+        restoreSettled: false,
+        readOnlyCompatibilityRestore: true,
+      );
+    }
+  }
+
+  void updateReadingVisibility({
+    required bool frontmost,
+    required bool resumed,
+  }) {
+    _surfaceFrontmost = frontmost;
+    _surfaceResumed = resumed;
+    _readingSession.updateVisibility(frontmost: frontmost, resumed: resumed);
+  }
+
+  void cancelPendingCompletion() {
+    final token = _readingSession.session;
+    if (token != null) _readingSession.cancelPendingCompletion(token);
+  }
+
+  void _prepareReadingAuthority({
+    required bool userNavigation,
+    bool readOnly = false,
+  }) {
+    final token = _readingSession.session;
+    if (token == null) return;
+    _readingSession.updateReadiness(
+      token,
+      bodyReady: true,
+      restoreSettled: true,
+      readOnlyCompatibilityRestore: readOnly,
+    );
+    if (userNavigation && _readingSession.confirmNavigation(token)) {
+      final barrier = ref.read(novelReadingMutationBarrierProvider);
+      barrier.invalidate(token.novelId, token.episodeId);
+      _readingBarrierRevision = barrier.capture(token.novelId, token.episodeId);
+    }
+  }
+
+  bool Function() _readingGuard(NovelReadingCommitLease lease) {
+    final session = _activeSessionToken;
+    final barrierRevision = _readingBarrierRevision;
+    final barrier = ref.read(novelReadingMutationBarrierProvider);
+    return () =>
+        ref.mounted &&
+        session == _activeSessionToken &&
+        lease.isValid &&
+        barrier.isCurrent(
+          lease.token.novelId,
+          lease.token.episodeId,
+          barrierRevision,
+        );
+  }
+
+  void _scheduleProgress(NovelReaderProgressSnapshot snapshot) {
+    final token = _readingSession.session;
+    if (token == null) return;
+    final lease = _readingSession.positionLease(
+      token,
+      positionIdentity: snapshot,
+    );
+    if (lease == null) return;
+    final guard = _readingGuard(lease);
+    final committer = ref.read(novelReaderProgressCommitterProvider);
+    if (committer is ScopedNovelReaderProgressCommitter) {
+      (committer as ScopedNovelReaderProgressCommitter).scheduleScoped(
+        snapshot,
+        scope: (token, lease.revision),
+        canCommit: guard,
+        onCommitted: () {
+          if (guard()) _syncPersistedReadingProgress(snapshot);
+        },
+      );
+    } else if (guard()) {
+      committer.schedule(snapshot);
+    }
+  }
+
+  Future<bool> _flushLegacy(
+    NovelReaderProgressCommitter committer,
+    NovelReaderProgressSnapshot snapshot,
+    bool Function() guard,
+  ) async {
+    if (!guard()) return false;
+    await committer.flush(snapshot);
+    return true;
+  }
+
+  Future<void> refreshReadingState() async {
+    final repository = ref.read(novelReadingStateRepositoryProvider);
+    if (repository == null) return;
+    final session = _activeSessionToken;
+    final request = ++_readingRefreshSerial;
+    final result = await repository.loadWorkState(novelId: _args.novelId);
+    if (!ref.mounted ||
+        session != _activeSessionToken ||
+        state.isLoading ||
+        request != _readingRefreshSerial) {
+      return;
+    }
+    final current = state.asData?.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        readingState: result,
+        readingProgress: result.recentProgress,
+        clearReadingProgress: result.recentProgress == null,
+      ),
+    );
+  }
+
+  Future<void> setChapterRead(String episodeId, bool isRead) async {
+    final repository = ref.read(novelReadingStateRepositoryProvider);
+    if (repository == null) return;
+    final session = _activeSessionToken;
+    final bus = ref.read(libraryShelfRefreshBusProvider);
+    final barrier = ref.read(novelReadingMutationBarrierProvider);
+    barrier.invalidate(_args.novelId, episodeId);
+    final revision = barrier.capture(_args.novelId, episodeId);
+    bool canCommit() =>
+        ref.mounted &&
+        session == _activeSessionToken &&
+        barrier.isCurrent(_args.novelId, episodeId, revision);
+    final applied = await repository.setChapterRead(
+      novelId: _args.novelId,
+      episodeId: episodeId,
+      isRead: isRead,
+      canCommit: canCommit,
+    );
+    if (!applied) {
+      if (!canCommit()) return;
+      throw StateError('Chapter mutation was not applied');
+    }
+    bus.notify(
+      modules: {LibraryModuleKey.novel},
+      reason: 'novel_chapter_read_state',
+      source: LibraryMutationSource.novelRefresh,
+      workId: _args.novelId,
+    );
+    if (!ref.mounted || session != _activeSessionToken) return;
+    if (!isRead && _readingSession.session?.episodeId == episodeId) {
+      final token = _readingSession.begin(
+        novelId: _args.novelId,
+        episodeId: episodeId,
+        entry: NovelReadingSessionEntry.readOnlyRestore,
+      );
+      _readingBarrierRevision = ref
+          .read(novelReadingMutationBarrierProvider)
+          .capture(_args.novelId, episodeId);
+      _readingSession.updateVisibility(
+        frontmost: _surfaceFrontmost,
+        resumed: _surfaceResumed,
+      );
+      _readingSession.updateReadiness(
+        token,
+        bodyReady: true,
+        restoreSettled: true,
+        readOnlyCompatibilityRestore: true,
+      );
+    }
+    await refreshReadingState();
+  }
+
+  void observeReadingSurface({
+    required bool bodyReady,
+    required bool restoreSettled,
+    required bool finalBoundaryKnown,
+    required bool atBodyEnd,
+    required bool wholeBodyVisible,
+    required bool idle,
+    required Object? geometryIdentity,
+    NovelReaderProgressSnapshot? bodySnapshot,
+  }) {
+    final token = _readingSession.session;
+    final current = state.asData?.value;
+    if (token == null ||
+        current == null ||
+        state.isLoading ||
+        current.transition != null) {
+      return;
+    }
+    _readingSession.updateReadiness(
+      token,
+      bodyReady: bodyReady,
+      restoreSettled: restoreSettled,
+    );
+    // Bind layout before reporting position and starting chapter-end proof.
+    // A body built behind another route has no content-ready flush on return.
+    _readingSession.updateGeometry(token, geometryIdentity);
+    if (bodySnapshot != null &&
+        bodyReady &&
+        restoreSettled &&
+        _surfaceFrontmost &&
+        _surfaceResumed &&
+        ((token.entry == NovelReadingSessionEntry.firstStart &&
+                current.readingProgress?.episodeId != token.episodeId &&
+                current.readingState?.progressByEpisode.containsKey(
+                      token.episodeId,
+                    ) !=
+                    true) ||
+            _pendingBeginningCommitEpisodeId == token.episodeId)) {
+      _pendingBeginningCommitEpisodeId = null;
+      _applyProgressSnapshot(bodySnapshot);
+      _scheduleProgress(bodySnapshot);
+    }
+    _readingSession.reportCompletion(
+      token,
+      bodyReady: bodyReady,
+      restoreSettled: restoreSettled,
+      finalBoundaryKnown: finalBoundaryKnown,
+      atBodyEnd: atBodyEnd,
+      wholeBodyVisible: wholeBodyVisible,
+      idle: idle,
+      geometryIdentity: geometryIdentity,
+      onComplete: (lease) {
+        unawaited(_completeChapter(lease));
+      },
+    );
+  }
+
+  Future<void> _completeChapter(NovelReadingCommitLease lease) async {
+    final repository = ref.read(novelReadingStateRepositoryProvider);
+    final current = state.asData?.value;
+    if (repository == null ||
+        current == null ||
+        current.currentEpisode.episodeId != lease.token.episodeId) {
+      return;
+    }
+    final guard = _readingGuard(lease);
+    try {
+      final applied = await repository.commitProgress(
+        progress: _readingProgressFromSnapshot(current.progressSnapshot),
+        markCompleted: true,
+        canCommit: guard,
+      );
+      if (!applied) {
+        _readingSession.rejectCompletion(lease);
+        return;
+      }
+      if (guard()) {
+        await refreshReadingState();
+      }
+      if (ref.mounted) {
+        ref
+            .read(libraryShelfRefreshBusProvider)
+            .notify(
+              modules: {LibraryModuleKey.novel},
+              reason: 'novel_chapter_completed',
+              source: LibraryMutationSource.novelRefresh,
+              workId: _args.novelId,
+            );
+      }
+    } catch (_) {
+      _readingSession.rejectCompletion(lease);
+    }
   }
 
   NovelReadingProgress _readingProgressFromSnapshot(
@@ -1055,6 +1450,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       paginationKey: snapshot.paginationKey,
       progressPercent: snapshot.progressPercent,
       isProgressPercentValid: snapshot.isProgressPercentValid,
+      percentBasis: snapshot.percentBasis,
     );
   }
 

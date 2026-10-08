@@ -778,6 +778,7 @@ void main() {
         anchorTextIdentity: '  unsupported identity  ',
       );
 
+      _markReadingSurfaceReady(container.read(provider.notifier));
       await container.read(provider.notifier).saveCurrentProgressNow(snapshot);
 
       final state = container.read(provider).value!;
@@ -815,6 +816,7 @@ void main() {
       addTearDown(subscription.close);
       await container.read(provider.future);
       await Future<void>.delayed(Duration.zero);
+      _markReadingSurfaceReady(container.read(provider.notifier));
       final initial = container.read(provider).value!;
       for (final identity in [
         (novelId: 'another-novel', episodeId: 'novel:49:100:5001'),
@@ -897,6 +899,8 @@ void main() {
           pageIndex: 0,
           progressPercent: 0.5,
         );
+        _markReadingSurfaceReady(controller);
+        await controller.onScrollOffsetChanged(42, bodySnapshot: snapshot);
         final oldFlush = controller.saveCurrentProgressNow(snapshot);
         expect(committer.flushCallCount, 1);
         expect(container.read(provider).value!.currentOffset, 42);
@@ -945,6 +949,10 @@ void main() {
           expect(after.currentOffset, fresh.currentOffset);
           expect(after.readingProgress, same(fresh.readingProgress));
         } else {
+          // Retire eligibility before changing owner: a transition now waits
+          // for any new eligible source flush, while this issued write remains
+          // deliberately pending until after the target has been published.
+          controller.updateReadingVisibility(frontmost: false, resumed: true);
           expect(await controller.openEpisode('novel:49:100:5002'), isTrue);
           if (retirement == 'return') {
             expect(await controller.openEpisode('novel:49:100:5001'), isTrue);
@@ -968,6 +976,59 @@ void main() {
       },
     );
   }
+
+  test('chapter transition waits for its eligible source flush', () async {
+    final repository = _ControllerNovelRepository();
+    final committer = _GatedProgressCommitter(repository);
+    final bootstrap = _SequenceNovelReaderBootstrapService();
+    bootstrap.completeAt(
+      0,
+      _criticalBootstrap(
+        episodeId: 'novel:49:100:5001',
+        preferences: repository.preferences,
+      ),
+    );
+    final container = _buildContainer(
+      repository: repository,
+      progressCommitter: committer,
+      bootstrapService: bootstrap,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    final subscription = _keepReaderAlive(container, args);
+    addTearDown(subscription.close);
+    await container.read(provider.future);
+    final controller = container.read(provider.notifier);
+    _markReadingSurfaceReady(controller);
+    await controller.onScrollOffsetChanged(42, maxScrollExtent: 84);
+    final sourceSnapshot = container.read(provider).value!.progressSnapshot;
+
+    final transition = controller.openEpisode('novel:49:100:5002');
+    await Future<void>.delayed(Duration.zero);
+    expect(committer.flushCallCount, 1);
+    expect(bootstrap.contexts, hasLength(1));
+    expect(container.read(provider).value!.transition, isNull);
+    expect(repository.savedProgressEpisodeIds, isEmpty);
+
+    committer.gate.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(committer.committed, [sourceSnapshot]);
+    expect(bootstrap.contexts, hasLength(2));
+    expect(
+      container.read(provider).value!.transition?.targetEpisodeId,
+      'novel:49:100:5002',
+    );
+    bootstrap.completeAt(1, _criticalBootstrap(episodeId: 'novel:49:100:5002'));
+    expect(await transition, isTrue);
+    expect(
+      container.read(provider).value!.currentEpisode.episodeId,
+      'novel:49:100:5002',
+    );
+  });
 
   for (final dispose in [false, true]) {
     for (final fail in [false, true]) {
@@ -1000,6 +1061,7 @@ void main() {
           await container.read(provider.future);
           final controller = container.read(provider.notifier);
           final oldTransition = controller.openEpisode('novel:49:100:5002');
+          await Future<void>.delayed(Duration.zero);
           expect(bootstrap.contexts, hasLength(2));
           expect(
             container.read(provider).value!.transition!.targetEpisodeId,
@@ -1331,6 +1393,7 @@ void main() {
         final controller = container.read(provider.notifier);
         // Exit can precede the first surface report, so it is protected too.
         await controller.saveCurrentProgressNow(loaded.progressSnapshot);
+        _markReadingSurfaceReady(controller);
         for (final isFinal in [false, true]) {
           controller.onPagedPositionChanged(
             NovelReaderPaginationPosition(
@@ -1363,6 +1426,7 @@ void main() {
             paginationKey: 'new-layout',
             pageIndex: 2,
             pageCount: 5,
+            hasUserNavigated: true,
             anchor: NovelReaderTextAnchor(
               episodeId: args.episodeId,
               nodeId: 'new-node',
@@ -1414,13 +1478,13 @@ void main() {
       final controller = container.read(provider.notifier);
       await controller.saveCurrentProgressNow(loaded.progressSnapshot);
       expect(repository.savedProgressEpisodeIds, isEmpty);
+      _markReadingSurfaceReady(controller);
       controller.onPagedPositionChanged(
         const NovelReaderPaginationPosition(
           episodeId: 'novel:49:100:5001',
           paginationKey: 'new-layout',
           pageIndex: 0,
           pageCount: 2,
-          isReadOnlyCompatibilityRestore: true,
           anchor: NovelReaderTextAnchor(
             episodeId: 'novel:49:100:5001',
             nodeId: 'node-0',
@@ -1461,6 +1525,7 @@ void main() {
       final subscription = _keepReaderAlive(container, args);
       addTearDown(subscription.close);
       await container.read(provider.future);
+      _markReadingSurfaceReady(container.read(provider.notifier));
       container
           .read(provider.notifier)
           .onPagedPositionChanged(
@@ -1469,7 +1534,6 @@ void main() {
               paginationKey: 'new-layout',
               pageIndex: 0,
               pageCount: 2,
-              isReadOnlyCompatibilityRestore: true,
               anchor: NovelReaderTextAnchor(
                 episodeId: 'novel:49:100:5001',
                 nodeId: 'node-0',
@@ -1527,6 +1591,7 @@ void main() {
       expect(loaded.progressSnapshot.isProgressPercentValid, isTrue);
 
       final controller = container.read(provider.notifier);
+      _markReadingSurfaceReady(controller);
       controller.onPagedPositionChanged(
         const NovelReaderPaginationPosition(
           episodeId: 'novel:49:100:5001',
@@ -1534,6 +1599,7 @@ void main() {
           pageIndex: 1,
           pageCount: 2,
           isPageCountFinal: false,
+          hasUserNavigated: true,
           anchor: NovelReaderTextAnchor(
             episodeId: 'novel:49:100:5001',
             nodeId: 'node-2',
@@ -1661,7 +1727,7 @@ void main() {
   });
 
   test(
-    'openEpisodeFromCatalog always starts the target chapter at the beginning',
+    'openEpisodeFromCatalog restores an unfinished target chapter',
     () async {
       final targetProgress = NovelReadingProgress(
         novelId: 'novel:49:100',
@@ -1687,13 +1753,13 @@ void main() {
       expect(initial.currentOffset, 0);
 
       final controller = container.read(provider.notifier);
-      await controller.saveCurrentOffsetNow(12);
       await controller.openEpisodeFromCatalog('novel:49:100:5002');
 
       final state = await container.read(provider.future);
       expect(state.currentEpisode.episodeId, 'novel:49:100:5002');
-      expect(state.currentOffset, 0);
-      expect(repository.savedProgressEpisodeIds, contains('novel:49:100:5001'));
+      expect(state.currentOffset, 88);
+      expect(repository.readingProgress, same(targetProgress));
+      expect(repository.savedProgressEpisodeIds, isEmpty);
     },
   );
 
@@ -1717,12 +1783,14 @@ void main() {
 
       await container.read(provider.future);
       final controller = container.read(provider.notifier);
+      _markReadingSurfaceReady(controller);
       controller.onPagedPositionChanged(
         const NovelReaderPaginationPosition(
           episodeId: 'novel:49:100:5001',
           paginationKey: 'source-layout',
           pageIndex: 4,
           pageCount: 6,
+          hasUserNavigated: true,
           anchor: NovelReaderTextAnchor(
             episodeId: 'novel:49:100:5001',
             nodeId: 'source-node',
@@ -1777,9 +1845,19 @@ void main() {
       expect(state.progressSnapshot.progressPercent, 0);
       expect(progressCommitter.flushCallCount, 0);
 
-      await container
-          .read(novelReaderControllerProvider(args).notifier)
-          .onVerticalContentReady('novel:49:100:5002');
+      final controller = container.read(
+        novelReaderControllerProvider(args).notifier,
+      );
+      controller.updateReadingVisibility(frontmost: true, resumed: true);
+      await controller.onVerticalContentReady('novel:49:100:5002');
+      expect(progressCommitter.flushCallCount, 0);
+      await controller.onVerticalContentReady(
+        'novel:49:100:5002',
+        bodySnapshot: state.progressSnapshot.copyWith(
+          isProgressPercentValid: true,
+          percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        ),
+      );
 
       expect(progressCommitter.flushCallCount, 1);
       expect(
@@ -1871,6 +1949,7 @@ void main() {
       final future = container
           .read(provider.notifier)
           .openEpisodeFromCatalog('novel:49:100:5002');
+      await Future<void>.delayed(Duration.zero);
       final transitioning = container.read(provider).value!;
 
       expect(container.read(provider).isLoading, isFalse);
@@ -2177,6 +2256,19 @@ void main() {
         expectPreservedAnchor(unknown);
       }
     },
+  );
+}
+
+void _markReadingSurfaceReady(NovelReaderController controller) {
+  controller.updateReadingVisibility(frontmost: true, resumed: true);
+  controller.observeReadingSurface(
+    bodyReady: true,
+    restoreSettled: true,
+    finalBoundaryKnown: false,
+    atBodyEnd: false,
+    wholeBodyVisible: false,
+    idle: true,
+    geometryIdentity: 'controller-test-body-layout',
   );
 }
 

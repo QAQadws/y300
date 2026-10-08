@@ -11,6 +11,9 @@ class NovelReaderPaginationPosition {
     required this.anchor,
     this.isPageCountFinal = true,
     this.isReadOnlyCompatibilityRestore = false,
+    this.hasUserNavigated = false,
+    this.isBodyEndVisible = true,
+    this.isWholeBodyVisible = true,
   });
 
   final String episodeId;
@@ -20,6 +23,9 @@ class NovelReaderPaginationPosition {
   final NovelReaderTextAnchor anchor;
   final bool isPageCountFinal;
   final bool isReadOnlyCompatibilityRestore;
+  final bool hasUserNavigated;
+  final bool isBodyEndVisible;
+  final bool isWholeBodyVisible;
 }
 
 @immutable

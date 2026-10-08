@@ -26,6 +26,7 @@ Future<void> createLibraryStateTables(Database db) async {
         episode_id TEXT NOT NULL,
         work_id TEXT NOT NULL,
         is_read INTEGER NOT NULL DEFAULT 0,
+        read_state_version INTEGER NOT NULL DEFAULT 0,
         is_downloaded INTEGER NOT NULL DEFAULT 0,
         is_bookmarked INTEGER NOT NULL DEFAULT 0,
         read_at INTEGER,
@@ -228,4 +229,14 @@ Future<void> upgradeLibraryFrom38To39(Database db) async {
   );
   await createLibraryCoverMigrationTable(db);
   await createLibraryCoverRevisionTriggers(db);
+}
+
+Future<void> upgradeLibraryFrom42To43(Database db) async {
+  await createLibraryStateTables(db);
+  await addColumnIfMissing(
+    db,
+    table: libraryEpisodeStateTable,
+    column: 'read_state_version',
+    definition: 'INTEGER NOT NULL DEFAULT 0',
+  );
 }

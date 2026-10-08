@@ -38,6 +38,196 @@ import 'package:y300/features/library_shared/presentation/reader/reader_models.d
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
+  testWidgets('text-only current page reports images ready without a host', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 1, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(host.imagesReady.last, isTrue);
+  });
+
+  testWidgets('current image waits for its first frame; neighbor never blocks it', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator()
+      ..pageHtml = {
+        0: '<img src="https://images.test/first.png" width="160" height="100">',
+        1: '<img src="https://images.test/second.png" width="160" height="100">',
+      };
+    final images = _ControlledPagedImageHost();
+    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+      ..imageHost = images
+      ..rawHtml = coordinator.pageHtml.values.join();
+    _disposeBudgetHost(tester, coordinator);
+    addTearDown(images.dispose);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 2, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(host.imagesReady.last, isFalse);
+    images.show('https://images.test/first.png');
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(host.imagesReady.last, isTrue);
+
+    final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
+    final gesture = await tester.startGesture(tester.getCenter(pageView));
+    await gesture.moveBy(const Offset(-140, 0));
+    await tester.pump();
+    await tester.pump();
+    expect(images.frames.containsKey('https://images.test/second.png'), isTrue);
+    expect(host.positions.last.pageIndex, 0);
+    expect(host.imagesReady.last, isTrue);
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(host.navigation.turnNext(), isTrue);
+    await tester.pumpAndSettle();
+    expect(host.positions.last.pageIndex, 1);
+    expect(host.imagesReady.last, isFalse);
+    images.show('https://images.test/second.png');
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(host.imagesReady.last, isTrue);
+  });
+
+  testWidgets('failed image cannot make a paged chapter completion-ready', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator()
+      ..pageHtml = {
+        0: '<img src="https://images.test/failed.png" width="160" height="100">',
+      };
+    final images = _ControlledPagedImageHost();
+    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+      ..imageHost = images
+      ..rawHtml = coordinator.pageHtml.values.join();
+    _disposeBudgetHost(tester, coordinator);
+    addTearDown(images.dispose);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 1, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    images.fail('https://images.test/failed.png');
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(host.imagesReady.last, isFalse);
+    expect(host.imagesReady, isNot(contains(true)));
+  });
+
+  testWidgets('page movement reports actual activity until animation settles', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator();
+    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 2, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    host.scrollActivity.clear();
+    expect(host.navigation.turnNext(), isTrue);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(host.scrollActivity, [true]);
+    await tester.pumpAndSettle();
+    expect(host.scrollActivity, [true, false]);
+  });
+
+  testWidgets('inner page requires its actual tail and a real reading scroll', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator()
+      ..pageHtml = {0: '<div style="height: 1400px">内部长页正文</div>'}
+      ..innerScrollPages = {0};
+    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+      ..rawHtml = coordinator.pageHtml.values.join();
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 1, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(host.positions.last.isBodyEndVisible, isFalse);
+    expect(host.positions.last.isWholeBodyVisible, isFalse);
+    expect(host.positions.last.hasUserNavigated, isFalse);
+    host.scrollActivity.clear();
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -1300),
+    );
+    await tester.pumpAndSettle();
+    expect(host.positions.last.isBodyEndVisible, isTrue);
+    expect(host.positions.last.isWholeBodyVisible, isFalse);
+    expect(host.positions.last.hasUserNavigated, isTrue);
+    expect(host.scrollActivity.first, isTrue);
+    expect(host.scrollActivity.last, isFalse);
+  });
+
+  testWidgets(
+    'inner metrics and programmatic compensation do not confirm navigation',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator()
+        ..pageHtml = {0: '<div style="height: 1400px">自动定位的长页正文</div>'}
+        ..innerScrollPages = {0};
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+        ..rawHtml = coordinator.pageHtml.values.join();
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 1, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pumpAndSettle();
+      final innerScrollable = find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(innerScrollable).position;
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(host.positions.last.isBodyEndVisible, isTrue);
+      expect(host.positions.last.isWholeBodyVisible, isFalse);
+      expect(
+        host.positions.every((position) => !position.hasUserNavigated),
+        isTrue,
+      );
+      position.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(host.positions.last.isBodyEndVisible, isFalse);
+      expect(
+        host.positions.every((position) => !position.hasUserNavigated),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('inner page with fully fitting body reports whole visibility', (
+    tester,
+  ) async {
+    final coordinator = _BudgetPaginationCoordinator()
+      ..pageHtml = {0: '<p>实际可见的单页正文</p>'}
+      ..innerScrollPages = {0};
+    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+      ..rawHtml = coordinator.pageHtml.values.join();
+    _disposeBudgetHost(tester, coordinator);
+    await _pumpBudgetHost(tester, host);
+    coordinator.emit(0, pageCount: 1, isComplete: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(host.positions.last.isBodyEndVisible, isTrue);
+    expect(host.positions.last.isWholeBodyVisible, isTrue);
+    expect(host.positions.last.hasUserNavigated, isFalse);
+  });
+
   for (final flowMode in [
     NovelReaderFlowMode.pagedLtr,
     NovelReaderFlowMode.pagedRtl,
@@ -1779,6 +1969,9 @@ final class _BudgetSurfaceHost {
   late final ForumHtmlThemeContext htmlTheme;
   late final NovelReaderPaginationCoordinatorBuilder coordinatorBuilder;
   final positions = <NovelReaderPaginationPosition>[];
+  final imagesReady = <bool>[];
+  final scrollActivity = <bool>[];
+  ForumHtmlImageHost? imageHost;
   final conversionPositions = <NovelReaderConversionPosition>[];
   NovelReaderConversionPosition? conversionPosition;
   String rawHtml = _budgetRawHtml;
@@ -1846,12 +2039,112 @@ final class _BudgetSurfaceHost {
             enforceBudgets: enforceBudgets,
           ),
           onPositionChanged: positions.add,
+          onImagesReadyChanged: imagesReady.add,
+          onScrollActivityChanged: scrollActivity.add,
+          imageHost: imageHost,
           onChooseScrollMode: () {
             scrollChoices += 1;
           },
         ),
       ),
     ),
+  );
+}
+
+final class _ControlledPagedImageHost implements ForumHtmlImageHost {
+  final frames = <String, ValueNotifier<int>>{};
+  void show(String url) => frames[url]!.value = 1;
+  void fail(String url) => frames[url]!.value = -1;
+  void dispose() {
+    for (final frame in frames.values) {
+      frame.dispose();
+    }
+  }
+
+  @override
+  ForumHtmlDisplayImage? resolveImage({
+    required Uri url,
+    required int? imageIndex,
+    required bool isSticker,
+    Size? htmlSize,
+  }) => _ControlledPagedDisplayImage(url.toString(), isSticker, htmlSize);
+
+  @override
+  Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
+    ForumHtmlDisplayImage image,
+  ) async => null;
+
+  @override
+  void onBlockImageResolved(ForumHtmlDisplayImage image, Size size) {}
+
+  @override
+  Future<void> prefetchDisk(
+    ForumHtmlDisplayImage image, {
+    required ForumHtmlImageWorkScope scope,
+  }) async {}
+
+  @override
+  Widget buildImage({
+    required ForumHtmlDisplayImage image,
+    required BoxFit fit,
+    required Widget placeholder,
+    double? width,
+    double? height,
+    Widget? errorPlaceholder,
+    VoidCallback? onRetry,
+    ValueChanged<Size>? onImageResolved,
+    VoidCallback? onImageFailed,
+    VoidCallback? onFirstFrameRendered,
+    bool showDelayedLoadingIndicator = false,
+    bool waitForCacheWrite = false,
+    int retryToken = 0,
+  }) => ValueListenableBuilder<int>(
+    valueListenable: frames.putIfAbsent(
+      image.sourceUrl,
+      () => ValueNotifier(0),
+    ),
+    builder: (_, frame, _) {
+      if (frame == 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          onFirstFrameRendered?.call();
+        });
+        return SizedBox(
+          width: width,
+          height: height,
+          child: const ColoredBox(color: Colors.red),
+        );
+      }
+      if (frame == -1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          onImageFailed?.call();
+        });
+        return errorPlaceholder ?? placeholder;
+      }
+      return placeholder;
+    },
+  );
+}
+
+final class _ControlledPagedDisplayImage implements ForumHtmlDisplayImage {
+  const _ControlledPagedDisplayImage(
+    this.sourceUrl,
+    this.isSticker,
+    this.htmlSize,
+  );
+  @override
+  final String sourceUrl;
+  @override
+  final bool isSticker;
+  @override
+  final Size? htmlSize;
+  @override
+  String get cacheKey => sourceUrl;
+  @override
+  Object get identity => sourceUrl;
+  @override
+  ForumHtmlImageLayout get initialLayout => ForumHtmlImageLayout(
+    displaySize: htmlSize ?? const Size(160, 100),
+    aspectRatio: 1.6,
   );
 }
 
@@ -1892,6 +2185,8 @@ final class _BudgetPaginationAttempt {
 final class _BudgetPaginationCoordinator
     implements NovelReaderPaginationCoordinator {
   bool useFlowAnchors = false;
+  Map<int, String> pageHtml = {};
+  Set<int> innerScrollPages = {};
   final attempts = <_BudgetPaginationAttempt>[];
   int cancelPendingCount = 0;
   int clearCount = 0;
@@ -1959,15 +2254,18 @@ final class _BudgetPaginationCoordinator
         : start.copyWith(textOffset: text.runes.length);
     return NovelReaderPageFragment(
       index: index,
-      html: useFlowAnchors
-          ? attempt.chapter.flowUnits[index].html
-          : replaceFirstHtml && index == 0
-          ? '<p>被替换的正文</p>'
-          : '<p>$text</p>',
+      html:
+          pageHtml[index] ??
+          (useFlowAnchors
+              ? attempt.chapter.flowUnits[index].html
+              : replaceFirstHtml && index == 0
+              ? '<p>被替换的正文</p>'
+              : '<p>$text</p>'),
       startAnchor: start,
       endAnchor: end,
       anchorRanges: [NovelReaderPageAnchorRange(start: start, end: end)],
       imageIndices: const [],
+      requiresInnerScroll: innerScrollPages.contains(index),
       usedHeight: 80,
       availableHeight: 600,
     );

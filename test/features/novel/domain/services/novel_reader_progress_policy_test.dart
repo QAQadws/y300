@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
@@ -273,6 +274,185 @@ void main() {
         snapshot.copyWith(progressPercent: 0, isProgressPercentValid: true),
         maxScrollExtent: 800,
         viewportDimension: 200,
+      ),
+      0,
+    );
+  });
+
+  test('body percentage round trips through a nonzero chrome inset', () {
+    const pixels = 1000.0;
+    const inset = 44.0;
+    const geometry = NovelReadingBodyGeometry(
+      bodyTop: 68,
+      bodyHeight: 2000,
+      viewportTop: pixels + inset,
+      effectiveViewportHeight: 600,
+      visibleBodyExtent: 600,
+      finalBoundaryKnown: true,
+    );
+    final snapshot = policy
+        .verticalSnapshot(
+          novelId: 'novel:1',
+          episodeId: 'episode-1',
+          scrollOffset: pixels,
+        )
+        .copyWith(
+          progressPercent: geometry.progressPercent,
+          isProgressPercentValid: true,
+          percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        );
+    expect(
+      policy.restoreScrollOffset(
+        snapshot,
+        maxScrollExtent: 2000,
+        bodyTop: geometry.bodyTop,
+        bodyHeight: geometry.bodyHeight,
+        effectiveViewportHeight: geometry.effectiveViewportHeight,
+        viewportTopInset: inset,
+      ),
+      closeTo(pixels, 1e-9),
+    );
+  });
+
+  test(
+    'new paging percentages map to the body instead of transition extent',
+    () {
+      final snapshot = policy.pagedSnapshot(
+        novelId: 'novel:1',
+        episodeId: 'episode-1',
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        pageIndex: 2,
+        pageCount: 5,
+        paginationKey: 'final-layout',
+      );
+      expect(
+        policy.restoreScrollOffset(
+          snapshot,
+          maxScrollExtent: 2000,
+          bodyTop: 68,
+          bodyHeight: 2000,
+          effectiveViewportHeight: 600,
+          viewportTopInset: 44,
+        ),
+        584,
+      );
+    },
+  );
+
+  test('zero body and paged percentages preserve the first screen padding', () {
+    for (final basis in [
+      NovelProgressPercentBasis.bodyGeometryV1,
+      NovelProgressPercentBasis.pagedStartV1,
+    ]) {
+      for (final bodyHeight in [300.0, 2000.0]) {
+        final snapshot = policy
+            .initialSnapshot(
+              novelId: 'novel:1',
+              episodeId: 'episode-1',
+              flowMode: NovelReaderFlowMode.vertical,
+            )
+            .copyWith(percentBasis: basis, isProgressPercentValid: true);
+        expect(
+          policy.restoreScrollOffset(
+            snapshot,
+            maxScrollExtent: 2000,
+            bodyTop: 68,
+            bodyHeight: bodyHeight,
+            effectiveViewportHeight: 600,
+            viewportTopInset: 44,
+          ),
+          0,
+        );
+        if (bodyHeight < 600) {
+          expect(
+            policy.restoreScrollOffset(
+              snapshot.copyWith(progressPercent: 0.7),
+              maxScrollExtent: 2000,
+              bodyTop: 68,
+              bodyHeight: bodyHeight,
+              effectiveViewportHeight: 600,
+              viewportTopInset: 44,
+            ),
+            0,
+          );
+        }
+      }
+    }
+  });
+
+  test('legacy and future bases retain their previous approximation rule', () {
+    for (final basis in [
+      NovelProgressPercentBasis.legacyReaderLayout,
+      'futureBasisV77',
+    ]) {
+      final snapshot = policy
+          .verticalSnapshot(
+            novelId: 'novel:1',
+            episodeId: 'episode-1',
+            scrollOffset: 100,
+          )
+          .copyWith(
+            percentBasis: basis,
+            progressPercent: 0.4,
+            isProgressPercentValid: true,
+          );
+      expect(
+        policy.restoreScrollOffset(
+          snapshot,
+          maxScrollExtent: 2000,
+          bodyTop: 68,
+          bodyHeight: 2000,
+          effectiveViewportHeight: 600,
+          viewportTopInset: 44,
+        ),
+        800,
+      );
+    }
+  });
+
+  test('invalid body geometry never produces a nonfinite scroll target', () {
+    final snapshot = policy
+        .verticalSnapshot(
+          novelId: 'novel:1',
+          episodeId: 'episode-1',
+          scrollOffset: 100,
+        )
+        .copyWith(
+          percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+          progressPercent: 0.4,
+          isProgressPercentValid: true,
+        );
+    for (final sample
+        in <({double top, double height, double viewport, double inset})>[
+          (top: double.nan, height: 2000, viewport: 600, inset: 44),
+          (top: 68, height: double.infinity, viewport: 600, inset: 44),
+          (top: 68, height: -1, viewport: 600, inset: 44),
+          (top: 68, height: 2000, viewport: 0, inset: 44),
+          (top: 68, height: 2000, viewport: 600, inset: double.nan),
+        ]) {
+      expect(
+        policy.restoreScrollOffset(
+          snapshot,
+          maxScrollExtent: 2000,
+          bodyTop: sample.top,
+          bodyHeight: sample.height,
+          effectiveViewportHeight: sample.viewport,
+          viewportTopInset: sample.inset,
+        ),
+        800,
+      );
+    }
+    expect(
+      policy.restoreScrollOffset(snapshot, maxScrollExtent: double.nan),
+      0,
+    );
+    expect(
+      policy.restoreScrollOffset(
+        snapshot.copyWith(
+          progressPercent: double.nan,
+          scrollOffset: double.infinity,
+        ),
+        maxScrollExtent: 2000,
       ),
       0,
     );

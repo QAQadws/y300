@@ -18,6 +18,7 @@ class NovelReaderProgressSnapshot {
     this.paginationKey,
     required this.progressPercent,
     this.isProgressPercentValid,
+    this.percentBasis = NovelProgressPercentBasis.legacyReaderLayout,
   });
 
   final String novelId;
@@ -33,6 +34,7 @@ class NovelReaderProgressSnapshot {
   final String? paginationKey;
   final double progressPercent;
   final bool? isProgressPercentValid;
+  final String percentBasis;
 
   bool get isPaged => flowMode != NovelReaderFlowMode.vertical;
 
@@ -54,7 +56,8 @@ class NovelReaderProgressSnapshot {
         other.anchorTextIdentity == anchorTextIdentity &&
         other.paginationKey == paginationKey &&
         other.progressPercent == progressPercent &&
-        other.isProgressPercentValid == isProgressPercentValid;
+        other.isProgressPercentValid == isProgressPercentValid &&
+        other.percentBasis == percentBasis;
   }
 
   @override
@@ -72,6 +75,7 @@ class NovelReaderProgressSnapshot {
     paginationKey,
     progressPercent,
     isProgressPercentValid,
+    percentBasis,
   );
 
   NovelReaderProgressSnapshot copyWith({
@@ -91,6 +95,7 @@ class NovelReaderProgressSnapshot {
     double? progressPercent,
     bool? isProgressPercentValid,
     bool clearProgressPercentValidity = false,
+    String? percentBasis,
   }) {
     return NovelReaderProgressSnapshot(
       novelId: novelId,
@@ -114,6 +119,7 @@ class NovelReaderProgressSnapshot {
       isProgressPercentValid: clearProgressPercentValidity
           ? null
           : (isProgressPercentValid ?? this.isProgressPercentValid),
+      percentBasis: percentBasis ?? this.percentBasis,
     );
   }
 }
@@ -170,6 +176,7 @@ class NovelReaderProgressPolicy {
       paginationKey: _normalizeAnchor(progress.paginationKey),
       progressPercent: _clampPercent(progress.progressPercent),
       isProgressPercentValid: progress.isProgressPercentValid,
+      percentBasis: progress.percentBasis,
     );
   }
 
@@ -237,6 +244,7 @@ class NovelReaderProgressPolicy {
       paginationKey: normalizedKey,
       progressPercent: !isPageCountFinal ? 0 : safePageIndex / safePageCount,
       isProgressPercentValid: isPageCountFinal,
+      percentBasis: NovelProgressPercentBasis.pagedStartV1,
     );
   }
 
@@ -244,8 +252,44 @@ class NovelReaderProgressPolicy {
     NovelReaderProgressSnapshot snapshot, {
     required double maxScrollExtent,
     double viewportDimension = 0,
+    double? bodyTop,
+    double? bodyHeight,
+    double? effectiveViewportHeight,
+    double viewportTopInset = 0,
   }) {
-    final safeMax = math.max(0.0, maxScrollExtent);
+    final safeMax = maxScrollExtent.isFinite
+        ? math.max(0.0, maxScrollExtent)
+        : 0.0;
+    final isBodyPercentage =
+        snapshot.percentBasis == NovelProgressPercentBasis.bodyGeometryV1 ||
+        snapshot.percentBasis == NovelProgressPercentBasis.pagedStartV1;
+    if (isBodyPercentage &&
+        snapshot.isProgressPercentValid == true &&
+        bodyTop != null &&
+        bodyTop.isFinite &&
+        bodyTop >= 0 &&
+        bodyHeight != null &&
+        bodyHeight.isFinite &&
+        bodyHeight >= 0 &&
+        effectiveViewportHeight != null &&
+        effectiveViewportHeight.isFinite &&
+        effectiveViewportHeight > 0 &&
+        viewportTopInset.isFinite &&
+        viewportTopInset >= 0 &&
+        snapshot.progressPercent.isFinite &&
+        snapshot.progressPercent >= 0 &&
+        snapshot.progressPercent <= 1) {
+      // Clamping makes zero ambiguous inside the chapter's leading padding.
+      // Keep the original first screen rather than aligning away that padding.
+      if (snapshot.progressPercent == 0) return 0;
+      final bodyRange = math.max(0.0, bodyHeight - effectiveViewportHeight);
+      if (bodyRange == 0) return 0;
+      // Reports use the readable viewport top, while ScrollController uses its
+      // physical origin. Project back through chrome only for the new bases.
+      return (bodyTop + snapshot.progressPercent * bodyRange - viewportTopInset)
+          .clamp(0.0, safeMax)
+          .toDouble();
+    }
     // Offset and page numbers belong to a previous layout. Percentage is the
     // stable cross-layout position, so prefer it whenever it is meaningful.
     if (snapshot.isProgressPercentValid != false &&
@@ -258,9 +302,17 @@ class NovelReaderProgressPolicy {
           snapshot.pageCount != null) {
         return target;
       }
-      return math.max(0.0, target - math.max(0.0, viewportDimension));
+      return math.max(
+        0.0,
+        target -
+            (viewportDimension.isFinite
+                ? math.max(0.0, viewportDimension)
+                : 0.0),
+      );
     }
-    return snapshot.scrollOffset.clamp(0.0, safeMax).toDouble();
+    return snapshot.scrollOffset.isFinite
+        ? snapshot.scrollOffset.clamp(0.0, safeMax).toDouble()
+        : 0;
   }
 
   int? _normalizePageCount(int? value) {

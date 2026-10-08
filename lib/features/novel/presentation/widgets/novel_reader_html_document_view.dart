@@ -14,6 +14,7 @@ import 'package:y300/features/library_shared/presentation/services/library_error
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/features/novel/presentation/services/novel_reading_image_host.dart';
 
 class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   const NovelReaderHtmlDocumentView({
@@ -31,6 +32,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
     this.onContentReady,
     this.onContentTerminal,
     this.onRetry,
+    this.onImagesReadyChanged,
     this.preferencesAdapter = const NovelHtmlReaderPreferencesAdapter(),
     this.preparer = const NovelHtmlChapterRenderPreparer(),
     this.preparationService,
@@ -52,6 +54,7 @@ class NovelReaderHtmlDocumentView extends ConsumerStatefulWidget {
   final VoidCallback? onContentReady;
   final VoidCallback? onContentTerminal;
   final VoidCallback? onRetry;
+  final ValueChanged<bool>? onImagesReadyChanged;
   final NovelHtmlReaderPreferencesAdapter preferencesAdapter;
   final NovelHtmlChapterPreparer preparer;
   final NovelReaderHtmlPreparationService? preparationService;
@@ -73,6 +76,16 @@ class _NovelReaderHtmlDocumentViewState
   NovelReaderPreparedChapterCache? _ownedPreparedCache;
   final _collapseExpansion = <String, bool>{};
   (String, String)? _collapseOwner;
+  late final _imageTracker = NovelReadingImageTracker((ready) {
+    if (mounted) widget.onImagesReadyChanged?.call(ready);
+  });
+  NovelReadingImageHost? _imageHost;
+
+  @override
+  void dispose() {
+    _imageTracker.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -118,12 +131,25 @@ class _NovelReaderHtmlDocumentViewState
               );
             }
             final signature = _signature;
+            if (prepared.renderDocument.sequence.entries.isNotEmpty) {
+              _imageHost ??= NovelReadingImageHost(
+                delegate: ref
+                    .read(forumHtmlImageHostProvider)
+                    .forContent(
+                      threadId: widget.episode.sourceTid,
+                      imageReferer: widget.imageReferer,
+                      imageCacheOwnerId: widget.episode.sourceTid,
+                    ),
+                tracker: _imageTracker,
+              );
+            }
             final fragments = widget.asSliver ? prepared.scrollFragments : null;
             Widget render(String? fragment) => ForumHtmlWidgetPostRenderer(
               key: fragment == null
                   ? const Key('novel-reader-html-renderer')
                   : null,
               html: prepared.html,
+              imageHost: _imageHost,
               theme: widget.theme,
               preparedDocument: fragment != null
                   ? prepared.renderDocument.copyWith(preparedHtml: fragment)
@@ -182,6 +208,7 @@ class _NovelReaderHtmlDocumentViewState
     if (_collapseOwner != owner) {
       _collapseOwner = owner;
       _collapseExpansion.clear();
+      _imageHost = null;
     }
     final preferences = widget.preferencesAdapter.map(widget.preferences);
     final signature = (
@@ -224,6 +251,7 @@ class _NovelReaderHtmlDocumentViewState
     _reportedReadySignature = signature;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _signature == signature) {
+        widget.onImagesReadyChanged?.call(_imageTracker.isReady);
         widget.onContentReady?.call();
       }
     });

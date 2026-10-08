@@ -43,6 +43,7 @@ class UnifiedDetailPage extends StatefulWidget {
     this.chapterStatus,
     this.chapterModeControl,
     this.onOpenChapter,
+    this.onOpenChapterFromBeginning,
     this.onContinue,
     this.onRefreshCompleted,
     this.onFirstContentPresented,
@@ -66,6 +67,8 @@ class UnifiedDetailPage extends StatefulWidget {
   final Widget? chapterModeControl;
   final Future<void> Function(BuildContext context, LibraryChapterItem chapter)?
   onOpenChapter;
+  final Future<void> Function(BuildContext context, LibraryChapterItem chapter)?
+  onOpenChapterFromBeginning;
   final Future<void> Function(BuildContext context, ReaderRouteTarget target)?
   onContinue;
   final Future<void> Function(DetailRefreshResult result)? onRefreshCompleted;
@@ -888,6 +891,24 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (widget.onOpenChapterFromBeginning != null)
+                  ListTile(
+                    key: ValueKey<String>(
+                      'unified-detail-chapter-start-action-${chapter.episodeId}',
+                    ),
+                    leading: const Icon(Icons.first_page),
+                    title: Text(l10n.libraryDetailStartFromBeginning),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await widget.onOpenChapterFromBeginning!(
+                        context,
+                        chapter,
+                      );
+                      if (!mounted) return;
+                      await _controller.reload();
+                      if (mounted) setState(() {});
+                    },
+                  ),
                 ListTile(
                   key: ValueKey<String>(
                     'unified-detail-chapter-bookmark-action-${chapter.episodeId}',

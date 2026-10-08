@@ -1,5 +1,6 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
@@ -45,6 +46,7 @@ class NovelReaderCriticalBootstrap {
     required this.readingProgress,
     required this.progressSnapshot,
     required this.currentOffset,
+    this.readingState,
   });
 
   final List<NovelEpisodeItem> episodes;
@@ -56,6 +58,7 @@ class NovelReaderCriticalBootstrap {
   final NovelReadingProgress? readingProgress;
   final NovelReaderProgressSnapshot progressSnapshot;
   final double currentOffset;
+  final NovelReadingStateSnapshot? readingState;
 }
 
 abstract interface class NovelReaderBootstrapService {
@@ -125,13 +128,30 @@ class DefaultNovelReaderBootstrapService
       ),
       converter: converter,
     );
-    final readingProgress = await _repository.getReadingProgress(
-      novelId: context.novelId,
-    );
+    final stateRepository = _repository;
+    final readingState = stateRepository is NovelReadingStateRepository
+        ? await (stateRepository as NovelReadingStateRepository).loadWorkState(
+            novelId: context.novelId,
+          )
+        : null;
+    final readingProgress =
+        readingState?.recentProgress ??
+        (readingState == null
+            ? await _repository.getReadingProgress(novelId: context.novelId)
+            : null);
+    final chapterProgress = readingState == null
+        ? readingProgress
+        : readingState.progressByEpisode[currentEpisode.episodeId];
+    final completed =
+        readingState?.episodeStates[currentEpisode.episodeId]?.isRead == true;
     final restoredProgress = _progressForEpisode(
       episodeId: currentEpisode.episodeId,
-      openPolicy: context.openPolicy,
-      currentProgress: readingProgress,
+      openPolicy:
+          completed &&
+              context.preservedProgress?.episodeId != currentEpisode.episodeId
+          ? NovelEpisodeOpenPolicy.startAtBeginning
+          : context.openPolicy,
+      currentProgress: chapterProgress,
       preservedProgress: context.preservedProgress,
     );
     final progressSnapshot = _progressPolicy.fromReadingProgress(
@@ -151,6 +171,7 @@ class DefaultNovelReaderBootstrapService
       readingProgress: readingProgress,
       progressSnapshot: progressSnapshot,
       currentOffset: progressSnapshot.scrollOffset,
+      readingState: readingState,
     );
   }
 

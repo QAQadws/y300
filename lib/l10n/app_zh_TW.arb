@@ -439,6 +439,7 @@
   "libraryChapterLastRead": "上次閱讀",
   "libraryChapterProgressPercent": "{percent}%",
   "libraryChapterLastReadPercent": "上次閱讀 {percent}%",
+  "libraryDetailStartFromBeginning": "從頭閱讀",
   "libraryChapterProgressSemantics": "{subtitle}，{progress}",
   "libraryChapterFilterAny": "不限",
   "libraryChapterFilterOnly": "只看{label}",

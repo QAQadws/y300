@@ -26,28 +26,32 @@ class LocalLibraryStateRepository
     final db = await _dbFuture;
     final now = DateTime.now().millisecondsSinceEpoch;
     final contentType = _moduleKeyToContentType(moduleKey);
-    final old = await getWorkState(moduleKey: moduleKey, workId: workId);
-    await db.insert(
-      AppDatabase.libraryWorkStateTable,
-      <String, Object?>{
-        'content_type': contentType,
-        'work_id': workId,
-        'last_read_episode_id': lastReadEpisodeId ?? old?.lastReadEpisodeId,
-        'last_read_at':
-            lastReadAt?.millisecondsSinceEpoch ??
-            old?.lastReadAt?.millisecondsSinceEpoch,
-        'check_updated_at':
-            checkUpdatedAt?.millisecondsSinceEpoch ??
-            old?.checkUpdatedAt?.millisecondsSinceEpoch,
-        'fetched_updated_at':
-            fetchedUpdatedAt?.millisecondsSinceEpoch ??
-            old?.fetchedUpdatedAt?.millisecondsSinceEpoch,
-        'intro_text': introText ?? old?.introText,
-        'created_at': old?.createdAt.millisecondsSinceEpoch ?? now,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    final values = <String, Object?>{
+      'last_read_episode_id': ?lastReadEpisodeId,
+      if (lastReadAt != null) 'last_read_at': lastReadAt.millisecondsSinceEpoch,
+      if (checkUpdatedAt != null)
+        'check_updated_at': checkUpdatedAt.millisecondsSinceEpoch,
+      if (fetchedUpdatedAt != null)
+        'fetched_updated_at': fetchedUpdatedAt.millisecondsSinceEpoch,
+      'intro_text': ?introText,
+      'updated_at': now,
+    };
+    await db.transaction((txn) async {
+      final changed = await txn.update(
+        AppDatabase.libraryWorkStateTable,
+        values,
+        where: 'content_type = ? AND work_id = ?',
+        whereArgs: [contentType, workId],
+      );
+      if (changed == 0) {
+        await txn.insert(AppDatabase.libraryWorkStateTable, {
+          ...values,
+          'content_type': contentType,
+          'work_id': workId,
+          'created_at': now,
+        });
+      }
+    });
   }
 
   @override
@@ -95,35 +99,36 @@ class LocalLibraryStateRepository
     DateTime? downloadedAt,
   }) async {
     final db = await _dbFuture;
-    final old = await getEpisodeState(
-      moduleKey: moduleKey,
-      episodeId: episodeId,
-    );
-    final nextRead = isRead ?? old?.isRead ?? false;
-    final nextDownloaded = isDownloaded ?? old?.isDownloaded ?? false;
-    final nextBookmarked = isBookmarked ?? old?.isBookmarked ?? false;
-    final nextReadAt = isRead == false
-        ? null
-        : readAt?.millisecondsSinceEpoch ?? old?.readAt?.millisecondsSinceEpoch;
-    final nextDownloadedAt = isDownloaded == false
-        ? null
-        : downloadedAt?.millisecondsSinceEpoch ??
-              old?.downloadedAt?.millisecondsSinceEpoch;
-
-    await db.insert(
-      AppDatabase.libraryEpisodeStateTable,
-      <String, Object?>{
-        'content_type': _moduleKeyToContentType(moduleKey),
-        'episode_id': episodeId,
-        'work_id': workId,
-        'is_read': nextRead ? 1 : 0,
-        'is_downloaded': nextDownloaded ? 1 : 0,
-        'is_bookmarked': nextBookmarked ? 1 : 0,
-        'read_at': nextReadAt,
-        'downloaded_at': nextDownloadedAt,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    final contentType = _moduleKeyToContentType(moduleKey);
+    final values = <String, Object?>{
+      'work_id': workId,
+      if (isRead != null) 'is_read': isRead ? 1 : 0,
+      if (isRead != null && moduleKey == LibraryModuleKey.novel)
+        'read_state_version': 1,
+      if (isDownloaded != null) 'is_downloaded': isDownloaded ? 1 : 0,
+      if (isBookmarked != null) 'is_bookmarked': isBookmarked ? 1 : 0,
+      if (isRead == false) 'read_at': null,
+      if (isRead != false && readAt != null)
+        'read_at': readAt.millisecondsSinceEpoch,
+      if (isDownloaded == false) 'downloaded_at': null,
+      if (isDownloaded != false && downloadedAt != null)
+        'downloaded_at': downloadedAt.millisecondsSinceEpoch,
+    };
+    await db.transaction((txn) async {
+      final changed = await txn.update(
+        AppDatabase.libraryEpisodeStateTable,
+        values,
+        where: 'content_type = ? AND episode_id = ?',
+        whereArgs: [contentType, episodeId],
+      );
+      if (changed == 0) {
+        await txn.insert(AppDatabase.libraryEpisodeStateTable, {
+          ...values,
+          'content_type': contentType,
+          'episode_id': episodeId,
+        });
+      }
+    });
   }
 
   @override
@@ -146,10 +151,16 @@ class LocalLibraryStateRepository
       moduleKey: moduleKey,
       episodeId: row['episode_id'] as String,
       workId: row['work_id'] as String,
-      isRead: (row['is_read'] as int? ?? 0) == 1,
+      isRead:
+          row['is_read'] == 1 &&
+          (moduleKey != LibraryModuleKey.novel ||
+              row['read_state_version'] == 1),
       isDownloaded: (row['is_downloaded'] as int? ?? 0) == 1,
       isBookmarked: (row['is_bookmarked'] as int? ?? 0) == 1,
-      readAt: _toDateTime(row['read_at']),
+      readAt:
+          moduleKey == LibraryModuleKey.novel && row['read_state_version'] != 1
+          ? null
+          : _toDateTime(row['read_at']),
       downloadedAt: _toDateTime(row['downloaded_at']),
     );
   }
@@ -164,7 +175,7 @@ class LocalLibraryStateRepository
       '''
       SELECT COUNT(*) AS count
       FROM ${AppDatabase.libraryEpisodeStateTable}
-      WHERE content_type = ? AND work_id = ? AND is_read = 0
+      WHERE content_type = ? AND work_id = ? AND (is_read = 0 OR (content_type = 'novel' AND read_state_version != 1))
       ''',
       <Object>[_moduleKeyToContentType(moduleKey), workId],
     );
@@ -181,7 +192,7 @@ class LocalLibraryStateRepository
       '''
       SELECT COUNT(*) AS count
       FROM ${AppDatabase.libraryEpisodeStateTable}
-      WHERE content_type = ? AND work_id = ? AND is_read = 1
+      WHERE content_type = ? AND work_id = ? AND is_read = 1 AND (content_type != 'novel' OR read_state_version = 1)
       ''',
       <Object>[_moduleKeyToContentType(moduleKey), workId],
     );
@@ -249,17 +260,22 @@ class LocalLibraryStateRepository
       // ineffective in aggregate queries.
       await txn.update(
         AppDatabase.libraryEpisodeStateTable,
-        <String, Object?>{'is_read': isRead ? 1 : 0, 'read_at': readAtMillis},
+        <String, Object?>{
+          'is_read': isRead ? 1 : 0,
+          'read_at': readAtMillis,
+          if (moduleKey == LibraryModuleKey.novel) 'read_state_version': 1,
+        },
         where: 'content_type = ? AND work_id IN ($placeholders)',
         whereArgs: <Object>[contentType, ...workIdArgs],
       );
       await txn.rawInsert(
         '''
-        INSERT OR REPLACE INTO ${AppDatabase.libraryEpisodeStateTable} (
+        INSERT OR IGNORE INTO ${AppDatabase.libraryEpisodeStateTable} (
           content_type,
           episode_id,
           work_id,
           is_read,
+          read_state_version,
           is_downloaded,
           is_bookmarked,
           read_at,
@@ -269,6 +285,7 @@ class LocalLibraryStateRepository
           ?,
           src.episode_id,
           src.$sourceWorkColumn,
+          ?,
           ?,
           COALESCE(state.is_downloaded, 0),
           COALESCE(state.is_bookmarked, 0),
@@ -285,6 +302,7 @@ class LocalLibraryStateRepository
         <Object?>[
           contentType,
           isRead ? 1 : 0,
+          moduleKey == LibraryModuleKey.novel ? 1 : 0,
           readAtMillis,
           contentType,
           ...workIdArgs,

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -35,6 +36,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
+import 'package:y300/features/novel/presentation/services/novel_reading_image_host.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
@@ -111,6 +113,9 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.onPositionChanged,
     this.onContentReady,
     this.onContentTerminal,
+    this.onImagesReadyChanged,
+    this.onScrollActivityChanged,
+    this.imageHost,
     this.onNavigationUnavailable,
     this.onTurnToAdjacentChapter,
     this.chapterTurnPolicy = const NovelReaderChapterTurnPolicy(),
@@ -165,6 +170,9 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final VoidCallback? onContentReady;
   final VoidCallback? onContentTerminal;
+  final ValueChanged<bool>? onImagesReadyChanged;
+  final ValueChanged<bool>? onScrollActivityChanged;
+  final ForumHtmlImageHost? imageHost;
   final ValueChanged<NovelReaderAnchorNavigationRequest>?
   onNavigationUnavailable;
 
@@ -651,6 +659,21 @@ class _NovelReaderHtmlPagedSurfaceState
                           onImageFallback: widget.onImageFallback,
                           onContentInteraction: widget.onContentInteraction,
                           imageReaderBridge: widget.imageReaderBridge,
+                          imageHost: widget.imageHost,
+                          onImagesReadyChanged: (ready) {
+                            if (mounted &&
+                                _planKey == plan.key &&
+                                _requestGeneration == requestGeneration) {
+                              widget.onImagesReadyChanged?.call(ready);
+                            }
+                          },
+                          onScrollActivityChanged: (scrolling) {
+                            if (mounted &&
+                                _planKey == plan.key &&
+                                _requestGeneration == requestGeneration) {
+                              widget.onScrollActivityChanged?.call(scrolling);
+                            }
+                          },
                           onPositionChanged: (position) {
                             if (mounted &&
                                 _planKey == plan.key &&
@@ -1609,6 +1632,9 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.onImageFallback,
     this.onContentInteraction,
     this.onPositionChanged,
+    this.onImagesReadyChanged,
+    this.onScrollActivityChanged,
+    this.imageHost,
   });
 
   final NovelReaderPaginationPlan plan;
@@ -1647,6 +1673,9 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final VoidCallback? onContentInteraction;
   final NovelHtmlImageReaderBridge imageReaderBridge;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
+  final ValueChanged<bool>? onImagesReadyChanged;
+  final ValueChanged<bool>? onScrollActivityChanged;
+  final ForumHtmlImageHost? imageHost;
 
   @override
   State<_NovelReaderPagedPageView> createState() =>
@@ -1667,6 +1696,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   bool _tapTurnAnimationInFlight = false;
   Object? _tapTurnAnimationIdentity;
   int? _forwardAnimationTarget;
+  final _bodyVisibility = <int, ({bool atEnd, bool wholeBody})>{};
 
   @override
   void initState() {
@@ -1688,6 +1718,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
           !_reportedInitialPage &&
           widget.plan.pageCount > 0) {
         _reportedInitialPage = true;
+        widget.onImagesReadyChanged?.call(false);
         _emitPosition(widget.initialPage);
       }
     });
@@ -1898,6 +1929,12 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
                     onImageFallback: widget.onImageFallback,
                     onContentInteraction: widget.onContentInteraction,
                     imageReaderBridge: widget.imageReaderBridge,
+                    imageHost: widget.imageHost,
+                    isVisible: index == _currentPage,
+                    onImagesReadyChanged: widget.onImagesReadyChanged,
+                    onScrollActivityChanged: widget.onScrollActivityChanged,
+                    onBodyVisibilityChanged: (visibility) =>
+                        _onBodyVisibilityChanged(index, visibility),
                   ),
                 );
               },
@@ -2066,6 +2103,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       return false;
     }
     if (notification is ScrollStartNotification) {
+      widget.onScrollActivityChanged?.call(true);
       _userDragInProgress = notification.dragDetails != null;
       if (_userDragInProgress) {
         // Flutter already replaced the driven activity with this user's drag.
@@ -2099,6 +2137,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       return false;
     }
     if (notification is ScrollEndNotification) {
+      widget.onScrollActivityChanged?.call(false);
       _userDragInProgress = false;
       _commitChapterTurnIfRequested(notification.metrics);
       return false;
@@ -2231,9 +2270,27 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         index != _currentPage) {
       _hasUserNavigated = true;
     }
+    if (index != _currentPage) {
+      widget.onImagesReadyChanged?.call(false);
+      _bodyVisibility.remove(index);
+    }
     setState(() {
       _currentPage = index;
     });
+    _emitPosition(index);
+  }
+
+  void _onBodyVisibilityChanged(
+    int index,
+    ({bool atEnd, bool wholeBody, bool hasUserNavigated}) visibility,
+  ) {
+    if (!mounted || index != _currentPage) return;
+    final proof = (atEnd: visibility.atEnd, wholeBody: visibility.wholeBody);
+    final confirmsNavigation =
+        visibility.hasUserNavigated && !_hasUserNavigated;
+    if (_bodyVisibility[index] == proof && !confirmsNavigation) return;
+    _bodyVisibility[index] = proof;
+    if (confirmsNavigation) _hasUserNavigated = true;
     _emitPosition(index);
   }
 
@@ -2245,6 +2302,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     if (page == null) {
       return;
     }
+    final bodyVisibility = _bodyVisibility[index];
     widget.onPositionChanged?.call(
       NovelReaderPaginationPosition(
         episodeId: widget.plan.episodeId,
@@ -2254,6 +2312,11 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         isPageCountFinal: widget.isPageCountFinal,
         isReadOnlyCompatibilityRestore:
             !_hasUserNavigated && widget.isReadOnlyCompatibilityRestore,
+        hasUserNavigated: _hasUserNavigated,
+        isBodyEndVisible:
+            !page.requiresInnerScroll || bodyVisibility?.atEnd == true,
+        isWholeBodyVisible:
+            !page.requiresInnerScroll || bodyVisibility?.wholeBody == true,
         anchor: page.startAnchor.copyWith(pageIndex: index),
       ),
     );
@@ -2322,7 +2385,7 @@ class _NovelReaderChapterTurnHintOverlay extends StatelessWidget {
   }
 }
 
-class _NovelReaderPagedPage extends StatelessWidget {
+class _NovelReaderPagedPage extends ConsumerStatefulWidget {
   const _NovelReaderPagedPage({
     super.key,
     required this.page,
@@ -2335,6 +2398,11 @@ class _NovelReaderPagedPage extends StatelessWidget {
     required this.episode,
     required this.imageReferer,
     required this.imageReaderBridge,
+    required this.isVisible,
+    this.imageHost,
+    this.onImagesReadyChanged,
+    this.onScrollActivityChanged,
+    this.onBodyVisibilityChanged,
     this.onLinkTap,
     this.onOpenImage,
     this.onImageFallback,
@@ -2355,27 +2423,202 @@ class _NovelReaderPagedPage extends StatelessWidget {
   final ValueChanged<ForumHtmlImageRequest>? onImageFallback;
   final VoidCallback? onContentInteraction;
   final NovelHtmlImageReaderBridge imageReaderBridge;
+  final bool isVisible;
+  final ForumHtmlImageHost? imageHost;
+  final ValueChanged<bool>? onImagesReadyChanged;
+  final ValueChanged<bool>? onScrollActivityChanged;
+  final ValueChanged<({bool atEnd, bool wholeBody, bool hasUserNavigated})>?
+  onBodyVisibilityChanged;
+
+  @override
+  ConsumerState<_NovelReaderPagedPage> createState() =>
+      _NovelReaderPagedPageState();
+}
+
+class _NovelReaderPagedPageState extends ConsumerState<_NovelReaderPagedPage> {
+  late NovelReadingImageTracker _imageTracker;
+  Object? _hostIdentity;
+  int _reportGeneration = 0;
+  bool _bodyBuilt = false;
+  bool? _reportedReady;
+  ScrollMetrics? _innerMetrics;
+  bool _innerHasUserNavigated = false;
+  ({bool atEnd, bool wholeBody, bool hasUserNavigated})?
+  _reportedBodyVisibility;
+
+  Object get _contentIdentity => (
+    widget.plan.key.cacheIdentity,
+    widget.page.index,
+    widget.page.html,
+    widget.episode.episodeId,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _imageTracker = NovelReadingImageTracker((_) => _forwardReadiness());
+  }
+
+  @override
+  void didUpdateWidget(covariant _NovelReaderPagedPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.page.html != widget.page.html ||
+        oldWidget.plan.key != widget.plan.key ||
+        oldWidget.episode.episodeId != widget.episode.episodeId) {
+      _resetImageTracker();
+    }
+    if (oldWidget.isVisible != widget.isVisible) {
+      _reportedReady = null;
+      _reportedBodyVisibility = null;
+      _scheduleReadiness();
+    }
+  }
+
+  void _resetImageTracker() {
+    _reportGeneration += 1;
+    _imageTracker.dispose();
+    _imageTracker = NovelReadingImageTracker((_) => _forwardReadiness());
+    _bodyBuilt = false;
+    _reportedReady = null;
+    _innerMetrics = null;
+    _innerHasUserNavigated = false;
+    _reportedBodyVisibility = null;
+  }
+
+  void _scheduleReadiness() {
+    final generation = _reportGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && generation == _reportGeneration) _forwardReadiness();
+    });
+  }
+
+  void _forwardReadiness() {
+    if (!mounted || !widget.isVisible || !_bodyBuilt) return;
+    _forwardBodyVisibility();
+    final ready = _imageTracker.isReady;
+    if (_reportedReady == ready) return;
+    _reportedReady = ready;
+    widget.onImagesReadyChanged?.call(ready);
+  }
+
+  void _forwardBodyVisibility() {
+    if (!widget.page.requiresInnerScroll) return;
+    final metrics = _innerMetrics;
+    final known =
+        metrics != null &&
+        metrics.pixels.isFinite &&
+        metrics.viewportDimension.isFinite &&
+        metrics.viewportDimension > 0 &&
+        metrics.minScrollExtent.isFinite &&
+        metrics.maxScrollExtent.isFinite;
+    final atEnd =
+        !widget.page.requiresInnerScroll ||
+        (known && metrics.extentAfter <= 0.5);
+    final wholeBody =
+        !widget.page.requiresInnerScroll ||
+        (known && metrics.extentBefore <= 0.5 && metrics.extentAfter <= 0.5);
+    final visibility = (
+      atEnd: atEnd,
+      wholeBody: wholeBody,
+      hasUserNavigated: _innerHasUserNavigated,
+    );
+    if (_reportedBodyVisibility == visibility) return;
+    _reportedBodyVisibility = visibility;
+    widget.onBodyVisibilityChanged?.call(visibility);
+  }
+
+  void _observeInnerMetrics(
+    ScrollMetrics metrics, {
+    bool realNavigation = false,
+  }) {
+    final previousPixels = _innerMetrics?.pixels;
+    if (realNavigation &&
+        widget.isVisible &&
+        _bodyBuilt &&
+        previousPixels != null &&
+        (previousPixels - metrics.pixels).abs() > 0.5) {
+      _innerHasUserNavigated = true;
+    }
+    _innerMetrics = metrics;
+    _scheduleReadiness();
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  bool _onInnerScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
+    if (widget.isVisible && notification is ScrollStartNotification) {
+      widget.onScrollActivityChanged?.call(true);
+    }
+    _observeInnerMetrics(
+      notification.metrics,
+      realNavigation:
+          notification is ScrollUpdateNotification &&
+          notification.dragDetails != null,
+    );
+    if (widget.isVisible && notification is ScrollEndNotification) {
+      widget.onScrollActivityChanged?.call(false);
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    _reportGeneration += 1;
+    _imageTracker.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final preparedDocument = renderDocument.copyWith(preparedHtml: page.html);
+    final preparedDocument = widget.renderDocument.copyWith(
+      preparedHtml: widget.page.html,
+    );
+    final hasImages = RegExp(
+      r'<img(?:\s|/|>)',
+      caseSensitive: false,
+    ).hasMatch(widget.page.html);
+    ForumHtmlImageHost? host;
+    if (hasImages) {
+      final source = widget.imageHost ?? ref.watch(forumHtmlImageHostProvider);
+      if (_hostIdentity != null && !identical(source, _hostIdentity)) {
+        _resetImageTracker();
+      }
+      _hostIdentity = source;
+      final delegate =
+          widget.imageHost ??
+          ref
+              .read(forumHtmlImageHostProvider)
+              .forContent(
+                threadId: widget.episode.sourceTid,
+                imageReferer: widget.imageReferer,
+                imageCacheOwnerId: widget.episode.sourceTid,
+              );
+      host = NovelReadingImageHost(delegate: delegate, tracker: _imageTracker);
+    }
+    final contentIdentity = _contentIdentity;
     Widget child = ForumHtmlWidgetPostRenderer(
-      key: ValueKey<int>(page.index),
-      html: page.html,
-      theme: theme,
+      key: ValueKey<int>(widget.page.index),
+      html: widget.page.html,
+      theme: widget.theme,
       preparedDocument: preparedDocument,
-      preferences: htmlPreferences,
-      textStyle: renderEnvironment.textStyle,
-      textAlign: renderEnvironment.textAlign,
-      sourceId: episode.episodeId,
-      threadId: episode.sourceTid,
-      imageReferer: imageReferer,
-      imageCacheOwnerId: episode.sourceTid,
+      preferences: widget.htmlPreferences,
+      textStyle: widget.renderEnvironment.textStyle,
+      textAlign: widget.renderEnvironment.textAlign,
+      sourceId: widget.episode.episodeId,
+      threadId: widget.episode.sourceTid,
+      imageReferer: widget.imageReferer,
+      imageCacheOwnerId: widget.episode.sourceTid,
+      imageHost: host,
+      onBodyBuilt: () {
+        if (!mounted || _contentIdentity != contentIdentity) return;
+        _bodyBuilt = true;
+        _scheduleReadiness();
+      },
       blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
       callbacks: ForumHtmlRenderCallbacks(
-        onInteraction: onContentInteraction,
+        onInteraction: widget.onContentInteraction,
         onTapUrl: (url) {
-          onLinkTap?.call(NovelReaderLink(url: url, text: url));
+          widget.onLinkTap?.call(NovelReaderLink(url: url, text: url));
           return true;
         },
         onTapImage: (request) => _handleImageTap(
@@ -2384,18 +2627,29 @@ class _NovelReaderPagedPage extends StatelessWidget {
         ),
       ),
     );
-    if (page.requiresInnerScroll) {
-      child = SingleChildScrollView(
-        key: ValueKey<int>(page.index),
-        child: child,
+    if (widget.page.requiresInnerScroll) {
+      child = NotificationListener<ScrollMetricsNotification>(
+        onNotification: (notification) {
+          if (notification.depth == 0) {
+            _observeInnerMetrics(notification.metrics);
+          }
+          return false;
+        },
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _onInnerScrollNotification,
+          child: SingleChildScrollView(
+            key: ValueKey<int>(widget.page.index),
+            child: child,
+          ),
+        ),
       );
     }
     return Semantics(
       container: true,
       label: AppLocalizations.of(
         context,
-      ).novelPageOfTotalSemantics(page.index + 1, plan.pageCount),
-      child: renderEnvironment.wrap(child),
+      ).novelPageOfTotalSemantics(widget.page.index + 1, widget.plan.pageCount),
+      child: widget.renderEnvironment.wrap(child),
     );
   }
 
@@ -2403,20 +2657,20 @@ class _NovelReaderPagedPage extends StatelessWidget {
     required ForumHtmlImageRequest request,
     required ForumHtmlReadableImageSequence sequence,
   }) {
-    final openRequest = imageReaderBridge.buildOpenRequest(
-      threadId: episode.sourceTid,
-      episodeId: episode.episodeId,
-      postNumber: episode.orderIndex + 1,
-      imageReferer: imageReferer,
+    final openRequest = widget.imageReaderBridge.buildOpenRequest(
+      threadId: widget.episode.sourceTid,
+      episodeId: widget.episode.episodeId,
+      postNumber: widget.episode.orderIndex + 1,
+      imageReferer: widget.imageReferer,
       sequence: sequence,
       imageRequest: request,
     );
     if (openRequest != null) {
-      onOpenImage?.call(openRequest);
+      widget.onOpenImage?.call(openRequest);
       return;
     }
     if (!request.isSticker) {
-      onImageFallback?.call(request);
+      widget.onImageFallback?.call(request);
     }
   }
 }

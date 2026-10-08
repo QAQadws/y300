@@ -197,6 +197,12 @@ void main() {
           isBookmarked: true,
           downloadedAt: downloadedAt,
         );
+        await db.execute(
+          'ALTER TABLE ${AppDatabase.libraryEpisodeStateTable} ADD COLUMN future_extension TEXT',
+        );
+        await db.update(AppDatabase.libraryEpisodeStateTable, {
+          'future_extension': 'opaque',
+        });
 
         await repository.setWorksReadState(
           moduleKey: LibraryModuleKey.comic,
@@ -226,6 +232,14 @@ void main() {
         expect(existing?.isDownloaded, isTrue);
         expect(existing?.isBookmarked, isTrue);
         expect(existing?.downloadedAt, downloadedAt);
+        expect(
+          (await db.query(
+            AppDatabase.libraryEpisodeStateTable,
+            where: 'episode_id = ?',
+            whereArgs: ['comic:batch-a:2'],
+          )).single['future_extension'],
+          'opaque',
+        );
         expect(
           await repository.getEpisodeState(
             moduleKey: LibraryModuleKey.comic,

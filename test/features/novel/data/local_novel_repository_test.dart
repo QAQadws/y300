@@ -204,35 +204,45 @@ void main() {
       );
     });
 
-    test('reading progress keeps exactly one row per novel', () async {
-      await repository.saveReadingProgress(
-        novelId: 'novel:single-progress',
-        episodeId: 'episode-1',
-        scrollOffset: 20,
-      );
-      await repository.saveReadingProgress(
-        novelId: 'novel:single-progress',
-        episodeId: 'episode-2',
-        scrollOffset: 0,
-        flowMode: NovelReaderFlowMode.pagedRtl,
-        pageIndex: 0,
-        pageCount: 8,
-      );
+    test(
+      'reading progress retains each chapter and queries the recent one',
+      () async {
+        await repository.saveReadingProgress(
+          novelId: 'novel:single-progress',
+          episodeId: 'episode-1',
+          scrollOffset: 20,
+        );
+        await repository.saveReadingProgress(
+          novelId: 'novel:single-progress',
+          episodeId: 'episode-2',
+          scrollOffset: 0,
+          flowMode: NovelReaderFlowMode.pagedRtl,
+          pageIndex: 0,
+          pageCount: 8,
+        );
 
-      final db = await dbFuture;
-      final rows = await db.query(
-        AppDatabase.novelReadingProgressTable,
-        where: 'novel_id = ?',
-        whereArgs: const <Object>['novel:single-progress'],
-      );
-      final progress = await repository.getReadingProgress(
-        novelId: 'novel:single-progress',
-      );
+        final db = await dbFuture;
+        final rows = await db.query(
+          AppDatabase.novelReadingProgressTable,
+          where: 'novel_id = ?',
+          whereArgs: const <Object>['novel:single-progress'],
+        );
+        final progress = await repository.getReadingProgress(
+          novelId: 'novel:single-progress',
+        );
 
-      expect(rows, hasLength(1));
-      expect(progress?.episodeId, 'episode-2');
-      expect(progress?.pageCount, 8);
-    });
+        expect(rows, hasLength(2));
+        expect(progress?.episodeId, 'episode-2');
+        expect(progress?.pageCount, 8);
+        expect(
+          (await repository.getChapterProgress(
+            novelId: 'novel:single-progress',
+            episodeId: 'episode-1',
+          ))?.scrollOffset,
+          20,
+        );
+      },
+    );
 
     test('reader bookmarks can persist and are purged with work', () async {
       await seedNovelRepository(

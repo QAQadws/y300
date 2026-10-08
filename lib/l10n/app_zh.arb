@@ -629,6 +629,7 @@
   "libraryChapterProgressPercent": "{percent}%",
   "@libraryChapterProgressPercent": {"placeholders": {"percent": {"type": "int"}}},
   "libraryChapterLastReadPercent": "上次阅读 {percent}%",
+  "libraryDetailStartFromBeginning": "从头阅读",
   "@libraryChapterLastReadPercent": {"placeholders": {"percent": {"type": "int"}}},
   "libraryChapterProgressSemantics": "{subtitle}，{progress}",
   "@libraryChapterProgressSemantics": {

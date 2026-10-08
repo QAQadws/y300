@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/novel/application/novel_reading_mutation_barrier.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
 import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
@@ -241,9 +243,12 @@ final novelReaderBootstrapServiceProvider =
 
 final novelReaderProgressCommitterProvider =
     Provider<NovelReaderProgressCommitter>((ref) {
-      return DefaultNovelReaderProgressCommitter(
+      final committer = DefaultNovelReaderProgressCommitter(
         repository: ref.watch(novelRepositoryProvider),
+        readingStateRepository: ref.watch(novelReadingStateRepositoryProvider),
       );
+      ref.onDispose(committer.cancel);
+      return committer;
     });
 
 final novelRepositoryProvider = Provider<NovelRepository>((ref) {
@@ -252,6 +257,19 @@ final novelRepositoryProvider = Provider<NovelRepository>((ref) {
     stateRepository: ref.watch(libraryStateRepositoryProvider),
   );
 });
+
+final novelReadingStateRepositoryProvider =
+    Provider<NovelReadingStateRepository?>((ref) {
+      final repository = ref.watch(novelRepositoryProvider);
+      return repository is NovelReadingStateRepository
+          ? repository as NovelReadingStateRepository
+          : null;
+    });
+
+final novelReadingMutationBarrierProvider =
+    Provider<NovelReadingMutationBarrier>(
+      (ref) => NovelReadingMutationBarrier(),
+    );
 
 final novelChapterUpdateServiceProvider = Provider<NovelChapterUpdateService>((
   ref,

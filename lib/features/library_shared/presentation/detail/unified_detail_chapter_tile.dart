@@ -157,7 +157,7 @@ class UnifiedDetailChapterTile extends StatelessWidget {
         ? scheme.onSecondaryContainer
         : scheme.onPrimaryContainer;
 
-    return _BoundedReadStateSwipe(
+    return LibraryChapterReadStateSwipe(
       key: ValueKey<String>(
         'unified-detail-chapter-read-swipe-${chapter.episodeId}',
       ),
@@ -199,8 +199,9 @@ class UnifiedDetailChapterTile extends StatelessWidget {
   }
 }
 
-class _BoundedReadStateSwipe extends StatefulWidget {
-  const _BoundedReadStateSwipe({
+/// Shared bounded physical-right swipe for chapter completion actions.
+class LibraryChapterReadStateSwipe extends StatefulWidget {
+  const LibraryChapterReadStateSwipe({
     super.key,
     required this.foregroundKey,
     required this.locked,
@@ -216,10 +217,12 @@ class _BoundedReadStateSwipe extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_BoundedReadStateSwipe> createState() => _BoundedReadStateSwipeState();
+  State<LibraryChapterReadStateSwipe> createState() =>
+      _LibraryChapterReadStateSwipeState();
 }
 
-class _BoundedReadStateSwipeState extends State<_BoundedReadStateSwipe>
+class _LibraryChapterReadStateSwipeState
+    extends State<LibraryChapterReadStateSwipe>
     with SingleTickerProviderStateMixin {
   static const double _maxDragFraction = 1 / 3;
   static const double _activationFraction = _maxDragFraction * 0.8;

@@ -94,6 +94,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       ref.watch(novelRepositoryProvider),
       coverStore: ref.watch(libraryCoverStoreProvider),
       stateRepository: ref.watch(libraryStateRepositoryProvider),
+      readingStateRepository: ref.watch(novelReadingStateRepositoryProvider),
+      mutationBarrier: ref.watch(novelReadingMutationBarrierProvider),
       sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
       chapterUpdateServiceFactory: () =>
           ref.read(novelChapterUpdateServiceProvider),
@@ -154,6 +156,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         onChanged: openModeState.isLoading ? null : _updateOpenMode,
       ),
       onOpenChapter: _openChapter,
+      onOpenChapterFromBeginning: _openChapterFromBeginning,
       onContinue: _openContinue,
       onRefreshCompleted: (_) async {
         ref.invalidate(hydrationProvider);
@@ -186,21 +189,38 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     }
   }
 
-  Future<void> _openChapter(
+  Future<void> _openChapter(BuildContext context, LibraryChapterItem chapter) =>
+      _openSelectedChapter(context, chapter);
+
+  Future<void> _openChapterFromBeginning(
     BuildContext context,
     LibraryChapterItem chapter,
-  ) async {
+  ) => _openSelectedChapter(context, chapter, fromBeginning: true);
+
+  Future<void> _openSelectedChapter(
+    BuildContext context,
+    LibraryChapterItem chapter, {
+    bool fromBeginning = false,
+  }) async {
     _selectChapter(chapter.episodeId);
+    final selectionGeneration = _chapterSelectionGeneration;
+    final novelId = widget.novelId;
     final mode =
         ref.read(novelChapterOpenModeControllerProvider).value ??
         NovelChapterOpenMode.reader;
     if (mode == NovelChapterOpenMode.reader) {
+      final policy = fromBeginning
+          ? NovelEpisodeOpenPolicy.startAtBeginning
+          : await _chapterOpenPolicy(chapter.episodeId);
+      if (!context.mounted ||
+          widget.novelId != novelId ||
+          selectionGeneration != _chapterSelectionGeneration) {
+        return;
+      }
       await _openReader(
         context,
         ReaderRouteTarget(workId: widget.novelId, episodeId: chapter.episodeId),
-        openPolicy: chapter.progressInfo?.isCurrent == true
-            ? NovelEpisodeOpenPolicy.resumeLastRead
-            : NovelEpisodeOpenPolicy.startAtBeginning,
+        openPolicy: policy,
       );
       return;
     }
@@ -224,11 +244,13 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
         ref.read(novelChapterOpenModeControllerProvider).value ??
         NovelChapterOpenMode.reader;
     if (mode == NovelChapterOpenMode.reader) {
-      await _openReader(
-        context,
-        target,
-        openPolicy: NovelEpisodeOpenPolicy.resumeLastRead,
-      );
+      final policy = await _chapterOpenPolicy(target.episodeId);
+      if (!context.mounted ||
+          widget.novelId != novelId ||
+          selectionGeneration != _chapterSelectionGeneration) {
+        return;
+      }
+      await _openReader(context, target, openPolicy: policy);
       return;
     }
 
@@ -251,6 +273,25 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
       pid: episode.sourcePid?.trim() ?? '',
       subject: episode.episodeTitle,
     );
+  }
+
+  Future<NovelEpisodeOpenPolicy> _chapterOpenPolicy(String episodeId) async {
+    final readingRepository = ref.read(novelReadingStateRepositoryProvider);
+    if (readingRepository != null) {
+      final snapshot = await readingRepository.loadWorkState(
+        novelId: widget.novelId,
+      );
+      final isRead = snapshot.episodeStates[episodeId]?.isRead == true;
+      return !isRead && snapshot.progressByEpisode.containsKey(episodeId)
+          ? NovelEpisodeOpenPolicy.resumeLastRead
+          : NovelEpisodeOpenPolicy.startAtBeginning;
+    }
+    final progress = await ref
+        .read(novelRepositoryProvider)
+        .getReadingProgress(novelId: widget.novelId);
+    return progress?.episodeId == episodeId
+        ? NovelEpisodeOpenPolicy.resumeLastRead
+        : NovelEpisodeOpenPolicy.startAtBeginning;
   }
 
   Future<void> _openSourceChapter(

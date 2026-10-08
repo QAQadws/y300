@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
@@ -13,18 +15,178 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
+import 'package:y300/features/novel/application/novel_reading_mutation_barrier.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 
 void main() {
-  test('NovelDetailAdapter does not expose chapter read-state capability', () {
+  test('NovelDetailAdapter exposes only chapter read-state capability', () {
     final adapter = NovelDetailAdapter(
       _FakeNovelRepository(),
       stateRepository: _RecordingLibraryStateRepository(),
     );
 
-    expect(adapter, isNot(isA<DetailChapterReadStateAdapter>()));
+    expect(adapter, isA<DetailChapterReadStateAdapter>());
+    expect(adapter, isNot(isA<DetailWorkReadingResetAdapter>()));
   });
+
+  test(
+    'loadChapters reads one snapshot for all chapter positions and states',
+    () async {
+      final states = _RecordingLibraryStateRepository();
+      final reading = _FakeNovelReadingStateRepository(
+        recentEpisodeId: 'novel:1:2',
+        progressByEpisode: {
+          'novel:1:1': _chapterPosition('novel:1:1', 0.2),
+          'novel:1:2': _chapterPosition('novel:1:2', 0.42),
+        },
+        episodeStates: const {
+          'novel:1:1': LibraryEpisodeState(
+            moduleKey: LibraryModuleKey.novel,
+            episodeId: 'novel:1:1',
+            workId: 'novel:1',
+            isRead: true,
+            isBookmarked: true,
+          ),
+        },
+      );
+      final adapter = NovelDetailAdapter(
+        _FakeNovelRepository(),
+        stateRepository: states,
+        readingStateRepository: reading,
+      );
+      final chapters = await adapter.loadChapters(
+        workId: 'novel:1',
+        filters: const LibraryFilterSet(),
+        sortOption: LibraryChapterSortOption.defaults,
+      );
+      final first = chapters.singleWhere(
+        (item) => item.episodeId == 'novel:1:1',
+      );
+      final recent = chapters.singleWhere(
+        (item) => item.episodeId == 'novel:1:2',
+      );
+      expect(first.isRead, isTrue);
+      expect(first.isBookmarked, isTrue);
+      expect(first.progressInfo?.fraction, 0.2);
+      expect(first.progressInfo?.isCurrent, isFalse);
+      expect(recent.progressInfo?.fraction, 0.42);
+      expect(recent.progressInfo?.isCurrent, isTrue);
+      expect(reading.snapshotReads, 1);
+      expect(states.episodeStateReads, 0);
+
+      final unread = await adapter.loadChapters(
+        workId: 'novel:1',
+        filters: const LibraryFilterSet(unread: TriStateFilterValue.include),
+        sortOption: LibraryChapterSortOption.defaults,
+      );
+      expect(unread.single.episodeId, 'novel:1:2');
+    },
+  );
+
+  test(
+    'continue advances a completed recent chapter and retains the final chapter',
+    () async {
+      for (final sample in [
+        ('novel:1:1', 'novel:1:2'),
+        ('novel:1:2', 'novel:1:2'),
+      ]) {
+        final adapter = NovelDetailAdapter(
+          _FakeNovelRepository(),
+          stateRepository: _RecordingLibraryStateRepository(),
+          readingStateRepository: _FakeNovelReadingStateRepository(
+            recentEpisodeId: sample.$1,
+            episodeStates: {
+              sample.$1: LibraryEpisodeState(
+                moduleKey: LibraryModuleKey.novel,
+                episodeId: sample.$1,
+                workId: 'novel:1',
+                isRead: true,
+              ),
+            },
+          ),
+        );
+        expect(
+          (await adapter.getReaderRouteTarget(
+            workId: 'novel:1',
+            preferContinue: true,
+          ))?.episodeId,
+          sample.$2,
+        );
+      }
+    },
+  );
+
+  test(
+    'read mutations invalidate pending producers and delegate atomic reset',
+    () async {
+      final reading = _FakeNovelReadingStateRepository();
+      final barrier = NovelReadingMutationBarrier();
+      final revision = barrier.capture('novel:1', 'novel:1:1');
+      final adapter = NovelDetailAdapter(
+        _FakeNovelRepository(),
+        stateRepository: _RecordingLibraryStateRepository(),
+        readingStateRepository: reading,
+        mutationBarrier: barrier,
+      );
+      await adapter.markChapterRead(
+        workId: 'novel:1',
+        episodeId: 'novel:1:1',
+        isRead: true,
+      );
+      expect(barrier.isCurrent('novel:1', 'novel:1:1', revision), isFalse);
+      expect(reading.readMutations, [('novel:1', 'novel:1:1', true)]);
+      await adapter.resetChapterReadingState(
+        workId: 'novel:1',
+        episodeId: 'novel:1:1',
+      );
+      expect(reading.resetEpisodeIds, ['novel:1:1']);
+      reading.appliesMutation = false;
+      await expectLater(
+        adapter.markChapterRead(
+          workId: 'novel:1',
+          episodeId: 'novel:1:1',
+          isRead: true,
+        ),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  for (final reset in [false, true]) {
+    test(
+      'a queued ${reset ? 'reset' : 'completion mark'} cannot override newer navigation',
+      () async {
+        final release = Completer<void>();
+        final reading = _FakeNovelReadingStateRepository()
+          ..beforeMutation = release.future;
+        final barrier = NovelReadingMutationBarrier();
+        final adapter = NovelDetailAdapter(
+          _FakeNovelRepository(),
+          stateRepository: _RecordingLibraryStateRepository(),
+          readingStateRepository: reading,
+          mutationBarrier: barrier,
+        );
+        final pending = reset
+            ? adapter.resetChapterReadingState(
+                workId: 'novel:1',
+                episodeId: 'novel:1:1',
+              )
+            : adapter.markChapterRead(
+                workId: 'novel:1',
+                episodeId: 'novel:1:1',
+                isRead: true,
+              );
+        // A frontmost reader's real navigation takes newer authority while the
+        // older detail action is still waiting for the persistence transaction.
+        barrier.invalidate('novel:1', 'novel:1:1');
+        release.complete();
+        await pending;
+        expect(reading.committedMutations, 0);
+      },
+    );
+  }
 
   test('loadChapters sorts novel sources by numeric pid', () async {
     final adapter = NovelDetailAdapter(
@@ -817,6 +979,7 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
   });
 
   final Map<String, LibraryEpisodeState> episodeStates;
+  int episodeStateReads = 0;
   LibraryWorkState? workState;
 
   @override
@@ -867,7 +1030,10 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
   Future<LibraryEpisodeState?> getEpisodeState({
     required LibraryModuleKey moduleKey,
     required String episodeId,
-  }) async => episodeStates[episodeId];
+  }) async {
+    episodeStateReads++;
+    return episodeStates[episodeId];
+  }
 
   @override
   Future<List<LibraryTag>> getTags() async => const <LibraryTag>[];
@@ -959,4 +1125,74 @@ class _RecordingLibraryStateRepository implements LibraryStateRepository {
       updatedAt: DateTime(2026, 1, 1),
     );
   }
+}
+
+NovelReadingProgress _chapterPosition(String episodeId, double percent) =>
+    NovelReadingProgress(
+      novelId: 'novel:1',
+      episodeId: episodeId,
+      scrollOffset: 80,
+      progressPercent: percent,
+      isProgressPercentValid: true,
+      updatedAt: DateTime(2026, 10, 7),
+    );
+
+class _FakeNovelReadingStateRepository implements NovelReadingStateRepository {
+  _FakeNovelReadingStateRepository({
+    this.progressByEpisode = const {},
+    this.episodeStates = const {},
+    this.recentEpisodeId,
+  });
+  final Map<String, NovelReadingProgress> progressByEpisode;
+  final Map<String, LibraryEpisodeState> episodeStates;
+  final String? recentEpisodeId;
+  int snapshotReads = 0;
+  bool appliesMutation = true;
+  Future<void>? beforeMutation;
+  int committedMutations = 0;
+  final readMutations = <(String, String, bool)>[];
+  final resetEpisodeIds = <String>[];
+
+  @override
+  Future<NovelReadingStateSnapshot> loadWorkState({
+    required String novelId,
+  }) async {
+    snapshotReads++;
+    return NovelReadingStateSnapshot(
+      novelId: novelId,
+      progressByEpisode: progressByEpisode,
+      episodeStates: episodeStates,
+      recentEpisodeId: recentEpisodeId,
+    );
+  }
+
+  @override
+  Future<bool> setChapterRead({
+    required String novelId,
+    required String episodeId,
+    required bool isRead,
+    bool Function()? canCommit,
+  }) async {
+    readMutations.add((novelId, episodeId, isRead));
+    await beforeMutation;
+    if (canCommit?.call() == false) return false;
+    if (appliesMutation) committedMutations++;
+    return appliesMutation;
+  }
+
+  @override
+  Future<bool> resetChapter({
+    required String novelId,
+    required String episodeId,
+    bool Function()? canCommit,
+  }) async {
+    resetEpisodeIds.add(episodeId);
+    await beforeMutation;
+    if (canCommit?.call() == false) return false;
+    if (appliesMutation) committedMutations++;
+    return appliesMutation;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

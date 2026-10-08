@@ -65,4 +65,8 @@ Future<void> upgradeAppDatabaseSchema(
   if (oldVersion < 42 && newVersion >= 42) {
     await upgradeNovelFrom41To42(db);
   }
+  if (oldVersion < 43 && newVersion >= 43) {
+    await upgradeLibraryFrom42To43(db);
+    await upgradeNovelFrom42To43(db);
+  }
 }

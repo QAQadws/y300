@@ -712,13 +712,9 @@ void main() {
       expect(position.maxScrollExtent, greaterThan(320));
       final expectedOffset = position.maxScrollExtent * 0.25;
       expect(position.pixels, closeTo(expectedOffset, 0.01));
-      // The corrected viewport no longer waits for an entrance animation;
-      // persistence retains its independent debounce, not a rendering delay.
+      // Passive layout restoration preserves the original persisted record.
       await tester.pump(const Duration(seconds: 1));
-      expect(
-        repository.readingProgress?.scrollOffset,
-        closeTo(expectedOffset, 0.01),
-      );
+      expect(repository.readingProgress?.scrollOffset, 320);
     },
   );
 
@@ -870,6 +866,10 @@ void main() {
       );
       final provider = novelReaderControllerProvider(args);
       final controller = container.read(provider.notifier);
+      committer.autoCompleteFlushes = true;
+      // Withdraw the old producer while replacing the chapter twice. The
+      // stale callbacks must not revive that retired surface afterwards.
+      controller.updateReadingVisibility(frontmost: false, resumed: true);
       expect(
         await tester.runAsync(
           () => controller.openEpisodeFromCatalog('novel:49:100:5002'),
@@ -882,9 +882,11 @@ void main() {
         ),
         isTrue,
       );
+      controller.updateReadingVisibility(frontmost: true, resumed: true);
+      final flushesBeforeLateCallback = committer.flushes.length;
       oldHtml.onContentReady?.call();
       oldHtml.onContentTerminal?.call();
-      expect(committer.flushes, isEmpty);
+      expect(committer.flushes, hasLength(flushesBeforeLateCallback));
 
       await _pumpVerticalReaderReady(tester);
       for (final flush in committer.flushes) {
@@ -892,9 +894,12 @@ void main() {
       }
       await tester.pumpAndSettle();
       await tester.pump(const Duration(milliseconds: 250));
-      expect(_verticalPosition(tester).pixels, closeTo(0, 0.01));
-      expect(container.read(provider).value!.progressSnapshot.scrollOffset, 0);
-      expect(repository.readingProgress?.scrollOffset, 0);
+      expect(_verticalPosition(tester).pixels, greaterThan(0));
+      expect(
+        container.read(provider).value!.progressSnapshot.scrollOffset,
+        greaterThan(0),
+      );
+      expect(repository.readingProgress?.scrollOffset, greaterThan(0));
       expect(
         container.read(provider).value!.currentEpisode.episodeId,
         'novel:49:100:5001',
@@ -925,17 +930,26 @@ void main() {
       episodeId: 'novel:49:100:5001',
     );
     final provider = novelReaderControllerProvider(args);
+    committer.flushes.clear();
+    committer.autoCompleteFlushes = false;
     await _showReaderMenu(tester);
     await tester.tap(find.byKey(const Key('shared-reader-next-button')));
     await tester.pump();
     expect(committer.flushes, hasLength(1));
-
+    // A covered producer loses save authority. A newer navigation can replace
+    // the surface while the page still awaits its older flush.
+    container
+        .read(provider.notifier)
+        .updateReadingVisibility(frontmost: false, resumed: true);
     expect(
       await container
           .read(provider.notifier)
           .openEpisodeFromCatalog('novel:49:100:5002'),
       isTrue,
     );
+    container
+        .read(provider.notifier)
+        .updateReadingVisibility(frontmost: true, resumed: true);
     await tester.pumpAndSettle();
     committer.flushes.first.complete();
     await tester.pumpAndSettle();
@@ -964,6 +978,8 @@ void main() {
         _buildReaderApp(repository: repository, progressCommitter: committer),
       );
       await tester.pumpAndSettle();
+      committer.flushes.clear();
+      committer.autoCompleteFlushes = false;
       await _showReaderMenu(tester);
       await tester.tap(find.byKey(const Key('shared-reader-next-button')));
       await tester.pump();
@@ -1047,6 +1063,8 @@ void main() {
       episodeId: 'novel:49:100:5001',
     );
     final provider = novelReaderControllerProvider(args);
+    committer.flushes.clear();
+    committer.autoCompleteFlushes = false;
     await _showReaderMenu(tester);
     tester
         .widget<Slider>(find.byKey(const Key('shared-reader-progress-slider')))
@@ -1062,7 +1080,12 @@ void main() {
         .widget<Slider>(find.byKey(const Key('shared-reader-progress-slider')))
         .onChangeEnd!(0.7);
     await tester.pump();
-    expect(committer.flushes, hasLength(2));
+    expect(committer.flushes.last.snapshot.progressPercent, closeTo(0.7, 0.01));
+    // A new readable bootstrap may also queue zero before the seek. Release
+    // that older revision while keeping the new seek's save blocked.
+    for (final flush in committer.flushes.skip(1)) {
+      if (flush.snapshot.progressPercent == 0) flush.complete();
+    }
     committer.flushes.first.complete();
     await tester.pumpAndSettle();
     expect(
@@ -1145,7 +1168,8 @@ void main() {
         matching: find.byType(Scrollable),
       );
       final position = tester.state<ScrollableState>(scrollable).position;
-      expect(position.pixels, closeTo(savedOffset, 0.01));
+      // The legacy repository port retains the existing whole-layout basis.
+      expect(position.pixels, closeTo(position.maxScrollExtent * 0.59, 0.01));
 
       await _showReaderMenu(tester);
       expect(find.text('59%'), findsOneWidget);
@@ -1255,37 +1279,38 @@ void main() {
     },
   );
 
-  testWidgets('NovelReaderPage catalog marks last reading episode', (
-    tester,
-  ) async {
-    final repository = _FakeNovelRepository.threeEpisodes(
-      readingProgress: NovelReadingProgress(
-        novelId: 'novel:49:100',
-        episodeId: 'novel:49:100:5003',
-        scrollOffset: 120,
-        updatedAt: DateTime(2026, 6, 1),
-      ),
-    );
-    await tester.pumpWidget(_buildReaderApp(repository: repository));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'NovelReaderPage catalog marks the newly readable chapter as recent',
+    (tester) async {
+      final repository = _FakeNovelRepository.threeEpisodes(
+        readingProgress: NovelReadingProgress(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5003',
+          scrollOffset: 120,
+          updatedAt: DateTime(2026, 6, 1),
+        ),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await tester.pumpAndSettle();
 
-    await _showReaderMenu(tester);
-    await tester.tap(
-      find.byKey(const Key('shared-reader-bottom-action-catalog')),
-    );
-    await tester.pumpAndSettle();
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-catalog')),
+      );
+      await tester.pumpAndSettle();
 
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(NovelReaderPage)),
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('novel-reader-chapter-novel:49:100:5003')),
-        matching: find.textContaining(l10n.libraryChapterLastRead),
-      ),
-      findsOneWidget,
-    );
-  });
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(NovelReaderPage)),
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('novel-reader-chapter-novel:49:100:5001')),
+          matching: find.textContaining(l10n.libraryChapterLastRead),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('NovelReaderPage catalog opens near current chapter', (
     tester,
@@ -3211,6 +3236,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_readerText('第三段。'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 250));
     expect(repository.readingProgress?.episodeId, 'novel:49:100:5002');
     expect(repository.readingProgress?.scrollOffset, 0);
     expect(repository.readingProgress?.progressPercent, 0);
@@ -4567,6 +4593,7 @@ class _ControlledPageProgressCommitter implements NovelReaderProgressCommitter {
 
   final DefaultNovelReaderProgressCommitter _delegate;
   final bool forwardScheduledCommits;
+  bool autoCompleteFlushes = true;
   final flushes = <_PendingPageProgressFlush>[];
   Future<void> _tail = Future<void>.value();
 
@@ -4579,6 +4606,7 @@ class _ControlledPageProgressCommitter implements NovelReaderProgressCommitter {
   Future<void> flush(NovelReaderProgressSnapshot snapshot) {
     final pending = _PendingPageProgressFlush(snapshot);
     flushes.add(pending);
+    if (autoCompleteFlushes) pending.complete();
     final operation = _tail.then((_) async {
       await pending.completer.future;
       await _delegate.flush(snapshot);

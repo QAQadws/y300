@@ -92,7 +92,7 @@ Future<void> createNovelTables(Database db) async {
 Future<void> createNovelReadingProgressTable(Database db) async {
   await db.execute('''
       CREATE TABLE IF NOT EXISTS $novelReadingProgressTable (
-        novel_id TEXT PRIMARY KEY,
+        novel_id TEXT NOT NULL,
         episode_id TEXT NOT NULL,
         scroll_offset REAL NOT NULL,
         flow_mode TEXT,
@@ -105,9 +105,15 @@ Future<void> createNovelReadingProgressTable(Database db) async {
         anchor_format_version INTEGER NOT NULL DEFAULT 0,
         anchor_text_identity TEXT,
         progress_percent_valid INTEGER,
-        updated_at INTEGER NOT NULL
+        percent_basis TEXT NOT NULL DEFAULT 'legacyReaderLayout',
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (novel_id, episode_id)
       )
     ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_novel_progress_recent ON '
+    '$novelReadingProgressTable(novel_id, updated_at DESC)',
+  );
 }
 
 Future<void> createNovelHydrationTables(Database db) async {
@@ -332,4 +338,85 @@ Future<void> upgradeNovelFrom41To42(Database db) async {
       definition: 'INTEGER',
     );
   }
+}
+
+Future<void> upgradeNovelFrom42To43(Database db) async {
+  final definitions = await db.rawQuery(
+    'SELECT sql FROM sqlite_master WHERE type = ? AND name = ?',
+    <Object>['table', novelReadingProgressTable],
+  );
+  if (definitions.isEmpty) {
+    await createNovelReadingProgressTable(db);
+    return;
+  }
+  await addColumnIfMissing(
+    db,
+    table: novelReadingProgressTable,
+    column: 'percent_basis',
+    definition: "TEXT NOT NULL DEFAULT 'legacyReaderLayout'",
+  );
+  final columns = await db.rawQuery(
+    'PRAGMA table_info($novelReadingProgressTable)',
+  );
+  final episodeIsKey = columns.any(
+    (row) => row['name'] == 'episode_id' && row['pk'] != 0,
+  );
+  if (!episodeIsKey) {
+    // Preserve the original column definitions, including fields from a newer
+    // client. Only replace the old singleton primary key, without reinterpreting
+    // any position or anchor values.
+    final schema =
+        (await db.rawQuery(
+              'SELECT sql FROM sqlite_master WHERE type = ? AND name = ?',
+              <Object>['table', novelReadingProgressTable],
+            )).single['sql']
+            as String;
+    final replacement = schema.replaceFirst(
+      RegExp(r'novel_id\s+TEXT\s+PRIMARY\s+KEY', caseSensitive: false),
+      'novel_id TEXT NOT NULL',
+    );
+    if (replacement == schema) {
+      throw StateError('Unsupported novel progress primary key definition');
+    }
+    final dependents = await db.rawQuery(
+      'SELECT sql FROM sqlite_master WHERE tbl_name = ? AND sql IS NOT NULL AND type IN (?, ?)',
+      <Object>[novelReadingProgressTable, 'index', 'trigger'],
+    );
+    const oldTable = '${novelReadingProgressTable}_singleton';
+    await db.execute(
+      'ALTER TABLE $novelReadingProgressTable RENAME TO $oldTable',
+    );
+    final end = replacement.lastIndexOf(')');
+    await db.execute(
+      '${replacement.substring(0, end)}, PRIMARY KEY (novel_id, episode_id)${replacement.substring(end)}',
+    );
+    final names = columns
+        .map((row) => '"${(row['name'] as String).replaceAll('"', '""')}"')
+        .join(', ');
+    await db.execute(
+      'INSERT INTO $novelReadingProgressTable ($names) SELECT $names FROM $oldTable',
+    );
+    await db.execute('DROP TABLE $oldTable');
+    for (final dependent in dependents) {
+      await db.execute(dependent['sql'] as String);
+    }
+  }
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_novel_progress_recent ON '
+    '$novelReadingProgressTable(novel_id, updated_at DESC)',
+  );
+  await db.execute('''
+    INSERT OR IGNORE INTO $libraryWorkStateTable
+      (content_type, work_id, created_at, updated_at)
+    SELECT 'novel', novel_id, updated_at, updated_at FROM $novelReadingProgressTable
+  ''');
+  await db.execute('''
+    UPDATE $libraryWorkStateTable
+    SET last_read_episode_id = (SELECT episode_id FROM $novelReadingProgressTable p
+      WHERE p.novel_id = $libraryWorkStateTable.work_id ORDER BY updated_at DESC, episode_id ASC LIMIT 1),
+      last_read_at = (SELECT MAX(updated_at) FROM $novelReadingProgressTable p
+        WHERE p.novel_id = $libraryWorkStateTable.work_id)
+    WHERE content_type = 'novel' AND EXISTS
+      (SELECT 1 FROM $novelReadingProgressTable p WHERE p.novel_id = $libraryWorkStateTable.work_id)
+  ''');
 }

@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_chapter_sync_repository.dart';
+import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
+import 'package:y300/features/novel/domain/models/novel_reading_progress.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
@@ -42,82 +44,117 @@ void main() {
     }
   });
 
-  test('initial promotion preserves matching episode bookmarks', () async {
-    await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:2');
-    await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:stale');
-    await db.insert(AppDatabase.readerBookmarksTable, <String, Object?>{
-      'bookmark_id': 'bookmark-1',
-      'novel_id': 'novel:55:521519',
-      'episode_id': 'novel:55:521519:2',
-      'node_id': null,
-      'text_offset': 0,
-      'page_index': 0,
-      'scroll_offset': 0.0,
-      'progress_percent': 0.1,
-      'title': '保留书签',
-      'snippet': '摘要',
-      'note': null,
-      'created_at': 1,
-      'updated_at': 1,
-    });
-
-    await repository.beginRun(
-      runId: 'run-1',
-      novelId: 'novel:55:521519',
-      mode: NovelChapterSyncMode.initialFull,
-    );
-    await repository.stageEpisodes(
-      runId: 'run-1',
-      episodes: <NovelEpisodeDraft>[
-        _draft(pid: '2', title: '更新后的第一章', orderIndex: 0),
-        _draft(pid: '3', title: '新增第二章', orderIndex: 1),
-      ],
-    );
-    final completedAt = DateTime(2026, 7, 13, 12);
-    final result = await repository.promote(
-      runId: 'run-1',
-      request: _request(),
-      checkpoint: NovelChapterSyncCheckpoint(
+  test(
+    'initial promotion preserves matching chapter positions and user state',
+    () async {
+      await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:2');
+      await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:stale');
+      final reading = LocalNovelRepository(Future.value(db));
+      await reading.commitProgress(
+        progress: NovelReadingProgress(
+          novelId: 'novel:55:521519',
+          episodeId: 'novel:55:521519:2',
+          scrollOffset: 140,
+          updatedAt: DateTime(2026, 7, 1),
+          progressPercent: .42,
+          isProgressPercentValid: true,
+          percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        ),
+        markCompleted: true,
+      );
+      await reading.toggleEpisodeBookmark(
         novelId: 'novel:55:521519',
-        publisherId: '406769',
-        lastCompletedAuthorPage: 3,
-        lastSeenPid: '3',
-        completedAt: completedAt,
-      ),
-      fetchedPages: 3,
-    );
+        episodeId: 'novel:55:521519:2',
+        isBookmarked: true,
+      );
+      final positionBefore = (await db.query(
+        AppDatabase.novelReadingProgressTable,
+      )).single;
+      final stateBefore = (await db.query(
+        AppDatabase.libraryEpisodeStateTable,
+      )).single;
+      await db.insert(AppDatabase.readerBookmarksTable, <String, Object?>{
+        'bookmark_id': 'bookmark-1',
+        'novel_id': 'novel:55:521519',
+        'episode_id': 'novel:55:521519:2',
+        'node_id': null,
+        'text_offset': 0,
+        'page_index': 0,
+        'scroll_offset': 0.0,
+        'progress_percent': 0.1,
+        'title': '保留书签',
+        'snippet': '摘要',
+        'note': null,
+        'created_at': 1,
+        'updated_at': 1,
+      });
 
-    final episodes = await db.query(
-      AppDatabase.workEpisodesTable,
-      where: 'work_id = ?',
-      whereArgs: const <Object?>['novel:55:521519'],
-      orderBy: 'order_index ASC',
-    );
-    expect(episodes.map((row) => row['episode_id']), <String>[
-      'novel:55:521519:2',
-      'novel:55:521519:3',
-    ]);
-    expect(episodes.first['episode_title'], '更新后的第一章');
-    expect(
-      await db.query(
-        AppDatabase.readerBookmarksTable,
-        where: 'bookmark_id = ?',
-        whereArgs: const <Object?>['bookmark-1'],
-      ),
-      hasLength(1),
-      reason: 'DO UPDATE must not cascade-delete the existing bookmark.',
-    );
-    expect(result.insertedCount, 1);
-    expect(result.updatedCount, 1);
-    expect(result.totalCount, 2);
-    expect(await db.query(AppDatabase.novelEpisodeSyncStagingTable), isEmpty);
-    final sourceState = await SqfliteNovelSourceStateRepository(
-      Future<Database>.value(db),
-    ).getSourceState(novelId: 'novel:55:521519');
-    expect(sourceState?.hydrationState, NovelChapterHydrationState.ready);
-    expect(sourceState?.checkpoint?.lastCompletedAuthorPage, 3);
-    expect(sourceState?.chaptersHydratedAt, completedAt);
-  });
+      await repository.beginRun(
+        runId: 'run-1',
+        novelId: 'novel:55:521519',
+        mode: NovelChapterSyncMode.initialFull,
+      );
+      await repository.stageEpisodes(
+        runId: 'run-1',
+        episodes: <NovelEpisodeDraft>[
+          _draft(pid: '2', title: '更新后的第一章', orderIndex: 0),
+          _draft(pid: '3', title: '新增第二章', orderIndex: 1),
+        ],
+      );
+      final completedAt = DateTime(2026, 7, 13, 12);
+      final result = await repository.promote(
+        runId: 'run-1',
+        request: _request(),
+        checkpoint: NovelChapterSyncCheckpoint(
+          novelId: 'novel:55:521519',
+          publisherId: '406769',
+          lastCompletedAuthorPage: 3,
+          lastSeenPid: '3',
+          completedAt: completedAt,
+        ),
+        fetchedPages: 3,
+      );
+
+      final episodes = await db.query(
+        AppDatabase.workEpisodesTable,
+        where: 'work_id = ?',
+        whereArgs: const <Object?>['novel:55:521519'],
+        orderBy: 'order_index ASC',
+      );
+      expect(episodes.map((row) => row['episode_id']), <String>[
+        'novel:55:521519:2',
+        'novel:55:521519:3',
+      ]);
+      expect(episodes.first['episode_title'], '更新后的第一章');
+      expect(
+        (await db.query(AppDatabase.novelReadingProgressTable)).single,
+        positionBefore,
+      );
+      expect(
+        (await db.query(AppDatabase.libraryEpisodeStateTable)).single,
+        stateBefore,
+      );
+      expect(
+        await db.query(
+          AppDatabase.readerBookmarksTable,
+          where: 'bookmark_id = ?',
+          whereArgs: const <Object?>['bookmark-1'],
+        ),
+        hasLength(1),
+        reason: 'DO UPDATE must not cascade-delete the existing bookmark.',
+      );
+      expect(result.insertedCount, 1);
+      expect(result.updatedCount, 1);
+      expect(result.totalCount, 2);
+      expect(await db.query(AppDatabase.novelEpisodeSyncStagingTable), isEmpty);
+      final sourceState = await SqfliteNovelSourceStateRepository(
+        Future<Database>.value(db),
+      ).getSourceState(novelId: 'novel:55:521519');
+      expect(sourceState?.hydrationState, NovelChapterHydrationState.ready);
+      expect(sourceState?.checkpoint?.lastCompletedAuthorPage, 3);
+      expect(sourceState?.chaptersHydratedAt, completedAt);
+    },
+  );
 
   test('failed promotion rolls back all official episode changes', () async {
     await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:old');

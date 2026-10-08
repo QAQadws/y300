@@ -10,6 +10,114 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test(
+    'v42 singleton migration retains future metadata, old read evidence and recent pointer',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'y300-novel-v43-',
+      );
+      final path = p.join(directory.path, 'old.db');
+      Database? database;
+      addTearDown(() async {
+        await database?.close();
+        await directory.delete(recursive: true);
+      });
+      var db = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 42,
+          onCreate: (db, _) async {
+            await _createLegacyNovelMarkTables(db);
+            for (final table in [
+              AppDatabase.novelReadingProgressTable,
+              AppDatabase.readerBookmarksTable,
+            ]) {
+              await db.execute(
+                'ALTER TABLE $table ADD COLUMN anchor_format_version INTEGER NOT NULL DEFAULT 0',
+              );
+              await db.execute(
+                'ALTER TABLE $table ADD COLUMN anchor_text_identity TEXT',
+              );
+              await db.execute(
+                'ALTER TABLE $table ADD COLUMN progress_percent_valid INTEGER',
+              );
+            }
+            await db.execute(
+              'ALTER TABLE novel_reading_progress ADD COLUMN future_extension TEXT',
+            );
+            await db.execute(
+              'CREATE INDEX future_progress_index ON novel_reading_progress(future_extension)',
+            );
+            await db.execute('''CREATE TABLE library_episode_state (
+          content_type TEXT NOT NULL, episode_id TEXT NOT NULL, work_id TEXT NOT NULL,
+          is_read INTEGER NOT NULL DEFAULT 0, is_downloaded INTEGER NOT NULL DEFAULT 0,
+          is_bookmarked INTEGER NOT NULL DEFAULT 0, read_at INTEGER, downloaded_at INTEGER,
+          future_extension TEXT, PRIMARY KEY(content_type, episode_id))''');
+          },
+        ),
+      );
+      database = db;
+      await db.insert(AppDatabase.novelReadingProgressTable, {
+        'novel_id': 'n',
+        'episode_id': 'a',
+        'scroll_offset': 123.5,
+        'progress_percent': .42,
+        'progress_percent_valid': null,
+        'anchor_format_version': 99,
+        'anchor_text_identity': ' future ',
+        'anchor_text_offset': 1 << 35,
+        'future_extension': 'opaque',
+        'updated_at': 123,
+      });
+      await db.insert(AppDatabase.libraryEpisodeStateTable, {
+        'content_type': 'novel',
+        'episode_id': 'a',
+        'work_id': 'n',
+        'is_read': 1,
+        'read_at': 456,
+        'is_bookmarked': 1,
+        'future_extension': 'shared opaque',
+      });
+      final oldProgress = (await db.query(
+        AppDatabase.novelReadingProgressTable,
+      )).single;
+      final oldState = (await db.query(
+        AppDatabase.libraryEpisodeStateTable,
+      )).single;
+      await db.close();
+      db = await AppDatabase.open(databaseName: path);
+      database = db;
+      expect(await db.getVersion(), 43);
+      expect((await db.query(AppDatabase.novelReadingProgressTable)).single, {
+        ...oldProgress,
+        'percent_basis': 'legacyReaderLayout',
+      });
+      expect((await db.query(AppDatabase.libraryEpisodeStateTable)).single, {
+        ...oldState,
+        'read_state_version': 0,
+      });
+      final recent = (await db.query(AppDatabase.libraryWorkStateTable)).single;
+      expect(recent['last_read_episode_id'], 'a');
+      expect(recent['last_read_at'], 123);
+      expect(
+        await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'future_progress_index'",
+        ),
+        hasLength(1),
+      );
+      await db.insert(AppDatabase.novelReadingProgressTable, {
+        'novel_id': 'n',
+        'episode_id': 'b',
+        'scroll_offset': 10,
+        'updated_at': 200,
+      });
+      expect(
+        await db.query(AppDatabase.novelReadingProgressTable),
+        hasLength(2),
+      );
+    },
+  );
+
+  test(
     'v40 upgrade preserves cache payloads and adds v41 metadata defaults',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -118,7 +226,7 @@ void main() {
 
       db = await AppDatabase.open(databaseName: databasePath);
       database = db;
-      expect(await db.getVersion(), 42);
+      expect(await db.getVersion(), 43);
       expect(
         (await db.query(AppDatabase.cachedImagesTable)).single,
         <String, Object?>{...oldImage, 'etag': null, 'content_hash': null},
@@ -158,7 +266,7 @@ void main() {
     },
   );
   test(
-    'v41 novel marks retain legacy rows and match fresh v42 columns',
+    'v41 novel marks retain legacy rows and match fresh schema columns',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'y300-novel-v42-',
@@ -220,7 +328,7 @@ void main() {
 
       db = await AppDatabase.open(databaseName: databasePath);
       database = db;
-      expect(await db.getVersion(), 42);
+      expect(await db.getVersion(), 43);
       const legacyMetadata = <String, Object?>{
         'anchor_format_version': 0,
         'anchor_text_identity': null,
@@ -229,6 +337,7 @@ void main() {
       final migratedProgress = <String, Object?>{
         ...oldProgress,
         ...legacyMetadata,
+        'percent_basis': 'legacyReaderLayout',
       };
       final migratedBookmark = <String, Object?>{
         ...oldBookmark,

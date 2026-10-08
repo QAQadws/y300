@@ -9,6 +9,8 @@ import 'package:y300/features/library_shared/domain/services/library_cover_asset
 import 'package:y300/features/library_shared/data/services/library_cover_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
+import 'package:y300/features/novel/application/novel_reading_mutation_barrier.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_chapter_progress_projector.dart';
@@ -18,22 +20,29 @@ class NovelDetailAdapter
     implements
         DetailModuleAdapter,
         DetailFullRefreshAdapter,
+        DetailChapterReadStateAdapter,
         DetailMetadataEditor,
         DetailCoverEditor {
   NovelDetailAdapter(
     this._repository, {
     LibraryCoverStore? coverStore,
     required LibraryStateRepository stateRepository,
+    NovelReadingStateRepository? readingStateRepository,
+    NovelReadingMutationBarrier? mutationBarrier,
     NovelSourceStateRepository? sourceStateRepository,
     NovelChapterUpdateService Function()? chapterUpdateServiceFactory,
   }) : _coverStore = coverStore,
        _stateRepository = stateRepository,
+       _readingStateRepository = readingStateRepository,
+       _mutationBarrier = mutationBarrier,
        _sourceStateRepository = sourceStateRepository,
        _chapterUpdateServiceFactory = chapterUpdateServiceFactory;
 
   final NovelRepository _repository;
   final LibraryCoverStore? _coverStore;
   final LibraryStateRepository _stateRepository;
+  final NovelReadingStateRepository? _readingStateRepository;
+  final NovelReadingMutationBarrier? _mutationBarrier;
   final NovelSourceStateRepository? _sourceStateRepository;
   final NovelChapterUpdateService Function()? _chapterUpdateServiceFactory;
 
@@ -106,14 +115,22 @@ class NovelDetailAdapter
       novelId: workId,
       descending: false,
     );
-    final progress = await _repository.getReadingProgress(novelId: workId);
+    final readingRepository = _readingRepository;
+    final readingState = await readingRepository?.loadWorkState(
+      novelId: workId,
+    );
+    final legacyProgress = readingState == null
+        ? await _repository.getReadingProgress(novelId: workId)
+        : null;
 
     final mapped = <LibraryChapterItem>[];
     for (final item in episodes) {
-      final state = await _stateRepository.getEpisodeState(
-        moduleKey: LibraryModuleKey.novel,
-        episodeId: item.episodeId,
-      );
+      final state = readingState != null
+          ? readingState.episodeStates[item.episodeId]
+          : await _stateRepository.getEpisodeState(
+              moduleKey: LibraryModuleKey.novel,
+              episodeId: item.episodeId,
+            );
       mapped.add(
         LibraryChapterItem(
           episodeId: item.episodeId,
@@ -124,12 +141,17 @@ class NovelDetailAdapter
           sourcePid: item.sourcePid,
           publishTimeText: item.datelineText,
           showSourceIdentifier: false,
-          isRead: false,
+          isRead: readingState != null && state?.isRead == true,
           isBookmarked: state?.isBookmarked ?? false,
           progressInfo: NovelChapterProgressProjector.project(
             novelId: workId,
             episodeId: item.episodeId,
-            progress: progress,
+            progress:
+                readingState?.progressByEpisode[item.episodeId] ??
+                legacyProgress,
+            isRecentChapter: readingState == null
+                ? null
+                : readingState.recentEpisodeId == item.episodeId,
           ),
         ),
       );
@@ -144,7 +166,12 @@ class NovelDetailAdapter
     required String workId,
     required bool preferContinue,
   }) async {
-    final progress = await _repository.getReadingProgress(novelId: workId);
+    final readingState = await _readingRepository?.loadWorkState(
+      novelId: workId,
+    );
+    final recentEpisodeId = readingState != null
+        ? readingState.recentEpisodeId
+        : (await _repository.getReadingProgress(novelId: workId))?.episodeId;
     final episodes = await _repository.getEpisodes(
       novelId: workId,
       descending: false,
@@ -152,15 +179,93 @@ class NovelDetailAdapter
     if (episodes.isEmpty) {
       return null;
     }
-    if (preferContinue &&
-        progress != null &&
-        episodes.any((episode) => episode.episodeId == progress.episodeId)) {
-      return ReaderRouteTarget(workId: workId, episodeId: progress.episodeId);
+    if (preferContinue && recentEpisodeId != null) {
+      final index = episodes.indexWhere(
+        (episode) => episode.episodeId == recentEpisodeId,
+      );
+      if (index >= 0) {
+        final isRead =
+            readingState?.episodeStates[recentEpisodeId]?.isRead == true;
+        final targetIndex = isRead && index + 1 < episodes.length
+            ? index + 1
+            : index;
+        return ReaderRouteTarget(
+          workId: workId,
+          episodeId: episodes[targetIndex].episodeId,
+        );
+      }
     }
     return ReaderRouteTarget(
       workId: workId,
       episodeId: episodes.first.episodeId,
     );
+  }
+
+  NovelReadingStateRepository? get _readingRepository {
+    final repository = _repository;
+    return _readingStateRepository ??
+        (repository is NovelReadingStateRepository
+            ? repository as NovelReadingStateRepository
+            : null);
+  }
+
+  @override
+  Future<void> markChapterRead({
+    required String workId,
+    required String episodeId,
+    required bool isRead,
+  }) async {
+    final repository = _readingRepository;
+    if (repository == null) {
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
+    }
+    _mutationBarrier?.invalidate(workId, episodeId);
+    final canCommit = _mutationGuard(workId, episodeId);
+    final applied = await repository.setChapterRead(
+      novelId: workId,
+      episodeId: episodeId,
+      isRead: isRead,
+      canCommit: canCommit,
+    );
+    if (!applied && canCommit()) {
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
+    }
+  }
+
+  @override
+  Future<void> resetChapterReadingState({
+    required String workId,
+    required String episodeId,
+  }) async {
+    final repository = _readingRepository;
+    if (repository == null) {
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
+    }
+    _mutationBarrier?.invalidate(workId, episodeId);
+    final canCommit = _mutationGuard(workId, episodeId);
+    final applied = await repository.resetChapter(
+      novelId: workId,
+      episodeId: episodeId,
+      canCommit: canCommit,
+    );
+    if (!applied && canCommit()) {
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
+    }
+  }
+
+  bool Function() _mutationGuard(String workId, String episodeId) {
+    final barrier = _mutationBarrier;
+    if (barrier == null) return () => true;
+    final revision = barrier.capture(workId, episodeId);
+    return () => barrier.isCurrent(workId, episodeId, revision);
   }
 
   @override
@@ -391,6 +496,9 @@ class NovelDetailAdapter
   ) {
     return source
         .where((chapter) {
+          if (!_matchTriState(filters.unread, !chapter.isRead)) {
+            return false;
+          }
           if (!_matchTriState(filters.bookmarked, chapter.isBookmarked)) {
             return false;
           }

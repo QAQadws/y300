@@ -1407,6 +1407,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get libraryDetailStartFromBeginning => '从头阅读';
+
+  @override
   String libraryChapterProgressSemantics(String subtitle, String progress) {
     return '$subtitle，$progress';
   }
@@ -6816,6 +6819,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String libraryChapterLastReadPercent(int percent) {
     return '上次閱讀 $percent%';
   }
+
+  @override
+  String get libraryDetailStartFromBeginning => '從頭閱讀';
 
   @override
   String libraryChapterProgressSemantics(String subtitle, String progress) {
