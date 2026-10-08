@@ -482,6 +482,109 @@ void main() {
     expect(resolver.lastReference?.pid, '5001');
   });
 
+  testWidgets('source restoration binds the catalog and remains read only', (
+    tester,
+  ) async {
+    final reading = _MemoryNovelReadingStateRepository(hasPosition: true);
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(
+        NovelChapterOpenMode.sourcePost,
+      ),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(page: 7),
+      readingStateRepository: reading,
+      threadRepository: _FakeThreadRepository(),
+    );
+    await _scrollNovelChapterIntoTapArea(tester);
+    await tester.tap(find.text('Chapter 1'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
+    final page = tester.widget<ThreadDetailPage>(find.byType(ThreadDetailPage));
+    expect(page.initialPage, 7);
+    expect(page.bodyReadingObserver?.tracks('100', '5001'), isTrue);
+    expect(page.bodyReadingObserver?.tracks('100', '5002'), isFalse);
+    expect(reading.progressCommitCount, 0);
+    expect(reading.completionCommitCount, 0);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(reading.progressCommitCount, 0);
+    expect(reading.hasPosition, isTrue);
+    expect(reading.isRead, isFalse);
+  });
+
+  testWidgets('a readable source chapter updates the same catalog state', (
+    tester,
+  ) async {
+    final reading = _MemoryNovelReadingStateRepository();
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(
+        NovelChapterOpenMode.sourcePost,
+      ),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+      readingStateRepository: reading,
+      threadRepository: _FakeThreadRepository(),
+    );
+    expect(reading.hasPosition, isFalse);
+    await _scrollNovelChapterIntoTapArea(tester);
+    await tester.tap(find.text('Chapter 1'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(reading.hasPosition, isTrue);
+    expect(reading.lastCommitted?.progressPercent, 0);
+    expect(reading.lastCommitted?.isProgressPercentValid, isTrue);
+    expect(reading.lastCommitted?.percentBasis, 'bodyGeometryV1');
+    expect(reading.lastCommitted?.anchorNodeId, isNull);
+    expect(reading.lastCommitted?.paginationKey, isNull);
+    expect(reading.completionCommitCount, 1);
+    expect(reading.recentEpisodeId, 'novel:1:e1');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    final chapter = find.byKey(
+      const ValueKey<String>('unified-detail-chapter-novel:1:e1'),
+    );
+    final l10n = AppLocalizations.of(tester.element(chapter));
+    expect(
+      find.descendant(
+        of: chapter,
+        matching: find.textContaining(
+          l10n.libraryChapterLastRead,
+          findRichText: true,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(reading.isRead, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('work source action binds bodies without restoring a chapter', (
+    tester,
+  ) async {
+    final reading = _MemoryNovelReadingStateRepository(hasPosition: true);
+    await _pumpNovelDetail(
+      tester,
+      preferences: _MemoryNovelInteractionPreferencesRepository(),
+      routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+      readingStateRepository: reading,
+      threadRepository: _FakeThreadRepository(),
+    );
+    final actions = find.byKey(const Key('unified-detail-header-actions-row'));
+    final l10n = AppLocalizations.of(tester.element(actions));
+    await tester.tap(
+      find.descendant(
+        of: actions,
+        matching: find.text(l10n.libraryDetailSourceThread),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final page = tester.widget<ThreadDetailPage>(find.byType(ThreadDetailPage));
+    expect(page.targetPid, isNull);
+    expect(page.bodyReadingObserver?.tracks('100', '5001'), isTrue);
+    expect(reading.progressCommitCount, 0);
+  });
+
   testWidgets('reader mode keeps opening chapters in NovelReaderPage', (
     tester,
   ) async {
@@ -673,7 +776,7 @@ void main() {
   );
 
   testWidgets(
-    'explicit beginning action honors source-post mode without recording a visit',
+    'explicit beginning confirms source position only after readable content',
     (tester) async {
       final reading = _MemoryNovelReadingStateRepository(hasPosition: true);
       final resolver = _FakeNovelChapterSourceRouteResolver.success(page: 7);
@@ -707,6 +810,8 @@ void main() {
       );
       expect(reading.readMutationCount, 0);
       expect(reading.hasPosition, isTrue);
+      expect(reading.lastCommitted?.progressPercent, 0);
+      expect(reading.completionCommitCount, 1);
     },
   );
 
@@ -769,12 +874,14 @@ void main() {
     tester,
   ) async {
     final resolver = _FakeNovelChapterSourceRouteResolver.failure();
+    final reading = _MemoryNovelReadingStateRepository();
     await _pumpNovelDetail(
       tester,
       preferences: _MemoryNovelInteractionPreferencesRepository(
         NovelChapterOpenMode.sourcePost,
       ),
       routeResolver: resolver,
+      readingStateRepository: reading,
       threadRepository: _FakeThreadRepository(),
     );
 
@@ -806,6 +913,9 @@ void main() {
     expect(threadPage.tid, '100');
     expect(threadPage.initialPage, isNull);
     expect(threadPage.targetPid, isNull);
+    expect(threadPage.bodyReadingObserver, isNull);
+    expect(reading.progressCommitCount, 0);
+    expect(reading.completionCommitCount, 0);
   });
 
   testWidgets('continue opens the first chapter in source-post mode', (
@@ -1359,6 +1469,9 @@ class _MemoryNovelReadingStateRepository
   String? recentEpisodeId;
   int readMutationCount = 0;
   bool appliesMutation = true;
+  NovelReadingProgress? lastCommitted;
+  int progressCommitCount = 0;
+  int completionCommitCount = 0;
 
   @override
   Future<NovelReadingStateSnapshot> loadWorkState({
@@ -1368,14 +1481,16 @@ class _MemoryNovelReadingStateRepository
     recentEpisodeId: hasPosition ? recentEpisodeId : null,
     progressByEpisode: {
       if (hasPosition)
-        'novel:1:e1': NovelReadingProgress(
-          novelId: novelId,
-          episodeId: 'novel:1:e1',
-          scrollOffset: 80,
-          progressPercent: 0.42,
-          isProgressPercentValid: true,
-          updatedAt: DateTime(2026, 10, 7),
-        ),
+        'novel:1:e1':
+            lastCommitted ??
+            NovelReadingProgress(
+              novelId: novelId,
+              episodeId: 'novel:1:e1',
+              scrollOffset: 80,
+              progressPercent: 0.42,
+              isProgressPercentValid: true,
+              updatedAt: DateTime(2026, 10, 7),
+            ),
     },
     episodeStates: {
       'novel:1:e1': LibraryEpisodeState(
@@ -1387,6 +1502,31 @@ class _MemoryNovelReadingStateRepository
       ),
     },
   );
+
+  @override
+  Future<NovelReadingProgress?> getChapterProgress({
+    required String novelId,
+    required String episodeId,
+  }) async =>
+      (await loadWorkState(novelId: novelId)).progressByEpisode[episodeId];
+
+  @override
+  Future<bool> commitProgress({
+    required NovelReadingProgress progress,
+    bool markCompleted = false,
+    bool Function()? canCommit,
+  }) async {
+    if (canCommit?.call() == false || !appliesMutation) return false;
+    hasPosition = true;
+    lastCommitted = progress;
+    recentEpisodeId = progress.episodeId;
+    progressCommitCount++;
+    if (markCompleted) {
+      isRead = true;
+      completionCommitCount++;
+    }
+    return true;
+  }
 
   @override
   Future<bool> setChapterRead({

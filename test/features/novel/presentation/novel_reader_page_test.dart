@@ -2731,31 +2731,43 @@ void main() {
     expect(_readerText('第一段。'), findsOneWidget);
   });
 
-  testWidgets('NovelReaderPage open thread uses novel detail source tid', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildReaderApp(
-        repository: _FakeNovelRepository(),
-        threadRepository: _FakeThreadRepository(),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'NovelReaderPage source reading locates the current chapter PID',
+    (tester) async {
+      final locator = _ReaderPostLocator(tid: '100');
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: _FakeNovelRepository(),
+          threadRepository: _FakeThreadRepository(targetPid: '5001'),
+          threadPostLocator: locator,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await _showReaderMenu(tester);
-    final openThread = find.byKey(
-      const Key('shared-reader-top-action-open-thread'),
-    );
-    expect(
-      find.byKey(const Key('shared-reader-bottom-action-open-thread')),
-      findsNothing,
-    );
-    await tester.tap(openThread);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
+      await _showReaderMenu(tester);
+      final openThread = find.byKey(
+        const Key('shared-reader-top-action-open-thread'),
+      );
+      expect(
+        find.byKey(const Key('shared-reader-bottom-action-open-thread')),
+        findsNothing,
+      );
+      await tester.tap(openThread);
+      await tester.pumpAndSettle();
 
-    expect(find.byType(ThreadDetailPage), findsOneWidget);
-  });
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+      final detail = tester.widget<ThreadDetailPage>(
+        find.byType(ThreadDetailPage),
+      );
+      expect(
+        (detail.tid, detail.targetPid, detail.initialPage),
+        ('100', '5001', 2),
+      );
+      expect(detail.landing, ThreadPostLanding.top);
+      expect(detail.bodyReadingObserver, isNull);
+      expect(locator.calls, 1);
+    },
+  );
 
   testWidgets('vertical chapter action opens body end and preserves position', (
     tester,

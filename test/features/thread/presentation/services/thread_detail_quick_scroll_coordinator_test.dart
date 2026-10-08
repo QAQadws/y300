@@ -6,6 +6,49 @@ import 'package:y300/features/thread/presentation/services/thread_detail_quick_s
 
 void main() {
   group('ThreadDetailQuickScrollCoordinator', () {
+    testWidgets(
+      'confirms the final animated position and rejects retired navigation',
+      (tester) async {
+        final controller = ScrollController();
+        final confirmations = <double>[];
+        var starts = 0;
+        final coordinator = ThreadDetailQuickScrollCoordinator(
+          scrollController: controller,
+          onNavigationStarted: () => starts++,
+          onUserNavigation: () => confirmations.add(controller.offset),
+        );
+        addTearDown(() {
+          coordinator.dispose();
+          controller.dispose();
+        });
+        await tester.pumpWidget(
+          LocalizedTestApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                controller: controller,
+                child: const SizedBox(height: 2400),
+              ),
+            ),
+          ),
+        );
+        coordinator.updateMetrics(controller.position);
+        final first = coordinator.navigate(animate: true);
+        await tester.pumpAndSettle();
+        await first;
+        expect(starts, 1);
+        expect(confirmations, [controller.position.maxScrollExtent]);
+        final returning = coordinator.navigate(animate: true);
+        await tester.pump(const Duration(milliseconds: 80));
+        coordinator.cancelNavigation();
+        final cancelledOffset = controller.offset;
+        await tester.pumpAndSettle();
+        await returning;
+        expect(controller.offset, cancelledOffset);
+        expect(confirmations, hasLength(1));
+        expect(coordinator.isNavigating, isFalse);
+      },
+    );
+
     test('tracks user direction and keeps idle direction stable', () {
       final scrollController = ScrollController();
       final coordinator = ThreadDetailQuickScrollCoordinator(

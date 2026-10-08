@@ -6,6 +6,7 @@ import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/services/shelf_category_assign_use_case.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
 import 'package:y300/features/novel/data/preferences/novel_interaction_preferences_legacy_source.dart';
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_legacy_source.dart';
@@ -49,6 +50,8 @@ import 'package:y300/features/novel/presentation/services/novel_html_chapter_ren
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
+import 'package:y300/features/novel/presentation/adapters/novel_source_reading_adapter.dart';
+import 'package:y300/features/novel/presentation/services/novel_source_thread_route_launcher.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 import 'package:y300/features/thread/data/providers/forum_image_source_pipeline_provider.dart';
 import 'package:y300/features/thread/domain/services/forum_post_image_source_collector.dart';
@@ -270,6 +273,30 @@ final novelReadingMutationBarrierProvider =
     Provider<NovelReadingMutationBarrier>(
       (ref) => NovelReadingMutationBarrier(),
     );
+
+final novelSourceReadingAdapterFactoryProvider =
+    Provider<NovelSourceReadingAdapterFactory?>((ref) {
+      final repository = ref.watch(novelReadingStateRepositoryProvider);
+      final committer = ref.watch(novelReaderProgressCommitterProvider);
+      if (repository == null ||
+          committer is! ScopedNovelReaderProgressCommitter) {
+        return null;
+      }
+      final barrier = ref.watch(novelReadingMutationBarrierProvider);
+      final bus = ref.watch(libraryShelfRefreshBusProvider);
+      return (context) => NovelSourceReadingAdapter(
+        context: context,
+        readingStateRepository: repository,
+        committer: committer as ScopedNovelReaderProgressCommitter,
+        mutationBarrier: barrier,
+        onCommitted: () => bus.notify(
+          modules: {LibraryModuleKey.novel},
+          reason: 'novel_source_reading_progress',
+          source: LibraryMutationSource.novelRefresh,
+          workId: context.novelId,
+        ),
+      );
+    });
 
 final novelChapterUpdateServiceProvider = Provider<NovelChapterUpdateService>((
   ref,

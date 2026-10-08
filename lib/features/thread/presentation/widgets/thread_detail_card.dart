@@ -111,6 +111,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.imageViewportCoordinator,
     this.imageAnchorController,
     required this.imagePrecacheService,
+    this.bodyReadingCoordinator,
   });
 
   final ThreadPost sourcePost;
@@ -141,6 +142,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
+  final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
   final ValueChanged<ThreadPost> onOpenPostActions;
 
   @override
@@ -188,6 +190,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             imageViewportCoordinator: imageViewportCoordinator,
             imageAnchorController: imageAnchorController,
             imagePrecacheService: imagePrecacheService,
+            readingCoordinator: bodyReadingCoordinator,
           ),
         ),
       ),
@@ -389,6 +392,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.imageViewportCoordinator,
     this.imageAnchorController,
     required this.imagePrecacheService,
+    this.bodyReadingCoordinator,
   });
 
   final ThreadPost sourcePost;
@@ -433,6 +437,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
+  final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
 
   @override
   State<_ThreadPostCardEntry> createState() => _ThreadPostCardEntryState();
@@ -493,6 +498,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           imageViewportCoordinator: widget.imageViewportCoordinator,
           imageAnchorController: widget.imageAnchorController,
           imagePrecacheService: widget.imagePrecacheService,
+          bodyReadingCoordinator: widget.bodyReadingCoordinator,
         ),
         _ThreadPostCardFooterEntry(
           key: Key('thread-post-footer-${widget.sourcePost.pid}'),

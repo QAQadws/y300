@@ -4,7 +4,6 @@ import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_providers.dart';
@@ -18,6 +17,8 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
+import 'package:y300/features/novel/domain/models/novel_reading_session.dart';
+import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_interaction_models.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
@@ -27,7 +28,7 @@ import 'package:y300/features/novel/presentation/controllers/novel_chapter_open_
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_chapter_hydration_panel.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_chapter_open_mode_control.dart';
-import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/novel/presentation/services/novel_source_thread_route_launcher.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -227,6 +228,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
 
     await _openSourceChapter(
       context,
+      episodeId: chapter.episodeId,
+      fromBeginning: fromBeginning,
       tid: chapter.sourceTid?.trim() ?? '',
       pid: chapter.sourcePid?.trim() ?? '',
       subject: chapter.title,
@@ -269,6 +272,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     final episode = matches.first;
     await _openSourceChapter(
       context,
+      episodeId: episode.episodeId,
       tid: episode.sourceTid.trim(),
       pid: episode.sourcePid?.trim() ?? '',
       subject: episode.episodeTitle,
@@ -296,19 +300,51 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
 
   Future<void> _openSourceChapter(
     BuildContext context, {
+    required String episodeId,
     required String tid,
     required String pid,
     required String subject,
-  }) {
+    bool fromBeginning = false,
+  }) async {
     final novelId = widget.novelId;
-    return launchThreadPostRoute(
+    final generation = _chapterSelectionGeneration;
+    final episodes = await ref
+        .read(novelRepositoryProvider)
+        .getEpisodes(novelId: novelId, descending: false);
+    final policy = fromBeginning
+        ? NovelEpisodeOpenPolicy.startAtBeginning
+        : await _chapterOpenPolicy(episodeId);
+    if (!context.mounted ||
+        widget.novelId != novelId ||
+        generation != _chapterSelectionGeneration) {
+      return;
+    }
+    return launchNovelSourceThreadRoute(
       context: context,
       session: _postRouteSession,
       resolver: ref.read(threadPostRouteResolverProvider),
       target: ThreadPostTarget(tid: tid, pid: pid),
       subject: subject,
+      readingContext: NovelSourceReadingContext(
+        novelId: novelId,
+        initialEpisodeId: episodeId,
+        entry: policy == NovelEpisodeOpenPolicy.startAtBeginning
+            ? NovelReadingSessionEntry.explicitStart
+            : NovelReadingSessionEntry.resume,
+        chapters: episodes.map(
+          (episode) => NovelSourceReadingChapter(
+            episodeId: episode.episodeId,
+            sourceTid: episode.sourceTid,
+            sourcePid: episode.sourcePid ?? '',
+          ),
+        ),
+      ),
+      createAdapter: ref.read(novelSourceReadingAdapterFactoryProvider),
       failureDialogKey: const Key('novel-source-route-failure-dialog'),
-      isCurrent: () => mounted && widget.novelId == novelId,
+      isCurrent: () =>
+          mounted &&
+          widget.novelId == novelId &&
+          generation == _chapterSelectionGeneration,
       resolve: () async {
         try {
           final route = await ref
@@ -375,15 +411,37 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
   ) async {
     _chapterSelectionGeneration++;
     _postRouteSession.invalidate();
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ThreadDetailPage(
-          tid: target.tid,
-          subject: target.subject ?? '',
-          initialPage: target.initialPage,
-          targetPid: target.targetPid,
+    final novelId = widget.novelId;
+    final generation = _chapterSelectionGeneration;
+    final episodes = await ref
+        .read(novelRepositoryProvider)
+        .getEpisodes(novelId: novelId, descending: false);
+    if (!context.mounted ||
+        widget.novelId != novelId ||
+        generation != _chapterSelectionGeneration) {
+      return;
+    }
+    await launchNovelSourceThreadHome(
+      context: context,
+      tid: target.tid,
+      subject: target.subject ?? '',
+      initialPage: target.initialPage,
+      targetPid: target.targetPid,
+      isCurrent: () =>
+          mounted &&
+          widget.novelId == novelId &&
+          generation == _chapterSelectionGeneration,
+      readingContext: NovelSourceReadingContext(
+        novelId: novelId,
+        chapters: episodes.map(
+          (episode) => NovelSourceReadingChapter(
+            episodeId: episode.episodeId,
+            sourceTid: episode.sourceTid,
+            sourcePid: episode.sourcePid ?? '',
+          ),
         ),
       ),
+      createAdapter: ref.read(novelSourceReadingAdapterFactoryProvider),
     );
   }
 

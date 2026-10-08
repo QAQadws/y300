@@ -66,6 +66,9 @@ class ForumHtmlRenderer extends StatefulWidget {
   final RenderMode renderMode;
   final VoidCallback? onBodyBuilt;
   final ForumHtmlBodyPresentation? bodyPresentation;
+
+  /// Owner-supplied mutable expansion memory. Built folds record their effective
+  /// defaults so a host can distinguish hidden content from a real body end.
   final Map<String, bool>? collapseExpansion;
   final String? sourceId;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
@@ -267,6 +270,12 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     }
     if (!stylePolicy.isForumCollapseElement(element)) return null;
     final collapseId = _collapseSourceId(element);
+    final initiallyExpanded =
+        widget.collapseExpansion?.putIfAbsent(
+          collapseId,
+          () => stylePolicy.isForumCollapseInitiallyExpanded(element),
+        ) ??
+        stylePolicy.isForumCollapseInitiallyExpanded(element);
     final titleHtml = _firstChildWithClass(
       element,
       'showcollapse_title',
@@ -281,8 +290,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
         contentHtml: contentHtml,
         labels: configuration.labels,
         initiallyExpanded:
-            configuration.collapseExpansion?[collapseId] ??
-            stylePolicy.isForumCollapseInitiallyExpanded(element),
+            configuration.collapseExpansion?[collapseId] ?? initiallyExpanded,
         onExpandedChanged: (expanded) =>
             configuration.collapseExpansion?[collapseId] = expanded,
         sourceId: collapseId,

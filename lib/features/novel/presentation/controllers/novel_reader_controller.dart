@@ -51,6 +51,21 @@ class NovelReaderArgs {
   int get hashCode => Object.hash(novelId, episodeId, openPolicy);
 }
 
+/// Identifies the paused reader that handed position authority to a source route.
+final class NovelReaderSourceHandoff {
+  NovelReaderSourceHandoff._({
+    required this.owner,
+    required this.session,
+    required this.episodeId,
+    required this.progress,
+  });
+
+  final NovelReaderController owner;
+  final int session;
+  final String episodeId;
+  final NovelReadingProgress? progress;
+}
+
 class NovelReaderViewState {
   const NovelReaderViewState({
     required this.novel,
@@ -72,6 +87,7 @@ class NovelReaderViewState {
     this.isHydratingSupplemental = false,
     this.readingState,
     this.readingSurfaceRevision = 0,
+    this.readingAuthorityRevision = 0,
   });
 
   final NovelItem? novel;
@@ -93,6 +109,7 @@ class NovelReaderViewState {
   final bool isHydratingSupplemental;
   final NovelReadingStateSnapshot? readingState;
   final int readingSurfaceRevision;
+  final int readingAuthorityRevision;
 
   int get currentEpisodeIndex {
     return episodes.indexWhere(
@@ -160,6 +177,7 @@ class NovelReaderViewState {
     NovelReadingProgress? readingProgress,
     NovelReadingStateSnapshot? readingState,
     int? readingSurfaceRevision,
+    int? readingAuthorityRevision,
     bool clearReadingProgress = false,
     NovelReaderProgressSnapshot? progressSnapshot,
     double? currentOffset,
@@ -186,6 +204,8 @@ class NovelReaderViewState {
       readingState: readingState ?? this.readingState,
       readingSurfaceRevision:
           readingSurfaceRevision ?? this.readingSurfaceRevision,
+      readingAuthorityRevision:
+          readingAuthorityRevision ?? this.readingAuthorityRevision,
       progressSnapshot: progressSnapshot ?? this.progressSnapshot,
       currentOffset: currentOffset ?? this.currentOffset,
       bookmarks: bookmarks ?? this.bookmarks,
@@ -216,6 +236,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       const DefaultNovelReaderPreferenceImpactAnalyzer();
   String? _pendingBeginningCommitEpisodeId;
   bool _isPagedRestoreReadOnly = false;
+  NovelReaderSourceHandoff? _activeSourceHandoff;
   int _activeSessionToken = 0;
   final _readingSession = NovelReadingSessionCoordinator();
   int _readingBarrierRevision = 0;
@@ -1284,6 +1305,153 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         clearReadingProgress: result.recentProgress == null,
       ),
     );
+  }
+
+  /// The page flushes its visible position before transferring authority.
+  /// Retiring the lease here also rejects writes already in the serial queue.
+  NovelReaderSourceHandoff? beginSourceReadingHandoff() {
+    final current = state.asData?.value;
+    if (current == null || state.isLoading || current.transition != null) {
+      return null;
+    }
+    final episodeId = current.currentEpisode.episodeId;
+    final handoff = _activeSourceHandoff = NovelReaderSourceHandoff._(
+      owner: this,
+      session: _activeSessionToken,
+      episodeId: episodeId,
+      progress:
+          current.readingState?.progressByEpisode[episodeId] ??
+          (current.readingState == null &&
+                  current.readingProgress?.episodeId == episodeId
+              ? current.readingProgress
+              : null),
+    );
+    _readingSession.retire();
+    ref
+        .read(novelReadingMutationBarrierProvider)
+        .invalidate(_args.novelId, episodeId);
+    _pendingBeginningCommitEpisodeId = null;
+    _isPagedRestoreReadOnly = true;
+    state = AsyncData(
+      current.copyWith(
+        readingAuthorityRevision: current.readingAuthorityRevision + 1,
+      ),
+    );
+    return handoff;
+  }
+
+  /// Adopts source changes before the covered reader can produce new events.
+  /// The existing document is reused; only a changed position rebuilds its
+  /// surface, and the resulting restore stays read-only until real navigation.
+  Future<void> acceptSourceReadingReturn(
+    NovelReaderSourceHandoff handoff,
+  ) async {
+    bool ownsReader() =>
+        ref.mounted &&
+        identical(handoff.owner, this) &&
+        identical(handoff, _activeSourceHandoff) &&
+        handoff.session == _activeSessionToken &&
+        !state.isLoading &&
+        state.asData?.value.currentEpisode.episodeId == handoff.episodeId;
+    if (!ownsReader()) return;
+    final request = ++_readingRefreshSerial;
+    final repository = ref.read(novelReadingStateRepositoryProvider);
+    NovelReadingStateSnapshot? readingState;
+    NovelReadingProgress? fallbackProgress;
+    try {
+      if (repository == null) {
+        fallbackProgress = await ref
+            .read(novelRepositoryProvider)
+            .getReadingProgress(novelId: _args.novelId);
+      } else {
+        readingState = await repository.loadWorkState(novelId: _args.novelId);
+      }
+    } catch (_) {
+      if (ownsReader() && request == _readingRefreshSerial) {
+        // Passive exit still cannot write a stale position after a read failure.
+        // A later deliberate navigation can establish a new reading position.
+        _resumeSourceReadingSession(handoff.episodeId, bodyReady: false);
+        _activeSourceHandoff = null;
+      }
+      rethrow;
+    }
+    if (!ownsReader() || request != _readingRefreshSerial) return;
+    final current = state.asData!.value;
+    final progress =
+        readingState?.progressByEpisode[handoff.episodeId] ??
+        (readingState == null &&
+                fallbackProgress?.episodeId == handoff.episodeId
+            ? fallbackProgress
+            : null);
+    final changed = !_sameRecordedPosition(handoff.progress, progress);
+    final snapshot = changed
+        ? _progressPolicy.fromReadingProgress(
+            novelId: _args.novelId,
+            episodeId: handoff.episodeId,
+            flowMode: current.preferences.flowMode,
+            progress: progress,
+          )
+        : current.progressSnapshot;
+    final recent = readingState?.recentProgress ?? fallbackProgress;
+    _resumeSourceReadingSession(handoff.episodeId, bodyReady: !changed);
+    _activeSourceHandoff = null;
+    state = AsyncData(
+      current.copyWith(
+        readingState: readingState,
+        readingProgress: recent,
+        clearReadingProgress: recent == null,
+        progressSnapshot: snapshot,
+        currentOffset: snapshot.scrollOffset,
+        readingSurfaceRevision:
+            current.readingSurfaceRevision + (changed ? 1 : 0),
+      ),
+    );
+  }
+
+  void _resumeSourceReadingSession(
+    String episodeId, {
+    required bool bodyReady,
+  }) {
+    final token = _readingSession.begin(
+      novelId: _args.novelId,
+      episodeId: episodeId,
+      entry: NovelReadingSessionEntry.readOnlyRestore,
+    );
+    _readingBarrierRevision = ref
+        .read(novelReadingMutationBarrierProvider)
+        .capture(_args.novelId, episodeId);
+    _readingSession.updateVisibility(
+      frontmost: _surfaceFrontmost,
+      resumed: _surfaceResumed,
+    );
+    _readingSession.updateReadiness(
+      token,
+      bodyReady: bodyReady,
+      restoreSettled: bodyReady,
+      readOnlyCompatibilityRestore: true,
+    );
+  }
+
+  bool _sameRecordedPosition(
+    NovelReadingProgress? previous,
+    NovelReadingProgress? next,
+  ) {
+    if (identical(previous, next)) return true;
+    if (previous == null || next == null) return false;
+    // Projection and a deduplicated flush can have different timestamps from
+    // the stored row. Only position evidence requires a surface restoration.
+    return _progressPolicy.fromReadingProgress(
+          novelId: _args.novelId,
+          episodeId: previous.episodeId,
+          flowMode: previous.flowMode,
+          progress: previous,
+        ) ==
+        _progressPolicy.fromReadingProgress(
+          novelId: _args.novelId,
+          episodeId: next.episodeId,
+          flowMode: next.flowMode,
+          progress: next,
+        );
   }
 
   Future<void> setChapterRead(String episodeId, bool isRead) async {

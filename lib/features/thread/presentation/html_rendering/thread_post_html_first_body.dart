@@ -9,6 +9,8 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
+import 'package:y300/features/thread/presentation/services/thread_body_reading_image_host.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
     void Function(ThreadPost post, ForumHtmlImageRequest request);
@@ -36,6 +38,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
     this.imageAnchorController,
+    this.readingCoordinator,
     this.bodyPresentation,
     this.imagePrecacheService,
     this.fallback,
@@ -64,6 +67,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   onBlockImageResolved;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumHtmlImageAnchorController? imageAnchorController;
+  final ThreadBodyReadingCoordinator? readingCoordinator;
   final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
@@ -82,6 +86,39 @@ class _ThreadPostHtmlFirstBodyState
   String? _lastRenderFailureLogKey;
   Object? _preparedIdentity;
   ForumHtmlPreparedRenderDocument? _preparedDocument;
+  final _readingKey = GlobalKey();
+  final _readingExpansion = <String, bool>{};
+  ThreadBodyReadingImageTracker? _readingImages;
+  ForumHtmlImageHost? _readingImageHost;
+  Object? _readingIdentity;
+  bool _readingReady = false;
+  int _readingRevision = 0;
+
+  @override
+  void didUpdateWidget(covariant ThreadPostHtmlFirstBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.readingCoordinator, widget.readingCoordinator)) {
+      oldWidget.readingCoordinator?.unregister(this);
+      _clearReading();
+    }
+  }
+
+  void _clearReading() {
+    _readingReady = false;
+    _readingIdentity = null;
+    _readingImageHost = null;
+    _readingImages?.dispose();
+    _readingImages = null;
+    _readingExpansion.clear();
+    _readingRevision++;
+  }
+
+  @override
+  void dispose() {
+    widget.readingCoordinator?.unregister(this);
+    _readingImages?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,12 +175,67 @@ class _ThreadPostHtmlFirstBodyState
         _preparedIdentity = identity;
       }
       final preparedDocument = _preparedDocument!;
+      final coordinator = widget.readingCoordinator;
+      final tracked =
+          coordinator?.tracks(widget.threadId, sourcePost.pid) == true;
+      final readingIdentity = (
+        identity,
+        sourcePost.message,
+        widget.imageReferer,
+        widget.imagePrecacheService,
+      );
+      if (tracked && _readingIdentity != readingIdentity) {
+        _clearReading();
+        _readingIdentity = readingIdentity;
+        _readingImages = ThreadBodyReadingImageTracker(coordinator!.schedule);
+        if (preparedDocument.sequence.entries.isNotEmpty) {
+          final delegate = ref
+              .read(forumHtmlImageHostProvider)
+              .forContent(
+                threadId: widget.threadId,
+                imageReferer: widget.imageReferer,
+                imageCacheOwnerId: widget.threadId,
+                fallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
+                onBlockImageResolved: widget.onBlockImageResolved,
+                imagePrecacheService: widget.imagePrecacheService,
+              );
+          _readingImageHost = ThreadBodyReadingImageHost(
+            delegate: delegate,
+            tracker: _readingImages!,
+          );
+        }
+      }
+      if (tracked) {
+        coordinator!.register(
+          ThreadBodyReadingHandle(
+            owner: this,
+            key: _readingKey,
+            tid: widget.threadId,
+            pid: sourcePost.pid,
+            bodyIdentity: readingIdentity,
+            htmlReady: () => _readingReady,
+            imagesReady: (viewport) =>
+                _readingImages?.readyIn(viewport) ?? true,
+            finalBoundaryKnown: () =>
+                _readingExpansion.values.every((value) => value),
+            layoutRevision: () => (
+              _readingRevision,
+              Object.hashAll(
+                _readingExpansion.entries.map(
+                  (entry) => (entry.key, entry.value),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       _logPreparedDocument(
         sourceId: sourceId,
         htmlLength: html.length,
         preparedDocument: preparedDocument,
       );
-      return KeyedSubtree(
+      final readingRevision = _readingRevision;
+      final body = KeyedSubtree(
         key: Key('thread-post-html-first-body-${sourcePost.pid}'),
         child: ForumHtmlWidgetPostRenderer(
           html: html,
@@ -158,10 +250,28 @@ class _ThreadPostHtmlFirstBodyState
           imageViewportCoordinator: widget.imageViewportCoordinator,
           imageAnchorController: widget.imageAnchorController,
           bodyPresentation: widget.bodyPresentation,
-          collapseExpansion: widget.bodyPresentation?.collapseExpansion,
+          collapseExpansion: tracked
+              ? _readingExpansion
+              : widget.bodyPresentation?.collapseExpansion,
+          imageHost: tracked ? _readingImageHost : null,
+          onBodyBuilt: !tracked
+              ? null
+              : () {
+                  if (mounted && readingRevision == _readingRevision) {
+                    _readingReady = true;
+                    coordinator!.schedule();
+                  }
+                },
           imagePrecacheService: widget.imagePrecacheService,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(
+            onInteraction: !tracked
+                ? null
+                : () {
+                    _readingRevision++;
+                    coordinator!.observer.cancelPendingCompletion();
+                    coordinator.schedule();
+                  },
             onTapUrl: (url) {
               widget.onOpenPostLink(url);
               return true;
@@ -172,6 +282,13 @@ class _ThreadPostHtmlFirstBodyState
           ),
         ),
       );
+      return !tracked
+          ? body
+          : ThreadBodyReadingBoundary(
+              key: _readingKey,
+              coordinator: coordinator!,
+              child: body,
+            );
     } catch (error, stackTrace) {
       _logRenderFailure(
         htmlLength: html.length,
@@ -314,6 +431,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.onBlockImageResolved,
     this.imageViewportCoordinator,
     this.imageAnchorController,
+    this.readingCoordinator,
     this.bodyPresentation,
     this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
@@ -341,6 +459,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   onBlockImageResolved;
   final ForumHtmlImageViewportCoordinator? imageViewportCoordinator;
   final ForumHtmlImageAnchorController? imageAnchorController;
+  final ThreadBodyReadingCoordinator? readingCoordinator;
   final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
@@ -363,6 +482,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       onBlockImageResolved: onBlockImageResolved,
       imageViewportCoordinator: imageViewportCoordinator,
       imageAnchorController: imageAnchorController,
+      readingCoordinator: readingCoordinator,
       bodyPresentation: bodyPresentation,
       imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,

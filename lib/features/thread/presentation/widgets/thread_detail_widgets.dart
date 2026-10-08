@@ -22,6 +22,7 @@ import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_preload_policy.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_return_coordinator.dart';
+import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
@@ -50,6 +51,7 @@ class ThreadDetailContent extends StatefulWidget {
     this.projection,
     this.scrollController,
     this.imageReaderReturnCoordinator,
+    this.bodyReadingCoordinator,
     this.highlightPostPid,
     this.targetPid,
     this.landing = ThreadPostLanding.top,
@@ -78,6 +80,7 @@ class ThreadDetailContent extends StatefulWidget {
   final ThreadDetailContentProjection? projection;
   final ScrollController? scrollController;
   final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
+  final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
   final String? highlightPostPid;
   final String? targetPid;
   final ThreadPostLanding landing;
@@ -119,6 +122,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     debugLabel: 'thread-detail-target-visible',
   );
   String? _reportedTargetIdentity;
+  int _readingContentRevision = 0;
   late ThreadDetailScrollStabilizer _scrollStabilizer;
   late ThreadPostViewportAnchorCoordinator _projectionAnchorCoordinator;
   ForumHtmlImageViewportCoordinator? _imageViewportCoordinator;
@@ -159,6 +163,18 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.bodyReadingCoordinator != null &&
+        (oldWidget.state.posts.length != widget.state.posts.length ||
+            List.generate(widget.state.posts.length, (index) => index).any(
+              (index) =>
+                  index >= oldWidget.state.posts.length ||
+                  oldWidget.state.posts[index].pid !=
+                      widget.state.posts[index].pid ||
+                  oldWidget.state.posts[index].message !=
+                      widget.state.posts[index].message,
+            ))) {
+      _readingContentRevision++;
+    }
     if (oldWidget.state.tid != widget.state.tid ||
         oldWidget.targetPid != widget.targetPid ||
         oldWidget.landing != widget.landing) {
@@ -217,6 +233,19 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   Widget build(BuildContext context) {
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    widget.bodyReadingCoordinator?.bindContent(
+      tid: widget.state.tid,
+      page: widget.state.currentPage,
+      identity: (
+        widget.state.tid,
+        widget.state.currentPage,
+        widget.state.queryParameters['authorid'],
+        widget.state.queryParameters['ordertype'],
+        _readingContentRevision,
+        widget.projection?.displayIdentity,
+      ),
+      viewportKey: _viewportKey,
+    );
     widget.imageReaderReturnCoordinator?.updatePage(
       tid: widget.state.tid,
       page: widget.state.currentPage,
@@ -513,6 +542,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
             imageAnchorController: widget.imageReaderReturnCoordinator
                 ?.anchorsFor(entry.sourcePost!.pid),
             imagePrecacheService: widget.htmlImagePrecacheService,
+            bodyReadingCoordinator: widget.bodyReadingCoordinator,
             onOpenPostActions: widget.onOpenPostActions,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
             onTogglePollOption: widget.onTogglePollOption,
@@ -568,6 +598,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           imageAnchorController: widget.imageReaderReturnCoordinator
               ?.anchorsFor(entry.sourcePost!.pid),
           imagePrecacheService: widget.htmlImagePrecacheService,
+          bodyReadingCoordinator: widget.bodyReadingCoordinator,
           onOpenPostActions: widget.onOpenPostActions,
         );
       case ThreadDetailRenderEntryKind.postFooter:

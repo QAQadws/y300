@@ -12,17 +12,33 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     required ScrollController scrollController,
     this.animationDuration = const Duration(milliseconds: 260),
     this.endpointTolerance = 1,
+    this.onUserNavigation,
+    this.onNavigationStarted,
   }) : _scrollController = scrollController;
 
   final ScrollController _scrollController;
   final Duration animationDuration;
   final double endpointTolerance;
+  final VoidCallback? onUserNavigation;
+  final VoidCallback? onNavigationStarted;
 
   ThreadDetailQuickScrollTarget _target = ThreadDetailQuickScrollTarget.bottom;
   bool _isScrollable = false;
   bool _isNavigating = false;
   bool _navigationInterrupted = false;
   bool _isDisposed = false;
+  int _navigationGeneration = 0;
+
+  void cancelNavigation() {
+    _navigationGeneration++;
+    _navigationInterrupted = true;
+    final wasNavigating = _isNavigating;
+    _isNavigating = false;
+    if (wasNavigating && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.position.pixels);
+    }
+    if (wasNavigating && !_isDisposed) notifyListeners();
+  }
 
   ThreadDetailQuickScrollTarget get target => _target;
   bool get isScrollable => _isScrollable;
@@ -101,6 +117,9 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     }
 
     _isNavigating = true;
+    final generation = ++_navigationGeneration;
+    bool isCurrent() => !_isDisposed && generation == _navigationGeneration;
+    onNavigationStarted?.call();
     _navigationInterrupted = false;
     notifyListeners();
     try {
@@ -113,9 +132,19 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
       } else {
         _scrollController.jumpTo(targetOffset);
       }
-      if (!_navigationInterrupted &&
+      if (isCurrent() &&
+          !_navigationInterrupted &&
           _shouldSettleAtLiveEndpoint(requestedTarget, targetOffset)) {
-        await _settleAtLiveEndpoint(requestedTarget);
+        await _settleAtLiveEndpoint(requestedTarget, isCurrent);
+      }
+      if (isCurrent() &&
+          !_navigationInterrupted &&
+          _scrollController.hasClients &&
+          (_scrollController.position.pixels - sourceOffset).abs() >
+              endpointTolerance) {
+        // Confirm after the final live endpoint settles. Authorizing only the
+        // animation's first frame would persist its starting position.
+        onUserNavigation?.call();
       }
     } catch (error) {
       // A route replacement or a new user drag may detach/cancel the position.
@@ -128,7 +157,7 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
         return true;
       }());
     } finally {
-      if (!_isDisposed) {
+      if (isCurrent()) {
         _isNavigating = false;
         _navigationInterrupted = false;
         if (_scrollController.hasClients) {
@@ -160,13 +189,14 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
 
   Future<void> _settleAtLiveEndpoint(
     ThreadDetailQuickScrollTarget requestedTarget,
+    bool Function() isCurrent,
   ) async {
     // Lazy HTML entries and decoded images can change the content extent while
     // a fast animation is crossing the page. Re-sample for a few frames so the
     // button never leaves the position at a stale or out-of-range endpoint.
     for (var attempt = 0; attempt < 3; attempt++) {
       await WidgetsBinding.instance.endOfFrame;
-      if (_isDisposed ||
+      if (!isCurrent() ||
           _navigationInterrupted ||
           !_scrollController.hasClients) {
         return;
@@ -194,6 +224,7 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _navigationGeneration++;
     super.dispose();
   }
 }

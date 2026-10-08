@@ -23,6 +23,7 @@ import 'package:y300/features/novel/application/novel_reader_vertical_session_co
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
+import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -36,6 +37,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_source_thread_route_launcher.dart';
 
 import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
@@ -224,7 +226,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   Widget build(BuildContext context) {
     final readerProvider = novelReaderControllerProvider(_args);
-    ref.listen(readerProvider, (_, next) {
+    ref.listen(readerProvider, (previous, next) {
+      if (previous?.asData?.value.readingAuthorityRevision !=
+          next.asData?.value.readingAuthorityRevision) {
+        _pagedPosition = null;
+      }
       if (next.isLoading) {
         _retireDisplayPreferencesCoordinator();
         _retireVerticalSession(preserveContentProof: true);
@@ -466,11 +472,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                     child: Stack(
                       children: [
                         Positioned.fill(
-                          child: ExcludeSemantics(
-                            excluding: _readerSemanticsSuspendCount > 0,
-                            child: KeyedSubtree(
-                              key: ValueKey<String>(readerSurfaceIdentity),
-                              child: reader,
+                          // Keep a stable semantics parent while a native
+                          // route temporarily excludes the cached reader tree.
+                          child: Semantics(
+                            container: true,
+                            child: ExcludeSemantics(
+                              excluding: _readerSemanticsSuspendCount > 0,
+                              child: KeyedSubtree(
+                                key: ValueKey<String>(readerSurfaceIdentity),
+                                child: reader,
+                              ),
                             ),
                           ),
                         ),
@@ -855,6 +866,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }) {
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return NovelReaderHtmlPagedSurface(
+        readingAuthorityIdentity: viewState.readingAuthorityRevision,
         preparationService: ref.watch(
           novelReaderHtmlPreparationServiceProvider,
         ),
@@ -1964,6 +1976,61 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
   }
 
+  Future<void> _runWithSourceReadingSuspended(
+    Future<void> Function() action,
+  ) async {
+    final args = _args;
+    final provider = novelReaderControllerProvider(args);
+    final controller = ref.read(provider.notifier);
+    final current = ref.read(provider).asData?.value;
+    if (current == null) return;
+    final identity = _readerSurfaceIdentity(current);
+    try {
+      await _saveVisibleProgressNow(reason: 'before_source_reading');
+    } catch (_) {
+      if (mounted && _isCurrentReaderSurface(identity)) {
+        _showReaderSnackBar(
+          AppLocalizations.of(context).novelSaveReadingProgressFailed,
+        );
+      }
+      return;
+    }
+    if (!mounted ||
+        _args != args ||
+        !identical(ref.read(provider.notifier), controller) ||
+        !_isCurrentReaderSurface(identity)) {
+      return;
+    }
+    final handoff = controller.beginSourceReadingHandoff();
+    if (handoff == null) return;
+    _suspendReaderSemantics();
+    try {
+      // Publish the covered semantics and retired navigation proof before a
+      // native source route mounts its own HTML semantics tree.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      await action();
+    } finally {
+      try {
+        if (mounted &&
+            _args == args &&
+            identical(ref.read(provider.notifier), controller)) {
+          await controller.acceptSourceReadingReturn(handoff);
+        }
+      } catch (_) {
+        // A failed refresh must leave the old producer retired, not overwrite
+        // a source position using the stale snapshot during route exit.
+        if (mounted) {
+          _showReaderSnackBar(
+            AppLocalizations.of(context).novelSaveReadingProgressFailed,
+          );
+        }
+      } finally {
+        _resumeReaderSemantics();
+      }
+    }
+  }
+
   void _suspendReaderSemantics() {
     if (!mounted) {
       _readerSemanticsSuspendCount += 1;
@@ -2116,15 +2183,47 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _openSourceThread(NovelReaderViewState viewState) async {
-    final tid = (viewState.novel?.sourceTid.trim().isNotEmpty == true)
-        ? viewState.novel!.sourceTid
-        : viewState.currentEpisode.sourceTid;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            ThreadDetailPage(tid: tid, subject: _novelTitle(viewState)),
-      ),
+    final identity = _readerSurfaceIdentity(viewState);
+    final episode = viewState.currentEpisode;
+    final target = ThreadPostTarget(
+      tid: episode.sourceTid,
+      pid: episode.sourcePid ?? '',
     );
+    await _runWithSourceReadingSuspended(() async {
+      if (!_isCurrentReaderSurface(identity)) return;
+      if (!target.isValid) {
+        // A missing PID cannot prove which body belongs to this chapter.
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ThreadDetailPage(
+              tid: episode.sourceTid,
+              subject: _novelTitle(viewState),
+            ),
+          ),
+        );
+        return;
+      }
+      await launchNovelSourceThreadRoute(
+        context: context,
+        session: _postRouteSession,
+        resolver: ref.read(threadPostRouteResolverProvider),
+        target: target,
+        isCurrent: () => _isCurrentReaderSurface(identity),
+        readingContext: NovelSourceReadingContext(
+          novelId: widget.novelId,
+          initialEpisodeId: episode.episodeId,
+          chapters: viewState.episodes.map(
+            (chapter) => NovelSourceReadingChapter(
+              episodeId: chapter.episodeId,
+              sourceTid: chapter.sourceTid,
+              sourcePid: chapter.sourcePid,
+            ),
+          ),
+        ),
+        createAdapter: ref.read(novelSourceReadingAdapterFactoryProvider),
+        subject: _novelTitle(viewState),
+      );
+    });
   }
 
   ThreadPostTarget? _chapterInteractionsTarget(NovelReaderViewState viewState) {
@@ -2162,44 +2261,37 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     });
     _overlayController.hideMenu();
     try {
-      try {
-        await _saveVisibleProgressNow(reason: 'before_chapter_interactions');
-      } catch (_) {
-        if (mounted && _isCurrentReaderSurface(surfaceIdentity)) {
-          _showReaderSnackBar(
-            AppLocalizations.of(context).novelSaveReadingProgressFailed,
-          );
+      await _runWithSourceReadingSuspended(() async {
+        if (!_isCurrentReaderSurface(surfaceIdentity)) return;
+        final current = ref
+            .read(novelReaderControllerProvider(_args))
+            .asData
+            ?.value;
+        if (current == null || _chapterInteractionsTarget(current) != target) {
+          return;
         }
-        return;
-      }
-      if (!_isCurrentReaderSurface(surfaceIdentity)) return;
-      final current = ref
-          .read(novelReaderControllerProvider(_args))
-          .asData
-          ?.value;
-      if (current == null || _chapterInteractionsTarget(current) != target) {
-        return;
-      }
-      if (!mounted) return;
-      await launchThreadPostRoute(
-        context: context,
-        session: _postRouteSession,
-        resolver: ref.read(threadPostRouteResolverProvider),
-        target: target,
-        subject: NovelTextResolver.chapterTitle(
-          AppLocalizations.of(context),
-          current.currentEpisode.episodeTitle,
-          current.currentEpisode.sourceTid,
-        ),
-        isCurrent: () {
-          if (!_isCurrentReaderSurface(surfaceIdentity)) return false;
-          final latest = ref
-              .read(novelReaderControllerProvider(_args))
-              .asData
-              ?.value;
-          return latest != null && _chapterInteractionsTarget(latest) == target;
-        },
-      );
+        if (!mounted) return;
+        await launchThreadPostRoute(
+          context: context,
+          session: _postRouteSession,
+          resolver: ref.read(threadPostRouteResolverProvider),
+          target: target,
+          subject: NovelTextResolver.chapterTitle(
+            AppLocalizations.of(context),
+            current.currentEpisode.episodeTitle,
+            current.currentEpisode.sourceTid,
+          ),
+          isCurrent: () {
+            if (!_isCurrentReaderSurface(surfaceIdentity)) return false;
+            final latest = ref
+                .read(novelReaderControllerProvider(_args))
+                .asData
+                ?.value;
+            return latest != null &&
+                _chapterInteractionsTarget(latest) == target;
+          },
+        );
+      });
     } finally {
       if (mounted &&
           _chapterInteractionsPendingOwner == surfaceIdentity &&
@@ -2302,7 +2394,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _showReaderSnackBar(AppLocalizations.of(context).novelLinkOpenFailed);
   }
 
-  void _openHtmlReaderImage(ThreadImageOpenRequest request) {
+  Future<void> _openHtmlReaderImage(ThreadImageOpenRequest request) async {
     if (request.continuousImages.isEmpty) {
       final entry = request.initialEntry;
       if (entry != null) {
@@ -2310,14 +2402,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       }
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ThreadImageReaderPage(
-          request: request,
-          imageReferer: ref.read(forumImageRefererProvider),
+    await _runWithReaderSemanticsSuspended(() async {
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ThreadImageReaderPage(
+            request: request,
+            imageReferer: ref.read(forumImageRefererProvider),
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   Future<void> _copyNovelImageUrl(String url) async {

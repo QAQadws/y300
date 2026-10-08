@@ -47,6 +47,8 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
+import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
+import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 
 class ThreadDetailPage extends ConsumerStatefulWidget {
   const ThreadDetailPage({
@@ -58,6 +60,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.initialHandoff,
     this.landing = ThreadPostLanding.top,
     this.initialForumName,
+    this.bodyReadingObserver,
   }) : assert(
          landing == ThreadPostLanding.top ||
              (targetPid != null && targetPid != ''),
@@ -71,12 +74,14 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
   final ThreadDetailHandoff? initialHandoff;
   final ThreadPostLanding landing;
   final String? initialForumName;
+  final ThreadBodyReadingObserver? bodyReadingObserver;
 
   @override
   ConsumerState<ThreadDetailPage> createState() => _ThreadDetailPageState();
 }
 
-class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
+class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
+    with WidgetsBindingObserver {
   late final ScrollController _scrollController;
   late final ThreadImageReaderReturnCoordinator _imageReaderReturnCoordinator;
   late final ThreadDetailQuickScrollCoordinator _quickScrollCoordinator;
@@ -91,6 +96,14 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   bool _didReportHistoryDuplicate = false;
   bool _postActionActive = false;
   final _postRouteSession = ThreadPostNavigationSession();
+  ThreadBodyReadingCoordinator? _bodyReadingCoordinator;
+  bool _readingResumed = true;
+  bool _readingVisible = false;
+  bool _readingClosing = false;
+  int _readingSuspensions = 0;
+  int _readingVisibilityRevision = 0;
+  int _readingCloseRevision = 0;
+  int _readingOwnerRevision = 0;
 
   @override
   void initState() {
@@ -101,12 +114,158 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
     );
     _quickScrollCoordinator = ThreadDetailQuickScrollCoordinator(
       scrollController: _scrollController,
+      onUserNavigation: () => _bodyReadingCoordinator?.markUserNavigation(),
+      onNavigationStarted: () =>
+          _bodyReadingCoordinator?.beginExplicitNavigation(),
     );
+    _bindReadingObserver();
+  }
+
+  void _bindReadingObserver() {
+    final observer = widget.bodyReadingObserver;
+    if (observer == null) return;
+    WidgetsBinding.instance.addObserver(this);
+    _bodyReadingCoordinator = ThreadBodyReadingCoordinator(
+      observer: observer,
+      scrollController: _scrollController,
+      initialTargetPid: widget.targetPid,
+    )..setActive(false);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncReadingVisibility();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _readingResumed = state == AppLifecycleState.resumed;
+    _syncReadingVisibility();
+  }
+
+  void _syncReadingVisibility() {
+    final observer = widget.bodyReadingObserver;
+    if (observer == null || !mounted || _readingClosing) return;
+    final frontmost =
+        (ModalRoute.of(context)?.isCurrent ?? true) && _readingSuspensions == 0;
+    final visible = frontmost && _readingResumed;
+    if (_readingVisible == visible) return;
+    _readingVisible = visible;
+    final revision = ++_readingVisibilityRevision;
+    if (visible) {
+      observer.onVisibility(frontmost: frontmost, resumed: _readingResumed);
+      _bodyReadingCoordinator?.setActive(true);
+      return;
+    }
+    _bodyReadingCoordinator?.setActive(false);
+    _quickScrollCoordinator.cancelNavigation();
+    _pauseReading(observer);
+    // Stop new measurements immediately, then flush the last confirmed lease
+    // before changing producer visibility and invalidating that lease.
+    unawaited(() async {
+      await _flushReading(observer);
+      if (mounted &&
+          revision == _readingVisibilityRevision &&
+          identical(observer, widget.bodyReadingObserver)) {
+        observer.onVisibility(frontmost: frontmost, resumed: _readingResumed);
+      }
+    }());
+  }
+
+  Future<void> _flushReading(ThreadBodyReadingObserver observer) async {
+    try {
+      await observer.flush();
+    } catch (error) {
+      debugPrint('[ThreadBodyReading] flush_failure=${error.runtimeType}');
+    }
+  }
+
+  void _pauseReading(ThreadBodyReadingObserver observer) {
+    if (observer is ThreadBodyReadingSuspension) {
+      (observer as ThreadBodyReadingSuspension).suspendForFlush();
+    }
+    observer.cancelPendingCompletion();
+  }
+
+  Future<void> _runReadingViewAction(
+    FutureOr<void> Function() action, {
+    bool userNavigation = false,
+  }) async {
+    final observer = widget.bodyReadingObserver;
+    final ownerRevision = _readingOwnerRevision;
+    if (observer == null) {
+      await action();
+      return;
+    }
+    _readingSuspensions++;
+    _quickScrollCoordinator.cancelNavigation();
+    if (userNavigation) _bodyReadingCoordinator?.markUserNavigation();
+    _bodyReadingCoordinator?.setActive(false);
+    _pauseReading(observer);
+    try {
+      await _flushReading(observer);
+      if (mounted && ownerRevision == _readingOwnerRevision) await action();
+    } finally {
+      if (mounted && ownerRevision == _readingOwnerRevision) {
+        _readingSuspensions--;
+        _readingVisible = false;
+        _syncReadingVisibility();
+      }
+    }
+  }
+
+  Future<void> _closeReadingAndPop() async {
+    if (_readingClosing) return;
+    final observer = widget.bodyReadingObserver;
+    if (observer == null) return;
+    final tid = widget.tid;
+    final targetPid = widget.targetPid;
+    final closeRevision = ++_readingCloseRevision;
+    bool isCurrent() =>
+        mounted &&
+        closeRevision == _readingCloseRevision &&
+        identical(observer, widget.bodyReadingObserver) &&
+        tid == widget.tid &&
+        targetPid == widget.targetPid;
+    _readingClosing = true;
+    _quickScrollCoordinator.cancelNavigation();
+    _readingVisibilityRevision++;
+    _bodyReadingCoordinator?.setActive(false);
+    _pauseReading(observer);
+    await _flushReading(observer);
+    observer.retire();
+    if (!isCurrent()) return;
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isCurrent()) Navigator.of(context).pop();
+    });
   }
 
   @override
   void didUpdateWidget(covariant ThreadDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.bodyReadingObserver, widget.bodyReadingObserver) ||
+        oldWidget.tid != widget.tid ||
+        oldWidget.targetPid != widget.targetPid) {
+      _readingCloseRevision++;
+      _quickScrollCoordinator.cancelNavigation();
+      _readingOwnerRevision++;
+      _readingVisibilityRevision++;
+      _readingClosing = false;
+      _readingSuspensions = 0;
+      WidgetsBinding.instance.removeObserver(this);
+      _bodyReadingCoordinator?.dispose();
+      _bodyReadingCoordinator = null;
+      final oldObserver = oldWidget.bodyReadingObserver;
+      if (oldObserver != null) {
+        _pauseReading(oldObserver);
+        unawaited(_flushReading(oldObserver).whenComplete(oldObserver.retire));
+      }
+      _readingVisible = false;
+      _bindReadingObserver();
+      _syncReadingVisibility();
+    }
     if (oldWidget.tid != widget.tid ||
         oldWidget.targetPid != widget.targetPid ||
         oldWidget.initialPage != widget.initialPage ||
@@ -125,6 +284,15 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
 
   @override
   void dispose() {
+    _readingCloseRevision++;
+    _readingOwnerRevision++;
+    WidgetsBinding.instance.removeObserver(this);
+    _bodyReadingCoordinator?.dispose();
+    final observer = widget.bodyReadingObserver;
+    if (observer != null && !_readingClosing) {
+      _pauseReading(observer);
+      unawaited(_flushReading(observer).whenComplete(observer.retire));
+    }
     _postRouteSession.dispose();
     _highlightClearTimer?.cancel();
     _quickScrollCoordinator.dispose();
@@ -204,9 +372,12 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       diagnostics: historyDiagnostics,
     );
 
-    return Scaffold(
+    final page = Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
+        leading: widget.bodyReadingObserver == null
+            ? null
+            : BackButton(onPressed: () => unawaited(_closeReadingAndPop())),
         centerTitle: false,
         title: GestureDetector(
           key: const Key('thread-detail-appbar-copy-link-area'),
@@ -264,10 +435,22 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
             ),
           _ThreadDetailMoreMenu(
             state: state,
-            onOnlyAuthor: controller.openOnlyAuthor,
-            onAllPosts: controller.openAllPosts,
-            onReverseOrder: controller.openReverseOrder,
-            onNormalOrder: controller.openNormalOrder,
+            onOnlyAuthor: () => _runReadingViewAction(
+              controller.openOnlyAuthor,
+              userNavigation: true,
+            ),
+            onAllPosts: () => _runReadingViewAction(
+              controller.openAllPosts,
+              userNavigation: true,
+            ),
+            onReverseOrder: () => _runReadingViewAction(
+              controller.openReverseOrder,
+              userNavigation: true,
+            ),
+            onNormalOrder: () => _runReadingViewAction(
+              controller.openNormalOrder,
+              userNavigation: true,
+            ),
             onCopyUrl: _copyUrl,
             onDisplaySettings: _openDisplaySettings,
           ),
@@ -315,10 +498,13 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
                               },
                       )
                     : ForumPullToRefresh(
-                        onRefresh: () => controller.refresh(forceNetwork: true),
+                        onRefresh: () => _runReadingViewAction(
+                          () => controller.refresh(forceNetwork: true),
+                        ),
                         child: ThreadDetailContent(
                           imageReaderReturnCoordinator:
                               _imageReaderReturnCoordinator,
+                          bodyReadingCoordinator: _bodyReadingCoordinator,
                           state: state,
                           projection: projection,
                           displayExtraCommentsByPostId: extraComments,
@@ -392,12 +578,22 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
       ),
       floatingActionButtonAnimator: FloatingActionButtonAnimator.noAnimation,
     );
+    return widget.bodyReadingObserver == null
+        ? page
+        : PopScope<void>(
+            canPop: _readingClosing,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) unawaited(_closeReadingAndPop());
+            },
+            child: page,
+          );
   }
 
   bool _handleQuickScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) {
       return false;
     }
+    _bodyReadingCoordinator?.handleScroll(notification);
     if (notification case UserScrollNotification(:final direction)) {
       _quickScrollCoordinator.updateUserDirection(direction);
     }
@@ -410,6 +606,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   ) {
     if (notification.depth == 0) {
       _quickScrollCoordinator.updateMetrics(notification.metrics);
+      _bodyReadingCoordinator?.schedule();
     }
     return false;
   }
@@ -500,24 +697,47 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage> {
   Future<void> _runPageActionAndScrollTop(
     FutureOr<void> Function() action,
   ) async {
-    await action();
-    if (!mounted) {
-      return;
+    final observer = widget.bodyReadingObserver;
+    final ownerRevision = _readingOwnerRevision;
+    if (observer != null) {
+      _readingSuspensions++;
+      _quickScrollCoordinator.cancelNavigation();
+      _bodyReadingCoordinator?.markUserNavigation();
+      _bodyReadingCoordinator?.setActive(false);
+      _pauseReading(observer);
+      await _flushReading(observer);
     }
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted || !_scrollController.hasClients) {
-      return;
+    try {
+      if (!mounted || ownerRevision != _readingOwnerRevision) return;
+      await action();
+      if (!mounted || ownerRevision != _readingOwnerRevision) {
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted ||
+          ownerRevision != _readingOwnerRevision ||
+          !_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      final targetOffset = position.minScrollExtent;
+      if ((position.pixels - targetOffset).abs() < 1) {
+        return;
+      }
+      await _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    } finally {
+      if (observer != null && ownerRevision == _readingOwnerRevision) {
+        _readingSuspensions--;
+        if (mounted) {
+          _readingVisible = false;
+          _syncReadingVisibility();
+        }
+      }
     }
-    final position = _scrollController.position;
-    final targetOffset = position.minScrollExtent;
-    if ((position.pixels - targetOffset).abs() < 1) {
-      return;
-    }
-    await _scrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   Future<void> _openThreadReplyComposer(

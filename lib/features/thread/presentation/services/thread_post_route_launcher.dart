@@ -6,6 +6,7 @@ import 'package:y300/features/thread/domain/services/thread_post_navigation_sess
 import 'package:y300/features/thread/domain/services/thread_post_route_resolver.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
 
 enum _FailureChoice { retry, home }
 
@@ -16,6 +17,7 @@ Future<void> launchThreadPostRoute({
   required ThreadPostTarget target,
   required bool Function() isCurrent,
   String subject = '',
+  ThreadBodyReadingObserver? bodyReadingObserver,
   Future<ApiResult<ThreadPostLocation>> Function()? resolve,
   Key failureDialogKey = const Key('thread-post-route-failure-dialog'),
 }) {
@@ -51,6 +53,7 @@ Future<void> launchThreadPostRoute({
                 initialPage: data.page,
                 initialHandoff: data.detailHandoff,
                 subject: subject,
+                bodyReadingObserver: bodyReadingObserver,
               ),
             ),
           );

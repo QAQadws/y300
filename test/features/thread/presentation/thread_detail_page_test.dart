@@ -90,6 +90,7 @@ import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 import 'package:y300/shared/widgets/forum_pull_to_refresh.dart';
+import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
 
 void main() {
   setUp(() {
@@ -97,6 +98,134 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
+    testWidgets('late reading close cannot pop a rebound thread owner', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository(
+        (String tid, int page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: 'bound',
+            author: 'Author',
+            replies: 0,
+            views: 1,
+            currentPage: page,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: '200',
+                author: 'Author',
+                authorId: '10',
+                message: '<p>body</p>',
+                number: 1,
+                isFirst: true,
+                dateline: '',
+              ),
+            ],
+          ),
+        ),
+      );
+      final oldObserver = _ReadingLifecycleObserver();
+      final nextObserver = _ReadingLifecycleObserver();
+      var observer = oldObserver;
+      var tid = '100';
+      StateSetter? changeRoute;
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                key: const Key('reading-test-home'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => StatefulBuilder(
+                      builder: (context, setState) {
+                        changeRoute = setState;
+                        return ThreadDetailPage(
+                          key: const Key('reading-owner'),
+                          tid: tid,
+                          targetPid: '200',
+                          bodyReadingObserver: observer,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('reading-test-home')));
+      await tester.pumpAndSettle();
+      final gate = Completer<void>();
+      oldObserver.flushGate = gate;
+      await tester.tap(find.byType(BackButton));
+      await tester.pump();
+      expect(oldObserver.flushCalls, greaterThan(0));
+      changeRoute!(() {
+        observer = nextObserver;
+        tid = '101';
+      });
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<ThreadDetailPage>(find.byType(ThreadDetailPage)).tid,
+        '101',
+      );
+      expect(nextObserver.retired, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('bound system back flushes before retiring the reading route', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository(
+        (String tid, int page) async =>
+            ApiSuccess(_navigationData(page, pid: '200')),
+      );
+      final observer = _ReadingLifecycleObserver();
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                key: const Key('reading-test-home'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ThreadDetailPage(
+                      tid: '100',
+                      targetPid: '200',
+                      bodyReadingObserver: observer,
+                    ),
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('reading-test-home')));
+      await tester.pumpAndSettle();
+      final gate = Completer<void>();
+      observer.flushGate = gate;
+      final back = tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+      expect(observer.retired, isFalse);
+      gate.complete();
+      await back;
+      await tester.pumpAndSettle();
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      expect(observer.retired, isTrue);
+    });
+
     testWidgets(
       'loads one comment page, deduplicates IDs, and retries failure',
       (tester) async {
@@ -7518,6 +7647,38 @@ class _FakeAuthSessionController extends AuthSessionController {
 
   @override
   Future<AuthSessionViewState> build() async => _session;
+}
+
+class _ReadingLifecycleObserver implements ThreadBodyReadingObserver {
+  Completer<void>? flushGate;
+  int flushCalls = 0;
+  bool retired = false;
+  @override
+  bool tracks(String tid, String pid) => pid == '200';
+  @override
+  ThreadBodyRestoreTarget? restoreTarget({
+    required String tid,
+    required String pid,
+    required Object bodyIdentity,
+  }) => null;
+  @override
+  void onContentChanged(Object contentIdentity) {}
+  @override
+  void onViewport(ThreadBodyReadingViewport viewport) {}
+  @override
+  void onVisibility({required bool frontmost, required bool resumed}) {}
+  @override
+  void cancelPendingCompletion() {}
+  @override
+  Future<void> flush() {
+    flushCalls++;
+    return flushGate?.future ?? Future<void>.value();
+  }
+
+  @override
+  void retire() {
+    retired = true;
+  }
 }
 
 class _FakeThreadRepository implements ThreadRepository {

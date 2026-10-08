@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -29,6 +31,11 @@ import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/domain/models/thread_post_target.dart';
+import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
+import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -38,6 +45,300 @@ const _next = 'novel:49:100:5002';
 const _args = NovelReaderArgs(novelId: _work, episodeId: _chapter);
 
 void main() {
+  testWidgets(
+    'source menu actual body reading returns to the latest common position',
+    (tester) async {
+      final repository = _ReadingRepository(
+        '<div style="height: 1800px">小说与原帖公共正文。</div>',
+      );
+      final sourceRepository = _SourceThreadRepository(repository.html);
+      final locator = _SourcePostLocator();
+      await tester.pumpWidget(
+        _app(repository, threadRepository: sourceRepository, locator: locator),
+      );
+      await _pumpBodyWithoutAdvancingTime(tester);
+      await tester.drag(
+        find.byKey(const Key('novel-reader-paragraph-list')),
+        const Offset(0, -250),
+      );
+      await tester.pumpAndSettle();
+      final before = _verticalPosition(tester).pixels;
+      await tester.tapAt(
+        tester.getCenter(find.byKey(const Key('novel-reader-paragraph-list'))),
+      );
+      await tester.pump(const Duration(milliseconds: 330));
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('shared-reader-top-action-open-thread')),
+      );
+      await tester.pumpAndSettle();
+      final sourcePage = tester.widget<ThreadDetailPage>(
+        find.byType(ThreadDetailPage),
+      );
+      expect(sourcePage.targetPid, '5001');
+      expect(sourcePage.landing, ThreadPostLanding.top);
+      expect(sourcePage.bodyReadingObserver, isNotNull);
+      expect(locator.calls, 1);
+      final priorSource = repository.progress[_chapter]!;
+      expect(priorSource.progressPercent, greaterThan(0));
+      final sourceScroll = find.descendant(
+        of: find.byType(ThreadDetailPage),
+        matching: find.byType(CustomScrollView),
+      );
+      await tester.drag(sourceScroll, const Offset(0, -450));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      final sourceProgress = repository.progress[_chapter]!;
+      expect(
+        sourceProgress.progressPercent,
+        greaterThan(priorSource.progressPercent),
+      );
+      expect(
+        sourceProgress.percentBasis,
+        NovelProgressPercentBasis.bodyGeometryV1,
+      );
+      expect(sourceProgress.anchorNodeId, isNull);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      final geometry = _bodyLayout(tester);
+      final expected =
+          geometry.bodyTop +
+          sourceProgress.progressPercent * geometry.bodyRange -
+          geometry.topChrome;
+      expect(_verticalPosition(tester).pixels, closeTo(expected, 1));
+      expect(_verticalPosition(tester).pixels, greaterThan(before));
+      expect(repository.progress[_chapter], same(sourceProgress));
+      expect(repository.completed, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'unchanged paged return retires old navigation without remounting HTML',
+    (tester) async {
+      final repository = _ReadingRepository(
+        List.generate(
+          16,
+          (index) => '<p>第$index段：${List.filled(40, '小说正文').join()}。</p>',
+        ).join(),
+      );
+      final navigation = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        _app(
+          repository,
+          navigation: navigation,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+          ),
+          threadRepository: _SourceThreadRepository(repository.html),
+          locator: _SourcePostLocator(),
+        ),
+      );
+      await _pumpPagedReady(tester);
+      final surfaceFinder = find.byType(NovelReaderHtmlPagedSurface);
+      tester
+          .widget<NovelReaderHtmlPagedSurface>(surfaceFinder)
+          .navigationController!
+          .turnNext();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      final mountedSurface = tester.state(surfaceFinder);
+      final before = _state(tester);
+      await tester.tapAt(const Offset(400, 300));
+      await tester.pump(const Duration(milliseconds: 330));
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('shared-reader-top-action-open-thread')),
+      );
+      await tester.pumpAndSettle();
+      final sourceOtherChapter = NovelReadingProgress(
+        novelId: _work,
+        episodeId: _next,
+        scrollOffset: 0,
+        progressPercent: .2,
+        isProgressPercentValid: true,
+        percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        updatedAt: DateTime(2026, 10, 8),
+      );
+      await repository.commitProgress(progress: sourceOtherChapter);
+      final commitCount = repository.committed.length;
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      final surface = tester.widget<NovelReaderHtmlPagedSurface>(surfaceFinder);
+      surface.onImagesReadyChanged!(true);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.state(surfaceFinder), same(mountedSurface));
+      expect(
+        _state(tester).readingSurfaceRevision,
+        before.readingSurfaceRevision,
+      );
+      expect(repository.recent, _next);
+      expect(repository.committed, hasLength(commitCount));
+      surface.navigationController!.turnNext();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(repository.recent, _chapter);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'source body percentage restores the actual paged surface read-only',
+    (tester) async {
+      final repository = _ReadingRepository(
+        List.generate(
+          16,
+          (index) => '<p>第$index段：${List.filled(40, '小说正文').join()}。</p>',
+        ).join(),
+      );
+      final navigation = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        _app(
+          repository,
+          navigation: navigation,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+          ),
+        ),
+      );
+      await _pumpPagedReady(tester);
+      final controller = _controller(tester);
+      final handoff = controller.beginSourceReadingHandoff()!;
+      unawaited(
+        navigation.currentState!.push<void>(
+          MaterialPageRoute(builder: (_) => const Scaffold(body: Text('原帖'))),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final source = NovelReadingProgress(
+        novelId: _work,
+        episodeId: _chapter,
+        scrollOffset: 0,
+        progressPercent: .6,
+        isProgressPercentValid: true,
+        percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        updatedAt: DateTime(2026, 10, 8),
+      );
+      await repository.commitProgress(progress: source);
+      final commitCount = repository.committed.length;
+      await controller.acceptSourceReadingReturn(handoff);
+      navigation.currentState!.pop();
+      await _pumpPagedReady(tester);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
+      final pageView = tester.widget<PageView>(
+        find.byKey(const Key('novel-reader-paged-page-view')),
+      );
+      final count = pageView.childrenDelegate.estimatedChildCount!;
+      expect(count, greaterThan(1));
+      expect(pageView.controller!.page, (.6 * count).floor().toDouble());
+      expect(repository.progress[_chapter], same(source));
+      expect(repository.committed, hasLength(commitCount));
+      expect(repository.completed, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'source handoff returns to the latest body position without rewriting it',
+    (tester) async {
+      final repository = _ReadingRepository(
+        '<div style="height: 2000px">原帖往返正文。</div>',
+      );
+      final navigation = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(_app(repository, navigation: navigation));
+      await _pumpBodyWithoutAdvancingTime(tester);
+      await tester.drag(
+        find.byKey(const Key('novel-reader-paragraph-list')),
+        const Offset(0, -300),
+      );
+      await tester.pumpAndSettle();
+      final controller = _controller(tester);
+      await controller.saveCurrentProgressNow(_state(tester).progressSnapshot);
+      final revision = _state(tester).readingSurfaceRevision;
+      final handoff = controller.beginSourceReadingHandoff()!;
+      unawaited(
+        navigation.currentState!.push<void>(
+          MaterialPageRoute(builder: (_) => const Scaffold(body: Text('原帖'))),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final source = NovelReadingProgress(
+        novelId: _work,
+        episodeId: _chapter,
+        scrollOffset: 0,
+        progressPercent: .65,
+        isProgressPercentValid: true,
+        percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        updatedAt: DateTime(2026, 10, 8),
+      );
+      await repository.commitProgress(progress: source);
+      final commitCount = repository.committed.length;
+      await controller.acceptSourceReadingReturn(handoff);
+      navigation.currentState!.pop();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
+      final geometry = _bodyLayout(tester);
+      final expected =
+          geometry.bodyTop + .65 * geometry.bodyRange - geometry.topChrome;
+      expect(_verticalPosition(tester).pixels, closeTo(expected, 1));
+      expect(_state(tester).readingSurfaceRevision, revision + 1);
+      expect(_state(tester).progressSnapshot.progressPercent, .65);
+      expect(repository.committed, hasLength(commitCount));
+      expect(repository.progress[_chapter], same(source));
+      expect(repository.completed, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(repository.progress[_chapter], same(source));
+    },
+  );
+
+  testWidgets(
+    'source reset returns to the head without establishing a new position',
+    (tester) async {
+      final repository = _ReadingRepository(
+        '<div style="height: 1600px">原帖重置正文。</div>',
+      );
+      repository.progress[_chapter] = NovelReadingProgress(
+        novelId: _work,
+        episodeId: _chapter,
+        scrollOffset: 0,
+        progressPercent: .5,
+        isProgressPercentValid: true,
+        percentBasis: NovelProgressPercentBasis.bodyGeometryV1,
+        updatedAt: DateTime(2026, 10, 1),
+      );
+      repository.recent = _chapter;
+      final navigation = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(_app(repository, navigation: navigation));
+      await _pumpBodyWithoutAdvancingTime(tester);
+      await tester.pumpAndSettle();
+      expect(_verticalPosition(tester).pixels, greaterThan(0));
+      final controller = _controller(tester);
+      final handoff = controller.beginSourceReadingHandoff()!;
+      unawaited(
+        navigation.currentState!.push<void>(
+          MaterialPageRoute(builder: (_) => const Scaffold(body: Text('原帖'))),
+        ),
+      );
+      await tester.pumpAndSettle();
+      repository.progress.clear();
+      repository.recent = null;
+      await controller.acceptSourceReadingReturn(handoff);
+      navigation.currentState!.pop();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(_verticalPosition(tester).pixels, 0);
+      expect(repository.progress, isEmpty);
+      expect(repository.committed, isEmpty);
+      expect(repository.completed, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('fresh short body completes only after stable real display', (
     tester,
   ) async {
@@ -457,6 +758,32 @@ NovelReaderViewState _state(WidgetTester tester) => ProviderScope.containerOf(
   listen: false,
 ).read(novelReaderControllerProvider(_args)).value!;
 
+NovelReaderController _controller(WidgetTester tester) =>
+    ProviderScope.containerOf(
+      tester.element(find.byType(NovelReaderPage)),
+      listen: false,
+    ).read(novelReaderControllerProvider(_args).notifier);
+
+Future<void> _pumpPagedReady(WidgetTester tester) async {
+  for (var frame = 0; frame < 200; frame++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    final surface = find.byType(NovelReaderHtmlPagedSurface);
+    if (surface.evaluate().isNotEmpty &&
+        tester
+                .widget<NovelReaderHtmlPagedSurface>(surface)
+                .paginationCache!
+                .length >
+            0 &&
+        find
+            .byKey(const Key('novel-reader-paged-page-view'))
+            .evaluate()
+            .isNotEmpty) {
+      return;
+    }
+  }
+  fail('Final paged layout did not become ready');
+}
+
 ScrollPosition _verticalPosition(WidgetTester tester) => tester
     .state<ScrollableState>(
       find.descendant(
@@ -497,12 +824,20 @@ Widget _app(
   GlobalKey<NavigatorState>? navigation,
   _PendingImageCache? images,
   NovelReaderHtmlPreparationService? preparation,
+  NovelReaderPreferences? preferences,
+  ThreadRepository? threadRepository,
+  ThreadPostLocator? locator,
   EdgeInsets safeArea = EdgeInsets.zero,
 }) => ProviderScope(
   overrides: [
     novelRepositoryProvider.overrideWithValue(repository),
     novelReaderPreferencesRepositoryProvider.overrideWithValue(
-      _ReadingPreferences(),
+      _ReadingPreferences()
+        ..preferences =
+            preferences ??
+            NovelReaderPreferences.defaults().copyWith(
+              flowMode: NovelReaderFlowMode.vertical,
+            ),
     ),
     novelChapterInteractionsDockPreferencesRepositoryProvider.overrideWithValue(
       _DisabledDock(),
@@ -512,6 +847,9 @@ Widget _app(
     imageCacheServiceProvider.overrideWithValue(images ?? _PendingImageCache()),
     if (preparation != null)
       novelReaderHtmlPreparationServiceProvider.overrideWithValue(preparation),
+    if (threadRepository != null)
+      threadRepositoryProvider.overrideWithValue(threadRepository),
+    if (locator != null) threadPostLocatorProvider.overrideWithValue(locator),
   ],
   child: LocalizedTestApp(
     navigatorKey: navigation,
@@ -700,4 +1038,56 @@ class _PendingImageCache implements ImageCacheService {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('Unexpected image-cache call: ${invocation.memberName}');
+}
+
+class _SourcePostLocator implements ThreadPostLocator {
+  var calls = 0;
+  @override
+  Future<ApiResult<ThreadPostLocation>> locate({
+    required String tid,
+    required String pid,
+    required Uri sourceUri,
+  }) async {
+    calls++;
+    return ApiSuccess(ThreadPostLocation(tid: tid, pid: pid, page: 2, url: ''));
+  }
+}
+
+class _SourceThreadRepository implements ThreadRepository {
+  _SourceThreadRepository(this.html);
+  final String html;
+  @override
+  ThreadDetailSourceCapabilities get capabilities =>
+      ThreadDetailSourceCapabilities.full;
+  @override
+  Future<DataReadResult<ThreadDetailData, ThreadDetailReadCapabilities>>
+  getThreadDetail({
+    required String tid,
+    int page = 1,
+    ThreadDetailQuery query = const ThreadDetailQuery(),
+  }) async => DataReadSuccess(
+    data: ThreadDetailData(
+      tid: tid,
+      fid: '49',
+      subject: '测试作品',
+      author: 'author',
+      replies: 0,
+      views: 1,
+      currentPage: page,
+      perPage: 20,
+      posts: [
+        ThreadPost(
+          pid: '5001',
+          author: 'author',
+          authorId: '10',
+          message: html,
+          number: 21,
+          isFirst: false,
+          dateline: '',
+        ),
+      ],
+    ),
+    capabilities: capabilities.toReadCapabilities(),
+    metadata: const DataReadMetadata.network(),
+  );
 }

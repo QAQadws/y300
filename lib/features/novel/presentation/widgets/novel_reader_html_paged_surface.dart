@@ -101,6 +101,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     this.navigationRequest,
     this.pageSeekRequest,
     this.navigationController,
+    this.readingAuthorityIdentity,
     this.chapterEntryRequest,
     this.onChapterEntryApplied,
     this.previousChapterTitle,
@@ -148,6 +149,9 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final NovelReaderPageSeekRequest? pageSeekRequest;
   final NovelReaderPagedNavigationController? navigationController;
+
+  /// Changes retire navigation proof while preserving the mounted HTML layout.
+  final Object? readingAuthorityIdentity;
   final NovelReaderChapterEntryRequest? chapterEntryRequest;
 
   /// Fired once [chapterEntryRequest] has actually been resolved into a page and
@@ -615,6 +619,8 @@ class _NovelReaderHtmlPagedSurfaceState
                           navigationRequest: widget.navigationRequest,
                           pageSeekRequest: widget.pageSeekRequest,
                           navigationController: widget.navigationController,
+                          readingAuthorityIdentity:
+                              widget.readingAuthorityIdentity,
                           targetPage: requestedPage,
                           pendingForwardPage: _pendingForwardPage,
                           onRequestPendingForwardPage: (target) =>
@@ -1606,6 +1612,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.navigationRequest,
     this.pageSeekRequest,
     this.navigationController,
+    this.readingAuthorityIdentity,
     this.targetPage,
     this.pendingForwardPage,
     required this.onRequestPendingForwardPage,
@@ -1645,6 +1652,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final NovelReaderAnchorNavigationRequest? navigationRequest;
   final NovelReaderPageSeekRequest? pageSeekRequest;
   final NovelReaderPagedNavigationController? navigationController;
+  final Object? readingAuthorityIdentity;
   final int? targetPage;
   final int? pendingForwardPage;
   final bool Function(int target) onRequestPendingForwardPage;
@@ -1687,6 +1695,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   int _currentPage = 0;
   bool _reportedInitialPage = false;
   bool _hasUserNavigated = false;
+  bool _navigationProofRetired = false;
   bool _userDragInProgress = false;
   final ValueNotifier<NovelReaderChapterTurnHint?> _chapterTurnHint =
       ValueNotifier<NovelReaderChapterTurnHint?>(null);
@@ -1727,6 +1736,23 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   @override
   void didUpdateWidget(covariant _NovelReaderPagedPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.readingAuthorityIdentity != widget.readingAuthorityIdentity) {
+      // A source route now owns the public position. Cached pages must not
+      // replay navigation that happened before that transfer on return.
+      _hasUserNavigated = false;
+      _navigationProofRetired = true;
+      _userDragInProgress = false;
+      _tapTurnAnimationIdentity = null;
+      _tapTurnAnimationInFlight = false;
+      _forwardAnimationTarget = null;
+      _resetChapterTurnTracking();
+      final identity = widget.readingAuthorityIdentity;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.readingAuthorityIdentity == identity) {
+          _emitPosition(_currentPage);
+        }
+      });
+    }
     if (oldWidget.requestGeneration != widget.requestGeneration ||
         oldWidget.navigationRequest?.requestId !=
             widget.navigationRequest?.requestId ||
@@ -1931,6 +1957,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
                     imageReaderBridge: widget.imageReaderBridge,
                     imageHost: widget.imageHost,
                     isVisible: index == _currentPage,
+                    readingAuthorityIdentity: widget.readingAuthorityIdentity,
                     onImagesReadyChanged: widget.onImagesReadyChanged,
                     onScrollActivityChanged: widget.onScrollActivityChanged,
                     onBodyVisibilityChanged: (visibility) =>
@@ -2311,7 +2338,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         pageCount: widget.plan.pageCount,
         isPageCountFinal: widget.isPageCountFinal,
         isReadOnlyCompatibilityRestore:
-            !_hasUserNavigated && widget.isReadOnlyCompatibilityRestore,
+            !_hasUserNavigated &&
+            (_navigationProofRetired || widget.isReadOnlyCompatibilityRestore),
         hasUserNavigated: _hasUserNavigated,
         isBodyEndVisible:
             !page.requiresInnerScroll || bodyVisibility?.atEnd == true,
@@ -2388,6 +2416,7 @@ class _NovelReaderChapterTurnHintOverlay extends StatelessWidget {
 class _NovelReaderPagedPage extends ConsumerStatefulWidget {
   const _NovelReaderPagedPage({
     super.key,
+    this.readingAuthorityIdentity,
     required this.page,
     required this.plan,
     required this.theme,
@@ -2410,6 +2439,7 @@ class _NovelReaderPagedPage extends ConsumerStatefulWidget {
   });
 
   final NovelReaderPageFragment page;
+  final Object? readingAuthorityIdentity;
   final NovelReaderPaginationPlan plan;
   final ForumHtmlThemeContext theme;
   final ForumHtmlReaderPreferences htmlPreferences;
@@ -2462,6 +2492,12 @@ class _NovelReaderPagedPageState extends ConsumerState<_NovelReaderPagedPage> {
   @override
   void didUpdateWidget(covariant _NovelReaderPagedPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.readingAuthorityIdentity != widget.readingAuthorityIdentity) {
+      _reportGeneration++;
+      _innerHasUserNavigated = false;
+      _reportedBodyVisibility = null;
+      _scheduleReadiness();
+    }
     if (oldWidget.page.html != widget.page.html ||
         oldWidget.plan.key != widget.plan.key ||
         oldWidget.episode.episodeId != widget.episode.episodeId) {
