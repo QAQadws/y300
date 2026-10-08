@@ -6,13 +6,89 @@ import 'package:y300/features/forum/domain/models/forum_webview_launch_models.da
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_navigation.dart';
+import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import 'html_rendering/forum_html_test_theme.dart';
 
 void main() {
+  testWidgets('highlighted chapter HTML links open native thread pages', (
+    tester,
+  ) async {
+    final observer = _Observer();
+    final browser = <ForumWebViewLaunchConfig>[];
+    final session = ThreadPostNavigationSession();
+    addTearDown(session.dispose);
+    late BuildContext source;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          verifiedSessionOwnerProvider.overrideWithValue(null),
+          forumWebViewRouteFactoryProvider.overrideWithValue((config) {
+            browser.add(config);
+            return MaterialPageRoute(builder: (_) => const SizedBox());
+          }),
+        ],
+        child: LocalizedTestApp(
+          navigatorObservers: [observer],
+          home: Consumer(
+            builder: (context, ref, _) {
+              source = context;
+              final navigation = ThreadPostNavigation(
+                context: context,
+                ref: ref,
+                tid: 'chapter-three',
+                imageReferer: null,
+                isCurrent: () => ModalRoute.of(context)?.isCurrent != false,
+                routeSession: session,
+              );
+              return Scaffold(
+                body: ForumHtmlWidgetPostRenderer(
+                  theme: forumHtmlTestTheme,
+                  sourceId: 'chapter-links',
+                  buildAsync: false,
+                  html:
+                      '<p><a href="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=571608&amp;highlight=%E7%8B%AC%E8%A1%8C%E8%80%85%E4%BB%AC%EF%BC%8C%E9%9D%92%E6%98%A5%E6%8C%A1%E4%B8%8D%E4%BD%8F" target="_blank">1话</a></p>'
+                      '<p><a href="https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=577235&amp;highlight=%E7%8B%AC%E8%A1%8C%E8%80%85" target="_blank">2话</a></p>',
+                  callbacks: ForumHtmlRenderCallbacks(
+                    onTapUrl: (url) {
+                      navigation.openLink(url);
+                      return true;
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    observer.pushed.clear();
+
+    for (final entry in {'1话': '571608', '2话': '577235'}.entries) {
+      await tester.tapAt(
+        tester.getTopLeft(find.text(entry.key, findRichText: true)) +
+            const Offset(8, 8),
+      );
+      expect(observer.pushed, hasLength(1));
+      final route = observer.pushed.removeLast() as MaterialPageRoute;
+      final page = route.builder(source);
+      expect(page, isA<ThreadDetailPage>());
+      expect((page as ThreadDetailPage).tid, entry.value);
+      expect(page.initialPage, 1);
+      expect(browser, isEmpty);
+      // Inspect the destination before mounting its data-loading page.
+      Navigator.of(source).removeRoute(route);
+      await tester.pumpAndSettle();
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('author identities open native profiles with route isolation', (
     tester,
   ) async {

@@ -228,6 +228,9 @@ class YamiboForumLinkResolver {
       'mobile',
       'extra',
       'fromuid',
+      // Discuz search highlighting changes presentation, not thread identity
+      // or the selected page. Chapter links often retain this search hint.
+      'highlight',
       'goto',
       'ptid',
       'pid',
@@ -285,7 +288,7 @@ class YamiboForumLinkResolver {
           r'^/thread-[1-9]\d*-[1-9]\d*-\d+\.html$',
           caseSensitive: false,
         ).hasMatch(uri.path) &&
-        _hasOnly(uri, {'mobile', 'fromuid'});
+        _hasOnly(uri, {'mobile', 'fromuid', 'highlight'});
   }
 
   YamiboForumLinkDestination? _extractFriendFeed(

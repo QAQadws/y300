@@ -6,6 +6,105 @@ void main() {
   group('YamiboForumLinkResolver', () {
     const resolver = YamiboForumLinkResolver();
 
+    test('chapter links with search highlight retain native thread identity', () {
+      const firstHighlight =
+          '%E7%8B%AC%E8%A1%8C%E8%80%85%E4%BB%AC%EF%BC%8C%E9%9D%92%E6%98%A5%E6%8C%A1%E4%B8%8D%E4%BD%8F';
+      const secondHighlight = '%E7%8B%AC%E8%A1%8C%E8%80%85';
+      for (final entry in {
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=571608&amp;highlight=$firstHighlight':
+            '571608',
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&amp;tid=577235&amp;highlight=$secondHighlight':
+            '577235',
+        'forum.php?mod=viewthread&tid=571608&highlight=$firstHighlight':
+            '571608',
+        'thread-571608-1-1.html': '571608',
+        'thread-577235-1-1.html?highlight=$secondHighlight': '577235',
+      }.entries) {
+        final destination = resolver.resolve(entry.key);
+        expect(
+          destination?.kind,
+          YamiboForumLinkKind.thread,
+          reason: entry.key,
+        );
+        expect(destination?.tid, entry.value);
+        expect(destination?.pid, isNull);
+        expect(
+          destination?.uri.queryParameters['highlight'],
+          entry.key.contains('highlight=')
+              ? Uri.decodeComponent(
+                  entry.value == '571608' ? firstHighlight : secondHighlight,
+                )
+              : isNull,
+        );
+      }
+    });
+
+    test('search highlight keeps native page and explicit floor targets', () {
+      for (final highlight in ['', '%E7%8B%AC%E8%A1%8C%E8%80%85']) {
+        final thread = resolver.resolve(
+          'forum.php?mod=viewthread&tid=571608&page=3&extra=&highlight=$highlight',
+        );
+        expect(thread?.kind, YamiboForumLinkKind.thread);
+        expect(thread?.tid, '571608');
+        expect(thread?.page, 3);
+        expect(thread?.uri.queryParameters['highlight'], isNotNull);
+
+        for (final reference in [
+          'forum.php?mod=viewthread&tid=571608&page=3&highlight=$highlight#pid41560047',
+          'thread-571608-3-1.html?highlight=$highlight#pid41560047',
+        ]) {
+          final floor = resolver.resolve(reference);
+          expect(
+            floor?.kind,
+            YamiboForumLinkKind.threadPost,
+            reason: reference,
+          );
+          expect(floor?.tid, '571608');
+          expect(floor?.pid, '41560047');
+          expect(floor?.page, 3);
+        }
+      }
+    });
+
+    test(
+      'search highlight does not bypass browser semantics or identity checks',
+      () {
+        for (final reference in [
+          'forum.php?mod=viewthread&tid=571608&highlight=query&unknown=1',
+          'thread-571608-1-1.html?highlight=query&unknown=1',
+          'forum.php?mod=viewthread&tid=571608&highlight=query&authorid=2',
+          'forum.php?mod=viewthread&tid=571608&highlight=query&ordertype=1',
+          'forum.php?mod=viewthread&tid=571608&highlight=query&viewpid=90',
+          'forum.php?mod=viewthread&tid=571608&highlight=query&ppp=20',
+          'forum.php?mod=viewthread&tid=571608&highlight=one&highlight=two',
+          'thread-571608-1-1.html?highlight=one&highlight=two',
+          'forum.php?mod=viewthread&tid=571608&tid=577235&highlight=query',
+          'forum.php?mod=viewthread&tid=0&highlight=query',
+          'forum.php?mod=viewthread&tid=invalid&highlight=query',
+          'forum.php?mod=viewthread&tid=571608&page=0&highlight=query',
+          'forum.php?mod=viewthread&tid=571608&highlight=query#comments',
+          'thread-0-1-1.html?highlight=query',
+          'thread-571608-0-1.html?highlight=query',
+        ]) {
+          final destination = resolver.resolve(reference);
+          expect(
+            destination?.kind,
+            YamiboForumLinkKind.managedWebView,
+            reason: reference,
+          );
+          expect(
+            destination?.uri.toString(),
+            'https://bbs.yamibo.com/$reference',
+          );
+        }
+        const external =
+            'https://example.com/forum.php?mod=viewthread&tid=571608&highlight=query';
+        final destination = resolver.resolve(external);
+        expect(destination?.kind, YamiboForumLinkKind.external);
+        expect(destination?.uri.toString(), external);
+      },
+    );
+
     test(
       'known view filters retain explicit floor identity for relocation',
       () {
