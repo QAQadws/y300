@@ -61,11 +61,10 @@ class FriendListRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Flexible(
+                    Expanded(
                       child: Padding(
                         key: Key('my-friends-name-${item.userId}'),
                         padding: const EdgeInsets.symmetric(vertical: 4),
