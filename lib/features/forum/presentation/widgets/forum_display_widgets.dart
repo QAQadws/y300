@@ -34,7 +34,6 @@ class ForumDisplayContent extends StatefulWidget {
     required this.onOpenFilter,
     required this.onOpenThreadTag,
     required this.onOpenThread,
-    required this.onCopyThreadLink,
     required this.onOpenTopEntry,
     required this.onOpenSubForum,
   });
@@ -49,7 +48,6 @@ class ForumDisplayContent extends StatefulWidget {
   final ValueChanged<ForumDisplayFilterItem> onOpenFilter;
   final ValueChanged<ForumThreadSummary> onOpenThreadTag;
   final ValueChanged<ForumThreadSummary> onOpenThread;
-  final ValueChanged<ForumThreadSummary> onCopyThreadLink;
   final ValueChanged<ForumDisplayTopEntry> onOpenTopEntry;
   final ValueChanged<ForumDisplaySubForum> onOpenSubForum;
 
@@ -148,9 +146,6 @@ class _ForumDisplayContentState extends State<ForumDisplayContent> {
                 _sourceThread(item, widget.projection.threads),
               ),
               onOpenThreadTag: (item) => widget.onOpenThreadTag(
-                _sourceThread(item, widget.projection.threads),
-              ),
-              onCopyThreadLink: (item) => widget.onCopyThreadLink(
                 _sourceThread(item, widget.projection.threads),
               ),
               palette: palette,
@@ -1407,7 +1402,6 @@ class _ThreadListSection extends StatelessWidget {
     required this.threads,
     required this.onOpenThread,
     required this.onOpenThreadTag,
-    required this.onCopyThreadLink,
     required this.palette,
   });
 
@@ -1415,7 +1409,6 @@ class _ThreadListSection extends StatelessWidget {
   final List<ForumThreadSummary> threads;
   final ValueChanged<ForumThreadSummary> onOpenThread;
   final ValueChanged<ForumThreadSummary> onOpenThreadTag;
-  final ValueChanged<ForumThreadSummary> onCopyThreadLink;
   final ForumDisplayThemePalette palette;
 
   @override
@@ -1443,7 +1436,6 @@ class _ThreadListSection extends StatelessWidget {
             child: _ThreadCard(
               thread: thread,
               onTap: () => onOpenThread(thread),
-              onLongPress: () => onCopyThreadLink(thread),
               onTapTag: () => onOpenThreadTag(thread),
               palette: palette,
             ),
@@ -1454,136 +1446,101 @@ class _ThreadListSection extends StatelessWidget {
   }
 }
 
-class _ThreadCard extends StatefulWidget {
+class _ThreadCard extends StatelessWidget {
   const _ThreadCard({
     required this.thread,
     required this.onTap,
-    required this.onLongPress,
     required this.onTapTag,
     required this.palette,
   });
 
   final ForumThreadSummary thread;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
   final VoidCallback onTapTag;
   final ForumDisplayThemePalette palette;
 
   @override
-  State<_ThreadCard> createState() => _ThreadCardState();
-}
-
-class _ThreadCardState extends State<_ThreadCard> {
-  bool _isPressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final thread = widget.thread;
-    final palette = widget.palette;
     final badges = thread.effectiveBadges;
     final titleColor = _parseColor(thread.titleColorHex) ?? palette.threadTitle;
-    return AnimatedScale(
-      duration: const Duration(milliseconds: 110),
-      curve: Curves.easeOutCubic,
-      scale: _isPressed ? 0.985 : 1,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
+      ),
+      child: Material(
+        color: palette.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: Key('forum-thread-${thread.tid}'),
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: ForumNativeSurfaceShadows.card(palette.stateLayer),
-        ),
-        child: Material(
-          color: palette.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            key: Key('forum-thread-${thread.tid}'),
-            onTap: widget.onTap,
-            onLongPress: widget.onLongPress,
-            borderRadius: BorderRadius.circular(12),
-            onHighlightChanged: (isHighlighted) {
-              if (_isPressed != isHighlighted) {
-                setState(() => _isPressed = isHighlighted);
-              }
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              decoration: BoxDecoration(
-                color: _isPressed
-                    ? Color.alphaBlend(
-                        palette.stateLayer,
-                        palette.surfaceContainerLow,
-                      )
-                    : palette.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    LayoutBuilder(
-                      builder: (context, constraints) => Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _Avatar(
-                            url: thread.avatarUrl,
-                            ownerId: thread.uid.trim().isNotEmpty
-                                ? thread.uid
-                                : thread.author,
-                            threadId: thread.tid,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _ThreadAuthorBlock(
-                              thread: thread,
-                              palette: palette,
-                            ),
-                          ),
-                          if (badges.isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: constraints.maxWidth * 0.45,
-                              ),
-                              child: ForumThreadBadgeGroup(badges: badges),
-                            ),
-                          ],
-                        ],
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) => Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _Avatar(
+                        url: thread.avatarUrl,
+                        ownerId: thread.uid.trim().isNotEmpty
+                            ? thread.uid
+                            : thread.author,
+                        threadId: thread.tid,
                       ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      thread.subject,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: titleColor,
-                        height: 1.28,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (thread.excerpt.trim().isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        thread.excerpt.trim(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: palette.bodyText,
-                          height: 1.35,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ThreadAuthorBlock(
+                          thread: thread,
+                          palette: palette,
                         ),
                       ),
+                      if (badges.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth * 0.45,
+                          ),
+                          child: ForumThreadBadgeGroup(badges: badges),
+                        ),
+                      ],
                     ],
-                    const SizedBox(height: 10),
-                    _ThreadFooter(
-                      thread: thread,
-                      onTapTag: widget.onTapTag,
-                      palette: palette,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 7),
+                Text(
+                  thread.subject,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: titleColor,
+                    height: 1.28,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (thread.excerpt.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    thread.excerpt.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: palette.bodyText,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                _ThreadFooter(
+                  thread: thread,
+                  onTapTag: onTapTag,
+                  palette: palette,
+                ),
+              ],
             ),
           ),
         ),

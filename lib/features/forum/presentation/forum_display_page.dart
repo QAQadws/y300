@@ -2,12 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/presentation/services/read_access_feedback.dart';
 import 'package:y300/app/theme/app_theme.dart';
-import 'package:y300/core/config/app_config.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/data/services/forum_favorite_action_service.dart';
@@ -161,7 +159,6 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
                   () => controller.openThreadTag(thread),
                 ),
                 onOpenThread: (thread) => _openThread(context, state, thread),
-                onCopyThreadLink: (thread) => _copyThreadLink(context, thread),
                 onOpenTopEntry: (entry) => _openTopEntry(context, state, entry),
                 onOpenSubForum: (subForum) => _openSubForum(context, subForum),
               ),
@@ -445,48 +442,6 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     );
   }
 
-  Future<void> _copyThreadLink(
-    BuildContext context,
-    ForumThreadSummary thread,
-  ) async {
-    final url = _threadLinkForCopy(thread);
-    if (url == null) {
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: url));
-    if (!context.mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).forumDisplayCopiedLink),
-        ),
-      );
-  }
-
-  String? _threadLinkForCopy(ForumThreadSummary thread) {
-    final threadUrl = thread.threadUrl?.trim();
-    if (threadUrl != null && threadUrl.isNotEmpty) {
-      return threadUrl;
-    }
-    final tid = thread.tid.trim();
-    if (tid.isEmpty) {
-      return null;
-    }
-    return Uri.parse(AppConfig.siteBaseUrl)
-        .replace(
-          path: '/forum.php',
-          queryParameters: <String, String>{
-            'mod': 'viewthread',
-            'tid': tid,
-            'mobile': '2',
-          },
-        )
-        .toString();
-  }
-
   void _openTopEntry(
     BuildContext context,
     ForumDisplayPageState state,
@@ -647,7 +602,6 @@ Widget forumDisplayThreadCardPreview() {
     onOpenFilter: (_) {},
     onOpenThreadTag: (_) {},
     onOpenThread: (_) {},
-    onCopyThreadLink: (_) {},
     onOpenTopEntry: (_) {},
     onOpenSubForum: (_) {},
   );

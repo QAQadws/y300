@@ -914,7 +914,9 @@ void main() {
       expect(callCount, 2);
     });
 
-    testWidgets('long pressing thread copies thread link', (tester) async {
+    testWidgets('holding a thread opens it on release without copying', (
+      tester,
+    ) async {
       final copiedTexts = <String>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -941,7 +943,7 @@ void main() {
             threads: [
               ForumThreadSummary(
                 tid: '572604',
-                subject: '可复制链接的帖子',
+                subject: '有源链接的帖子',
                 author: 'alice',
                 replies: 0,
                 views: 1,
@@ -954,20 +956,37 @@ void main() {
         );
       });
 
-      await tester.pumpWidget(_buildTestApp(repository));
+      await tester.pumpWidget(
+        _buildTestApp(repository, threadRepository: _FakeThreadRepository()),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.longPress(find.byKey(const Key('forum-thread-572604')));
-      await tester.pump();
+      final card = find.byKey(const Key('forum-thread-572604'));
+      final restingBounds = tester.getRect(card);
+      final gesture = await tester.startGesture(restingBounds.center);
+      await tester.pump(const Duration(seconds: 1));
 
-      expect(copiedTexts, [
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572604&mobile=2',
-      ]);
-      expect(find.text('已复制帖子链接'), findsOneWidget);
+      expect(copiedTexts, isEmpty);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.getRect(card), restingBounds);
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ThreadDetailPage), findsOneWidget);
+      expect(
+        tester.widget<ThreadDetailPage>(find.byType(ThreadDetailPage)).tid,
+        '572604',
+      );
+      expect(copiedTexts, isEmpty);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('long pressing thread falls back to tid link', (tester) async {
+    testWidgets('dragging after holding a thread cancels opening it', (
+      tester,
+    ) async {
       final copiedTexts = <String>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -1000,6 +1019,7 @@ void main() {
                 views: 1,
                 dateline: 'today',
               ),
+              ..._manyThreads(suffix: 'hold-drag', count: 20),
             ],
           ),
         );
@@ -1009,12 +1029,26 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.longPress(find.byKey(const Key('forum-thread-100')));
-      await tester.pump();
+      final card = find.byKey(const Key('forum-thread-100'));
+      final restingBounds = tester.getRect(card);
+      final gesture = await tester.startGesture(restingBounds.center);
+      await tester.pump(const Duration(seconds: 1));
 
-      expect(copiedTexts, [
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2',
-      ]);
+      expect(copiedTexts, isEmpty);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.getRect(card), restingBounds);
+      await gesture.moveBy(const Offset(0, -30));
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.moveBy(const Offset(0, -140));
+      await tester.pump(const Duration(milliseconds: 100));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(_scrollOffset(tester), greaterThan(0));
+      expect(find.byType(ThreadDetailPage), findsNothing);
+      expect(copiedTexts, isEmpty);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('filter and thread tag taps reload using link query', (
@@ -1435,10 +1469,7 @@ void main() {
       expect(find.text('長篇連載'), findsOneWidget);
       expect(find.text('投票'), findsOneWidget);
 
-      final threadDecoration = _firstAnimatedContainerDecoration(
-        tester,
-        find.byKey(const Key('forum-thread-572604')),
-      );
+      final threadDecoration = _threadCardShadowDecoration(tester, '572604');
       expect(threadDecoration.border, isNull);
 
       final threadBadgeDecoration = _decorationAroundText(tester, '投票');
@@ -2022,22 +2053,6 @@ BoxDecoration _decorationAroundText(WidgetTester tester, String text) {
         .first,
   );
   return decoratedBox.decoration as BoxDecoration;
-}
-
-BoxDecoration _firstAnimatedContainerDecoration(
-  WidgetTester tester,
-  Finder root,
-) {
-  final containers = tester.widgetList<AnimatedContainer>(
-    find.descendant(of: root, matching: find.byType(AnimatedContainer)),
-  );
-  for (final container in containers) {
-    final decoration = container.decoration;
-    if (decoration is BoxDecoration) {
-      return decoration;
-    }
-  }
-  throw StateError('No BoxDecoration AnimatedContainer found.');
 }
 
 BoxDecoration _threadCardShadowDecoration(WidgetTester tester, String tid) {

@@ -48,7 +48,6 @@ void main() {
                         onOpenFilter: (_) {},
                         onOpenThreadTag: (_) {},
                         onOpenThread: (_) {},
-                        onCopyThreadLink: (_) {},
                         onOpenTopEntry: (_) {},
                         onOpenSubForum: (_) {},
                       ),
