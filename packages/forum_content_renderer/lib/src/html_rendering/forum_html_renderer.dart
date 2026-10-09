@@ -68,7 +68,7 @@ class ForumHtmlRenderer extends StatefulWidget {
   final ForumHtmlBodyPresentation? bodyPresentation;
 
   /// Owner-supplied mutable expansion memory. Built folds record their effective
-  /// defaults so a host can distinguish hidden content from a real body end.
+  /// defaults so a host can track changes to the currently visible layout.
   final Map<String, bool>? collapseExpansion;
   final String? sourceId;
   final ForumHtmlBlockSpacingMode blockSpacingMode;

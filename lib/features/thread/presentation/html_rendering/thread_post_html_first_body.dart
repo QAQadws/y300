@@ -216,8 +216,9 @@ class _ThreadPostHtmlFirstBodyState
             htmlReady: () => _readingReady,
             imagesReady: (viewport) =>
                 _readingImages?.readyIn(viewport) ?? true,
-            finalBoundaryKnown: () =>
-                _readingExpansion.values.every((value) => value),
+            // This boundary measures the current rendered body. Closed folds
+            // contribute their visible header, not their unmounted contents.
+            finalBoundaryKnown: () => true,
             layoutRevision: () => (
               _readingRevision,
               Object.hashAll(

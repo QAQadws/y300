@@ -177,6 +177,185 @@ void main() {
     }
   });
 
+  group('waiting for an existing completion', () {
+    test('joins one timer and delivers its lease after the callback', () {
+      fakeAsync((clock) {
+        final coordinator = NovelReadingSessionCoordinator();
+        final token = _readable(coordinator);
+        final events = <String>[];
+        NovelReadingCommitLease? emitted;
+        _report(coordinator, token, (lease) {
+          emitted = lease;
+          events.add('callback');
+        });
+        final first = coordinator.waitForPendingCompletion(token);
+        final second = coordinator.waitForPendingCompletion(token);
+        expect(second, same(first));
+        first.then((lease) {
+          expect(lease, same(emitted));
+          events.add('first');
+        });
+        second.then((lease) {
+          expect(lease, same(emitted));
+          events.add('second');
+        });
+        clock.elapse(const Duration(milliseconds: 249));
+        clock.flushMicrotasks();
+        expect(events, isEmpty);
+        // Joining late never starts a new stability interval.
+        expect(coordinator.waitForPendingCompletion(token), same(first));
+        clock.elapse(const Duration(milliseconds: 1));
+        clock.flushMicrotasks();
+        expect(events, ['callback', 'first', 'second']);
+        expect(emitted!.isValid, true);
+        expect(clock.nonPeriodicTimerCount, 0);
+        NovelReadingCommitLease? alreadyEmitted;
+        coordinator.waitForPendingCompletion(token).then((lease) {
+          alreadyEmitted = lease;
+        });
+        clock.flushMicrotasks();
+        expect(alreadyEmitted, same(emitted));
+        coordinator.dispose();
+      });
+    });
+
+    test('no task or passive restore resolves null without creating work', () {
+      fakeAsync((clock) {
+        final coordinator = NovelReadingSessionCoordinator();
+        final token = _readable(
+          coordinator,
+          entry: NovelReadingSessionEntry.resume,
+        );
+        final results = <NovelReadingCommitLease?>[];
+        coordinator.waitForPendingCompletion(token).then(results.add);
+        _report(coordinator, token, (_) => fail('Passive restore completed'));
+        coordinator.waitForPendingCompletion(token).then(results.add);
+        clock.flushMicrotasks();
+        expect(results, [null, null]);
+        expect(clock.nonPeriodicTimerCount, 0);
+        coordinator.dispose();
+      });
+    });
+
+    for (final change in [
+      'cancel',
+      'bodyReady',
+      'restoreSettled',
+      'compatibility',
+      'covered',
+      'background',
+      'geometry',
+      'navigation',
+      'position',
+      'observation',
+      'retire',
+      'dispose',
+    ]) {
+      test('$change promptly releases all waiters with null', () {
+        fakeAsync((clock) {
+          final coordinator = NovelReadingSessionCoordinator();
+          final token = _readable(coordinator);
+          final completed = <NovelReadingCommitLease>[];
+          final results = <NovelReadingCommitLease?>[];
+          _report(coordinator, token, completed.add);
+          coordinator.waitForPendingCompletion(token).then(results.add);
+          coordinator.waitForPendingCompletion(token).then(results.add);
+          clock.elapse(const Duration(milliseconds: 100));
+          switch (change) {
+            case 'cancel':
+              coordinator.cancelPendingCompletion(token);
+            case 'bodyReady':
+              coordinator.updateReadiness(
+                token,
+                bodyReady: false,
+                restoreSettled: true,
+              );
+            case 'restoreSettled':
+              coordinator.updateReadiness(
+                token,
+                bodyReady: true,
+                restoreSettled: false,
+              );
+            case 'compatibility':
+              coordinator.updateReadiness(
+                token,
+                bodyReady: true,
+                restoreSettled: true,
+                readOnlyCompatibilityRestore: true,
+              );
+            case 'covered':
+              coordinator.updateVisibility(frontmost: false, resumed: true);
+            case 'background':
+              coordinator.updateVisibility(frontmost: true, resumed: false);
+            case 'geometry':
+              coordinator.updateGeometry(token, (2, 100));
+            case 'navigation':
+              coordinator.confirmNavigation(token);
+            case 'position':
+              coordinator.positionLease(token, positionIdentity: 'new');
+            case 'observation':
+              _report(coordinator, token, completed.add, idle: false);
+            case 'retire':
+              coordinator.retire();
+            case 'dispose':
+              coordinator.dispose();
+          }
+          clock.flushMicrotasks();
+          expect(results, [null, null]);
+          expect(completed, isEmpty);
+          expect(clock.nonPeriodicTimerCount, 0);
+          clock.elapse(const Duration(seconds: 1));
+          expect(completed, isEmpty);
+          coordinator.dispose();
+        });
+      });
+    }
+
+    test('callback reentry cannot deliver old completion to a new owner', () {
+      fakeAsync((clock) {
+        final coordinator = NovelReadingSessionCoordinator();
+        final old = _readable(coordinator);
+        final oldResults = <NovelReadingCommitLease?>[];
+        final newResults = <NovelReadingCommitLease?>[];
+        NovelReadingSessionToken? next;
+        _report(coordinator, old, (_) {
+          next = _readable(coordinator);
+          _report(coordinator, next!, (_) {});
+          coordinator.waitForPendingCompletion(next!).then(newResults.add);
+        });
+        coordinator.waitForPendingCompletion(old).then(oldResults.add);
+        clock.elapse(const Duration(milliseconds: 250));
+        clock.flushMicrotasks();
+        expect(oldResults, [null]);
+        expect(newResults, isEmpty);
+        coordinator.waitForPendingCompletion(old).then(oldResults.add);
+        clock.flushMicrotasks();
+        expect(oldResults, [null, null]);
+        clock.elapse(const Duration(milliseconds: 250));
+        clock.flushMicrotasks();
+        expect(newResults.single!.token, same(next));
+        expect(newResults.single!.isValid, true);
+        coordinator.dispose();
+      });
+    });
+
+    test('cancelled emitted completion is not returned to a late waiter', () {
+      fakeAsync((clock) {
+        final coordinator = NovelReadingSessionCoordinator();
+        final token = _readable(coordinator);
+        _report(coordinator, token, (_) {});
+        clock.elapse(const Duration(milliseconds: 250));
+        coordinator.cancelPendingCompletion(token);
+        final results = <NovelReadingCommitLease?>[];
+        coordinator.waitForPendingCompletion(token).then(results.add);
+        clock.flushMicrotasks();
+        expect(results, [null]);
+        expect(clock.nonPeriodicTimerCount, 0);
+        coordinator.dispose();
+      });
+    });
+  });
+
   group('bounded completion confirmation', () {
     for (final entry in <NovelReadingSessionEntry>[
       NovelReadingSessionEntry.firstStart,

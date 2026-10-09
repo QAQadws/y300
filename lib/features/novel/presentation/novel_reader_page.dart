@@ -881,6 +881,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         theme: htmlTheme,
         imageReferer: _imageRefererFor(viewState),
         progressSnapshot: viewState.progressSnapshot,
+        startsAtBeginning: ref
+            .read(novelReaderControllerProvider(_args).notifier)
+            .startsPagedAtBeginning,
         chromeInsets: chromeInsets,
         semanticDocument: viewState.document,
         conversionPosition: _conversionPosition,
@@ -1742,31 +1745,98 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return false;
     }
     final controller = ref.read(novelReaderControllerProvider(_args).notifier);
-    setState(() {
-      _pendingChapterEntryRequest = NovelReaderChapterEntryRequest(
-        requestId: ++_chapterEntrySerial,
-        episodeId: target.episodeId,
-        edge: edge == NovelReaderChapterEdge.end
-            ? NovelReaderChapterEdge.start
-            : NovelReaderChapterEdge.end,
-      );
-    });
-    unawaited(_runChapterTurn(edge, controller));
+    final identity = _readerSurfaceIdentity(viewState);
+    final confirmEnd =
+        edge == NovelReaderChapterEdge.end &&
+        _isReadingVisible &&
+        _imagesReady &&
+        _readyReaderSurfaceIdentity == identity;
+    unawaited(
+      _runChapterTurn(
+        edge,
+        controller,
+        target.episodeId,
+        confirmEnd: confirmEnd,
+      ),
+    );
     return true;
   }
 
   Future<void> _runChapterTurn(
     NovelReaderChapterEdge edge,
     NovelReaderController controller,
-  ) async {
-    final entryRequestId = _pendingChapterEntryRequest?.requestId;
-    final didSucceed = await _openDifferentEpisode(
-      edge == NovelReaderChapterEdge.end
-          ? controller.goToNextEpisode
-          : controller.goToPreviousEpisode,
-    );
-    if (!didSucceed && entryRequestId != null) {
-      _retireChapterEntryRequest(requestId: entryRequestId);
+    String targetEpisodeId, {
+    required bool confirmEnd,
+  }) async {
+    final sourceArgs = _args;
+    final current = ref
+        .read(novelReaderControllerProvider(sourceArgs))
+        .asData
+        ?.value;
+    if (current == null) return;
+    final identity = _readerSurfaceIdentity(current);
+    bool ownsSource() =>
+        mounted &&
+        _isReadingVisible &&
+        _args == sourceArgs &&
+        identical(
+          ref.read(novelReaderControllerProvider(sourceArgs).notifier),
+          controller,
+        ) &&
+        _isCurrentReaderSurface(identity) &&
+        ref
+                .read(novelReaderControllerProvider(sourceArgs))
+                .asData
+                ?.value
+                .readingAuthorityRevision ==
+            current.readingAuthorityRevision;
+    var targetArmed = false;
+    try {
+      if (confirmEnd) {
+        try {
+          await controller.settleCurrentCompletionWrite();
+        } catch (_) {
+          if (mounted && ownsSource()) {
+            _showReaderSnackBar(
+              AppLocalizations.of(context).novelSaveReadingProgressFailed,
+            );
+          }
+          return;
+        }
+        if (!ownsSource()) return;
+        if (_imagesReady &&
+            _readyReaderSurfaceIdentity == identity &&
+            _pagedNavigationController.confirmChapterEndNavigation()) {
+          _observeReadingSurface();
+          if (!await controller.waitForPendingChapterCompletion()) return;
+        }
+      }
+      if (!ownsSource()) return;
+      // Arm the next chapter only after the source confirmation. Changing this
+      // request earlier would retire the paged surface's navigation evidence.
+      setState(() {
+        _pendingChapterEntryRequest = NovelReaderChapterEntryRequest(
+          requestId: ++_chapterEntrySerial,
+          episodeId: targetEpisodeId,
+          edge: edge == NovelReaderChapterEdge.end
+              ? NovelReaderChapterEdge.start
+              : NovelReaderChapterEdge.end,
+        );
+      });
+      targetArmed = true;
+      final entryRequestId = _pendingChapterEntryRequest?.requestId;
+      final didSucceed = await _openDifferentEpisode(
+        edge == NovelReaderChapterEdge.end
+            ? controller.goToNextEpisode
+            : controller.goToPreviousEpisode,
+      );
+      if (!didSucceed && entryRequestId != null) {
+        _retireChapterEntryRequest(requestId: entryRequestId);
+      }
+    } finally {
+      if (!targetArmed && mounted && _isCurrentReaderSurface(identity)) {
+        _pagedNavigationController.cancelChapterTurn();
+      }
     }
   }
 

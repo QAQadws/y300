@@ -21,6 +21,7 @@ class NovelDetailAdapter
         DetailModuleAdapter,
         DetailFullRefreshAdapter,
         DetailChapterReadStateAdapter,
+        DetailWorkReadingResetAdapter,
         DetailMetadataEditor,
         DetailCoverEditor {
   NovelDetailAdapter(
@@ -266,6 +267,31 @@ class NovelDetailAdapter
     if (barrier == null) return () => true;
     final revision = barrier.capture(workId, episodeId);
     return () => barrier.isCurrent(workId, episodeId, revision);
+  }
+
+  @override
+  Future<void> resetWorkReadingState({required String workId}) async {
+    final repository = _readingRepository;
+    if (repository is! NovelWorkReadingResetRepository) {
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
+    }
+    final resetRepository = repository as NovelWorkReadingResetRepository;
+    final barrier = _mutationBarrier;
+    barrier?.invalidateWork(workId);
+    final revision = barrier?.captureWork(workId);
+    bool canCommit() =>
+        barrier == null || barrier.isWorkCurrent(workId, revision!);
+    final applied = await resetRepository.resetWorkReadingState(
+      novelId: workId,
+      canCommit: canCommit,
+    );
+    if (!applied && canCommit()) {
+      throw const LibraryOperationException(
+        LibraryOperationFailureCode.unsupported,
+      );
+    }
   }
 
   @override

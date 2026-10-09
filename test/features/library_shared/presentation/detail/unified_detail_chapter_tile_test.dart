@@ -99,6 +99,45 @@ void main() {
     }
   });
 
+  testWidgets(
+    'an unfinished end position keeps unread styling and at most 99%',
+    (tester) async {
+      for (final recent in <bool>[false, true]) {
+        for (final sample in <({double fraction, int display})>[
+          (fraction: 0, display: 0),
+          (fraction: 0.999, display: 99),
+          (fraction: 1, display: 99),
+        ]) {
+          await _pumpTile(
+            tester,
+            progress: LibraryChapterProgressInfo(
+              kind: LibraryChapterProgressKind.percentage,
+              isCurrent: recent,
+              fraction: sample.fraction,
+            ),
+          );
+          final context = tester.element(_tile);
+          final l10n = AppLocalizations.of(context);
+          final label = recent
+              ? l10n.libraryChapterLastReadPercent(sample.display)
+              : l10n.libraryChapterProgressPercent(sample.display);
+          expect(
+            _progressText(tester).text.toPlainText(),
+            '2026-10-07  ·  $label',
+          );
+          expect(
+            tester.widget<Semantics>(_progress).properties.label,
+            l10n.libraryChapterProgressSemantics('2026-10-07', label),
+          );
+          expect(
+            tester.widget<Text>(find.text(_title)).style?.color,
+            Theme.of(context).colorScheme.onSurface,
+          );
+        }
+      }
+    },
+  );
+
   testWidgets('completed recent chapter is muted and omits percentage', (
     tester,
   ) async {

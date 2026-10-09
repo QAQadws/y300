@@ -43,3 +43,12 @@ abstract interface class NovelReadingStateRepository {
     bool Function()? canCommit,
   });
 }
+
+/// Optional whole-work mutation. Clears public positions, the recent chapter
+/// and current completion evidence atomically while preserving bookmarks.
+abstract interface class NovelWorkReadingResetRepository {
+  Future<bool> resetWorkReadingState({
+    required String novelId,
+    bool Function()? canCommit,
+  });
+}

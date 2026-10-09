@@ -14,6 +14,7 @@ import 'package:y300/features/novel/domain/models/novel_source_reading_context.d
 import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/adapters/novel_source_reading_adapter.dart';
+import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
 
@@ -239,6 +240,82 @@ void main() {
     expect(state.recentEpisodeId, isNull);
     expect(state.episodeStates['a']!.isRead, false);
   });
+
+  test(
+    'work reset retires an in-flight first source save from another chapter',
+    () async {
+      await repository.commitProgress(progress: _old(.2), markCompleted: true);
+      await shared.upsertEpisodeState(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'novel',
+        episodeId: 'a',
+        isBookmarked: true,
+      );
+      final gate = _GatedRepository(repository);
+      committer.cancel();
+      committer = DefaultNovelReaderProgressCommitter(
+        repository: repository,
+        readingStateRepository: gate,
+      );
+      final source = await start();
+      source.onViewport(
+        _viewport([_sample(pid: '102', top: -360)], navigation: 1),
+      );
+      final save = source.flush();
+      await gate.entered.future;
+      final detail = NovelDetailAdapter(
+        repository,
+        stateRepository: shared,
+        mutationBarrier: barrier,
+      );
+
+      await detail.resetWorkReadingState(workId: 'novel');
+      gate.release.complete();
+      await save;
+
+      final state = await repository.loadWorkState(novelId: 'novel');
+      expect(state.progressByEpisode, isEmpty);
+      expect(state.recentEpisodeId, isNull);
+      expect(state.episodeStates['a']!.isRead, isFalse);
+      expect(state.episodeStates['a']!.isBookmarked, isTrue);
+      expect(state.episodeStates.containsKey('b'), isFalse);
+      await source.flush();
+      expect(
+        (await repository.loadWorkState(novelId: 'novel')).progressByEpisode,
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'work reset rejects late source completion before the first chapter row',
+    () async {
+      final gate = _GatedRepository(repository);
+      final source = await start(
+        readingRepository: gate,
+        coordinator: NovelReadingSessionCoordinator(
+          completionStability: const Duration(milliseconds: 2),
+        ),
+      );
+      source.onViewport(_viewport([_sample(height: 200, extent: 200)]));
+      await gate.entered.future;
+      expect(gate.completedWrite, isTrue);
+      final detail = NovelDetailAdapter(
+        repository,
+        stateRepository: shared,
+        mutationBarrier: barrier,
+      );
+
+      await detail.resetWorkReadingState(workId: 'novel');
+      gate.release.complete();
+      await gate.finished.future;
+
+      final state = await repository.loadWorkState(novelId: 'novel');
+      expect(state.progressByEpisode, isEmpty);
+      expect(state.recentEpisodeId, isNull);
+      expect(state.episodeStates, isEmpty);
+    },
+  );
 }
 
 NovelReadingProgress _old(double fraction) => NovelReadingProgress(

@@ -21,15 +21,18 @@ import 'package:y300/features/novel/domain/services/novel_chapter_update_service
 import 'package:y300/features/novel/presentation/adapters/novel_detail_adapter.dart';
 
 void main() {
-  test('NovelDetailAdapter exposes only chapter read-state capability', () {
-    final adapter = NovelDetailAdapter(
-      _FakeNovelRepository(),
-      stateRepository: _RecordingLibraryStateRepository(),
-    );
+  test(
+    'NovelDetailAdapter exposes chapter read-state and work reset capabilities',
+    () {
+      final adapter = NovelDetailAdapter(
+        _FakeNovelRepository(),
+        stateRepository: _RecordingLibraryStateRepository(),
+      );
 
-    expect(adapter, isA<DetailChapterReadStateAdapter>());
-    expect(adapter, isNot(isA<DetailWorkReadingResetAdapter>()));
-  });
+      expect(adapter, isA<DetailChapterReadStateAdapter>());
+      expect(adapter, isA<DetailWorkReadingResetAdapter>());
+    },
+  );
 
   test(
     'loadChapters reads one snapshot for all chapter positions and states',
@@ -187,6 +190,68 @@ void main() {
       },
     );
   }
+
+  test('work reset delegates once and retires every older producer', () async {
+    final reading = _FakeNovelReadingStateRepository();
+    final barrier = NovelReadingMutationBarrier();
+    final persisted = barrier.capture('novel:1', 'novel:1:1');
+    final pending = barrier.capture('novel:1', 'not-yet-persisted');
+    final other = barrier.capture('novel:2', 'novel:2:1');
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: _RecordingLibraryStateRepository(),
+      readingStateRepository: reading,
+      mutationBarrier: barrier,
+    );
+
+    await adapter.resetWorkReadingState(workId: 'novel:1');
+
+    expect(reading.resetWorkIds, ['novel:1']);
+    expect(reading.resetEpisodeIds, isEmpty);
+    expect(reading.committedMutations, 1);
+    expect(barrier.isCurrent('novel:1', 'novel:1:1', persisted), isFalse);
+    expect(barrier.isCurrent('novel:1', 'not-yet-persisted', pending), isFalse);
+    expect(barrier.isCurrent('novel:2', 'novel:2:1', other), isTrue);
+    reading.appliesMutation = false;
+    await expectLater(
+      adapter.resetWorkReadingState(workId: 'novel:1'),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test('new navigation in any chapter retires a queued work reset', () async {
+    final release = Completer<void>();
+    final reading = _FakeNovelReadingStateRepository()
+      ..beforeMutation = release.future;
+    final barrier = NovelReadingMutationBarrier();
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: _RecordingLibraryStateRepository(),
+      readingStateRepository: reading,
+      mutationBarrier: barrier,
+    );
+    final pending = adapter.resetWorkReadingState(workId: 'novel:1');
+    barrier.invalidate('novel:1', 'newly-discovered-chapter');
+    release.complete();
+    await pending;
+    expect(reading.resetWorkIds, ['novel:1']);
+    expect(reading.committedMutations, 0);
+  });
+
+  test('unsupported work reset preserves producer revisions', () async {
+    final barrier = NovelReadingMutationBarrier();
+    final revision = barrier.capture('novel:1', 'novel:1:1');
+    final adapter = NovelDetailAdapter(
+      _FakeNovelRepository(),
+      stateRepository: _RecordingLibraryStateRepository(),
+      mutationBarrier: barrier,
+    );
+    await expectLater(
+      adapter.resetWorkReadingState(workId: 'novel:1'),
+      throwsA(isA<Exception>()),
+    );
+    expect(barrier.isCurrent('novel:1', 'novel:1:1', revision), isTrue);
+  });
 
   test('loadChapters sorts novel sources by numeric pid', () async {
     final adapter = NovelDetailAdapter(
@@ -1137,7 +1202,8 @@ NovelReadingProgress _chapterPosition(String episodeId, double percent) =>
       updatedAt: DateTime(2026, 10, 7),
     );
 
-class _FakeNovelReadingStateRepository implements NovelReadingStateRepository {
+class _FakeNovelReadingStateRepository
+    implements NovelReadingStateRepository, NovelWorkReadingResetRepository {
   _FakeNovelReadingStateRepository({
     this.progressByEpisode = const {},
     this.episodeStates = const {},
@@ -1152,6 +1218,7 @@ class _FakeNovelReadingStateRepository implements NovelReadingStateRepository {
   int committedMutations = 0;
   final readMutations = <(String, String, bool)>[];
   final resetEpisodeIds = <String>[];
+  final resetWorkIds = <String>[];
 
   @override
   Future<NovelReadingStateSnapshot> loadWorkState({
@@ -1187,6 +1254,18 @@ class _FakeNovelReadingStateRepository implements NovelReadingStateRepository {
     bool Function()? canCommit,
   }) async {
     resetEpisodeIds.add(episodeId);
+    await beforeMutation;
+    if (canCommit?.call() == false) return false;
+    if (appliesMutation) committedMutations++;
+    return appliesMutation;
+  }
+
+  @override
+  Future<bool> resetWorkReadingState({
+    required String novelId,
+    bool Function()? canCommit,
+  }) async {
+    resetWorkIds.add(novelId);
     await beforeMutation;
     if (canCommit?.call() == false) return false;
     if (appliesMutation) committedMutations++;

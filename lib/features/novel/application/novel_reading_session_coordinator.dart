@@ -29,6 +29,7 @@ final class NovelReadingSessionCoordinator {
   _CompletionObservation? _completionObservation;
   NovelReadingCommitLease? _emittedCompletion;
   Timer? _completionTimer;
+  Completer<NovelReadingCommitLease?>? _completionWait;
   void Function(NovelReadingCommitLease)? _onComplete;
 
   NovelReadingSessionToken? get session => _session;
@@ -157,15 +158,46 @@ final class NovelReadingSessionCoordinator {
       return;
     }
     final lease = _lease(token, observation: observation);
+    final completionWait = _completionWait =
+        Completer<NovelReadingCommitLease?>();
     _completionTimer = Timer(completionStability, () {
       _completionTimer = null;
-      if (!lease.isValid) return;
-      _completionConfirmed = true;
-      _emittedCompletion = lease;
-      final callback = _onComplete;
-      _onComplete = null;
-      callback?.call(lease);
+      var delivered = false;
+      try {
+        if (!lease.isValid) return;
+        _completionConfirmed = true;
+        _emittedCompletion = lease;
+        final callback = _onComplete;
+        _onComplete = null;
+        callback?.call(lease);
+        delivered = true;
+      } finally {
+        // A callback may retire this owner or start another confirmation. Only
+        // the wait belonging to this timer can receive its result.
+        _resolveCompletionWait(
+          completionWait,
+          delivered && lease.isValid ? lease : null,
+        );
+      }
     });
+  }
+
+  /// Joins an existing bounded confirmation without creating end evidence.
+  /// Callers must still await their completion write before retiring the owner.
+  Future<NovelReadingCommitLease?> waitForPendingCompletion(
+    NovelReadingSessionToken token,
+  ) {
+    if (!isCurrent(token)) return Future.value(null);
+    final emitted = _emittedCompletion;
+    if (emitted != null && emitted.isValid) return Future.value(emitted);
+    final wait = _completionWait;
+    final observation = _completionObservation;
+    return _completionTimer != null &&
+            wait != null &&
+            observation != null &&
+            _canComplete(token, observation)
+        ? wait.future
+        : Future.value(null);
   }
 
   /// Allows a fresh observation after a failed or superseded queued write.
@@ -186,6 +218,7 @@ final class NovelReadingSessionCoordinator {
     _completionTimer = null;
     _completionObservation = null;
     _onComplete = null;
+    _resolveCompletionWait(_completionWait, null);
   }
 
   void retire() {
@@ -204,6 +237,7 @@ final class NovelReadingSessionCoordinator {
     _geometryIdentity = null;
     _revision += 1;
     _completionRevision += 1;
+    _resolveCompletionWait(_completionWait, null);
   }
 
   void dispose() {
@@ -262,6 +296,16 @@ final class NovelReadingSessionCoordinator {
     _completionTimer = null;
     _completionObservation = null;
     _onComplete = null;
+    _resolveCompletionWait(_completionWait, null);
+  }
+
+  void _resolveCompletionWait(
+    Completer<NovelReadingCommitLease?>? wait,
+    NovelReadingCommitLease? lease,
+  ) {
+    if (wait == null) return;
+    if (identical(wait, _completionWait)) _completionWait = null;
+    if (!wait.isCompleted) wait.complete(lease);
   }
 }
 

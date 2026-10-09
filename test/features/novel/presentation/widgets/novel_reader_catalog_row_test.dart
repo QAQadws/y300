@@ -47,9 +47,47 @@ void main() {
   });
 
   testWidgets(
+    'unfinished saved and live end positions do not imply read completion',
+    (tester) async {
+      for (final recent in <String?>['episode', 'other']) {
+        for (final sample in <({double fraction, int display})>[
+          (fraction: 0, display: 0),
+          (fraction: 0.999, display: 99),
+          (fraction: 1, display: 99),
+        ]) {
+          for (final live in <NovelReaderProgressSnapshot?>[
+            null,
+            _live(sample.fraction),
+          ]) {
+            await _pumpRow(
+              tester,
+              readingState: _state(recent: recent, percent: sample.fraction),
+              live: live,
+            );
+            final tile = tester.widget<ListTile>(_tile);
+            final l10n = AppLocalizations.of(tester.element(_tile));
+            expect(
+              (tile.subtitle as Text).data,
+              recent == 'episode'
+                  ? l10n.libraryChapterLastReadPercent(sample.display)
+                  : l10n.libraryChapterProgressPercent(sample.display),
+            );
+            expect((tile.title as Text).style?.color, isNull);
+            expect(tile.selected, isTrue);
+          }
+        }
+      }
+    },
+  );
+
+  testWidgets(
     'read chapters use muted colors and omit percentage while keeping recent',
     (tester) async {
-      await _pumpRow(tester, readingState: _state(read: true));
+      await _pumpRow(
+        tester,
+        readingState: _state(read: true, percent: 1),
+        live: _live(1),
+      );
       final tile = tester.widget<ListTile>(_tile);
       final l10n = AppLocalizations.of(tester.element(_tile));
       final colors = Theme.of(tester.element(_tile)).colorScheme;
@@ -59,7 +97,10 @@ void main() {
         (tile.subtitle as Text).style?.color,
         colors.onSurfaceVariant.withAlpha(170),
       );
-      expect(find.textContaining('42%'), findsNothing);
+      expect(
+        find.textContaining(l10n.libraryChapterProgressPercent(100)),
+        findsNothing,
+      );
     },
   );
 

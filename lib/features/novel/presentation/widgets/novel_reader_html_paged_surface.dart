@@ -67,6 +67,15 @@ final class NovelReaderPagedNavigationController {
 
   bool turnNext() => _state?._turnPageByTap(1) ?? false;
 
+  /// The owner calls this after accepting a forward chapter turn, before it
+  /// retires the current reading session. Rejected turns cannot grant proof.
+  bool confirmChapterEndNavigation() =>
+      _state?._confirmChapterEndNavigation() ?? false;
+
+  /// Releases a previously accepted turn if the owner cancels before arming
+  /// the destination chapter entry. Reading position and proof are unchanged.
+  void cancelChapterTurn() => _state?._cancelChapterTurn();
+
   void _attach(_NovelReaderPagedPageViewState state) {
     if (!_isDisposed) {
       _state = state;
@@ -95,6 +104,7 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
     required this.theme,
     required this.imageReferer,
     required this.progressSnapshot,
+    this.startsAtBeginning = false,
     this.semanticDocument,
     this.conversionPosition,
     this.onConversionPositionChanged,
@@ -142,6 +152,10 @@ class NovelReaderHtmlPagedSurface extends StatefulWidget {
   final ForumHtmlThemeContext theme;
   final String imageReferer;
   final NovelReaderProgressSnapshot progressSnapshot;
+
+  /// The owner has confirmed a fresh chapter entry or an explicit restart.
+  /// A zero-valued compatibility snapshot alone cannot authorize a new position.
+  final bool startsAtBeginning;
   final NovelReaderDocument? semanticDocument;
   final NovelReaderConversionPosition? conversionPosition;
   final ValueChanged<NovelReaderConversionPosition>?
@@ -565,9 +579,21 @@ class _NovelReaderHtmlPagedSurfaceState
                   if (!targetIsPending) {
                     if (!_hasReadablePage) {
                       _displayInitialPage = resolvedPage;
+                      // Conversion previews remain restores even when their
+                      // mapped anchor falls back to the first page.
+                      final hasConversionRestore =
+                          _conversionRestoreAnchor != null ||
+                          (widget.conversionPosition != null &&
+                              widget.conversionPosition!.conversionIdentity !=
+                                  widget.preferences.conversionMode.name);
+                      final startsAtBeginning =
+                          widget.startsAtBeginning &&
+                          resolvedPage == 0 &&
+                          !hasConversionRestore;
                       _displayRestoreReadOnly =
                           requestedPage == null &&
                           entryPage == null &&
+                          !startsAtBeginning &&
                           restoreResolution!.isReadOnlyCompatibilityRestore;
                     }
                     _hasReadablePage = true;
@@ -2037,6 +2063,30 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       _chapterTurnRequested = true;
     }
     return accepted;
+  }
+
+  bool _confirmChapterEndNavigation() {
+    if (!mounted ||
+        !widget.isPageCountFinal ||
+        widget.plan.pageCount <= 0 ||
+        _currentPage != widget.plan.pageCount - 1) {
+      return false;
+    }
+    final page = widget.plan.pageAt(_currentPage);
+    if (page == null ||
+        (page.requiresInnerScroll &&
+            _bodyVisibility[_currentPage]?.atEnd != true)) {
+      return false;
+    }
+    _hasUserNavigated = true;
+    _emitPosition(_currentPage);
+    return true;
+  }
+
+  void _cancelChapterTurn() {
+    if (!mounted) return;
+    _chapterTurnRequested = false;
+    _resetChapterTurnTracking();
   }
 
   Future<void> _animateTapTurnToPage(

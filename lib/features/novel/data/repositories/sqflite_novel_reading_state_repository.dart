@@ -8,7 +8,7 @@ import '../../domain/models/novel_reading_progress.dart';
 import '../../domain/repositories/novel_reading_state_repository.dart';
 
 class SqfliteNovelReadingStateRepository
-    implements NovelReadingStateRepository {
+    implements NovelReadingStateRepository, NovelWorkReadingResetRepository {
   SqfliteNovelReadingStateRepository(this._dbFuture);
   final Future<Database> _dbFuture;
 
@@ -171,6 +171,29 @@ class SqfliteNovelReadingStateRepository
           latest.isEmpty ? null : latest.single['updated_at'] as int,
         );
       }
+    });
+  }
+
+  @override
+  Future<bool> resetWorkReadingState({
+    required String novelId,
+    bool Function()? canCommit,
+  }) {
+    return _mutate(canCommit, (txn) async {
+      await txn.delete(
+        AppDatabase.novelReadingProgressTable,
+        where: 'novel_id = ?',
+        whereArgs: [novelId],
+      );
+      // Older completion flags are compatibility evidence, and future versions
+      // remain opaque. Clear only the completion semantics owned by this reader.
+      await txn.update(
+        AppDatabase.libraryEpisodeStateTable,
+        {'is_read': 0, 'read_at': null},
+        where: 'content_type = ? AND work_id = ? AND read_state_version = ?',
+        whereArgs: ['novel', novelId, 1],
+      );
+      await _writeRecent(txn, novelId, null, null);
     });
   }
 

@@ -5,6 +5,7 @@ import 'package:y300/features/library_shared/data/repositories/local_library_sta
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/novel/data/repositories/local_novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reading_progress.dart';
+import 'package:y300/features/novel/application/novel_reading_mutation_barrier.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -204,6 +205,237 @@ void main() {
       expect(state.episodeStates['new']!.isRead, true);
       expect(state.progressByEpisode, isEmpty);
       expect(state.recentEpisodeId, isNull);
+    },
+  );
+
+  test(
+    'work reset clears positions and completion but preserves owned data',
+    () async {
+      await repository.commitProgress(
+        progress: position('a', 2),
+        markCompleted: true,
+      );
+      await repository.commitProgress(progress: position('b', 4));
+      await repository.setChapterRead(
+        novelId: 'novel',
+        episodeId: 'manual',
+        isRead: true,
+      );
+      await repository.toggleEpisodeBookmark(
+        novelId: 'novel',
+        episodeId: 'a',
+        isBookmarked: true,
+      );
+      await shared.upsertWorkState(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'novel',
+        introText: 'retained intro',
+      );
+      await db.update(
+        AppDatabase.libraryEpisodeStateTable,
+        {'is_downloaded': 1, 'downloaded_at': 456},
+        where: 'episode_id = ?',
+        whereArgs: ['a'],
+      );
+      for (final (episode, version) in [('legacy', 0), ('future', 7)]) {
+        await db.insert(AppDatabase.libraryEpisodeStateTable, {
+          'content_type': 'novel',
+          'work_id': 'novel',
+          'episode_id': episode,
+          'is_read': 1,
+          'read_at': 123,
+          'read_state_version': version,
+          'is_bookmarked': 1,
+        });
+      }
+      await db.insert(AppDatabase.worksTable, {
+        'work_id': 'novel',
+        'content_type': 'novel',
+        'source_tid': '1',
+        'source_fid': '2',
+        'title': 'novel',
+        'updated_at': 123,
+      });
+      await db.insert(AppDatabase.workEpisodesTable, {
+        'episode_id': 'a',
+        'work_id': 'novel',
+        'content_type': 'novel',
+        'source_tid': '1',
+        'order_index': 0,
+      });
+      await db.insert(AppDatabase.readerBookmarksTable, {
+        'bookmark_id': 'bookmark',
+        'novel_id': 'novel',
+        'episode_id': 'a',
+        'scroll_offset': 80,
+        'title': 'bookmark',
+        'snippet': 'saved text',
+        'created_at': 123,
+        'updated_at': 123,
+      });
+      await repository.commitProgress(
+        progress: NovelReadingProgress(
+          novelId: 'other',
+          episodeId: 'other:a',
+          scrollOffset: 80,
+          updatedAt: DateTime(2026),
+        ),
+        markCompleted: true,
+      );
+      await db.insert(AppDatabase.libraryEpisodeStateTable, {
+        'content_type': 'comic',
+        'work_id': 'novel',
+        'episode_id': 'comic:a',
+        'is_read': 1,
+        'read_at': 123,
+        'read_state_version': 1,
+      });
+      final retainedRows = await db.query(
+        AppDatabase.libraryEpisodeStateTable,
+        where: 'episode_id IN (?, ?, ?, ?)',
+        whereArgs: ['legacy', 'future', 'other:a', 'comic:a'],
+        orderBy: 'episode_id',
+      );
+      final bookmarks = await db.query(AppDatabase.readerBookmarksTable);
+
+      expect(await repository.resetWorkReadingState(novelId: 'novel'), isTrue);
+
+      final state = await repository.loadWorkState(novelId: 'novel');
+      expect(state.progressByEpisode, isEmpty);
+      expect(state.recentEpisodeId, isNull);
+      expect(state.episodeStates.values.every((s) => !s.isRead), isTrue);
+      expect(state.episodeStates['a']!.isBookmarked, isTrue);
+      expect(state.episodeStates['a']!.isDownloaded, isTrue);
+      expect(
+        state.episodeStates['a']!.downloadedAt,
+        DateTime.fromMillisecondsSinceEpoch(456),
+      );
+      final work = (await shared.getWorkState(
+        moduleKey: LibraryModuleKey.novel,
+        workId: 'novel',
+      ))!;
+      expect(work.lastReadEpisodeId, isNull);
+      expect(work.lastReadAt, isNull);
+      expect(work.introText, 'retained intro');
+      expect(await db.query(AppDatabase.readerBookmarksTable), bookmarks);
+      expect(
+        await db.query(
+          AppDatabase.libraryEpisodeStateTable,
+          where: 'episode_id IN (?, ?, ?, ?)',
+          whereArgs: ['legacy', 'future', 'other:a', 'comic:a'],
+          orderBy: 'episode_id',
+        ),
+        retainedRows,
+      );
+      expect(
+        (await repository.loadWorkState(novelId: 'other')).recentEpisodeId,
+        'other:a',
+      );
+    },
+  );
+
+  test(
+    'work reset retires stale saves including a chapter without a first row',
+    () async {
+      final barrier = NovelReadingMutationBarrier();
+      final oldA = barrier.capture('novel', 'a');
+      final oldPending = barrier.capture('novel', 'pending');
+      await repository.commitProgress(
+        progress: position('a', 2),
+        markCompleted: true,
+      );
+      barrier.invalidateWork('novel');
+      final resetRevision = barrier.captureWork('novel');
+      expect(
+        await repository.resetWorkReadingState(
+          novelId: 'novel',
+          canCommit: () => barrier.isWorkCurrent('novel', resetRevision),
+        ),
+        isTrue,
+      );
+      for (final (episode, revision) in [
+        ('a', oldA),
+        ('pending', oldPending),
+      ]) {
+        expect(
+          await repository.commitProgress(
+            progress: position(episode, 4),
+            markCompleted: true,
+            canCommit: () => barrier.isCurrent('novel', episode, revision),
+          ),
+          isFalse,
+        );
+      }
+      final state = await repository.loadWorkState(novelId: 'novel');
+      expect(state.progressByEpisode, isEmpty);
+      expect(state.recentEpisodeId, isNull);
+      expect(state.episodeStates['a']!.isRead, isFalse);
+      expect(state.episodeStates.containsKey('pending'), isFalse);
+      final fresh = barrier.capture('novel', 'pending');
+      expect(
+        await repository.commitProgress(
+          progress: position('pending', 4),
+          canCommit: () => barrier.isCurrent('novel', 'pending', fresh),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'retired work reset rolls back all positions, completion and recent state',
+    () async {
+      await repository.commitProgress(
+        progress: position('a', 2),
+        markCompleted: true,
+      );
+      await repository.commitProgress(
+        progress: position('b', 4),
+        markCompleted: true,
+      );
+      final positions = await db.query(AppDatabase.novelReadingProgressTable);
+      final states = await db.query(AppDatabase.libraryEpisodeStateTable);
+      final work = await db.query(AppDatabase.libraryWorkStateTable);
+      for (final retireAfterWrite in [false, true]) {
+        var calls = 0;
+        expect(
+          await repository.resetWorkReadingState(
+            novelId: 'novel',
+            canCommit: () => retireAfterWrite && ++calls == 1,
+          ),
+          isFalse,
+        );
+        expect(
+          await db.query(AppDatabase.novelReadingProgressTable),
+          positions,
+        );
+        expect(await db.query(AppDatabase.libraryEpisodeStateTable), states);
+        expect(await db.query(AppDatabase.libraryWorkStateTable), work);
+      }
+    },
+  );
+
+  test(
+    'work reset database failure preserves the complete pre-reset state',
+    () async {
+      await repository.commitProgress(
+        progress: position('a', 2),
+        markCompleted: true,
+      );
+      final positions = await db.query(AppDatabase.novelReadingProgressTable);
+      final states = await db.query(AppDatabase.libraryEpisodeStateTable);
+      final work = await db.query(AppDatabase.libraryWorkStateTable);
+      await db.execute(
+        '''CREATE TRIGGER fail_reset_recent BEFORE UPDATE ON library_work_state
+      BEGIN SELECT RAISE(ABORT, 'controlled reset failure'); END''',
+      );
+      await expectLater(
+        repository.resetWorkReadingState(novelId: 'novel'),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await db.query(AppDatabase.novelReadingProgressTable), positions);
+      expect(await db.query(AppDatabase.libraryEpisodeStateTable), states);
+      expect(await db.query(AppDatabase.libraryWorkStateTable), work);
     },
   );
 

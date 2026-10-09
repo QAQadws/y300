@@ -217,8 +217,8 @@ abstract final class LibraryDetailTextResolver {
         fraction > 1) {
       return progress.isCurrent ? l10n.libraryChapterLastRead : '';
     }
-    // Display rounding must not turn an unfinished position into 100%.
-    final percent = (fraction * 100).floor();
+    // Even an end position needs independent completion confirmation.
+    final percent = (fraction * 100).floor().clamp(0, 99).toInt();
     return progress.isCurrent
         ? l10n.libraryChapterLastReadPercent(percent)
         : l10n.libraryChapterProgressPercent(percent);

@@ -247,7 +247,7 @@ void main() {
     },
   );
 
-  testWidgets('closed folds cannot prove the final body boundary', (
+  testWidgets('folds use current visible geometry without inventing navigation', (
     tester,
   ) async {
     final harness = _Harness(
@@ -257,26 +257,34 @@ void main() {
     addTearDown(harness.dispose);
     await tester.pumpWidget(harness.host());
     await tester.pumpAndSettle();
-    expect(
-      harness.observer.viewports.last.samples.single.finalBoundaryKnown,
-      isFalse,
-    );
+    final closed = harness.observer.viewports.last.samples.single;
+    expect(closed.finalBoundaryKnown, isTrue);
+    expect(find.text('hidden text', findRichText: true), findsNothing);
+    final cancellations = harness.observer.completionCancellations;
     await tester.tap(
       find.byKey(const Key('forum-html-collapse-toggle-200-fold')),
     );
     await tester.pumpAndSettle();
-    expect(
-      harness.observer.viewports.last.samples.single.finalBoundaryKnown,
-      isTrue,
-    );
+    final expanded = harness.observer.viewports.last.samples.single;
+    expect(expanded.finalBoundaryKnown, isTrue);
+    expect(expanded.bodyHeight, greaterThan(closed.bodyHeight));
+    expect(expanded.geometryIdentity, isNot(closed.geometryIdentity));
+    expect(find.text('hidden text', findRichText: true), findsOneWidget);
     await tester.tap(
       find.byKey(const Key('forum-html-collapse-toggle-200-fold')),
     );
     await tester.pumpAndSettle();
+    final closedAgain = harness.observer.viewports.last.samples.single;
+    expect(closedAgain.finalBoundaryKnown, isTrue);
+    expect(closedAgain.bodyHeight, closed.bodyHeight);
+    expect(closedAgain.geometryIdentity, isNot(expanded.geometryIdentity));
+    expect(closedAgain.geometryIdentity, isNot(closed.geometryIdentity));
+    expect(harness.observer.viewports.last.userNavigationRevision, 0);
     expect(
-      harness.observer.viewports.last.samples.single.finalBoundaryKnown,
-      isFalse,
+      harness.observer.completionCancellations,
+      greaterThan(cancellations),
     );
+    expect(find.text('hidden text', findRichText: true), findsNothing);
   });
 
   testWidgets(

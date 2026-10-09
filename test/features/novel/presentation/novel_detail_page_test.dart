@@ -744,6 +744,105 @@ void main() {
   );
 
   testWidgets(
+    'chapter menu confirms resetting the whole novel and preserves bookmarks',
+    (tester) async {
+      final reading = _MemoryNovelReadingStateRepository(
+        hasPosition: true,
+        isRead: true,
+        isBookmarked: true,
+      );
+      await _pumpNovelDetail(
+        tester,
+        preferences: _MemoryNovelInteractionPreferencesRepository(),
+        routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+        readingStateRepository: reading,
+      );
+      await _scrollNovelChapterIntoTapArea(tester);
+      final chapter = find.byKey(
+        const ValueKey<String>('unified-detail-chapter-novel:1:e1'),
+      );
+      await tester.longPress(chapter);
+      await tester.pumpAndSettle();
+      final action = find.byKey(
+        const Key('unified-detail-work-reset-reading-action'),
+      );
+      final l10n = AppLocalizations.of(tester.element(action));
+      expect(find.text(l10n.libraryDetailResetWorkReading), findsOneWidget);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.libraryDetailResetReadingBody), findsOneWidget);
+      await tester.tap(find.text(l10n.commonCancel));
+      await tester.pumpAndSettle();
+      expect(reading.workResetCount, 0);
+      expect(reading.hasPosition, isTrue);
+      expect(reading.isRead, isTrue);
+
+      await tester.longPress(chapter);
+      await tester.pumpAndSettle();
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('unified-detail-work-reset-reading-confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(reading.workResetCount, 1);
+      expect(reading.readMutationCount, 0);
+      expect(reading.hasPosition, isFalse);
+      expect(reading.isRead, isFalse);
+      expect(reading.recentEpisodeId, isNull);
+      expect(reading.isBookmarked, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'failed whole-novel reset preserves reading state and can be retried',
+    (tester) async {
+      final reading = _MemoryNovelReadingStateRepository(
+        hasPosition: true,
+        isRead: true,
+        isBookmarked: true,
+      )..appliesMutation = false;
+      await _pumpNovelDetail(
+        tester,
+        preferences: _MemoryNovelInteractionPreferencesRepository(),
+        routeResolver: _FakeNovelChapterSourceRouteResolver.success(),
+        readingStateRepository: reading,
+      );
+      await _scrollNovelChapterIntoTapArea(tester);
+      final chapter = find.byKey(
+        const ValueKey<String>('unified-detail-chapter-novel:1:e1'),
+      );
+      Future<void> reset() async {
+        await tester.longPress(chapter);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('unified-detail-work-reset-reading-action')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('unified-detail-work-reset-reading-confirm')),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await reset();
+      final l10n = AppLocalizations.of(tester.element(chapter));
+      expect(find.text(l10n.libraryDetailResetReadingFailed), findsOneWidget);
+      expect(reading.hasPosition, isTrue);
+      expect(reading.isRead, isTrue);
+      expect(reading.isBookmarked, isTrue);
+      reading.appliesMutation = true;
+      await reset();
+      expect(reading.workResetCount, 2);
+      expect(reading.hasPosition, isFalse);
+      expect(reading.isRead, isFalse);
+      expect(reading.isBookmarked, isTrue);
+    },
+  );
+
+  testWidgets(
     'a failed chapter swipe preserves state and releases the action lock',
     (tester) async {
       final reading = _MemoryNovelReadingStateRepository(hasPosition: true)
@@ -1456,7 +1555,7 @@ class _NoopImageCacheService implements ImageCacheService {
 }
 
 class _MemoryNovelReadingStateRepository
-    implements NovelReadingStateRepository {
+    implements NovelReadingStateRepository, NovelWorkReadingResetRepository {
   _MemoryNovelReadingStateRepository({
     this.hasPosition = false,
     this.isRead = false,
@@ -1472,6 +1571,7 @@ class _MemoryNovelReadingStateRepository
   NovelReadingProgress? lastCommitted;
   int progressCommitCount = 0;
   int completionCommitCount = 0;
+  int workResetCount = 0;
 
   @override
   Future<NovelReadingStateSnapshot> loadWorkState({
@@ -1552,6 +1652,20 @@ class _MemoryNovelReadingStateRepository
     isRead = false;
     hasPosition = false;
     recentEpisodeId = null;
+    return true;
+  }
+
+  @override
+  Future<bool> resetWorkReadingState({
+    required String novelId,
+    bool Function()? canCommit,
+  }) async {
+    workResetCount++;
+    if (canCommit?.call() == false || !appliesMutation) return false;
+    isRead = false;
+    hasPosition = false;
+    recentEpisodeId = null;
+    lastCommitted = null;
     return true;
   }
 

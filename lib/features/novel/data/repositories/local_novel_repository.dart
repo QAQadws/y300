@@ -22,6 +22,7 @@ class LocalNovelRepository
     implements
         NovelRepository,
         NovelReadingStateRepository,
+        NovelWorkReadingResetRepository,
         NovelShelfSnapshotRepository,
         NovelCoverCacheWriter,
         NovelCustomMetadataWriter,
@@ -34,7 +35,7 @@ class LocalNovelRepository
            stateRepository ?? LocalLibraryStateRepository(_dbFuture);
 
   final Future<Database> _dbFuture;
-  late final NovelReadingStateRepository _readingState =
+  late final SqfliteNovelReadingStateRepository _readingState =
       SqfliteNovelReadingStateRepository(_dbFuture);
   final LibraryStateRepository _stateRepository;
 
@@ -744,6 +745,15 @@ class LocalNovelRepository
   }) => _readingState.resetChapter(
     novelId: novelId,
     episodeId: episodeId,
+    canCommit: canCommit,
+  );
+
+  @override
+  Future<bool> resetWorkReadingState({
+    required String novelId,
+    bool Function()? canCommit,
+  }) => _readingState.resetWorkReadingState(
+    novelId: novelId,
     canCommit: canCommit,
   );
 

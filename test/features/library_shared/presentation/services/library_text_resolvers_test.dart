@@ -177,23 +177,41 @@ void main() {
         LibraryDetailTextResolver.chapterProgress(traditional, progress),
         traditional.libraryChapterCurrentPage(3),
       );
+      const finalPage = LibraryChapterProgressInfo(
+        kind: LibraryChapterProgressKind.currentPage,
+        isCurrent: true,
+        currentPage: 12,
+        totalPages: 12,
+        fraction: 1,
+      );
+      expect(
+        LibraryDetailTextResolver.chapterProgress(
+          simplified,
+          finalPage,
+          isRead: true,
+        ),
+        simplified.libraryChapterCurrentPage(12),
+      );
     });
 
-    test(
-      'localizes percentage and recent markers without rounding to complete',
-      () {
-        for (final locale in <AppLocalizationsZh>[simplified, traditional]) {
-          for (final recent in <bool>[false, true]) {
+    test('unfinished percentages cannot claim completion even at the end', () {
+      for (final locale in <AppLocalizationsZh>[simplified, traditional]) {
+        for (final recent in <bool>[false, true]) {
+          for (final sample in <({double fraction, int display})>[
+            (fraction: 0, display: 0),
+            (fraction: 0.999, display: 99),
+            (fraction: 1, display: 99),
+          ]) {
             final progress = LibraryChapterProgressInfo(
               kind: LibraryChapterProgressKind.percentage,
               isCurrent: recent,
-              fraction: 0.9999,
+              fraction: sample.fraction,
             );
             expect(
               LibraryDetailTextResolver.chapterProgress(locale, progress),
               recent
-                  ? locale.libraryChapterLastReadPercent(99)
-                  : locale.libraryChapterProgressPercent(99),
+                  ? locale.libraryChapterLastReadPercent(sample.display)
+                  : locale.libraryChapterProgressPercent(sample.display),
             );
             expect(
               LibraryDetailTextResolver.chapterProgress(
@@ -205,8 +223,8 @@ void main() {
             );
           }
         }
-      },
-    );
+      }
+    });
 
     test('unknown or malformed fractions keep only a recent marker', () {
       for (final fraction in <double?>[

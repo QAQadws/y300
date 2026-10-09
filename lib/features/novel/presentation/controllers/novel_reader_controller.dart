@@ -239,6 +239,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   NovelReaderSourceHandoff? _activeSourceHandoff;
   int _activeSessionToken = 0;
   final _readingSession = NovelReadingSessionCoordinator();
+  (NovelReadingCommitLease, Future<void>)? _completionWrite;
   int _readingBarrierRevision = 0;
   bool _surfaceFrontmost = true;
   bool _surfaceResumed = true;
@@ -253,6 +254,22 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     Future<NovelReaderDocument>
   >
   _preferenceDocumentFlights = {};
+
+  /// A default, unrecorded start is not a compatibility position restore.
+  /// Stop supplying this intent once a real position is available, so later
+  /// display or conversion rebuilds keep their existing restore protection.
+  bool get startsPagedAtBeginning {
+    final token = _readingSession.session;
+    final current = state.asData?.value;
+    if (token == null || current == null) return false;
+    if (_pendingBeginningCommitEpisodeId == token.episodeId) return true;
+    return token.entry == NovelReadingSessionEntry.firstStart &&
+        current.readingProgress?.episodeId != token.episodeId &&
+        current.readingState?.progressByEpisode.containsKey(token.episodeId) !=
+            true &&
+        current.progressSnapshot.anchorNodeId == null &&
+        current.progressSnapshot.isProgressPercentValid == null;
+  }
 
   @override
   FutureOr<NovelReaderViewState> build() async {
@@ -1558,9 +1575,57 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       idle: idle,
       geometryIdentity: geometryIdentity,
       onComplete: (lease) {
-        unawaited(_completeChapter(lease));
+        final write = _completeChapter(lease);
+        _completionWrite = (lease, write);
+        unawaited(write);
       },
     );
+  }
+
+  /// Reconciles a completion write already emitted before a chapter-edge drag.
+  Future<void> settleCurrentCompletionWrite() async {
+    final token = _readingSession.session;
+    final write = _completionWrite;
+    if (token == null || write == null || !identical(write.$1.token, token)) {
+      return;
+    }
+    await write.$2;
+    if (ref.mounted &&
+        _readingSession.isCurrent(token) &&
+        _surfaceFrontmost &&
+        _surfaceResumed) {
+      // A real drag can invalidate a lease after its transaction applied but
+      // before its read-model refresh. Reconcile that completed write first.
+      await refreshReadingState();
+    }
+  }
+
+  /// Joins the reported visible end and its transaction before owner retirement.
+  Future<bool> waitForPendingChapterCompletion() async {
+    if (ref.read(novelReadingStateRepositoryProvider) == null) return true;
+    final token = _readingSession.session;
+    if (token == null) return false;
+    final lease = await _readingSession.waitForPendingCompletion(token);
+    if (!_readingSession.isCurrent(token) ||
+        !_surfaceFrontmost ||
+        !_surfaceResumed) {
+      return false;
+    }
+    if (lease == null) {
+      // An already completed chapter needs no new confirmation.
+      return state
+              .asData
+              ?.value
+              .readingState
+              ?.episodeStates[token.episodeId]
+              ?.isRead ==
+          true;
+    }
+    final write = _completionWrite;
+    if (write != null && identical(write.$1, lease)) {
+      await write.$2;
+    }
+    return lease.isValid;
   }
 
   Future<void> _completeChapter(NovelReadingCommitLease lease) async {
