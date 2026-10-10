@@ -10,10 +10,10 @@ import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 
 import 'clipboard_link_settings_controller.dart';
-import 'forum_clipboard_link_notice.dart';
 import 'forum_clipboard_link_policy.dart';
 import 'forum_clipboard_route_observer.dart';
 import 'forum_clipboard_runtime.dart';
+import 'forum_clipboard_snack_bar_presenter.dart';
 
 /// The sole main-shell UI host. Routes, keyboard and startup readiness gate an
 /// existing intent; rebuilding or switching tabs never creates a new read.
@@ -27,7 +27,7 @@ class ForumClipboardLinkHost extends ConsumerStatefulWidget {
 
   final bool isReady;
   final bool allowPrompt;
-  final Widget Function(BuildContext context, Widget? notice) builder;
+  final WidgetBuilder builder;
 
   @override
   ConsumerState<ForumClipboardLinkHost> createState() =>
@@ -40,12 +40,14 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
   late final ForumClipboardRouteObserver _routes;
   late final Object _host;
   final _navigation = ThreadPostNavigationSession();
+  final _notice = ForumClipboardSnackBarPresenter();
   ModalRoute<dynamic>? _route;
   bool _focused = true;
   bool _backgrounded = false;
   bool _resumePending = false;
   bool _firstFrame = false;
   bool _rebuildScheduled = false;
+  bool _noticeScheduled = false;
   int? _viewId;
   double _keyboardInset = 0;
   bool _authReady = false;
@@ -183,6 +185,33 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
     }
   }
 
+  void _scheduleNotice() {
+    if (_noticeScheduled) return;
+    _noticeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _noticeScheduled = false;
+      if (!mounted) return;
+      _sync();
+      final candidate = _available ? _runtime.coordinator.candidate : null;
+      _notice.show(
+        context: context,
+        candidate: candidate,
+        isCurrent: () =>
+            mounted &&
+            _available &&
+            identical(candidate, _runtime.coordinator.candidate),
+        onOpen: () => _open(candidate!),
+        onShown: () => _runtime.coordinator.markShown(candidate!),
+        onDismiss: () {
+          if (mounted && _runtime.owns(_host)) {
+            _runtime.coordinator.dismiss(candidate!);
+            _changed();
+          }
+        },
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(clipboardLinkSettingsControllerProvider);
@@ -190,24 +219,8 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
     ref.listen(clipboardLinkSettingsControllerProvider, (_, _) => _changed());
     ref.listen(authSessionControllerProvider, (_, _) => _changed());
     _sync();
-    final candidate = _available ? _runtime.coordinator.candidate : null;
-    if (candidate != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _available && _runtime.owns(_host)) {
-          _runtime.coordinator.markShown(candidate);
-        }
-      });
-    }
-    return widget.builder(
-      context,
-      candidate == null
-          ? null
-          : ForumClipboardLinkNotice(
-              kind: candidate.kind,
-              onOpen: () => _open(candidate),
-              onDismiss: () => _runtime.coordinator.dismiss(candidate),
-            ),
-    );
+    _scheduleNotice();
+    return widget.builder(context);
   }
 
   void _open(ForumClipboardLinkCandidate candidate) {
@@ -238,6 +251,7 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
 
   @override
   void dispose() {
+    _notice.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _runtime.removeListener(_changed);
     _routes.removeListener(_changed);

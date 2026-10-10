@@ -90,7 +90,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       builder: (context, _) => ForumClipboardLinkHost(
         isReady: isReady,
         allowPrompt: !selection.isActive,
-        builder: (context, notice) => Scaffold(
+        builder: (context) => Scaffold(
           body: IndexedStack(
             index: MainShellDestination.values.indexOf(currentDestination),
             children: _buildIndexedPages(
@@ -98,29 +98,21 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
               currentDestination: currentDestination,
             ),
           ),
-          bottomNavigationBar: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ?notice,
-              ShelfSelectionBottomBar(
-                fallback: NavigationBar(
-                  key: const ValueKey<String>('main-shell-navigation-bar'),
-                  selectedIndex: visibleDestinations.indexOf(
-                    currentDestination,
-                  ),
-                  onDestinationSelected: (index) {
-                    final destination = visibleDestinations[index];
-                    setState(() {
-                      _currentDestination = destination;
-                      _builtDestinations.add(destination);
-                    });
-                  },
-                  destinations: visibleDestinations
-                      .map(_buildNavigationDestination)
-                      .toList(growable: false),
-                ),
-              ),
-            ],
+          bottomNavigationBar: ShelfSelectionBottomBar(
+            fallback: NavigationBar(
+              key: const ValueKey<String>('main-shell-navigation-bar'),
+              selectedIndex: visibleDestinations.indexOf(currentDestination),
+              onDestinationSelected: (index) {
+                final destination = visibleDestinations[index];
+                setState(() {
+                  _currentDestination = destination;
+                  _builtDestinations.add(destination);
+                });
+              },
+              destinations: visibleDestinations
+                  .map(_buildNavigationDestination)
+                  .toList(growable: false),
+            ),
           ),
         ),
       ),

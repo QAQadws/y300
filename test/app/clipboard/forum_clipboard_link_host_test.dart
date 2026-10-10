@@ -366,12 +366,12 @@ void main() {
   );
 
   testWidgets(
-    'dismissed or shown targets do not reappear after foreground resume',
+    'swiped or shown targets do not reappear after foreground resume',
     (tester) async {
       final fixture = _Fixture();
       await fixture.mount(tester);
       await fixture.complete(tester, 0, url);
-      await tester.tap(find.byKey(const Key('forum-clipboard-link-dismiss')));
+      await _swipeClipboardSnackBar(tester);
       await tester.pumpAndSettle();
       expect(find.byKey(noticeKey), findsNothing);
       await _lifecycle(tester, AppLifecycleState.paused);
@@ -527,6 +527,222 @@ void main() {
   }
 
   testWidgets(
+    'clipboard SnackBar expires without moving layout or renewing on rebuild',
+    (tester) async {
+      final fixture = _Fixture();
+      await fixture.mount(tester);
+      final body = find.byKey(const Key('clipboard-shell-body'));
+      final navigation = find.byKey(const Key('clipboard-shell-navigation'));
+      final bodyRect = tester.getRect(body);
+      final navigationRect = tester.getRect(navigation);
+      await fixture.complete(tester, 0, url);
+      expect(find.byKey(noticeKey), findsOneWidget);
+      final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
+      expect(snackBar.duration, const Duration(seconds: 6));
+      expect(snackBar.persist, isFalse);
+      expect(tester.getRect(body), bodyRect);
+      expect(tester.getRect(navigation), navigationRect);
+
+      await tester.pump(const Duration(seconds: 3));
+      fixture.tab = 1;
+      await fixture.pump(tester);
+      expect(find.byKey(noticeKey), findsOneWidget);
+      expect(tester.getRect(body), bodyRect);
+      expect(tester.getRect(navigation), navigationRect);
+      await tester.pump(const Duration(milliseconds: 3500));
+      await tester.pumpAndSettle();
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(fixture.runtime.coordinator.candidate, isNull);
+      expect(tester.getRect(body), bodyRect);
+      expect(tester.getRect(navigation), navigationRect);
+      expect(fixture.reader.reads, hasLength(1));
+
+      await _lifecycle(tester, AppLifecycleState.paused);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      await fixture.complete(tester, 1, url);
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(fixture.runtime.coordinator.candidate, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'clipboard notice waits behind ordinary feedback without replacing it',
+    (tester) async {
+      final fixture = _Fixture();
+      await fixture.mount(tester);
+      final business = _showBusinessSnackBar(tester, 'Business feedback');
+      await tester.pumpAndSettle();
+      await fixture.complete(tester, 0, url);
+      expect(find.text('Business feedback'), findsOneWidget);
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(fixture.runtime.coordinator.candidate?.url, url);
+      await tester.pump(const Duration(seconds: 10));
+      expect(find.text('Business feedback'), findsOneWidget);
+      expect(find.byKey(noticeKey), findsNothing);
+
+      business.close();
+      await tester.pumpAndSettle();
+      expect(await business.closed, SnackBarClosedReason.hide);
+      expect(find.byKey(noticeKey), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 5500));
+      expect(find.byKey(noticeKey), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(fixture.runtime.coordinator.candidate, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'invalid unseen notice preserves business queue and does not mark history',
+    (tester) async {
+      final fixture = _Fixture();
+      await fixture.mount(tester);
+      final first = _showBusinessSnackBar(tester, 'First business feedback');
+      final second = _showBusinessSnackBar(tester, 'Second business feedback');
+      await tester.pumpAndSettle();
+      await fixture.complete(tester, 0, url);
+      expect(find.byKey(noticeKey), findsNothing);
+      final stale = fixture.runtime.coordinator.candidate!;
+      var firstClosed = false;
+      var secondClosed = false;
+      unawaited(first.closed.then((_) => firstClosed = true));
+      unawaited(second.closed.then((_) => secondClosed = true));
+      await fixture.container
+          .read(clipboardLinkSettingsControllerProvider.notifier)
+          .setEnabled(false);
+      await tester.pumpAndSettle();
+      expect(fixture.runtime.coordinator.candidate, isNull);
+      expect(fixture.runtime.coordinator.takeForOpen(stale), isNull);
+      expect(find.text('First business feedback'), findsOneWidget);
+      expect(firstClosed, isFalse);
+      expect(secondClosed, isFalse);
+      first.close();
+      await tester.pumpAndSettle();
+      expect(find.text('Second business feedback'), findsOneWidget);
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(secondClosed, isFalse);
+      second.close();
+      await tester.pumpAndSettle();
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(fixture.destinations, isEmpty);
+      expect(fixture.locator.requests, isEmpty);
+
+      await fixture.container
+          .read(clipboardLinkSettingsControllerProvider.notifier)
+          .setEnabled(true);
+      await tester.pumpAndSettle();
+      await _lifecycle(tester, AppLifecycleState.paused);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      expect(fixture.reader.reads, hasLength(2));
+      await fixture.complete(tester, 1, url);
+      expect(find.byKey(noticeKey), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'fresh candidate waits for stale queued entry and preserves business order',
+    (tester) async {
+      final fixture = _Fixture();
+      await fixture.mount(tester);
+      final first = _showBusinessSnackBar(tester, 'First queued business');
+      await tester.pumpAndSettle();
+      await fixture.complete(tester, 0, url);
+      final stale = fixture.runtime.coordinator.candidate!;
+      expect(find.byKey(noticeKey), findsNothing);
+      _focus(tester, focused: false);
+      await tester.pumpAndSettle();
+      _focus(tester, focused: true);
+      await tester.pumpAndSettle();
+      expect(fixture.reader.reads, hasLength(2));
+      await fixture.complete(tester, 1, other);
+      expect(fixture.runtime.coordinator.takeForOpen(stale), isNull);
+      await fixture.pump(tester);
+      await fixture.pump(tester);
+      expect(find.text('First queued business'), findsOneWidget);
+      expect(fixture.reader.reads, hasLength(2));
+      final second = _showBusinessSnackBar(tester, 'Second queued business');
+      first.close();
+      await tester.pumpAndSettle();
+      expect(find.text('Second queued business'), findsOneWidget);
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(fixture.runtime.coordinator.candidate?.url, other);
+
+      second.close();
+      await tester.pumpAndSettle();
+      expect(find.byKey(noticeKey), findsOneWidget);
+      await tester.tap(find.byKey(const Key('forum-clipboard-link-open')));
+      await tester.pumpAndSettle();
+      expect(fixture.destinations, hasLength(1));
+      expect(fixture.destinations.single.tid, '124');
+      fixture.navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(fixture.runtime.coordinator.candidate, isNull);
+      await _lifecycle(tester, AppLifecycleState.paused);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      await fixture.complete(tester, 2, url);
+      expect(find.byKey(noticeKey), findsOneWidget);
+      expect(fixture.runtime.coordinator.candidate?.url, url);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'retiring visible notice keeps the next business feedback alive',
+    (tester) async {
+      final fixture = _Fixture();
+      await fixture.mount(tester);
+      await fixture.complete(tester, 0, url);
+      final business = _showBusinessSnackBar(
+        tester,
+        'Queued business feedback',
+      );
+      var closed = false;
+      unawaited(business.closed.then((_) => closed = true));
+      _focus(tester, focused: false);
+      await tester.pumpAndSettle();
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(find.text('Queued business feedback'), findsOneWidget);
+      expect(closed, isFalse);
+      await tester.pump(const Duration(seconds: 7));
+      expect(find.text('Queued business feedback'), findsOneWidget);
+      expect(closed, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Open does not double-hide business feedback queued behind its action',
+    (tester) async {
+      final fixture = _Fixture();
+      await fixture.mount(tester);
+      await fixture.complete(
+        tester,
+        0,
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=123&pid=456',
+      );
+      final business = _showBusinessSnackBar(tester, 'Business after Open');
+      var closed = false;
+      unawaited(business.closed.then((_) => closed = true));
+      await tester.tap(find.byKey(const Key('forum-clipboard-link-open')));
+      await tester.pumpAndSettle();
+      expect(fixture.locator.requests, hasLength(1));
+      expect(find.byKey(noticeKey), findsNothing);
+      expect(find.text('Business after Open'), findsOneWidget);
+      expect(closed, isFalse);
+      await tester.pump(const Duration(seconds: 7));
+      expect(find.text('Business after Open'), findsOneWidget);
+      expect(closed, isFalse);
+      expect(fixture.reader.reads, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'traditional Chinese notice remains usable on narrow large-text layouts',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(280, 900));
@@ -545,7 +761,10 @@ void main() {
         final l10n = AppLocalizations.of(context);
         expect(find.text(l10n.clipboardLinkFoundThread), findsOneWidget);
         expect(find.text(l10n.clipboardLinkOpen), findsOneWidget);
-        expect(find.byTooltip(l10n.commonClose), findsOneWidget);
+        expect(
+          find.byTooltip(MaterialLocalizations.of(context).closeButtonTooltip),
+          findsNothing,
+        );
         expect(
           tester
               .getSemantics(find.text(l10n.clipboardLinkFoundThread))
@@ -567,7 +786,7 @@ void main() {
           greaterThanOrEqualTo(48),
         );
         expect(tester.takeException(), isNull);
-        await tester.tap(find.byKey(const Key('forum-clipboard-link-dismiss')));
+        await _swipeClipboardSnackBar(tester);
         await tester.pumpAndSettle();
         expect(find.byKey(noticeKey), findsNothing);
       } finally {
@@ -581,6 +800,26 @@ Future<void> _lifecycle(WidgetTester tester, AppLifecycleState state) async {
   tester.binding.handleAppLifecycleStateChanged(state);
   await tester.pumpAndSettle();
 }
+
+Future<void> _swipeClipboardSnackBar(WidgetTester tester) async {
+  await tester.drag(
+    find.ancestor(
+      of: find.byKey(const Key('forum-clipboard-link-notice')),
+      matching: find.byType(SnackBar),
+    ),
+    const Offset(0, 200),
+  );
+}
+
+ScaffoldFeatureController<SnackBar, SnackBarClosedReason> _showBusinessSnackBar(
+  WidgetTester tester,
+  String label,
+) =>
+    ScaffoldMessenger.of(
+      tester.element(find.byKey(const Key('clipboard-shell-body'))),
+    ).showSnackBar(
+      SnackBar(content: Text(label), duration: const Duration(hours: 1)),
+    );
 
 void _focus(WidgetTester tester, {required bool focused, int? viewId}) =>
     tester.binding.handleViewFocusChanged(
@@ -666,15 +905,22 @@ final class _Fixture {
               key: const ValueKey('clipboard-test-host'),
               isReady: ready,
               allowPrompt: allowPrompt,
-              builder: (_, notice) => Scaffold(
-                body: Text('Tab $tab', key: const Key('clipboard-shell-body')),
-                bottomNavigationBar: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ?notice,
-                    const SizedBox(
-                      height: 56,
-                      child: Center(child: Text('Navigation')),
+              builder: (_) => Scaffold(
+                body: SizedBox.expand(
+                  key: const Key('clipboard-shell-body'),
+                  child: Text('Tab $tab'),
+                ),
+                bottomNavigationBar: NavigationBar(
+                  key: const Key('clipboard-shell-navigation'),
+                  selectedIndex: tab,
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.forum_outlined),
+                      label: 'Forum',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.book_outlined),
+                      label: 'Library',
                     ),
                   ],
                 ),
