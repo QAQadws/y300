@@ -6,8 +6,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/app/clipboard/clipboard_link_settings_controller.dart';
-import 'package:y300/app/clipboard/clipboard_link_settings_repository.dart';
 import 'package:y300/app/clipboard/forum_clipboard_link_host.dart';
 import 'package:y300/app/clipboard/forum_clipboard_runtime.dart';
 import 'package:y300/core/clipboard/clipboard_providers.dart';
@@ -168,27 +166,29 @@ void main() {
     },
   );
 
-  testWidgets(
-    'automatic detection disabled still permits selected navigation',
-    (tester) async {
-      final fixture = _Fixture(thread, clipboard: true, enabled: false);
-      await fixture.mount(tester);
-      expect(fixture.reader.reads, 0);
-      expect(find.byKey(notice), findsNothing);
-      await fixture.open(tester, _Entry.selectedText);
-      await tester.idle();
-      final page = fixture.takeThreadRoute();
-      expect(page.tid, '123');
-      expect(page.initialPage, 7);
-      await tester.pumpAndSettle();
-      expect(fixture.reader.reads, 0);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  for (final entry in [_Entry.plainText, _Entry.selectedText]) {
+    testWidgets(
+      'unavailable automatic prompt still permits ${entry.name} navigation',
+      (tester) async {
+        final fixture = _Fixture(thread, clipboard: true, allowPrompt: false);
+        await fixture.mount(tester);
+        expect(fixture.reader.reads, 0);
+        expect(find.byKey(notice), findsNothing);
+        await fixture.open(tester, entry);
+        await tester.idle();
+        final page = fixture.takeThreadRoute();
+        expect(page.tid, '123');
+        expect(page.initialPage, 7);
+        await tester.pumpAndSettle();
+        expect(fixture.reader.reads, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 final class _Fixture {
-  _Fixture(String text, {bool clipboard = false, bool enabled = true})
+  _Fixture(String text, {bool clipboard = false, this.allowPrompt = true})
     : post = ThreadPost(
         pid: 'p1',
         author: 'Synthetic Author',
@@ -203,9 +203,6 @@ final class _Fixture {
       overrides: [
         forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
           _PreferencesRepository(),
-        ),
-        clipboardLinkSettingsRepositoryProvider.overrideWithValue(
-          _SettingsRepository(enabled),
         ),
         authSessionControllerProvider.overrideWith(_AuthController.new),
         clipboardTextReaderProvider.overrideWithValue(reader),
@@ -236,6 +233,7 @@ final class _Fixture {
   }
 
   late final ProviderContainer container;
+  final bool allowPrompt;
   final ThreadPost post;
   final _Reader reader = _Reader();
   final _Locator locator = _Locator();
@@ -266,6 +264,7 @@ final class _Fixture {
           theme: ThemeData(platform: TargetPlatform.android),
           home: ForumClipboardLinkHost(
             isReady: true,
+            allowPrompt: allowPrompt,
             builder: (context) => Scaffold(
               body: Consumer(
                 builder: (context, ref, _) {
@@ -453,17 +452,6 @@ final class _PreferencesRepository
 
   @override
   Future<void> save(ForumHtmlReaderPreferences preferences) async {}
-}
-
-final class _SettingsRepository implements ClipboardLinkSettingsRepository {
-  _SettingsRepository(this.enabled);
-  final bool enabled;
-
-  @override
-  Future<bool> loadEnabled() async => enabled;
-
-  @override
-  Future<void> saveEnabled(bool value) async {}
 }
 
 class _AuthController extends AuthSessionController {

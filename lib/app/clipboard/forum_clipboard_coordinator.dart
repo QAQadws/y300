@@ -35,7 +35,6 @@ final class ForumClipboardCoordinator {
   ForumClipboardLinkCandidate? _candidate;
   Object? _owner;
   bool _ownerInitialized = false;
-  bool _enabled = false;
   bool _available = false;
   bool _pending = false;
   bool _reading = false;
@@ -46,32 +45,25 @@ final class ForumClipboardCoordinator {
   ForumClipboardLinkCandidate? get candidate => _candidate;
   bool get isReading => _reading;
 
-  void updateEligibility({
-    required bool available,
-    required bool enabled,
-    required Object? owner,
-  }) {
+  void updateEligibility({required bool available, required Object? owner}) {
     if (_disposed) return;
     final ownerChanged = _ownerInitialized && owner != _owner;
-    final disabled = _enabled && !enabled;
     final becameUnavailable = _available && !available;
     final hadWork = _pending || _reading || _candidate != null;
     _ownerInitialized = true;
     _owner = owner;
-    _enabled = enabled;
     _available = available;
-    if (ownerChanged || disabled || becameUnavailable) {
+    if (ownerChanged || becameUnavailable) {
       _readGeneration++;
-      if (ownerChanged || disabled) cancelOperations();
-      _pending = enabled && hadWork;
+      if (ownerChanged) cancelOperations();
+      _pending = hadWork;
       _setCandidate(null);
     }
-    if (!enabled) _pending = false;
     _drain();
   }
 
   void requestCheck() {
-    if (_disposed || !_enabled) return;
+    if (_disposed) return;
     _readGeneration++;
     cancelOperations();
     _pending = true;
@@ -109,10 +101,7 @@ final class ForumClipboardCoordinator {
     // Availability can become false because this operation pushed its route.
     // The host separately cancels actual background and focus transitions.
     return () =>
-        !_disposed &&
-        _enabled &&
-        generation == _operationGeneration &&
-        owner == _owner;
+        !_disposed && generation == _operationGeneration && owner == _owner;
   }
 
   void dispose() {
@@ -125,7 +114,7 @@ final class ForumClipboardCoordinator {
   }
 
   bool _isCurrent(ForumClipboardLinkCandidate candidate) =>
-      !_disposed && _enabled && _available && identical(candidate, _candidate);
+      !_disposed && _available && identical(candidate, _candidate);
 
   void _setCandidate(ForumClipboardLinkCandidate? candidate) {
     if (identical(_candidate, candidate)) return;
@@ -141,15 +130,14 @@ final class ForumClipboardCoordinator {
   }
 
   void _drain() {
-    if (_disposed || !_enabled || !_available || !_pending || _reading) return;
+    if (_disposed || !_available || !_pending || _reading) return;
     _pending = false;
     _reading = true;
     unawaited(_read(_readGeneration));
   }
 
   Future<void> _read(int generation) async {
-    bool current() =>
-        !_disposed && _enabled && _available && generation == _readGeneration;
+    bool current() => !_disposed && _available && generation == _readGeneration;
     try {
       final text = await _readText();
       if (!current() || text == null) return;

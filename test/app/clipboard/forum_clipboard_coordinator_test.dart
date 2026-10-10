@@ -118,21 +118,22 @@ void main() {
     );
 
     test(
-      'disabling cancels queued work and old completions without new reads',
+      'suspension rejects late reads and coalesces blocked lifecycle checks',
       () async {
         final fixture = _Fixture();
         fixture.eligibility();
         fixture.coordinator.requestCheck();
-        fixture.eligibility(enabled: false);
+        fixture.eligibility(available: false);
+        fixture.coordinator.requestCheck();
         fixture.coordinator.requestCheck();
         await fixture.complete(0, url);
         expect(fixture.coordinator.candidate, isNull);
-        fixture.eligibility();
-        await _flush();
         expect(fixture.reads, hasLength(1));
-        fixture.coordinator.requestCheck();
+        fixture.eligibility();
+        expect(fixture.reads, hasLength(2));
         await fixture.complete(1, other);
         expect(fixture.coordinator.candidate?.url, other);
+        expect(fixture.maxActiveReads, 1);
       },
     );
 
@@ -261,7 +262,7 @@ void main() {
       },
     );
 
-    for (final mutation in ['request', 'owner', 'disable', 'dispose']) {
+    for (final mutation in ['request', 'owner', 'suspend', 'dispose']) {
       test('an open lease is retired by $mutation', () async {
         final fixture = _Fixture();
         final candidate = await fixture.show(url);
@@ -271,8 +272,9 @@ void main() {
             fixture.coordinator.requestCheck();
           case 'owner':
             fixture.eligibility(owner: 'new');
-          case 'disable':
-            fixture.eligibility(enabled: false);
+          case 'suspend':
+            fixture.eligibility(available: false);
+            fixture.coordinator.cancelOperations();
           case 'dispose':
             fixture.coordinator.dispose();
         }
@@ -368,15 +370,8 @@ final class _Fixture {
   var activeReads = 0;
   var maxActiveReads = 0;
 
-  void eligibility({
-    bool available = true,
-    bool enabled = true,
-    Object? owner = 'owner',
-  }) => coordinator.updateEligibility(
-    available: available,
-    enabled: enabled,
-    owner: owner,
-  );
+  void eligibility({bool available = true, Object? owner = 'owner'}) =>
+      coordinator.updateEligibility(available: available, owner: owner);
 
   Future<void> complete(int index, String? text) async {
     reads[index].complete(text);

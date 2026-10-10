@@ -9,7 +9,6 @@ import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 
-import 'clipboard_link_settings_controller.dart';
 import 'forum_clipboard_link_policy.dart';
 import 'forum_clipboard_route_observer.dart';
 import 'forum_clipboard_runtime.dart';
@@ -51,7 +50,6 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
   int? _viewId;
   double _keyboardInset = 0;
   bool _authReady = false;
-  bool _settingEnabled = false;
 
   @override
   void initState() {
@@ -126,46 +124,29 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
 
   void _sync() {
     if (!mounted || !_runtime.owns(_host)) return;
-    final settings = ref.read(clipboardLinkSettingsControllerProvider);
-    final preference = settings.asData?.value;
     final auth = ref.read(authSessionControllerProvider);
     final wasAuthReady = _authReady;
     _authReady = !auth.isLoading && auth.asData?.value.isLoggingOut == false;
-    _settingEnabled =
-        !settings.isLoading &&
-        preference?.enabled == true &&
-        preference?.isSaving == false;
     if (wasAuthReady && !_authReady) {
       _runtime.coordinator.cancelOperations();
       _navigation.invalidate();
     }
-    final configurationReady =
-        !settings.isLoading && preference != null && !preference.isSaving;
     final coldReady =
         _runtime.needsColdCheck &&
         _firstFrame &&
         widget.isReady &&
         _authReady &&
-        configurationReady &&
         _runtime.isUnblocked;
-    final resumeReady = _resumePending && configurationReady;
+    final resumeReady = _resumePending;
     if (coldReady || resumeReady) {
       _resumePending = false;
       // Merge lifecycle opportunities before making the pending queue runnable.
       // Otherwise a resumed read can be started and immediately superseded.
-      _runtime.updateEligibility(
-        _host,
-        enabled: _settingEnabled,
-        available: false,
-      );
+      _runtime.updateEligibility(_host, available: false);
       if (coldReady) _runtime.requestColdCheck(_host);
       if (resumeReady) _runtime.coordinator.requestCheck();
     }
-    _runtime.updateEligibility(
-      _host,
-      enabled: _settingEnabled,
-      available: _available,
-    );
+    _runtime.updateEligibility(_host, available: _available);
   }
 
   void _changed() {
@@ -214,9 +195,7 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(clipboardLinkSettingsControllerProvider);
     ref.watch(authSessionControllerProvider);
-    ref.listen(clipboardLinkSettingsControllerProvider, (_, _) => _changed());
     ref.listen(authSessionControllerProvider, (_, _) => _changed());
     _sync();
     _scheduleNotice();
@@ -241,8 +220,7 @@ class _ForumClipboardLinkHostState extends ConsumerState<ForumClipboardLinkHost>
                 lease() &&
                 _foreground &&
                 _focused &&
-                _authReady &&
-                _settingEnabled,
+                _authReady,
             onCopyLink: (url) =>
                 ref.read(clipboardTextWriterProvider).writeText(url),
           ),

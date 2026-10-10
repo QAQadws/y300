@@ -127,18 +127,6 @@ abstract class AppLocalizations {
   /// **'评论刷新失败，已保留原有评论'**
   String get comicCommentRefreshFailed;
 
-  /// 自动检测剪贴板论坛链接的设置名称
-  ///
-  /// In zh, this message translates to:
-  /// **'剪贴板链接提示'**
-  String get clipboardLinkDetectionTitle;
-
-  /// 自动剪贴板链接提示设置说明
-  ///
-  /// In zh, this message translates to:
-  /// **'回到应用时提示打开百合会链接'**
-  String get clipboardLinkDetectionSubtitle;
-
   /// 剪贴板中唯一可推荐目标为论坛帖子
   ///
   /// In zh, this message translates to:

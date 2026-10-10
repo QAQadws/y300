@@ -4,8 +4,7 @@ import 'dart:ui' show ViewFocusDirection, ViewFocusEvent, ViewFocusState;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/app/clipboard/clipboard_link_settings_controller.dart';
-import 'package:y300/app/clipboard/clipboard_link_settings_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/clipboard/forum_clipboard_link_host.dart';
 import 'package:y300/app/clipboard/forum_clipboard_runtime.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
@@ -15,6 +14,8 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/core/preferences/preferences_providers.dart';
+import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -45,29 +46,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'cold check waits for settings, authentication and shell readiness',
-    (tester) async {
-      final settings = Completer<bool>();
-      final auth = Completer<AuthSessionViewState>();
-      final fixture = _Fixture(settingsLoad: settings, authLoad: auth)
-        ..ready = false;
-      await fixture.mount(tester);
-      expect(fixture.reader.reads, isEmpty);
-      settings.complete(true);
-      await tester.pumpAndSettle();
-      expect(fixture.reader.reads, isEmpty);
-      auth.complete(const AuthSessionViewState.signedOut());
-      await tester.pumpAndSettle();
-      expect(fixture.reader.reads, isEmpty);
-      fixture.ready = true;
-      await fixture.pump(tester);
-      expect(fixture.reader.reads, hasLength(1));
-      await fixture.complete(tester, 0, url);
-      expect(find.byKey(noticeKey), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('cold check waits for authentication and shell readiness', (
+    tester,
+  ) async {
+    final auth = Completer<AuthSessionViewState>();
+    final fixture = _Fixture(authLoad: auth)..ready = false;
+    await fixture.mount(tester);
+    expect(fixture.reader.reads, isEmpty);
+    auth.complete(const AuthSessionViewState.signedOut());
+    await tester.pumpAndSettle();
+    expect(fixture.reader.reads, isEmpty);
+    fixture.ready = true;
+    await fixture.pump(tester);
+    expect(fixture.reader.reads, hasLength(1));
+    await fixture.complete(tester, 0, url);
+    expect(find.byKey(noticeKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('allowed-prompt gating defers one cold intent until usable', (
     tester,
@@ -87,24 +82,65 @@ void main() {
   });
 
   testWidgets(
-    'unavailable settings do not consume clipboard data or cold intent',
+    'unavailable authentication does not consume clipboard data or cold intent',
     (tester) async {
-      final settings = Completer<bool>();
-      final fixture = _Fixture(settingsLoad: settings);
+      final auth = Completer<AuthSessionViewState>();
+      final fixture = _Fixture(authLoad: auth);
       await fixture.mount(tester);
-      settings.completeError(StateError('synthetic settings unavailable'));
+      auth.completeError(StateError('synthetic authentication unavailable'));
       await tester.pumpAndSettle();
       expect(fixture.reader.reads, isEmpty);
       expect(fixture.runtime.needsColdCheck, isTrue);
       expect(
-        fixture.container
-            .read(clipboardLinkSettingsControllerProvider)
-            .hasError,
+        fixture.container.read(authSessionControllerProvider).hasError,
         isTrue,
       );
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final legacyValue in <Object>[false, 'unknown']) {
+    testWidgets('legacy clipboard preference $legacyValue is ignored', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'app.clipboard.link_detection.enabled.v1': legacyValue,
+      });
+      final fixture = _Fixture();
+      await fixture.mount(tester);
+      expect(fixture.reader.reads, hasLength(1));
+      await fixture.complete(tester, 0, url);
+      expect(find.byKey(noticeKey), findsOneWidget);
+      await _swipeClipboardSnackBar(tester);
+      await _lifecycle(tester, AppLifecycleState.paused);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      expect(fixture.reader.reads, hasLength(2));
+      await fixture.complete(tester, 1, other);
+      expect(find.byKey(noticeKey), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('clipboard detection never waits for preference storage', (
+    tester,
+  ) async {
+    var loads = 0;
+    final fixture = _Fixture(
+      preferences: SharedPreferencesStore(
+        loader: () {
+          loads++;
+          throw StateError('synthetic preference storage unavailable');
+        },
+      ),
+    );
+    await fixture.mount(tester);
+    expect(loads, 0);
+    expect(fixture.reader.reads, hasLength(1));
+    await fixture.complete(tester, 0, url);
+    expect(find.byKey(noticeKey), findsOneWidget);
+    expect(loads, 0);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('WAF and update gates postpone initial clipboard work', (
     tester,
@@ -324,21 +360,23 @@ void main() {
   });
 
   testWidgets(
-    'disabling settings retires late clipboard work and future resumes',
+    'selection mode defers late clipboard work and resumes until released',
     (tester) async {
       final fixture = _Fixture();
       await fixture.mount(tester);
-      await fixture.container
-          .read(clipboardLinkSettingsControllerProvider.notifier)
-          .setEnabled(false);
-      await tester.pumpAndSettle();
+      fixture.allowPrompt = false;
+      await fixture.pump(tester);
       await fixture.complete(tester, 0, url);
       expect(find.byKey(noticeKey), findsNothing);
       expect(fixture.runtime.coordinator.candidate, isNull);
       await _lifecycle(tester, AppLifecycleState.paused);
       await _lifecycle(tester, AppLifecycleState.resumed);
       expect(fixture.reader.reads, hasLength(1));
-      expect(fixture.settings.saves, [false]);
+      fixture.allowPrompt = true;
+      await fixture.pump(tester);
+      expect(fixture.reader.reads, hasLength(2));
+      await fixture.complete(tester, 1, other);
+      expect(find.byKey(noticeKey), findsOneWidget);
     },
   );
 
@@ -411,7 +449,6 @@ void main() {
     'inactive',
     'focus',
     'owner',
-    'disable',
     'host',
     'auth',
   ]) {
@@ -442,11 +479,6 @@ void main() {
             fixture.sessions
               ..clear()
               ..saveExtracted(_snapshot('101'));
-            await tester.pumpAndSettle();
-          case 'disable':
-            await fixture.container
-                .read(clipboardLinkSettingsControllerProvider.notifier)
-                .setEnabled(false);
             await tester.pumpAndSettle();
           case 'host':
             fixture.showHost = false;
@@ -610,10 +642,8 @@ void main() {
       var secondClosed = false;
       unawaited(first.closed.then((_) => firstClosed = true));
       unawaited(second.closed.then((_) => secondClosed = true));
-      await fixture.container
-          .read(clipboardLinkSettingsControllerProvider.notifier)
-          .setEnabled(false);
-      await tester.pumpAndSettle();
+      fixture.allowPrompt = false;
+      await fixture.pump(tester);
       expect(fixture.runtime.coordinator.candidate, isNull);
       expect(fixture.runtime.coordinator.takeForOpen(stale), isNull);
       expect(find.text('First business feedback'), findsOneWidget);
@@ -630,12 +660,11 @@ void main() {
       expect(fixture.destinations, isEmpty);
       expect(fixture.locator.requests, isEmpty);
 
-      await fixture.container
-          .read(clipboardLinkSettingsControllerProvider.notifier)
-          .setEnabled(true);
-      await tester.pumpAndSettle();
       await _lifecycle(tester, AppLifecycleState.paused);
       await _lifecycle(tester, AppLifecycleState.resumed);
+      expect(fixture.reader.reads, hasLength(1));
+      fixture.allowPrompt = true;
+      await fixture.pump(tester);
       expect(fixture.reader.reads, hasLength(2));
       await fixture.complete(tester, 1, url);
       expect(find.byKey(noticeKey), findsOneWidget);
@@ -841,14 +870,14 @@ YamiboSessionSnapshot _snapshot(String uid) => YamiboSessionSnapshot(
 
 final class _Fixture {
   _Fixture({
-    Completer<bool>? settingsLoad,
     Completer<AuthSessionViewState>? authLoad,
-  }) : settings = _SettingsRepository(settingsLoad),
-       auth = _AuthController(authLoad) {
+    PreferencesStore? preferences,
+  }) : auth = _AuthController(authLoad) {
     container = ProviderContainer(
       overrides: [
         clipboardTextReaderProvider.overrideWithValue(reader),
-        clipboardLinkSettingsRepositoryProvider.overrideWithValue(settings),
+        if (preferences != null)
+          preferencesStoreProvider.overrideWithValue(preferences),
         authSessionControllerProvider.overrideWith(
           () => auth = _AuthController(auth.load),
         ),
@@ -867,7 +896,6 @@ final class _Fixture {
 
   late final ProviderContainer container;
   final _Reader reader = _Reader();
-  final _SettingsRepository settings;
   _AuthController auth;
   final YamiboSessionStore sessions = YamiboSessionStore();
   final _Locator locator = _Locator();
@@ -986,18 +1014,6 @@ final class _Locator implements ThreadPostLocator {
     requests.add(request);
     return request.future;
   }
-}
-
-final class _SettingsRepository implements ClipboardLinkSettingsRepository {
-  _SettingsRepository(this.load);
-  final Completer<bool>? load;
-  final saves = <bool>[];
-
-  @override
-  Future<bool> loadEnabled() async => load == null ? true : await load!.future;
-
-  @override
-  Future<void> saveEnabled(bool value) async => saves.add(value);
 }
 
 class _AuthController extends AuthSessionController {

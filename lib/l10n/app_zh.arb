@@ -7,10 +7,6 @@
 
   "@@locale": "zh",
 
-  "clipboardLinkDetectionTitle": "剪贴板链接提示",
-  "@clipboardLinkDetectionTitle": {"description": "自动检测剪贴板论坛链接的设置名称"},
-  "clipboardLinkDetectionSubtitle": "回到应用时提示打开百合会链接",
-  "@clipboardLinkDetectionSubtitle": {"description": "自动剪贴板链接提示设置说明"},
   "clipboardLinkFoundThread": "发现百合会帖子链接",
   "@clipboardLinkFoundThread": {"description": "剪贴板中唯一可推荐目标为论坛帖子"},
   "clipboardLinkFoundPost": "发现百合会楼层链接",

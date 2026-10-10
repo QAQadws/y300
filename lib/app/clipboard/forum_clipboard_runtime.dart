@@ -50,7 +50,6 @@ final class ForumClipboardRuntime extends ChangeNotifier {
   late final ForumClipboardCoordinator coordinator;
   Object _owner = Object();
   Object? _host;
-  bool _enabled = false;
   bool _coldRequested = false;
   bool _wafBusy = false;
   bool _updateBlocked = false;
@@ -65,11 +64,7 @@ final class ForumClipboardRuntime extends ChangeNotifier {
     coordinator.cancelOperations();
     final token = Object();
     _host = token;
-    coordinator.updateEligibility(
-      available: false,
-      enabled: _enabled,
-      owner: _owner,
-    );
+    coordinator.updateEligibility(available: false, owner: _owner);
     return token;
   }
 
@@ -79,23 +74,13 @@ final class ForumClipboardRuntime extends ChangeNotifier {
     if (!owns(token)) return;
     _host = null;
     coordinator.cancelOperations();
-    coordinator.updateEligibility(
-      available: false,
-      enabled: _enabled,
-      owner: _owner,
-    );
+    coordinator.updateEligibility(available: false, owner: _owner);
   }
 
-  void updateEligibility(
-    Object token, {
-    required bool enabled,
-    required bool available,
-  }) {
+  void updateEligibility(Object token, {required bool available}) {
     if (!owns(token)) return;
-    _enabled = enabled;
     coordinator.updateEligibility(
       available: available && isUnblocked,
-      enabled: enabled,
       owner: _owner,
     );
   }
@@ -109,11 +94,7 @@ final class ForumClipboardRuntime extends ChangeNotifier {
   void changeOwner() {
     if (_disposed) return;
     _owner = Object();
-    coordinator.updateEligibility(
-      available: false,
-      enabled: _enabled,
-      owner: _owner,
-    );
+    coordinator.updateEligibility(available: false, owner: _owner);
     _publish();
   }
 
@@ -139,11 +120,7 @@ final class ForumClipboardRuntime extends ChangeNotifier {
     if (!isUnblocked) {
       // These gates retire optional detection, not an already confirmed open.
       // Its locator may itself need the shared WAF recovery to finish.
-      coordinator.updateEligibility(
-        available: false,
-        enabled: _enabled,
-        owner: _owner,
-      );
+      coordinator.updateEligibility(available: false, owner: _owner);
     }
     _publish();
   }
