@@ -4,6 +4,8 @@ abstract final class PreferenceKeyNames {
   static const appThemePreference = 'app_theme_preference';
   static const appLanguagePreference = 'app_language_preference';
   static const appNavigationSnapshotV1 = 'app.navigation.snapshot.v1';
+  static const appClipboardLinkDetectionEnabledV1 =
+      'app.clipboard.link_detection.enabled.v1';
   static const appUpdateReleaseNotesSnapshotV1 =
       'app.update.release_notes.snapshot.v1';
   static const dailyAutoSignInEnabledV1Prefix =

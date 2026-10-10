@@ -18,6 +18,9 @@ abstract final class PreferenceKeys {
   static const appNavigationSnapshotV1 = PreferenceKey<String>(
     PreferenceKeyNames.appNavigationSnapshotV1,
   );
+  static const appClipboardLinkDetectionEnabledV1 = PreferenceKey<bool>(
+    PreferenceKeyNames.appClipboardLinkDetectionEnabledV1,
+  );
   static const appUpdateReleaseNotesSnapshotV1 = PreferenceKey<String>(
     PreferenceKeyNames.appUpdateReleaseNotesSnapshotV1,
   );

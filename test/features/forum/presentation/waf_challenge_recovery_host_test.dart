@@ -138,6 +138,7 @@ void main() {
         retryCooldown: Duration.zero,
       );
       final observer = _CountingNavigatorObserver();
+      final busyChanges = <bool>[];
       ValueChanged<WafChallengeRecoveryResult>? completeRecovery;
       WafChallengeRecoveryRequest? browserRequest;
       await tester.pumpWidget(
@@ -160,8 +161,9 @@ void main() {
           ],
           child: LocalizedTestApp(
             navigatorObservers: <NavigatorObserver>[observer],
-            home: const WafChallengeRecoveryHost(
-              child: Scaffold(body: Text('home')),
+            home: WafChallengeRecoveryHost(
+              onBusyChanged: busyChanges.add,
+              child: const Scaffold(body: Text('home')),
             ),
           ),
         ),
@@ -178,6 +180,7 @@ void main() {
           userAgent: 'test-agent',
         ),
       );
+      expect(busyChanges, [true]);
       await tester.pump();
       await tester.pump();
 
@@ -197,6 +200,7 @@ void main() {
       unawaited(recovery.then((_) => recoveryCompleted = true));
       completeRecovery!(WafChallengeRecoveryResult.verified);
       expect(recoveryCompleted, isFalse);
+      expect(busyChanges, [true]);
       expect(
         find.byKey(const Key('fake-waf-background-webview')),
         findsOneWidget,
@@ -204,6 +208,7 @@ void main() {
 
       await tester.pump();
       expect(recoveryCompleted, isTrue);
+      expect(busyChanges, [true, false]);
       expect(await recovery, WafChallengeRecoveryResult.verified);
       expect(
         find.byKey(const Key('fake-waf-background-webview')),
@@ -218,6 +223,7 @@ void main() {
     final coordinator = WafChallengeRecoveryCoordinator(
       retryCooldown: Duration.zero,
     );
+    final busyChanges = <bool>[];
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -231,8 +237,11 @@ void main() {
             return const SizedBox(key: Key('fake-waf-background-webview'));
           }),
         ],
-        child: const LocalizedTestApp(
-          home: WafChallengeRecoveryHost(child: Scaffold(body: Text('home'))),
+        child: LocalizedTestApp(
+          home: WafChallengeRecoveryHost(
+            onBusyChanged: busyChanges.add,
+            child: const Scaffold(body: Text('home')),
+          ),
         ),
       ),
     );
@@ -248,12 +257,14 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
+    expect(busyChanges, [true]);
     expect(
       find.byKey(const Key('fake-waf-background-webview')),
       findsOneWidget,
     );
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    expect(busyChanges, [true, false]);
     await tester.pump();
 
     final result = await recovery;
@@ -264,7 +275,69 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
     expect(find.byKey(const Key('fake-waf-background-webview')), findsNothing);
+    expect(busyChanges, [true, false]);
   });
+
+  for (final retireBeforeUnmount in [false, true]) {
+    testWidgets(
+      'unmount releases WAF busy while retiring=$retireBeforeUnmount',
+      (tester) async {
+        final coordinator = WafChallengeRecoveryCoordinator(
+          retryCooldown: Duration.zero,
+        );
+        final busyChanges = <bool>[];
+        ValueChanged<WafChallengeRecoveryResult>? completeRecovery;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              wafChallengeRecoveryCoordinatorProvider.overrideWithValue(
+                coordinator,
+              ),
+              wafChallengeBackgroundBuilderProvider.overrideWithValue(({
+                required request,
+                required onCompleted,
+              }) {
+                completeRecovery = onCompleted;
+                return const SizedBox(key: Key('fake-waf-background-webview'));
+              }),
+            ],
+            child: LocalizedTestApp(
+              home: WafChallengeRecoveryHost(
+                onBusyChanged: busyChanges.add,
+                child: const Scaffold(),
+              ),
+            ),
+          ),
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        final recovery = coordinator.recover(
+          WafChallengeRecoveryRequest(
+            triggeringUri: Uri.parse('https://bbs.yamibo.com/index.php'),
+            method: 'GET',
+            evidence: WafChallengeEvidence.httpStatus405,
+          ),
+        );
+        await tester.pump();
+        expect(busyChanges, [true]);
+        if (retireBeforeUnmount) {
+          completeRecovery!(WafChallengeRecoveryResult.verified);
+          expect(busyChanges, [true]);
+        }
+
+        await tester.pumpWidget(const SizedBox());
+        expect(await recovery, WafChallengeRecoveryResult.unavailable);
+        expect(busyChanges, [true, false]);
+        // Previously scheduled surface completion and browser callbacks cannot
+        // emit a second release or resurrect the retired run.
+        completeRecovery!(WafChallengeRecoveryResult.verified);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(busyChanges, [true, false]);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('keeps the foreground subtree mounted during recovery', (
     tester,

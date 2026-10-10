@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/navigation/forum_link_opener.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
@@ -293,6 +295,59 @@ void main() {
     await tester.idle();
     expect(takePage(), isA<ThreadDetailPage>());
   });
+
+  testWidgets(
+    'App provider fallback Copy records successful shared writer evidence',
+    (tester) async {
+      await pumpHost(tester);
+      final platformCalls = <MethodCall>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') platformCalls.add(call);
+        if (call.method == 'Clipboard.getData') {
+          fail('Copy must not read back the clipboard');
+        }
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      final container = ProviderContainer.test(
+        overrides: [
+          yamiboSessionStoreProvider.overrideWithValue(YamiboSessionStore()),
+          forumWebViewExternalLauncherProvider.overrideWithValue(launcher),
+        ],
+      );
+      addTearDown(container.dispose);
+      const url = 'https://example.org/read?keep=1#fragment';
+      unawaited(
+        container
+            .read(forumLinkOpenerProvider)
+            .open(
+              context: source,
+              url: url,
+              session: session,
+              isCurrent: () => sourceValid,
+            ),
+      );
+      await tester.idle();
+      launcher.requests.single.complete(false);
+      await tester.pumpAndSettle();
+      expect(platformCalls, isEmpty);
+      final l10n = AppLocalizations.of(source);
+      await tester.tap(find.text(l10n.threadDetailCopyLink));
+      await tester.pumpAndSettle();
+      expect(platformCalls, hasLength(1));
+      expect(platformCalls.single.arguments, {'text': url});
+      expect(
+        container
+            .read(clipboardSelfCopyFingerprintRegistryProvider)
+            .containsText(url),
+        isTrue,
+      );
+    },
+  );
 
   testWidgets('App provider opens ordinary links without auth verification', (
     tester,

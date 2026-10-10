@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/presentation/login_page.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -154,6 +155,12 @@ void main() {
         await _openSheet(tester, comment: comment);
         await _tapAction(tester, 'copy-all');
         expect(copied, hasLength(1));
+        expect(
+          host.container
+              .read(clipboardSelfCopyFingerprintRegistryProvider)
+              .containsText(copied.single),
+          isTrue,
+        );
         expect(copied.single, contains('內文\n第二行'));
         expect(copied.single, contains('引用內文'));
         expect(copied.single, contains('结尾[笑]'));
@@ -181,6 +188,12 @@ void main() {
               .toString(),
         );
         expect(host.details.queries, hasLength(1));
+        expect(
+          host.container
+              .read(clipboardSelfCopyFingerprintRegistryProvider)
+              .containsText(copied.last),
+          isTrue,
+        );
         expect(host.comments.preparations, isEmpty);
         expect(tester.takeException(), isNull);
       },

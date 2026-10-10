@@ -24,6 +24,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get comicCommentRefreshFailed => '评论刷新失败，已保留原有评论';
 
   @override
+  String get clipboardLinkDetectionTitle => '剪贴板链接提示';
+
+  @override
+  String get clipboardLinkDetectionSubtitle => '回到应用时提示打开百合会链接';
+
+  @override
+  String get clipboardLinkFoundThread => '发现百合会帖子链接';
+
+  @override
+  String get clipboardLinkFoundPost => '发现百合会楼层链接';
+
+  @override
+  String get clipboardLinkFoundForum => '发现百合会版块链接';
+
+  @override
+  String get clipboardLinkOpen => '打开';
+
+  @override
   String get appLanguageSectionTitle => '界面语言';
 
   @override
@@ -5439,6 +5457,24 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get comicCommentRefreshFailed => '評論重新整理失敗，已保留原有評論';
+
+  @override
+  String get clipboardLinkDetectionTitle => '剪貼簿連結提示';
+
+  @override
+  String get clipboardLinkDetectionSubtitle => '返回應用程式時提示開啟百合會連結';
+
+  @override
+  String get clipboardLinkFoundThread => '發現百合會帖子連結';
+
+  @override
+  String get clipboardLinkFoundPost => '發現百合會樓層連結';
+
+  @override
+  String get clipboardLinkFoundForum => '發現百合會版塊連結';
+
+  @override
+  String get clipboardLinkOpen => '開啟';
 
   @override
   String get appLanguageSectionTitle => '介面語言';

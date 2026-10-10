@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
@@ -6,6 +8,8 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/clipboard/clipboard_link_settings_controller.dart';
+import 'package:y300/app/clipboard/clipboard_link_settings_repository.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -45,6 +49,91 @@ import '../../messages/support/message_test_repository.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
+  testWidgets(
+    'clipboard setting disables loading and saves only one pending mutation',
+    (tester) async {
+      final repository = _ClipboardSettingsRepository();
+      await _pumpClipboardSettingsMorePage(tester, repository);
+      final entry = find.byKey(
+        const Key('more-clipboard-link-detection-switch'),
+      );
+      await _scrollUntilVisibleIfNeeded(tester, entry);
+      expect(tester.widget<SwitchListTile>(entry).onChanged, isNull);
+
+      repository.load.complete(true);
+      await tester.pumpAndSettle();
+      final original = tester.widget<SwitchListTile>(entry);
+      expect(original.value, isTrue);
+      original.onChanged!(false);
+      original.onChanged!(false);
+      await tester.pump();
+      final saving = tester.widget<SwitchListTile>(entry);
+      expect(saving.value, isFalse);
+      expect(saving.onChanged, isNull);
+      expect(repository.writes, [false]);
+      repository.saves.single.complete();
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(entry).value, isFalse);
+      expect(tester.widget<SwitchListTile>(entry).onChanged, isNotNull);
+      expect(find.byType(SnackBar), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'clipboard setting failure restores value and displays localized safe feedback',
+    (tester) async {
+      final repository = _ClipboardSettingsRepository()..load.complete(true);
+      await _pumpClipboardSettingsMorePage(tester, repository);
+      final entry = find.byKey(
+        const Key('more-clipboard-link-detection-switch'),
+      );
+      await _scrollUntilVisibleIfNeeded(tester, entry);
+      tester.widget<SwitchListTile>(entry).onChanged!(false);
+      repository.saves.single.completeError(
+        StateError('private technical failure'),
+      );
+      await tester.pumpAndSettle();
+
+      final restored = tester.widget<SwitchListTile>(entry);
+      expect(restored.value, isTrue);
+      expect(restored.onChanged, isNotNull);
+      final l10n = AppLocalizations.of(tester.element(entry));
+      expect(
+        find.text(l10n.forumActionFailed(l10n.commonUnknownError)),
+        findsOneWidget,
+      );
+      expect(find.textContaining('private technical failure'), findsNothing);
+      restored.onChanged!(false);
+      repository.saves.last.complete();
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(entry).value, isFalse);
+      expect(repository.writes, [false, false]);
+    },
+  );
+
+  for (final locale in [const Locale('zh'), const Locale('zh', 'TW')]) {
+    testWidgets(
+      'clipboard setting labels use ${locale.toLanguageTag()} localization',
+      (tester) async {
+        final repository = _ClipboardSettingsRepository()..load.complete(false);
+        await _pumpClipboardSettingsMorePage(
+          tester,
+          repository,
+          locale: locale,
+        );
+        final entry = find.byKey(
+          const Key('more-clipboard-link-detection-switch'),
+        );
+        await _scrollUntilVisibleIfNeeded(tester, entry);
+        final l10n = AppLocalizations.of(tester.element(entry));
+        expect(find.text(l10n.clipboardLinkDetectionTitle), findsOneWidget);
+        expect(find.text(l10n.clipboardLinkDetectionSubtitle), findsOneWidget);
+        expect(tester.widget<SwitchListTile>(entry).value, isFalse);
+        expect(tester.widget<SwitchListTile>(entry).onChanged, isNotNull);
+      },
+    );
+  }
 
   for (final type in UserThreadDirectoryType.values) {
     testWidgets('account ${type.name} statistic opens its native directory', (
@@ -1578,6 +1667,43 @@ List<Override> _moreAuthOverrides(
       });
     }),
 ];
+
+Future<void> _pumpClipboardSettingsMorePage(
+  WidgetTester tester,
+  _ClipboardSettingsRepository repository, {
+  Locale locale = const Locale('zh'),
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+        clipboardLinkSettingsRepositoryProvider.overrideWithValue(repository),
+        appAppearanceControllerProvider.overrideWith(
+          () => _FakeAppAppearanceController(),
+        ),
+      ],
+      child: LocalizedTestApp(home: const MorePage(), locale: locale),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+class _ClipboardSettingsRepository implements ClipboardLinkSettingsRepository {
+  final load = Completer<bool>();
+  final writes = <bool>[];
+  final saves = <Completer<void>>[];
+
+  @override
+  Future<bool> loadEnabled() => load.future;
+
+  @override
+  Future<void> saveEnabled(bool enabled) {
+    writes.add(enabled);
+    final completion = Completer<void>();
+    saves.add(completion);
+    return completion.future;
+  }
+}
 
 class _AccountSummaryRepository implements CurrentAccountSummaryRepository {
   _AccountSummaryRepository(this.currentData);

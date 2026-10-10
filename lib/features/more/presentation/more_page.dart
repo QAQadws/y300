@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/clipboard/clipboard_link_settings_controller.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
@@ -71,6 +72,10 @@ class _MorePageState extends ConsumerState<MorePage> {
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
+    final clipboardSettings = ref
+        .watch(clipboardLinkSettingsControllerProvider)
+        .asData
+        ?.value;
     final l10n = AppLocalizations.of(context);
 
     return Scaffold(
@@ -154,6 +159,16 @@ class _MorePageState extends ConsumerState<MorePage> {
               title: Text(l10n.moreAppearance),
               onTap: () => _showAppearanceSettingsSheet(context),
             ),
+            SwitchListTile(
+              key: const Key('more-clipboard-link-detection-switch'),
+              secondary: const Icon(Icons.content_paste_go_outlined),
+              title: Text(l10n.clipboardLinkDetectionTitle),
+              subtitle: Text(l10n.clipboardLinkDetectionSubtitle),
+              value: clipboardSettings?.enabled ?? false,
+              onChanged: clipboardSettings == null || clipboardSettings.isSaving
+                  ? null
+                  : _setClipboardLinkDetectionEnabled,
+            ),
             ListTile(
               key: const Key('more-navigation-management-entry'),
               leading: const Icon(Icons.view_week_outlined),
@@ -208,6 +223,28 @@ class _MorePageState extends ConsumerState<MorePage> {
       context: context,
       builder: (_) => const AppearanceSettingsSheet(),
     );
+  }
+
+  Future<void> _setClipboardLinkDetectionEnabled(bool enabled) async {
+    if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+    final settings = ref
+        .read(clipboardLinkSettingsControllerProvider)
+        .asData
+        ?.value;
+    if (settings == null || settings.isSaving) return;
+    try {
+      await ref
+          .read(clipboardLinkSettingsControllerProvider.notifier)
+          .setEnabled(enabled);
+    } on Object {
+      if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.forumActionFailed(l10n.commonUnknownError)),
+        ),
+      );
+    }
   }
 
   Future<void> _openMyThreadsPage(UserThreadDirectoryType type) =>

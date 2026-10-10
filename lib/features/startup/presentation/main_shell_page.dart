@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/clipboard/forum_clipboard_link_host.dart';
 import 'package:y300/app/navigation/main_destination_page.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
@@ -9,6 +10,7 @@ import 'package:y300/app/startup/main_shell_startup_host.dart';
 import 'package:y300/app/startup/main_shell_library_gate.dart';
 import 'package:y300/app/startup/main_shell_startup_providers.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_bottom_bar.dart';
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -55,7 +57,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                 snapshot.connectionState == ConnectionState.done;
             return MainShellReadyTaskHost(
               isReady: libraryReady,
-              child: _buildReadyShell(context),
+              child: _buildReadyShell(context, isReady: libraryReady),
             );
           },
         ),
@@ -63,7 +65,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     );
   }
 
-  Widget _buildReadyShell(BuildContext context) {
+  Widget _buildReadyShell(BuildContext context, {required bool isReady}) {
     final navigationState = ref
         .watch(mainNavigationSettingsControllerProvider)
         .value;
@@ -82,28 +84,44 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     _currentDestination = currentDestination;
     _builtDestinations.add(currentDestination);
 
-    return Scaffold(
-      body: IndexedStack(
-        index: MainShellDestination.values.indexOf(currentDestination),
-        children: _buildIndexedPages(
-          settings,
-          currentDestination: currentDestination,
-        ),
-      ),
-      bottomNavigationBar: ShelfSelectionBottomBar(
-        fallback: NavigationBar(
-          key: const ValueKey<String>('main-shell-navigation-bar'),
-          selectedIndex: visibleDestinations.indexOf(currentDestination),
-          onDestinationSelected: (index) {
-            final destination = visibleDestinations[index];
-            setState(() {
-              _currentDestination = destination;
-              _builtDestinations.add(destination);
-            });
-          },
-          destinations: visibleDestinations
-              .map(_buildNavigationDestination)
-              .toList(growable: false),
+    final selection = ref.watch(shelfSelectionHostControllerProvider);
+    return ListenableBuilder(
+      listenable: selection,
+      builder: (context, _) => ForumClipboardLinkHost(
+        isReady: isReady,
+        allowPrompt: !selection.isActive,
+        builder: (context, notice) => Scaffold(
+          body: IndexedStack(
+            index: MainShellDestination.values.indexOf(currentDestination),
+            children: _buildIndexedPages(
+              settings,
+              currentDestination: currentDestination,
+            ),
+          ),
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ?notice,
+              ShelfSelectionBottomBar(
+                fallback: NavigationBar(
+                  key: const ValueKey<String>('main-shell-navigation-bar'),
+                  selectedIndex: visibleDestinations.indexOf(
+                    currentDestination,
+                  ),
+                  onDestinationSelected: (index) {
+                    final destination = visibleDestinations[index];
+                    setState(() {
+                      _currentDestination = destination;
+                      _builtDestinations.add(destination);
+                    });
+                  },
+                  destinations: visibleDestinations
+                      .map(_buildNavigationDestination)
+                      .toList(growable: false),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

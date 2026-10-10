@@ -72,6 +72,21 @@ class YamiboForumLinkResolver {
     if (_isBrowsingKind(destination.kind)) return destination;
     if (destination.kind != YamiboForumLinkKind.managedWebView) return null;
 
+    return _resolveBrowsingIdentity(uri) == null ? null : destination;
+  }
+
+  /// Identity evidence for locally proven browsing links. This may discard
+  /// unsupported view filters from its URI and must never be used as the URL
+  /// to open; [resolveBrowsable] retains the original navigation semantics.
+  YamiboForumLinkDestination? resolveBrowsingIdentity(String rawUrl) {
+    final destination = resolveBrowsable(rawUrl);
+    if (destination == null) return null;
+    return destination.kind == YamiboForumLinkKind.managedWebView
+        ? _resolveBrowsingIdentity(destination.uri)
+        : destination;
+  }
+
+  YamiboForumLinkDestination? _resolveBrowsingIdentity(Uri uri) {
     // Let the existing classifier prove the base browsing identity. Only the
     // proof drops unsupported view filters; navigation keeps the original URI
     // and its complete WebView semantics.
@@ -101,7 +116,7 @@ class YamiboForumLinkResolver {
       },
     );
     final proof = resolve(proofUri.toString());
-    return proof != null && _isBrowsingKind(proof.kind) ? destination : null;
+    return proof != null && _isBrowsingKind(proof.kind) ? proof : null;
   }
 
   bool _isBrowsingKind(YamiboForumLinkKind kind) => switch (kind) {

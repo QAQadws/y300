@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/forum_link_opener.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
@@ -167,7 +167,7 @@ class ThreadPostNavigation {
     if (value.isEmpty) {
       return;
     }
-    await Clipboard.setData(ClipboardData(text: value));
+    await ref.read(clipboardTextWriterProvider).writeText(value);
     if (!context.mounted || !isCurrent()) {
       return;
     }

@@ -127,6 +127,42 @@ abstract class AppLocalizations {
   /// **'评论刷新失败，已保留原有评论'**
   String get comicCommentRefreshFailed;
 
+  /// 自动检测剪贴板论坛链接的设置名称
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板链接提示'**
+  String get clipboardLinkDetectionTitle;
+
+  /// 自动剪贴板链接提示设置说明
+  ///
+  /// In zh, this message translates to:
+  /// **'回到应用时提示打开百合会链接'**
+  String get clipboardLinkDetectionSubtitle;
+
+  /// 剪贴板中唯一可推荐目标为论坛帖子
+  ///
+  /// In zh, this message translates to:
+  /// **'发现百合会帖子链接'**
+  String get clipboardLinkFoundThread;
+
+  /// 剪贴板中唯一可推荐目标为论坛楼层
+  ///
+  /// In zh, this message translates to:
+  /// **'发现百合会楼层链接'**
+  String get clipboardLinkFoundPost;
+
+  /// 剪贴板中唯一可推荐目标为论坛版块
+  ///
+  /// In zh, this message translates to:
+  /// **'发现百合会版块链接'**
+  String get clipboardLinkFoundForum;
+
+  /// 剪贴板论坛链接轻提示的打开按钮
+  ///
+  /// In zh, this message translates to:
+  /// **'打开'**
+  String get clipboardLinkOpen;
+
   /// 应用设置中的界面语言分区标题
   ///
   /// In zh, this message translates to:

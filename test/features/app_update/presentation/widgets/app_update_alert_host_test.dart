@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -149,19 +151,115 @@ void main() {
 
     expect(find.byKey(const Key('upgrader_alert_dialog')), findsOneWidget);
   });
+
+  testWidgets(
+    'startup availability waits for shared initialization to settle',
+    (tester) async {
+      final initialization = Completer<bool>();
+      final upgrader = _DisplayUpgrader(
+        displayUpgrade: false,
+        initialization: initialization.future,
+      );
+      final coordinator = AppUpdatePromptCoordinator(
+        repository: _UnusedRepository(),
+        launcher: _FakeLauncher(const AppUpdateLaunchSuccess()),
+        upgrader: upgrader,
+      );
+      addTearDown(coordinator.dispose);
+      final blockedChanges = <bool>[];
+      await _pumpHost(
+        tester,
+        coordinator,
+        onBlockedChanged: blockedChanges.add,
+      );
+      expect(upgrader.initializeCalls, 2);
+      expect(blockedChanges, isNot(contains(false)));
+      expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      expect(blockedChanges, isNot(contains(false)));
+
+      initialization.complete(true);
+      await tester.pump();
+      await tester.pump();
+      expect(blockedChanges.last, isFalse);
+      expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
+    },
+  );
+
+  testWidgets('evaluation blocks before delayed push and later pop releases', (
+    tester,
+  ) async {
+    final upgrader = _DisplayUpgrader();
+    final coordinator = AppUpdatePromptCoordinator(
+      repository: _UnusedRepository(),
+      launcher: _FakeLauncher(const AppUpdateLaunchSuccess()),
+      upgrader: upgrader,
+    );
+    addTearDown(coordinator.dispose);
+    final blockedChanges = <bool>[];
+    await _pumpHost(tester, coordinator, onBlockedChanged: blockedChanges.add);
+    expect(blockedChanges.last, isFalse);
+    final alertFinder = find.byWidgetPredicate(
+      (widget) => widget is UpgradeAlert,
+    );
+    final alert = tester.state<UpgradeAlertState>(alertFinder);
+    _setVersionInfo(upgrader);
+    alert.checkVersion(context: tester.element(alertFinder));
+
+    expect(alert.displayed, isTrue);
+    expect(blockedChanges.last, isTrue);
+    expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('upgrader_alert_dialog')), findsOneWidget);
+    expect(blockedChanges.last, isTrue);
+
+    await tester.tap(find.text('LATER'));
+    expect(blockedChanges.last, isFalse);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('upgrader_alert_dialog')), findsNothing);
+  });
+
+  testWidgets('late initialization does not publish after host unmount', (
+    tester,
+  ) async {
+    final initialization = Completer<bool>();
+    final coordinator = AppUpdatePromptCoordinator(
+      repository: _UnusedRepository(),
+      launcher: _FakeLauncher(const AppUpdateLaunchSuccess()),
+      upgrader: _DisplayUpgrader(
+        displayUpgrade: false,
+        initialization: initialization.future,
+      ),
+    );
+    addTearDown(coordinator.dispose);
+    final blockedChanges = <bool>[];
+    await _pumpHost(tester, coordinator, onBlockedChanged: blockedChanges.add);
+    await tester.pumpWidget(const SizedBox());
+    final count = blockedChanges.length;
+    initialization.complete(true);
+    await tester.pump();
+    expect(blockedChanges, hasLength(count));
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pumpHost(
   WidgetTester tester,
   AppUpdatePromptCoordinator coordinator, {
   Widget child = const Scaffold(body: Text('content')),
+  ValueChanged<bool>? onBlockedChanged,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         appUpdatePromptCoordinatorProvider.overrideWithValue(coordinator),
       ],
-      child: LocalizedTestApp(home: AppUpdateAlertHost(child: child)),
+      child: LocalizedTestApp(
+        home: AppUpdateAlertHost(
+          onBlockedChanged: onBlockedChanged,
+          child: child,
+        ),
+      ),
     ),
   );
   coordinator.upgrader.updateStream();
@@ -193,19 +291,21 @@ final class _DisplayUpgrader extends Upgrader
     this.updateAvailable = false,
     this.reminderInterval = false,
     this.versionInfoOnUpdate,
+    this.initialization,
   });
 
   final bool displayUpgrade;
   final bool updateAvailable;
   final bool reminderInterval;
   final UpgraderVersionInfo? versionInfoOnUpdate;
+  final Future<bool>? initialization;
   int initializeCalls = 0;
   int defaultStoreLaunchCalls = 0;
 
   @override
   Future<bool> initialize() async {
     initializeCalls += 1;
-    return true;
+    return initialization == null ? true : await initialization!;
   }
 
   @override

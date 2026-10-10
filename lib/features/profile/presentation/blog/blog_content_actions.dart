@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_action_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_comment_page.dart';
@@ -253,7 +253,7 @@ class _BlogContentActionsState extends ConsumerState<BlogContentActions> {
     (String, String, String?) identity,
   ) async {
     if (text.trim().isEmpty || !_canAct(owner, identity)) return;
-    await Clipboard.setData(ClipboardData(text: text));
+    await ref.read(clipboardTextWriterProvider).writeText(text);
     if (!mounted || !_canAct(owner, identity)) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()

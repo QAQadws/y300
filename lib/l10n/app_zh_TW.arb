@@ -7,6 +7,13 @@
 
   "@@locale": "zh_TW",
 
+  "clipboardLinkDetectionTitle": "剪貼簿連結提示",
+  "clipboardLinkDetectionSubtitle": "返回應用程式時提示開啟百合會連結",
+  "clipboardLinkFoundThread": "發現百合會帖子連結",
+  "clipboardLinkFoundPost": "發現百合會樓層連結",
+  "clipboardLinkFoundForum": "發現百合會版塊連結",
+  "clipboardLinkOpen": "開啟",
+
   "appLanguageSectionTitle": "介面語言",
   "appLanguageSystem": "跟隨系統",
   "appLanguageSimplifiedChinese": "簡體中文",

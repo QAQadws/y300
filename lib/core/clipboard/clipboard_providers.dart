@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'clipboard_text_writer.dart';
+import 'clipboard_text_reader.dart';
 import 'self_copy_fingerprint_registry.dart';
 
 final clipboardSelfCopyFingerprintRegistryProvider =
@@ -12,4 +13,8 @@ final clipboardTextWriterProvider = Provider<ClipboardTextWriter>((ref) {
   return PlatformClipboardTextWriter(
     selfCopyRegistry: ref.watch(clipboardSelfCopyFingerprintRegistryProvider),
   );
+});
+
+final clipboardTextReaderProvider = Provider<ClipboardTextReader>((ref) {
+  return const PlatformClipboardTextReader();
 });

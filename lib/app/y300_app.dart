@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/clipboard/forum_clipboard_runtime.dart';
 import 'package:y300/app/localization/app_locale_resolution.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
@@ -24,6 +25,8 @@ class Y300App extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final clipboard = ref.watch(forumClipboardRuntimeProvider);
+    clipboard.configureUpdatePrompt(enableAppUpdatePrompt);
     final settings = ref
         .watch(appAppearanceControllerProvider)
         .maybeWhen(
@@ -49,9 +52,17 @@ class Y300App extends ConsumerWidget {
       locale: localeForAppLanguage(settings.languagePreference),
       localeListResolutionCallback: (locales, _) => resolveAppLocale(locales),
       supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) =>
-          WafChallengeRecoveryHost(child: child ?? const SizedBox.shrink()),
-      home: enableAppUpdatePrompt ? AppUpdateAlertHost(child: home) : home,
+      navigatorObservers: [ref.watch(forumClipboardRouteObserverProvider)],
+      builder: (context, child) => WafChallengeRecoveryHost(
+        onBusyChanged: clipboard.setWafBusy,
+        child: child ?? const SizedBox.shrink(),
+      ),
+      home: enableAppUpdatePrompt
+          ? AppUpdateAlertHost(
+              onBlockedChanged: clipboard.setUpdateBlocked,
+              child: home,
+            )
+          : home,
     );
   }
 }

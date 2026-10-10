@@ -36,9 +36,16 @@ final Uri _safeVerificationUri = Uri.parse(AppConfig.siteBaseUrl).replace(
 /// This keeps the browser lifecycle used by the proven foreground flow while
 /// avoiding a route, visible challenge UI, pointer input, or semantics.
 class WafChallengeRecoveryHost extends ConsumerStatefulWidget {
-  const WafChallengeRecoveryHost({super.key, required this.child});
+  const WafChallengeRecoveryHost({
+    super.key,
+    required this.child,
+    this.onBusyChanged,
+  });
 
   final Widget child;
+
+  /// Includes surface retirement, which does not appear as a Navigator route.
+  final ValueChanged<bool>? onBusyChanged;
 
   @override
   ConsumerState<WafChallengeRecoveryHost> createState() =>
@@ -138,6 +145,7 @@ class _WafChallengeRecoveryHostState
       request: request,
     );
     _activeRun = run;
+    widget.onBusyChanged?.call(true);
     _runNotifier.value = run;
     return run.completion.future;
   }
@@ -167,6 +175,7 @@ class _WafChallengeRecoveryHostState
       return;
     }
     _retiringRun = null;
+    widget.onBusyChanged?.call(false);
     if (!run.completion.isCompleted) {
       run.completion.complete(result);
     }
@@ -180,6 +189,9 @@ class _WafChallengeRecoveryHostState
     final retiringRun = _retiringRun;
     _activeRun = null;
     _retiringRun = null;
+    if (activeRun != null || retiringRun != null) {
+      widget.onBusyChanged?.call(false);
+    }
     _retirementGeneration += 1;
     _completeSurfaceRetirementWait();
     if (notifyBackground) {

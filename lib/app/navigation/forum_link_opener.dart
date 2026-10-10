@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
@@ -42,6 +43,7 @@ final forumLinkOpenerProvider = Provider<ForumLinkOpener>((ref) {
         ref.read(forumWebViewRouteFactoryProvider)(config),
     externalLauncher: () => ref.read(forumWebViewExternalLauncherProvider),
     postResolver: () => ref.read(threadPostRouteResolverProvider),
+    writeText: (text) => ref.read(clipboardTextWriterProvider).writeText(text),
   );
 });
 
@@ -56,7 +58,8 @@ final class ForumLinkOpener {
     required this.webViewRoute,
     required this.externalLauncher,
     required this.postResolver,
-  });
+    Future<void> Function(String text)? writeText,
+  }) : writeText = writeText ?? _writePlatformText;
 
   final String? Function() readViewerUserId;
   final Object? Function() readOwner;
@@ -65,6 +68,7 @@ final class ForumLinkOpener {
   final ForumWebViewRouteFactory webViewRoute;
   final ForumWebViewExternalLauncher Function() externalLauncher;
   final ThreadPostRouteResolver Function() postResolver;
+  final Future<void> Function(String text) writeText;
   final _sessionOwners = Expando<Object>();
 
   Future<void> open({
@@ -100,9 +104,9 @@ final class ForumLinkOpener {
           onPressed: () {
             if (!sourceCurrent()) return;
             unawaited(
-              (onCopyLink?.call(url) ??
-                      Clipboard.setData(ClipboardData(text: url)))
-                  .catchError((Object _) {}),
+              (onCopyLink?.call(url) ?? writeText(url)).catchError(
+                (Object _) {},
+              ),
             );
           },
         ),
@@ -176,4 +180,7 @@ final class ForumLinkOpener {
       failure();
     }
   }
+
+  static Future<void> _writePlatformText(String text) =>
+      Clipboard.setData(ClipboardData(text: text));
 }
