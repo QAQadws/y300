@@ -171,6 +171,9 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
           child: ThreadPostHtmlBody(
             post: post,
             sourcePost: sourcePost,
+            renderPreparer: const DefaultForumHtmlRenderPreparer(
+              enablePlainTextLinks: true,
+            ),
             threadId: threadId,
             imageReferer: imageReferer,
             onOpenPostLink: onOpenPostLink,

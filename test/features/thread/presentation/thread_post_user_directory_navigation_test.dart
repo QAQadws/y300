@@ -75,6 +75,7 @@ void main() {
         tester.getTopLeft(find.text(entry.key, findRichText: true)) +
             const Offset(8, 8),
       );
+      await tester.idle();
       expect(observer.pushed, hasLength(1));
       final route = observer.pushed.removeLast() as MaterialPageRoute;
       final page = route.builder(source);
@@ -216,6 +217,7 @@ void main() {
     navigation.openLink(
       'https://bbs.yamibo.com/home.php?mod=space&uid=260328&do=thread&mobile=2',
     );
+    await tester.idle();
     final topics = takePage();
     expect(topics.userId, '260328');
     expect(topics.initialType, UserThreadDirectoryType.threads);
@@ -223,6 +225,7 @@ void main() {
     navigation.openLink(
       'home.php?mod=space&uid=260328&do=thread&type=reply&page=4',
     );
+    await tester.idle();
     final replies = takePage();
     expect(replies.userId, '260328');
     expect(replies.initialType, UserThreadDirectoryType.replies);

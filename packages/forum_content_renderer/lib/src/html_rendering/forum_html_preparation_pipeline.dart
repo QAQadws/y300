@@ -3,6 +3,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'forum_html_fragment_codec.dart';
 import 'forum_html_image_deduplicator.dart';
+import 'forum_html_plain_text_linkifier.dart';
 import 'forum_html_prepared_render_document.dart';
 import '../models/forum_html_render_options.dart';
 import 'forum_html_render_style_policy.dart';
@@ -50,6 +51,11 @@ class ForumHtmlPreparationPipeline {
           policy: ForumHtmlColorAdaptationPolicy.standard,
         )
         .stats;
+    if (options.enablePlainTextLinks) {
+      // Theme adaptation has already resolved author foregrounds. Generated
+      // links can retain those colors without changing their parent markup.
+      const ForumHtmlPlainTextLinkifier().linkify(fragment, theme: theme);
+    }
     (_imageDeduplicator ?? ForumHtmlImageDeduplicator(resolveUrl: _resolveUrl))
         .deduplicateAttachmentImagesInFragment(fragment);
     final entries = <ForumHtmlReadableImageEntry>[];

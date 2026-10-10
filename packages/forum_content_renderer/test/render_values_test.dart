@@ -25,12 +25,13 @@ void main() {
     expect({options, equal}, hasLength(1));
   });
 
-  test('copyWith preserves omitted values and includes all four fields', () {
+  test('copyWith preserves omitted values and includes all five fields', () {
     final updated = options.copyWith(
       fontScale: 1.4,
       lineHeightScale: 2,
       paragraphSpacing: 24,
       preserveAuthorFontSize: true,
+      enablePlainTextLinks: true,
     );
 
     expect(
@@ -40,6 +41,7 @@ void main() {
         lineHeightScale: 2,
         paragraphSpacing: 24,
         preserveAuthorFontSize: true,
+        enablePlainTextLinks: true,
       ),
     );
     final fontOnly = options.copyWith(fontScale: 1.4);
@@ -47,13 +49,15 @@ void main() {
     expect(fontOnly.lineHeightScale, options.lineHeightScale);
     expect(fontOnly.paragraphSpacing, options.paragraphSpacing);
     expect(fontOnly.preserveAuthorFontSize, options.preserveAuthorFontSize);
+    expect(fontOnly.enablePlainTextLinks, isFalse);
     expect({
       options,
       fontOnly,
       options.copyWith(lineHeightScale: 2),
       options.copyWith(paragraphSpacing: 24),
       options.copyWith(preserveAuthorFontSize: true),
-    }, hasLength(5));
+      options.copyWith(enablePlainTextLinks: true),
+    }, hasLength(6));
     expect(
       options
           .copyWith(lineHeightScale: 2)
@@ -73,6 +77,12 @@ void main() {
       options,
     );
     expect(options.fontScale, 1.25);
+    expect(
+      options
+          .copyWith(enablePlainTextLinks: true)
+          .copyWith(enablePlainTextLinks: false),
+      options,
+    );
   });
 
   test('collapse labels compare all localized values', () {

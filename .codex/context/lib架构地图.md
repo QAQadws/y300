@@ -61,6 +61,8 @@
 
 ## 跨模块流转说明
 
+- 正文纯文本 HTTP(S) 网址检测与显示链接化经 `forum_content_renderer` 的中立公开能力消费，匹配范围为 UTF-16，默认关闭。App `DefaultForumHtmlRenderPreparer` 的显示开关只由原生帖子详情及其选择复制路径显式开启，进入准备缓存身份，不持久化为阅读偏好；漫画共享卡片、小说及其他 HTML 消费者保持默认准备规则。链接点击统一由 `app/navigation/forum_link_opener.dart` 组合既有 resolver、原生工厂、thread locator、受管 WebView 与外部 launcher；保留来源 session、owner 与请求代次，楼层不嵌套同一 session.run。选区条件菜单和剪贴板自动提示未随正文链接化启用，也不预先探测网络。
+
 - 所有 Yamibo 业务请求经 `yamiboForumClientProvider` 的 `YamiboForumClient` 发起，协议构造、解析与成功/失败语义在 `packages/yamibo_forum_client` 内；Host 传输统一由 `core/network` 的 `YamiboHttpGateway` 承担，共享 Cookie、`YamiboSessionStore` 与 formhash。feature 不得绕过 client 自建第二套请求/会话路径；唯一例外是 App-bound 的 `ForumWebViewRedirectResolver`，只用于跟随 WebView 受管站内跳转并返回最终 URI。WebView 登录/浏览产生的 Cookie 通过同步服务回写；feature 不应各自维护第二套会话。检测到 WAF 挑战（同站 HTTP 405）时，由共享 coordinator 在应用处于 `resumed` 时挂载不可见普通 WebView，Cookie 回灌后仍须通过原生探针确认，只允许原业务请求重放一次；页面加载完成或出现 Cookie 不能单独视为成功。
 - 写命令结果统一区分 applied / rejected / notSent / outcomeUnknown / unsupported：只有 applied 才允许更新本地数据、刷新页面或同步书架；结果不确定（outcomeUnknown）不得自动重发；失败呈现使用本地化固定文案，不展示服务器原始消息、JSON、XML/CDATA 或 HTML。
 - 论坛壳根据持久化模式进入解析模式或 WebView。受管站内链接由 forum router 分流到原生帖子、发帖、回复、用户资料等页面；无法原生承接的流程保留 WebView 边界。

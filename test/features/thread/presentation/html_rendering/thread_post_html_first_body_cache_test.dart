@@ -8,6 +8,89 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_post_htm
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('link capability changes invalidate only the prepared document', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+          _PreferencesRepository(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    const url = 'https://bbs.yamibo.com/thread-123-2-1.html';
+    final post = ThreadPost(
+      pid: 'plain-link',
+      author: 'author',
+      authorId: '1',
+      message: '<p>$url</p>',
+      number: 1,
+      isFirst: true,
+      dateline: 'date',
+    );
+    var enabled = false;
+    var callbackRevision = 0;
+    int? invokedRevision;
+    Widget host() {
+      final revision = callbackRevision;
+      final theme = ThemeData.light();
+      return UncontrolledProviderScope(
+        container: container,
+        child: LocalizedTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: ThreadPostHtmlFirstBody(
+              post: post,
+              threadId: '123',
+              imageReferer: '',
+              onOpenPostLink: (_) => invokedRevision = revision,
+              onOpenPostImage: null,
+              theme: const ForumHtmlRenderThemeFactory().fromMaterialTheme(
+                theme: theme,
+                surface: theme.colorScheme.surface,
+              ),
+              renderPreparer: enabled
+                  ? const DefaultForumHtmlRenderPreparer(
+                      enablePlainTextLinks: true,
+                    )
+                  : const DefaultForumHtmlRenderPreparer(),
+            ),
+          ),
+        ),
+      );
+    }
+
+    ForumHtmlWidgetPostRenderer renderer() =>
+        tester.widget(find.byType(ForumHtmlWidgetPostRenderer));
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+    final original = renderer().preparedDocument!;
+    final element = tester.element(find.byType(ThreadPostHtmlFirstBody));
+    expect(original.preparedHtml, isNot(contains('href=')));
+
+    enabled = true;
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+    final linked = renderer().preparedDocument!;
+    expect(linked, isNot(same(original)));
+    expect(linked.preparedHtml, contains('href="$url"'));
+    expect(tester.element(find.byType(ThreadPostHtmlFirstBody)), same(element));
+
+    callbackRevision++;
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+    expect(renderer().preparedDocument, same(linked));
+    await renderer().callbacks.onTapUrl!(url);
+    expect(invokedRevision, callbackRevision);
+
+    enabled = false;
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+    expect(renderer().preparedDocument!.preparedHtml, original.preparedHtml);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reuses prepared HTML and invalidates every preparation input', (
     tester,
   ) async {

@@ -19,6 +19,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     ForumHtmlThemeAdapter themeAdapter = const DefaultForumHtmlThemeAdapter(),
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ForumHtmlPreparationImagePolicy? imagePolicy,
+    this.enablePlainTextLinks = false,
   }) : _imageRequestResolver = imageRequestResolver,
        _imageDeduplicator = imageDeduplicator,
        _fragmentCodec = fragmentCodec,
@@ -32,6 +33,9 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
   final ForumHtmlThemeAdapter _themeAdapter;
   final SiteUrlResolver _urlResolver;
   final ForumHtmlPreparationImagePolicy? _imagePolicy;
+
+  /// Display-only capability; it is not a persisted reading preference.
+  final bool enablePlainTextLinks;
 
   @override
   ForumHtmlPreparedRenderDocument prepare({
@@ -60,7 +64,9 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         resolveUrl: _urlResolver.resolve,
       ).prepare(
         html: html,
-        options: preferences.renderOptions,
+        options: preferences.renderOptions.copyWith(
+          enablePlainTextLinks: enablePlainTextLinks,
+        ),
         theme: theme,
         sourceId: sourceId,
         threadId: threadId,

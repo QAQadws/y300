@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/reply/domain/models/reply_models.dart';
 import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
@@ -49,12 +50,14 @@ class ThreadPostActions {
     required this.target,
     required this.isCurrent,
     required this.imageReferer,
+    this.selectionRenderPreparer = const DefaultForumHtmlRenderPreparer(),
   });
   final BuildContext context;
   final WidgetRef ref;
   final ThreadPostActionContext target;
   final bool Function() isCurrent;
   final String? imageReferer;
+  final ForumHtmlRenderPreparer selectionRenderPreparer;
   bool get active => context.mounted && isCurrent();
   late final ThreadPostNavigation navigation = ThreadPostNavigation(
     context: context,
@@ -131,6 +134,7 @@ class ThreadPostActions {
                 return ThreadPostHtmlSelectionCopyPage(
                   post: displayPost,
                   sourcePost: sourcePost,
+                  renderPreparer: selectionRenderPreparer,
                   threadId: target.tid,
                   imageReferer: imageReferer ?? '',
                   onOpenPostLink: selectionNavigation.openLink,

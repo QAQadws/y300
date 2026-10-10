@@ -870,6 +870,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
       final mutation = await ThreadPostActions(
         context: context,
         ref: ref,
+        selectionRenderPreparer: const DefaultForumHtmlRenderPreparer(
+          enablePlainTextLinks: true,
+        ),
         target: ThreadPostActionContext(
           tid: args.tid,
           fid: state.fid,

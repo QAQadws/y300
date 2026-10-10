@@ -1,27 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/app/navigation/friend_routes.dart';
-import 'package:y300/app/navigation/forum_link_routes.dart';
+import 'package:y300/app/navigation/forum_link_opener.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
-import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
-import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
-import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
-import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
-import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
-import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_reader_exit_result.dart';
 import 'package:y300/features/thread/domain/services/thread_post_body_plain_text_extractor.dart';
 import 'package:y300/features/thread/domain/services/thread_floor_link_builder.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
-import 'package:y300/features/thread/presentation/thread_detail_page.dart';
-import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
-import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -150,130 +141,19 @@ class ThreadPostNavigation {
 
   void openLink(String url) {
     if (!mounted) return;
-    const resolver = YamiboForumLinkResolver();
-    final destination = resolver.resolveForViewer(
-      url,
-      readViewerUserId: () => ref.read(verifiedSessionOwnerProvider)?.uid,
-    );
-    if (destination?.kind != YamiboForumLinkKind.threadPost) {
-      routeSession.invalidate();
-    }
-    if (destination == null) {
-      copyUrl(AppLocalizations.of(context).threadDetailCopyLink, url);
-      return;
-    }
-    switch (destination.kind) {
-      case YamiboForumLinkKind.home:
-      case YamiboForumLinkKind.forumDisplay:
-      case YamiboForumLinkKind.search:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => nativeForumLinkPage(destination)!,
-          ),
-        );
-        return;
-      case YamiboForumLinkKind.thread:
-        final tid = destination.tid;
-        if (tid == null || tid.isEmpty) {
-          copyUrl(
-            AppLocalizations.of(context).threadDetailPostLink,
-            destination.uri.toString(),
-          );
-          return;
-        }
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) =>
-                ThreadDetailPage(tid: tid, initialPage: destination.page ?? 1),
-          ),
-        );
-        return;
-      case YamiboForumLinkKind.threadPost:
-        _openThreadPost(destination);
-        return;
-      case YamiboForumLinkKind.tagThreadPage:
-        final tagId = destination.tagId;
-        if (tagId == null || tagId.isEmpty) {
-          copyUrl(
-            AppLocalizations.of(context).threadDetailExternalLink,
-            destination.uri.toString(),
-          );
-          return;
-        }
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) =>
-                YamiboTagThreadPage(tagId: tagId, page: destination.page ?? 1),
-          ),
-        );
-        return;
-      case YamiboForumLinkKind.userThreadDirectory:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => UserThreadPage(
-              userId: destination.userId,
-              initialType: destination.userThreadType!,
-              initialPage: destination.page ?? 1,
+    unawaited(
+      ref
+          .read(forumLinkOpenerProvider)
+          .open(
+            context: context,
+            url: url,
+            session: routeSession,
+            isCurrent: isCurrent,
+            onCopyLink: (value) => copyUrl(
+              AppLocalizations.of(context).threadDetailCopyLink,
+              value,
             ),
           ),
-        );
-        return;
-      case YamiboForumLinkKind.friendFeed:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => MyFriendsDestination(
-              initialScope: destination.friendScope!,
-              initialPage: destination.page ?? 1,
-            ),
-          ),
-        );
-        return;
-      case YamiboForumLinkKind.managedWebView:
-        openManagedWebView(destination.uri);
-        return;
-      case YamiboForumLinkKind.external:
-        copyUrl(
-          AppLocalizations.of(context).threadDetailExternalLink,
-          destination.uri.toString(),
-        );
-        return;
-    }
-  }
-
-  Future<void> _openThreadPost(YamiboForumLinkDestination destination) async {
-    final tid = destination.tid?.trim();
-    final pid = destination.pid?.trim();
-    if (tid == null || tid.isEmpty || pid == null || pid.isEmpty) {
-      copyUrl(
-        AppLocalizations.of(context).threadDetailFloorLink,
-        destination.uri.toString(),
-      );
-      return;
-    }
-    await launchThreadPostRoute(
-      context: context,
-      session: routeSession,
-      resolver: ref.read(threadPostRouteResolverProvider),
-      target: ThreadPostTarget.fromLink(
-        tid: tid,
-        pid: pid,
-        sourceUri: destination.uri,
-        pageHint: destination.page,
-      ),
-      isCurrent: isCurrent,
-    );
-  }
-
-  void openManagedWebView(Uri uri) {
-    final routeFactory = ref.read(forumWebViewRouteFactoryProvider);
-    Navigator.of(context).push(
-      routeFactory(
-        ForumWebViewLaunchConfig(
-          initialUri: uri,
-          popOnRootBack: true,
-          navigationPolicy: ForumWebViewNavigationPolicy.keepWebView,
-        ),
-      ),
     );
   }
 

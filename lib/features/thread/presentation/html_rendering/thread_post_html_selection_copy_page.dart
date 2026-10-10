@@ -18,6 +18,7 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
     required this.onOpenPostLink,
     required this.onOpenPostImage,
     required this.onImageFallback,
+    this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
   });
 
   final ThreadPost post;
@@ -28,6 +29,7 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImage;
   final ThreadPostHtmlFirstImageFallback onImageFallback;
+  final ForumHtmlRenderPreparer renderPreparer;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +43,7 @@ class ThreadPostHtmlSelectionCopyPage extends StatelessWidget {
       child: ThreadPostHtmlBody(
         post: post,
         sourcePost: sourcePost,
+        renderPreparer: renderPreparer,
         threadId: threadId,
         imageReferer: imageReferer,
         onOpenPostLink: onOpenPostLink,

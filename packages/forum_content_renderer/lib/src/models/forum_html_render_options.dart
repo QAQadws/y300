@@ -6,6 +6,7 @@ final class ForumHtmlRenderOptions {
     required this.lineHeightScale,
     required this.paragraphSpacing,
     required this.preserveAuthorFontSize,
+    this.enablePlainTextLinks = false,
   });
 
   final double fontScale;
@@ -13,11 +14,16 @@ final class ForumHtmlRenderOptions {
   final double paragraphSpacing;
   final bool preserveAuthorFontSize;
 
+  /// Display-only HTTP(S) linking. Readers using prepared HTML as semantic
+  /// content keep the default to preserve their document and anchor identity.
+  final bool enablePlainTextLinks;
+
   ForumHtmlRenderOptions copyWith({
     double? fontScale,
     double? lineHeightScale,
     double? paragraphSpacing,
     bool? preserveAuthorFontSize,
+    bool? enablePlainTextLinks,
   }) {
     return ForumHtmlRenderOptions(
       fontScale: fontScale ?? this.fontScale,
@@ -25,6 +31,7 @@ final class ForumHtmlRenderOptions {
       paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
       preserveAuthorFontSize:
           preserveAuthorFontSize ?? this.preserveAuthorFontSize,
+      enablePlainTextLinks: enablePlainTextLinks ?? this.enablePlainTextLinks,
     );
   }
 
@@ -34,7 +41,8 @@ final class ForumHtmlRenderOptions {
         fontScale == other.fontScale &&
         lineHeightScale == other.lineHeightScale &&
         paragraphSpacing == other.paragraphSpacing &&
-        preserveAuthorFontSize == other.preserveAuthorFontSize;
+        preserveAuthorFontSize == other.preserveAuthorFontSize &&
+        enablePlainTextLinks == other.enablePlainTextLinks;
   }
 
   @override
@@ -43,5 +51,6 @@ final class ForumHtmlRenderOptions {
     lineHeightScale,
     paragraphSpacing,
     preserveAuthorFontSize,
+    enablePlainTextLinks,
   );
 }
