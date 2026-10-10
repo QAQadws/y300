@@ -3408,6 +3408,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadSelectionCopyTitle => '选择复制';
 
   @override
+  String get selectionOpenForumLink => '打开链接';
+
+  @override
   String get threadDetailScrollTop => '滚动到顶部';
 
   @override
@@ -8820,6 +8823,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadSelectionCopyTitle => '選擇複製';
+
+  @override
+  String get selectionOpenForumLink => '開啟連結';
 
   @override
   String get threadDetailScrollTop => '滾動到頂部';

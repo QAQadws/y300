@@ -11,6 +11,7 @@
 - `lib/main.dart`：Flutter 入口、全局初始化和启动前兼容维护。
 - `lib/app`：应用顶层装配；`navigation` 负责跨 feature 路由，`settings` 负责外观设置，`theme` 负责主题 token、语义色和组件主题，`localization` 负责语言解析，`storage` 组合各业务统计 adapter、统一报表与缓存维护 provider，`startup` 组合主壳启动协调、跨 feature 维护与账号/任务通知 Host；`Y300App` 还装配更新提示和后台 WAF 恢复宿主。
 - `lib/core/config`：应用配置、稳定存储 key 和技术性存储 key。
+- `lib/core/clipboard`：可替换的文本写入端口及 Flutter 平台 adapter。成功写入后才记录最近 20 个原文 SHA-256 指纹；状态仅归当前 provider container，不读回剪贴板、不持久化或记录原文。当前接管帖子选择复制菜单，未接管的快捷键与平台内部动作不推断为自复制。
 - `lib/core/media`：封面裁剪/焦点、图片降采样、显示 provider 和 Flutter 图片内存缓存调优。
 - `lib/core/network`：共享网络基础设施与 forum client Host 边界。包括 `ApiResult`、`YamiboHttpGateway`（唯一 Host 传输：Cookie、会话与 formhash 存储、WAF 挑战检测/恢复协调、敏感 URI 日志脱敏）、WebView Cookie 同步、图片请求头和 URL 解析；`yamibo_forum_client_provider.dart`、`yamibo_forum_transport_providers.dart`、`yamibo_forum_client_host_adapters.dart` 负责把 Host 传输、Cookie、会话、document/snapshot 缓存和表情目录存储注入 `YamiboForumClient`。`Y300ForumHomeCacheOwnerStore` 保存远端确认的 UID 与登录 Cookie 摘要，允许未验证冷启动只读同凭据账号的首页缓存；它不恢复认证身份或放宽其他缓存/写入权限，scope 与 Cookie revision 共同拒绝迟到结果。
 - `lib/core/preferences`：类型化偏好 key、SharedPreferences 访问、provider 和旧偏好迁移。
@@ -61,7 +62,8 @@
 
 ## 跨模块流转说明
 
-- 正文纯文本 HTTP(S) 网址检测与显示链接化经 `forum_content_renderer` 的中立公开能力消费，匹配范围为 UTF-16，默认关闭。App `DefaultForumHtmlRenderPreparer` 的显示开关只由原生帖子详情及其选择复制路径显式开启，进入准备缓存身份，不持久化为阅读偏好；漫画共享卡片、小说及其他 HTML 消费者保持默认准备规则。链接点击统一由 `app/navigation/forum_link_opener.dart` 组合既有 resolver、原生工厂、thread locator、受管 WebView 与外部 launcher；保留来源 session、owner 与请求代次，楼层不嵌套同一 session.run。选区条件菜单和剪贴板自动提示未随正文链接化启用，也不预先探测网络。
+- 正文纯文本 HTTP(S) 网址检测与显示链接化经 `forum_content_renderer` 的中立公开能力消费，匹配范围为 UTF-16，默认关闭。App `DefaultForumHtmlRenderPreparer` 的显示开关只由原生帖子详情及其选择复制路径显式开启，进入准备缓存身份，不持久化为阅读偏好；漫画共享卡片、小说及其他 HTML 消费者保持默认准备规则。链接点击统一由 `app/navigation/forum_link_opener.dart` 组合既有 resolver、原生工厂、thread locator、受管 WebView 与外部 launcher；保留来源 session、owner 与请求代次，楼层不嵌套同一 session.run。相同目标只有旧 lease 仍有效时才能共享在途导航，旧结果不会清除后来请求。
+- 帖子楼层的选择复制页通过共享 `ForumContentSelectionCopyPage` 可选菜单能力接入上述 opener；未接入的日志等消费者保留 SDK 默认菜单。`ForumSelectedLinkPolicy` 先检查全部网址出现次数，再复用 resolver 的本地 `resolveBrowsable`，只接受唯一完整的可信论坛浏览目标，未知视图过滤参数原样交给 WebView。Thread adapter 按正文缓存 `ForumSelectedLinkSource`，保留 HTML 原文硬换行和块边界，拒绝无法证明完整的 URL 前缀；选区 range 只用于身份，不投影到 DOM。菜单点击重校验选区及来源，先关闭工具栏，再用选择页自己的 context/session 导航；选区文本或范围变化立即退休旧回调。可控制 Copy 只经共享 writer 写一次，成功后按平台收尾，迟到结果不清新选区。自动剪贴板读取、开关和提示宿主尚未接入；菜单不依赖自复制指纹，也不预先探测网络。
 
 - 所有 Yamibo 业务请求经 `yamiboForumClientProvider` 的 `YamiboForumClient` 发起，协议构造、解析与成功/失败语义在 `packages/yamibo_forum_client` 内；Host 传输统一由 `core/network` 的 `YamiboHttpGateway` 承担，共享 Cookie、`YamiboSessionStore` 与 formhash。feature 不得绕过 client 自建第二套请求/会话路径；唯一例外是 App-bound 的 `ForumWebViewRedirectResolver`，只用于跟随 WebView 受管站内跳转并返回最终 URI。WebView 登录/浏览产生的 Cookie 通过同步服务回写；feature 不应各自维护第二套会话。检测到 WAF 挑战（同站 HTTP 405）时，由共享 coordinator 在应用处于 `resumed` 时挂载不可见普通 WebView，Cookie 回灌后仍须通过原生探针确认，只允许原业务请求重放一次；页面加载完成或出现 Cookie 不能单独视为成功。
 - 写命令结果统一区分 applied / rejected / notSent / outcomeUnknown / unsupported：只有 applied 才允许更新本地数据、刷新页面或同步书架；结果不确定（outcomeUnknown）不得自动重发；失败呈现使用本地化固定文案，不展示服务器原始消息、JSON、XML/CDATA 或 HTML。

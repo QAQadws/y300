@@ -5681,6 +5681,12 @@ abstract class AppLocalizations {
   /// **'选择复制'**
   String get threadSelectionCopyTitle;
 
+  /// No description provided for @selectionOpenForumLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开链接'**
+  String get selectionOpenForumLink;
+
   /// No description provided for @threadDetailScrollTop.
   ///
   /// In zh, this message translates to:

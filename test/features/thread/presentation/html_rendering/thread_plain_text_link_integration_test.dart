@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,12 +7,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/core/network/api_result.dart';
+import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
+import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 
@@ -215,6 +220,107 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final scenario in ['complete', 'leave', 'reselect']) {
+    testWidgets('selection menu uses its own route session; $scenario', (
+      tester,
+    ) async {
+      final locator = _Locator();
+      final container = ProviderContainer(
+        overrides: [
+          forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+            _PreferencesRepository(),
+          ),
+          threadPostLocatorProvider.overrideWithValue(locator),
+        ],
+      );
+      addTearDown(container.dispose);
+      final observer = _Observer();
+      const url =
+          'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=123&pid=456';
+      final post = _post('<p>${const HtmlEscape().convert(url)}</p>');
+      await tester.pumpWidget(
+        _host(
+          container,
+          Consumer(
+            builder: (context, ref, _) => TextButton(
+              onPressed: () => ThreadPostActions(
+                context: context,
+                ref: ref,
+                target: const ThreadPostActionContext(
+                  tid: '100',
+                  fid: '33',
+                  subject: 'fixture',
+                  page: 1,
+                  capabilities: null,
+                ),
+                isCurrent: () => context.mounted,
+                imageReferer: null,
+              ).show(sourcePost: post, displayPost: post),
+              child: const Text('Open actions'),
+            ),
+          ),
+          observers: [observer],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('thread-post-select-copy-action')));
+      await tester.pumpAndSettle();
+      final selection = tester.state<SelectionAreaState>(
+        find.byType(SelectionArea),
+      );
+      final source = selection.context;
+      final label = AppLocalizations.of(source).selectionOpenForumLink;
+      selection.selectableRegion.selectAll(SelectionChangedCause.toolbar);
+      await tester.pumpAndSettle();
+      expect(find.text(label), findsOneWidget);
+      observer.pushed.clear();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      expect(find.text(label), findsNothing);
+      expect(locator.requests, hasLength(1));
+      expect(observer.pushed, isEmpty);
+      if (scenario == 'leave') {
+        Navigator.of(source).pop();
+        await tester.pumpAndSettle();
+      }
+      if (scenario == 'reselect') {
+        selection.selectableRegion.selectAll(SelectionChangedCause.toolbar);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+        expect(locator.requests, hasLength(2));
+        locator.requests.first.complete(
+          const ApiSuccess(
+            ThreadPostLocation(tid: '123', pid: '456', page: 2, url: ''),
+          ),
+        );
+        await tester.idle();
+        expect(observer.pushed, isEmpty);
+      }
+      locator.requests.last.complete(
+        const ApiSuccess(
+          ThreadPostLocation(tid: '123', pid: '456', page: 3, url: ''),
+        ),
+      );
+      await tester.idle();
+      if (scenario == 'leave') {
+        expect(observer.pushed, isEmpty);
+      } else {
+        expect(observer.pushed, hasLength(1));
+        final route = observer.pushed.single as MaterialPageRoute;
+        final destination = route.builder(source) as ThreadDetailPage;
+        expect(destination.tid, '123');
+        expect(destination.targetPid, '456');
+        expect(destination.initialPage, 3);
+        Navigator.of(source).removeRoute(route);
+        await tester.pumpAndSettle();
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
 
 ProviderContainer _container() => ProviderContainer(
@@ -330,5 +436,22 @@ class _Observer extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     pushed.add(route);
+  }
+}
+
+class _Locator implements ThreadPostLocator {
+  final requests = <Completer<ApiResult<ThreadPostLocation>>>[];
+
+  @override
+  Future<ApiResult<ThreadPostLocation>> locate({
+    required String tid,
+    required String pid,
+    required Uri sourceUri,
+  }) {
+    expect(tid, '123');
+    expect(pid, '456');
+    final request = Completer<ApiResult<ThreadPostLocation>>();
+    requests.add(request);
+    return request.future;
   }
 }

@@ -53,6 +53,75 @@ class YamiboForumLinkResolver {
   final SiteUrlResolver _siteUrlResolver;
   final ForumReferenceResolver _references;
 
+  /// Local proof for conditional open actions, without resolving the viewer or
+  /// visiting the target. Unlike [resolve], a same-site browser fallback alone
+  /// is not sufficient: its route and resource identity must identify a known
+  /// browsing page, with no command or ambiguous selector fields.
+  YamiboForumLinkDestination? resolveBrowsable(String rawUrl) {
+    final destination = resolve(rawUrl);
+    if (destination == null) return null;
+    final uri = destination.uri;
+    if (!_isYamiboSite(uri) ||
+        !_isNativeOrigin(uri) ||
+        uri.queryParametersAll.values.any((values) => values.length != 1) ||
+        uri.queryParameters.keys.any(_isActionField) ||
+        (uri.queryParameters.containsKey('page') &&
+            _parsePositiveInt(uri.queryParameters['page']) == null)) {
+      return null;
+    }
+    if (_isBrowsingKind(destination.kind)) return destination;
+    if (destination.kind != YamiboForumLinkKind.managedWebView) return null;
+
+    // Let the existing classifier prove the base browsing identity. Only the
+    // proof drops unsupported view filters; navigation keeps the original URI
+    // and its complete WebView semantics.
+    const selectorFields = {
+      'mod',
+      'tid',
+      'fid',
+      'ptid',
+      'pid',
+      'goto',
+      'page',
+      'mobile',
+      'id',
+      'type',
+      'uid',
+      'do',
+      'view',
+      'srhfid',
+    };
+    final proofUri = uri.replace(
+      queryParameters: {
+        for (final entry in uri.queryParameters.entries)
+          if (selectorFields.contains(entry.key) &&
+              (entry.key != 'page' ||
+                  !{'/', '/index.php', '/search.php'}.contains(uri.path)))
+            entry.key: entry.value,
+      },
+    );
+    final proof = resolve(proofUri.toString());
+    return proof != null && _isBrowsingKind(proof.kind) ? destination : null;
+  }
+
+  bool _isBrowsingKind(YamiboForumLinkKind kind) => switch (kind) {
+    YamiboForumLinkKind.home ||
+    YamiboForumLinkKind.forumDisplay ||
+    YamiboForumLinkKind.search ||
+    YamiboForumLinkKind.thread ||
+    YamiboForumLinkKind.threadPost ||
+    YamiboForumLinkKind.tagThreadPage ||
+    YamiboForumLinkKind.userThreadDirectory ||
+    YamiboForumLinkKind.friendFeed => true,
+    YamiboForumLinkKind.managedWebView || YamiboForumLinkKind.external => false,
+  };
+
+  bool _isActionField(String key) {
+    final normalized = key.toLowerCase();
+    return const {'ac', 'action', 'op', 'formhash'}.contains(normalized) ||
+        normalized.endsWith('submit');
+  }
+
   /// Reads the verified viewer only when it can change route classification.
   /// Account providers may validate sessions remotely; ordinary links must not
   /// start that work just to choose a browser destination.

@@ -1440,6 +1440,7 @@
   "threadHtmlCollapseCollapsed": "展开折叠内容",
   "threadHtmlRenderFailed": "正文渲染失败，可长按楼层复制正文或打开原帖查看",
   "threadSelectionCopyTitle": "选择复制",
+  "selectionOpenForumLink": "打开链接",
   "threadDetailScrollTop": "滚动到顶部",
   "threadQuickScrollDragHint": "长按拖动，松手后吸附到左下角或右下角",
   "threadQuickScrollMoveLeft": "移动到左下角",

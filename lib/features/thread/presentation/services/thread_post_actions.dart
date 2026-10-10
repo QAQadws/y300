@@ -138,6 +138,8 @@ class ThreadPostActions {
                   threadId: target.tid,
                   imageReferer: imageReferer ?? '',
                   onOpenPostLink: selectionNavigation.openLink,
+                  onOpenSelectedPostLink: selectionNavigation.openSelectedLink,
+                  isCurrent: () => active && selectionContext.mounted,
                   onOpenPostImage: selectionNavigation.openImages,
                   onImageFallback: selectionNavigation.copyImageUrl,
                 );

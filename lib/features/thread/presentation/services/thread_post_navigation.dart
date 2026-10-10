@@ -140,21 +140,26 @@ class ThreadPostNavigation {
   }
 
   void openLink(String url) {
-    if (!mounted) return;
-    unawaited(
-      ref
-          .read(forumLinkOpenerProvider)
-          .open(
-            context: context,
-            url: url,
-            session: routeSession,
-            isCurrent: isCurrent,
-            onCopyLink: (value) => copyUrl(
-              AppLocalizations.of(context).threadDetailCopyLink,
-              value,
-            ),
-          ),
-    );
+    unawaited(_openLink(url, isCurrent));
+  }
+
+  Future<void> openSelectedLink(
+    String url,
+    bool Function() selectionIsCurrent,
+  ) => _openLink(url, () => isCurrent() && selectionIsCurrent());
+
+  Future<void> _openLink(String url, bool Function() current) async {
+    if (!context.mounted || !current()) return;
+    await ref
+        .read(forumLinkOpenerProvider)
+        .open(
+          context: context,
+          url: url,
+          session: routeSession,
+          isCurrent: current,
+          onCopyLink: (value) =>
+              copyUrl(AppLocalizations.of(context).threadDetailCopyLink, value),
+        );
   }
 
   Future<void> copyUrl(String label, String url) async {

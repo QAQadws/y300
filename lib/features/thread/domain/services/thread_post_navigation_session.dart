@@ -6,6 +6,7 @@ final class ThreadPostNavigationSession {
   int _generation = 0;
   Object? _key;
   Future<void>? _pending;
+  bool Function()? _pendingIsCurrent;
   bool _disposed = false;
 
   Future<void> run({
@@ -14,13 +15,18 @@ final class ThreadPostNavigationSession {
     required Future<void> Function(bool Function() isCurrent) action,
   }) {
     if (_disposed || !isCurrent()) return Future<void>.value();
-    if (_key == key && _pending != null) return _pending!;
+    // A repeated target can belong to a new selection lease. Do not join an
+    // old request whose source has already retired, even if its work is pending.
+    if (_key == key && _pending != null && _pendingIsCurrent?.call() == true) {
+      return _pending!;
+    }
     final generation = ++_generation;
     final completion = Completer<void>();
+    bool current() => !_disposed && generation == _generation && isCurrent();
     _key = key;
     _pending = completion.future;
+    _pendingIsCurrent = current;
     Future<void>.microtask(() async {
-      bool current() => !_disposed && generation == _generation && isCurrent();
       try {
         if (current()) await action(current);
         completion.complete();
@@ -29,6 +35,7 @@ final class ThreadPostNavigationSession {
       } finally {
         if (generation == _generation) {
           _pending = null;
+          _pendingIsCurrent = null;
           _key = null;
         }
       }
@@ -39,6 +46,7 @@ final class ThreadPostNavigationSession {
   void invalidate() {
     _generation++;
     _pending = null;
+    _pendingIsCurrent = null;
     _key = null;
   }
 
