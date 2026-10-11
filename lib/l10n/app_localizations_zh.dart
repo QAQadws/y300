@@ -56,6 +56,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get messageAttentionAvailable => '有新消息或提醒';
+
+  @override
   String get messageNew => '发私信';
 
   @override
@@ -5486,6 +5489,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String appLanguageSaveFailed(String error) {
     return '語言設定儲存失敗：$error';
   }
+
+  @override
+  String get messageAttentionAvailable => '有新訊息或提醒';
 
   @override
   String get messageNew => '發私訊';

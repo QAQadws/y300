@@ -101,3 +101,47 @@ final class ForumMessageAttentionObservation {
     return ForumMessageAttentionState.unknown;
   }
 }
+
+/// Host ownership and ordering captured before one network request starts.
+///
+/// This contains no session secrets or response payload. The host chooses an
+/// immutable [ownerToken] that distinguishes account and source generations,
+/// and allocates sequences across every observing client for that owner.
+final class ForumMessageAttentionRequestContext {
+  /// Creates request ownership without inferring it from the response.
+  const ForumMessageAttentionRequestContext({
+    required this.viewerUserId,
+    required this.requestSequence,
+    required this.ownerToken,
+  }) : assert(requestSequence > 0);
+
+  /// Expected authenticated viewer when the request was issued.
+  final String viewerUserId;
+
+  /// Host-allocated increasing request sequence, not a server arrival version.
+  final int requestSequence;
+
+  /// Opaque immutable account/source ownership token, checked again on delivery.
+  final Object ownerToken;
+}
+
+/// Optional host port for fresh, verified message-arrival observations.
+///
+/// Calls are synchronous. Capture and delivery failures are isolated from
+/// ordinary forum reads; the host must check current ownership and reject
+/// older evidence by coverage before merging an observation.
+abstract interface class ForumMessageAttentionObserver {
+  /// Captures the current owner and issues a sequence before transport starts.
+  ///
+  /// Returning null opts this request out, for example when signed out or
+  /// identity verification is still pending.
+  ForumMessageAttentionRequestContext? captureRequest();
+
+  /// Delivers supported evidence with its original request ownership.
+  ///
+  /// A delivery does not itself prove that the captured owner is still current.
+  void onObservation(
+    ForumMessageAttentionObservation observation, {
+    required ForumMessageAttentionRequestContext context,
+  });
+}

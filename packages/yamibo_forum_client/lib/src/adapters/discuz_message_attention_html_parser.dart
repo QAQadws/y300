@@ -2,6 +2,7 @@ import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 
 import '../contracts/forum_message_attention.dart';
+import '../parsing/discuz_message_attention_source.dart';
 import '../parsing/discuz_navigation_viewer.dart';
 
 /// Extracts arrival indicators from supported Discuz public HTML navigation.
@@ -27,7 +28,10 @@ final class DiscuzMessageAttentionHtmlParser {
     required String expectedUserId,
   }) {
     if (!_positiveId.hasMatch(expectedUserId) ||
-        !_eligibleDocument(sourceUri) ||
+        !acceptsDiscuzMessageAttentionHtmlSource(
+          sourceUri,
+          siteOrigin: siteOrigin,
+        ) ||
         !_completeDocument(source)) {
       return null;
     }
@@ -211,47 +215,6 @@ final class DiscuzMessageAttentionHtmlParser {
           )
           .map((script) => script.text),
     );
-  }
-
-  bool _eligibleDocument(Uri uri) {
-    if (!_sameOrigin(uri) || uri.hasFragment) return false;
-    final query = _query(uri);
-    if (query == null ||
-        const [
-          'inajax',
-          'infloat',
-          'action',
-          'ac',
-          'op',
-        ].any(query.containsKey)) {
-      return false;
-    }
-    switch (uri.path) {
-      case '/index.php':
-      case '/':
-        return query['mod'] == null;
-      case '/forum.php':
-        return const [
-          null,
-          'index',
-          'forumdisplay',
-          'viewthread',
-          'guide',
-        ].contains(query['mod']);
-      case '/home.php':
-        return query['mod'] == 'space' &&
-            const [
-              'profile',
-              'thread',
-              'blog',
-              'album',
-              'favorite',
-              'friend',
-              'feed',
-            ].contains(query['do']);
-      default:
-        return false;
-    }
   }
 
   bool _spaceLink(Element element, Uri sourceUri, String destination) {

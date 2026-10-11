@@ -14,7 +14,8 @@ The following APIs are covered by the compatibility policy in
   authentication/session, favorite-command, post-rating, post-comment,
   thread-creation, thread-reply, thread-poll-vote, thread-post-edit, and image-attachment
   preparation/command contracts, cache policy, cancellation, resource
-  contracts, message-attention observations, and reference/image helpers;
+  contracts, message-attention observations/request contexts/observer ports,
+  and reference/image helpers;
 - `yamibo_forum_client.dart`: `YamiboForumClient`,
   `YamiboForumClientBuilder`, `ForumClientConfig`, verified browser identities,
   the standard and ephemeral Dio runtimes,
@@ -26,6 +27,13 @@ The following APIs are covered by the compatibility policy in
   `YamiboForumClientBuilder.ephemeralDio` as supported third-party composition
   paths, with the ephemeral path explicitly excluded from persistence
   guarantees.
+
+`messageAttentionObserver` is an optional builder composition port. Hosts own
+verified viewer/session/source tokens, send-time request sequences, evidence
+merging, and consumption-success barriers. Standard assembly samples only fresh
+eligible network responses; it neither observes cached data nor adds requests.
+Observer errors cannot change read results, and resource/multipart capabilities
+remain intact. Concrete Discuz eligibility and extraction stay experimental.
 
 `ForumResourceMetadataPolicy.cacheLifetime` preserves the existing transports'
 response-order handling of the first `Cache-Control` value. For example,

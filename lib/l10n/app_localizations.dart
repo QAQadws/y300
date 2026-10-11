@@ -187,6 +187,12 @@ abstract class AppLocalizations {
   /// **'语言设置保存失败：{error}'**
   String appLanguageSaveFailed(String error);
 
+  /// 消息提示红点的无障碍说明，表示新到达提示而不是全部内容未读
+  ///
+  /// In zh, this message translates to:
+  /// **'有新消息或提醒'**
+  String get messageAttentionAvailable;
+
   /// No description provided for @messageNew.
   ///
   /// In zh, this message translates to:

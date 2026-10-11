@@ -1,4 +1,5 @@
 import '../contracts/forum_message_attention.dart';
+import '../parsing/discuz_message_attention_source.dart';
 
 /// Extracts navigation-attention evidence from decoded Discuz API envelopes.
 ///
@@ -22,10 +23,10 @@ final class DiscuzMessageAttentionApiParser {
     required Uri sourceUri,
     required String expectedUserId,
   }) {
-    try {
-      if (!_acceptsEndpoint(sourceUri)) return null;
-    } on FormatException {
-      // Malformed query escaping has no trustworthy endpoint interpretation.
+    if (!acceptsDiscuzMessageAttentionApiSource(
+      sourceUri,
+      siteOrigin: siteOrigin,
+    )) {
       return null;
     }
     final expected = _positiveIdentity(expectedUserId);
@@ -69,31 +70,8 @@ final class DiscuzMessageAttentionApiParser {
     );
   }
 
-  bool _acceptsEndpoint(Uri uri) {
-    if ((siteOrigin.scheme != 'http' && siteOrigin.scheme != 'https') ||
-        uri.scheme != siteOrigin.scheme ||
-        uri.host.isEmpty ||
-        uri.host.toLowerCase() != siteOrigin.host.toLowerCase() ||
-        uri.port != siteOrigin.port ||
-        uri.userInfo.isNotEmpty ||
-        uri.hasFragment ||
-        uri.path != '/api/mobile/index.php') {
-      return false;
-    }
-    final parameters = uri.queryParametersAll;
-    if (parameters.values.any((values) => values.length != 1)) return false;
-    if (_dispatchOverrides.any(parameters.containsKey)) return false;
-    final module = parameters['module']?.single;
-    // Unknown modules are not implicitly safe: message lists consume hints,
-    // and authentication or command responses are not passive observations.
-    return _passiveReadModules.contains(module);
-  }
-
   bool _acceptsVersion(Map<String, Object?> root, Uri uri) {
     final queryVersion = uri.queryParameters['version'];
-    if (queryVersion != null && !_apiVersions.contains(queryVersion)) {
-      return false;
-    }
     if (!root.containsKey('Version')) return true;
     final value = root['Version'];
     final envelopeVersion = switch (value) {
@@ -101,22 +79,10 @@ final class DiscuzMessageAttentionApiParser {
       int value => value.toString(),
       _ => null,
     };
-    return _apiVersions.contains(envelopeVersion) &&
+    return discuzMessageAttentionApiVersions.contains(envelopeVersion) &&
         (queryVersion == null || queryVersion == envelopeVersion);
   }
 }
-
-const _passiveReadModules = <String>{
-  'forumindex',
-  'forumdisplay',
-  'viewthread',
-  'profile',
-  'myfavforum',
-  'myfavthread',
-  'smiley',
-};
-const _apiVersions = <String>{'1', '2', '3', '4'};
-const _dispatchOverrides = <String>{'submodule', 'mod', 'do', 'action', 'op'};
 
 // The exact integer range shared by the Dart VM and web targets. Invalid
 // values stay unknown instead of overflowing or losing notification identity.

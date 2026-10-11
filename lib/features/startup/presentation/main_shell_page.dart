@@ -9,9 +9,12 @@ import 'package:y300/app/startup/main_shell_startup_coordinator.dart';
 import 'package:y300/app/startup/main_shell_startup_host.dart';
 import 'package:y300/app/startup/main_shell_library_gate.dart';
 import 'package:y300/app/startup/main_shell_startup_providers.dart';
+import 'package:y300/app/startup/message_attention_visibility_host.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_bottom_bar.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
+import 'package:y300/features/messages/presentation/widgets/message_attention_icon.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 /// 应用主壳：承载可配置业务入口和固定的“更多”入口。
@@ -83,6 +86,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     final currentDestination = _resolveCurrentDestination(settings);
     _currentDestination = currentDestination;
     _builtDestinations.add(currentDestination);
+    final attention = ref
+        .watch(messageAttentionStateProvider)
+        .project(
+          messagesVisible: settings.isVisible(MainShellDestination.messages),
+        );
 
     final selection = ref.watch(shelfSelectionHostControllerProvider);
     return ListenableBuilder(
@@ -90,28 +98,42 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       builder: (context, _) => ForumClipboardLinkHost(
         isReady: isReady,
         allowPrompt: !selection.isActive,
-        builder: (context) => Scaffold(
-          body: IndexedStack(
-            index: MainShellDestination.values.indexOf(currentDestination),
-            children: _buildIndexedPages(
-              settings,
-              currentDestination: currentDestination,
+        builder: (context) => MessageAttentionVisibilityHost(
+          isMoreSelected: currentDestination == MainShellDestination.more,
+          child: Scaffold(
+            body: IndexedStack(
+              index: MainShellDestination.values.indexOf(currentDestination),
+              children: _buildIndexedPages(
+                settings,
+                currentDestination: currentDestination,
+              ),
             ),
-          ),
-          bottomNavigationBar: ShelfSelectionBottomBar(
-            fallback: NavigationBar(
-              key: const ValueKey<String>('main-shell-navigation-bar'),
-              selectedIndex: visibleDestinations.indexOf(currentDestination),
-              onDestinationSelected: (index) {
-                final destination = visibleDestinations[index];
-                setState(() {
-                  _currentDestination = destination;
-                  _builtDestinations.add(destination);
-                });
-              },
-              destinations: visibleDestinations
-                  .map(_buildNavigationDestination)
-                  .toList(growable: false),
+            bottomNavigationBar: ShelfSelectionBottomBar(
+              fallback: NavigationBar(
+                key: const ValueKey<String>('main-shell-navigation-bar'),
+                selectedIndex: visibleDestinations.indexOf(currentDestination),
+                onDestinationSelected: (index) {
+                  final destination = visibleDestinations[index];
+                  setState(() {
+                    _currentDestination = destination;
+                    _builtDestinations.add(destination);
+                  });
+                },
+                destinations: visibleDestinations
+                    .map(
+                      (destination) => _buildNavigationDestination(
+                        destination,
+                        showAttention: switch (destination) {
+                          MainShellDestination.messages =>
+                            attention.messagesNavigationDot,
+                          MainShellDestination.more =>
+                            attention.moreNavigationDot,
+                          _ => false,
+                        },
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
             ),
           ),
         ),
@@ -130,17 +152,25 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   }
 
   NavigationDestination _buildNavigationDestination(
-    MainShellDestination destination,
-  ) {
+    MainShellDestination destination, {
+    required bool showAttention,
+  }) {
     return NavigationDestination(
-      icon: _buildNavigationIcon(destination.icon),
-      selectedIcon: _buildNavigationIcon(destination.selectedIcon),
+      key: ValueKey<String>('main-shell-destination-${destination.name}'),
+      icon: _buildNavigationIcon(
+        destination.icon,
+        showAttention: showAttention,
+      ),
+      selectedIcon: _buildNavigationIcon(
+        destination.selectedIcon,
+        showAttention: showAttention,
+      ),
       label: destination.localizedLabel(AppLocalizations.of(context)),
     );
   }
 
-  Widget _buildNavigationIcon(IconData icon) {
-    return SizedBox(width: 24, height: 24, child: Center(child: Icon(icon)));
+  Widget _buildNavigationIcon(IconData icon, {required bool showAttention}) {
+    return MessageAttentionIcon(icon: icon, showAttention: showAttention);
   }
 
   List<Widget> _buildIndexedPages(

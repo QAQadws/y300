@@ -42,6 +42,7 @@ final class DiscuzApiClient {
     Map<String, Object?> queryParameters = const {},
     bool treatMessageAsBusinessError = true,
     ForumRequestCancellation? cancellation,
+    ForumRequestContext? requestContext,
   }) async {
     final apiOrigin = config.apiOrigin;
     if (apiOrigin == null) {
@@ -66,7 +67,9 @@ final class DiscuzApiClient {
       ForumRequest(
         method: ForumRequestMethod.get,
         uri: uri,
-        context: ForumRequestContext(operation: module, module: module),
+        context:
+            requestContext ??
+            ForumRequestContext(operation: module, module: module),
         headers: requestProfiles
             .resolve(ForumRequestProfileKind.discuzApi)
             .headers,

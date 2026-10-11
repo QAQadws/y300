@@ -25,7 +25,7 @@ in [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 Applications should consume the facade or contracts barrel. Do not import
 package `src/` files.
 
-## Passive message attention extraction
+## Passive message attention
 
 `ForumMessageAttentionObservation` describes verified viewer evidence using
 `unknown`, `absent`, and `present`. These are message-center arrival indicators,
@@ -48,11 +48,29 @@ API modules `forumindex`, `forumdisplay`, `viewthread`, `profile`, `myfavforum`,
 authentication, dispatch overrides, unknown routes, and business error envelopes
 are excluded. Supported templates have self-contained fixtures in the package.
 
-These utilities perform no requests, observation publication, persistence, or
-WebView sampling. A future host must separately verify successful fresh GET
-responses, cancellation, session owner, request ordering, and consumption
-barriers before applying evidence to UI state. Cached documents can be parsed,
-but a parse result does not establish freshness.
+The parsers remain pure and perform no I/O or publication. To observe existing
+network reads, pass a `ForumMessageAttentionObserver` as
+`messageAttentionObserver` to the builder or adapter factory. Its synchronous
+`captureRequest()` may return null to skip a request; otherwise it binds the
+verified viewer, a positive send-time sequence, and an opaque immutable owner
+token. `onObservation()` receives that same context. Hosts must recheck current
+account/session/source ownership and merge evidence by sequence and coverage.
+Observer failures never change the business response.
+
+The package wraps the shared transport once and samples only eligible,
+uncancelled GETs with successful final 2xx responses and supported same-site
+request/response routes. Authentication and formhash preflights, consuming
+message/notice reads, writes, bytes, and cache replay do not publish. WAF replay
+remains transport-owned; resource streams and multipart capabilities are
+preserved. No observer keeps the original network identity. Advanced source
+overrides must use a factory with the same observer rather than construct reads
+against an unobserved transport.
+
+Attention is ephemeral and does not perform polling, persist message state, or
+sample WebView. Consumption-success barriers and optional subsequent calibration
+remain host responsibilities; excluding a consuming response does not establish
+that the source has cleared attention. Cached documents can be parsed, but a
+parse result does not establish freshness.
 
 ## Installation
 

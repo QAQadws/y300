@@ -151,4 +151,8 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 
 首版保守接纳普通 index／forum／公共 space HTML，以及 API 的 `forumindex`、`forumdisplay`、`viewthread`、`profile`、`myfavforum`、`myfavthread`、`smiley`（版本 1–4）。消息／提醒消费页面、认证、调度覆盖、未知路由与业务错误响应均排除。包内测试使用自包含脱敏 fixture，不依赖外部论坛目录或 App 测试数据。
 
-纯提取器不发请求、不发布观察、不保存状态，也不从 WebView 采样。后续 Host 应独立核对成功的新鲜 GET、取消、session owner、请求顺序和消费屏障，再把证据应用到界面。缓存 HTML 可以被解析，但解析成功不代表数据新鲜。本阶段不改变现有消息 API 版本和导航行为。
+纯提取器仍不发请求或发布观察。Builder／adapter factory 可选传入 `messageAttentionObserver`，通过 contracts 入口的 `ForumMessageAttentionObserver` 观察已有网络读取。同步 `captureRequest()` 可返回 `null` 跳过请求，否则绑定已验证 viewer、正数发起序号和不可变 opaque owner token；`onObservation()` 收到同一上下文。Host 必须在接收时再次核对当前账号／session／source 归属，按序号和覆盖范围合并证据。观察异常不影响原业务响应。
+
+包内 decorator 只包装一次共享传输，仅发布未取消、最终 2xx、发起与最终 URI 均受支持的同站 GET。认证和 formhash 预检、消息／提醒消费读取、写请求、字节资源及缓存回放不发布；WAF 单次重放仍归原传输，resource stream／multipart 能力原样保留。不提供 observer 时保持原 network 对象。自定义 source override 应经携带同一 observer 的 factory 装配，直接使用原始 network 的自定义读取不在观察范围。
+
+提示状态只保留在 Host 内存，不轮询、不持久化，也不从 WebView 采样。消费成功屏障与后续校准仍需由 Host 业务生命周期独立实现；排除消费响应并不证明服务端已清除提示。缓存 HTML 可以被解析，但解析成功不代表新鲜。现有提醒 v3、私信 v1 和作者帖 `viewthread version=1` 不变。

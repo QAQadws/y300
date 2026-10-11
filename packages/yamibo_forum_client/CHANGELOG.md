@@ -8,6 +8,12 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
+- Passive message-attention observations, request contexts, and an optional
+  Host observer on Builder/Factory assembly. Pure mobile/desktop HTML and API
+  extractors retain unknown evidence and distinguish arrival hints from unread
+  conversations. Existing eligible GETs publish only after successful final
+  responses; authentication/formhash preflights, consuming reads, caches,
+  resources, and writes are excluded without changing transport capabilities.
 - `ForumResourceMetadataPolicy`, a supported pure helper shared by package and
   Host image transports for MIME, signature, extension, and cache-lifetime
   decisions. Resource streaming, Cookie isolation, and WAF ownership are unchanged.

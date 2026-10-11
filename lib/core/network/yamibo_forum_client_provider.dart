@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
+import 'package:y300/app/startup/message_attention_network_host_provider.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_client_host_adapters.dart';
 import 'package:y300/core/network/yamibo_forum_home_cache_owner.dart';
@@ -73,6 +74,7 @@ final yamiboForumClientProvider = Provider<YamiboForumClient>((ref) {
       snapshotStore: ref.watch(yamiboForumSnapshotStoreProvider),
       cookieStore: ref.watch(yamiboForumCookieStoreProvider),
       stickerCatalogStore: ref.watch(yamiboForumStickerCatalogStoreProvider),
+      messageAttentionObserver: ref.watch(messageAttentionNetworkHostProvider),
     ),
   );
 });

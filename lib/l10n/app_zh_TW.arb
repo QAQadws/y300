@@ -18,6 +18,7 @@
   "appLanguageSimplifiedChinese": "簡體中文",
   "appLanguageTraditionalChinese": "繁體中文",
   "appLanguageSaveFailed": "語言設定儲存失敗：{error}",
+  "messageAttentionAvailable": "有新訊息或提醒",
   "messageNew": "發私訊",
   "messageSend": "傳送",
   "messageSending": "正在傳送…",
