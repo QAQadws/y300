@@ -33,6 +33,34 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Install protocol package dependencies
+        working-directory: packages/yamibo_forum_client
+        run: dart pub get
+
+      - name: Install markup package dependencies
+        working-directory: packages/forum_markup_core
+        run: dart pub get
+
+      - name: Install title package dependencies
+        working-directory: packages/content_title_core
+        run: dart pub get
+
+      - name: Install geometry package dependencies
+        working-directory: packages/continuous_image_geometry
+        run: dart pub get
+
+      - name: Install pagination package dependencies
+        working-directory: packages/html_pagination_core
+        run: dart pub get
+
+      - name: Install renderer package dependencies
+        working-directory: packages/forum_content_renderer
+        run: flutter pub get
+
+      - name: Install renderer example dependencies
+        working-directory: packages/forum_content_renderer/example
+        run: flutter pub get
+
       - name: Analyze
         run: flutter analyze
 

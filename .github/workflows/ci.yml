@@ -36,6 +36,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes libsqlite3-0 libsqlite3-dev
       - name: Install app dependencies
         run: flutter pub get
+      - name: Install protocol package dependencies
+        working-directory: packages/yamibo_forum_client
+        run: dart pub get
       - name: Install markup package dependencies
         working-directory: packages/forum_markup_core
         run: dart pub get
@@ -58,9 +61,6 @@ jobs:
         run: flutter analyze --no-pub
       - name: Test app
         run: flutter test --no-pub --reporter expanded
-      - name: Install protocol package dependencies
-        working-directory: packages/yamibo_forum_client
-        run: dart pub get
       - name: Analyze protocol package
         working-directory: packages/yamibo_forum_client
         run: dart analyze --fatal-infos
