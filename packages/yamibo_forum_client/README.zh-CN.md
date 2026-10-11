@@ -84,6 +84,8 @@ final client = builder.buildStandardClient(
 
 不存在全局 HTML/API 开关。
 
+`ForumReferenceResolver.resolveBlogDetailReference` 本地识别受支持的同站日志详情，不请求数据或解析当前浏览者。它委托既有日志只读引用 parser，返回 `UserBlogDetailReference`，保留评论页码、评论 ID、末页和评论聚焦意图。身份不完整、目录／作者链接、命令、未知参数或冲突锚点返回 null；大于 1 的显式页码不能同时指定评论 ID 或末页，这类组合不符合原生读取 query。Host 保留原有浏览器边界，不删除 URL 字段来推断日志身份。
+
 版块列表和用户主题／回复摘要通过 `badges` 保留有序的独立标识；每枚标识提供来源中立的 kind 与服务器原文 `sourceLabel`。Host 对已知 kind 使用本地化文案，未知标识保留原文。版块摘要继续保留 `badgeLabel`、`isLocked`，通过 `effectiveBadges` 兼容旧调用。版块快照使用 codec/parser v2；旧快照在有原始 HTML 缓存时重新解析，避免只留下第一枚标识。
 
 帖子投票保留完整原始 `summary`，另提供可选的 `participantCount` 与 `rulesText`。Discuz adapter 独立识别人数子句，不使用多选选项票数求和推断参与人数；`rulesText` 去掉已识别的人数子句，为 null 时保留原始摘要作为未知格式的回退。这些新增字段随详情快照保存，旧快照由同一解析器从原摘要恢复，保持现有版本可读。

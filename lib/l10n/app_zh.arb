@@ -13,6 +13,8 @@
   "@clipboardLinkFoundPost": {"description": "剪贴板中唯一可推荐目标为论坛楼层"},
   "clipboardLinkFoundForum": "发现百合会版块链接",
   "@clipboardLinkFoundForum": {"description": "剪贴板中唯一可推荐目标为论坛版块"},
+  "clipboardLinkFoundBlog": "发现百合会日志链接",
+  "@clipboardLinkFoundBlog": {"description": "剪贴板中唯一可推荐目标为论坛日志"},
   "clipboardLinkOpen": "打开",
   "@clipboardLinkOpen": {"description": "剪贴板论坛链接轻提示的打开按钮"},
 

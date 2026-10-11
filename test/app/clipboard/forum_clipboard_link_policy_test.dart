@@ -7,10 +7,11 @@ void main() {
   const origin = 'https://bbs.yamibo.com';
   const thread = '$origin/thread-123-2-1.html';
   const forum = '$origin/forum-42-3.html';
+  const blog = '$origin/home.php?mod=space&uid=101&do=blog&id=11';
 
   group('ForumClipboardLinkPolicy', () {
     test(
-      'only locally proven thread, floor and forum browsing targets qualify',
+      'only locally proven thread, floor, forum and blog targets qualify',
       () {
         for (final entry in {
           thread: ForumClipboardLinkKind.thread,
@@ -22,6 +23,10 @@ void main() {
           forum: ForumClipboardLinkKind.forum,
           '$origin/forum.php?mod=forumdisplay&fid=42&page=3':
               ForumClipboardLinkKind.forum,
+          blog: ForumClipboardLinkKind.blog,
+          '$blog&page=2': ForumClipboardLinkKind.blog,
+          '$blog&cid=42#comment_42': ForumClipboardLinkKind.blog,
+          '$blog&goto=last': ForumClipboardLinkKind.blog,
         }.entries) {
           final candidate = policy.resolve('分享：“${entry.key}”。');
           expect(candidate?.url, entry.key, reason: entry.key);
@@ -75,6 +80,13 @@ void main() {
             '$origin/forum.php?mod=viewthread&tid=123&page=2#pid456',
           ],
           [forum, '$origin/forum.php?mod=forumdisplay&fid=42&page=3'],
+          [
+            blog,
+            '$origin/home.php?do=blog&id=11&uid=101&mod=space&page=1&mobile=2',
+          ],
+          [blog, blog.replaceFirst('https:', 'http:')],
+          ['$blog&cid=42', '$blog#comment_42_li'],
+          ['$blog#comment', '$blog#quickcommentform_11'],
         ]) {
           final first = policy.resolve(urls.first);
           final second = policy.resolve(urls.last);
@@ -105,6 +117,55 @@ void main() {
         '$forum $origin/forum-42-4.html',
         '$forum $origin/forum-43-3.html',
         '$thread $forum',
+      ]) {
+        expect(policy.resolve(input), isNull, reason: input);
+      }
+    });
+
+    test('blog identity retains owner and comment navigation intent', () {
+      for (final input in [
+        '$blog ${blog.replaceFirst('uid=101', 'uid=102')}',
+        '$blog ${blog.replaceFirst('id=11', 'id=12')}',
+        '$blog $blog&page=2',
+        '$blog $blog#comment',
+        '$blog&cid=42 $blog&cid=43',
+        '$blog&page=2 $blog&page=3',
+        '$blog $blog&goto=last',
+        '$blog $thread',
+        '$blog $forum',
+      ]) {
+        expect(policy.resolve(input), isNull, reason: input);
+      }
+      final candidate = policy.resolve('https://example.test/ 分享：$blog。');
+      expect(candidate?.kind, ForumClipboardLinkKind.blog);
+      expect(candidate?.url, blog);
+    });
+
+    test('blog commands, feeds and unproven article links are ignored', () {
+      for (final input in [
+        '$origin/home.php?mod=space&do=blog&view=all',
+        '$origin/home.php?mod=space&do=blog&view=me&uid=101',
+        '$origin/home.php?mod=spacecp&ac=blog&op=edit&blogid=11',
+        '$origin/home.php?mod=spacecp&ac=comment&op=delete&cid=42',
+        '$origin/home.php?mod=space&do=blog&id=11',
+        '$blog&uid=102',
+        '$blog&page=0',
+        blog.replaceFirst('uid=101', 'uid=0'),
+        blog.replaceFirst('id=11', 'id=0'),
+        '$blog&action=delete',
+        '$blog&formhash=proof',
+        '$blog&replysubmit=1',
+        '$blog&unknown=1',
+        '$blog&cid=42#comment_43',
+        '$blog&cid=42&goto=last',
+        '$blog&page=2&cid=42',
+        '$blog&page=2#comment_42_li',
+        '$blog&page=2&goto=last',
+        '$blog#unknown',
+        '$blog&goto=last#unknown',
+        blog.replaceFirst('bbs.yamibo.com', 'bbs.yamibo.com.example.test'),
+        blog.replaceFirst('bbs.yamibo.com', 'someone@bbs.yamibo.com'),
+        blog.replaceFirst('bbs.yamibo.com', 'bbs.yamibo.com:8443'),
       ]) {
         expect(policy.resolve(input), isNull, reason: input);
       }

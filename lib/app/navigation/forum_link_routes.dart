@@ -5,6 +5,7 @@ import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.d
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
@@ -56,6 +57,14 @@ Widget? nativeForumLinkPage(
       initialScope: destination.friendScope!,
       initialPage: destination.page ?? 1,
       isActive: isActive,
+    ),
+    YamiboForumLinkKind.blogDetail => ProfileBlogDetailPage(
+      ownerUserId: destination.blogDetail!.query.ownerUserId,
+      blogId: destination.blogDetail!.query.blogId,
+      initialPage: destination.blogDetail!.query.page,
+      commentId: destination.blogDetail!.query.commentId,
+      lastCommentPage: destination.blogDetail!.query.lastCommentPage,
+      focusComments: destination.blogDetail!.focusComments,
     ),
     YamiboForumLinkKind.threadPost ||
     YamiboForumLinkKind.managedWebView ||

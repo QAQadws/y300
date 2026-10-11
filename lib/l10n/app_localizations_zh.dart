@@ -33,6 +33,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clipboardLinkFoundForum => '发现百合会版块链接';
 
   @override
+  String get clipboardLinkFoundBlog => '发现百合会日志链接';
+
+  @override
   String get clipboardLinkOpen => '打开';
 
   @override
@@ -5460,6 +5463,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get clipboardLinkFoundForum => '發現百合會版塊連結';
+
+  @override
+  String get clipboardLinkFoundBlog => '發現百合會日誌連結';
 
   @override
   String get clipboardLinkOpen => '開啟';

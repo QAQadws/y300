@@ -1,6 +1,9 @@
 import 'package:html/parser.dart' as html_parser;
 
-/// Resolves and normalizes supported same-site thread and tag references.
+import '../adapters/discuz_blog_read_reference_parser.dart';
+import '../contracts/user_blog_navigation.dart';
+
+/// Resolves and normalizes supported same-site thread, tag and blog references.
 ///
 /// Cross-site, malformed, or identity-ambiguous values fail closed instead of
 /// leaking source-specific URL handling into application code.
@@ -146,6 +149,34 @@ class ForumReferenceResolver {
   /// Whether the value identifies a supported same-site tag catalog.
   bool isTagCatalogUrl(String value, {String? baseUrl}) =>
       extractTagId(value, baseUrl: baseUrl) != null;
+
+  /// Locally resolves a complete read-only blog detail reference.
+  ///
+  /// Uses the same source parser as blog navigation, preserving comment page,
+  /// comment identity and entry intent. Feeds, profiles, unsupported fields and
+  /// ambiguous references return null without acquiring remote state.
+  UserBlogDetailReference? resolveBlogDetailReference(
+    String value, {
+    String? baseUrl,
+  }) {
+    final uri = resolveSameSite(value, baseUrl: baseUrl);
+    if (uri == null) return null;
+    var origin = Uri.parse(siteOrigin);
+    // Standard HTTP and HTTPS links share the configured host. Match only
+    // their default ports; custom ports retain the source parser's boundary.
+    if (_usesDefaultWebPort(origin)) {
+      if (!_usesDefaultWebPort(uri)) return null;
+      origin = origin.replace(scheme: uri.scheme, port: uri.port);
+    }
+    final reference = DiscuzBlogReadReferenceParser(
+      origin,
+    ).resolve(uri.toString());
+    return reference is UserBlogDetailReference ? reference : null;
+  }
+
+  bool _usesDefaultWebPort(Uri uri) =>
+      (uri.scheme == 'http' && uri.port == 80) ||
+      (uri.scheme == 'https' && uri.port == 443);
 
   /// Normalizes a tag catalog reference to one explicit page.
   String? normalizeTagPageReference(

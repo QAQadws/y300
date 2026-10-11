@@ -11,6 +11,7 @@ enum YamiboForumLinkKind {
   tagThreadPage,
   userThreadDirectory,
   friendFeed,
+  blogDetail,
   managedWebView,
   external,
 }
@@ -28,6 +29,7 @@ class YamiboForumLinkDestination {
     this.friendScope,
     this.forumId,
     this.searchScope,
+    this.blogDetail,
   });
 
   final YamiboForumLinkKind kind;
@@ -41,6 +43,7 @@ class YamiboForumLinkDestination {
   final ForumFriendFeedScope? friendScope;
   final String? forumId;
   final ForumSearchScope? searchScope;
+  final UserBlogDetailReference? blogDetail;
 }
 
 class YamiboForumLinkResolver {
@@ -87,6 +90,13 @@ class YamiboForumLinkResolver {
   }
 
   YamiboForumLinkDestination? _resolveBrowsingIdentity(Uri uri) {
+    // Blog routes require their complete comment and fragment semantics. Do
+    // not turn an unsupported blog URL into a proven detail by dropping fields.
+    if (uri.path == '/home.php' &&
+        uri.queryParameters['mod'] == 'space' &&
+        uri.queryParameters['do'] == 'blog') {
+      return null;
+    }
     // Let the existing classifier prove the base browsing identity. Only the
     // proof drops unsupported view filters; navigation keeps the original URI
     // and its complete WebView semantics.
@@ -127,7 +137,8 @@ class YamiboForumLinkResolver {
     YamiboForumLinkKind.threadPost ||
     YamiboForumLinkKind.tagThreadPage ||
     YamiboForumLinkKind.userThreadDirectory ||
-    YamiboForumLinkKind.friendFeed => true,
+    YamiboForumLinkKind.friendFeed ||
+    YamiboForumLinkKind.blogDetail => true,
     YamiboForumLinkKind.managedWebView || YamiboForumLinkKind.external => false,
   };
 
@@ -189,6 +200,15 @@ class YamiboForumLinkResolver {
 
     final userThreads = _extractUserThreadDirectory(uri, viewerUserId);
     if (userThreads != null) return userThreads;
+
+    final blogDetail = _references.resolveBlogDetailReference(uri.toString());
+    if (blogDetail != null) {
+      return YamiboForumLinkDestination(
+        kind: YamiboForumLinkKind.blogDetail,
+        uri: uri,
+        blogDetail: blogDetail,
+      );
+    }
 
     final supportsThread = _supportsNativeThread(uri);
     final postTarget = supportsThread

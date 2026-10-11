@@ -116,6 +116,7 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
         case YamiboForumLinkKind.home:
         case YamiboForumLinkKind.forumDisplay:
         case YamiboForumLinkKind.search:
+        case YamiboForumLinkKind.blogDetail:
           page = nativeForumLinkPage(destination);
         case YamiboForumLinkKind.thread:
           page = ThreadDetailPage(

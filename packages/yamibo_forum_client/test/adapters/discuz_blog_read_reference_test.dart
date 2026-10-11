@@ -91,21 +91,22 @@ void main() {
   );
 
   test('comment anchors resolve against the actual article base', () {
-    final base = navigation.detail(
-      const UserBlogDetailQuery(ownerUserId: '101', blogId: '11', page: 2),
-    )!;
     for (final fragment in [
       'comment',
       'quickcommentform_11',
       'comment_31',
       'comment_31_li',
     ]) {
+      final page = fragment.startsWith('comment_') ? 1 : 2;
+      final base = navigation.detail(
+        UserBlogDetailQuery(ownerUserId: '101', blogId: '11', page: page),
+      )!;
       final reference =
           navigation.resolveReadReference('#$fragment', baseUri: base)
               as UserBlogDetailReference;
       expect(reference.query.ownerUserId, '101');
       expect(reference.query.blogId, '11');
-      expect(reference.query.page, 2);
+      expect(reference.query.page, page);
       expect(
         reference.query.commentId,
         fragment.startsWith('comment_') ? '31' : null,
@@ -154,6 +155,10 @@ void main() {
     '&cid=0',
     '&cid=x',
     '&cid=31&goto=last',
+    '&page=3&cid=31',
+    '&page=3&goto=last',
+    '&page=3#comment_31',
+    '&page=3#comment_31_li',
     '&goto=other',
     '&modblogkey=secret',
     '&op=delete',

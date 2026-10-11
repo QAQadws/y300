@@ -15,6 +15,7 @@ SnackBar buildForumClipboardLinkSnackBar({
     ForumClipboardLinkKind.thread => l10n.clipboardLinkFoundThread,
     ForumClipboardLinkKind.threadPost => l10n.clipboardLinkFoundPost,
     ForumClipboardLinkKind.forum => l10n.clipboardLinkFoundForum,
+    ForumClipboardLinkKind.blog => l10n.clipboardLinkFoundBlog,
   };
   final content = Text(label);
   return SnackBar(

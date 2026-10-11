@@ -152,7 +152,13 @@ final class DiscuzBlogReadReferenceParser {
         commentId = fragmentId;
       }
     }
-    if (last && commentId != null) return null;
+    // The native reader resolves specific/last comments independently of
+    // pagination. Preserve combined browser semantics instead of constructing
+    // a query that its detail reader would reject before requesting content.
+    if ((last && commentId != null) ||
+        (page != 1 && (commentId != null || last))) {
+      return null;
+    }
     return UserBlogDetailReference(
       UserBlogDetailQuery(
         ownerUserId: uid,

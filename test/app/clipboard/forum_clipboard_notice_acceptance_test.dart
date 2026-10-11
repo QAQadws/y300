@@ -309,6 +309,7 @@ String _kindLabel(AppLocalizations l10n, ForumClipboardLinkKind kind) =>
       ForumClipboardLinkKind.thread => l10n.clipboardLinkFoundThread,
       ForumClipboardLinkKind.threadPost => l10n.clipboardLinkFoundPost,
       ForumClipboardLinkKind.forum => l10n.clipboardLinkFoundForum,
+      ForumClipboardLinkKind.blog => l10n.clipboardLinkFoundBlog,
     };
 
 Key _destinationKey(MainShellDestination destination) =>

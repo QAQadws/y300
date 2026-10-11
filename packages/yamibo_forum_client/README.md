@@ -122,6 +122,17 @@ currently verified by Y300:
 | Thread creation and reply preparation/commands | Mobile HTML creation preparation, desktop HTML post-reply preparation, Discuz v4 commands |
 | Thread poll-vote command | Discuz `pollvote version=2` API |
 
+`ForumReferenceResolver.resolveBlogDetailReference` locally identifies supported
+same-site blog articles without requesting data or resolving the viewer. It
+delegates to the existing blog read-reference parser and returns a
+`UserBlogDetailReference`, preserving comment page, comment ID, last-page and
+comment-focus intent. Incomplete identities, directory or author links,
+commands, unsupported parameters and ambiguous anchors return null. An explicit
+page above one cannot also select a comment ID or the last comment page; these
+combinations are not representable by the native read query. Hosts keep their
+existing browser fallback instead of discarding URL fields to infer an article
+destination.
+
 Authentication contracts are deliberately independent. A future source may
 implement session resolution without implementing password login or logout.
 Login is considered applied only after a subsequent profile response proves a

@@ -145,6 +145,12 @@ abstract class AppLocalizations {
   /// **'发现百合会版块链接'**
   String get clipboardLinkFoundForum;
 
+  /// 剪贴板中唯一可推荐目标为论坛日志
+  ///
+  /// In zh, this message translates to:
+  /// **'发现百合会日志链接'**
+  String get clipboardLinkFoundBlog;
+
   /// 剪贴板论坛链接轻提示的打开按钮
   ///
   /// In zh, this message translates to:

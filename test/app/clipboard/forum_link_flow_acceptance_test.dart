@@ -16,6 +16,7 @@ import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
@@ -36,6 +37,8 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost&ptid=123&pid=456';
   const managed =
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&page=7&authorid=101&unknown=1#pid456';
+  const blog =
+      'https://bbs.yamibo.com/home.php?mod=space&uid=101&do=blog&id=11';
   const notice = Key('forum-clipboard-link-notice');
 
   for (final entry in _Entry.values) {
@@ -105,11 +108,105 @@ void main() {
       expect(fixture.reader.reads, 1);
       expect(tester.takeException(), isNull);
     });
+
+    for (final scenario
+        in <
+          ({
+            String name,
+            String suffix,
+            int page,
+            String? cid,
+            bool last,
+            bool focus,
+          })
+        >[
+          (
+            name: 'article',
+            suffix: '',
+            page: 1,
+            cid: null,
+            last: false,
+            focus: false,
+          ),
+          (
+            name: 'comment page',
+            suffix: '&page=3',
+            page: 3,
+            cid: null,
+            last: false,
+            focus: false,
+          ),
+          (
+            name: 'specific comment',
+            suffix: '&cid=31',
+            page: 1,
+            cid: '31',
+            last: false,
+            focus: true,
+          ),
+          (
+            name: 'last comment page',
+            suffix: '&goto=last',
+            page: 1,
+            cid: null,
+            last: true,
+            focus: true,
+          ),
+          (
+            name: 'comment section',
+            suffix: '#comment',
+            page: 1,
+            cid: null,
+            last: false,
+            focus: true,
+          ),
+          (
+            name: 'comment anchor',
+            suffix: '#comment_31_li',
+            page: 1,
+            cid: '31',
+            last: false,
+            focus: true,
+          ),
+        ]) {
+      testWidgets('${entry.name} opens native blog ${scenario.name}', (
+        tester,
+      ) async {
+        final fixture = _Fixture(
+          '$blog${scenario.suffix}',
+          clipboard: entry == _Entry.clipboard,
+        );
+        await fixture.mount(tester);
+        expect(fixture.observer.pushed, isEmpty);
+        if (entry == _Entry.clipboard) {
+          final l10n = AppLocalizations.of(tester.element(find.byKey(notice)));
+          expect(find.text(l10n.clipboardLinkFoundBlog), findsOneWidget);
+        }
+        await fixture.open(tester, entry);
+        await tester.idle();
+        final page = fixture.takeBlogRoute();
+        expect(page.ownerUserId, '101');
+        expect(page.blogId, '11');
+        expect(page.initialPage, scenario.page);
+        expect(page.commentId, scenario.cid);
+        expect(page.lastCommentPage, scenario.last);
+        expect(page.focusComments, scenario.focus);
+        expect(fixture.locator.requests, isEmpty);
+        expect(fixture.webViewLaunches, isEmpty);
+        expect(fixture.writes, isEmpty);
+        await tester.pumpAndSettle();
+        expect(fixture.observer.pushed, hasLength(1));
+        expect(fixture.reader.reads, 1);
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   for (final scenario in {
     'different forum targets':
         '$thread https://bbs.yamibo.com/thread-124-7-1.html',
+    'thread and blog targets': '$thread $blog',
+    'different blog targets': '$blog ${blog.replaceFirst('id=11', 'id=12')}',
     'external target': 'https://example.test/thread-123-7-1.html',
     'forum action': '$thread?action=delete',
   }.entries) {
@@ -361,6 +458,17 @@ final class _Fixture {
     final page = route.builder(navigator.currentContext!) as ThreadDetailPage;
     // The real production route is inspected before mounting. This tests its
     // destination without touching forum IO, history or reader persistence.
+    navigator.currentState!.removeRoute(route);
+    return page;
+  }
+
+  ProfileBlogDetailPage takeBlogRoute() {
+    expect(observer.pushed, hasLength(1));
+    final route = observer.pushed.single as MaterialPageRoute<void>;
+    final page =
+        route.builder(navigator.currentContext!) as ProfileBlogDetailPage;
+    // Inspect the production destination before mounting so no profile
+    // controller, forum request or reading/history persistence is started.
     navigator.currentState!.removeRoute(route);
     return page;
   }

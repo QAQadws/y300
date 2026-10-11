@@ -14,6 +14,7 @@ import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
+import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/threads/user_thread_page.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
@@ -108,6 +109,39 @@ void main() {
     expect(replies.initialType, UserThreadDirectoryType.replies);
     expect(replies.initialPage, 3);
     expect(web, isEmpty);
+    expect(locator.requests, isEmpty);
+  });
+
+  testWidgets('blog links in messages preserve native comment destination', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    await open(
+      tester,
+      'home.php?mod=space&uid=101&do=blog&id=11#comment_31_li',
+    );
+    final page = takeDestination() as ProfileBlogDetailPage;
+    expect(page.ownerUserId, '101');
+    expect(page.blogId, '11');
+    expect(page.initialPage, 1);
+    expect(page.commentId, '31');
+    expect(page.lastCommentPage, isFalse);
+    expect(page.focusComments, isTrue);
+    expect(web, isEmpty);
+    expect(locator.requests, isEmpty);
+  });
+
+  testWidgets('combined blog comment selectors remain complete browser links', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    for (final suffix in ['&cid=31', '&goto=last', '#comment_31_li']) {
+      final link = 'home.php?mod=space&uid=101&do=blog&id=11&page=3$suffix';
+      await open(tester, link);
+      expect(takeDestination(), isA<SizedBox>());
+      expect(web.last.initialUri.toString(), 'https://bbs.yamibo.com/$link');
+      await tester.pumpAndSettle();
+    }
     expect(locator.requests, isEmpty);
   });
 

@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
 
-enum ForumClipboardLinkKind { thread, threadPost, forum }
+enum ForumClipboardLinkKind { thread, threadPost, forum, blog }
 
 final class ForumClipboardLinkCandidate {
   const ForumClipboardLinkCandidate({
@@ -43,6 +43,7 @@ final class ForumClipboardLinkPolicy {
         YamiboForumLinkKind.thread => ForumClipboardLinkKind.thread,
         YamiboForumLinkKind.threadPost => ForumClipboardLinkKind.threadPost,
         YamiboForumLinkKind.forumDisplay => ForumClipboardLinkKind.forum,
+        YamiboForumLinkKind.blogDetail => ForumClipboardLinkKind.blog,
         _ => null,
       };
       if (kind == null) continue;
@@ -66,6 +67,15 @@ final class ForumClipboardLinkPolicy {
                 kind.name,
                 identity.forumId,
                 identity.page ?? 1,
+              ],
+              ForumClipboardLinkKind.blog => [
+                kind.name,
+                identity.blogDetail!.query.ownerUserId,
+                identity.blogDetail!.query.blogId,
+                identity.blogDetail!.query.page,
+                identity.blogDetail!.query.commentId,
+                identity.blogDetail!.query.lastCommentPage,
+                identity.blogDetail!.focusComments,
               ],
             };
       final fingerprint = sha256
