@@ -6,6 +6,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/private_conversation_page.dart';
@@ -27,6 +28,7 @@ void main() {
     repository = MessageTestRepository();
     container = ProviderContainer.test(
       overrides: [
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue('10'),
         messageRepositoryProvider.overrideWithValue(repository),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
@@ -542,6 +544,7 @@ void main() {
           .refresh();
       final oldRead = repository.reads.last;
       container.updateOverrides([
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue('11'),
         messageRepositoryProvider.overrideWithValue(repository),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
@@ -592,6 +595,7 @@ void main() {
     tester,
   ) async {
     container.updateOverrides([
+      messageAttentionOwnerProvider.overrideWithValue(null),
       messageAccountIdProvider.overrideWithValue(null),
       messageRepositoryProvider.overrideWithValue(repository),
       forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
@@ -749,6 +753,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SelectionArea), findsOneWidget);
     container.updateOverrides([
+      messageAttentionOwnerProvider.overrideWithValue(null),
       messageAccountIdProvider.overrideWithValue('11'),
       messageRepositoryProvider.overrideWithValue(repository),
       forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),

@@ -52,6 +52,7 @@ import '../session/forum_cookie_store.dart';
 import 'discuz_authentication_adapter.dart';
 import 'discuz_image_attachment_adapters.dart';
 import 'discuz_api_client.dart';
+import 'discuz_message_attention_repository.dart';
 import 'discuz_comic_read_adapters.dart';
 import 'discuz_directory_adapters.dart';
 import 'discuz_daily_sign_in_adapter.dart';
@@ -190,6 +191,14 @@ final class ForumClientAdapterFactory {
   /// Creates the Discuz private-message directory source.
   ForumPrivateMessageRepository createPrivateMessages() =>
       DiscuzForumPrivateMessageRepository(_api);
+
+  /// Creates the uncached, non-consuming arrival-hint probe source.
+  ForumMessageAttentionRepository createMessageAttention() =>
+      DiscuzMessageAttentionRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
 
   /// Creates the private-message command on the shared formhash boundary.
   ForumPrivateMessageCommand createPrivateMessageCommand(

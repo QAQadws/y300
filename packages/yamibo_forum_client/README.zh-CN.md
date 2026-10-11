@@ -155,4 +155,10 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 
 包内 decorator 只包装一次共享传输，仅发布未取消、最终 2xx、发起与最终 URI 均受支持的同站 GET。认证和 formhash 预检、消息／提醒消费读取、写请求、字节资源及缓存回放不发布；WAF 单次重放仍归原传输，resource stream／multipart 能力原样保留。不提供 observer 时保持原 network 对象。自定义 source override 应经携带同一 observer 的 factory 装配，直接使用原始 network 的自定义读取不在观察范围。
 
-提示状态只保留在 Host 内存，不轮询、不持久化，也不从 WebView 采样。消费成功屏障与后续校准仍需由 Host 业务生命周期独立实现；排除消费响应并不证明服务端已清除提示。缓存 HTML 可以被解析，但解析成功不代表新鲜。现有提醒 v3、私信 v1 和作者帖 `viewthread version=1` 不变。
+显式校准通过 `loadMessageAttention(ForumMessageAttentionQuery(...))` 和可选 `messageAttention` source 契约读取。标准装配使用同一传输发起不缓存的 `forumindex version=1&checknotice=1`，要求 `expectedUserId`，支持取消，并核对最终状态码、同站精确端点／查询、API 版本和 `member_uid`。未装配该来源时返回 unsupported；局部证据保持未知，只提供已建立的 capability。它不打开消息／提醒列表，也不补齐 UCenter 到达标志同步。
+
+显式探测以内部 `message.attention.probe` request context 排除被动发布。调用方在 facade 请求前分配一个序号，接收时再次核对归属，仅接纳一次成功且 current 的网络结果。调度、新鲜性、取消、退避与轮询策略归 Host，包内不启动定时器。
+
+私信和提醒 query 可选传入 `expectedUserId`；传入时，标准 adapter 在合并 session 或返回成功前核对发起端点／查询、响应版本和 `member_uid`。不传时保留既有读取行为。提醒 v3、私信 v1 和作者帖 `viewthread version=1` 不变。
+
+提示状态只保留在 Host 内存，不持久化，也不从 WebView 采样。Host 只在活跃业务读取的有效结果成功接纳后，以完成时已发起的最大序号建立对应类别的消费屏障；成功本身不清零，由屏障后的可靠证据重新校准。排除消费响应并不证明服务端已清除提示。缓存 HTML 可以被解析，但解析成功不代表新鲜。

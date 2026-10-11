@@ -5,6 +5,9 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 enum MessageFeedOperation { idle, refresh, more }
 
+/// Captured at an active read's start and invoked after its business success.
+typedef MessageFeedReadCompletion<P> = void Function(P data);
+
 @immutable
 final class MessageFeedState<P> {
   const MessageFeedState({
@@ -32,6 +35,7 @@ final class MessageFeedController<P>
     required this.nextPage,
     required this.mergeMore,
     this.mergeRefresh,
+    this.captureActiveRead,
   }) : super(MessageFeedState<P>());
 
   final int initialPage;
@@ -44,12 +48,17 @@ final class MessageFeedController<P>
   final P Function(P current, P next) mergeMore;
   final P Function(P current, P next)? mergeRefresh;
 
+  /// Captures immutable ownership for optional read-side effects. Hidden reads,
+  /// cache playback and an activity lifetime that ended cannot complete it.
+  final MessageFeedReadCompletion<P>? Function()? captureActiveRead;
+
   bool _disposed = false;
   final Set<Object> _activeOwners = {};
   final Object _defaultOwner = Object();
   bool get _active => _activeOwners.isNotEmpty;
   bool _dirty = false;
   int _generation = 0;
+  int _activityGeneration = 0;
   ForumRequestCancellation? _cancellation;
   Future<void>? _pending;
 
@@ -65,6 +74,7 @@ final class MessageFeedController<P>
       _activeOwners.remove(identity);
     }
     if (wasActive == _active) return;
+    ++_activityGeneration;
     if (active &&
         (_dirty || (value.data == null && value.failure == null)) &&
         !value.isBusy) {
@@ -101,6 +111,15 @@ final class MessageFeedController<P>
     _cancellation?.cancel();
     final cancellation = _cancellation = ForumRequestCancellation();
     final generation = ++_generation;
+    final activityGeneration = _activityGeneration;
+    MessageFeedReadCompletion<P>? completionObserver;
+    if (_active) {
+      try {
+        completionObserver = captureActiveRead?.call();
+      } on Object {
+        // Optional observation never prevents the underlying business read.
+      }
+    }
     // Install the shared future before notifying, so a reentrant refresh joins
     // this operation instead of starting another read.
     final completion = Completer<void>();
@@ -112,6 +131,8 @@ final class MessageFeedController<P>
         operation,
         generation,
         cancellation,
+        activityGeneration,
+        completionObserver,
       ).whenComplete(() => completion.complete()),
     );
     return completion.future;
@@ -122,18 +143,33 @@ final class MessageFeedController<P>
     MessageFeedOperation operation,
     int generation,
     ForumRequestCancellation cancellation,
+    int activityGeneration,
+    MessageFeedReadCompletion<P>? completionObserver,
   ) async {
     try {
       final result = await load(page, cancellation);
       if (_disposed || generation != _generation) return;
       switch (result) {
-        case DataReadSuccess<P, Object?>(:final data):
+        case DataReadSuccess<P, Object?>(:final data, :final metadata):
           final previous = value.data;
           final merged = previous == null
               ? data
               : operation == MessageFeedOperation.more
               ? mergeMore(previous, data)
               : mergeRefresh?.call(previous, data) ?? data;
+          if (!cancellation.isCancelled &&
+              _active &&
+              activityGeneration == _activityGeneration &&
+              metadata.origin == DataReadOrigin.network &&
+              metadata.freshness == DataReadFreshness.current) {
+            try {
+              completionObserver?.call(data);
+            } on Object {
+              // A consumption/calibration observer cannot turn success into
+              // a feed error or expose any response payload.
+            }
+          }
+          if (_disposed || generation != _generation) return;
           value = MessageFeedState(data: merged);
         case DataReadFailure<P, Object?>():
           value = MessageFeedState(

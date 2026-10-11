@@ -383,6 +383,213 @@ void main() {
       expect(failure.diagnosticMessage, 'message_login_required');
     },
   );
+
+  for (final notification in [false, true]) {
+    Future<DataReadResult<Object?, Object?>> strictRead({
+      String uid = '10',
+      ForumRequestCancellation? cancellation,
+    }) => notification
+        ? factory.createNotifications().load(
+            ForumNotificationQuery(
+              expectedUserId: uid,
+              cancellation: cancellation,
+            ),
+          )
+        : factory.createPrivateMessages().load(
+            ForumPrivateMessageQuery(
+              expectedUserId: uid,
+              cancellation: cancellation,
+            ),
+          );
+
+    test(
+      'strict ${notification ? 'notification' : 'PM'} read accepts a canonical integer viewer',
+      () async {
+        network.variables = {..._page([]), 'member_uid': 10};
+        expect((await strictRead()).isSuccess, isTrue);
+        expect(network.requests, hasLength(1));
+      },
+    );
+
+    for (final uid in [
+      '',
+      '0',
+      '010',
+      ' 10',
+      '10&uid=11',
+      '9007199254740992',
+    ]) {
+      test(
+        'strict ${notification ? 'notification' : 'PM'} query rejects $uid before transport',
+        () async {
+          expect(
+            (await strictRead(uid: uid)).failureOrNull!.kind,
+            DataReadFailureKind.business,
+          );
+          expect(network.requests, isEmpty);
+        },
+      );
+    }
+
+    for (final viewer in <Object?>[null, '0', '11', '010', ' 10', 10.0, true]) {
+      test(
+        'strict ${notification ? 'notification' : 'PM'} read rejects unverified viewer $viewer',
+        () async {
+          network.variables = {
+            ..._page([]),
+            'member_uid': viewer,
+            'space': {'uid': '10'},
+          };
+          final result = await strictRead();
+          expect(result.failureOrNull!.kind, DataReadFailureKind.unauthorized);
+          expect(result.failureOrNull!.code, 'message_viewer_mismatch');
+        },
+      );
+    }
+
+    for (final version in <Object?>[null, '', '4', ' 1', 1.0, true]) {
+      test(
+        'strict ${notification ? 'notification' : 'PM'} read rejects body version $version',
+        () async {
+          network.overrideVersion = true;
+          network.version = version;
+          final result = await strictRead();
+          expect(result.failureOrNull!.kind, DataReadFailureKind.parse);
+          expect(result.failureOrNull!.code, 'message_response_unverified');
+        },
+      );
+    }
+
+    for (final status in <int?>[null, 0, 302, 304, 401, 500]) {
+      test(
+        'strict ${notification ? 'notification' : 'PM'} read rejects HTTP $status',
+        () async {
+          network.status = status;
+          final result = await strictRead();
+          expect(result.failureOrNull!.code, 'message_response_unverified');
+        },
+      );
+    }
+
+    for (final uri in [
+      'https://other.example.test/api/mobile/index.php?module=mypm&version=1&page=1&filter=privatepm',
+      'https://forum.example.test/api/mobile/index.php?module=profile&version=1&page=1&filter=privatepm',
+      'https://forum.example.test/api/mobile/index.php?module=mypm&version=1&page=1&filter=privatepm&op=delete',
+      'https://forum.example.test/api/mobile/index.php?module=mypm&version=1&page=1&filter=privatepm&version=1',
+      'https://forum.example.test/home.php?module=mypm&version=1&page=1&filter=privatepm',
+    ]) {
+      test(
+        'strict ${notification ? 'notification' : 'PM'} read rejects final source $uri',
+        () async {
+          network.responseUri = Uri.parse(uri);
+          expect(
+            (await strictRead()).failureOrNull!.code,
+            'message_response_unverified',
+          );
+        },
+      );
+    }
+
+    test(
+      'strict ${notification ? 'notification' : 'PM'} proof failures do not merge session values',
+      () async {
+        final sessions = MemoryForumSessionStore();
+        await sessions.merge(
+          ForumSessionSnapshot(
+            isLoggedIn: true,
+            userId: '10',
+            username: 'original',
+            formhash: 'original',
+            updatedAt: DateTime.utc(2026),
+            source: 'fixture',
+          ),
+        );
+        factory = ForumClientAdapterFactory(
+          config: ForumClientConfig(
+            siteOrigin: Uri.parse('https://forum.example.test'),
+            apiOrigin: Uri.parse(
+              'https://forum.example.test/api/mobile/index.php',
+            ),
+            userAgent: 'fixture',
+          ),
+          network: network,
+          sessionStore: sessions,
+        );
+        network.variables = {
+          ..._page([]),
+          'member_uid': '11',
+          'formhash': 'unverified',
+        };
+        expect((await strictRead()).isFailure, isTrue);
+        expect(sessions.readCurrent()!.userId, '10');
+        expect(sessions.readCurrent()!.formhash, 'original');
+        network.variables = {..._page([]), 'formhash': 'unverified'};
+        network.status = 304;
+        expect((await strictRead()).isFailure, isTrue);
+        expect(sessions.readCurrent()!.formhash, 'original');
+        network.status = 200;
+        network.pending = Completer<void>();
+        final cancellation = ForumRequestCancellation();
+        final result = strictRead(cancellation: cancellation);
+        cancellation.cancel();
+        network.pending!.complete();
+        expect(
+          (await result).failureOrNull!.kind,
+          DataReadFailureKind.cancelled,
+        );
+        expect(sessions.readCurrent()!.formhash, 'original');
+      },
+    );
+
+    test(
+      'legacy ${notification ? 'notification' : 'PM'} reads keep optional-viewer compatibility',
+      () async {
+        network.variables = {..._page([]), 'member_uid': null};
+        network.overrideVersion = true;
+        network.version = null;
+        final result = notification
+            ? await factory.createNotifications().load(
+                const ForumNotificationQuery(),
+              )
+            : await factory.createPrivateMessages().load(
+                const ForumPrivateMessageQuery(),
+              );
+        expect(result.isSuccess, isTrue);
+      },
+    );
+  }
+
+  test(
+    'strict conversation reads retain direct and group v1 routing',
+    () async {
+      for (final target in [
+        const ForumConversationTarget.direct('20'),
+        const ForumConversationTarget.group('92'),
+      ]) {
+        expect(
+          (await factory.createPrivateMessages().load(
+            ForumPrivateMessageQuery.conversation(
+              target: target,
+              expectedUserId: '10',
+            ),
+          )).isSuccess,
+          isTrue,
+        );
+        expect(network.requests.last.uri.queryParameters['version'], '1');
+        expect(network.requests.last.uri.queryParameters['subop'], 'view');
+      }
+      network.variables = {..._page([]), 'member_uid': '11'};
+      expect(
+        (await factory.createPrivateMessages().load(
+          const ForumPrivateMessageQuery.conversation(
+            target: ForumConversationTarget.direct('20'),
+            expectedUserId: '10',
+          ),
+        )).failureOrNull!.kind,
+        DataReadFailureKind.unauthorized,
+      );
+    },
+  );
 }
 
 // Self-contained projections of api/1/mypm.php and api/3/mynotelist.php.
@@ -438,6 +645,10 @@ final class _Network implements ForumClientNetwork {
   Map<String, Object?> variables = _page([]);
   Completer<void>? pending;
   String? errorCode;
+  int? status = 200;
+  Uri? responseUri;
+  bool overrideVersion = false;
+  Object? version;
 
   @override
   Future<ForumTransportResult<ForumResponse<Object?>>> send(
@@ -447,11 +658,13 @@ final class _Network implements ForumClientNetwork {
     await pending?.future;
     return ForumTransportSuccess(
       ForumResponse<Object?>(
-        uri: request.uri,
-        statusCode: 200,
+        uri: responseUri ?? request.uri,
+        statusCode: status,
         headers: const {},
         body: {
-          'Version': request.uri.queryParameters['version'],
+          'Version': overrideVersion
+              ? version
+              : request.uri.queryParameters['version'],
           'Variables': variables,
           if (errorCode != null)
             'Message': {

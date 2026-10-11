@@ -18,6 +18,7 @@ import '../contracts/user_blog_media.dart';
 import '../contracts/user_blog_favorites.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
+import '../contracts/forum_message_attention.dart';
 import '../contracts/private_message_command.dart';
 import '../contracts/private_message_batch_command.dart';
 import '../contracts/friend_directory.dart';
@@ -54,6 +55,7 @@ final class ForumClientSourcePlan {
     this.dailySignInCommand,
     this.notifications,
     this.privateMessages,
+    this.messageAttention,
     this.privateMessageCommand,
     this.friendDirectory,
     this.friendFeed,
@@ -164,6 +166,7 @@ final class ForumClientSourcePlan {
     dailySignInCommand: overrides.dailySignInCommand ?? dailySignInCommand,
     notifications: overrides.notifications ?? notifications,
     privateMessages: overrides.privateMessages ?? privateMessages,
+    messageAttention: overrides.messageAttention ?? messageAttention,
     privateMessageCommand:
         overrides.privateMessageCommand ?? privateMessageCommand,
     friendDirectory: overrides.friendDirectory ?? friendDirectory,
@@ -284,6 +287,9 @@ final class ForumClientSourcePlan {
 
   /// Source for private-message pages.
   final ForumPrivateMessageRepository? privateMessages;
+
+  /// Optional network-only source for non-consuming arrival-hint calibration.
+  final ForumMessageAttentionRepository? messageAttention;
 
   /// Command for sending a private message to one explicit destination.
   final ForumPrivateMessageCommand? privateMessageCommand;

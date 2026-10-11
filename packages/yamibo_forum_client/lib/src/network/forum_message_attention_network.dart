@@ -103,6 +103,7 @@ final class _MessageAttentionNetwork implements ForumClientNetwork {
         const {
           'authentication',
           'formhash',
+          'message.attention.probe',
         }.contains(request.context.pageKind) ||
         (request.cancellation?.isCancelled ?? false)) {
       return false;

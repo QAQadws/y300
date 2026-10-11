@@ -6,6 +6,7 @@ import 'package:y300/app/localization/app_locale_resolution.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/startup/message_attention_visibility_host.dart';
+import 'package:y300/app/startup/message_attention_probe_host.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/app_update/presentation/widgets/app_update_alert_host.dart';
 import 'package:y300/features/forum/presentation/webview/waf_challenge_recovery_host.dart';
@@ -59,7 +60,9 @@ class Y300App extends ConsumerWidget {
       ],
       builder: (context, child) => WafChallengeRecoveryHost(
         onBusyChanged: clipboard.setWafBusy,
-        child: child ?? const SizedBox.shrink(),
+        child: MessageAttentionProbeHost(
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
       home: enableAppUpdatePrompt
           ? AppUpdateAlertHost(

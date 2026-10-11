@@ -194,6 +194,7 @@ final class YamiboForumClientBuilder {
       dailySignInCommand: dailySignIn.command,
       notifications: factory.createNotifications(),
       privateMessages: factory.createPrivateMessages(),
+      messageAttention: factory.createMessageAttention(),
       privateMessageCommand: factory.createPrivateMessageCommand(formhash),
       friendDirectory: factory.createFriendDirectory(),
       friendFeed: factory.createFriendFeed(),

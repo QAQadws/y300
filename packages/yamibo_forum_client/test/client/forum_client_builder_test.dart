@@ -68,6 +68,7 @@ void main() {
         sources.dailySignInCommand,
         sources.notifications,
         sources.privateMessages,
+        sources.messageAttention,
         sources.privateMessageCommand,
         sources.friendDirectory,
         sources.friendFeed,

@@ -1,6 +1,9 @@
 /// Source-neutral evidence for the forum's message arrival indicators.
 library;
 
+import '../network/forum_request.dart';
+import 'data_read_contract.dart';
+
 /// What a supported response establishes for one arrival indicator.
 enum ForumMessageAttentionState {
   /// No reliable evidence; this must not clear a previously observed indicator.
@@ -144,4 +147,72 @@ abstract interface class ForumMessageAttentionObserver {
     ForumMessageAttentionObservation observation, {
     required ForumMessageAttentionRequestContext context,
   });
+}
+
+/// An explicit, non-consuming read of one verified viewer's arrival hints.
+final class ForumMessageAttentionQuery {
+  /// Creates a fresh read without inferring the account from cached session data.
+  const ForumMessageAttentionQuery({
+    required this.expectedUserId,
+    this.cancellation,
+  });
+
+  /// Authenticated viewer expected by the caller for this read.
+  final String expectedUserId;
+
+  /// Cancels an obsolete owner or calibration read.
+  final ForumRequestCancellation? cancellation;
+}
+
+/// Evidence supported by an explicit arrival-hint source.
+enum ForumMessageAttentionCapability {
+  /// The response establishes the expected authenticated viewer.
+  viewerIdentity,
+
+  /// The message-center arrival flag, independent of conversation unread state.
+  privateMessageArrival,
+
+  /// The notification arrival flag across supported notification categories.
+  notificationArrival,
+
+  /// The complete count of supported notification categories.
+  notificationCount,
+}
+
+/// Arrival-hint capabilities declared by one source.
+final class ForumMessageAttentionSourceCapabilities {
+  /// Creates the source's explicit support values.
+  const ForumMessageAttentionSourceCapabilities({required this.values});
+
+  /// Per-capability support values.
+  final DataCapabilitySet<ForumMessageAttentionCapability> values;
+}
+
+/// Arrival-hint capabilities proved by one explicit read.
+final class ForumMessageAttentionReadCapabilities {
+  /// Creates the read's explicit support values.
+  const ForumMessageAttentionReadCapabilities({required this.values});
+
+  /// Per-capability support values; missing hint fields remain unknown.
+  final DataCapabilitySet<ForumMessageAttentionCapability> values;
+}
+
+/// Fresh arrival-hint reads that never open a consuming message list.
+///
+/// Reads are uncached and do not imply UCenter synchronization or that every
+/// conversation has been read. Ownership, single-flight, and trigger policy
+/// remain with the calling host. An explicit read returns its evidence to that
+/// host and does not also publish it through [ForumMessageAttentionObserver].
+abstract interface class ForumMessageAttentionRepository {
+  /// Capabilities declared by this source.
+  ForumMessageAttentionSourceCapabilities get capabilities;
+
+  /// Loads a verified arrival observation or a safe structured failure.
+  Future<
+    DataReadResult<
+      ForumMessageAttentionObservation,
+      ForumMessageAttentionReadCapabilities
+    >
+  >
+  load(ForumMessageAttentionQuery query);
 }

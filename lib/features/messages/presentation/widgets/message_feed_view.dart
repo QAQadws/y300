@@ -18,8 +18,17 @@ class MessageFeedView<P> extends StatefulWidget {
   State<MessageFeedView<P>> createState() => _MessageFeedViewState<P>();
 }
 
-class _MessageFeedViewState<P> extends State<MessageFeedView<P>> {
+class _MessageFeedViewState<P> extends State<MessageFeedView<P>>
+    with WidgetsBindingObserver {
   final _owner = Object();
+  AppLifecycleState? _lifecycleState;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleState = WidgetsBinding.instance.lifecycleState;
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   void _syncActivity() {
     // TabBarView can retain old child properties during a page animation. The
@@ -27,10 +36,18 @@ class _MessageFeedViewState<P> extends State<MessageFeedView<P>> {
     final tickersEnabled = TickerMode.valuesOf(context).enabled;
     widget.controller.setActive(
       widget.isActive &&
+          (_lifecycleState == null ||
+              _lifecycleState == AppLifecycleState.resumed) &&
           tickersEnabled &&
           (ModalRoute.isCurrentOf(context) ?? true),
       owner: _owner,
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    if (mounted) _syncActivity();
   }
 
   @override
@@ -50,6 +67,7 @@ class _MessageFeedViewState<P> extends State<MessageFeedView<P>> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller.setActive(false, owner: _owner);
     super.dispose();
   }

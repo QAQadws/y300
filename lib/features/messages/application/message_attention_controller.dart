@@ -1,8 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/messages/application/message_attention_state.dart';
 
 export 'message_attention_state.dart';
+
+enum MessageAttentionConsumptionKind { privateMessages, notifications }
+
+/// Accepted complete evidence, including repeated values with no UI change.
+final class MessageAttentionFreshSample {
+  const MessageAttentionFreshSample({
+    required this.owner,
+    required this.sequence,
+  });
+
+  final MessageAttentionOwner owner;
+  final int sequence;
+}
 
 /// Merges fresh arrival evidence without networking or consuming forum hints.
 ///
@@ -21,6 +36,12 @@ final class MessageAttentionController
   int _privateSequence = -1;
   int _notificationSequence = -1;
   int _combinedSequence = -1;
+  int _privateConsumptionBarrier = 0;
+  int _notificationConsumptionBarrier = 0;
+  int _completeSequence = -1;
+  final _freshSamples = StreamController<MessageAttentionFreshSample>.broadcast(
+    sync: true,
+  );
   ForumMessageAttentionState _privateMessages = _unknown;
   ForumMessageAttentionState _notifications = _unknown;
   ForumMessageAttentionState _combinedHint = _unknown;
@@ -35,11 +56,32 @@ final class MessageAttentionController
   /// Monotonic local request order; it is not a server arrival version.
   int nextRequestSequence() => ++_requestSequence;
 
+  Stream<MessageAttentionFreshSample> get freshSamples => _freshSamples.stream;
+  int get latestCompleteSequence => _completeSequence;
+
+  /// Successful business reads establish order, not a synthetic zero. Taking
+  /// the current maximum also retires samples started while the read was in flight.
+  int? recordConsumption({
+    required MessageAttentionOwner owner,
+    required MessageAttentionConsumptionKind kind,
+  }) {
+    if (_disposed || _owner != owner) return null;
+    switch (kind) {
+      case MessageAttentionConsumptionKind.privateMessages:
+        _privateConsumptionBarrier = _requestSequence;
+      case MessageAttentionConsumptionKind.notifications:
+        _notificationConsumptionBarrier = _requestSequence;
+    }
+    return _requestSequence;
+  }
+
   /// Identity loss, same-UID re-login and a new source lifetime discard hints.
   void setOwner(MessageAttentionOwner? owner) {
     if (_disposed || owner == _owner) return;
     _owner = owner;
     _privateSequence = _notificationSequence = _combinedSequence = -1;
+    _privateConsumptionBarrier = _notificationConsumptionBarrier = 0;
+    _completeSequence = -1;
     _privateMessages = _notifications = _combinedHint = _unknown;
     _notificationCount = null;
     _attentionEpoch = _acknowledgedMoreEpoch = 0;
@@ -65,15 +107,25 @@ final class MessageAttentionController
     if (sequence > _requestSequence) _requestSequence = sequence;
 
     final previousCombined = _combined;
+    final canAcceptPrivate =
+        observation.privateMessages != _unknown &&
+        sequence > _privateSequence &&
+        sequence > _combinedSequence &&
+        sequence > _privateConsumptionBarrier;
+    final canAcceptNotifications =
+        observation.notifications != _unknown &&
+        sequence > _notificationSequence &&
+        sequence > _combinedSequence &&
+        sequence > _notificationConsumptionBarrier;
     final canAcceptCombined =
         observation.combinedHint != _unknown &&
         sequence > _combinedSequence &&
+        sequence > _privateConsumptionBarrier &&
+        sequence > _notificationConsumptionBarrier &&
         (observation.combinedHint == _absent ||
             (sequence > _privateSequence && sequence > _notificationSequence));
     var arrivalChanged = false;
-    if (observation.privateMessages != _unknown &&
-        sequence > _privateSequence &&
-        sequence > _combinedSequence) {
+    if (canAcceptPrivate) {
       arrivalChanged |=
           _privateMessages == _absent &&
           observation.privateMessages == _present;
@@ -81,9 +133,7 @@ final class MessageAttentionController
       _privateSequence = sequence;
     }
 
-    if (observation.notifications != _unknown &&
-        sequence > _notificationSequence &&
-        sequence > _combinedSequence) {
+    if (canAcceptNotifications) {
       arrivalChanged |=
           _notifications == _absent && observation.notifications == _present;
       final count = _reliableNotificationCount(observation);
@@ -131,7 +181,9 @@ final class MessageAttentionController
         _privateMessages != _unknown &&
         _notifications != _unknown &&
         _privateSequence > _combinedSequence &&
-        _notificationSequence > _combinedSequence) {
+        _notificationSequence > _combinedSequence &&
+        _privateSequence > _privateConsumptionBarrier &&
+        _notificationSequence > _notificationConsumptionBarrier) {
       // New category coverage replaces a historical mobile aggregate, so a
       // complete inactive API/desktop snapshot can actually clear its dot.
       _combinedHint = _unknown;
@@ -146,6 +198,15 @@ final class MessageAttentionController
       _acknowledgedMoreEpoch = _attentionEpoch;
     }
     _publish();
+    if (!_disposed &&
+        _owner == owner &&
+        (canAcceptCombined || (canAcceptPrivate && canAcceptNotifications)) &&
+        sequence > _completeSequence) {
+      _completeSequence = sequence;
+      _freshSamples.add(
+        MessageAttentionFreshSample(owner: owner, sequence: sequence),
+      );
+    }
   }
 
   /// The shell supplies actual route and foreground visibility, not mounting.
@@ -205,6 +266,7 @@ final class MessageAttentionController
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_freshSamples.close());
     super.dispose();
   }
 }

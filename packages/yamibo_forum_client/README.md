@@ -66,11 +66,34 @@ preserved. No observer keeps the original network identity. Advanced source
 overrides must use a factory with the same observer rather than construct reads
 against an unobserved transport.
 
-Attention is ephemeral and does not perform polling, persist message state, or
-sample WebView. Consumption-success barriers and optional subsequent calibration
-remain host responsibilities; excluding a consuming response does not establish
-that the source has cleared attention. Cached documents can be parsed, but a
-parse result does not establish freshness.
+For explicit calibration, `loadMessageAttention(ForumMessageAttentionQuery(...))`
+uses the optional `messageAttention` source contract. Standard assembly provides
+a fresh, uncached `forumindex version=1&checknotice=1` read through the same
+transport. The query requires `expectedUserId` and supports cancellation;
+successful reads verify final status, exact same-site endpoint/query, API version,
+and `member_uid`. Unsupported sources fail closed. Partial evidence retains
+unknown fields and advertises only established capabilities. This read opens no
+message/notice list and does not synchronize UCenter arrival flags.
+
+Explicit probes bypass passive publication using the internal
+`message.attention.probe` request context. The caller assigns one sequence before
+the facade call and accepts its successful current network result once, after
+rechecking ownership. Scheduling, freshness, cancellation, retries, and polling
+policy remain Host responsibilities; the package starts no timers.
+
+Private-message and notification queries optionally accept `expectedUserId`.
+When supplied, standard adapters verify the issued endpoint/query, response
+version, and `member_uid` before merging session data or returning success.
+Omitting it preserves existing read behavior. Notification v3 and private-message
+v1 remain unchanged.
+
+Attention remains ephemeral and does not persist message state or sample WebView.
+Hosts establish per-category consumption barriers only after accepted active
+business reads succeed, using the maximum sequence issued at completion. A
+success does not itself clear attention; only newer verified evidence calibrates
+the affected category. Excluding a consuming response does not establish that
+the source has cleared attention. Cached documents can be parsed, but a parse
+result does not establish freshness.
 
 ## Installation
 

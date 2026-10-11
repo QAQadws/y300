@@ -1,4 +1,5 @@
 import '../contracts/forum_message_attention.dart';
+import '../parsing/discuz_message_attention_identity.dart';
 import '../parsing/discuz_message_attention_source.dart';
 
 /// Extracts navigation-attention evidence from decoded Discuz API envelopes.
@@ -29,7 +30,7 @@ final class DiscuzMessageAttentionApiParser {
     )) {
       return null;
     }
-    final expected = _positiveIdentity(expectedUserId);
+    final expected = discuzMessageAttentionIdentity(expectedUserId);
     final root = _stringKeyedMap(source);
     if (expected == null || root == null) return null;
     final message = root['Message'];
@@ -40,7 +41,7 @@ final class DiscuzMessageAttentionApiParser {
     if (!_acceptsVersion(root, sourceUri)) return null;
     final variables = _stringKeyedMap(root['Variables']);
     if (variables == null) return null;
-    final viewer = _positiveIdentity(variables['member_uid']);
+    final viewer = discuzMessageAttentionIdentity(variables['member_uid']);
     if (viewer == null || viewer != expected) return null;
     final notice = _stringKeyedMap(variables['notice']);
     if (notice == null) return null;
@@ -88,7 +89,6 @@ final class DiscuzMessageAttentionApiParser {
 // values stay unknown instead of overflowing or losing notification identity.
 const _maximumExactInteger = 9007199254740991;
 final _decimal = RegExp(r'^[0-9]+$');
-final _positiveDecimal = RegExp(r'^[1-9][0-9]*$');
 
 Map<String, Object?>? _stringKeyedMap(Object? value) {
   if (value is! Map<Object?, Object?> ||
@@ -98,18 +98,6 @@ Map<String, Object?>? _stringKeyedMap(Object? value) {
   return <String, Object?>{
     for (final entry in value.entries) entry.key as String: entry.value,
   };
-}
-
-String? _positiveIdentity(Object? value) {
-  final text = switch (value) {
-    String value => value,
-    int value when value > 0 && value <= _maximumExactInteger =>
-      value.toString(),
-    _ => null,
-  };
-  if (text == null || _positiveDecimal.stringMatch(text) != text) return null;
-  final parsed = int.tryParse(text);
-  return parsed != null && parsed <= _maximumExactInteger ? text : null;
 }
 
 int? _nonNegativeInteger(Object? value) {
