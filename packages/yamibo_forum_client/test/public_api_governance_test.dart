@@ -69,6 +69,8 @@ void main() {
       expect(
         exports,
         <String>[
+          'src/adapters/discuz_message_attention_api_parser.dart',
+          'src/adapters/discuz_message_attention_html_parser.dart',
           'src/adapters/forum_client_adapter_factory.dart',
           'src/adapters/thread_detail_api_mapper.dart',
           'src/adapters/thread_detail_html_parser.dart',

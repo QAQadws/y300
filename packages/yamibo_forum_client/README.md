@@ -25,6 +25,35 @@ in [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 Applications should consume the facade or contracts barrel. Do not import
 package `src/` files.
 
+## Passive message attention extraction
+
+`ForumMessageAttentionObservation` describes verified viewer evidence using
+`unknown`, `absent`, and `present`. These are message-center arrival indicators,
+including Discuz announcements, rather than conversation unread flags. A mobile
+aggregate does not establish either category; incomplete evidence never implies
+zero. `notificationCount` is optional and never counts private messages.
+
+The experimental adapters barrel exports `DiscuzMessageAttentionHtmlParser`
+and `DiscuzMessageAttentionApiParser`. Both take `siteOrigin` and parse with
+`sourceUri` (the final response URI) and `expectedUserId`. They return `null`
+for unsupported or untrusted responses and retain individual unknown fields.
+HTML requires a complete document, a unique head `discuz_uid`, and supported
+public mobile/desktop navigation. API input is an already decoded envelope
+with `Variables.member_uid`; raw JSON decoding and duplicate-key handling are
+the decoder's responsibility. `space.uid` never establishes viewer identity.
+
+The initial route allowlists cover ordinary index/forum/public-space HTML and
+API modules `forumindex`, `forumdisplay`, `viewthread`, `profile`, `myfavforum`,
+`myfavthread`, and `smiley` (versions 1–4). Consuming message/notice pages,
+authentication, dispatch overrides, unknown routes, and business error envelopes
+are excluded. Supported templates have self-contained fixtures in the package.
+
+These utilities perform no requests, observation publication, persistence, or
+WebView sampling. A future host must separately verify successful fresh GET
+responses, cancellation, session owner, request ordering, and consumption
+barriers before applying evidence to UI state. Cached documents can be parsed,
+but a parse result does not establish freshness.
+
 ## Installation
 
 Use a local path inside this repository:

@@ -1,0 +1,18 @@
+{
+  "Version": "1",
+  "Charset": "UTF-8",
+  "Variables": {
+    "member_uid": "42",
+    "member_username": "Fixture reader",
+    "notice": {
+      "newpm": "2",
+      "newprompt": "3",
+      "newmypost": "5",
+      "newpush": "1"
+    },
+    "space": {
+      "uid": "99",
+      "username": "Fixture profile owner"
+    }
+  }
+}

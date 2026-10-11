@@ -14,7 +14,7 @@ The following APIs are covered by the compatibility policy in
   authentication/session, favorite-command, post-rating, post-comment,
   thread-creation, thread-reply, thread-poll-vote, thread-post-edit, and image-attachment
   preparation/command contracts, cache policy, cancellation, resource
-  contracts, and reference/image helpers;
+  contracts, message-attention observations, and reference/image helpers;
 - `yamibo_forum_client.dart`: `YamiboForumClient`,
   `YamiboForumClientBuilder`, `ForumClientConfig`, verified browser identities,
   the standard and ephemeral Dio runtimes,
@@ -54,6 +54,7 @@ experimental:
 - `ForumClientSourcePlan` and direct construction of concrete source plans;
 - `ForumClientAdapterFactory`, `ThreadDetailHtmlParser`,
   `ThreadDetailApiMapper`, and `DataParseException`;
+- `DiscuzMessageAttentionHtmlParser` and `DiscuzMessageAttentionApiParser`;
 - concrete Discuz/HTML parsers, mappers, repositories, and snapshot codecs
   used internally by the factory;
 - direct multipart runtime composition through `ForumMultipartClient`;

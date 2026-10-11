@@ -142,3 +142,13 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 - `yamibo_forum_client_adapters.dart`：实验性的 adapter factory 及少量公开 parser/mapper。
 
 第三方代码不得导入 `package:yamibo_forum_client/src/...`。贡献和发布检查见 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [RELEASING.md](RELEASING.md)。
+
+## 被动消息提示的纯提取
+
+`ForumMessageAttentionObservation` 使用 `unknown`、`absent`、`present` 表达已核对 viewer 的到达提示证据。消息中心提示可能包含 Discuz 公告位，不等于会话未读标志。移动端合并点不会伪造私信／提醒分项；缺字段、受限显示或未知结构不补零。`notificationCount` 仅表示完整可核对的提醒数量，不表示私信条数。
+
+实验性 adapters 入口公开 `DiscuzMessageAttentionHtmlParser` 和 `DiscuzMessageAttentionApiParser`，构造时传 `siteOrigin`，解析时传最终响应 `sourceUri` 和预期 `expectedUserId`。不可信或不支持的响应返回 `null`，局部缺失保留分项未知。HTML 要求完整文档、唯一 head `discuz_uid` 以及受支持的移动／桌面公共导航结构；API 接受已解码的 envelope，以 `Variables.member_uid` 核对身份。原始 JSON 解码及重复键检测属于 decoder 边界，`space.uid` 不能充当 viewer。
+
+首版保守接纳普通 index／forum／公共 space HTML，以及 API 的 `forumindex`、`forumdisplay`、`viewthread`、`profile`、`myfavforum`、`myfavthread`、`smiley`（版本 1–4）。消息／提醒消费页面、认证、调度覆盖、未知路由与业务错误响应均排除。包内测试使用自包含脱敏 fixture，不依赖外部论坛目录或 App 测试数据。
+
+纯提取器不发请求、不发布观察、不保存状态，也不从 WebView 采样。后续 Host 应独立核对成功的新鲜 GET、取消、session owner、请求顺序和消费屏障，再把证据应用到界面。缓存 HTML 可以被解析，但解析成功不代表数据新鲜。本阶段不改变现有消息 API 版本和导航行为。
