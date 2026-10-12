@@ -56,18 +56,20 @@ class ForumHtmlPreparationPipeline {
       // links can retain those colors without changing their parent markup.
       const ForumHtmlPlainTextLinkifier().linkify(fragment, theme: theme);
     }
-    (_imageDeduplicator ?? ForumHtmlImageDeduplicator(resolveUrl: _resolveUrl))
-        .deduplicateAttachmentImagesInFragment(fragment);
+    final images =
+        (_imageDeduplicator ??
+                ForumHtmlImageDeduplicator(resolveUrl: _resolveUrl))
+            .prepareImageCandidates(fragment);
     final entries = <ForumHtmlReadableImageEntry>[];
     final attachmentIdsByUrl = <String, String>{};
     final readableUrlCounts = <String, int>{};
-    final images = fragment.querySelectorAll('img');
     var skippedStickerCount = 0;
     var skippedNonNetworkCount = 0;
     var attachmentTaggedCount = 0;
 
-    for (final image in images) {
-      final rawSrc = _rawImageSourceFromElement(image);
+    for (final candidate in images) {
+      final image = candidate.element;
+      final rawSrc = candidate.rawSrc;
       if (rawSrc == null || rawSrc.isEmpty) {
         skippedNonNetworkCount++;
         continue;

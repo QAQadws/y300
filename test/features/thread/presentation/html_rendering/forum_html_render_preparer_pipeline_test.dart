@@ -43,6 +43,7 @@ void main() {
 
       expect(codec.parseCount, 1);
       expect(codec.serializeCount, 1);
+      expect(codec.imageQueryCount, 1);
     });
 
     test('keeps the fixed normalize, dedupe, and annotation order', () {
@@ -134,9 +135,11 @@ void main() {
     const origin = SiteUrlResolver(
       siteOrigin: 'https://origin.example.invalid/base/',
     );
-    const preparer = DefaultForumHtmlRenderPreparer(
+    final codec = _CountingFragmentCodec();
+    final preparer = DefaultForumHtmlRenderPreparer(
       urlResolver: origin,
-      imagePolicy: _ImagePolicy(),
+      imagePolicy: const _ImagePolicy(),
+      fragmentCodec: codec,
     );
 
     final prepared = preparer.prepare(
@@ -152,6 +155,7 @@ void main() {
     );
 
     expect(prepared.totalImageCount, 1);
+    expect(codec.imageQueryCount, 1);
     expect(prepared.sequence.entries, hasLength(1));
     expect(prepared.sequence.entries.single.index, 0);
     expect(
@@ -228,17 +232,31 @@ final class _CountingFragmentCodec implements ForumHtmlFragmentCodec {
   final _delegate = const HtmlPackageForumHtmlFragmentCodec();
   var parseCount = 0;
   var serializeCount = 0;
+  var imageQueryCount = 0;
 
   @override
   html_dom.DocumentFragment parse(String html) {
     parseCount++;
-    return _delegate.parse(html);
+    return _CountingImageQueryFragment(() => imageQueryCount++)
+      ..nodes.addAll(_delegate.parse(html).nodes.toList());
   }
 
   @override
   String serialize(html_dom.DocumentFragment fragment) {
     serializeCount++;
     return _delegate.serialize(fragment);
+  }
+}
+
+final class _CountingImageQueryFragment extends html_dom.DocumentFragment {
+  _CountingImageQueryFragment(this.onImageQuery);
+
+  final void Function() onImageQuery;
+
+  @override
+  List<html_dom.Element> querySelectorAll(String selector) {
+    if (selector == 'img') onImageQuery();
+    return super.querySelectorAll(selector);
   }
 }
 

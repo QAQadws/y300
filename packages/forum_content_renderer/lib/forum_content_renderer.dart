@@ -20,7 +20,8 @@ export 'src/contracts/forum_html_preparation_image_policy.dart';
 export 'src/contracts/forum_html_prepared_image_resource.dart';
 export 'src/contracts/forum_html_render_palette.dart';
 export 'src/html_rendering/forum_html_fragment_codec.dart';
-export 'src/html_rendering/forum_html_image_deduplicator.dart';
+export 'src/html_rendering/forum_html_image_deduplicator.dart'
+    show ForumHtmlImageDeduplicator;
 export 'src/html_rendering/forum_html_prepared_render_document.dart';
 export 'src/html_rendering/forum_html_render_callbacks.dart';
 export 'src/html_rendering/forum_html_render_theme_factory.dart';
