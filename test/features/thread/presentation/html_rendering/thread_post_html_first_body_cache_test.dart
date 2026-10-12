@@ -1,13 +1,98 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/dom.dart' as html_dom;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('default preparation survives typography changes and relayouts', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+          _PreferencesRepository(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final codec = _CountingFragmentCodec();
+    final preparer = DefaultForumHtmlRenderPreparer(fragmentCodec: codec);
+    final theme = ThemeData.light();
+    final post = ThreadPost(
+      pid: 'typography',
+      author: 'author',
+      authorId: '1',
+      message: '<font size="5">First line</font><p>Second line</p>',
+      number: 1,
+      isFirst: true,
+      dateline: 'date',
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: LocalizedTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: ThreadPostHtmlFirstBody(
+              post: post,
+              threadId: '123',
+              imageReferer: '',
+              onOpenPostLink: (_) {},
+              onOpenPostImage: null,
+              theme: const ForumHtmlRenderThemeFactory().fromMaterialTheme(
+                theme: theme,
+                surface: theme.colorScheme.surface,
+              ),
+              renderPreparer: preparer,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    ForumHtmlWidgetPostRenderer renderer() =>
+        tester.widget(find.byType(ForumHtmlWidgetPostRenderer));
+    final original = renderer().preparedDocument!;
+    final firstHeight = tester
+        .getSize(find.text('First line', findRichText: true))
+        .height;
+    final controller = container.read(
+      forumHtmlReaderPreferencesControllerProvider.notifier,
+    );
+    await controller.setTypography(
+      renderer().preferences!.typography.copyWith(
+        fontScale: 1.8,
+        lineHeightScale: 2.0,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(renderer().preparedDocument, same(original));
+    expect(codec.parseCount, 1);
+    expect(
+      tester.getSize(find.text('First line', findRichText: true)).height,
+      greaterThan(firstHeight),
+    );
+    await controller.setConversionMode(TextConversionMode.toSimplified);
+    await tester.pumpAndSettle();
+    expect(renderer().preparedDocument, same(original));
+    expect(codec.parseCount, 1);
+    await controller.setPreserveAuthorFontSize(false);
+    await tester.pumpAndSettle();
+    expect(renderer().preparedDocument, isNot(same(original)));
+    expect(codec.parseCount, 2);
+    expect(
+      renderer().preparedDocument!.preparedHtml,
+      isNot(contains('font-size')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('link capability changes invalidate only the prepared document', (
     tester,
   ) async {
@@ -190,6 +275,15 @@ void main() {
     container.invalidate(forumHtmlReaderPreferencesControllerProvider);
     await tester.pumpAndSettle();
     expect(preparer.calls, 6);
+    final controller = container.read(
+      forumHtmlReaderPreferencesControllerProvider.notifier,
+    );
+    await controller.setFontScale(1.8);
+    await tester.pumpAndSettle();
+    expect(preparer.calls, 7, reason: 'Injected preparers may use typography.');
+    await controller.setConversionMode(TextConversionMode.toSimplified);
+    await tester.pumpAndSettle();
+    expect(preparer.calls, 8, reason: 'Injected preparers may use conversion.');
     activePreparer = _CountingPreparer();
     await rebuild();
     expect(activePreparer.calls, 1);
@@ -234,4 +328,19 @@ class _PreferencesRepository implements ForumHtmlReaderPreferencesRepository {
   @override
   Future<void> save(ForumHtmlReaderPreferences value) async =>
       preferences = value;
+}
+
+final class _CountingFragmentCodec implements ForumHtmlFragmentCodec {
+  final _delegate = const HtmlPackageForumHtmlFragmentCodec();
+  int parseCount = 0;
+
+  @override
+  html_dom.DocumentFragment parse(String html) {
+    parseCount++;
+    return _delegate.parse(html);
+  }
+
+  @override
+  String serialize(html_dom.DocumentFragment fragment) =>
+      _delegate.serialize(fragment);
 }

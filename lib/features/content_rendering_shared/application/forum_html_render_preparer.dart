@@ -6,6 +6,19 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
 import 'forum_html_render_preferences_projection.dart';
 
+/// Unknown preparers may consume every preference, including conversion mode.
+extension ForumHtmlPreparationPreferencesIdentity on ForumHtmlRenderPreparer {
+  Object preparationPreferencesIdentity(
+    ForumHtmlReaderPreferences preferences,
+  ) {
+    // A subclass can override prepare and introduce additional dependencies.
+    // Only the exact default facade has this verified preparation projection.
+    return runtimeType == DefaultForumHtmlRenderPreparer
+        ? preferences.preserveAuthorFontSize
+        : preferences;
+  }
+}
+
 /// App defaults stay as values so this facade can cross preparation isolates.
 class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
   /// [imageRequestResolver] configures the default cache policy. An injected

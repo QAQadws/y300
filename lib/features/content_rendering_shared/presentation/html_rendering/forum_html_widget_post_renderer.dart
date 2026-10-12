@@ -101,20 +101,14 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
 
 class _ForumHtmlWidgetPostRendererState
     extends State<ForumHtmlWidgetPostRenderer> {
+  Object? _preparationIdentity;
+  ForumHtmlPreparedRenderDocument? _preparedDocument;
+
   @override
   Widget build(BuildContext context) {
     final preferences =
         widget.preferences ?? ForumHtmlReaderPreferences.defaults();
-    final document =
-        widget.preparedDocument ??
-        const DefaultForumHtmlRenderPreparer().prepare(
-          html: widget.html,
-          preferences: preferences,
-          theme: widget.theme,
-          sourceId: widget.sourceId ?? 'anonymous',
-          threadId: widget.threadId,
-          imageCacheOwnerId: widget.imageCacheOwnerId,
-        );
+    final document = _resolveDocument(preferences);
     final localizations = AppLocalizations.of(context);
     final host =
         widget.imageHost ??
@@ -176,5 +170,43 @@ class _ForumHtmlWidgetPostRendererState
       linkBaseUri:
           widget.linkBaseUri ?? ForumHtmlWidgetPostRenderer.forumBaseUri,
     );
+  }
+
+  ForumHtmlPreparedRenderDocument _resolveDocument(
+    ForumHtmlReaderPreferences preferences,
+  ) {
+    final supplied = widget.preparedDocument;
+    if (supplied != null) {
+      // The caller owns supplied documents; do not retain a parallel fallback.
+      _preparationIdentity = null;
+      _preparedDocument = null;
+      return supplied;
+    }
+    const preparer = DefaultForumHtmlRenderPreparer();
+    final sourceId = widget.sourceId ?? 'anonymous';
+    final identity = (
+      widget.html,
+      preparer.preparationPreferencesIdentity(preferences),
+      widget.theme.signature,
+      sourceId,
+      widget.threadId,
+      widget.imageCacheOwnerId,
+      preparer,
+    );
+    if (_preparationIdentity != identity || _preparedDocument == null) {
+      _preparationIdentity = null;
+      _preparedDocument = null;
+      final document = preparer.prepare(
+        html: widget.html,
+        preferences: preferences,
+        theme: widget.theme,
+        sourceId: sourceId,
+        threadId: widget.threadId,
+        imageCacheOwnerId: widget.imageCacheOwnerId,
+      );
+      _preparationIdentity = identity;
+      _preparedDocument = document;
+    }
+    return _preparedDocument!;
   }
 }

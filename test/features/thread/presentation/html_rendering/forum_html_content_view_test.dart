@@ -3,10 +3,116 @@ import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
+  testWidgets('default preparation reuses HTML while typography relayouts', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+          _FixedPreferencesRepository(ForumHtmlReaderPreferences.defaults()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final codec = _CountingFragmentCodec();
+    final preparer = DefaultForumHtmlRenderPreparer(fragmentCodec: codec);
+    Widget host(String html) => UncontrolledProviderScope(
+      container: container,
+      child: LocalizedTestApp(
+        home: Scaffold(
+          body: ForumHtmlContentView(
+            html: html,
+            sourceId: 'shared-typography',
+            renderPreparer: preparer,
+          ),
+        ),
+      ),
+    );
+    const html = '<font size="5">First line</font><p>Second line</p>';
+    await tester.pumpWidget(host(html));
+    await tester.pumpAndSettle();
+    ForumHtmlWidgetPostRenderer renderer() =>
+        tester.widget(find.byType(ForumHtmlWidgetPostRenderer));
+    final original = renderer().preparedDocument!;
+    final firstHeight = tester
+        .getSize(find.text('First line', findRichText: true))
+        .height;
+    final controller = container.read(
+      forumHtmlReaderPreferencesControllerProvider.notifier,
+    );
+    await controller.setTypography(
+      renderer().preferences!.typography.copyWith(
+        fontScale: 1.8,
+        lineHeightScale: 2.0,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(renderer().preparedDocument, same(original));
+    expect(codec.parseCount, 1);
+    expect(
+      tester.getSize(find.text('First line', findRichText: true)).height,
+      greaterThan(firstHeight),
+    );
+    await controller.setPreserveAuthorFontSize(false);
+    await tester.pumpAndSettle();
+    expect(renderer().preparedDocument, isNot(same(original)));
+    expect(codec.parseCount, 2);
+    expect(
+      renderer().preparedDocument!.preparedHtml,
+      isNot(contains('font-size')),
+    );
+    await tester.pumpWidget(host(''));
+    await tester.pumpAndSettle();
+    expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+    await tester.pumpWidget(host(html));
+    await tester.pumpAndSettle();
+    expect(codec.parseCount, 3);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a custom default subclass retains full preference invalidation',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+            _FixedPreferencesRepository(ForumHtmlReaderPreferences.defaults()),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final preparer = _PreferenceSensitivePreparer();
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: ForumHtmlContentView(
+                html: '<p>body</p>',
+                sourceId: 'custom-preferences',
+                renderPreparer: preparer,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('scale: 1.15', findRichText: true), findsOneWidget);
+      await container
+          .read(forumHtmlReaderPreferencesControllerProvider.notifier)
+          .setFontScale(1.8);
+      await tester.pumpAndSettle();
+      expect(find.text('scale: 1.8', findRichText: true), findsOneWidget);
+      expect(find.text('scale: 1.15', findRichText: true), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'relative links follow the current document across compact layout changes',
     (tester) async {
@@ -219,4 +325,39 @@ final class _FixedPreferencesRepository
 
   @override
   Future<void> save(ForumHtmlReaderPreferences preferences) async {}
+}
+
+final class _CountingFragmentCodec implements ForumHtmlFragmentCodec {
+  final _delegate = const HtmlPackageForumHtmlFragmentCodec();
+  int parseCount = 0;
+
+  @override
+  html_dom.DocumentFragment parse(String html) {
+    parseCount++;
+    return _delegate.parse(html);
+  }
+
+  @override
+  String serialize(html_dom.DocumentFragment fragment) =>
+      _delegate.serialize(fragment);
+}
+
+final class _PreferenceSensitivePreparer
+    extends DefaultForumHtmlRenderPreparer {
+  @override
+  ForumHtmlPreparedRenderDocument prepare({
+    required String html,
+    required ForumHtmlReaderPreferences preferences,
+    required ForumHtmlThemeContext theme,
+    required String sourceId,
+    required String? threadId,
+    required String? imageCacheOwnerId,
+  }) => super.prepare(
+    html: '<p>scale: ${preferences.typography.fontScale}</p>$html',
+    preferences: preferences,
+    theme: theme,
+    sourceId: sourceId,
+    threadId: threadId,
+    imageCacheOwnerId: imageCacheOwnerId,
+  );
 }

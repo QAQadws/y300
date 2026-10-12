@@ -153,7 +153,7 @@ class _ThreadPostHtmlFirstBodyState
           : sourcePost.pid.trim();
       final identity = (
         html,
-        preferences,
+        widget.renderPreparer.preparationPreferencesIdentity(preferences),
         widget.theme.signature,
         sourceId,
         widget.threadId,
@@ -180,6 +180,8 @@ class _ThreadPostHtmlFirstBodyState
           coordinator?.tracks(widget.threadId, sourcePost.pid) == true;
       final readingIdentity = (
         identity,
+        // Preparation reuse does not remove reading layout/ready invalidation.
+        preferences,
         sourcePost.message,
         widget.imageReferer,
         widget.imagePrecacheService,

@@ -75,7 +75,9 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
         : widget.sourceId.trim();
     final preparationIdentity = (
       html: trimmedHtml,
-      preferences: preferences,
+      preferences: widget.renderPreparer.preparationPreferencesIdentity(
+        preferences,
+      ),
       themeSignature: renderTheme.signature,
       sourceId: sourceId,
       ownerId: ownerId,
