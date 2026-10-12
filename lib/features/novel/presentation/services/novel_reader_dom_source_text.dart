@@ -8,6 +8,34 @@ abstract final class NovelReaderDomSourceText {
       if (node.localName == 'br') return '\n';
       if (node.localName == 'script' || node.localName == 'style') return '';
     }
-    return node.nodes.map(read).join();
+    final buffer = StringBuffer();
+    // Keep one child iterator per nesting level, without intermediate subtree
+    // strings or a recursive call stack for deeply wrapped forum markup.
+    final pending = <Iterator<html_dom.Node>>[node.nodes.iterator];
+    while (pending.isNotEmpty) {
+      final children = pending.last;
+      if (!children.moveNext()) {
+        pending.removeLast();
+        continue;
+      }
+      final current = children.current;
+      if (current is html_dom.Text) {
+        buffer.write(current.data);
+        continue;
+      }
+      if (current is html_dom.Element) {
+        if (current.localName == 'br') {
+          buffer.write('\n');
+          continue;
+        }
+        if (current.localName == 'script' || current.localName == 'style') {
+          continue;
+        }
+      }
+      if (current.nodes.isNotEmpty) {
+        pending.add(current.nodes.iterator);
+      }
+    }
+    return buffer.toString();
   }
 }
