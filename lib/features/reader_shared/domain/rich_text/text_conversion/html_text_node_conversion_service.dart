@@ -298,7 +298,9 @@ final class DomHtmlTextNodeConversionService
     List<html_dom.Text> output,
   ) {
     if (node is html_dom.Text) {
-      if (node.data.trim().isNotEmpty && !_isInsideSkippedNode(node, options)) {
+      // Collection starts at fragment roots and never enters excluded subtrees.
+      // Rechecking ancestors here would repeat policy work for every text node.
+      if (node.data.trim().isNotEmpty) {
         output.add(node);
       }
       return;
@@ -311,20 +313,6 @@ final class DomHtmlTextNodeConversionService
     for (final child in node.nodes) {
       _collectConvertibleTextNodes(child, options, output);
     }
-  }
-
-  bool _isInsideSkippedNode(
-    html_dom.Node node,
-    HtmlTextNodeConversionOptions options,
-  ) {
-    html_dom.Node? current = node.parentNode;
-    while (current != null) {
-      if (current is html_dom.Element && _shouldSkipElement(current, options)) {
-        return true;
-      }
-      current = current.parentNode;
-    }
-    return false;
   }
 
   bool _shouldSkipElement(

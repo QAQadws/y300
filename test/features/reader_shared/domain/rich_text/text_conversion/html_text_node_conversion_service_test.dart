@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_exclusion_policy.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
@@ -169,6 +170,47 @@ void main() {
     });
 
     test(
+      'checks structural policies once and skips their entire subtree',
+      () async {
+        final policy = _RecordingExclusionPolicy();
+        final service = DomHtmlTextNodeConversionService();
+        final converter = _MapTextConverter({
+          '正文': '正文T',
+          '尾巴': '尾巴T',
+          '保留': '不可转换',
+        });
+        var visible = '正文';
+        for (var depth = 0; depth < 32; depth += 1) {
+          visible = '<span>$visible 尾巴</span>';
+        }
+
+        final result = await service.convert(
+          html:
+              '<div>$visible'
+              '<section data-protected="true">'
+              '<span data-protected-child="true">保留</span>'
+              '</section><p>正文</p></div>',
+          converter: converter,
+          options: HtmlTextNodeConversionOptions(exclusionPolicies: [policy]),
+        );
+
+        expect(result.html, contains('<span>正文T 尾巴T</span>'));
+        expect(result.html, contains('<p>正文T</p>'));
+        expect(result.html, contains('data-protected-child="true">保留</span>'));
+        expect(result.html, isNot(contains('不可转换')));
+        expect(result.convertedTextNodeCount, 33);
+        expect(policy.checkedElements, hasLength(35));
+        expect(policy.checkedElements.toSet(), hasLength(35));
+        expect(
+          policy.checkedElements.any(
+            (element) => element.attributes.containsKey('data-protected-child'),
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    test(
       'identity converter returns original html without conversion',
       () async {
         final service = DomHtmlTextNodeConversionService();
@@ -307,6 +349,19 @@ void main() {
       expect(metrics.single.usedIndividualFallback, isTrue);
     });
   });
+}
+
+class _RecordingExclusionPolicy implements HtmlTextNodeExclusionPolicy {
+  final checkedElements = <html_dom.Element>[];
+
+  @override
+  String get id => 'recording-protected-subtree';
+
+  @override
+  bool excludes(html_dom.Element element) {
+    checkedElements.add(element);
+    return element.attributes['data-protected'] == 'true';
+  }
 }
 
 class _MapTextConverter implements TextConverter {
