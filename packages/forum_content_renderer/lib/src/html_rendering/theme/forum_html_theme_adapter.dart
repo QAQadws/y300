@@ -70,6 +70,7 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
         theme: theme,
         policy: policy,
         stats: stats,
+        hasQuoteAncestor: false,
       );
     }
     return ForumHtmlThemeAdaptationResult(
@@ -84,7 +85,11 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
     required ForumHtmlThemeContext theme,
     required ForumHtmlColorAdaptationPolicy policy,
     required _MutableThemeAdaptationStats stats,
+    required bool hasQuoteAncestor,
   }) {
+    final isQuoteSurface =
+        element.classes.contains('quote') ||
+        (element.localName?.toLowerCase() == 'blockquote' && !hasQuoteAncestor);
     var current = parent;
     try {
       current = _adaptElement(
@@ -93,16 +98,21 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
         theme: theme,
         policy: policy,
         stats: stats,
+        isQuoteSurface: isQuoteSurface,
       );
     } catch (_) {
       stats.semanticFallbackCount++;
       _neutralizeElement(element);
-      final role = _semanticRole(element, parent.resolved.semanticRole);
+      final role = _semanticRole(
+        element,
+        parent.resolved.semanticRole,
+        isQuoteSurface: isQuoteSurface,
+      );
       current = _TraversalColorState(
         resolved: ForumHtmlResolvedColorState(
           effectiveForeground: _semanticForeground(role, theme),
           effectiveBackground:
-              _ownedSurface(element, theme) ??
+              _ownedSurface(element, theme, isQuoteSurface: isQuoteSurface) ??
               parent.resolved.effectiveBackground,
           semanticRole: role,
         ),
@@ -110,6 +120,9 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
         concealed: false,
       );
     }
+    // A quote class owns nested blockquotes; a standalone blockquote does not.
+    final childHasQuoteAncestor =
+        hasQuoteAncestor || element.classes.contains('quote');
     for (final child in element.children.toList(growable: false)) {
       _visit(
         element: child,
@@ -117,6 +130,7 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
         theme: theme,
         policy: policy,
         stats: stats,
+        hasQuoteAncestor: childHasQuoteAncestor,
       );
     }
   }
@@ -127,11 +141,20 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
     required ForumHtmlThemeContext theme,
     required ForumHtmlColorAdaptationPolicy policy,
     required _MutableThemeAdaptationStats stats,
+    required bool isQuoteSurface,
   }) {
     final author = _colorParser.parseOwn(element);
-    final role = _semanticRole(element, parent.resolved.semanticRole);
+    final role = _semanticRole(
+      element,
+      parent.resolved.semanticRole,
+      isQuoteSurface: isQuoteSurface,
+    );
     final semanticForeground = _semanticForeground(role, theme);
-    final ownedSurface = _ownedSurface(element, theme);
+    final ownedSurface = _ownedSurface(
+      element,
+      theme,
+      isQuoteSurface: isQuoteSurface,
+    );
     final hasForegroundDeclaration =
         author.foreground != null ||
         author.unsupportedForeground ||
@@ -195,7 +218,7 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
     final declaresConcealedText =
         author.foreground != null &&
         author.background != null &&
-        element.text.trim().isNotEmpty &&
+        _hasNonWhitespaceText(element) &&
         _colorsNearlyEqual(
           _contrast.composite(author.foreground!, originalBackground),
           originalBackground,
@@ -350,15 +373,16 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
 
   ForumHtmlSemanticColorRole _semanticRole(
     html_dom.Element element,
-    ForumHtmlSemanticColorRole parent,
-  ) {
+    ForumHtmlSemanticColorRole parent, {
+    required bool isQuoteSurface,
+  }) {
     if (element.classes.contains('pstatus')) {
       return ForumHtmlSemanticColorRole.editStatus;
     }
     if (_isCodeLike(element)) {
       return ForumHtmlSemanticColorRole.code;
     }
-    if (_isQuoteSurface(element)) {
+    if (isQuoteSurface) {
       return ForumHtmlSemanticColorRole.quote;
     }
     if (element.localName?.toLowerCase() == 'a') {
@@ -385,8 +409,12 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
     };
   }
 
-  Color? _ownedSurface(html_dom.Element element, ForumHtmlThemeContext theme) {
-    if (_isQuoteSurface(element)) {
+  Color? _ownedSurface(
+    html_dom.Element element,
+    ForumHtmlThemeContext theme, {
+    required bool isQuoteSurface,
+  }) {
+    if (isQuoteSurface) {
       return theme.quoteSurface;
     }
     if (_isCodeLike(element)) {
@@ -395,21 +423,23 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
     return null;
   }
 
-  bool _isQuoteSurface(html_dom.Element element) {
-    if (element.classes.contains('quote')) {
-      return true;
-    }
-    if (element.localName?.toLowerCase() != 'blockquote') {
-      return false;
-    }
-    html_dom.Node? ancestor = element.parentNode;
-    while (ancestor is html_dom.Element) {
-      if (ancestor.classes.contains('quote')) {
-        return false;
+  bool _hasNonWhitespaceText(html_dom.Element element) {
+    // Concealment only needs existence, not a concatenated subtree string.
+    final stack = <Iterator<html_dom.Node>>[element.nodes.iterator];
+    while (stack.isNotEmpty) {
+      final iterator = stack.last;
+      if (!iterator.moveNext()) {
+        stack.removeLast();
+        continue;
       }
-      ancestor = ancestor.parentNode;
+      final node = iterator.current;
+      if (node is html_dom.Text) {
+        if (node.data.trim().isNotEmpty) return true;
+      } else if (node.nodes.isNotEmpty) {
+        stack.add(node.nodes.iterator);
+      }
     }
-    return true;
+    return false;
   }
 
   bool _isCodeLike(html_dom.Element element) {

@@ -151,6 +151,56 @@ void main() {
     expect(fragment.querySelector('#quote')!.attributes['style'], isNull);
     expect(fragment.querySelector('#code')!.attributes['style'], isNull);
   });
+
+  test('distinguishes quote class ancestry from standalone blockquotes', () {
+    final fragment = html_parser.parseFragment(
+      '<div class="quote"><span><blockquote id="inside-quote" '
+      'style="color: red; background-color: yellow">引用内作者颜色'
+      '</blockquote></span></div>'
+      '<blockquote id="standalone" '
+      'style="color: red; background-color: yellow"><span>'
+      '<blockquote id="nested-standalone" '
+      'style="color: red; background-color: yellow">独立引用'
+      '</blockquote></span></blockquote>',
+    );
+
+    adapter.adapt(
+      fragment: fragment,
+      theme: _darkTheme,
+      policy: ForumHtmlColorAdaptationPolicy.standard,
+    );
+
+    final insideQuote = colorParser.parseOwn(
+      fragment.querySelector('#inside-quote')!,
+    );
+    expect(insideQuote.background, isNotNull);
+    expect(insideQuote.foreground, isNotNull);
+    expect(fragment.querySelector('#standalone')!.attributes['style'], isNull);
+    expect(
+      fragment.querySelector('#nested-standalone')!.attributes['style'],
+      isNull,
+    );
+  });
+
+  test('concealment requires nested non-whitespace text, not empty markup', () {
+    final fragment = html_parser.parseFragment(
+      '<span id="empty" style="color: white; background-color: white">'
+      ' \n<span>\t</span><!--注释--><br><img alt="图片文字"></span>'
+      '<span id="text" style="color: white; background-color: white">'
+      '<span> \n<span>隐藏正文</span></span></span>',
+    );
+
+    final result = adapter.adapt(
+      fragment: fragment,
+      theme: _darkTheme,
+      policy: ForumHtmlColorAdaptationPolicy.standard,
+    );
+
+    final text = colorParser.parseOwn(fragment.querySelector('#text')!);
+    expect(result.stats.concealedTextRangeCount, 1);
+    expect(text.foreground, text.background);
+    expect(fragment.querySelector('#text')!.text, contains('隐藏正文'));
+  });
 }
 
 Matcher atLeast(double value) => greaterThanOrEqualTo(value - 0.000001);
