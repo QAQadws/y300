@@ -21,10 +21,12 @@ ForumHtmlPreparedRenderDocument prepareRenderTestDocument(
   String html, {
   String sourceId = 'render-test',
   ForumHtmlRenderOptions options = renderTestOptions,
+  ForumHtmlThemeAdapter themeAdapter = const DefaultForumHtmlThemeAdapter(),
 }) =>
-    const ForumHtmlPreparationPipeline(
-      imagePolicy: _RenderTestImagePolicy(),
+    ForumHtmlPreparationPipeline(
+      imagePolicy: const _RenderTestImagePolicy(),
       resolveUrl: _resolveRenderTestUrl,
+      themeAdapter: themeAdapter,
     ).prepare(
       html: html,
       options: options,

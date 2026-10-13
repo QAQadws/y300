@@ -187,6 +187,79 @@ void main() {
     },
   );
 
+  test('link colors retain nested inline and sibling scopes until run flush', () {
+    final fragment = _linkedFragment(
+      '<div style="color:#102030">'
+      '<span style="color:#405060">https://example.com/outer '
+      '<strong style="color:#708090">https://example.com/inner </strong>'
+      'https://example.com/restored </span>'
+      '<b>https://example.com/sibling </b>'
+      '</div><p>https://example.com/fallback</p>',
+    );
+    expect(
+      fragment.querySelectorAll('a').map((link) => link.attributes['style']),
+      [
+        'color: #405060',
+        'color: #708090',
+        'color: #405060',
+        'color: #102030',
+        'color: #${(forumHtmlTestTheme.link.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}',
+      ],
+    );
+  });
+
+  test(
+    'nearest style precedes color attribute with CSS declaration priority',
+    () {
+      final fragment = _linkedFragment(
+        '<div style="color:#102030" color="#ffffff">'
+        '<font color="#405060"><b>https://example.com/attribute </b></font>'
+        '<span color="#405060" style="color:#708090 !important;color:#abcdef">'
+        'https://example.com/style </span>'
+        '<span color="#aabbcc" style="color:{broken">'
+        'https://example.com/invalid-style </span>'
+        '<b>https://example.com/ancestor </b></div>',
+      );
+      expect(
+        fragment.querySelectorAll('a').map((link) => link.attributes['style']),
+        [
+          'color: #405060',
+          'color: #708090',
+          'color: #aabbcc',
+          'color: #102030',
+        ],
+      );
+    },
+  );
+
+  test(
+    'many deeply nested URL nodes share inherited color without recursion',
+    () {
+      final fragment = html_dom.DocumentFragment();
+      final root = html_dom.Element.tag('div')
+        ..attributes['style'] = 'color:#102030';
+      fragment.append(root);
+      var current = root;
+      for (var depth = 0; depth < 400; depth++) {
+        final child = html_dom.Element.tag('span');
+        current.append(child);
+        current = child;
+      }
+      for (var index = 0; index < 40; index++) {
+        current.append(
+          html_dom.Element.tag('b')
+            ..append(html_dom.Text('https://example.com/$index ')),
+        );
+      }
+      final links = _linkedFragment(fragment.outerHtml).querySelectorAll('a');
+      expect(links, hasLength(40));
+      expect(
+        links.map((link) => link.attributes['style']),
+        everyElement('color: #102030'),
+      );
+    },
+  );
+
   testWidgets(
     'native fold can reveal URLs behind Discuz display:none while ordinary hidden remains skipped',
     (tester) async {
@@ -334,6 +407,28 @@ final _options = renderTestOptions.copyWith(enablePlainTextLinks: true);
 
 html_dom.DocumentFragment _fragment(String html) =>
     html_parser.parseFragment(html);
+
+html_dom.DocumentFragment _linkedFragment(String html) => _fragment(
+  prepareRenderTestDocument(
+    html,
+    options: _options,
+    themeAdapter: const _PassthroughThemeAdapter(),
+  ).preparedHtml,
+);
+
+final class _PassthroughThemeAdapter implements ForumHtmlThemeAdapter {
+  const _PassthroughThemeAdapter();
+
+  @override
+  ForumHtmlThemeAdaptationResult adapt({
+    required html_dom.DocumentFragment fragment,
+    required ForumHtmlThemeContext theme,
+    required ForumHtmlColorAdaptationPolicy policy,
+  }) => ForumHtmlThemeAdaptationResult(
+    fragment: fragment,
+    stats: ForumHtmlThemeAdaptationStats.none,
+  );
+}
 
 String _color(String style) => const CssInlineStyleDeclarationCodec()
     .tryParse(style)!

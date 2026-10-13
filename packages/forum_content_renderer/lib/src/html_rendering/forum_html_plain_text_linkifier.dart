@@ -57,11 +57,13 @@ final class ForumHtmlPlainTextLinkifier {
     html_dom.DocumentFragment fragment, {
     required ForumHtmlThemeContext theme,
   }) {
-    final run = <({html_dom.Text node, int start, int end})>[];
+    final run =
+        <({html_dom.Text node, int start, int end, String? authorColor})>[];
     var text = StringBuffer();
     String? excludedTail;
-    final work = <({html_dom.Node node, bool exit})>[
-      for (final node in fragment.nodes.reversed) (node: node, exit: false),
+    final work = <({html_dom.Node node, bool exit, String? authorColor})>[
+      for (final node in fragment.nodes.reversed)
+        (node: node, exit: false, authorColor: null),
     ];
     Iterable<html_dom.Node> followingNodes(html_dom.Node? upcoming) sync* {
       if (upcoming != null) yield upcoming;
@@ -94,7 +96,11 @@ final class ForumHtmlPlainTextLinkifier {
         maxCandidates: scanSource.length,
       );
       var nodeIndex = 0;
-      final byNode = <html_dom.Text, List<ForumHttpTextLink>>{};
+      final byNode =
+          <
+            html_dom.Text,
+            ({List<ForumHttpTextLink> links, String? authorColor})
+          >{};
       for (final link in result.links) {
         if (link.end > source.length) break;
         if (unknownExcludedHead && link.end == source.length) continue;
@@ -107,7 +113,11 @@ final class ForumHtmlPlainTextLinkifier {
         // markup is skipped rather than linking only its valid-looking prefix.
         if (link.start < segment.start || link.end > segment.end) continue;
         byNode
-            .putIfAbsent(segment.node, () => [])
+            .putIfAbsent(
+              segment.node,
+              () => (links: [], authorColor: segment.authorColor),
+            )
+            .links
             .add(
               ForumHttpTextLink(
                 start: link.start - segment.start,
@@ -118,7 +128,11 @@ final class ForumHtmlPlainTextLinkifier {
             );
       }
       for (final entry in byNode.entries) {
-        _replaceText(entry.key, entry.value, theme);
+        _replaceText(
+          entry.key,
+          entry.value.links,
+          entry.value.authorColor ?? _cssColor(theme),
+        );
       }
       run.clear();
       text = StringBuffer();
@@ -139,9 +153,15 @@ final class ForumHtmlPlainTextLinkifier {
         }
         final start = text.length;
         text.write(node.data);
-        run.add((node: node, start: start, end: text.length));
+        run.add((
+          node: node,
+          start: start,
+          end: text.length,
+          authorColor: event.authorColor,
+        ));
       } else if (node is html_dom.Element) {
-        if (_isExcluded(node)) {
+        final inspection = _inspectElement(node);
+        if (inspection.excluded) {
           final inline = _isInline(node);
           final head = _excludedBoundaryText(node);
           final tail = inline ? _excludedBoundaryText(node, atEnd: true) : null;
@@ -169,14 +189,18 @@ final class ForumHtmlPlainTextLinkifier {
           excludedTail = inline ? tail ?? 'x' : null;
           continue;
         }
+        // Capture inheritance before entering children; sibling events retain
+        // their own parent color even when this inline run flushes much later.
+        final authorColor = inspection.authorColor ?? event.authorColor;
         final inline = _isInline(node);
         if (!inline) {
           flush(upcoming: node, hardBreak: true);
           excludedTail = null;
-          work.add((node: node, exit: true));
+          work.add((node: node, exit: true, authorColor: event.authorColor));
         }
         work.addAll([
-          for (final child in node.nodes.reversed) (node: child, exit: false),
+          for (final child in node.nodes.reversed)
+            (node: child, exit: false, authorColor: authorColor),
         ]);
       }
     }
@@ -221,14 +245,42 @@ final class ForumHtmlPlainTextLinkifier {
     return null;
   }
 
-  bool _isExcluded(html_dom.Element element) {
-    if (_excludedTags.contains(element.localName?.toLowerCase()) ||
-        element.classes.contains('blockcode') ||
-        element.classes.contains('showcollapse_gather') ||
-        element.attributes.containsKey('hidden')) {
-      return true;
+  ({bool excluded, String? authorColor}) _inspectElement(
+    html_dom.Element element,
+  ) {
+    if (_isExcludedWithoutStyle(element)) {
+      return (excluded: true, authorColor: null);
     }
-    final style = _declarationCodec.tryParse(element.attributes['style'] ?? '');
+    // Visibility already needs these declarations. Reuse them for inheritance
+    // instead of reparsing every ancestor of each text node with a detected URL.
+    final style = _elementStyle(element);
+    return (
+      excluded: _isExcludedByStyle(element, style),
+      authorColor:
+          style?.effectiveDeclaration({'color'})?.value ??
+          element.attributes['color'],
+    );
+  }
+
+  CssInlineStyleDeclarationList? _elementStyle(html_dom.Element element) {
+    final source = element.attributes['style'];
+    return source == null ? null : _declarationCodec.tryParse(source);
+  }
+
+  bool _isExcluded(html_dom.Element element) =>
+      _isExcludedWithoutStyle(element) ||
+      _isExcludedByStyle(element, _elementStyle(element));
+
+  bool _isExcludedWithoutStyle(html_dom.Element element) =>
+      _excludedTags.contains(element.localName?.toLowerCase()) ||
+      element.classes.contains('blockcode') ||
+      element.classes.contains('showcollapse_gather') ||
+      element.attributes.containsKey('hidden');
+
+  bool _isExcludedByStyle(
+    html_dom.Element element,
+    CssInlineStyleDeclarationList? style,
+  ) {
     final display = style
         ?.effectiveDeclaration({'display'})
         ?.value
@@ -288,12 +340,11 @@ final class ForumHtmlPlainTextLinkifier {
   void _replaceText(
     html_dom.Text node,
     List<ForumHttpTextLink> links,
-    ForumHtmlThemeContext theme,
+    String color,
   ) {
     final parent = node.parentNode;
     if (parent == null) return;
     final source = node.data;
-    final color = _inheritedAuthorColor(node) ?? _cssColor(theme);
     var offset = 0;
     for (final link in links) {
       if (link.start > offset) {
@@ -313,21 +364,6 @@ final class ForumHtmlPlainTextLinkifier {
       parent.insertBefore(html_dom.Text(source.substring(offset)), node);
     }
     node.remove();
-  }
-
-  String? _inheritedAuthorColor(html_dom.Text node) {
-    html_dom.Node? ancestor = node.parentNode;
-    while (ancestor is html_dom.Element) {
-      final style = _declarationCodec.tryParse(
-        ancestor.attributes['style'] ?? '',
-      );
-      final color = style?.effectiveDeclaration({'color'})?.value;
-      if (color != null) return color;
-      final fontColor = ancestor.attributes['color'];
-      if (fontColor != null) return fontColor;
-      ancestor = ancestor.parentNode;
-    }
-    return null;
   }
 
   String _cssColor(ForumHtmlThemeContext theme) =>
