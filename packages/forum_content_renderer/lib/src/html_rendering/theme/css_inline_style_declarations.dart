@@ -82,7 +82,16 @@ final class CssInlineStyleDeclarationList {
 /// A syntax error returns null so callers can preserve the original style
 /// instead of partially rewriting unrelated declarations.
 final class CssInlineStyleDeclarationCodec {
-  const CssInlineStyleDeclarationCodec();
+  const CssInlineStyleDeclarationCodec() : _cache = null;
+
+  /// Reuses declarations only within the owning synchronous operation.
+  ///
+  /// Admission is bounded so a document with unique author styles cannot retain
+  /// an additional unbounded set of csslib trees. Consumers treat expressions
+  /// as read-only; declaration updates already return new lists.
+  CssInlineStyleDeclarationCodec.scoped() : _cache = _InlineStyleParseCache();
+
+  final _InlineStyleParseCache? _cache;
 
   static const _options = css_parser.PreprocessorOptions(
     checked: false,
@@ -92,6 +101,16 @@ final class CssInlineStyleDeclarationCodec {
   );
 
   CssInlineStyleDeclarationList? tryParse(String style) {
+    final cache = _cache;
+    if (cache != null && cache.results.containsKey(style)) {
+      return cache.results[style];
+    }
+    final result = _parse(style);
+    cache?.remember(style, result);
+    return result;
+  }
+
+  CssInlineStyleDeclarationList? _parse(String style) {
     if (style.trim().isEmpty) {
       return CssInlineStyleDeclarationList(const <CssInlineStyleDeclaration>[]);
     }
@@ -256,6 +275,23 @@ final class CssInlineStyleDeclarationCodec {
       );
     }
     return _CssDeclarationSourceParts(property, value.trim());
+  }
+}
+
+final class _InlineStyleParseCache {
+  static const _maxEntries = 128;
+  static const _maxSourceCodeUnits = 64 * 1024;
+
+  final results = <String, CssInlineStyleDeclarationList?>{};
+  int _sourceCodeUnits = 0;
+
+  void remember(String style, CssInlineStyleDeclarationList? result) {
+    if (results.length >= _maxEntries ||
+        _sourceCodeUnits + style.length > _maxSourceCodeUnits) {
+      return;
+    }
+    results[style] = result;
+    _sourceCodeUnits += style.length;
   }
 }
 

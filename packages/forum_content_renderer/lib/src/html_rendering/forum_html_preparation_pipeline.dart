@@ -10,6 +10,7 @@ import 'forum_html_render_style_policy.dart';
 import 'theme/forum_html_theme_adapter.dart';
 import 'theme/forum_html_color_adaptation_policy.dart';
 import 'theme/forum_html_theme_context.dart';
+import 'theme/css_inline_style_declarations.dart';
 
 /// Shared preparation pipeline; URL and image ownership are supplied by Host.
 class ForumHtmlPreparationPipeline {
@@ -40,7 +41,11 @@ class ForumHtmlPreparationPipeline {
     required String? threadId,
     required String? imageCacheOwnerId,
   }) {
-    final stylePolicy = ForumHtmlRenderStylePolicy(options, theme: theme);
+    final stylePolicy = ForumHtmlRenderStylePolicy(
+      options,
+      theme: theme,
+      inlineStyleDeclarationCodec: CssInlineStyleDeclarationCodec.scoped(),
+    );
     final fragment = _fragmentCodec.parse(html);
     stylePolicy.normalizeStructure(fragment);
     stylePolicy.normalizeAuthorStyles(fragment);

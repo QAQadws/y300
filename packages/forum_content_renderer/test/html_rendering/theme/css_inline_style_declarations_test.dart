@@ -80,5 +80,68 @@ void main() {
     test('returns null for malformed declarations', () {
       expect(codec.tryParse('color: rgba(1, 2; text-align: center'), isNull);
     });
+
+    test('scoped reuse preserves cascade and isolates declaration updates', () {
+      final scoped = CssInlineStyleDeclarationCodec.scoped();
+      const source =
+          'color: red !important; color: blue; '
+          'background: white; text-align: center';
+      final original = scoped.tryParse(source)!;
+      final changed = original.upsert(property: 'color', value: '#112233');
+
+      expect(identical(scoped.tryParse(source), original), isTrue);
+      expect(original.toCss(), codec.tryParse(source)!.toCss());
+      expect(original.effectiveDeclaration({'color'})?.value, 'red');
+      expect(changed.effectiveDeclaration({'color'})?.value, '#112233');
+      expect(
+        scoped.tryParse(changed.toCss())!.effectiveDeclaration({
+          'color',
+        })?.value,
+        '#112233',
+      );
+      expect(
+        identical(
+          CssInlineStyleDeclarationCodec.scoped().tryParse(source),
+          original,
+        ),
+        isFalse,
+      );
+    });
+
+    test('scoped capacity stops retention while keeping parsing behavior', () {
+      final scoped = CssInlineStyleDeclarationCodec.scoped();
+      final first = scoped.tryParse('color: red')!;
+      for (var i = 0; i < 160; i++) {
+        final source = 'color: rgb($i, 0, 0); margin: ${i}px';
+        expect(
+          scoped.tryParse(source)!.toCss(),
+          codec.tryParse(source)!.toCss(),
+        );
+      }
+      const overflow = 'color: blue; font-size: 20px';
+      expect(identical(scoped.tryParse('color: red'), first), isTrue);
+      expect(
+        identical(scoped.tryParse(overflow), scoped.tryParse(overflow)),
+        isFalse,
+      );
+    });
+
+    test('scoped failures and source size limits preserve original styles', () {
+      final scoped = CssInlineStyleDeclarationCodec.scoped();
+      const malformed = 'color: rgba(1, 2; text-align: center';
+      expect(scoped.tryParse(malformed), isNull);
+      expect(scoped.tryParse(malformed), isNull);
+      const valid = 'color: rgba(1, 2, 3, .5); text-align: center';
+      expect(scoped.tryParse(valid)!.toCss(), codec.tryParse(valid)!.toCss());
+      final oversized = 'color: red; ${' ' * (64 * 1024)}';
+      expect(
+        scoped.tryParse(oversized)!.toCss(),
+        codec.tryParse(oversized)!.toCss(),
+      );
+      expect(
+        identical(scoped.tryParse(oversized), scoped.tryParse(oversized)),
+        isFalse,
+      );
+    });
   });
 }

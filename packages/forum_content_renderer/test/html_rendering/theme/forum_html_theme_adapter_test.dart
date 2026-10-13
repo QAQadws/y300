@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:html/dom.dart' as html_dom;
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 void main() {
@@ -45,6 +46,34 @@ void main() {
     expect(result.stats.explicitBackgroundCount, 2);
     expect(result.stats.minimumResultContrast, greaterThanOrEqualTo(4.5));
     expect(source, contains('color="black"'));
+  });
+
+  test('scoped reuse preserves custom parser failure and sibling recovery', () {
+    final parser = _FailingColorParser();
+    final fragment = html_parser.parseFragment(
+      '<div id="failed" style="color:red;background:white;text-align:center">'
+      '<span id="child">子节点</span></div>'
+      '<span id="sibling" style="color:#99BBF1">兄弟</span>',
+    );
+    final result = DefaultForumHtmlThemeAdapter(colorParser: parser).adapt(
+      fragment: fragment,
+      theme: _darkTheme,
+      policy: ForumHtmlColorAdaptationPolicy.standard,
+    );
+    expect(parser.visited, ['failed', 'child', 'sibling']);
+    expect(result.stats.semanticFallbackCount, 1);
+    expect(
+      fragment.querySelector('#failed')!.attributes['style'],
+      'text-align: center',
+    );
+    expect(
+      colorParser.parseOwn(fragment.querySelector('#child')!).foreground,
+      isNull,
+    );
+    expect(
+      colorParser.parseOwn(fragment.querySelector('#sibling')!).foreground,
+      const Color(0xFF99BBF1),
+    );
   });
 
   test(
@@ -201,6 +230,21 @@ void main() {
     expect(text.foreground, text.background);
     expect(fragment.querySelector('#text')!.text, contains('隐藏正文'));
   });
+}
+
+final class _FailingColorParser implements CssAuthorColorParser {
+  final visited = <String>[];
+
+  @override
+  ForumHtmlAuthorColorStyle parseOwn(html_dom.Element element) {
+    visited.add(element.id);
+    if (element.id == 'failed') throw StateError('synthetic parser failure');
+    return const CsslibAuthorColorParser().parseOwn(element);
+  }
+
+  @override
+  ForumHtmlAuthorColorStyle parse(html_dom.Element element) =>
+      parseOwn(element);
 }
 
 Matcher atLeast(double value) => greaterThanOrEqualTo(value - 0.000001);

@@ -53,6 +53,25 @@ final class DefaultForumHtmlThemeAdapter implements ForumHtmlThemeAdapter {
     required ForumHtmlThemeContext theme,
     required ForumHtmlColorAdaptationPolicy policy,
   }) {
+    final declarations = CssInlineStyleDeclarationCodec.scoped();
+    // Reads and rewrites share an exact-style cache for this adaptation only.
+    // Custom color parsers retain their own behavior and failure boundaries.
+    return DefaultForumHtmlThemeAdapter(
+      colorParser: _colorParser is CsslibAuthorColorParser
+          ? CsslibAuthorColorParser(declarationCodec: declarations)
+          : _colorParser,
+      declarationCodec: declarations,
+      backgroundToneResolver: _backgroundToneResolver,
+      toneResolver: _toneResolver,
+      contrast: _contrast,
+    )._adapt(fragment: fragment, theme: theme, policy: policy);
+  }
+
+  ForumHtmlThemeAdaptationResult _adapt({
+    required html_dom.DocumentFragment fragment,
+    required ForumHtmlThemeContext theme,
+    required ForumHtmlColorAdaptationPolicy policy,
+  }) {
     final stats = _MutableThemeAdaptationStats();
     final rootState = _TraversalColorState(
       resolved: ForumHtmlResolvedColorState(
