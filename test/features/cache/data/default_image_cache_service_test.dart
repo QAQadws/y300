@@ -13,6 +13,9 @@ import 'package:y300/features/cache/data/repositories/image_cache_repository.dar
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
+import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 
 void main() {
   test(
@@ -554,6 +557,80 @@ void main() {
   );
 
   test(
+    'dimension single-flight preserves real file and metadata validation',
+    () async {
+      final tempDir = await io.Directory.systemTemp.createTemp(
+        'y300-dimension-index-',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) await tempDir.delete(recursive: true);
+      });
+      final image = io.File('${tempDir.path}/cached.jpg');
+      await image.writeAsBytes(<int>[1, 2, 3]);
+      const key = 'cover/dimension-test';
+      final repository = _MemoryImageCacheRepository()
+        ..records[key] = CachedImageRecord(
+          cacheKey: key,
+          ownerType: ImageCacheOwnerType.comic.dbValue,
+          ownerId: 'dimension-owner',
+          role: ImageCacheRole.cover.dbValue,
+          localPath: image.path,
+          bytes: 3,
+          width: 320,
+          height: 200,
+          protected: false,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        );
+      final service = DefaultImageCacheService(
+        repository: repository,
+        cacheManagerFuture: Future<BaseCacheManager>.value(
+          _UnusedCacheManager(),
+        ),
+        directoryResolver: const ImageCacheDirectoryResolver(),
+      );
+      final index = CacheRecordForumImageDimensionIndex(
+        imageCacheService: service,
+        imageRequestResolver: const DefaultForumImageRequestResolver(),
+      );
+      final spec = ForumImageLoadSpec(
+        kind: ForumImageKind.cover,
+        url: Uri.parse('https://bbs.yamibo.com/cache-dimension-test.jpg'),
+        ownerId: 'dimension-owner',
+        cacheKey: key,
+      );
+      final results = await Future.wait(
+        List.generate(10, (_) => index.getBySpec(spec)),
+      );
+      expect(
+        results.map((value) => value?.size),
+        everyElement(const Size(320, 200)),
+      );
+      expect(repository.getByKeyCalls, 1);
+      expect(repository.records[key]?.lastAccessedAt, isNull);
+      expect(repository.touchCalls, 0);
+
+      await image.delete();
+      expect(await index.getBySpec(spec), isNull);
+      expect(repository.getByKeyCalls, 2);
+
+      await image.writeAsBytes(<int>[1, 2, 3, 4, 5, 6, 7]);
+      expect((await service.peekCached(key))?.bytes, 7);
+      await index.recordDecodedDimensions(
+        spec: spec,
+        size: const Size(640, 400),
+      );
+      final recordedAccess = repository.records[key]?.lastAccessedAt;
+      expect((await index.getBySpec(spec))?.size, const Size(640, 400));
+      expect(repository.records[key]?.lastAccessedAt, recordedAccess);
+      expect(repository.touchCalls, 0);
+
+      repository.records.remove(key);
+      expect(await index.getBySpec(spec), isNull);
+    },
+  );
+
+  test(
     'last known dimensions prefer current key then newest matching owner',
     () async {
       final repository = _MemoryImageCacheRepository()
@@ -784,6 +861,8 @@ class _ThrowingImageCacheDiagnosticRecorder
 
 class _MemoryImageCacheRepository implements ImageCacheRepository {
   final Map<String, CachedImageRecord> records = <String, CachedImageRecord>{};
+  int getByKeyCalls = 0;
+  int touchCalls = 0;
 
   @override
   Future<int> calculateUsageBytes({required bool includeProtected}) async {
@@ -813,8 +892,10 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
   }
 
   @override
-  Future<CachedImageRecord?> getByKey(String cacheKey) async =>
-      records[cacheKey];
+  Future<CachedImageRecord?> getByKey(String cacheKey) async {
+    getByKeyCalls++;
+    return records[cacheKey];
+  }
 
   @override
   Future<List<CachedImageRecord>> listByOwner({
@@ -866,7 +947,9 @@ class _MemoryImageCacheRepository implements ImageCacheRepository {
   }
 
   @override
-  Future<void> touch(String cacheKey, DateTime accessedAt) async {}
+  Future<void> touch(String cacheKey, DateTime accessedAt) async {
+    touchCalls++;
+  }
 
   @override
   Future<void> updateDimensions({

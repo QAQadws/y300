@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -162,6 +163,165 @@ void main() {
         expect(cacheService.lastKnownOwnerId, 'forum:30');
         expect(cacheService.lastKnownRole, ImageCacheRole.forumHeadImage);
         expect(cacheService.lastKnownPreferredCacheKey, isNotEmpty);
+      },
+    );
+
+    test(
+      '100 overlapping calls share 40 validated lookups with peak four',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+        );
+        final specs = List.generate(
+          100,
+          (i) => _lookupSpec(i % 40, imageIndex: i, ownerId: 'owner-$i'),
+        );
+        for (final spec in specs) {
+          cacheService.setDimensions(spec, const Size(320, 200));
+        }
+        final reads = specs.map(index.getBySpec).toList();
+        expect(cacheService.metadataKeys, hasLength(4));
+        await cacheService.drain();
+        final results = await Future.wait(reads);
+
+        expect(cacheService.metadataKeys, hasLength(40));
+        expect(cacheService.metadataKeys.toSet(), hasLength(40));
+        expect(cacheService.peakActive, 4);
+        expect(cacheService.getCachedKeys, isEmpty);
+        expect(
+          results.map((value) => value?.size),
+          everyElement(const Size(320, 200)),
+        );
+      },
+    );
+
+    test(
+      'default backlog is bounded and saturation permits a later retry',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+        );
+        final specs = List.generate(100, _lookupSpec);
+        for (final spec in specs) {
+          cacheService.setDimensions(spec, const Size(320, 200));
+        }
+        final reads = specs.map(index.getBySpec).toList();
+        // Full admission still shares work already running or waiting.
+        final joined = index.getBySpec(specs.first);
+        expect(await index.getBySpec(specs.last), isNull);
+        expect(cacheService.metadataKeys, hasLength(4));
+        await cacheService.drain();
+        final results = await Future.wait(reads);
+
+        expect(cacheService.metadataKeys, hasLength(4 + 64));
+        expect(cacheService.peakActive, 4);
+        expect(results.where((result) => result != null), hasLength(68));
+        expect(results.where((result) => result == null), hasLength(32));
+        expect((await joined)?.size, const Size(320, 200));
+
+        final retried = index.getBySpec(specs.last);
+        await cacheService.drain();
+        expect((await retried)?.size, const Size(320, 200));
+        expect(cacheService.metadataKeys, hasLength(69));
+      },
+    );
+
+    test('same source URL with different resolved keys cannot share', () async {
+      final cacheService = _BlockedMetadataImageCacheService();
+      final index = CacheRecordForumImageDimensionIndex(
+        imageCacheService: cacheService,
+        imageRequestResolver: const DefaultForumImageRequestResolver(),
+      );
+      final inline = _lookupSpec(1);
+      final attachment = _lookupSpec(1, kind: ForumImageKind.threadAttachment);
+      cacheService.setDimensions(inline, const Size(320, 200));
+      cacheService.setDimensions(attachment, const Size(800, 600));
+      final first = index.getBySpec(inline);
+      final second = index.getBySpec(attachment);
+      await cacheService.drain();
+
+      expect(cacheService.metadataKeys.toSet(), hasLength(2));
+      expect((await first)?.size, const Size(320, 200));
+      expect((await second)?.size, const Size(800, 600));
+    });
+
+    test(
+      'shared misses expire at completion instead of hiding a new record',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+        );
+        final spec = _lookupSpec(1);
+        final missing = List.generate(10, (_) => index.getBySpec(spec));
+        await cacheService.drain();
+        expect(await Future.wait(missing), everyElement(isNull));
+        expect(cacheService.metadataKeys, hasLength(1));
+
+        cacheService.setDimensions(spec, const Size(640, 400));
+        final retry = index.getBySpec(spec);
+        await cacheService.drain();
+        expect((await retry)?.size, const Size(640, 400));
+        expect(cacheService.metadataKeys, hasLength(2));
+      },
+    );
+
+    test(
+      'failed shared reads release their slot and remain retryable',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+          maxConcurrentLookups: 1,
+        );
+        final spec = _lookupSpec(1);
+        cacheService.setDimensions(spec, const Size(320, 200));
+        final reads = List.generate(10, (_) => index.getBySpec(spec));
+        final assertion = expectLater(Future.wait(reads), throwsStateError);
+        cacheService.pending.single.result.completeError(
+          StateError('lookup failed'),
+        );
+        await assertion;
+
+        final retry = index.getBySpec(spec);
+        await cacheService.drain();
+        expect((await retry)?.size, const Size(320, 200));
+        expect(cacheService.metadataKeys, hasLength(2));
+        expect(cacheService.peakActive, 1);
+      },
+    );
+
+    test(
+      'decode persistence prevents sharing an older in-flight hint',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+        );
+        final spec = _lookupSpec(1);
+        cacheService.setDimensions(spec, const Size(320, 200));
+        final oldRead = index.getBySpec(spec);
+        await index.recordDecodedDimensions(
+          spec: spec,
+          size: const Size(640, 400),
+        );
+        final freshRead = index.getBySpec(spec);
+        expect(cacheService.metadataKeys, hasLength(2));
+        cacheService.pending.first.complete();
+        expect((await oldRead)?.size, const Size(320, 200));
+        final joinedFreshRead = index.getBySpec(spec);
+        expect(cacheService.metadataKeys, hasLength(2));
+        await cacheService.drain();
+
+        expect((await freshRead)?.size, const Size(640, 400));
+        expect((await joinedFreshRead)?.size, const Size(640, 400));
       },
     );
 
@@ -390,4 +550,87 @@ class _ThrowingDimensionImageCacheService extends _RecordingImageCacheService
   }) async {
     throw StateError('boom');
   }
+}
+
+ForumImageLoadSpec _lookupSpec(
+  int id, {
+  int? imageIndex,
+  String ownerId = 'lookup-owner',
+  ForumImageKind kind = ForumImageKind.threadInline,
+}) => ForumImageLoadSpec(
+  kind: kind,
+  url: Uri.parse('https://bbs.yamibo.com/data/attachment/forum/image-$id.jpg'),
+  ownerId: ownerId,
+  imageIndex: imageIndex,
+);
+
+class _BlockedMetadataImageCacheService extends _RecordingImageCacheService
+    implements ImageCacheMetadataLookup, ImageCacheDimensionRecorder {
+  final metadataKeys = <String>[];
+  final pending = <_BlockedMetadataRead>[];
+  var active = 0;
+  var peakActive = 0;
+
+  void setDimensions(ForumImageLoadSpec spec, Size size) {
+    final key = const DefaultForumImageRequestResolver()
+        .resolveCacheRequest(spec)!
+        .cacheKey;
+    cachedResults[key] = CachedImageResult(
+      success: true,
+      cacheKey: key,
+      width: size.width.toInt(),
+      height: size.height.toInt(),
+      fromCache: true,
+    );
+  }
+
+  @override
+  Future<CachedImageResult?> peekCached(String cacheKey) async {
+    metadataKeys.add(cacheKey);
+    active++;
+    if (active > peakActive) peakActive = active;
+    final read = _BlockedMetadataRead(cachedResults[cacheKey]);
+    pending.add(read);
+    try {
+      return await read.result.future;
+    } finally {
+      active--;
+    }
+  }
+
+  Future<void> drain() async {
+    while (true) {
+      final started = pending
+          .where((read) => !read.result.isCompleted)
+          .toList();
+      if (started.isEmpty) return;
+      for (final read in started) {
+        read.complete();
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
+
+  @override
+  Future<void> recordResolvedDimensions({
+    required String cacheKey,
+    required Size size,
+  }) async {
+    cachedResults[cacheKey] = CachedImageResult(
+      success: true,
+      cacheKey: cacheKey,
+      width: size.width.toInt(),
+      height: size.height.toInt(),
+      fromCache: true,
+    );
+  }
+}
+
+final class _BlockedMetadataRead {
+  _BlockedMetadataRead(this.snapshot);
+
+  final CachedImageResult? snapshot;
+  final result = Completer<CachedImageResult?>();
+
+  void complete() => result.complete(snapshot);
 }
