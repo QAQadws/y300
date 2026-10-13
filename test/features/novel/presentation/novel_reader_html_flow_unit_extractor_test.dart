@@ -73,6 +73,99 @@ void main() {
     expect(unit.sourceAnchorProjection!.anchorAtSourceRune(1).textOffset, 9);
   });
 
+  test('unit identity uses DOM text while source boundaries retain BR', () {
+    final first = extractor
+        .extract(
+          episodeId: 'text-axes',
+          renderDocument: _prepare('<p>甲<br>乙</p>'),
+        )
+        .single;
+    final second = extractor
+        .extract(episodeId: 'text-axes', renderDocument: _prepare('<p>甲乙</p>'))
+        .single;
+
+    // These nodes have equal DOM text, but different slicing text and layouts.
+    expect(first.unitId, second.unitId);
+    expect(first.endAnchor.textOffset, 3);
+    expect(second.endAnchor.textOffset, 2);
+    expect(first.sourceAnchorProjection!.sourceRuneLength, 3);
+    expect(second.sourceAnchorProjection!.sourceRuneLength, 2);
+    expect(
+      first.startAnchor.textIdentity,
+      isNot(second.startAnchor.textIdentity),
+    );
+  });
+
+  test(
+    'a root link retains normalized semantic boundaries and source runes',
+    () {
+      final semantic = const DiscuzNovelReaderDocumentParser().parse(
+        episodeId: 'link-projection',
+        rawHtml: '<p>中 👩‍👩‍👧‍👦<br>末</p>',
+        fallbackParagraphs: const <String>[],
+      );
+      final unit = extractor
+          .extract(
+            episodeId: 'link-projection',
+            renderDocument: _prepare(
+              '<a href="#target">  中&nbsp;&nbsp;👩‍👩‍👧‍👦<br>末 </a>',
+            ),
+            semanticDocument: semantic,
+          )
+          .single;
+
+      expect(unit.breakability, NovelReaderFlowUnitBreakability.inlineText);
+      expect(unit.startAnchor.nodeId, semantic.blocks.single.anchorId);
+      expect(unit.endAnchor.textOffset, 11);
+      expect(unit.sourceAnchorProjection!.sourceRuneLength, 15);
+      expect(
+        unit.sourceAnchorProjection!.semanticOffsetsBySourceRuneBoundary,
+        <int>[0, 0, 0, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11],
+      );
+    },
+  );
+
+  test('local summaries never reuse a previous semantic matching result', () {
+    final rendered = _prepare('<p>正文</p>');
+    final unique = const DiscuzNovelReaderDocumentParser().parse(
+      episodeId: 'semantic-context',
+      rawHtml: '<p>正文</p>',
+      fallbackParagraphs: const <String>[],
+    );
+    final ambiguous = const DiscuzNovelReaderDocumentParser().parse(
+      episodeId: 'semantic-context',
+      rawHtml: '<p>正文</p><p>正文</p>',
+      fallbackParagraphs: const <String>[],
+    );
+    final first = extractor
+        .extract(
+          episodeId: 'semantic-context',
+          renderDocument: rendered,
+          semanticDocument: unique,
+        )
+        .single;
+    final second = extractor
+        .extract(
+          episodeId: 'semantic-context',
+          renderDocument: rendered,
+          semanticDocument: ambiguous,
+        )
+        .single;
+    final third = extractor
+        .extract(
+          episodeId: 'semantic-context',
+          renderDocument: rendered,
+          semanticDocument: unique,
+        )
+        .single;
+
+    expect(first.startAnchor.nodeId, unique.blocks.single.anchorId);
+    expect(second.startAnchor.nodeId, startsWith('novel-html-'));
+    expect(third.startAnchor.nodeId, first.startAnchor.nodeId);
+    expect(third.startAnchor.textIdentity, first.startAnchor.textIdentity);
+    expect(first.unitId, second.unitId);
+  });
+
   test(
     'ambiguous, multi-node and converted text use an exact layout identity',
     () {
@@ -187,6 +280,61 @@ void main() {
     expect(units[1].breakability, NovelReaderFlowUnitBreakability.blockImage);
     expect(units[1].imageIndices, <int>[1]);
     expect(units.last.imageIndices, isEmpty);
+  });
+
+  test('image presence remains independent of readable image membership', () {
+    final document = _prepare(
+      '<div><img src="static/image/smiley/default/smile.gif"></div>'
+      '<a href="#image"><img src="data:image/png;base64,AA"></a>'
+      '<img src="data/attachment/forum/first.jpg">'
+      '<table><tbody><tr><td>'
+      '<img src="data/attachment/forum/second.jpg">'
+      '</td></tr></tbody></table>',
+    );
+    final units = extractor.extract(
+      episodeId: 'image-membership',
+      renderDocument: document,
+    );
+
+    expect(units, hasLength(4));
+    expect(document.sequence.entries, hasLength(2));
+    expect(units[0].breakability, NovelReaderFlowUnitBreakability.blockImage);
+    expect(units[0].imageIndices, isEmpty);
+    expect(units[1].breakability, NovelReaderFlowUnitBreakability.blockImage);
+    expect(units[1].imageIndices, isEmpty);
+    expect(units[2].breakability, NovelReaderFlowUnitBreakability.blockImage);
+    expect(units[2].imageIndices, <int>[0]);
+    expect(units[3].breakability, NovelReaderFlowUnitBreakability.atomicWidget);
+    expect(units[3].imageIndices, <int>[1]);
+    for (final unit in units) {
+      expect(unit.sourceAnchorProjection!.sourceRuneLength, 0);
+      expect(unit.endAnchor.textOffset, 0);
+    }
+  });
+
+  test('readable indices stay valid, distinct, sorted and immutable', () {
+    final document =
+        _prepare(
+          '<img src="data/attachment/forum/first.jpg">'
+          '<img src="data/attachment/forum/second.jpg">',
+        ).copyWith(
+          preparedHtml:
+              '<div id="images">'
+              '<img data-y300-readable-image-index="1">'
+              '<img data-y300-readable-image-index="1">'
+              '<img data-y300-readable-image-index="0">'
+              '<img data-y300-readable-image-index="-1">'
+              '<img data-y300-readable-image-index="not-an-index">'
+              '<img data-y300-readable-image-index="20">'
+              '</div>',
+        );
+    final unit = extractor
+        .extract(episodeId: 'indices', renderDocument: document)
+        .single;
+
+    expect(unit.breakability, NovelReaderFlowUnitBreakability.blockImage);
+    expect(unit.imageIndices, <int>[0, 1]);
+    expect(() => unit.imageIndices.add(0), throwsUnsupportedError);
   });
 
   test('duplicate blocks receive deterministic occurrence identities', () {

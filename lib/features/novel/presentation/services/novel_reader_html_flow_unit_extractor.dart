@@ -82,19 +82,20 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     }
 
     for (final node in fragment.nodes) {
-      if (!_isMeaningful(node)) {
+      // Filtering is complete; subsequent unit decisions only read this DOM.
+      final facts = _FlowUnitFacts(node, renderDocument);
+      if (!_isMeaningful(facts)) {
         continue;
       }
       final semanticMatch = _matchSemanticAnchor(
-        node,
+        facts,
         semanticDocument,
         semanticNodesByText,
       );
       final descriptor = _describeNode(
-        node,
+        facts,
         episodeId: episodeId,
         occurrences: occurrences,
-        renderDocument: renderDocument,
         semanticProjection: semanticMatch,
         displayIdentity: displayIdentity,
       );
@@ -138,26 +139,25 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
   }
 
   NovelReaderFlowUnit? _describeNode(
-    html_dom.Node node, {
+    _FlowUnitFacts facts, {
     required String episodeId,
     required Map<String, int> occurrences,
-    required ForumHtmlPreparedRenderDocument renderDocument,
     required NovelReaderSourceAnchorProjection? semanticProjection,
     required String displayIdentity,
   }) {
+    final node = facts.node;
     final html = _serializeNode(node);
     if (html.trim().isEmpty) {
       return null;
     }
     final element = node is html_dom.Element ? node : null;
-    final identity = _identityFor(node);
+    final identity = _identityFor(facts);
     final occurrence = occurrences.update(
       identity,
       (value) => value + 1,
       ifAbsent: () => 0,
     );
     final anchorId = _anchorId(identity, occurrence);
-    final sourceText = _readableText(node);
     final isSpacer = element?.localName == 'br';
     // Ambiguous/multi-block/converted text has its own exact layout identity.
     // It can restore the same display projection, but cannot impersonate node-N.
@@ -169,13 +169,13 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
             nodeId: anchorId,
             formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
             textIdentity: NovelReaderAnchorFormat.layoutTextIdentity(
-              isSpacer ? '' : sourceText,
+              isSpacer ? '' : facts.sourceText,
               displayIdentity,
             ),
             isProgressPercentValid: false,
           ),
           semanticOffsetsBySourceRuneBoundary: List<int>.generate(
-            sourceText.runes.length + 1,
+            facts.sourceRuneLength + 1,
             (index) => isSpacer ? 0 : index,
           ),
         );
@@ -185,25 +185,24 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
       html: html,
       startAnchor: projection.anchorAtSourceRune(0),
       endAnchor: projection.anchorAtSourceRune(projection.sourceRuneLength),
-      breakability: _breakability(element, node),
-      imageIndices: _imageIndices(node, renderDocument),
+      breakability: _breakability(element, facts),
+      imageIndices: facts.readableImageIndices,
       sourceAnchorProjection: projection,
     );
   }
 
   NovelReaderSourceAnchorProjection? _matchSemanticAnchor(
-    html_dom.Node node,
+    _FlowUnitFacts facts,
     NovelReaderDocument? semanticDocument,
     Map<String, List<String>> semanticNodesByText,
   ) {
     if (semanticDocument == null) {
       return null;
     }
-    final source = _readableText(node);
-    if (source.trim().isEmpty) {
+    if (!facts.hasSourceText) {
       return null;
     }
-    for (final candidate in _candidateProjections(node, source)) {
+    for (final candidate in _candidateProjections(facts)) {
       if (candidate.text.trim().isEmpty) continue;
       NovelReaderSourceAnchorProjection? match;
       final exactNodes = semanticNodesByText[candidate.text];
@@ -246,14 +245,18 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
   }
 
   Iterable<_SourceTextProjection> _candidateProjections(
-    html_dom.Node node,
-    String source,
+    _FlowUnitFacts facts,
   ) sync* {
+    final source = facts.sourceText;
     yield _SourceTextProjection(
       source,
-      List<int>.generate(source.runes.length + 1, (index) => index),
+      List<int>.generate(facts.sourceRuneLength + 1, (index) => index),
     );
-    yield _projectInlineSource(node);
+    yield _projectInlineSource(
+      facts.node,
+      sourceText: source,
+      sourceRuneLength: facts.sourceRuneLength,
+    );
     final plain = NovelReaderTextNormalization.project(source, trim: true);
     yield _SourceTextProjection(plain.text, plain.offsets);
   }
@@ -277,10 +280,14 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
         .toList(growable: false),
   );
 
-  _SourceTextProjection _projectInlineSource(html_dom.Node node) {
+  _SourceTextProjection _projectInlineSource(
+    html_dom.Node node, {
+    String? sourceText,
+    int? sourceRuneLength,
+  }) {
     if (node is html_dom.Text ||
         (node is html_dom.Element && node.localName == 'a')) {
-      final source = _readableText(node);
+      final source = sourceText ?? NovelReaderDomSourceText.read(node);
       final projected = NovelReaderTextNormalization.project(
         source,
         trim: node is html_dom.Element,
@@ -288,7 +295,7 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
       if (projected.text.trim().isEmpty) {
         return _SourceTextProjection(
           '',
-          List<int>.filled(source.runes.length + 1, 0),
+          List<int>.filled((sourceRuneLength ?? source.runes.length) + 1, 0),
         );
       }
       return _SourceTextProjection(projected.text, projected.offsets);
@@ -310,7 +317,8 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
     return _SourceTextProjection(text.toString(), offsets);
   }
 
-  bool _isMeaningful(html_dom.Node node) {
+  bool _isMeaningful(_FlowUnitFacts facts) {
+    final node = facts.node;
     if (node is html_dom.Text) {
       return node.data.trim().isNotEmpty;
     }
@@ -319,61 +327,36 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
       if (tag == 'br' || tag == 'hr' || tag == 'img') {
         return true;
       }
-      return node.text.trim().isNotEmpty ||
-          node.querySelector('img') != null ||
+      return facts.hasDomText ||
+          facts.hasAnyImage ||
           (tag != null && _atomicTags.contains(tag));
     }
-    return node.text?.trim().isNotEmpty == true;
+    return facts.hasDomText;
   }
 
   NovelReaderFlowUnitBreakability _breakability(
     html_dom.Element? element,
-    html_dom.Node node,
+    _FlowUnitFacts facts,
   ) {
     final tag = element?.localName?.toLowerCase();
     if (tag != null && _atomicTags.contains(tag)) {
       return NovelReaderFlowUnitBreakability.atomicWidget;
     }
     if (tag == 'img' ||
-        (element != null &&
-            element.querySelector('img') != null &&
-            _readableText(node).trim().isEmpty)) {
+        (element != null && facts.hasAnyImage && !facts.hasSourceText)) {
       return NovelReaderFlowUnitBreakability.blockImage;
     }
     if (tag != null && _inlineTags.contains(tag)) {
       return NovelReaderFlowUnitBreakability.inlineText;
     }
-    if (_readableText(node).trim().isNotEmpty) {
+    if (facts.hasSourceText) {
       return NovelReaderFlowUnitBreakability.text;
     }
     return NovelReaderFlowUnitBreakability.atomicWidget;
   }
 
-  List<int> _imageIndices(
-    html_dom.Node node,
-    ForumHtmlPreparedRenderDocument renderDocument,
-  ) {
-    final elements = <html_dom.Element>[];
-    if (node is html_dom.Element && node.localName == 'img') {
-      elements.add(node);
-    }
-    if (node is html_dom.Element) {
-      elements.addAll(node.querySelectorAll('img'));
-    }
-    final indices = <int>{};
-    for (final image in elements) {
-      final rawIndex = image.attributes[forumHtmlReadableImageIndexAttribute];
-      final index = int.tryParse(rawIndex ?? '');
-      if (index == null || renderDocument.sequence.entryAt(index) == null) {
-        continue;
-      }
-      indices.add(index);
-    }
-    final result = indices.toList()..sort();
-    return List<int>.unmodifiable(result);
-  }
-
-  String _identityFor(html_dom.Node node) {
+  String _identityFor(_FlowUnitFacts facts) {
+    final node = facts.node;
     if (node is html_dom.Element) {
       final explicitId = node.id.trim();
       if (explicitId.isNotEmpty) {
@@ -390,18 +373,14 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
           attributes.add('$name=$value');
         }
       }
-      return 'element:${node.localName}:${_stableHash('${node.text}|${attributes.join('|')}')}';
+      return 'element:${node.localName}:${_stableHash('${facts.domText}|${attributes.join('|')}')}';
     }
-    return 'text:${_stableHash(node.text ?? '')}';
+    return 'text:${_stableHash(facts.domText)}';
   }
 
   String _anchorId(String identity, int occurrence) {
     final normalizedIdentity = identity.replaceAll(':', '-');
     return 'novel-html-$normalizedIdentity-$occurrence';
-  }
-
-  String _readableText(html_dom.Node node) {
-    return NovelReaderDomSourceText.read(node);
   }
 
   String _serializeNode(html_dom.Node node) {
@@ -421,6 +400,45 @@ final class DefaultNovelReaderHtmlFlowUnitExtractor
       hash = (hash * 0x01000193) & 0xffffffff;
     }
     return hash.toRadixString(16).padLeft(8, '0');
+  }
+}
+
+// These lazy summaries belong to one fixed layout DOM, never a chapter
+// cache. Identity text, slicing text and image presence have distinct semantics.
+final class _FlowUnitFacts {
+  _FlowUnitFacts(this.node, this.renderDocument);
+
+  final html_dom.Node node;
+  final ForumHtmlPreparedRenderDocument renderDocument;
+  late final String domText = node.text ?? '';
+  late final bool hasDomText = domText.trim().isNotEmpty;
+  late final String sourceText = NovelReaderDomSourceText.read(node);
+  late final bool hasSourceText = sourceText.trim().isNotEmpty;
+  late final int sourceRuneLength = sourceText.runes.length;
+  late final List<html_dom.Element> imageCandidates = _findImages();
+  late final bool hasAnyImage = imageCandidates.isNotEmpty;
+  late final List<int> readableImageIndices = _readableIndices();
+
+  List<html_dom.Element> _findImages() {
+    final current = node;
+    if (current is! html_dom.Element) return const <html_dom.Element>[];
+    return <html_dom.Element>[
+      if (current.localName == 'img') current,
+      ...current.querySelectorAll('img'),
+    ];
+  }
+
+  List<int> _readableIndices() {
+    final indices = <int>{};
+    for (final image in imageCandidates) {
+      final index = int.tryParse(
+        image.attributes[forumHtmlReadableImageIndexAttribute] ?? '',
+      );
+      if (index != null && renderDocument.sequence.entryAt(index) != null) {
+        indices.add(index);
+      }
+    }
+    return List<int>.unmodifiable(indices.toList()..sort());
   }
 }
 
