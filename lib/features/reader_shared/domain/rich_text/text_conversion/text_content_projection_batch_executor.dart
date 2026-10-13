@@ -128,6 +128,12 @@ final class TextContentProjectionBatchExecutor {
           htmlFragmentCount:
               htmlMetrics?.htmlFragmentCount ?? htmlFragments.length,
           convertedTextNodeCount: htmlMetrics?.convertedTextNodeCount ?? 0,
+          cachedHtmlFragmentCount: htmlMetrics?.cachedHtmlFragmentCount ?? 0,
+          parsedHtmlFragmentCount: htmlMetrics?.parsedHtmlFragmentCount ?? 0,
+          deduplicatedHtmlFragmentCount:
+              htmlMetrics?.deduplicatedHtmlFragmentCount ?? 0,
+          submittedHtmlPlainSourceCount:
+              htmlMetrics?.submittedPlainSourceCount ?? 0,
           elapsedMs: stopwatch.elapsedMilliseconds,
           cacheHit:
               applicableCacheHits.isNotEmpty &&

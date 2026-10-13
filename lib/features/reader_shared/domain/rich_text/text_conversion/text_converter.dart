@@ -20,3 +20,11 @@ abstract interface class TextConverter {
   /// For the identity converter this is a no-op returning the same string.
   Future<String> convertHtml(String html);
 }
+
+/// Opt-in for conversion of independent, already-delimited text values.
+///
+/// Removing, reordering or repeating other values must not change the output
+/// of a value. This does not permit splitting one value or changing its text
+/// boundaries. Unknown converters retain whole-batch conversion and caching.
+abstract interface class IndependentTextValueConverter
+    implements TextConverter {}

@@ -164,27 +164,51 @@ final class DomHtmlTextNodeConversionService
           elapsedMs: stopwatch.elapsedMilliseconds,
           cacheHit: true,
           usedIndividualFallback: false,
+          cachedHtmlFragmentCount: input.length,
         ),
         operationMetricsListener: operationMetricsListener,
       );
       return _copyResults(cached.results);
     }
 
+    final work = _HtmlConversionWork();
+    final allowFragmentReuse =
+        converter is IndependentTextValueConverter &&
+        _plainTextBatchConversionService
+            is DefaultPlainTextBatchConversionService &&
+        options.exclusionPolicies.every(
+          // Injected policies may depend on visit order or mutable state. Only
+          // the canonical structural policy is known to be fragment-local.
+          (policy) =>
+              identical(policy, const YamiboUserProfileLinkExclusionPolicy()),
+        );
     try {
-      final outcome = await _convertUncached(
-        htmlFragments: input,
-        converter: converter,
-        options: options,
-      );
-      _putCache(key, outcome);
+      final outcome = allowFragmentReuse
+          ? await _convertIncremental(
+              key: key,
+              converter: converter,
+              options: options,
+              work: work,
+            )
+          : await _convertUncached(
+              htmlFragments: input,
+              converter: converter,
+              options: options,
+              work: work,
+            );
+      _putCache(key, outcome, allowFragmentReuse: allowFragmentReuse);
       _notify(
         HtmlTextNodeConversionMetrics(
           htmlFragmentCount: input.length,
           plainSourceCount: outcome.plainSourceCount,
           convertedTextNodeCount: outcome.convertedTextNodeCount,
           elapsedMs: stopwatch.elapsedMilliseconds,
-          cacheHit: false,
+          cacheHit: work.cachedHtmlFragmentCount == input.length,
           usedIndividualFallback: outcome.usedIndividualFallback,
+          cachedHtmlFragmentCount: work.cachedHtmlFragmentCount,
+          parsedHtmlFragmentCount: work.parsedHtmlFragmentCount,
+          deduplicatedHtmlFragmentCount: work.deduplicatedHtmlFragmentCount,
+          submittedPlainSourceCount: work.submittedPlainSourceCount,
         ),
         operationMetricsListener: operationMetricsListener,
       );
@@ -198,6 +222,10 @@ final class DomHtmlTextNodeConversionService
           elapsedMs: stopwatch.elapsedMilliseconds,
           cacheHit: false,
           usedIndividualFallback: false,
+          cachedHtmlFragmentCount: work.cachedHtmlFragmentCount,
+          parsedHtmlFragmentCount: work.parsedHtmlFragmentCount,
+          deduplicatedHtmlFragmentCount: work.deduplicatedHtmlFragmentCount,
+          submittedPlainSourceCount: work.submittedPlainSourceCount,
           failureType: error.runtimeType.toString(),
         ),
         operationMetricsListener: operationMetricsListener,
@@ -206,14 +234,107 @@ final class DomHtmlTextNodeConversionService
     }
   }
 
+  Future<_HtmlTextNodeConversionOutcome> _convertIncremental({
+    required _HtmlTextNodeConversionCacheKey key,
+    required TextConverter converter,
+    required HtmlTextNodeConversionOptions options,
+    required _HtmlConversionWork work,
+  }) async {
+    // Reuse the bounded successful batch store, without a second retained cache.
+    final requested = key.htmlFragments.toSet();
+    final reusable =
+        <String, ({HtmlTextNodeConversionResult result, int plainCount})>{};
+    for (final entry in _cache.entries) {
+      if (!entry.value.allowFragmentReuse ||
+          entry.key.converterId != key.converterId ||
+          entry.key.optionsSignature != key.optionsSignature) {
+        continue;
+      }
+      for (var i = 0; i < entry.key.htmlFragments.length; i++) {
+        final result = entry.value.results[i];
+        // No-Han fragments are raw in an all-no-Han batch, but serialized in
+        // a mixed batch. Keep their existing context-dependent output path.
+        if (result.convertedTextNodeCount == 0 ||
+            !requested.contains(entry.key.htmlFragments[i])) {
+          continue;
+        }
+        reusable[entry.key.htmlFragments[i]] = (
+          result: result,
+          plainCount: entry.value.plainSourceCountsByFragment[i],
+        );
+      }
+    }
+    final results = List<HtmlTextNodeConversionResult?>.filled(
+      key.htmlFragments.length,
+      null,
+    );
+    final plainCounts = List<int>.filled(key.htmlFragments.length, 0);
+    final pending = <String>[];
+    final pendingIndex = <String, int>{};
+    final positions = <List<int>>[];
+    for (var index = 0; index < key.htmlFragments.length; index++) {
+      final html = key.htmlFragments[index];
+      final cached = reusable[html];
+      if (cached != null) {
+        results[index] = cached.result;
+        plainCounts[index] = cached.plainCount;
+        work.cachedHtmlFragmentCount++;
+        continue;
+      }
+      final existing = pendingIndex[html];
+      if (existing != null) {
+        positions[existing].add(index);
+        work.deduplicatedHtmlFragmentCount++;
+      } else {
+        pendingIndex[html] = pending.length;
+        pending.add(html);
+        positions.add(<int>[index]);
+      }
+    }
+    var usedIndividualFallback = false;
+    if (pending.isNotEmpty) {
+      final fresh = await _convertUncached(
+        htmlFragments: pending,
+        converter: converter,
+        options: options,
+        work: work,
+        forceSerialization: work.cachedHtmlFragmentCount > 0,
+      );
+      usedIndividualFallback = fresh.usedIndividualFallback;
+      for (var index = 0; index < pending.length; index++) {
+        for (final position in positions[index]) {
+          results[position] = fresh.results[index];
+          plainCounts[position] = fresh.plainSourceCountsByFragment[index];
+        }
+      }
+    }
+    final complete = <HtmlTextNodeConversionResult>[
+      for (final result in results) result!,
+    ];
+    return _HtmlTextNodeConversionOutcome(
+      results: complete,
+      plainSourceCount: plainCounts.fold<int>(0, (sum, count) => sum + count),
+      plainSourceCountsByFragment: plainCounts,
+      convertedTextNodeCount: complete.fold<int>(
+        0,
+        (sum, result) => sum + result.convertedTextNodeCount,
+      ),
+      usedIndividualFallback: usedIndividualFallback,
+    );
+  }
+
   Future<_HtmlTextNodeConversionOutcome> _convertUncached({
     required List<String> htmlFragments,
     required TextConverter converter,
     required HtmlTextNodeConversionOptions options,
+    required _HtmlConversionWork work,
+    bool forceSerialization = false,
   }) async {
-    final documents = [
-      for (final html in htmlFragments) html_parser.parseFragment(html),
-    ];
+    final documents = <html_dom.DocumentFragment>[];
+    for (final html in htmlFragments) {
+      documents.add(html_parser.parseFragment(html));
+      work.parsedHtmlFragmentCount++;
+    }
     final textNodesByFragment = <List<html_dom.Text>>[];
     final sourceValues = <String>[];
     final convertedNodeCounts = <int>[];
@@ -230,17 +351,33 @@ final class DomHtmlTextNodeConversionService
       );
     }
 
+    final plainCounts = <int>[
+      for (final nodes in textNodesByFragment) nodes.length,
+    ];
     if (sourceValues.isEmpty ||
         convertedNodeCounts.every((count) => count == 0)) {
       return _HtmlTextNodeConversionOutcome(
-        results: _rawResults(htmlFragments, converter.id),
-        plainSourceCount: 0,
+        results: forceSerialization
+            ? <HtmlTextNodeConversionResult>[
+                for (final document in documents)
+                  HtmlTextNodeConversionResult(
+                    html: _serializeFragment(document),
+                    convertedTextNodeCount: 0,
+                    converterId: converter.id,
+                  ),
+              ]
+            : _rawResults(htmlFragments, converter.id),
+        plainSourceCount: forceSerialization ? sourceValues.length : 0,
+        plainSourceCountsByFragment: forceSerialization
+            ? plainCounts
+            : List<int>.filled(htmlFragments.length, 0),
         convertedTextNodeCount: 0,
         usedIndividualFallback: false,
       );
     }
 
     PlainTextBatchConversionMetrics? plainMetrics;
+    work.submittedPlainSourceCount = sourceValues.length;
     final convertedValues =
         _plainTextBatchConversionService
             is ObservablePlainTextBatchConversionService
@@ -284,6 +421,7 @@ final class DomHtmlTextNodeConversionService
           ),
       ],
       plainSourceCount: sourceValues.length,
+      plainSourceCountsByFragment: plainCounts,
       convertedTextNodeCount: convertedNodeCounts.fold<int>(
         0,
         (total, count) => total + count,
@@ -359,8 +497,9 @@ final class DomHtmlTextNodeConversionService
 
   void _putCache(
     _HtmlTextNodeConversionCacheKey key,
-    _HtmlTextNodeConversionOutcome outcome,
-  ) {
+    _HtmlTextNodeConversionOutcome outcome, {
+    required bool allowFragmentReuse,
+  }) {
     if (_maxCacheEntries <= 0 || _maxCacheCodeUnits <= 0) {
       return;
     }
@@ -369,6 +508,10 @@ final class DomHtmlTextNodeConversionService
       plainSourceCount: outcome.plainSourceCount,
       convertedTextNodeCount: outcome.convertedTextNodeCount,
       codeUnitCost: _cacheCodeUnitCost(key, outcome),
+      plainSourceCountsByFragment: List<int>.unmodifiable(
+        outcome.plainSourceCountsByFragment,
+      ),
+      allowFragmentReuse: allowFragmentReuse,
     );
     if (cachedBatch.codeUnitCost > _maxCacheCodeUnits) {
       return;
@@ -389,7 +532,7 @@ final class DomHtmlTextNodeConversionService
       (total, result) => total + result.html.length + result.converterId.length,
     );
     // Count a small fixed metadata budget for each result and batch counter.
-    final metadataCodeUnits = 16 + (outcome.results.length * 8);
+    final metadataCodeUnits = 16 + (outcome.results.length * 12);
     return key.codeUnitCost + resultCodeUnits + metadataCodeUnits;
   }
 
@@ -447,13 +590,13 @@ final class HtmlTextNodeConversionOptions {
   final List<HtmlTextNodeExclusionPolicy> exclusionPolicies;
 
   String get signature {
-    final tags = skipTags.map((value) => value.toLowerCase()).toList()..sort();
+    // Match the actual skip checks, including tag spelling and unambiguous
+    // policy IDs; comma-containing values must not alias separate entries.
+    final tags = skipTags.toList()..sort();
     final classes = skipClassNames.toList()..sort();
     final policies = exclusionPolicies.map((policy) => policy.id).toList()
       ..sort();
-    return 'skipTags=${tags.join(',')};'
-        'skipClasses=${classes.join(',')};'
-        'policies=${policies.join(',')}';
+    return jsonEncode(<Object>[tags, classes, policies]);
   }
 }
 
@@ -477,16 +620,31 @@ final class HtmlTextNodeConversionMetrics {
     required this.elapsedMs,
     required this.cacheHit,
     required this.usedIndividualFallback,
+    this.cachedHtmlFragmentCount = 0,
+    this.parsedHtmlFragmentCount = 0,
+    this.deduplicatedHtmlFragmentCount = 0,
+    this.submittedPlainSourceCount = 0,
     this.failureType,
   });
 
   final int htmlFragmentCount;
+
+  /// Logical totals for the complete ordered result, including cached repeats.
   final int plainSourceCount;
   final int convertedTextNodeCount;
   final int elapsedMs;
+
+  /// True when every result came from a retained batch, including reordering.
   final bool cacheHit;
   final bool usedIndividualFallback;
   final String? failureType;
+  final int cachedHtmlFragmentCount;
+  final int parsedHtmlFragmentCount;
+  final int deduplicatedHtmlFragmentCount;
+
+  /// Text values handed to the plain batch service in this operation, before
+  /// its own duplicate filtering or native conversion cache lookup.
+  final int submittedPlainSourceCount;
 }
 
 typedef HtmlTextNodeConversionMetricsListener =
@@ -496,12 +654,14 @@ final class _HtmlTextNodeConversionOutcome {
   const _HtmlTextNodeConversionOutcome({
     required this.results,
     required this.plainSourceCount,
+    required this.plainSourceCountsByFragment,
     required this.convertedTextNodeCount,
     required this.usedIndividualFallback,
   });
 
   final List<HtmlTextNodeConversionResult> results;
   final int plainSourceCount;
+  final List<int> plainSourceCountsByFragment;
   final int convertedTextNodeCount;
   final bool usedIndividualFallback;
 }
@@ -512,12 +672,23 @@ final class _CachedHtmlBatch {
     required this.plainSourceCount,
     required this.convertedTextNodeCount,
     required this.codeUnitCost,
+    required this.plainSourceCountsByFragment,
+    required this.allowFragmentReuse,
   });
 
   final List<HtmlTextNodeConversionResult> results;
   final int plainSourceCount;
   final int convertedTextNodeCount;
   final int codeUnitCost;
+  final List<int> plainSourceCountsByFragment;
+  final bool allowFragmentReuse;
+}
+
+final class _HtmlConversionWork {
+  int cachedHtmlFragmentCount = 0;
+  int parsedHtmlFragmentCount = 0;
+  int deduplicatedHtmlFragmentCount = 0;
+  int submittedPlainSourceCount = 0;
 }
 
 final class HtmlTextNodeConversionException implements Exception {

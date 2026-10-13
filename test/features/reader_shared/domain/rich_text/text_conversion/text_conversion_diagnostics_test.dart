@@ -14,6 +14,10 @@ void main() {
     elapsedMs: 27,
     cacheHit: true,
     usedIndividualFallback: false,
+    cachedHtmlFragmentCount: 1,
+    parsedHtmlFragmentCount: 1,
+    deduplicatedHtmlFragmentCount: 2,
+    submittedHtmlPlainSourceCount: 5,
     failureType: 'StateError',
   );
 
@@ -26,6 +30,10 @@ void main() {
     expect(fields, contains('plain=12'));
     expect(fields, contains('html=4'));
     expect(fields, contains('nodes=18'));
+    expect(fields, contains('htmlCached=1'));
+    expect(fields, contains('htmlParsed=1'));
+    expect(fields, contains('htmlDeduplicated=2'));
+    expect(fields, contains('htmlSubmitted=5'));
     expect(fields, contains('elapsedMs=27'));
     expect(fields, contains('cacheHit=true'));
     expect(fields, contains('failure=StateError'));

@@ -10,7 +10,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 ///
 /// [id] encodes the package version and direction so that a dictionary or
 /// direction change automatically invalidates the render cache.
-final class OpenccTextConverter implements TextConverter {
+final class OpenccTextConverter implements IndependentTextValueConverter {
   const OpenccTextConverter({required this.mode});
 
   @override

@@ -29,6 +29,10 @@ final class TextConversionDiagnosticEvent {
     required this.elapsedMs,
     required this.cacheHit,
     required this.usedIndividualFallback,
+    this.cachedHtmlFragmentCount = 0,
+    this.parsedHtmlFragmentCount = 0,
+    this.deduplicatedHtmlFragmentCount = 0,
+    this.submittedHtmlPlainSourceCount = 0,
     this.failureType,
   });
 
@@ -43,6 +47,10 @@ final class TextConversionDiagnosticEvent {
   final bool cacheHit;
   final bool usedIndividualFallback;
   final String? failureType;
+  final int cachedHtmlFragmentCount;
+  final int parsedHtmlFragmentCount;
+  final int deduplicatedHtmlFragmentCount;
+  final int submittedHtmlPlainSourceCount;
 
   /// Formats a privacy-safe, single-line diagnostic payload.
   ///
@@ -56,6 +64,9 @@ final class TextConversionDiagnosticEvent {
         'revision=${_opaqueDiagnosticToken(sourceRevision)} '
         'plain=$plainSourceCount html=$htmlFragmentCount '
         'nodes=$convertedTextNodeCount elapsedMs=$elapsedMs '
+        'htmlCached=$cachedHtmlFragmentCount htmlParsed=$parsedHtmlFragmentCount '
+        'htmlDeduplicated=$deduplicatedHtmlFragmentCount '
+        'htmlSubmitted=$submittedHtmlPlainSourceCount '
         'cacheHit=$cacheHit individualFallback=$usedIndividualFallback '
         'failure=${_safeDiagnosticToken(failureType ?? '-')}';
   }
