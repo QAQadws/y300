@@ -280,14 +280,16 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
       element,
       'showcollapse_title',
     )?.innerHtml;
-    final contentHtml = _collapseContentHtml(element);
+    final contentHtml = _DeferredCollapseContentHtml(
+      _firstChildWithClass(element, 'showcollapse_content'),
+    );
     return ValueListenableBuilder<ForumHtmlRenderer>(
       valueListenable: _configuration,
-      builder: (context, configuration, _) => ForumCollapseBlock(
+      builder: (context, configuration, _) => ForumCollapseBlock.lazyContent(
         titleHtml:
             titleHtml ??
             const HtmlEscape().convert(configuration.labels.fallbackTitle),
-        contentHtml: contentHtml,
+        contentHtmlBuilder: contentHtml.call,
         labels: configuration.labels,
         initiallyExpanded:
             configuration.collapseExpansion?[collapseId] ?? initiallyExpanded,
@@ -327,18 +329,6 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     super.dispose();
   }
 
-  String _collapseContentHtml(html_dom.Element element) {
-    final content = _firstChildWithClass(element, 'showcollapse_content');
-    if (content == null) {
-      return '';
-    }
-    final clone = html_parser.parseFragment(content.innerHtml);
-    for (final gather in clone.querySelectorAll('.showcollapse_gather')) {
-      gather.remove();
-    }
-    return clone.nodes.map(_serializeNode).join();
-  }
-
   html_dom.Element? _firstChildWithClass(
     html_dom.Element element,
     String className,
@@ -372,8 +362,36 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     }
     return hash.toRadixString(16).padLeft(8, '0');
   }
+}
 
-  String _serializeNode(html_dom.Node node) {
+// Each fwfh custom fragment owns this source: configuration updates share it,
+// while rebuilding different HTML creates a fresh source. Only its extracted
+// string survives the first expansion; it never retains Context or a Widget.
+final class _DeferredCollapseContentHtml {
+  _DeferredCollapseContentHtml(this._content);
+
+  html_dom.Element? _content;
+  String? _html;
+
+  String call() {
+    final cached = _html;
+    if (cached != null) return cached;
+    final content = _content;
+    final String html;
+    if (content == null) {
+      html = '';
+    } else {
+      final clone = html_parser.parseFragment(content.innerHtml);
+      for (final gather in clone.querySelectorAll('.showcollapse_gather')) {
+        gather.remove();
+      }
+      html = clone.nodes.map(_serializeNode).join();
+    }
+    _content = null;
+    return _html = html;
+  }
+
+  static String _serializeNode(html_dom.Node node) {
     if (node is html_dom.Element) {
       return node.outerHtml;
     }

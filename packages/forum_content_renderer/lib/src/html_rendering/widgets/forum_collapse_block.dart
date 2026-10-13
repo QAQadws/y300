@@ -16,11 +16,27 @@ class ForumCollapseBlock extends StatelessWidget {
     required this.nestedRendererBuilder,
     this.onInteraction,
     this.onExpandedChanged,
-  });
+  }) : contentHtmlBuilder = null;
+
+  /// Defers content extraction until the chrome builds an expanded body.
+  /// The source owns reuse across rebuilds and must follow the HTML revision.
+  const ForumCollapseBlock.lazyContent({
+    super.key,
+    required this.titleHtml,
+    required this.labels,
+    required ValueGetter<String> contentHtmlBuilder,
+    required this.initiallyExpanded,
+    required this.sourceId,
+    required this.nestedRendererBuilder,
+    this.onInteraction,
+    this.onExpandedChanged,
+  }) : contentHtml = '',
+       contentHtmlBuilder = contentHtmlBuilder;
 
   final String titleHtml;
   final ForumHtmlCollapseLabels labels;
   final String contentHtml;
+  final ValueGetter<String>? contentHtmlBuilder;
   final bool initiallyExpanded;
   final String sourceId;
   final ForumHtmlNestedRenderer nestedRendererBuilder;
@@ -33,8 +49,10 @@ class ForumCollapseBlock extends StatelessWidget {
       sourceId: sourceId,
       initiallyExpanded: initiallyExpanded,
       title: nestedRendererBuilder(titleHtml, sourceId: '$sourceId-title'),
-      contentBuilder: (_) =>
-          nestedRendererBuilder(contentHtml, sourceId: '$sourceId-content'),
+      contentBuilder: (_) => nestedRendererBuilder(
+        contentHtmlBuilder?.call() ?? contentHtml,
+        sourceId: '$sourceId-content',
+      ),
       expandedSemanticsLabel: labels.expandedSemanticsLabel,
       collapsedSemanticsLabel: labels.collapsedSemanticsLabel,
       onExpandedChanged: (expanded) {
