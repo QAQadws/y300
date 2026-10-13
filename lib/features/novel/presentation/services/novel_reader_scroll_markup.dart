@@ -1,17 +1,52 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as parser;
 
+/// Display-only values; canonical HTML and reading coordinates stay unchanged.
+final class NovelReaderScrollMarkupProjection {
+  const NovelReaderScrollMarkupProjection._({
+    required this.html,
+    required this.fragments,
+  });
+
+  final String html;
+  final List<String>? fragments;
+}
+
 /// Bounds the ordinary v1 `text<br>text` layout without guessing boundaries
 /// inside styled elements, links, tables or collapse widgets. Pagination and
 /// canonical HTML keep using the original document.
 abstract final class NovelReaderScrollMarkup {
   static const int chunkCodeUnits = 1600;
+  static const _chunkPrefix = '<y300-novel-text-chunk';
+  static final _potentialBreak = RegExp(
+    r'</?br(?=[\s/>])',
+    caseSensitive: false,
+  );
+
+  /// Derives the markup and its ordered display fragments from one parsed tree.
+  /// Existing marker input retains the compatibility entry point's spelling
+  /// check, including short documents that prepare leaves byte-for-byte intact.
+  static NovelReaderScrollMarkupProjection project(String html) {
+    final prepared = _prepare(html);
+    final fragments = prepared.html.contains(_chunkPrefix)
+        ? _fragmentsFrom(
+            prepared.fragment ?? parser.parseFragment(prepared.html),
+          )
+        : null;
+    return NovelReaderScrollMarkupProjection._(
+      html: prepared.html,
+      fragments: fragments,
+    );
+  }
 
   /// Only split at our zero-margin block boundaries. Arbitrary HTML siblings
   /// can depend on margin collapsing or inline context and stay together.
   static List<String>? fragments(String prepared) {
-    if (!prepared.contains('<y300-novel-text-chunk')) return null;
-    final fragment = parser.parseFragment(prepared);
+    if (!prepared.contains(_chunkPrefix)) return null;
+    return _fragmentsFrom(parser.parseFragment(prepared));
+  }
+
+  static List<String>? _fragmentsFrom(dom.DocumentFragment fragment) {
     final result = <String>[];
     var pending = dom.DocumentFragment();
     for (final node in fragment.nodes.toList(growable: false)) {
@@ -27,8 +62,14 @@ abstract final class NovelReaderScrollMarkup {
     return List.unmodifiable(result);
   }
 
-  static String prepare(String html) {
-    if (html.length < 12000) return html;
+  static String prepare(String html) => _prepare(html).html;
+
+  static ({String html, dom.DocumentFragment? fragment}) _prepare(String html) {
+    // Without a possible BR no run can acquire a new boundary. End BR tags
+    // count too: the HTML parser treats </br> as a line break.
+    if (html.length < 12000 || !_potentialBreak.hasMatch(html)) {
+      return (html: html, fragment: null);
+    }
     final fragment = parser.parseFragment(html);
     final output = <dom.Node>[];
     final run = <dom.Node>[];
@@ -79,11 +120,11 @@ abstract final class NovelReaderScrollMarkup {
       }
     }
     flush();
-    if (!changed) return html;
+    if (!changed) return (html: html, fragment: fragment);
     final result = dom.DocumentFragment();
     for (final node in output) {
       result.append(node);
     }
-    return result.outerHtml;
+    return (html: result.outerHtml, fragment: result);
   }
 }

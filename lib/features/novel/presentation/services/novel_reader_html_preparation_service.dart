@@ -97,7 +97,7 @@ _chapterProjection(
         ? semanticDocument
         : null,
   );
-  final scrollHtml = NovelReaderScrollMarkup.prepare(
+  final scroll = NovelReaderScrollMarkup.project(
     prepared.document.preparedHtml,
   );
   return NovelReaderPreparedChapter(
@@ -107,8 +107,8 @@ _chapterProjection(
       '${prepared.document.preparedHtml}',
     ),
     html: prepared.html,
-    scrollHtml: scrollHtml,
-    scrollFragments: NovelReaderScrollMarkup.fragments(scrollHtml),
+    scrollHtml: scroll.html,
+    scrollFragments: scroll.fragments,
     renderDocument: prepared.document,
     flowUnits: flowUnits,
     themeSignature: prepared.document.themeSignature,
