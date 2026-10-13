@@ -12,6 +12,8 @@ import 'package:y300/features/content_rendering_shared/application/forum_html_im
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
+import '../../application/forum_html_preparation_controller.dart';
+import '../../application/forum_html_preparation_executor.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatefulWidget {
@@ -42,6 +44,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     this.imagePrecacheService,
     this.imageHost,
     this.preparedDocument,
+    this.preparationExecutor,
     this.contentImageKind = ForumImageKind.threadInline,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.linkBaseUri,
@@ -87,6 +90,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   /// Explicit display port; default cache configuration stays in the App facade.
   final ForumHtmlImageHost? imageHost;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
+  final ForumHtmlPreparationExecutor? preparationExecutor;
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final ForumHtmlContentLayout contentLayout;
@@ -101,14 +105,43 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
 
 class _ForumHtmlWidgetPostRendererState
     extends State<ForumHtmlWidgetPostRenderer> {
-  Object? _preparationIdentity;
-  ForumHtmlPreparedRenderDocument? _preparedDocument;
+  late var _preparation = _createPreparation();
+
+  ForumHtmlPreparationController _createPreparation() =>
+      ForumHtmlPreparationController(executor: widget.preparationExecutor)
+        ..addListener(_onPreparationChanged);
+
+  void _onPreparationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant ForumHtmlWidgetPostRenderer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.preparationExecutor != widget.preparationExecutor) {
+      _preparation.dispose();
+      _preparation = _createPreparation();
+    }
+    if (_preparation.hasError) _preparation.reset();
+  }
+
+  @override
+  void dispose() {
+    _preparation.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final preferences =
         widget.preferences ?? ForumHtmlReaderPreferences.defaults();
     final document = _resolveDocument(preferences);
+    if (document == null) {
+      const placeholder = ForumHtmlPreparationPlaceholder();
+      return widget.renderMode == RenderMode.sliverList
+          ? const SliverToBoxAdapter(child: placeholder)
+          : placeholder;
+    }
     final localizations = AppLocalizations.of(context);
     final host =
         widget.imageHost ??
@@ -172,41 +205,43 @@ class _ForumHtmlWidgetPostRendererState
     );
   }
 
-  ForumHtmlPreparedRenderDocument _resolveDocument(
+  ForumHtmlPreparedRenderDocument? _resolveDocument(
     ForumHtmlReaderPreferences preferences,
   ) {
     final supplied = widget.preparedDocument;
     if (supplied != null) {
       // The caller owns supplied documents; do not retain a parallel fallback.
-      _preparationIdentity = null;
-      _preparedDocument = null;
+      _preparation.reset();
       return supplied;
     }
     const preparer = DefaultForumHtmlRenderPreparer();
     final sourceId = widget.sourceId ?? 'anonymous';
-    final identity = (
-      widget.html,
-      preparer.preparationPreferencesIdentity(preferences),
-      widget.theme.signature,
-      sourceId,
-      widget.threadId,
-      widget.imageCacheOwnerId,
-      preparer,
-    );
-    if (_preparationIdentity != identity || _preparedDocument == null) {
-      _preparationIdentity = null;
-      _preparedDocument = null;
-      final document = preparer.prepare(
+    return _preparation.resolve(
+      ForumHtmlPreparationRequest(
         html: widget.html,
         preferences: preferences,
         theme: widget.theme,
         sourceId: sourceId,
         threadId: widget.threadId,
         imageCacheOwnerId: widget.imageCacheOwnerId,
-      );
-      _preparationIdentity = identity;
-      _preparedDocument = document;
-    }
-    return _preparedDocument!;
+        preparer: preparer,
+      ),
+    );
   }
+}
+
+/// Preparation is pending; renderer readiness is reported only by real content.
+class ForumHtmlPreparationPlaceholder extends StatelessWidget {
+  const ForumHtmlPreparationPlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    height: 48,
+    child: Center(
+      child: SizedBox.square(
+        dimension: 18,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    ),
+  );
 }

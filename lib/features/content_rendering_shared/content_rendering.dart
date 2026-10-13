@@ -4,6 +4,8 @@ library;
 export 'application/forum_html_reader_preferences_controller.dart';
 export 'application/forum_html_reader_preferences_repository_provider.dart';
 export 'application/forum_html_render_preparer.dart';
+export 'application/forum_html_preparation_executor.dart';
+export 'application/forum_html_preparation_controller.dart';
 export 'application/forum_html_render_preferences_projection.dart';
 export 'domain/models/forum_html_reader_preferences.dart';
 export 'package:forum_content_renderer/forum_content_renderer.dart';

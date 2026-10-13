@@ -43,6 +43,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.imagePrecacheService,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.preparationExecutor,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
 
@@ -72,6 +73,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
+  final ForumHtmlPreparationExecutor? preparationExecutor;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -84,8 +86,11 @@ class _ThreadPostHtmlFirstBodyState
   bool _loggedEmptyBody = false;
   String? _lastPreparedLogKey;
   String? _lastRenderFailureLogKey;
-  Object? _preparedIdentity;
-  ForumHtmlPreparedRenderDocument? _preparedDocument;
+  late var _preparation = _createPreparation();
+
+  ForumHtmlPreparationController _createPreparation() =>
+      ForumHtmlPreparationController(executor: widget.preparationExecutor)
+        ..addListener(_onPreparationChanged);
   final _readingKey = GlobalKey();
   final _readingExpansion = <String, bool>{};
   ThreadBodyReadingImageTracker? _readingImages;
@@ -94,9 +99,18 @@ class _ThreadPostHtmlFirstBodyState
   bool _readingReady = false;
   int _readingRevision = 0;
 
+  void _onPreparationChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void didUpdateWidget(covariant ThreadPostHtmlFirstBody oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.preparationExecutor != widget.preparationExecutor) {
+      _preparation.dispose();
+      _preparation = _createPreparation();
+    }
+    if (_preparation.hasError) _preparation.reset();
     if (!identical(oldWidget.readingCoordinator, widget.readingCoordinator)) {
       oldWidget.readingCoordinator?.unregister(this);
       _clearReading();
@@ -117,6 +131,7 @@ class _ThreadPostHtmlFirstBodyState
   void dispose() {
     widget.readingCoordinator?.unregister(this);
     _readingImages?.dispose();
+    _preparation.dispose();
     super.dispose();
   }
 
@@ -125,8 +140,9 @@ class _ThreadPostHtmlFirstBodyState
     final html = widget.post.message.trim();
     final sourcePost = widget.sourcePost ?? widget.post;
     if (html.isEmpty) {
-      _preparedIdentity = null;
-      _preparedDocument = null;
+      _preparation.reset();
+      widget.readingCoordinator?.unregister(this);
+      _clearReading();
       if (!_loggedEmptyBody) {
         _loggedEmptyBody = true;
         _logNative(
@@ -151,30 +167,25 @@ class _ThreadPostHtmlFirstBodyState
       final sourceId = sourcePost.pid.trim().isEmpty
           ? 'post'
           : sourcePost.pid.trim();
-      final identity = (
-        html,
-        widget.renderPreparer.preparationPreferencesIdentity(preferences),
-        widget.theme.signature,
-        sourceId,
-        widget.threadId,
-        widget.renderPreparer,
+      final request = ForumHtmlPreparationRequest(
+        html: html,
+        preferences: preferences,
+        theme: widget.theme,
+        sourceId: sourceId,
+        threadId: widget.threadId,
+        imageCacheOwnerId: widget.threadId,
+        preparer: widget.renderPreparer,
       );
-      // Keep only this mounted body's document. Unrelated card/chrome updates
-      // must not repeat DOM parsing and theme adaptation.
-      if (_preparedIdentity != identity || _preparedDocument == null) {
-        _preparedDocument = null;
-        _preparedIdentity = null;
-        _preparedDocument = widget.renderPreparer.prepare(
-          html: html,
-          preferences: preferences,
-          theme: widget.theme,
-          sourceId: sourceId,
-          threadId: widget.threadId,
-          imageCacheOwnerId: widget.threadId,
-        );
-        _preparedIdentity = identity;
+      final identity = request.identity;
+      if (_preparation.identity != identity) {
+        // Retire the previous reading handle before a new asynchronous wait.
+        widget.readingCoordinator?.unregister(this);
+        _clearReading();
       }
-      final preparedDocument = _preparedDocument!;
+      final preparedDocument = _preparation.resolve(request);
+      if (preparedDocument == null) {
+        return const ForumHtmlPreparationPlaceholder();
+      }
       final coordinator = widget.readingCoordinator;
       final tracked =
           coordinator?.tracks(widget.threadId, sourcePost.pid) == true;
@@ -438,6 +449,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.bodyPresentation,
     this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.preparationExecutor,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
 
@@ -466,6 +478,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
+  final ForumHtmlPreparationExecutor? preparationExecutor;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -489,6 +502,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       bodyPresentation: bodyPresentation,
       imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,
+      preparationExecutor: preparationExecutor,
       imageReaderBridge: imageReaderBridge,
     );
   }

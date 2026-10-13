@@ -50,6 +50,20 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
   /// Display-only capability; it is not a persisted reading preference.
   final bool enablePlainTextLinks;
 
+  /// Unknown injections can retain services or change preparation semantics.
+  /// Workers reconstruct this verified default configuration from pure values.
+  bool get supportsBackgroundPreparation =>
+      runtimeType == DefaultForumHtmlRenderPreparer &&
+      identical(
+        _imageRequestResolver,
+        const DefaultForumImageRequestResolver(),
+      ) &&
+      _imageDeduplicator == null &&
+      identical(_fragmentCodec, const HtmlPackageForumHtmlFragmentCodec()) &&
+      identical(_themeAdapter, const DefaultForumHtmlThemeAdapter()) &&
+      identical(_urlResolver, const SiteUrlResolver()) &&
+      _imagePolicy == null;
+
   @override
   ForumHtmlPreparedRenderDocument prepare({
     required String html,

@@ -6,6 +6,8 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
+import '../../application/forum_html_preparation_controller.dart';
+import '../../application/forum_html_preparation_executor.dart';
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 
 class ForumHtmlContentView extends ConsumerStatefulWidget {
@@ -23,6 +25,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.surfaceColor,
     this.foregroundColor,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.preparationExecutor,
     this.linkBaseUri,
   });
 
@@ -39,6 +42,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final Color? surfaceColor;
   final Color? foregroundColor;
   final ForumHtmlRenderPreparer renderPreparer;
+  final ForumHtmlPreparationExecutor? preparationExecutor;
   final Uri? linkBaseUri;
 
   @override
@@ -47,15 +51,37 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
 }
 
 class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
-  Object? _preparationIdentity;
-  ForumHtmlPreparedRenderDocument? _preparedDocument;
+  late var _preparation = _createPreparation();
+
+  ForumHtmlPreparationController _createPreparation() =>
+      ForumHtmlPreparationController(executor: widget.preparationExecutor)
+        ..addListener(_onPreparationChanged);
+
+  void _onPreparationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant ForumHtmlContentView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.preparationExecutor != widget.preparationExecutor) {
+      _preparation.dispose();
+      _preparation = _createPreparation();
+    }
+    if (_preparation.hasError) _preparation.reset();
+  }
+
+  @override
+  void dispose() {
+    _preparation.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final trimmedHtml = widget.html.trim();
     if (trimmedHtml.isEmpty) {
-      _preparationIdentity = null;
-      _preparedDocument = null;
+      _preparation.reset();
       return const SizedBox.shrink();
     }
     final ownerId = _ownerId();
@@ -73,29 +99,19 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
     final sourceId = widget.sourceId.trim().isEmpty
         ? ownerId
         : widget.sourceId.trim();
-    final preparationIdentity = (
-      html: trimmedHtml,
-      preferences: widget.renderPreparer.preparationPreferencesIdentity(
-        preferences,
-      ),
-      themeSignature: renderTheme.signature,
-      sourceId: sourceId,
-      ownerId: ownerId,
-      preparer: widget.renderPreparer,
-    );
-    if (_preparationIdentity != preparationIdentity) {
-      final preparedDocument = widget.renderPreparer.prepare(
+    final document = _preparation.resolve(
+      ForumHtmlPreparationRequest(
         html: trimmedHtml,
         preferences: preferences,
         theme: renderTheme,
         sourceId: sourceId,
         threadId: ownerId,
         imageCacheOwnerId: ownerId,
-      );
-      _preparationIdentity = preparationIdentity;
-      _preparedDocument = preparedDocument;
-    }
-    final sequence = _preparedDocument!.sequence;
+        preparer: widget.renderPreparer,
+      ),
+    );
+    if (document == null) return const ForumHtmlPreparationPlaceholder();
+    final sequence = document.sequence;
     final onOpenImage = widget.onOpenImage;
     return ForumHtmlWidgetPostRenderer(
       html: trimmedHtml,
@@ -105,7 +121,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       imageReferer: widget.imageReferer,
       imageCacheOwnerId: ownerId,
       preferences: preferences,
-      preparedDocument: _preparedDocument,
+      preparedDocument: document,
       contentImageKind: widget.contentImageKind,
       linkBaseUri: widget.linkBaseUri,
       contentLayout: widget.contentLayout,
