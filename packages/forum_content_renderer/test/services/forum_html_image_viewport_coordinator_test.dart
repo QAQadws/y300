@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
@@ -103,6 +104,119 @@ void main() {
       isTrue,
     );
   });
+
+  for (final outerIsList in [true, false]) {
+    testWidgets(
+      'nested horizontal images follow the outer ${outerIsList ? 'ListView' : 'SingleChildScrollView'}',
+      (tester) async {
+        final coordinator = ForumHtmlImageViewportCoordinator();
+        final vertical = ScrollController();
+        final horizontal = ScrollController();
+        addTearDown(() {
+          coordinator.dispose();
+          vertical.dispose();
+          horizontal.dispose();
+        });
+        final head = coordinator.register();
+        final tableUpper = coordinator.register();
+        final tableLower = coordinator.register();
+        final afterTable = coordinator.register();
+        final children = <Widget>[
+          _BoundImage(handle: head, height: 100),
+          const SizedBox(height: 100),
+          SingleChildScrollView(
+            controller: horizontal,
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: 640,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 500),
+                  _BoundImage(handle: tableUpper, height: 100),
+                  const SizedBox(height: 200),
+                  _BoundImage(handle: tableLower, height: 100),
+                ],
+              ),
+            ),
+          ),
+          _BoundImage(handle: afterTable, height: 100),
+          const SizedBox(height: 500),
+        ];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 320,
+                  height: 300,
+                  child: outerIsList
+                      ? ListView(
+                          controller: vertical,
+                          padding: EdgeInsets.zero,
+                          // Keep the same handles mounted as real HTML table
+                          // descendants; this is a placement/scheduling test.
+                          scrollCacheExtent: const ScrollCacheExtent.pixels(
+                            2000,
+                          ),
+                          children: children,
+                        )
+                      : SingleChildScrollView(
+                          controller: vertical,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: children,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(head.value, ForumHtmlImageViewportMode.display);
+        expect(tableUpper.value, ForumHtmlImageViewportMode.dormant);
+        expect(tableLower.value, ForumHtmlImageViewportMode.dormant);
+        expect(afterTable.value, ForumHtmlImageViewportMode.dormant);
+
+        // The lower table image lies 800px into the horizontal viewport. Its
+        // outer vertical placement, together with the following ordinary image,
+        // becomes visible here despite exceeding that viewport's 320px width.
+        vertical.jumpTo(950);
+        await tester.pump();
+        await tester.pump();
+        expect(head.value, ForumHtmlImageViewportMode.dormant);
+        expect(tableLower.value, ForumHtmlImageViewportMode.display);
+        expect(afterTable.value, ForumHtmlImageViewportMode.display);
+
+        horizontal.jumpTo(160);
+        await tester.pump();
+        await tester.pump();
+        expect(vertical.offset, 950);
+        expect(tableLower.value, ForumHtmlImageViewportMode.display);
+        expect(afterTable.value, ForumHtmlImageViewportMode.display);
+
+        vertical.jumpTo(0);
+        await tester.pump();
+        await tester.pump();
+        expect(head.value, ForumHtmlImageViewportMode.display);
+        expect(tableUpper.value, ForumHtmlImageViewportMode.dormant);
+        expect(tableLower.value, ForumHtmlImageViewportMode.dormant);
+        expect(afterTable.value, ForumHtmlImageViewportMode.dormant);
+
+        horizontal.jumpTo(240);
+        await tester.pump();
+        vertical.jumpTo(650);
+        await tester.pump();
+        await tester.pump();
+        expect(tableUpper.value, ForumHtmlImageViewportMode.display);
+        expect(head.value, ForumHtmlImageViewportMode.dormant);
+        expect(afterTable.value, isNot(ForumHtmlImageViewportMode.display));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 class _BoundImage extends StatelessWidget {

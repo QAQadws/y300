@@ -98,7 +98,11 @@ final class ForumHtmlImageViewportCoordinator {
       return;
     }
     handle._context = context;
-    final position = Scrollable.maybeOf(context)?.position;
+    // HTML tables introduce horizontal scrollables. Image scheduling follows
+    // the containing body column, so those inner scrollables cannot own it.
+    final scrollable = Scrollable.maybeOf(context, axis: Axis.vertical);
+    handle._scrollable = scrollable;
+    final position = scrollable?.position;
     if (!identical(position, _position)) {
       _position?.removeListener(_scheduleEvaluation);
       _position?.isScrollingNotifier.removeListener(_scheduleEvaluation);
@@ -317,8 +321,25 @@ final class ForumHtmlImageViewportCoordinator {
     if (renderObject == null || !renderObject.attached) {
       return null;
     }
-    final viewport = RenderAbstractViewport.maybeOf(renderObject);
-    if (viewport == null) {
+    final scrollable = handle._scrollable;
+    if (scrollable == null ||
+        !scrollable.mounted ||
+        !identical(scrollable.position, _position)) {
+      return null;
+    }
+    final boundary = scrollable.position.context.notificationContext
+        ?.findRenderObject();
+    if (boundary == null || !boundary.attached) return null;
+    // Pair the viewport with the same vertical ScrollPosition we listen to.
+    // The nearest viewport may belong to a horizontally scrolling table, and
+    // SingleChildScrollView's viewport does not expose a public axis property.
+    RenderAbstractViewport? viewport;
+    RenderObject? ancestor = renderObject;
+    while (ancestor != null && !identical(ancestor, boundary)) {
+      if (ancestor is RenderAbstractViewport) viewport = ancestor;
+      ancestor = ancestor.parent;
+    }
+    if (viewport == null || !identical(ancestor, boundary)) {
       return null;
     }
     final bounds = MatrixUtils.transformRect(
@@ -358,6 +379,7 @@ final class ForumHtmlImageViewportHandle
 
   final ForumHtmlImageViewportCoordinator _coordinator;
   BuildContext? _context;
+  ScrollableState? _scrollable;
   bool _firstFrameSettled = false;
   bool _disposed = false;
   Object? _workIdentity;
@@ -374,7 +396,10 @@ final class ForumHtmlImageViewportHandle
 
   void configureWork({required Object identity, required bool canPredecode}) {
     if (_workIdentity != identity || _canPredecode != canPredecode) {
-      _reset();
+      // The first configuration describes this binding's final initial layout.
+      // It has no old target to retire and must not unmount a visible image
+      // that was admitted earlier in the same frame.
+      if (_workIdentity != null) _reset();
       _workIdentity = identity;
       _canPredecode = canPredecode;
       _coordinator._scheduleEvaluation();
@@ -473,6 +498,7 @@ final class ForumHtmlImageViewportHandle
     _disposed = true;
     _clearWork();
     _context = null;
+    _scrollable = null;
     _coordinator._unregister(this);
     super.dispose();
   }

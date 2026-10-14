@@ -8,6 +8,55 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
+  for (final caption in ['', 'Image caption<br><br>']) {
+    testWidgets('unsized table image displays with caption "$caption"', (
+      tester,
+    ) async {
+      final dimensions = _Dimensions(deferred: true);
+      final host = _ImageHost(dimensions);
+      final viewport = ForumHtmlImageViewportCoordinator();
+      addTearDown(viewport.dispose);
+      await tester.pumpWidget(
+        _host(
+          host,
+          viewport: viewport,
+          width: 376,
+          height: 600,
+          html:
+              '<div align="center"><table><tr><td><div align="center">'
+              '$caption<a href="data/attachment/forum/example.png" class="orange" />'
+              '<img id="aimg_1058403" src="data/attachment/forum/example.png" '
+              'alt="image" loading="lazy" /></a>'
+              '</div></td></tr></table></div>',
+        ),
+      );
+      await _frames(tester);
+      for (var frame = 0; frame < 10; frame++) {
+        await tester.pump();
+      }
+      expect(tester.takeException(), isNull);
+      final image = find.byType(_DisplayedImage);
+      expect(image, findsOneWidget);
+      final bounds = tester.getRect(image);
+      expect(bounds.width, greaterThan(0));
+      expect(bounds.height, greaterThan(0));
+      expect(bounds.width, lessThanOrEqualTo(376));
+      final element = tester.element(image);
+      tester.widget<_DisplayedImage>(image).onFirstFrame!();
+      dimensions.pending.single.complete((
+        size: const Size(1100, 720),
+        layout: const ForumHtmlImageLayout(aspectRatio: 1100 / 720),
+      ));
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+        expect(image, findsOneWidget);
+        expect(tester.element(image), same(element));
+      }
+      expect(tester.getSize(image).aspectRatio, closeTo(1100 / 720, 0.001));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('late dimension hints preserve the mounted visible image', (
     tester,
   ) async {

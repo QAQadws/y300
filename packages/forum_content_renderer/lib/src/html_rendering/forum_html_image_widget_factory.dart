@@ -274,6 +274,7 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   ForumHtmlImageViewportWork? _prefetchToken;
   Object? _prefetchIdentity;
   Size _displaySize = Size.zero;
+  bool _workConfigurationScheduled = false;
 
   ForumHtmlImageLayout get _layout =>
       _cachedLayout ?? widget.image.initialLayout;
@@ -322,22 +323,7 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     if (handle == null) return _buildImage();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        _displaySize = Size(width, width / (_layout.aspectRatio ?? 0.7));
-        handle.configureWork(
-          identity: (
-            widget.host,
-            widget.image.identity,
-            // Block images decode by width. Intrinsic-height recovery only
-            // changes layout and must not retire an already displayed frame.
-            width,
-            MediaQuery.devicePixelRatioOf(context),
-          ),
-          canPredecode:
-              widget.host is ForumHtmlImagePredecodeHost &&
-              width.isFinite &&
-              width > 0,
-        );
+        _scheduleWorkConfiguration();
         handle.bind(context);
         return ValueListenableBuilder<ForumHtmlImageViewportMode>(
           valueListenable: handle,
@@ -370,6 +356,43 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
         );
       },
     );
+  }
+
+  void _scheduleWorkConfiguration() {
+    if (_workConfigurationScheduled) return;
+    _workConfigurationScheduled = true;
+    // Tables measure a cell at multiple widths in one frame. Only its final
+    // laid-out width can invalidate decode work; provisional constraints would
+    // repeatedly reset a visible image to dormant before it can mount.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _workConfigurationScheduled = false;
+      if (!mounted) return;
+      final handle = _viewportHandle;
+      final box = context.findRenderObject();
+      if (handle == null ||
+          box is! RenderBox ||
+          !box.attached ||
+          !box.hasSize) {
+        return;
+      }
+      // Read the current binding after layout, including any Host/viewport
+      // replacement during this frame, rather than configuring a retired one.
+      _displaySize = box.size;
+      final width = _displaySize.width;
+      handle.configureWork(
+        identity: (
+          widget.host,
+          widget.image.identity,
+          // Intrinsic-height recovery must not retire a width-bound frame.
+          width,
+          MediaQuery.devicePixelRatioOf(context),
+        ),
+        canPredecode:
+            widget.host is ForumHtmlImagePredecodeHost &&
+            width.isFinite &&
+            width > 0,
+      );
+    });
   }
 
   bool _acceptCallback(int revision) =>
