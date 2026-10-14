@@ -38,6 +38,7 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
     this.onImageLayoutShift,
     this.onBodyBuilt,
     this.readableImageKeyPrefix,
+    this.hasTrailingContentFor,
   });
 
   final ValueListenable<ForumHtmlImageFactoryBinding> binding;
@@ -47,6 +48,7 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
   final void Function(ForumHtmlImageRequest request)? onTapImageRequest;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final String? readableImageKeyPrefix;
+  final bool Function()? hasTrailingContentFor;
   var _nextImageIndex = 0;
 
   @override
@@ -57,6 +59,19 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
 
   @override
   Widget buildBodyWidget(BuildContext context, Widget child) {
+    if (hasTrailingContentFor?.call() == true && child is Column) {
+      // fwfh trims the root trailing margin. An interior display fragment must
+      // retain that real CSS margin, so put a zero-size flow item after it.
+      child = Column(
+        mainAxisSize: child.mainAxisSize,
+        mainAxisAlignment: child.mainAxisAlignment,
+        crossAxisAlignment: child.crossAxisAlignment,
+        textDirection: child.textDirection,
+        verticalDirection: child.verticalDirection,
+        textBaseline: child.textBaseline,
+        children: [...child.children, const SizedBox.shrink()],
+      );
+    }
     final body = super.buildBodyWidget(context, child);
     onBodyBuilt?.call();
     return body;

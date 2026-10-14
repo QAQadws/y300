@@ -12,6 +12,41 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 void main() {
   group('ForumHtmlPreparationExecutor', () {
     test(
+      'optional safe plan has identical worker and synchronous boundaries',
+      () async {
+        final executor = ForumHtmlPreparationExecutor();
+        addTearDown(executor.dispose);
+        final html = List.generate(
+          3000,
+          (index) => 'paragraph number $index with words',
+        ).join('<br>');
+        final request = _request(
+          html,
+          preparer: const DefaultForumHtmlRenderPreparer(
+            enablePlainTextLinks: true,
+            enableSafeDisplayPlanning: true,
+          ),
+        );
+        final direct = request.prepareSynchronously();
+        final lease = executor.tryAcquire(request)!;
+        final worker = (await lease.future)!;
+        lease.release();
+        expect(worker.safeDisplayPlan!.isChunked, isTrue);
+        expect(
+          worker.safeDisplayPlan!.chunks.map(
+            (chunk) => (chunk.html, chunk.startUnit, chunk.endUnit),
+          ),
+          direct.safeDisplayPlan!.chunks.map(
+            (chunk) => (chunk.html, chunk.startUnit, chunk.endUnit),
+          ),
+        );
+        expect(worker.safeDisplayPlan!.chunks.first.endUnit, 48);
+        expect(worker.preparedHtml, direct.preparedHtml);
+        expect(_projection(worker), _projection(direct));
+        expect(_request(html).prepareSynchronously().safeDisplayPlan, isNull);
+      },
+    );
+    test(
       'real worker output matches synchronous HTML and cache resources',
       () async {
         final executor = ForumHtmlPreparationExecutor(codeUnitThreshold: 0);

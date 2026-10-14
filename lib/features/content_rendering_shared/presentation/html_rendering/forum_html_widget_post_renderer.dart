@@ -49,6 +49,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.linkBaseUri,
     this.contentLayout = ForumHtmlContentLayout.document,
+    this.hasTrailingContent = false,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -94,6 +95,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   final ForumImageKind contentImageKind;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final ForumHtmlContentLayout contentLayout;
+  final bool hasTrailingContent;
 
   /// The current source document, so fragment links retain article identity.
   final Uri? linkBaseUri;
@@ -200,6 +202,7 @@ class _ForumHtmlWidgetPostRendererState
       sourceId: widget.sourceId,
       blockSpacingMode: widget.blockSpacingMode,
       contentLayout: widget.contentLayout,
+      hasTrailingContent: widget.hasTrailingContent,
       linkBaseUri:
           widget.linkBaseUri ?? ForumHtmlWidgetPostRenderer.forumBaseUri,
     );

@@ -15,6 +15,7 @@ class ForumHtmlRenderStylePolicy {
     required this.theme,
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.contentLayout = ForumHtmlContentLayout.document,
+    this.hasTrailingContent = false,
     CssInlineStyleDeclarationCodec inlineStyleDeclarationCodec =
         const CssInlineStyleDeclarationCodec(),
   }) : _inlineStyleDeclarationCodec = inlineStyleDeclarationCodec;
@@ -23,6 +24,7 @@ class ForumHtmlRenderStylePolicy {
   final ForumHtmlThemeContext theme;
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final ForumHtmlContentLayout contentLayout;
+  final bool hasTrailingContent;
   final CssInlineStyleDeclarationCodec _inlineStyleDeclarationCodec;
 
   TextStyle baseTextStyle(BuildContext context) {
@@ -108,6 +110,7 @@ class ForumHtmlRenderStylePolicy {
   String _paragraphMargin(html_dom.Element element) {
     final trimEnd =
         contentLayout == ForumHtmlContentLayout.compact &&
+        !hasTrailingContent &&
         _isAtContentEnd(element);
     final spacing = trimEnd ? 0.0 : options.paragraphSpacing;
     if (contentLayout == ForumHtmlContentLayout.compact) {

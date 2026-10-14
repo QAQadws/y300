@@ -43,6 +43,7 @@ class ForumHtmlRenderer extends StatefulWidget {
     this.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     this.linkBaseUri,
     this.contentLayout = ForumHtmlContentLayout.document,
+    this.hasTrailingContent = false,
   });
 
   final ForumHtmlPreparedRenderDocument preparedDocument;
@@ -74,6 +75,9 @@ class ForumHtmlRenderer extends StatefulWidget {
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final Uri? linkBaseUri;
   final ForumHtmlContentLayout contentLayout;
+
+  /// True for a display fragment before the logical body's final content edge.
+  final bool hasTrailingContent;
 
   @override
   State<ForumHtmlRenderer> createState() => _ForumHtmlRendererState();
@@ -164,6 +168,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
       theme: widget.theme,
       blockSpacingMode: widget.blockSpacingMode,
       contentLayout: widget.contentLayout,
+      hasTrailingContent: widget.hasTrailingContent,
     );
     final binding =
         context
@@ -187,6 +192,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
             _buildCustomWidget(element, stylePolicy, document, binding),
         factoryBuilder: () => ForumHtmlImageWidgetFactory(
           binding: binding,
+          hasTrailingContentFor: () => _configuration.value.hasTrailingContent,
           textAlignFor: () => _configuration.value.textAlign,
           onBodyBuilt: () => _onReady?.call(),
           onTapImageRequest: (request) {
@@ -210,6 +216,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
           widget.theme.signature,
           widget.blockSpacingMode,
           widget.contentLayout,
+          widget.hasTrailingContent,
           widget.linkBaseUri,
         ],
         textStyle: baseStyle,
@@ -241,6 +248,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
       widget.theme.signature,
       widget.blockSpacingMode,
       widget.contentLayout,
+      widget.hasTrailingContent,
       widget.linkBaseUri,
     );
     return ForumHtmlBodyLayout(

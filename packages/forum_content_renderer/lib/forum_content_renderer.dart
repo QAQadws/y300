@@ -12,6 +12,7 @@ export 'src/helpers/rich_text_tone_resolver.dart'
         RichTextToneResolutionFailure;
 export 'src/models/forum_html_content_layout.dart';
 export 'src/models/forum_html_render_options.dart';
+export 'src/models/forum_html_safe_display_plan.dart';
 export 'src/contracts/forum_html_collapse_labels.dart';
 export 'src/contracts/forum_html_display_image.dart';
 export 'src/contracts/forum_html_image_host.dart';
@@ -29,6 +30,7 @@ export 'src/html_rendering/forum_html_render_style_policy.dart';
 export 'src/html_rendering/forum_html_render_text_style_resolver.dart';
 export 'src/html_rendering/forum_html_preparation_pipeline.dart';
 export 'src/html_rendering/forum_html_renderer.dart';
+export 'src/html_rendering/forum_html_safe_display_planner.dart';
 export 'src/html_rendering/theme/css_author_color_parser.dart';
 export 'src/html_rendering/theme/css_inline_style_declarations.dart';
 export 'src/html_rendering/theme/forum_html_author_color_style.dart';

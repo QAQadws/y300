@@ -61,6 +61,7 @@ final class ForumHtmlPreparationRequest {
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,
       enablePlainTextLinks: candidate.enablePlainTextLinks,
+      enableSafeDisplayPlanning: candidate.enableSafeDisplayPlanning,
     );
   }
 }
@@ -75,6 +76,7 @@ final class ForumHtmlBackgroundPreparationInput {
     required this.threadId,
     required this.imageCacheOwnerId,
     required this.enablePlainTextLinks,
+    this.enableSafeDisplayPlanning = false,
   });
 
   final String html;
@@ -84,10 +86,12 @@ final class ForumHtmlBackgroundPreparationInput {
   final String? threadId;
   final String? imageCacheOwnerId;
   final bool enablePlainTextLinks;
+  final bool enableSafeDisplayPlanning;
 
   ForumHtmlPreparedRenderDocument prepare() =>
       DefaultForumHtmlRenderPreparer(
         enablePlainTextLinks: enablePlainTextLinks,
+        enableSafeDisplayPlanning: enableSafeDisplayPlanning,
       ).prepare(
         html: html,
         preferences: preferences,
