@@ -16,6 +16,56 @@ void main() {
     maxChunkCodeUnits: 1024,
   );
 
+  test('large leading wrappers keep the original whole display document', () {
+    final body = List.generate(3000, (unit) => 'marker[$unit] 正文<br>').join();
+    for (final tag in ['div', 'font', 'span']) {
+      final document = prepareRenderTestDocument('<$tag>$body</$tag>');
+      final plan = const ForumHtmlSafeDisplayPlanner().plan(document);
+      expect(plan.isChunked, isFalse);
+      expect(
+        plan.fallbackReason,
+        ForumHtmlSafeDisplayFallbackReason.unsupportedStructure,
+      );
+      expect(plan.chunks.single.html, same(document.preparedHtml));
+      expect(
+        document.copyWith(safeDisplayPlan: plan).sequence,
+        same(document.sequence),
+      );
+    }
+  });
+
+  test('custom fragment codecs keep responsibility for root parsing', () {
+    final document = prepareRenderTestDocument('<font>custom source</font>');
+    final codec = _OwnedFragmentCodec(
+      parser.parseFragment('<p>first</p><p>second</p>'),
+    );
+    final plan = ForumHtmlSafeDisplayPlanner(
+      minCodeUnits: 0,
+      targetChunkUnits: 1,
+      fragmentCodec: codec,
+    ).plan(document);
+    expect(codec.parseCount, 1);
+    expect(plan.isChunked, isTrue);
+    expect(plan.unitCount, 2);
+  });
+
+  test('complete paragraph inline wrappers still undergo DOM admission', () {
+    final document = prepareRenderTestDocument(
+      '<p><span><font>first</font></span></p><p>second</p>',
+    );
+    final codec = _OwnedFragmentCodec(
+      parser.parseFragment(document.preparedHtml),
+    );
+    final plan = ForumHtmlSafeDisplayPlanner(
+      minCodeUnits: 0,
+      targetChunkUnits: 1,
+      fragmentCodec: codec,
+    ).plan(document);
+    expect(codec.parseCount, 1);
+    expect(plan.isChunked, isTrue);
+    expect(plan.unitCount, 2);
+  });
+
   for (final paragraphs in [false, true]) {
     for (final units in [128, 10000]) {
       test(

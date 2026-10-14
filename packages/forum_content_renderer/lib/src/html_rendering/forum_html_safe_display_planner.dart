@@ -31,6 +31,10 @@ final class ForumHtmlSafeDisplayPlanner {
   final ForumHtmlFragmentCodec fragmentCodec;
 
   static final _rootWhitespace = RegExp(r'^[\t\n\f\r ]*$');
+  static final _unsupportedLeadingRoot = RegExp(
+    r'^[\t\n\f\r ]*<(?:div|font|span)(?=[\t\n\f\r />])',
+    caseSensitive: false,
+  );
   static const _inlineTags = {
     'span',
     'font',
@@ -77,6 +81,17 @@ final class ForumHtmlSafeDisplayPlanner {
       return _whole(
         document,
         ForumHtmlSafeDisplayFallbackReason.noSafeBoundaries,
+      );
+    }
+    // The canonical parser cannot admit these leading roots. Bound the prefix
+    // check; custom codecs and uncertain prefixes keep their full DOM check.
+    if (fragmentCodec is HtmlPackageForumHtmlFragmentCodec &&
+        _unsupportedLeadingRoot.hasMatch(
+          html.length <= 512 ? html : html.substring(0, 512),
+        )) {
+      return _whole(
+        document,
+        ForumHtmlSafeDisplayFallbackReason.unsupportedStructure,
       );
     }
     final fragment = fragmentCodec.parse(html);
