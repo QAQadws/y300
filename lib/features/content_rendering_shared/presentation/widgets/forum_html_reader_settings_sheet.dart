@@ -1,4 +1,5 @@
 import 'package:y300/features/content_rendering_shared/application/forum_html_reader_preferences_controller.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_typography_preview.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -7,7 +8,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
+class ForumHtmlReaderSettingsSheet extends ConsumerStatefulWidget {
   const ForumHtmlReaderSettingsSheet({
     super.key,
     this.showConversionControls = false,
@@ -20,15 +21,85 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
   final bool showResetButton;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ForumHtmlReaderSettingsSheet> createState() =>
+      _ForumHtmlReaderSettingsSheetState();
+}
+
+class _ForumHtmlReaderSettingsSheetState
+    extends ConsumerState<ForumHtmlReaderSettingsSheet> {
+  ForumHtmlReaderPreferencesController? _controller;
+  ForumHtmlTypographyPreview? _preview;
+
+  @override
+  void dispose() {
+    _preview?.close();
+    super.dispose();
+  }
+
+  static void _reportError(Object error, StackTrace stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'HTML reading preferences',
+      ),
+    );
+  }
+
+  void _observe(Future<void> future) {
+    unawaited(future.catchError(_reportError));
+  }
+
+  void _replacePreview(Future<void> Function() action) {
+    final future = action();
+    // Reset may retire a different local draft without changing provider state.
+    setState(() => _preview = null);
+    _observe(future);
+  }
+
+  ForumHtmlTypographyPreview _session() {
+    if (_preview?.isActive != true) {
+      _preview = _controller!.beginTypographyPreview(onError: _reportError);
+    }
+    return _preview!;
+  }
+
+  void _changeFont(double value) {
+    final session = _session();
+    session.change(session.value.copyWith(fontScale: value));
+    setState(() {});
+  }
+
+  void _changeLineHeight(double value) {
+    final session = _session();
+    session.change(session.value.copyWith(lineHeightScale: value));
+    setState(() {});
+  }
+
+  void _endDrag(double _) {
+    _observe(_preview?.flush() ?? Future<void>.value());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final preferenceState = ref.watch(
+      forumHtmlReaderPreferencesControllerProvider,
+    );
     final preferences =
-        ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
-        ForumHtmlReaderPreferences.defaults();
+        preferenceState.value ?? ForumHtmlReaderPreferences.defaults();
     final controller = ref.read(
       forumHtmlReaderPreferencesControllerProvider.notifier,
     );
-    final typography = preferences.typography;
+    if (!identical(controller, _controller)) {
+      _preview?.cancel();
+      _preview = null;
+      _controller = controller;
+    }
+    final ready = preferenceState.hasValue && !preferenceState.isLoading;
+    final typography = _preview?.isActive == true
+        ? _preview!.value
+        : preferences.typography;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -37,10 +108,14 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (showConversionControls) ...[
+            if (widget.showConversionControls) ...[
               _ConversionModeSegmentedControl(
                 mode: preferences.conversionMode,
-                onChanged: controller.setConversionMode,
+                onChanged: ready
+                    ? (mode) => _replacePreview(
+                        () => controller.setConversionMode(mode),
+                      )
+                    : null,
               ),
               const SizedBox(height: 20),
             ],
@@ -52,7 +127,8 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
               max: 2.0,
               divisions: 26,
               display: '${(typography.fontScale * 100).round()}%',
-              onChanged: controller.setFontScale,
+              onChanged: ready ? _changeFont : null,
+              onChangeEnd: ready ? _endDrag : null,
             ),
             const SizedBox(height: 16),
             _TypographySlider(
@@ -63,24 +139,31 @@ class ForumHtmlReaderSettingsSheet extends ConsumerWidget {
               max: 2.5,
               divisions: 30,
               display: '${typography.lineHeightScale.toStringAsFixed(1)}×',
-              onChanged: controller.setLineHeightScale,
+              onChanged: ready ? _changeLineHeight : null,
+              onChangeEnd: ready ? _endDrag : null,
             ),
-            if (showAuthorStyleControls) ...[
+            if (widget.showAuthorStyleControls) ...[
               const SizedBox(height: 16),
               SwitchListTile(
                 key: const Key('forum-html-reader-preserve-font-size-switch'),
                 contentPadding: EdgeInsets.zero,
                 title: Text(l10n.threadHtmlPreserveAuthorFontSize),
                 value: preferences.preserveAuthorFontSize,
-                onChanged: controller.setPreserveAuthorFontSize,
+                onChanged: ready
+                    ? (value) => _replacePreview(
+                        () => controller.setPreserveAuthorFontSize(value),
+                      )
+                    : null,
               ),
             ],
-            if (showResetButton) ...[
+            if (widget.showResetButton) ...[
               const SizedBox(height: 8),
               Center(
                 child: TextButton(
                   key: const Key('forum-html-reader-reset-button'),
-                  onPressed: () => controller.reset(),
+                  onPressed: ready
+                      ? () => _replacePreview(controller.reset)
+                      : null,
                   child: Text(l10n.threadHtmlReset),
                 ),
               ),
@@ -99,7 +182,7 @@ class _ConversionModeSegmentedControl extends StatelessWidget {
   });
 
   final TextConversionMode mode;
-  final Future<void> Function(TextConversionMode mode) onChanged;
+  final ValueChanged<TextConversionMode>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -132,9 +215,11 @@ class _ConversionModeSegmentedControl extends StatelessWidget {
           ),
         ],
         selected: {mode},
-        onSelectionChanged: (selection) {
-          unawaited(onChanged(selection.single));
-        },
+        onSelectionChanged: onChanged == null
+            ? null
+            : (selection) {
+                onChanged!(selection.single);
+              },
       ),
     );
   }
@@ -150,6 +235,7 @@ class _TypographySlider extends StatelessWidget {
     required this.divisions,
     required this.display,
     required this.onChanged,
+    required this.onChangeEnd,
   });
 
   final String label;
@@ -158,7 +244,8 @@ class _TypographySlider extends StatelessWidget {
   final double max;
   final int divisions;
   final String display;
-  final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChanged;
+  final ValueChanged<double>? onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +275,7 @@ class _TypographySlider extends StatelessWidget {
             max: max,
             divisions: divisions,
             onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
           ),
         ],
       ),
