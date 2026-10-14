@@ -13,6 +13,7 @@ final class ForumHtmlSafeDisplayPlanner {
     this.targetChunkCodeUnits = 1600,
     this.maxChunkCodeUnits = 8192,
     this.targetChunkUnits,
+    this.fragmentCodec = const HtmlPackageForumHtmlFragmentCodec(),
   }) : assert(minCodeUnits >= 0),
        assert(targetChunkCodeUnits > 0),
        assert(maxChunkCodeUnits >= targetChunkCodeUnits),
@@ -26,7 +27,9 @@ final class ForumHtmlSafeDisplayPlanner {
   /// Blank hard lines stay with neighboring text so fwfh keeps their geometry.
   final int? targetChunkUnits;
 
-  static const _codec = HtmlPackageForumHtmlFragmentCodec();
+  /// Returns a fragment owned by this planning call; no DOM enters the plan.
+  final ForumHtmlFragmentCodec fragmentCodec;
+
   static final _rootWhitespace = RegExp(r'^[\t\n\f\r ]*$');
   static const _inlineTags = {
     'span',
@@ -76,18 +79,15 @@ final class ForumHtmlSafeDisplayPlanner {
         ForumHtmlSafeDisplayFallbackReason.noSafeBoundaries,
       );
     }
-    final fragment = _codec.parse(html);
+    final fragment = fragmentCodec.parse(html);
     final nodes = fragment.nodes.toList(growable: false);
     final onlyLines = nodes.every(
       (node) => node is dom.Text || node is dom.Comment || _isBareBreak(node),
     );
-    final List<_DisplayPart> parts;
     final ForumHtmlSafeDisplayPlanKind kind;
     if (onlyLines) {
-      parts = _textLines(nodes);
       kind = ForumHtmlSafeDisplayPlanKind.textLines;
     } else if (_areParagraphRoots(nodes)) {
-      parts = _paragraphs(nodes);
       kind = ForumHtmlSafeDisplayPlanKind.paragraphs;
     } else {
       return _whole(
@@ -95,6 +95,13 @@ final class ForumHtmlSafeDisplayPlanner {
         ForumHtmlSafeDisplayFallbackReason.unsupportedStructure,
       );
     }
+    // html's addAll reparents with List.remove. Removing successive groups from
+    // a long sibling list is quadratic even in reverse group order. Detach the
+    // owned roots together, leaving each complete root's children untouched.
+    fragment.nodes.clear();
+    final parts = kind == ForumHtmlSafeDisplayPlanKind.textLines
+        ? _textLines(nodes)
+        : _paragraphs(nodes);
     if (parts.length < 2) {
       return _whole(
         document,
@@ -325,9 +332,9 @@ final class ForumHtmlSafeDisplayPlanner {
     return parts;
   }
 
-  static String _serialize(List<dom.Node> nodes) {
+  String _serialize(List<dom.Node> nodes) {
     final fragment = dom.DocumentFragment()..nodes.addAll(nodes);
-    return _codec.serialize(fragment);
+    return fragmentCodec.serialize(fragment);
   }
 }
 

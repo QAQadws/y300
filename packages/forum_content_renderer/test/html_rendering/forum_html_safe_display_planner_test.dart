@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as parser;
 
 import 'render_test_support.dart';
@@ -13,6 +14,97 @@ void main() {
     minCodeUnits: 0,
     targetChunkCodeUnits: 80,
     maxChunkCodeUnits: 1024,
+  );
+
+  for (final paragraphs in [false, true]) {
+    for (final units in [128, 10000]) {
+      test(
+        'owned $units roots detach together without sibling removals: P=$paragraphs',
+        () {
+          final counter = _RootRemovalWork();
+          final fragment = dom.DocumentFragment();
+          final roots = <dom.Node>[];
+          for (var unit = 0; unit < units; unit++) {
+            final label = 'unit[$unit] 正文🙂 & < > "';
+            if (paragraphs) {
+              roots.add(
+                _ObservedElement('p', counter)
+                  ..nodes.add(
+                    dom.Element.tag('span')
+                      ..attributes['style'] = 'font-weight:bold'
+                      ..nodes.add(dom.Text(label)),
+                  ),
+              );
+            } else {
+              if (unit > 0) roots.add(_ObservedElement('br', counter));
+              roots.add(_ObservedText(label, counter));
+            }
+          }
+          fragment.nodes.addAll(roots);
+          counter.root = fragment;
+          final codec = _OwnedFragmentCodec(fragment);
+          final html = const HtmlPackageForumHtmlFragmentCodec().serialize(
+            fragment,
+          );
+          final document = prepareRenderTestDocument(html);
+          final expectedFirst = const HtmlPackageForumHtmlFragmentCodec()
+              .serialize(
+                dom.DocumentFragment()
+                  ..nodes.addAll(
+                    paragraphs
+                        ? roots.take(48).map((node) => node.clone(true))
+                        : [
+                            dom.Element.tag('y300-forum-text-chunk')
+                              ..attributes['style'] = 'display:block;margin:0'
+                              ..nodes.addAll(
+                                roots.take(95).map((node) => node.clone(true)),
+                              ),
+                          ],
+                  ),
+              );
+          final plan = ForumHtmlSafeDisplayPlanner(
+            minCodeUnits: 0,
+            targetChunkUnits: 48,
+            fragmentCodec: codec,
+          ).plan(document);
+          expect(plan.isChunked, isTrue);
+          expect(plan.unitCount, units);
+          expect(plan.chunks.first.html, expectedFirst);
+          expect(plan.chunks.last.endUnit, units);
+          expect(codec.parseCount, 1);
+          expect(fragment.nodes, isEmpty);
+          expect(counter.parentedRemovals, 0);
+          expect(counter.siblingWork, 0);
+          expect(
+            parser
+                .parseFragment(plan.chunks.map((chunk) => chunk.html).join())
+                .text,
+            parser.parseFragment(document.preparedHtml).text,
+          );
+        },
+      );
+    }
+  }
+
+  test(
+    'rejected structure keeps its owned roots intact and bytes unchanged',
+    () {
+      final fragment = parser.parseFragment(
+        '<div><p>unsupported ancestor</p></div>',
+      );
+      final root = fragment.nodes.single;
+      final document = prepareRenderTestDocument(
+        const HtmlPackageForumHtmlFragmentCodec().serialize(fragment),
+      );
+      final plan = ForumHtmlSafeDisplayPlanner(
+        minCodeUnits: 0,
+        fragmentCodec: _OwnedFragmentCodec(fragment),
+      ).plan(document);
+      expect(plan.isChunked, isFalse);
+      expect(plan.chunks.single.html, same(document.preparedHtml));
+      expect(fragment.nodes.single, same(root));
+      expect(root.parentNode, same(fragment));
+    },
   );
 
   testWidgets('changing the logical tail updates an already cached factory', (
@@ -542,4 +634,54 @@ Rect _markerBox(WidgetTester tester, Finder body, String marker) {
   return rect.shift(
     paragraph.localToGlobal(Offset.zero) - tester.getTopLeft(body),
   );
+}
+
+final class _RootRemovalWork {
+  dom.Node? root;
+  int parentedRemovals = 0;
+  int siblingWork = 0;
+
+  void removing(dom.Node node) {
+    if (root == null || !identical(node.parentNode, root)) return;
+    parentedRemovals++;
+    siblingWork += root!.nodes.length;
+  }
+}
+
+final class _ObservedText extends dom.Text {
+  _ObservedText(super.data, this.counter);
+  final _RootRemovalWork counter;
+
+  @override
+  dom.Node remove() {
+    counter.removing(this);
+    return super.remove();
+  }
+}
+
+final class _ObservedElement extends dom.Element {
+  _ObservedElement(super.localName, this.counter) : super.tag();
+  final _RootRemovalWork counter;
+
+  @override
+  dom.Node remove() {
+    counter.removing(this);
+    return super.remove();
+  }
+}
+
+final class _OwnedFragmentCodec implements ForumHtmlFragmentCodec {
+  _OwnedFragmentCodec(this.fragment);
+  final dom.DocumentFragment fragment;
+  int parseCount = 0;
+
+  @override
+  dom.DocumentFragment parse(String html) {
+    parseCount++;
+    return fragment;
+  }
+
+  @override
+  String serialize(dom.DocumentFragment fragment) =>
+      const HtmlPackageForumHtmlFragmentCodec().serialize(fragment);
 }
