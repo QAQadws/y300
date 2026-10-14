@@ -134,6 +134,7 @@ final protectedCoverCacheMaintenanceProvider =
 
 final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
   final repository = ref.watch(imageCacheRepositoryProvider);
+  final sourceRuntime = ref.watch(yamiboForumSourceRuntimeProvider);
   final accessRecorder = BufferedImageCacheAccessRecorder(
     repository: repository,
   );
@@ -147,6 +148,9 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     mutationReporter: ref.watch(cacheMutationBusProvider),
     diagnosticRecorder: ref.watch(imageCacheDiagnosticRecorderProvider),
     accessRecorder: accessRecorder,
+    // The runtime changes identity synchronously, including logout/login to
+    // the same account. Old 404s cannot suppress requests in the new scope.
+    failureScopeFor: () => sourceRuntime.current,
     revalidator: LongTermImageRevalidator(
       repository: repository,
       fileService: Y300ForumResourceFileService(

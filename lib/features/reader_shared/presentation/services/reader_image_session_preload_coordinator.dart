@@ -475,9 +475,30 @@ class ReaderImageSessionPreloadCoordinator {
   }
 
   Future<void> _runTask(_ReaderImagePreparationTask task) async {
+    final store = _sessionStore;
+    if (_disposed ||
+        task.generation != _generation ||
+        !task.workToken.isActive ||
+        !task.context.mounted ||
+        (task.force &&
+            store != null &&
+            (store.readerOwnerId != task.request.readerOwnerId ||
+                store.generation != task.generation))) {
+      _completeCancelled(task);
+      _running.remove(task);
+      _pump();
+      return;
+    }
     final stopwatch = Stopwatch()..start();
     ForumImagePrecacheResult result;
     try {
+      // A queued retry may be cancelled or replaced before it reaches this
+      // point. Only a live task can lift the exact resource's failure cooldown.
+      if (task.precacheService
+          case final RetryableForumImagePrecacheService retryable
+          when task.force) {
+        retryable.allowRetry(task.request.spec);
+      }
       switch (task.request.kind) {
         case ReaderImageSessionPreloadKind.decoded:
           if (task.precacheService

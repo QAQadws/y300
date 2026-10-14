@@ -22,7 +22,10 @@ typedef ForumImagePrecacheInvoker =
     Future<void> Function(ImageProvider provider, ImageConfiguration config);
 
 class DefaultForumImagePrecacheService
-    implements ForumImagePrecacheService, BoundedForumImagePrecacheService {
+    implements
+        ForumImagePrecacheService,
+        BoundedForumImagePrecacheService,
+        RetryableForumImagePrecacheService {
   DefaultForumImagePrecacheService({
     required ImageCacheService imageCacheService,
     required ForumImageRequestResolver imageRequestResolver,
@@ -50,6 +53,16 @@ class DefaultForumImagePrecacheService
   final ForumImagePrecacheInvoker _precacheInvoker;
   final Map<String, _SharedForumImageDecodeTask> _diskTasks = {};
   final Map<Object, _SharedForumImageDecodeTask> _decodeTasks = {};
+
+  @override
+  void allowRetry(ForumImageLoadSpec spec) {
+    final service = _imageCacheService;
+    if (service is! ImageCacheFailureControl) return;
+    final request = _imageRequestResolver.resolveCacheRequest(spec);
+    if (request != null) {
+      (service as ImageCacheFailureControl).allowRetry(request);
+    }
+  }
 
   @override
   Future<ForumImagePrecacheResult> ensureDiskCached(ForumImageLoadSpec spec) {

@@ -3,11 +3,14 @@ import 'dart:ui';
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path/path.dart' as p;
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/image_cache_access_recorder.dart';
+import 'package:y300/features/cache/data/services/image_cache_failure_backoff.dart';
+import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
@@ -52,6 +55,7 @@ class DefaultImageCacheService
         ImageCacheMetadataLookup,
         ImageCacheDimensionRecorder,
         ImageCacheDecodeFailureReporter,
+        ImageCacheFailureControl,
         CacheBudgetParticipant {
   DefaultImageCacheService({
     required ImageCacheRepository repository,
@@ -64,6 +68,8 @@ class DefaultImageCacheService
         const NoopImageCacheDiagnosticRecorder(),
     ImageCacheAccessRecorder? accessRecorder,
     ImageCacheRevalidator? revalidator,
+    ImageCacheFailureBackoff? failureBackoff,
+    Object? Function()? failureScopeFor,
   }) : _repository = repository,
        _cacheManagerFuture = cacheManagerFuture,
        _directoryResolver = directoryResolver,
@@ -72,7 +78,9 @@ class DefaultImageCacheService
        _mutationReporter = mutationReporter,
        _diagnosticRecorder = diagnosticRecorder,
        _accessRecorder = accessRecorder,
-       _revalidator = revalidator;
+       _revalidator = revalidator,
+       _failureBackoff = failureBackoff ?? ImageCacheFailureBackoff(),
+       _failureScopeFor = failureScopeFor;
 
   final ImageCacheRevalidator? _revalidator;
 
@@ -92,30 +100,63 @@ class DefaultImageCacheService
   final CacheMutationReporter _mutationReporter;
   final ImageCacheDiagnosticRecorder _diagnosticRecorder;
   final ImageCacheAccessRecorder? _accessRecorder;
-  final Map<String, Future<CachedImageResult>> _ensureTasks =
-      <String, Future<CachedImageResult>>{};
+  final ImageCacheFailureBackoff _failureBackoff;
+  final Object? Function()? _failureScopeFor;
+  Object? _failureScope;
+  int _failureEpoch = 0;
+  final _ensureTasks = <(String, String), Future<CachedImageResult>>{};
+
+  ImageCacheFailureIdentity _failureIdentity(ImageCacheRequest request) => (
+    cacheKey: request.cacheKey.trim(),
+    sourceUrl:
+        _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim(),
+    referer: request.referer?.trim(),
+  );
+
+  void _syncFailureScope() {
+    final current = _failureScopeFor?.call();
+    if (!identical(current, _failureScope)) {
+      _failureScope = current;
+      _failureEpoch++;
+      _failureBackoff.clear();
+    }
+  }
+
+  @override
+  void allowRetry(ImageCacheRequest request) {
+    _syncFailureScope();
+    _failureBackoff.remove(_failureIdentity(request));
+    // A late failure that began before this retry must not restore its cooldown.
+    // Keep any actual in-flight download shared to avoid concurrent duplicates.
+    _failureEpoch++;
+  }
 
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) {
-    final cacheKey = request.cacheKey.trim();
-    final sourceUrl =
-        _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
-    final identity = '$cacheKey\n$sourceUrl';
-    final existing = _ensureTasks[identity];
+    _syncFailureScope();
+    final identity = _failureIdentity(request);
+    // CacheManager shares active downloads across headers. Only the initiating
+    // request may remember a failure for its actual Referer.
+    final flightIdentity = (identity.cacheKey, identity.sourceUrl);
+    final existing = _ensureTasks[flightIdentity];
     if (existing != null) {
       return existing;
     }
     late final Future<CachedImageResult> task;
-    task = _ensureCached(request).whenComplete(() {
-      if (identical(_ensureTasks[identity], task)) {
-        _ensureTasks.remove(identity);
+    task = _ensureCached(request, identity, _failureEpoch).whenComplete(() {
+      if (identical(_ensureTasks[flightIdentity], task)) {
+        _ensureTasks.remove(flightIdentity);
       }
     });
-    _ensureTasks[identity] = task;
+    _ensureTasks[flightIdentity] = task;
     return task;
   }
 
-  Future<CachedImageResult> _ensureCached(ImageCacheRequest request) async {
+  Future<CachedImageResult> _ensureCached(
+    ImageCacheRequest request,
+    ImageCacheFailureIdentity identity,
+    int failureEpoch,
+  ) async {
     final stopwatch = Stopwatch()..start();
     final cacheKey = request.cacheKey.trim();
     final sourceUrl =
@@ -159,6 +200,7 @@ class DefaultImageCacheService
               height: existing?.height,
             ),
           );
+          _failureBackoff.remove(identity);
           return CachedImageResult(
             success: true,
             cacheKey: cacheKey,
@@ -193,6 +235,7 @@ class DefaultImageCacheService
               height: existing?.height,
             ),
           );
+          _failureBackoff.remove(identity);
           return CachedImageResult(
             success: true,
             cacheKey: cacheKey,
@@ -205,6 +248,10 @@ class DefaultImageCacheService
         }
       }
 
+      // Another consumer may have produced a valid local file after the 404.
+      // Check both local cache paths first; the cooldown only skips downloading.
+      _syncFailureScope();
+      if (_failureBackoff.contains(identity)) return CachedImageResult.failed;
       final referer = request.referer;
       final headers = referer == null
           ? const <String, String>{}
@@ -233,6 +280,7 @@ class DefaultImageCacheService
         ),
       );
       _mutationReporter.reportMutation(CacheNamespace.image);
+      _failureBackoff.remove(identity);
       return CachedImageResult(
         success: true,
         cacheKey: cacheKey,
@@ -242,6 +290,14 @@ class DefaultImageCacheService
         height: sourceChanged ? null : existing?.height,
       );
     } catch (error) {
+      _syncFailureScope();
+      if (failureEpoch == _failureEpoch &&
+          stage == ImageCacheDiagnosticStage.download &&
+          error is ForumResourceFileServiceException &&
+          error.failure.kind == ForumResourceFailureKind.notFound &&
+          error.failure.statusCode == 404) {
+        _failureBackoff.remember(identity);
+      }
       _reportFailure(
         request: request,
         stage: stage,

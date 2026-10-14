@@ -107,6 +107,64 @@ void main() {
     expect(adapter.fetchCount, 1);
   });
 
+  test('45 missing-image calls share one HTTP failure and can retry', () async {
+    final bytes = await _pngBytes(width: 4, height: 3);
+    final adapter = _PipelineHttpAdapter(<_PipelineResponse>[
+      _PipelineResponse.notFound(),
+      _PipelineResponse.notFound(),
+      _PipelineResponse.chunked(bytes, contentType: 'image/png', chunkSize: 9),
+    ]);
+    final output = _MemoryLogOutput();
+    final recorder = _CapturingDiagnosticRecorder(
+      LoggerImageCacheDiagnosticRecorder(
+        Logger(
+          printer: SimplePrinter(colors: false),
+          output: output,
+          filter: ProductionFilter(),
+          level: Level.trace,
+        ),
+      ),
+    );
+    final harness = await _buildHarness(
+      cacheRoot,
+      adapter,
+      diagnosticRecorder: recorder,
+    );
+    addTearDown(harness.dispose);
+    final request = _request(cacheKey: 'pipeline-missing');
+
+    for (var attempt = 0; attempt < 45; attempt++) {
+      expect((await harness.service.ensureCached(request)).success, isFalse);
+    }
+
+    expect(adapter.fetchCount, 1);
+    expect(recorder.events, hasLength(1));
+    expect(recorder.events.single.stage, ImageCacheDiagnosticStage.download);
+    expect(
+      recorder.events.single.failureKind,
+      ImageCacheDiagnosticFailureKind.notFound,
+    );
+    expect(harness.repository.records[request.cacheKey], isNull);
+    expect(output.lines, hasLength(1));
+
+    harness.service.allowRetry(request);
+    expect((await harness.service.ensureCached(request)).success, isFalse);
+    expect(adapter.fetchCount, 2);
+    expect(recorder.events, hasLength(2));
+    expect(output.lines, hasLength(1));
+
+    harness.service.allowRetry(request);
+    final recovered = await harness.service.ensureCached(request);
+    expect(recovered.success, isTrue);
+    expect(adapter.fetchCount, 3);
+    expect(await _decodeDimensions(File(recovered.localPath!)), (
+      width: 4,
+      height: 3,
+    ));
+    expect(harness.repository.records[request.cacheKey], isNotNull);
+    expect(recorder.events, hasLength(2));
+  });
+
   test('partial stream does not commit metadata and logs no secrets', () async {
     final bytes = await _pngBytes(width: 8, height: 6);
     final adapter = _PipelineHttpAdapter(<_PipelineResponse>[
@@ -255,7 +313,15 @@ final class _PipelineResponse {
     required this.contentType,
     required this.chunkSize,
     this.failAfter,
+    this.statusCode = 200,
   });
+
+  factory _PipelineResponse.notFound() => _PipelineResponse._(
+    bytes: Uint8List(0),
+    contentType: 'text/html',
+    chunkSize: 1,
+    statusCode: 404,
+  );
 
   factory _PipelineResponse.chunked(
     Uint8List bytes, {
@@ -282,6 +348,7 @@ final class _PipelineResponse {
   final String contentType;
   final int chunkSize;
   final int? failAfter;
+  final int statusCode;
 
   Stream<Uint8List> openStream() async* {
     final failureOffset = failAfter;
@@ -318,7 +385,7 @@ final class _PipelineHttpAdapter implements HttpClientAdapter {
     final response = _responses[index];
     return ResponseBody(
       response.openStream(),
-      200,
+      response.statusCode,
       headers: <String, List<String>>{
         Headers.contentTypeHeader: <String>[response.contentType],
         Headers.contentLengthHeader: <String>[response.bytes.length.toString()],

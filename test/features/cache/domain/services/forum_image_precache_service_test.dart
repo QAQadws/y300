@@ -14,6 +14,68 @@ import 'package:y300/core/media/encoded_image_dimension_probe.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 
 void main() {
+  test('allowRetry forwards only the resolved cache request', () {
+    final cache = _RetryableRecordingImageCacheService();
+    final service = DefaultForumImagePrecacheService(
+      imageCacheService: cache,
+      imageRequestResolver: const DefaultForumImageRequestResolver(),
+    );
+    final spec = _threadSpec();
+    final expected = const DefaultForumImageRequestResolver()
+        .resolveCacheRequest(spec)!;
+
+    service.allowRetry(spec);
+    service.allowRetry(
+      ForumImageLoadSpec(
+        kind: ForumImageKind.externalInline,
+        url: Uri.parse('https://external.test/image.jpg'),
+      ),
+    );
+
+    expect(cache.retryRequests, hasLength(1));
+    final request = cache.retryRequests.single;
+    expect(request.cacheKey, expected.cacheKey);
+    expect(request.sourceUrl, expected.sourceUrl);
+    expect(request.ownerType, expected.ownerType);
+    expect(request.ownerId, expected.ownerId);
+    expect(request.role, expected.role);
+    expect(cache.ensureRequests, isEmpty);
+  });
+
+  test('retry allowance retains an in-flight shared disk request', () async {
+    final disk = Completer<CachedImageResult>();
+    final cache = _RetryableRecordingImageCacheService(ensureCompleter: disk);
+    final service = DefaultForumImagePrecacheService(
+      imageCacheService: cache,
+      imageRequestResolver: const DefaultForumImageRequestResolver(),
+    );
+    final first = service.ensureDiskCached(_threadSpec());
+    service.allowRetry(_threadSpec());
+    final second = service.ensureDiskCached(_threadSpec());
+
+    expect(cache.retryRequests, hasLength(1));
+    expect(cache.ensureRequests, hasLength(1));
+    disk.complete(CachedImageResult.failed);
+    expect((await first).success, isFalse);
+    expect((await second).success, isFalse);
+
+    await service.ensureDiskCached(_threadSpec());
+    expect(cache.ensureRequests, hasLength(2));
+  });
+
+  test('allowRetry remains optional for legacy cache services', () async {
+    final cache = _RecordingImageCacheService();
+    final service = DefaultForumImagePrecacheService(
+      imageCacheService: cache,
+      imageRequestResolver: const DefaultForumImageRequestResolver(),
+    );
+
+    service.allowRetry(_threadSpec());
+    expect(cache.ensureRequests, isEmpty);
+    expect((await service.ensureDiskCached(_threadSpec())).success, isTrue);
+    expect(cache.ensureRequests, hasLength(1));
+  });
+
   for (final intrinsic in [const Size(2000, 1000), const Size(2000, 100000)]) {
     testWidgets('bounded decode admits by encoded dimensions $intrinsic', (
       tester,
@@ -536,6 +598,18 @@ class _RecordingImageCacheService implements ImageCacheService {
     required List<ImageCacheRole> roles,
   }) async {
     return 0;
+  }
+}
+
+class _RetryableRecordingImageCacheService extends _RecordingImageCacheService
+    implements ImageCacheFailureControl {
+  _RetryableRecordingImageCacheService({super.ensureCompleter});
+
+  final retryRequests = <ImageCacheRequest>[];
+
+  @override
+  void allowRetry(ImageCacheRequest request) {
+    retryRequests.add(request);
   }
 }
 

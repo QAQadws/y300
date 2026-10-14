@@ -39,6 +39,13 @@ abstract class ImageCacheService {
   }
 }
 
+/// Optional explicit retry capability. Automatic mounts and prefetches retain
+/// their failure cooldown; a user retry can clear its exact failed request.
+/// An already running request remains shared rather than downloading twice.
+abstract interface class ImageCacheFailureControl {
+  void allowRetry(ImageCacheRequest request);
+}
+
 /// Optional read-only lookup used for layout metadata.
 ///
 /// Unlike [ImageCacheService.getCached], this does not count as a user-visible

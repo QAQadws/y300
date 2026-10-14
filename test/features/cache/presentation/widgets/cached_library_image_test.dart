@@ -17,6 +17,109 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
 void main() {
+  testWidgets('only a changed retry token lifts the current request cooldown', (
+    tester,
+  ) async {
+    final cacheService = _RetryableImageCacheService();
+    cacheService.completeGetCached('thread-image', null);
+    cacheService.completeGetCached('new-image', null);
+
+    Widget build(int retryToken, {String cacheKey = 'thread-image'}) {
+      return ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: LocalizedTestApp(
+          home: CachedLibraryImage(
+            request: _request(cacheKey),
+            fit: BoxFit.contain,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            errorPlaceholder: const SizedBox(key: Key('error-placeholder')),
+            remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
+            retryToken: retryToken,
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build(4));
+    await tester.pump();
+    await tester.pump();
+    expect(cacheService.retryRequests, isEmpty);
+    expect(cacheService.ensureRequests, hasLength(1));
+    expect(find.byKey(const Key('error-placeholder')), findsOneWidget);
+
+    await tester.pumpWidget(build(4));
+    await tester.pump();
+    expect(cacheService.retryRequests, isEmpty);
+    expect(cacheService.ensureRequests, hasLength(1));
+
+    await tester.pumpWidget(build(5));
+    await tester.pump();
+    await tester.pump();
+    expect(cacheService.retryRequests.map((request) => request.cacheKey), [
+      'thread-image',
+    ]);
+    expect(cacheService.operations, [
+      'ensure:thread-image',
+      'retry:thread-image',
+      'ensure:thread-image',
+    ]);
+
+    await tester.pumpWidget(build(6, cacheKey: 'new-image'));
+    await tester.pump();
+    await tester.pump();
+    expect(cacheService.retryRequests.map((request) => request.cacheKey), [
+      'thread-image',
+      'new-image',
+    ]);
+    expect(
+      cacheService.retryRequests.last.sourceUrl,
+      _request('new-image').sourceUrl,
+    );
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(build(6, cacheKey: 'new-image'));
+    await tester.pump();
+    await tester.pump();
+    expect(cacheService.retryRequests, hasLength(2));
+    expect(cacheService.ensureRequests, hasLength(4));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('retry token changes keep legacy cache services working', (
+    tester,
+  ) async {
+    final cacheService = _ControlledImageCacheService();
+    cacheService.completeGetCached('thread-image', null);
+    cacheService.completeEnsure('thread-image', CachedImageResult.failed);
+
+    Widget build(int retryToken) {
+      return ProviderScope(
+        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        child: LocalizedTestApp(
+          home: CachedLibraryImage(
+            request: _request('thread-image'),
+            fit: BoxFit.contain,
+            placeholder: const SizedBox(),
+            errorPlaceholder: const SizedBox(key: Key('error-placeholder')),
+            remoteDisplayPolicy: CachedImageRemoteDisplayPolicy.afterCacheWrite,
+            retryToken: retryToken,
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build(0));
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpWidget(build(1));
+    await tester.pump();
+    await tester.pump();
+
+    expect(cacheService.getCachedCount('thread-image'), 2);
+    expect(find.byKey(const Key('error-placeholder')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'shows placeholder and does not build remote image while cache lookup is pending',
     (tester) async {
@@ -1327,6 +1430,26 @@ class _ControlledImageCacheService
     required Size size,
   }) async {
     recordedDimensions[cacheKey] = size;
+  }
+}
+
+class _RetryableImageCacheService extends _ControlledImageCacheService
+    implements ImageCacheFailureControl {
+  final retryRequests = <ImageCacheRequest>[];
+  final ensureRequests = <ImageCacheRequest>[];
+  final operations = <String>[];
+
+  @override
+  void allowRetry(ImageCacheRequest request) {
+    retryRequests.add(request);
+    operations.add('retry:${request.cacheKey}');
+  }
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    ensureRequests.add(request);
+    operations.add('ensure:${request.cacheKey}');
+    return CachedImageResult.failed;
   }
 }
 

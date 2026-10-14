@@ -15,6 +15,212 @@ import 'package:y300/features/reader_shared/presentation/services/reader_image_s
 
 void main() {
   group('ReaderImageSessionPreloadCoordinator', () {
+    testWidgets(
+      'forced retry lifts cooldown only when its bounded task starts',
+      (tester) async {
+        final service = _RetryableBlockingPrecacheService();
+        final coordinator = ReaderImageSessionPreloadCoordinator(
+          policy: const ReaderImageSessionPreloadPolicy(maxConcurrentTasks: 1),
+        );
+        addTearDown(coordinator.dispose);
+        late BuildContext readerContext;
+        await tester.pumpWidget(
+          Builder(
+            builder: (context) {
+              readerContext = context;
+              return const SizedBox();
+            },
+          ),
+        );
+        final content = _content(count: 3);
+        final first = coordinator.prepareOne(
+          context: readerContext,
+          content: content,
+          index: 0,
+          capability: _TestCapability(),
+          precacheService: service,
+        );
+        final retry = coordinator.prepareOne(
+          context: readerContext,
+          content: content,
+          index: 1,
+          capability: _TestCapability(),
+          precacheService: service,
+          force: true,
+        );
+
+        expect(service.retrySpecs, isEmpty);
+        expect(service.startedSpecs, hasLength(1));
+        expect(coordinator.pendingTaskCount, 1);
+        service.completeNext();
+        await first;
+        await tester.pump();
+
+        expect(service.retrySpecs.map((spec) => spec.imageIndex), [1]);
+        expect(service.startedCountsAtRetry, [1]);
+        expect(service.startedSpecs.map((spec) => spec.imageIndex), [0, 1]);
+        expect(coordinator.runningTaskCount, 1);
+        service.completeNext();
+        await retry;
+        await tester.pump();
+
+        coordinator.promoteSeekTarget(
+          context: readerContext,
+          content: content,
+          index: 2,
+          capability: _TestCapability(),
+          precacheService: service,
+        );
+        expect(service.startedSpecs.map((spec) => spec.imageIndex), [0, 1, 2]);
+        expect(service.retrySpecs, hasLength(1));
+        service.completeNext();
+        await tester.pump();
+      },
+    );
+
+    for (final retirement in ['reset', 'dispose', 'unmount']) {
+      testWidgets('a queued retry retired by $retirement keeps the cooldown', (
+        tester,
+      ) async {
+        final service = _RetryableBlockingPrecacheService();
+        final coordinator = ReaderImageSessionPreloadCoordinator(
+          policy: const ReaderImageSessionPreloadPolicy(maxConcurrentTasks: 1),
+        );
+        addTearDown(coordinator.dispose);
+        late BuildContext readerContext;
+        await tester.pumpWidget(
+          Builder(
+            builder: (context) {
+              readerContext = context;
+              return const SizedBox();
+            },
+          ),
+        );
+        final content = _content(count: 2);
+        final first = coordinator.prepareOne(
+          context: readerContext,
+          content: content,
+          index: 0,
+          capability: _TestCapability(),
+          precacheService: service,
+        );
+        final retry = coordinator.prepareOne(
+          context: readerContext,
+          content: content,
+          index: 1,
+          capability: _TestCapability(),
+          precacheService: service,
+          force: true,
+        );
+        expect(coordinator.pendingTaskCount, 1);
+        expect(service.retrySpecs, isEmpty);
+
+        switch (retirement) {
+          case 'reset':
+            coordinator.resetSession();
+          case 'dispose':
+            coordinator.dispose();
+          case 'unmount':
+            await tester.pumpWidget(const SizedBox());
+        }
+        service.completeNext();
+        await first;
+        expect(await retry, isNull);
+        await tester.pump();
+
+        expect(service.retrySpecs, isEmpty);
+        expect(service.startedSpecs, hasLength(1));
+        expect(coordinator.runningTaskCount, 0);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('retry retired by a scheduling callback keeps the cooldown', (
+      tester,
+    ) async {
+      final service = _RetryableBlockingPrecacheService();
+      late ReaderImageSessionPreloadCoordinator coordinator;
+      coordinator = ReaderImageSessionPreloadCoordinator(
+        onScheduled: (_) => coordinator.resetSession(),
+      );
+      addTearDown(coordinator.dispose);
+      late BuildContext readerContext;
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            readerContext = context;
+            return const SizedBox();
+          },
+        ),
+      );
+
+      final retry = await coordinator.prepareOne(
+        context: readerContext,
+        content: _content(count: 1),
+        index: 0,
+        capability: _TestCapability(),
+        precacheService: service,
+        force: true,
+      );
+
+      expect(retry, isNull);
+      expect(service.retrySpecs, isEmpty);
+      expect(service.startedSpecs, isEmpty);
+      expect(coordinator.runningTaskCount, 0);
+    });
+
+    testWidgets('retry from a different store owner keeps the cooldown', (
+      tester,
+    ) async {
+      final store = ReaderImageSessionStore();
+      addTearDown(store.dispose);
+      final coordinator = ReaderImageSessionPreloadCoordinator(
+        sessionStore: store,
+      );
+      addTearDown(coordinator.dispose);
+      final content = _content(count: 1);
+      coordinator.resetSession(
+        readerOwnerId: content.ownerId,
+        items: content.items,
+      );
+      final service = _RetryableBlockingPrecacheService();
+      late BuildContext readerContext;
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            readerContext = context;
+            return const SizedBox();
+          },
+        ),
+      );
+      const otherContent = ReaderContent(
+        ownerId: 'other-reader',
+        items: [
+          ContinuousImageItem(
+            ownerId: 'other-reader',
+            id: 'other-reader:0',
+            url: 'https://img.test/other.jpg',
+            cacheKey: 'other-cache',
+            index: 0,
+            sourceKind: ContinuousImageSourceKind.threadImageReader,
+          ),
+        ],
+      );
+
+      final retry = await coordinator.prepareOne(
+        context: readerContext,
+        content: otherContent,
+        index: 0,
+        capability: _TestCapability(),
+        precacheService: service,
+        force: true,
+      );
+
+      expect(retry, isNull);
+      expect(service.retrySpecs, isEmpty);
+      expect(service.startedSpecs, isEmpty);
+    });
+
     test('builds decoded and disk windows around the current index', () {
       final coordinator = ReaderImageSessionPreloadCoordinator();
       final requests = coordinator.buildRequests(
@@ -664,6 +870,18 @@ class _BlockingPrecacheService implements ForumImagePrecacheService {
     final completer = Completer<ForumImagePrecacheResult>();
     _completers.add(completer);
     return completer.future;
+  }
+}
+
+class _RetryableBlockingPrecacheService extends _BlockingPrecacheService
+    implements RetryableForumImagePrecacheService {
+  final retrySpecs = <ForumImageLoadSpec>[];
+  final startedCountsAtRetry = <int>[];
+
+  @override
+  void allowRetry(ForumImageLoadSpec spec) {
+    retrySpecs.add(spec);
+    startedCountsAtRetry.add(startedSpecs.length);
   }
 }
 

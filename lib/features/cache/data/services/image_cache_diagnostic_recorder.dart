@@ -83,16 +83,60 @@ final class NoopImageCacheDiagnosticRecorder
   void recordFailure(ImageCacheFailureDiagnostic event) {}
 }
 
-/// Debug logger that emits only the fields already sanitized by the service.
+/// Debug logger that passively groups repeated, already sanitized failures.
+/// A hit never extends its window; no timer retains or flushes diagnostics.
 final class LoggerImageCacheDiagnosticRecorder
     implements ImageCacheDiagnosticRecorder {
-  const LoggerImageCacheDiagnosticRecorder(this._logger);
+  LoggerImageCacheDiagnosticRecorder(
+    this._logger, {
+    DateTime Function()? now,
+    Duration suppressionWindow = const Duration(seconds: 30),
+    int maxBuckets = 256,
+  }) : assert(!suppressionWindow.isNegative),
+       assert(maxBuckets >= 0),
+       _now = now ?? DateTime.now,
+       _suppressionWindow = suppressionWindow,
+       _maxBuckets = maxBuckets;
 
   final Logger _logger;
+  final DateTime Function() _now;
+  final Duration _suppressionWindow;
+  final int _maxBuckets;
+  final _buckets = <_ImageCacheLogGroup, _ImageCacheLogWindow>{};
+  DateTime? _lastObservedAt;
 
   @override
   void recordFailure(ImageCacheFailureDiagnostic event) {
     try {
+      var suppressedCount = 0;
+      DateTime? now;
+      _ImageCacheLogGroup? group;
+      if (_maxBuckets > 0 && _suppressionWindow > Duration.zero) {
+        now = _now();
+        group = (
+          fingerprint: event.cacheKeyFingerprint,
+          stage: event.stage,
+          kind: event.failureKind,
+          reason: event.reasonCode,
+          exceptionType: event.exceptionType,
+          ownerType: event.ownerType,
+          role: event.role,
+        );
+        final previous = _buckets[group];
+        if (_lastObservedAt != null && now.isBefore(_lastObservedAt!)) {
+          // A wall-clock correction retires every old window. Preserve only
+          // this group's count for its immediate replacement message.
+          _buckets.clear();
+        }
+        _lastObservedAt = now;
+        final current = _buckets[group];
+        if (current != null &&
+            now.difference(current.startedAt) < _suppressionWindow) {
+          current.suppressedCount++;
+          return;
+        }
+        suppressedCount = previous?.suppressedCount ?? 0;
+      }
       final receivedBytes = event.bytesReceived;
       _logger.w(
         '[ImageCache][failure] '
@@ -104,12 +148,37 @@ final class LoggerImageCacheDiagnosticRecorder
         'reason=${event.reasonCode} '
         'exception=${event.exceptionType} '
         '${receivedBytes == null ? '' : 'bytesReceived=$receivedBytes '}'
-        'elapsedMs=${event.elapsedMilliseconds}',
+        'elapsedMs=${event.elapsedMilliseconds}'
+        '${suppressedCount > 0 ? ' suppressedCount=$suppressedCount' : ''}',
       );
+      if (group != null && now != null) {
+        _buckets.remove(group);
+        while (_buckets.length >= _maxBuckets) {
+          _buckets.remove(_buckets.keys.first);
+        }
+        _buckets[group] = _ImageCacheLogWindow(now);
+      }
     } catch (_) {
       // Diagnostics must never become part of the image-loading outcome.
     }
   }
+}
+
+typedef _ImageCacheLogGroup = ({
+  String fingerprint,
+  ImageCacheDiagnosticStage stage,
+  ImageCacheDiagnosticFailureKind kind,
+  String reason,
+  String exceptionType,
+  String ownerType,
+  String role,
+});
+
+final class _ImageCacheLogWindow {
+  _ImageCacheLogWindow(this.startedAt);
+
+  final DateTime startedAt;
+  int suppressedCount = 0;
 }
 
 /// Builds a stable diagnostic classification without inspecting error text.

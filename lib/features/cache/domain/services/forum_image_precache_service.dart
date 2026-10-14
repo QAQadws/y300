@@ -11,6 +11,13 @@ abstract interface class ForumImagePrecacheService {
   });
 }
 
+/// Optional explicit-retry hint; ordinary preparation keeps failure cooldowns.
+///
+/// This does not start another download or retire a shared in-flight request.
+abstract interface class RetryableForumImagePrecacheService {
+  void allowRetry(ForumImageLoadSpec spec);
+}
+
 /// Optional lifecycle-aware extension used by page and reader schedulers.
 ///
 /// Cancelling a scope prevents queued decode work and stale UI updates. A

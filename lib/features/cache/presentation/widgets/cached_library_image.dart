@@ -115,6 +115,15 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   @override
   void didUpdateWidget(covariant CachedLibraryImage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.retryToken != widget.retryToken) {
+      final request = widget.request;
+      if (request != null) {
+        final service = ref.read(imageCacheServiceProvider);
+        if (service is ImageCacheFailureControl) {
+          (service as ImageCacheFailureControl).allowRetry(request);
+        }
+      }
+    }
     if (oldWidget.imageProviderOverride != widget.imageProviderOverride ||
         oldWidget.remoteImageProviderOverride !=
             widget.remoteImageProviderOverride ||
