@@ -54,6 +54,11 @@ final class ThreadPostViewportAnchorCoordinator {
     );
   }
 
+  void beginExplicitNavigation() {
+    _navigationRevision++;
+    _restoreGeneration++;
+  }
+
   /// Display units are stable hard-line/paragraph boundaries, not saved anchors.
   GlobalKey keyForChunk(String pid, int startUnit, {required int endUnit}) {
     final normalized = pid.trim();

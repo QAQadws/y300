@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../test_support/localized_test_app.dart';
 import 'package:flutter/rendering.dart';
@@ -5,6 +6,65 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 
 void main() {
+  for (final replacement in [false, true]) {
+    testWidgets(
+      'a late endpoint result is retired after ${replacement ? 'host replacement' : 'cancellation'}',
+      (tester) async {
+        final controller = ScrollController();
+        var confirmations = 0;
+        final coordinator = ThreadDetailQuickScrollCoordinator(
+          scrollController: controller,
+          onUserNavigation: () => confirmations++,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SingleChildScrollView(
+              controller: controller,
+              child: const SizedBox(height: 2400),
+            ),
+          ),
+        );
+        coordinator.updateMetrics(controller.position);
+        final completion = Completer<ThreadDetailEndpointNavigationResult>();
+        late bool Function() current;
+        final owner = Object();
+        coordinator.bindEndpointNavigator(owner, ({
+          required target,
+          required animate,
+          required duration,
+          required isCurrent,
+        }) {
+          current = isCurrent;
+          return completion.future;
+        });
+        final navigation = coordinator.navigate(animate: false);
+        expect(current(), isTrue);
+        if (replacement) {
+          coordinator.bindEndpointNavigator(
+            Object(),
+            ({
+              required target,
+              required animate,
+              required duration,
+              required isCurrent,
+            }) async => ThreadDetailEndpointNavigationResult.unavailable,
+          );
+          coordinator.unbindEndpointNavigator(owner);
+        } else {
+          coordinator.cancelNavigation();
+        }
+        expect(current(), isFalse);
+        completion.complete(ThreadDetailEndpointNavigationResult.reached);
+        await navigation;
+        expect(confirmations, 0);
+        expect(coordinator.isNavigating, isFalse);
+        await tester.pumpWidget(const SizedBox.shrink());
+        coordinator.dispose();
+        controller.dispose();
+      },
+    );
+  }
+
   group('ThreadDetailQuickScrollCoordinator', () {
     testWidgets(
       'confirms the final animated position and rejects retired navigation',

@@ -247,6 +247,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
 class _ThreadPostCardFooterEntry extends StatelessWidget {
   const _ThreadPostCardFooterEntry({
     super.key,
+    required this.footerExpansion,
     required this.sourcePost,
     required this.displayPost,
     required this.displayRatingsByPostId,
@@ -266,6 +267,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   });
 
   final ThreadPost sourcePost;
+  final _ThreadPostFooterExpansion footerExpansion;
   final ThreadPost displayPost;
   final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
   final ThreadDetailPageState state;
@@ -285,6 +287,13 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: footerExpansion,
+      builder: (context, _) => _buildFooter(context),
+    );
+  }
+
+  Widget _buildFooter(BuildContext context) {
     final post = displayPost;
     final commentState = state.commentsByPostId[sourcePost.pid];
     final extraComments =
@@ -329,6 +338,12 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
           children: [
             if (post.poll != null) ...[
               ThreadPollCard(
+                expanded: footerExpansion.value.poll,
+                onExpansionChanged: (expanded) => footerExpansion.value = (
+                  comments: footerExpansion.value.comments,
+                  ratings: footerExpansion.value.ratings,
+                  poll: expanded,
+                ),
                 poll: post.poll!,
                 selectedOptionIds: state.selectedPollOptionIds,
                 isSubmitting: state.isPollVoteSubmitting,
@@ -362,6 +377,12 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
             if (showComments) ...[
               if (post.poll != null) const SizedBox(height: 10),
               ThreadPostCommentSection(
+                expanded: footerExpansion.value.comments,
+                onExpansionChanged: (expanded) => footerExpansion.value = (
+                  comments: expanded,
+                  ratings: footerExpansion.value.ratings,
+                  poll: footerExpansion.value.poll,
+                ),
                 comments: visibleComments,
                 continuation: commentState,
                 nextPage: nextCommentPage,
@@ -388,6 +409,12 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
             if (post.ratingSummary != null) ...[
               if (post.poll != null || showComments) const SizedBox(height: 10),
               ThreadPostRatingSection(
+                expanded: footerExpansion.value.ratings,
+                onExpansionChanged: (expanded) => footerExpansion.value = (
+                  comments: footerExpansion.value.comments,
+                  ratings: expanded,
+                  poll: footerExpansion.value.poll,
+                ),
                 summary: post.ratingSummary!,
                 viewState:
                     displayRatingsByPostId[sourcePost.pid.trim()] ??
@@ -409,6 +436,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 
 class _ThreadPostCardEntry extends StatefulWidget {
   const _ThreadPostCardEntry({
+    required this.footerExpansion,
     required this.sourcePost,
     required this.displayPost,
     required this.displaySubject,
@@ -444,6 +472,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   });
 
   final ThreadPost sourcePost;
+  final _ThreadPostFooterExpansion footerExpansion;
   final ThreadPost displayPost;
   final String displaySubject;
   final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
@@ -555,6 +584,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           enableSafeDisplayPlanning: widget.enableSafeDisplayPlanning,
         ),
         _ThreadPostCardFooterEntry(
+          footerExpansion: widget.footerExpansion,
           key: Key('thread-post-footer-${widget.sourcePost.pid}'),
           sourcePost: widget.sourcePost,
           displayPost: widget.displayPost,

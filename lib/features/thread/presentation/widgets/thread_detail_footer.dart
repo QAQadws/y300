@@ -2,6 +2,14 @@ part of 'thread_detail_widgets.dart';
 
 // Post footer widgets: comment section, rating section, and tag links.
 
+// These transient choices belong to the page, so entry-centered navigation
+// can remount footer widgets without expanding previously collapsed sections.
+final class _ThreadPostFooterExpansion
+    extends ValueNotifier<({bool comments, bool ratings, bool poll})> {
+  _ThreadPostFooterExpansion()
+    : super((comments: true, ratings: true, poll: true));
+}
+
 class ThreadPostCommentSection extends StatefulWidget {
   const ThreadPostCommentSection({
     super.key,

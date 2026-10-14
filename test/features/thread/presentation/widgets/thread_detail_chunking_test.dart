@@ -7,6 +7,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
+import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
@@ -54,6 +55,312 @@ void main() {
       },
     );
   }
+
+  for (final floorCount in [1, 2]) {
+    testWidgets(
+      'quick endpoints reach real pagination and first floor with $floorCount safe long bodies',
+      (tester) async {
+        final host = _Host([
+          for (var index = 0; index < floorCount; index++)
+            _post(
+              'long-$index',
+              _html(3000, paragraphs: floorCount == 2, prefix: '$index-'),
+              index + 1,
+            ),
+        ], quickScrolling: true);
+        addTearDown(host.dispose);
+        await _mount(tester, host);
+        await _ready(tester, '0-unit[0]');
+        await _tail(tester, host, '${floorCount - 1}-unit[2999]');
+        final tailElements = _rendererElements(
+          tester,
+          'long-${floorCount - 1}',
+        );
+        expect(tailElements, isNotEmpty);
+        expect(host.visibleTargets, isEmpty);
+
+        host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+        final observed = await _quickNavigate(tester, host, animate: false);
+        expect(_atFirstFloor(tester, 'long-0'), isTrue);
+        expect(_visibleMarker(tester, 'long-0', 0), isTrue);
+        expect(tailElements.every((element) => !element.mounted), isTrue);
+        // Sixty-three blocks per floor exist; endpoint navigation should only
+        // demand blocks near its source and destination, not the whole prefix.
+        expect(observed.length, lessThan(20));
+        expect(_units(tester).length, lessThan(1000));
+        expect(host.navigationStarts, 1);
+        expect(host.confirmedOffsets, hasLength(1));
+
+        host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+        await _quickNavigate(tester, host, animate: false);
+        expect(_atPaginationEnd(tester), isTrue);
+        expect(_visibleMarker(tester, 'long-${floorCount - 1}', 2999), isTrue);
+        expect(host.navigationStarts, 2);
+        expect(host.confirmedOffsets, hasLength(2));
+
+        host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+        await _quickNavigate(tester, host, animate: true);
+        expect(
+          _atFirstFloor(tester, 'long-0'),
+          isTrue,
+          reason: _endpointGeometry(tester, host, 'long-0'),
+        );
+        expect(host.confirmedOffsets, hasLength(3));
+        host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+        await _quickNavigate(tester, host, animate: true);
+        expect(_atPaginationEnd(tester), isTrue);
+        expect(host.confirmedOffsets, hasLength(4));
+        expect(host.visibleTargets, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final retirement in [
+    'cancel',
+    'page',
+    'content',
+    'theme',
+    'themeFade',
+    'fontScale',
+  ]) {
+    testWidgets('quick endpoint $retirement retires its pending navigation', (
+      tester,
+    ) async {
+      final host = _Host(
+        [_post('long', _html(3000, prefix: 'old-'), 1)],
+        quickScrolling: true,
+        themeAnimationDuration: retirement == 'theme'
+            ? Duration.zero
+            : const Duration(milliseconds: 200),
+      );
+      addTearDown(host.dispose);
+      try {
+        await _mount(tester, host);
+        await _ready(tester, 'old-unit[0]');
+        final changesLayout =
+            retirement == 'theme' || retirement == 'fontScale';
+        if (!changesLayout) await _tail(tester, host, 'old-unit[2999]');
+        final originalPosition = host.controller.position;
+        final originalTheme = _renderers(tester, 'long').first.theme.signature;
+        host.quickCoordinator.updateUserDirection(
+          changesLayout ? ScrollDirection.reverse : ScrollDirection.forward,
+        );
+        final pending = host.quickCoordinator.navigate(animate: true);
+        expect(host.navigationStarts, 1);
+        switch (retirement) {
+          case 'cancel':
+            host.quickCoordinator.cancelNavigation();
+          case 'page':
+            host.changePage(2);
+          case 'content':
+            host.replace([_post('long', '<p>new current body</p>', 1)]);
+          case 'theme':
+          case 'themeFade':
+            host.changeTheme(ThemeData.dark());
+          case 'fontScale':
+            final preferences = ForumHtmlReaderPreferences.defaults();
+            (host.container.read(
+                      forumHtmlReaderPreferencesControllerProvider.notifier,
+                    )
+                    as _Preferences)
+                .replace(
+                  preferences.copyWith(
+                    typography: preferences.typography.copyWith(fontScale: 1.5),
+                  ),
+                );
+        }
+        await tester.pump(const Duration(milliseconds: 16));
+        if (changesLayout) {
+          // Updating layout before the queued rebase's first build must preserve
+          // the head's coordinate range and viewport. Theme dependency updates
+          // may legitimately replace the position without rebasing the viewport.
+          if (retirement == 'fontScale') {
+            expect(host.controller.position, same(originalPosition));
+          }
+          expect(host.controller.position.minScrollExtent, closeTo(0, 1));
+          expect(_atFirstFloor(tester, 'long'), isTrue);
+        }
+        await _pumpUntil(tester, () => !host.quickCoordinator.isNavigating);
+        await pending;
+        final confirmations = host.confirmedOffsets.length;
+        final retiredOffset = host.controller.offset;
+        for (var frame = 0; frame < 22; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 5)),
+          );
+        }
+        // Let real Isolate completion retire within this test's FakeAsync zone;
+        // leaving a shared executor continuation behind can block later tests.
+        await _pumpUntil(
+          tester,
+          () =>
+              ForumHtmlPreparationExecutor.shared.activeCount == 0 &&
+              ForumHtmlPreparationExecutor.shared.queuedCount == 0,
+        );
+        expect(confirmations, 0);
+        expect(host.confirmedOffsets, isEmpty);
+        if (retirement == 'cancel') {
+          expect(host.controller.offset, closeTo(retiredOffset, 1));
+        }
+        if (retirement == 'content') {
+          await _ready(tester, 'new current body');
+          expect(_bodyText(tester), isNot(contains('old-unit[')));
+        }
+        if (changesLayout) {
+          await _pumpUntil(
+            tester,
+            () =>
+                _visibleMarker(tester, 'long', 0) &&
+                _renderers(tester, 'long').every(
+                  (renderer) => retirement == 'theme'
+                      ? renderer.theme.signature != originalTheme
+                      : renderer.preferences!.typography.fontScale == 1.5,
+                ),
+          );
+          if (retirement == 'fontScale') {
+            expect(host.controller.position, same(originalPosition));
+          }
+          expect(host.controller.position.minScrollExtent, closeTo(0, 1));
+          expect(_atFirstFloor(tester, 'long'), isTrue);
+          expect(_visibleMarker(tester, 'long', 2999), isFalse);
+        }
+        expect(host.visibleTargets, isEmpty);
+        expect(tester.takeException(), isNull);
+      } finally {
+        // Stop rebuilds first, then drain real work in its originating fake
+        // clock even when an early geometry assertion fails.
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _pumpUntil(
+          tester,
+          () =>
+              ForumHtmlPreparationExecutor.shared.activeCount == 0 &&
+              ForumHtmlPreparationExecutor.shared.queuedCount == 0,
+        );
+      }
+    });
+  }
+
+  testWidgets('quick endpoints leave the route target report unchanged', (
+    tester,
+  ) async {
+    final host = _Host(
+      [_post('long', _html(3000), 1)],
+      target: 'long',
+      quickScrolling: true,
+    );
+    addTearDown(host.dispose);
+    await _mount(tester, host);
+    await _ready(tester, 'unit[0]');
+    await _pumpUntil(tester, () => host.visibleTargets.isNotEmpty);
+    expect(host.visibleTargets, ['long']);
+    host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+    await _quickNavigate(tester, host, animate: false);
+    expect(_atPaginationEnd(tester), isTrue);
+    host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+    await _quickNavigate(tester, host, animate: false);
+    expect(_atFirstFloor(tester, 'long'), isTrue);
+    expect(host.target, 'long');
+    expect(host.visibleTargets, ['long']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('short and source quick scroll keep their whole body Element', (
+    tester,
+  ) async {
+    for (final sourced in [false, true]) {
+      final host = _Host(
+        [_post('long', _html(sourced ? 3000 : 50), 1)],
+        quickScrolling: true,
+        observer: sourced ? _ReadingObserver(tracked: false) : null,
+      );
+      addTearDown(host.dispose);
+      await _mount(tester, host);
+      await _ready(tester, 'unit[0]');
+      final body = _rendererElements(tester, 'long').single;
+      host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+      await _quickNavigate(tester, host, animate: false);
+      expect(_atPaginationEnd(tester), isTrue);
+      expect(body.mounted, isTrue);
+      expect(_rendererElements(tester, 'long').single, same(body));
+      expect(
+        _renderers(tester, 'long').single.preparedDocument!.safeDisplayPlan,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets(
+    'comment expansion survives endpoint rebases and retires with the page',
+    (tester) async {
+      final host = _Host([
+        _post(
+          'long',
+          _html(3000, paragraphs: true),
+          1,
+          comments: const [
+            ThreadPostCommentEntry(
+              author: 'a',
+              message: 'comment-a',
+              dateline: 'local',
+            ),
+            ThreadPostCommentEntry(
+              author: 'b',
+              message: 'comment-b',
+              dateline: 'local',
+            ),
+            ThreadPostCommentEntry(
+              author: 'c',
+              message: 'comment-c',
+              dateline: 'local',
+            ),
+          ],
+        ),
+      ], quickScrolling: true);
+      addTearDown(host.dispose);
+      await _mount(tester, host);
+      await _ready(tester, 'unit[0]');
+      await _tail(tester, host, 'unit[2999]');
+      expect(find.byType(ThreadPostCommentRow), findsNWidgets(3));
+      final oldSection = find
+          .byType(ThreadPostCommentSection)
+          .evaluate()
+          .single;
+      await tester.tap(find.byKey(const Key('thread-post-comment-header')));
+      await tester.pump();
+      expect(find.byType(ThreadPostCommentRow), findsNothing);
+
+      host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+      await _quickNavigate(tester, host, animate: false);
+      expect(_atFirstFloor(tester, 'long'), isTrue);
+      expect(oldSection.mounted, isFalse);
+      host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+      await _quickNavigate(tester, host, animate: false);
+      expect(_atPaginationEnd(tester), isTrue);
+      expect(find.byType(ThreadPostCommentSection), findsOneWidget);
+      expect(find.byType(ThreadPostCommentRow), findsNothing);
+
+      await tester.tap(find.byKey(const Key('thread-post-comment-header')));
+      await tester.pump();
+      expect(find.byType(ThreadPostCommentRow), findsNWidgets(3));
+      host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+      await _quickNavigate(tester, host, animate: false);
+      host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+      await _quickNavigate(tester, host, animate: false);
+      expect(find.byType(ThreadPostCommentRow), findsNWidgets(3));
+
+      await tester.tap(find.byKey(const Key('thread-post-comment-header')));
+      await tester.pump();
+      expect(find.byType(ThreadPostCommentRow), findsNothing);
+      host.changePage(2);
+      await _tail(tester, host, 'unit[2999]');
+      expect(find.byType(ThreadPostCommentRow), findsNWidgets(3));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('far floors stay unprepared until actual list demand', (
     tester,
@@ -428,6 +735,8 @@ class _Host {
     this.target,
     this.landing = ThreadPostLanding.top,
     this.useProjection = false,
+    this.quickScrolling = false,
+    this.themeAnimationDuration = const Duration(milliseconds: 200),
     ThreadBodyReadingObserver? observer,
   }) : container = ProviderContainer(
          overrides: [
@@ -443,6 +752,11 @@ class _Host {
             scrollController: controller,
             initialTargetPid: target,
           );
+    quickCoordinator = ThreadDetailQuickScrollCoordinator(
+      scrollController: controller,
+      onNavigationStarted: () => navigationStarts++,
+      onUserNavigation: () => confirmedOffsets.add(controller.offset),
+    );
   }
   final ProviderContainer container;
   final controller = ScrollController();
@@ -452,6 +766,13 @@ class _Host {
   String? target;
   final ThreadPostLanding landing;
   final bool useProjection;
+  final bool quickScrolling;
+  final Duration themeAnimationDuration;
+  int currentPage = 1;
+  int navigationStarts = 0;
+  final confirmedOffsets = <double>[];
+  final visibleTargets = <String>[];
+  late final ThreadDetailQuickScrollCoordinator quickCoordinator;
   late final ThreadBodyReadingCoordinator? readingCoordinator;
   void navigate(String pid) {
     target = pid;
@@ -464,12 +785,18 @@ class _Host {
   }
 
   void changeTheme(ThemeData theme) => key.currentState!.changeTheme(theme);
+  void changePage(int page) {
+    currentPage = page;
+    key.currentState!.replacePosts();
+  }
+
   void replaceProjection(List<ThreadPost> value) {
     displayPosts = value;
     key.currentState!.replacePosts();
   }
 
   void dispose() {
+    quickCoordinator.dispose();
     readingCoordinator?.dispose();
     controller.dispose();
     container.dispose();
@@ -490,8 +817,8 @@ class _PageState extends State<_Page> {
   ThreadDetailPageState _state() =>
       ThreadDetailPageState.initial(tid: '100', subject: 'fixture').copyWith(
         posts: widget.host.posts,
-        currentPage: 1,
-        lastPage: 1,
+        currentPage: widget.host.currentPage,
+        lastPage: widget.host.currentPage,
         hasMore: false,
         isLoadingInitial: false,
       );
@@ -526,6 +853,7 @@ class _PageState extends State<_Page> {
     container: widget.host.container,
     child: MaterialApp(
       theme: theme,
+      themeAnimationDuration: widget.host.themeAnimationDuration,
       locale: const Locale('zh'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -533,30 +861,54 @@ class _PageState extends State<_Page> {
         body: SizedBox(
           width: 400,
           height: 720,
-          child: NotificationListener<ScrollNotification>(
+          child: NotificationListener<ScrollMetricsNotification>(
             onNotification: (notification) {
-              widget.host.readingCoordinator?.handleScroll(notification);
+              if (notification.depth == 0) {
+                widget.host.quickCoordinator.updateMetrics(
+                  notification.metrics,
+                );
+              }
               return false;
             },
-            child: ThreadDetailContent(
-              enableBodyChunking: true,
-              state: _state(),
-              projection: _projection(),
-              targetPid: widget.host.target,
-              landing: widget.host.landing,
-              scrollController: widget.host.controller,
-              bodyReadingCoordinator: widget.host.readingCoordinator,
-              imageReferer: '',
-              onLoadPreviousPage: () {},
-              onLoadNextPage: () {},
-              onLoadPageNumber: (_) {},
-              onOpenAuthorProfile: (_) {},
-              onOpenCommentAuthorProfile: (_) {},
-              onCopyActionUrl: (_, _) {},
-              onOpenPostLink: (_) {},
-              onOpenPostActions: (_) {},
-              onTogglePollOption: (_, _) {},
-              onSubmitPollVote: (_) {},
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification.depth == 0) {
+                  widget.host.readingCoordinator?.handleScroll(notification);
+                  if (notification case UserScrollNotification(
+                    :final direction,
+                  )) {
+                    widget.host.quickCoordinator.updateUserDirection(direction);
+                  }
+                  widget.host.quickCoordinator.updateMetrics(
+                    notification.metrics,
+                  );
+                }
+                return false;
+              },
+              child: ThreadDetailContent(
+                enableBodyChunking: true,
+                state: _state(),
+                projection: _projection(),
+                targetPid: widget.host.target,
+                landing: widget.host.landing,
+                scrollController: widget.host.controller,
+                bodyReadingCoordinator: widget.host.readingCoordinator,
+                quickScrollCoordinator: widget.host.quickScrolling
+                    ? widget.host.quickCoordinator
+                    : null,
+                onTargetVisible: widget.host.visibleTargets.add,
+                imageReferer: '',
+                onLoadPreviousPage: () {},
+                onLoadNextPage: () {},
+                onLoadPageNumber: (_) {},
+                onOpenAuthorProfile: (_) {},
+                onOpenCommentAuthorProfile: (_) {},
+                onCopyActionUrl: (_, _) {},
+                onOpenPostLink: (_) {},
+                onOpenPostActions: (_) {},
+                onTogglePollOption: (_, _) {},
+                onSubmitPollVote: (_) {},
+              ),
             ),
           ),
         ),
@@ -650,6 +1002,75 @@ Future<void> _tail(WidgetTester tester, _Host host, String text) async {
   fail('Real tail could not be reached');
 }
 
+Future<Set<(String, int)>> _quickNavigate(
+  WidgetTester tester,
+  _Host host, {
+  required bool animate,
+}) async {
+  final observed = <(String, int)>{};
+  void capture() {
+    for (final renderer in _renderers(tester)) {
+      final marker = RegExp(r'unit\[(\d+)\]').firstMatch(renderer.html);
+      if (marker != null) {
+        observed.add((renderer.sourceId ?? '', int.parse(marker.group(1)!)));
+      }
+    }
+  }
+
+  capture();
+  final navigation = host.quickCoordinator.navigate(animate: animate);
+  for (var frame = 0; frame < 40; frame++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    capture();
+    if (!host.quickCoordinator.isNavigating) break;
+  }
+  expect(host.quickCoordinator.isNavigating, isFalse);
+  await navigation;
+  for (var frame = 0; frame < 3; frame++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    capture();
+  }
+  return observed;
+}
+
+bool _atFirstFloor(WidgetTester tester, String pid) {
+  final header = find.byKey(Key('thread-post-header-entry-$pid'));
+  final card = find.byKey(Key('thread-post-card-entry-$pid'));
+  final first = header.evaluate().isNotEmpty ? header.first : card.first;
+  if (first.evaluate().isEmpty) return false;
+  final viewport = tester.getRect(find.byKey(const Key('thread-detail-list')));
+  final edge = tester.getRect(first).top;
+  return edge >= viewport.top - 1 && edge < viewport.top + 32;
+}
+
+bool _atPaginationEnd(WidgetTester tester) {
+  final pagination = find.byKey(const Key('thread-detail-pagination'));
+  if (pagination.evaluate().isEmpty) return false;
+  final viewport = tester.getRect(find.byKey(const Key('thread-detail-list')));
+  final edge = tester.getRect(pagination.first).bottom;
+  return edge > viewport.bottom - 40 && edge <= viewport.bottom + 1;
+}
+
+bool _visibleMarker(WidgetTester tester, String pid, int unit) {
+  final marker = _markerRect(tester, pid, unit);
+  if (marker == null) return false;
+  return marker.overlaps(
+    tester.getRect(find.byKey(const Key('thread-detail-list'))),
+  );
+}
+
+String _endpointGeometry(WidgetTester tester, _Host host, String pid) {
+  final header = find.byKey(Key('thread-post-header-entry-$pid'));
+  final card = find.byKey(Key('thread-post-card-entry-$pid'));
+  final first = header.evaluate().isNotEmpty ? header.first : card.first;
+  return 'offset=${host.controller.offset}, '
+      'min=${host.controller.position.minScrollExtent}, '
+      'max=${host.controller.position.maxScrollExtent}, '
+      'first=${first.evaluate().isEmpty ? null : tester.getRect(first)}, '
+      'viewport=${tester.getRect(find.byKey(const Key('thread-detail-list')))}, '
+      'confirmed=${host.confirmedOffsets}';
+}
+
 List<ForumHtmlWidgetPostRenderer> _renderers(
   WidgetTester tester, [
   String? pid,
@@ -730,7 +1151,12 @@ Set<int> _units(WidgetTester tester) => {
   for (final match in RegExp(r'unit\[(\d+)\]').allMatches(_bodyText(tester)))
     int.parse(match.group(1)!),
 };
-ThreadPost _post(String pid, String html, int number) => ThreadPost(
+ThreadPost _post(
+  String pid,
+  String html,
+  int number, {
+  List<ThreadPostCommentEntry> comments = const [],
+}) => ThreadPost(
   pid: pid,
   author: 'fixture',
   authorId: '',
@@ -738,6 +1164,7 @@ ThreadPost _post(String pid, String html, int number) => ThreadPost(
   number: number,
   isFirst: number == 1,
   dateline: 'local',
+  comments: comments,
 );
 String _html(int count, {bool paragraphs = false, String prefix = ''}) {
   final values = <String>[];

@@ -193,13 +193,13 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
     bool userNavigation = false,
   }) async {
     final observer = widget.bodyReadingObserver;
+    _quickScrollCoordinator.cancelNavigation();
     final ownerRevision = _readingOwnerRevision;
     if (observer == null) {
       await action();
       return;
     }
     _readingSuspensions++;
-    _quickScrollCoordinator.cancelNavigation();
     if (userNavigation) _bodyReadingCoordinator?.markUserNavigation();
     _bodyReadingCoordinator?.setActive(false);
     _pauseReading(observer);
@@ -502,6 +502,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
                           () => controller.refresh(forceNetwork: true),
                         ),
                         child: ThreadDetailContent(
+                          quickScrollCoordinator: _quickScrollCoordinator,
                           imageReaderReturnCoordinator:
                               _imageReaderReturnCoordinator,
                           bodyReadingCoordinator: _bodyReadingCoordinator,
@@ -699,9 +700,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
   ) async {
     final observer = widget.bodyReadingObserver;
     final ownerRevision = _readingOwnerRevision;
+    _quickScrollCoordinator.cancelNavigation();
     if (observer != null) {
       _readingSuspensions++;
-      _quickScrollCoordinator.cancelNavigation();
       _bodyReadingCoordinator?.markUserNavigation();
       _bodyReadingCoordinator?.setActive(false);
       _pauseReading(observer);

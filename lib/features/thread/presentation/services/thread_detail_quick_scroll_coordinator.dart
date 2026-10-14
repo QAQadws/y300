@@ -3,6 +3,16 @@ import 'package:flutter/widgets.dart';
 
 enum ThreadDetailQuickScrollTarget { top, bottom }
 
+enum ThreadDetailEndpointNavigationResult { unavailable, reached, retired }
+
+typedef ThreadDetailEndpointNavigator =
+    Future<ThreadDetailEndpointNavigationResult> Function({
+      required ThreadDetailQuickScrollTarget target,
+      required bool animate,
+      required Duration duration,
+      required bool Function() isCurrent,
+    });
+
 /// Owns the transient direction and endpoint state for thread quick scrolling.
 ///
 /// The coordinator observes only the page's primary scrollable. It does not own
@@ -28,6 +38,18 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
   bool _navigationInterrupted = false;
   bool _isDisposed = false;
   int _navigationGeneration = 0;
+  _EndpointBinding? _endpointBinding;
+
+  void bindEndpointNavigator(
+    Object owner,
+    ThreadDetailEndpointNavigator navigate,
+  ) {
+    _endpointBinding = _EndpointBinding(owner, navigate);
+  }
+
+  void unbindEndpointNavigator(Object owner) {
+    if (identical(_endpointBinding?.owner, owner)) _endpointBinding = null;
+  }
 
   void cancelNavigation() {
     _navigationGeneration++;
@@ -123,6 +145,30 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     _navigationInterrupted = false;
     notifyListeners();
     try {
+      final endpoint = _endpointBinding;
+      if (endpoint != null) {
+        final result = await endpoint.navigate(
+          target: requestedTarget,
+          animate: animate,
+          duration: animationDuration,
+          isCurrent: () =>
+              isCurrent() &&
+              !_navigationInterrupted &&
+              identical(_endpointBinding, endpoint),
+        );
+        if (!identical(_endpointBinding, endpoint) ||
+            !isCurrent() ||
+            _navigationInterrupted ||
+            result == ThreadDetailEndpointNavigationResult.retired) {
+          return;
+        }
+        if (result == ThreadDetailEndpointNavigationResult.reached) {
+          // The host may have rebased its viewport. Old and new pixel offsets
+          // are not comparable; completion confirms the actual entry endpoint.
+          onUserNavigation?.call();
+          return;
+        }
+      }
       if (animate) {
         await _scrollController.animateTo(
           targetOffset,
@@ -225,6 +271,13 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _navigationGeneration++;
+    _endpointBinding = null;
     super.dispose();
   }
+}
+
+final class _EndpointBinding {
+  _EndpointBinding(this.owner, this.navigate);
+  final Object owner;
+  final ThreadDetailEndpointNavigator navigate;
 }

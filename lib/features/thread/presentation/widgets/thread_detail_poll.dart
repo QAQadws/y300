@@ -12,6 +12,8 @@ class ThreadPollCard extends StatefulWidget {
     required this.onSubmit,
     required this.palette,
     this.notice,
+    this.expanded,
+    this.onExpansionChanged,
   });
 
   final ThreadPoll poll;
@@ -23,13 +25,16 @@ class ThreadPollCard extends StatefulWidget {
   final VoidCallback onSubmit;
   final ThreadDetailNativePalette palette;
   final ThreadActionNotice? notice;
+  final bool? expanded;
+  final ValueChanged<bool>? onExpansionChanged;
 
   @override
   State<ThreadPollCard> createState() => _ThreadPollCardState();
 }
 
 class _ThreadPollCardState extends State<ThreadPollCard> {
-  var _expanded = true;
+  var _localExpanded = true;
+  bool get _expanded => widget.expanded ?? _localExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +64,11 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
             poll: widget.poll,
             palette: widget.palette,
             expanded: _expanded,
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: () {
+              final next = !_expanded;
+              setState(() => _localExpanded = next);
+              widget.onExpansionChanged?.call(next);
+            },
           ),
           if (_expanded)
             Column(
