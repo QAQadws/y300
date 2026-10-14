@@ -671,52 +671,71 @@ void main() {
   );
 
   testWidgets(
-    'four retained long bodies admit chunks and a fifth remains fully readable',
+    'twenty long floors stay chunked across cache eviction and endpoint navigation',
     (tester) async {
       final posts = [
-        for (var i = 0; i < 5; i++)
-          _post('long-$i', _html(3000, paragraphs: true), i + 1),
+        for (var i = 0; i < 20; i++)
+          _post('long-$i', _html(3000, paragraphs: true, prefix: '$i-'), i + 1),
       ];
-      // Introduce the fifth floor after four plans have committed. An input
-      // demanded earlier keeps its original choice while preparation awaits.
-      final host = _Host(posts.take(4).toList(), target: 'long-0');
+      // Keep the same page/Content owner. This visits every floor rather than
+      // clearing the old budget through page replacement or skipping to twenty.
+      final host = _Host(posts, target: 'long-0', quickScrolling: true);
       addTearDown(host.dispose);
-      await _mount(tester, host);
-      for (var i = 0; i < 5; i++) {
-        if (i == 4) host.replace(posts);
-        if (i > 0) host.navigate('long-$i');
-        await _pumpUntil(
-          tester,
-          () => _bodyText(tester, 'long-$i').contains('unit[0]'),
-        );
-        final renderers = _renderers(tester, 'long-$i');
-        if (i < 4) {
+      try {
+        await _mount(tester, host);
+        for (final i in [...List.generate(20, (index) => index), 9, 0, 19]) {
+          host.navigate('long-$i');
+          await _pumpUntil(tester, () => _visibleMarker(tester, 'long-$i', 0));
+          final renderers = _renderers(tester, 'long-$i');
           expect(renderers, isNotEmpty);
           expect(
             renderers.every(
-              (renderer) => renderer.html.length < posts[i].message.length,
+              (renderer) =>
+                  renderer.html.length < posts[i].message.length &&
+                  renderer.preparedDocument!.safeDisplayPlan == null,
             ),
             isTrue,
           );
-        } else {
-          expect(renderers, hasLength(1));
-          expect(renderers.single.html, posts[i].message);
-          expect(renderers.single.preparedDocument!.safeDisplayPlan, isNull);
-          expect(_bodyText(tester, 'long-$i'), contains('unit[2999]'));
+          expect(
+            RegExp(r'unit\[').allMatches(_bodyText(tester)).length,
+            lessThan(3000),
+          );
+          // Traverse an actual chunk boundary after cache replacement. Returning
+          // must materialize the requested chunks, never one whole HTML renderer.
+          host.controller.jumpTo(host.controller.offset + 1800);
+          await _pumpUntil(tester, () {
+            if (_visibleMarker(tester, 'long-$i', 48)) return true;
+            final marker = _markerRect(tester, 'long-$i', 48);
+            final viewport = tester.getRect(
+              find.byKey(const Key('thread-detail-list')),
+            );
+            host.controller.jumpTo(
+              host.controller.offset +
+                  (marker == null ? 300 : marker.top - viewport.top - 80),
+            );
+            return false;
+          });
         }
+        host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+        await _quickNavigate(tester, host, animate: false);
+        await _pumpUntil(tester, () => _visibleMarker(tester, 'long-0', 0));
+        expect(_atFirstFloor(tester, 'long-0'), isTrue);
+        expect(
+          _renderers(tester, 'long-0').every(
+            (renderer) => renderer.html.length < posts.first.message.length,
+          ),
+          isTrue,
+        );
+        host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+        await _quickNavigate(tester, host, animate: false);
+        await _pumpUntil(tester, () => _visibleMarker(tester, 'long-19', 2999));
+        expect(_atPaginationEnd(tester), isTrue);
+        expect(host.confirmedOffsets, hasLength(2));
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainPreparation(tester);
       }
-      host.navigate('long-0');
-      await _pumpUntil(
-        tester,
-        () => _bodyText(tester, 'long-0').contains('unit[0]'),
-      );
-      expect(
-        _renderers(tester, 'long-0').every(
-          (renderer) => renderer.html.length < posts.first.message.length,
-        ),
-        isTrue,
-      );
-      expect(tester.takeException(), isNull);
     },
   );
 }
@@ -983,6 +1002,12 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() predicate) async {
 
 Future<void> _ready(WidgetTester tester, String text) =>
     _pumpUntil(tester, () => _bodyText(tester).contains(text));
+Future<void> _drainPreparation(WidgetTester tester) => _pumpUntil(
+  tester,
+  () =>
+      ForumHtmlPreparationExecutor.shared.activeCount == 0 &&
+      ForumHtmlPreparationExecutor.shared.queuedCount == 0,
+);
 Future<void> _tail(WidgetTester tester, _Host host, String text) async {
   for (var attempt = 0; attempt < 30; attempt++) {
     host.controller.jumpTo(host.controller.position.maxScrollExtent);

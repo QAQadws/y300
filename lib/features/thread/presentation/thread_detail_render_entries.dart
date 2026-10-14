@@ -13,7 +13,7 @@ class ThreadDetailRenderEntryPlanner {
     required List<ThreadPost> posts,
     String? targetPid,
     ThreadPostLanding landing = ThreadPostLanding.top,
-    Map<String, ThreadDetailPreparedBody> preparedBodies = const {},
+    Map<String, ThreadDetailBodyManifest> bodyManifests = const {},
   }) {
     return buildProjectionEntries(
       posts: [
@@ -22,7 +22,7 @@ class ThreadDetailRenderEntryPlanner {
       ],
       targetPid: targetPid,
       landing: landing,
-      preparedBodies: preparedBodies,
+      bodyManifests: bodyManifests,
     );
   }
 
@@ -30,14 +30,14 @@ class ThreadDetailRenderEntryPlanner {
     required List<ThreadDetailPostProjection> posts,
     String? targetPid,
     ThreadPostLanding landing = ThreadPostLanding.top,
-    Map<String, ThreadDetailPreparedBody> preparedBodies = const {},
+    Map<String, ThreadDetailBodyManifest> bodyManifests = const {},
   }) {
     final entries = <ThreadDetailRenderEntry>[];
     final normalizedTargetPid = targetPid?.trim();
     for (var index = 0; index < posts.length; index++) {
       final post = posts[index];
-      final preparedBody = preparedBodies[post.sourcePost.pid];
-      if (preparedBody != null ||
+      final manifest = bodyManifests[post.sourcePost.pid];
+      if (manifest != null ||
           landing == ThreadPostLanding.bodyEnd &&
               post.sourcePost.pid == normalizedTargetPid) {
         final pid = post.sourcePost.pid;
@@ -48,7 +48,7 @@ class ThreadDetailRenderEntryPlanner {
             displayPost: post.displayPost,
             postIndex: index,
           ),
-          if (preparedBody == null)
+          if (manifest == null)
             ThreadDetailRenderEntry.postBody(
               key: 'thread-post-body-entry-$pid',
               sourcePost: post.sourcePost,
@@ -56,13 +56,13 @@ class ThreadDetailRenderEntryPlanner {
               postIndex: index,
             )
           else
-            for (final chunk in preparedBody.document.safeDisplayPlan!.chunks)
+            for (final chunk in manifest.chunks)
               ThreadDetailRenderEntry.postBodyChunk(
                 key: 'thread-post-body-chunk-$pid-${chunk.ordinal}',
                 sourcePost: post.sourcePost,
                 displayPost: post.displayPost,
                 postIndex: index,
-                preparedBody: preparedBody,
+                bodyManifest: manifest,
                 chunkOrdinal: chunk.ordinal,
               ),
           ThreadDetailRenderEntry.postFooter(
@@ -109,7 +109,7 @@ class ThreadDetailRenderEntry {
     this.sourcePost,
     this.displayPost,
     required this.postIndex,
-    this.preparedBody,
+    this.bodyManifest,
     this.chunkOrdinal,
   });
 
@@ -170,7 +170,7 @@ class ThreadDetailRenderEntry {
     required ThreadPost sourcePost,
     required ThreadPost displayPost,
     required int postIndex,
-    required ThreadDetailPreparedBody preparedBody,
+    required ThreadDetailBodyManifest bodyManifest,
     required int chunkOrdinal,
   }) : this._(
          kind: ThreadDetailRenderEntryKind.postBodyChunk,
@@ -178,7 +178,7 @@ class ThreadDetailRenderEntry {
          sourcePost: sourcePost,
          displayPost: displayPost,
          postIndex: postIndex,
-         preparedBody: preparedBody,
+         bodyManifest: bodyManifest,
          chunkOrdinal: chunkOrdinal,
        );
 
@@ -201,6 +201,6 @@ class ThreadDetailRenderEntry {
   final ThreadPost? sourcePost;
   final ThreadPost? displayPost;
   final int postIndex;
-  final ThreadDetailPreparedBody? preparedBody;
+  final ThreadDetailBodyManifest? bodyManifest;
   final int? chunkOrdinal;
 }

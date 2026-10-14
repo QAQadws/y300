@@ -18,6 +18,7 @@ import 'package:y300/features/thread/presentation/thread_detail_render_entries.d
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import '../thread_detail_prepared_body.dart';
 import '../services/thread_body_preparation_handoff.dart';
+import '../services/thread_body_chunk_preparation.dart';
 import '../services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
@@ -128,6 +129,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   @override
   final _preparedBodies = ThreadDetailPreparedBodyStore();
   late final _bodyHandoffs = ThreadBodyPreparationHandoff(_preparedBodies);
+  late final _chunkPreparation = ThreadBodyChunkPreparation(_preparedBodies);
   final _footerExpansions = <String, _ThreadPostFooterExpansion>{};
   // Saved body percentages require complete actual geometry. Source reading
   // pages keep their existing whole-body renderer and reading observer.
@@ -270,6 +272,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     _disposeEndpointNavigation();
     _clearFooterExpansions();
     _retirePreparedBodies();
+    _chunkPreparation.dispose();
     _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
     _imageViewportCoordinator?.dispose();
     _scrollStabilizer.dispose();
@@ -289,6 +292,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       final activePids = _sourcePidsFor(widget).toSet();
       _bodyHandoffs.retainPids(activePids);
       _preparedBodies.retainWhere((pid, _) => activePids.contains(pid));
+      _chunkPreparation.retainCurrent();
       if (_preparedBodies.bodies.isNotEmpty) {
         final preferences = ref
             .watch(forumHtmlReaderPreferencesControllerProvider)
@@ -339,7 +343,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       posts: _postProjections,
       targetPid: _endpointTarget == null ? widget.targetPid : null,
       landing: _endpointTarget == null ? widget.landing : ThreadPostLanding.top,
-      preparedBodies: _preparedBodies.bodies,
+      bodyManifests: _preparedBodies.manifests,
     );
     _projectionAnchorCoordinator.prune(
       _postProjections.map((post) => post.sourcePost.pid),
@@ -454,6 +458,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   void _retirePreparedBodies() {
     _bodyGeneration++;
     _bodyHandoffs.clear();
+    _chunkPreparation.clear();
     _preparedBodies.clear();
     _pendingChunkAnchor = null;
     _renderLayoutIdentity = null;
@@ -481,11 +486,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     final generation = _bodyGeneration;
     if (!_bodyHandoffs.canReserve(pid, candidate)) {
       if (_preparedBodies[pid] == null) return false;
-      final rejected = _bodyHandoffs.begin(
-        pid: pid,
-        identity: identity,
-        reservedCodeUnits: 0,
-      );
+      final rejected = _bodyHandoffs.begin(pid: pid, identity: identity);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted ||
             generation != _bodyGeneration ||
@@ -500,11 +501,8 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       });
       return true;
     }
-    final lease = _bodyHandoffs.begin(
-      pid: pid,
-      identity: identity,
-      reservedCodeUnits: candidate.retainedCodeUnits,
-    );
+    final lease = _bodyHandoffs.begin(pid: pid, identity: identity);
+    final seedOrdinal = _preparationSeedOrdinal(bodyContext, pid, document);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           !bodyContext.mounted ||
@@ -516,7 +514,12 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       }
       late ThreadBodyPreparationHandoffResult result;
       setState(() {
-        result = _bodyHandoffs.complete(lease, candidate, currentInput: true);
+        result = _bodyHandoffs.complete(
+          lease,
+          candidate,
+          currentInput: true,
+          seedOrdinal: seedOrdinal,
+        );
       });
       if (result == ThreadBodyPreparationHandoffResult.admitted &&
           _pendingChunkAnchor?.pid == pid) {
@@ -525,6 +528,28 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       }
     });
     return true;
+  }
+
+  int _preparationSeedOrdinal(
+    BuildContext bodyContext,
+    String pid,
+    ForumHtmlPreparedRenderDocument document,
+  ) {
+    final plan = document.safeDisplayPlan!;
+    final anchor = _pendingChunkAnchor;
+    if (anchor?.pid == pid && anchor?.chunkStartUnit != null) {
+      return plan.chunkForUnit(anchor!.chunkStartUnit!)?.ordinal ?? 0;
+    }
+    if (bodyContext.widget case _ThreadPostChunkBody(:final ordinal)) {
+      return ordinal.clamp(0, plan.chunks.length - 1);
+    }
+    if (widget.landing == ThreadPostLanding.bodyEnd &&
+            widget.targetPid == pid ||
+        _endpointTarget == ThreadDetailQuickScrollTarget.bottom &&
+            _postProjections.last.sourcePost.pid == pid) {
+      return plan.chunks.length - 1;
+    }
+    return 0;
   }
 
   @override
@@ -865,22 +890,13 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       case ThreadDetailRenderEntryKind.postBody:
       case ThreadDetailRenderEntryKind.postBodyChunk:
         return KeyedSubtree(
-          key: entry.preparedBody == null
+          key: entry.bodyManifest == null
               ? null
               : _projectionAnchorCoordinator.keyForChunk(
                   entry.sourcePost!.pid,
-                  entry
-                      .preparedBody!
-                      .document
-                      .safeDisplayPlan!
-                      .chunks[entry.chunkOrdinal!]
-                      .startUnit,
-                  endUnit: entry
-                      .preparedBody!
-                      .document
-                      .safeDisplayPlan!
-                      .chunks[entry.chunkOrdinal!]
-                      .endUnit,
+                  entry.bodyManifest!.chunks[entry.chunkOrdinal!].startUnit,
+                  endUnit:
+                      entry.bodyManifest!.chunks[entry.chunkOrdinal!].endUnit,
                 ),
           child: _ThreadPostCardBodyEntry(
             sourcePost: entry.sourcePost!,
@@ -908,7 +924,10 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                 ? _bodyHandoffs.selectPreparer
                 : null,
             enableSafeDisplayPlanning: _canChunkBodies,
-            preparedBody: entry.preparedBody,
+            bodyManifest: entry.bodyManifest,
+            chunkPreparation: _chunkPreparation,
+            preparedBodyStore: _preparedBodies,
+            layoutIdentity: _renderLayoutIdentity,
             chunkOrdinal: entry.chunkOrdinal,
             onOpenPostActions: widget.onOpenPostActions,
           ),

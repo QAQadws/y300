@@ -114,7 +114,10 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     this.bodyReadingCoordinator,
     this.onPreparedBody,
     this.preparerSelector,
-    this.preparedBody,
+    this.bodyManifest,
+    this.chunkPreparation,
+    this.preparedBodyStore,
+    this.layoutIdentity,
     this.chunkOrdinal,
     this.enableSafeDisplayPlanning = false,
   });
@@ -150,7 +153,10 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
   final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
-  final ThreadDetailPreparedBody? preparedBody;
+  final ThreadDetailBodyManifest? bodyManifest;
+  final ThreadBodyChunkPreparation? chunkPreparation;
+  final ThreadDetailPreparedBodyStore? preparedBodyStore;
+  final Object? layoutIdentity;
   final int? chunkOrdinal;
   final bool enableSafeDisplayPlanning;
   final ValueChanged<ThreadPost> onOpenPostActions;
@@ -180,19 +186,30 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             color: palette.bodyText,
             height: 1.5,
           ),
-          child: preparedBody != null
-              ? _ThreadPostChunkBody(
-                  preparedBody: preparedBody!,
-                  ordinal: chunkOrdinal!,
-                  post: post,
-                  sourcePost: sourcePost,
-                  theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
-                    palette: palette,
-                    brightness: Theme.of(context).brightness,
+          child: bodyManifest != null
+              ? LayoutBuilder(
+                  builder: (context, constraints) => _ThreadPostChunkBody(
+                    manifest: bodyManifest!,
+                    preparation: chunkPreparation!,
+                    store: preparedBodyStore!,
+                    // Parent constraints can change without MediaQuery changing.
+                    layoutIdentity: (
+                      layoutIdentity!,
+                      constraints.maxWidth,
+                      DefaultTextStyle.of(context).style,
+                    ),
+                    ordinal: chunkOrdinal!,
+                    post: post,
+                    sourcePost: sourcePost,
+                    theme: const ForumHtmlRenderThemeFactory()
+                        .fromThreadPalette(
+                          palette: palette,
+                          brightness: Theme.of(context).brightness,
+                        ),
+                    onPreparedBody: onPreparedBody!,
+                    preparerSelector: preparerSelector,
+                    onOpenPostLink: onOpenPostLink,
                   ),
-                  onPreparedBody: onPreparedBody!,
-                  preparerSelector: preparerSelector,
-                  onOpenPostLink: onOpenPostLink,
                 )
               : ThreadPostHtmlBody(
                   post: post,
