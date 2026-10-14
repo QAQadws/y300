@@ -112,6 +112,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     this.imageAnchorController,
     required this.imagePrecacheService,
     this.bodyReadingCoordinator,
+    this.wholeBodyPresentation,
     this.onPreparedBody,
     this.preparerSelector,
     this.bodyManifest,
@@ -151,6 +152,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
+  final ThreadBodyPresentation? wholeBodyPresentation;
   final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final ThreadDetailBodyManifest? bodyManifest;
@@ -252,6 +254,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                   imageAnchorController: imageAnchorController,
                   imagePrecacheService: imagePrecacheService,
                   readingCoordinator: bodyReadingCoordinator,
+                  wholeBodyPresentation: wholeBodyPresentation,
                   onPreparedBody: onPreparedBody,
                   preparerSelector: preparerSelector,
                 ),
@@ -483,6 +486,8 @@ class _ThreadPostCardEntry extends StatefulWidget {
     this.imageAnchorController,
     required this.imagePrecacheService,
     this.bodyReadingCoordinator,
+    this.wholeBodyPresentation,
+    this.keepAlive = true,
     this.onPreparedBody,
     this.preparerSelector,
     this.enableSafeDisplayPlanning = false,
@@ -532,6 +537,8 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
+  final ThreadBodyPresentation? wholeBodyPresentation;
+  final bool keepAlive;
   final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final bool enableSafeDisplayPlanning;
@@ -551,6 +558,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
   @override
   void didUpdateWidget(covariant _ThreadPostCardEntry oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.keepAlive != widget.keepAlive) updateKeepAlive();
     if (oldWidget.sourcePost.pid != widget.sourcePost.pid ||
         oldWidget.postIndex != widget.postIndex ||
         oldWidget.onPostBuilt != widget.onPostBuilt) {
@@ -596,6 +604,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           imageAnchorController: widget.imageAnchorController,
           imagePrecacheService: widget.imagePrecacheService,
           bodyReadingCoordinator: widget.bodyReadingCoordinator,
+          wholeBodyPresentation: widget.wholeBodyPresentation,
           onPreparedBody: widget.onPreparedBody,
           preparerSelector: widget.preparerSelector,
           enableSafeDisplayPlanning: widget.enableSafeDisplayPlanning,
@@ -625,7 +634,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
   }
 
   @override
-  bool get wantKeepAlive => true;
+  bool get wantKeepAlive => widget.keepAlive;
 
   void _scheduleNotify() {
     final callback = widget.onPostBuilt;

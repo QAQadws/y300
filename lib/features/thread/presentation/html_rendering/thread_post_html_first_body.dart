@@ -11,6 +11,7 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_html_ima
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_image_host.dart';
+import 'package:y300/features/thread/presentation/services/thread_body_presentation.dart';
 
 typedef ThreadPostHtmlFirstImageFallback =
     void Function(ThreadPost post, ForumHtmlImageRequest request);
@@ -49,6 +50,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.imageAnchorController,
     this.readingCoordinator,
     this.bodyPresentation,
+    this.wholeBodyPresentation,
     this.imagePrecacheService,
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
@@ -81,6 +83,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ThreadBodyReadingCoordinator? readingCoordinator;
   final ForumHtmlBodyPresentation? bodyPresentation;
+  final ThreadBodyPresentation? wholeBodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
@@ -111,6 +114,9 @@ class _ThreadPostHtmlFirstBodyState
   Object? _readingIdentity;
   bool _readingReady = false;
   int _readingRevision = 0;
+  final _bodyLayoutConsumer = Object();
+  ThreadBodyLayoutLease? _bodyLayoutLease;
+  ThreadBodyLayoutPhase _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
 
   void _onPreparationChanged() {
     if (mounted) setState(() {});
@@ -128,6 +134,19 @@ class _ThreadPostHtmlFirstBodyState
       oldWidget.readingCoordinator?.unregister(this);
       _clearReading();
     }
+    if (!identical(
+          oldWidget.wholeBodyPresentation,
+          widget.wholeBodyPresentation,
+        ) ||
+        widget.readingCoordinator != null) {
+      _releaseBodyLayout();
+    }
+  }
+
+  void _releaseBodyLayout() {
+    _bodyLayoutLease?.release();
+    _bodyLayoutLease = null;
+    _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
   }
 
   void _clearReading() {
@@ -142,6 +161,7 @@ class _ThreadPostHtmlFirstBodyState
 
   @override
   void dispose() {
+    _releaseBodyLayout();
     widget.readingCoordinator?.unregister(this);
     _readingImages?.dispose();
     _preparation.dispose();
@@ -153,6 +173,7 @@ class _ThreadPostHtmlFirstBodyState
     final html = widget.post.message.trim();
     final sourcePost = widget.sourcePost ?? widget.post;
     if (html.isEmpty) {
+      _releaseBodyLayout();
       _preparation.reset();
       widget.readingCoordinator?.unregister(this);
       _clearReading();
@@ -171,29 +192,94 @@ class _ThreadPostHtmlFirstBodyState
         ForumHtmlReaderPreferences.defaults();
     // B-class conversion is owned by the page-level display projector. This
     // boundary only prepares and renders the already projected HTML.
-    return _buildHtmlBody(html, preferences);
+    final presentation = widget.wholeBodyPresentation;
+    if (widget.readingCoordinator != null ||
+        presentation == null ||
+        !presentation.isActive ||
+        presentation.html != widget.post.message) {
+      _releaseBodyLayout();
+      return _buildHtmlBody(html, preferences);
+    }
+    late ForumHtmlPreparationRequest request;
+    try {
+      request = _requestForBody(html, preferences);
+    } catch (error, stackTrace) {
+      _releaseBodyLayout();
+      _logRenderFailure(
+        htmlLength: html.length,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return widget.fallback ?? const ThreadPostHtmlBodyError();
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final lease = presentation.bind(
+          consumer: _bodyLayoutConsumer,
+          layoutIdentity: (
+            request.identity,
+            preferences.renderOptions,
+            Theme.of(context),
+            DefaultTextStyle.of(context).style,
+            constraints.maxWidth,
+            MediaQuery.textScalerOf(context),
+            Directionality.of(context),
+            Localizations.localeOf(context),
+          ),
+        );
+        if (!identical(_bodyLayoutLease, lease)) {
+          _bodyLayoutLease = lease;
+          _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
+        }
+        return ThreadBodyWaitingLayout(
+          lease: lease,
+          phase: () => _bodyLayoutPhase,
+          child: _buildHtmlBody(
+            html,
+            preferences,
+            bodyLayout: lease,
+            preparationRequest: request,
+          ),
+        );
+      },
+    );
   }
 
-  Widget _buildHtmlBody(String html, ForumHtmlReaderPreferences preferences) {
+  ForumHtmlPreparationRequest _requestForBody(
+    String html,
+    ForumHtmlReaderPreferences preferences,
+  ) {
+    final sourcePost = widget.sourcePost ?? widget.post;
+    final sourceId = sourcePost.pid.trim().isEmpty
+        ? 'post'
+        : sourcePost.pid.trim();
+    final baseRequest = ForumHtmlPreparationRequest(
+      html: html,
+      preferences: preferences,
+      theme: widget.theme,
+      sourceId: sourceId,
+      threadId: widget.threadId,
+      imageCacheOwnerId: widget.threadId,
+      preparer: widget.renderPreparer,
+    );
+    final selected = widget.preparerSelector?.call(baseRequest);
+    return selected == null || identical(selected, baseRequest.preparer)
+        ? baseRequest
+        : baseRequest.withPreparer(selected);
+  }
+
+  Widget _buildHtmlBody(
+    String html,
+    ForumHtmlReaderPreferences preferences, {
+    ThreadBodyLayoutLease? bodyLayout,
+    ForumHtmlPreparationRequest? preparationRequest,
+  }) {
     final sourcePost = widget.sourcePost ?? widget.post;
     try {
       final sourceId = sourcePost.pid.trim().isEmpty
           ? 'post'
           : sourcePost.pid.trim();
-      final baseRequest = ForumHtmlPreparationRequest(
-        html: html,
-        preferences: preferences,
-        theme: widget.theme,
-        sourceId: sourceId,
-        threadId: widget.threadId,
-        imageCacheOwnerId: widget.threadId,
-        preparer: widget.renderPreparer,
-      );
-      final selected = widget.preparerSelector?.call(baseRequest);
-      final request =
-          selected == null || identical(selected, baseRequest.preparer)
-          ? baseRequest
-          : baseRequest.withPreparer(selected);
+      final request = preparationRequest ?? _requestForBody(html, preferences);
       final identity = request.identity;
       if (_preparation.identity != identity) {
         // Retire the previous reading handle before a new asynchronous wait.
@@ -202,10 +288,12 @@ class _ThreadPostHtmlFirstBodyState
       }
       final preparedDocument = _preparation.resolve(request);
       if (preparedDocument == null) {
+        _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
         return const ForumHtmlPreparationPlaceholder();
       }
       if (widget.onPreparedBody?.call(context, request, preparedDocument) ==
           true) {
+        _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
         widget.readingCoordinator?.unregister(this);
         _clearReading();
         return const ForumHtmlPreparationPlaceholder();
@@ -287,17 +375,26 @@ class _ThreadPostHtmlFirstBodyState
           onBlockImageResolved: widget.onBlockImageResolved,
           imageViewportCoordinator: widget.imageViewportCoordinator,
           imageAnchorController: widget.imageAnchorController,
-          bodyPresentation: widget.bodyPresentation,
+          bodyPresentation: bodyLayout?.rendering ?? widget.bodyPresentation,
           collapseExpansion: tracked
               ? _readingExpansion
-              : widget.bodyPresentation?.collapseExpansion,
+              : (bodyLayout?.rendering ?? widget.bodyPresentation)
+                    ?.collapseExpansion,
           imageHost: tracked ? _readingImageHost : null,
-          onBodyBuilt: !tracked
+          onBodyBuilt: !tracked && bodyLayout == null
               ? null
               : () {
-                  if (mounted && readingRevision == _readingRevision) {
+                  if (tracked &&
+                      mounted &&
+                      readingRevision == _readingRevision) {
                     _readingReady = true;
                     coordinator!.schedule();
+                  }
+                  if (mounted &&
+                      identical(_bodyLayoutLease, bodyLayout) &&
+                      _preparation.identity == identity &&
+                      bodyLayout?.isCurrent == true) {
+                    _bodyLayoutPhase = ThreadBodyLayoutPhase.built;
                   }
                 },
           imagePrecacheService: widget.imagePrecacheService,
@@ -328,6 +425,7 @@ class _ThreadPostHtmlFirstBodyState
               child: body,
             );
     } catch (error, stackTrace) {
+      _bodyLayoutPhase = ThreadBodyLayoutPhase.failed;
       _logRenderFailure(
         htmlLength: html.length,
         error: error,
@@ -471,6 +569,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.imageAnchorController,
     this.readingCoordinator,
     this.bodyPresentation,
+    this.wholeBodyPresentation,
     this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.preparationExecutor,
@@ -502,6 +601,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ThreadBodyReadingCoordinator? readingCoordinator;
   final ForumHtmlBodyPresentation? bodyPresentation;
+  final ThreadBodyPresentation? wholeBodyPresentation;
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
   final ForumHtmlPreparationExecutor? preparationExecutor;
@@ -528,6 +628,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       imageAnchorController: imageAnchorController,
       readingCoordinator: readingCoordinator,
       bodyPresentation: bodyPresentation,
+      wholeBodyPresentation: wholeBodyPresentation,
       imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,
       preparationExecutor: preparationExecutor,

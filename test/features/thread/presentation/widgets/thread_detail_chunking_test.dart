@@ -266,32 +266,52 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('short and source quick scroll keep their whole body Element', (
-    tester,
-  ) async {
-    for (final sourced in [false, true]) {
-      final host = _Host(
-        [_post('long', _html(sourced ? 3000 : 50), 1)],
-        quickScrolling: true,
-        observer: sourced ? _ReadingObserver(tracked: false) : null,
-      );
-      addTearDown(host.dispose);
-      await _mount(tester, host);
-      await _ready(tester, 'unit[0]');
-      final body = _rendererElements(tester, 'long').single;
-      host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
-      await _quickNavigate(tester, host, animate: false);
-      expect(_atPaginationEnd(tester), isTrue);
-      expect(body.mounted, isTrue);
-      expect(_rendererElements(tester, 'long').single, same(body));
-      expect(
-        _renderers(tester, 'long').single.preparedDocument!.safeDisplayPlan,
-        isNull,
-      );
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    }
-  });
+  testWidgets(
+    'short quick scroll releases whole body while source preserves it',
+    (tester) async {
+      for (final sourced in [false, true]) {
+        final host = _Host(
+          [_post('long', _html(sourced ? 3000 : 50), 1)],
+          quickScrolling: true,
+          observer: sourced ? _ReadingObserver(tracked: false) : null,
+        );
+        addTearDown(host.dispose);
+        await _mount(tester, host);
+        await _ready(tester, 'unit[0]');
+        final body = _rendererElements(tester, 'long').single;
+        host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+        await _quickNavigate(tester, host, animate: false);
+        expect(_atPaginationEnd(tester), isTrue);
+        if (sourced) {
+          expect(body.mounted, isTrue);
+          expect(_rendererElements(tester, 'long').single, same(body));
+        } else {
+          expect(body.mounted, isFalse);
+          host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+          await _quickNavigate(tester, host, animate: false);
+          await _ready(tester, 'unit[0]');
+          expect(_atFirstFloor(tester, 'long'), isTrue);
+          expect(_visibleMarker(tester, 'long', 0), isTrue);
+          expect(_rendererElements(tester, 'long').single, isNot(same(body)));
+          expect(
+            _renderers(tester, 'long').single.html,
+            host.posts.single.message,
+          );
+          expect(
+            RegExp(r'unit\[').allMatches(_bodyText(tester, 'long')),
+            hasLength(50),
+          );
+          expect(_bodyText(tester, 'long'), contains('unit[49]'));
+        }
+        expect(
+          _renderers(tester, 'long').single.preparedDocument!.safeDisplayPlan,
+          isNull,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
 
   testWidgets(
     'comment expansion survives endpoint rebases and retires with the page',

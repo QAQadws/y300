@@ -19,6 +19,7 @@ import 'package:y300/features/thread/presentation/thread_detail_content_projecti
 import '../thread_detail_prepared_body.dart';
 import '../services/thread_body_preparation_handoff.dart';
 import '../services/thread_body_chunk_preparation.dart';
+import '../services/thread_body_presentation.dart';
 import '../services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
@@ -131,6 +132,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   late final _bodyHandoffs = ThreadBodyPreparationHandoff(_preparedBodies);
   late final _chunkPreparation = ThreadBodyChunkPreparation(_preparedBodies);
   final _footerExpansions = <String, _ThreadPostFooterExpansion>{};
+  final _wholeBodyPresentations = ThreadBodyPresentationStore();
   // Saved body percentages require complete actual geometry. Source reading
   // pages keep their existing whole-body renderer and reading observer.
   @override
@@ -196,6 +198,16 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     _updateEndpointNavigation(oldWidget);
+    if (oldWidget.state.tid != widget.state.tid ||
+        oldWidget.state.currentPage != widget.state.currentPage ||
+        oldWidget.state.queryParameters['authorid'] !=
+            widget.state.queryParameters['authorid'] ||
+        oldWidget.state.queryParameters['ordertype'] !=
+            widget.state.queryParameters['ordertype'] ||
+        !identical(oldWidget.scrollController, widget.scrollController) ||
+        oldWidget.bodyReadingCoordinator != widget.bodyReadingCoordinator) {
+      _wholeBodyPresentations.clear();
+    }
     if (oldWidget.state.tid != widget.state.tid ||
         oldWidget.state.currentPage != widget.state.currentPage) {
       _clearFooterExpansions();
@@ -271,6 +283,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   void dispose() {
     _disposeEndpointNavigation();
     _clearFooterExpansions();
+    _wholeBodyPresentations.clear();
     _retirePreparedBodies();
     _chunkPreparation.dispose();
     _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
@@ -282,6 +295,16 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
 
   @override
   Widget build(BuildContext context) {
+    final wholeBodyHtml = {
+      for (final post in _postProjections)
+        post.sourcePost.pid: post.displayPost.message,
+    };
+    _wholeBodyPresentations.retainWhere(
+      (pid, html) =>
+          widget.bodyReadingCoordinator == null &&
+          wholeBodyHtml[pid] == html &&
+          _preparedBodies[pid] == null,
+    );
     final footerPids = _sourcePidsFor(widget).toSet();
     _footerExpansions.removeWhere((pid, expansion) {
       if (footerPids.contains(pid)) return false;
@@ -455,6 +478,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   _ThreadPostFooterExpansion _footerExpansionFor(String pid) =>
       _footerExpansions.putIfAbsent(pid, _ThreadPostFooterExpansion.new);
 
+  ThreadBodyPresentation? _wholeBodyPresentationFor(String pid, String html) =>
+      widget.bodyReadingCoordinator != null || _preparedBodies[pid] != null
+      ? null
+      : _wholeBodyPresentations.obtain(pid, html);
+
   void _retirePreparedBodies() {
     _bodyGeneration++;
     _bodyHandoffs.clear();
@@ -520,6 +548,9 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
           currentInput: true,
           seedOrdinal: seedOrdinal,
         );
+        if (result == ThreadBodyPreparationHandoffResult.admitted) {
+          _wholeBodyPresentations.remove(pid);
+        }
       });
       if (result == ThreadBodyPreparationHandoffResult.admitted &&
           _pendingChunkAnchor?.pid == pid) {
@@ -752,9 +783,10 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                       widget.landing == ThreadPostLanding.top)) {
             child = KeyedSubtree(key: _targetVisibilityKey, child: child);
           }
-          if (entry.kind == ThreadDetailRenderEntryKind.postHeader ||
-              entry.kind == ThreadDetailRenderEntryKind.postBody ||
-              entry.kind == ThreadDetailRenderEntryKind.postFooter) {
+          if (widget.bodyReadingCoordinator != null &&
+              (entry.kind == ThreadDetailRenderEntryKind.postHeader ||
+                  entry.kind == ThreadDetailRenderEntryKind.postBody ||
+                  entry.kind == ThreadDetailRenderEntryKind.postFooter)) {
             child = _TargetPostSegmentKeepAlive(
               key: Key('keep-alive-${entry.key}'),
               child: child,
@@ -817,6 +849,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
         return KeyedSubtree(
           key: _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardEntry(
+            keepAlive: widget.bodyReadingCoordinator != null,
+            wholeBodyPresentation: _wholeBodyPresentationFor(
+              entry.sourcePost!.pid,
+              entry.displayPost!.message,
+            ),
             footerExpansion: _footerExpansionFor(entry.sourcePost!.pid),
             sourcePost: entry.sourcePost!,
             displayPost: entry.displayPost!,
@@ -899,6 +936,12 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                       entry.bodyManifest!.chunks[entry.chunkOrdinal!].endUnit,
                 ),
           child: _ThreadPostCardBodyEntry(
+            wholeBodyPresentation: entry.bodyManifest == null
+                ? _wholeBodyPresentationFor(
+                    entry.sourcePost!.pid,
+                    entry.displayPost!.message,
+                  )
+                : null,
             sourcePost: entry.sourcePost!,
             displayPost: entry.displayPost!,
             threadId: widget.state.tid,
