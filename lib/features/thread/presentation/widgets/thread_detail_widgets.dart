@@ -4,6 +4,7 @@ import 'package:y300/app/content_rendering/native_forum_html_render_theme_factor
 import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
@@ -15,6 +16,8 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
+import '../thread_detail_prepared_body.dart';
+import '../services/thread_body_preparation_handoff.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
@@ -43,8 +46,9 @@ part 'thread_detail_footer.dart';
 part 'thread_detail_atoms.dart';
 part 'thread_detail_card.dart';
 part 'thread_detail_loading.dart';
+part 'thread_detail_chunk_body.dart';
 
-class ThreadDetailContent extends StatefulWidget {
+class ThreadDetailContent extends ConsumerStatefulWidget {
   const ThreadDetailContent({
     super.key,
     required this.state,
@@ -74,10 +78,12 @@ class ThreadDetailContent extends StatefulWidget {
     this.onLoadAllRatings,
     this.onLoadMoreComments,
     this.displayExtraCommentsByPostId = const {},
+    this.enableBodyChunking = true,
   });
 
   final ThreadDetailPageState state;
   final ThreadDetailContentProjection? projection;
+  final bool enableBodyChunking;
   final ScrollController? scrollController;
   final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
@@ -109,10 +115,20 @@ class ThreadDetailContent extends StatefulWidget {
   final Map<String, List<ThreadPostCommentEntry>> displayExtraCommentsByPostId;
 
   @override
-  State<ThreadDetailContent> createState() => _ThreadDetailContentState();
+  ConsumerState<ThreadDetailContent> createState() =>
+      _ThreadDetailContentState();
 }
 
-class _ThreadDetailContentState extends State<ThreadDetailContent> {
+class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent> {
+  final _preparedBodies = ThreadDetailPreparedBodyStore();
+  late final _bodyHandoffs = ThreadBodyPreparationHandoff(_preparedBodies);
+  // Saved body percentages require complete actual geometry. Source reading
+  // pages keep their existing whole-body renderer and reading observer.
+  bool get _canChunkBodies =>
+      widget.enableBodyChunking && widget.bodyReadingCoordinator == null;
+  int _bodyGeneration = 0;
+  Object? _renderLayoutIdentity;
+  ThreadPostViewportAnchorSnapshot? _pendingChunkAnchor;
   final _entryPlanner = const ThreadDetailRenderEntryPlanner();
   final GlobalKey _viewportKey = GlobalKey(debugLabel: 'thread-detail-list');
   final GlobalKey _targetCenterKey = GlobalKey(
@@ -163,6 +179,12 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
   @override
   void didUpdateWidget(covariant ThreadDetailContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.tid != widget.state.tid ||
+        oldWidget.state.currentPage != widget.state.currentPage ||
+        oldWidget.enableBodyChunking != widget.enableBodyChunking ||
+        oldWidget.bodyReadingCoordinator != widget.bodyReadingCoordinator) {
+      _retirePreparedBodies();
+    }
     if (widget.bodyReadingCoordinator != null &&
         (oldWidget.state.posts.length != widget.state.posts.length ||
             List.generate(widget.state.posts.length, (index) => index).any(
@@ -191,6 +213,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
     final projectionAnchor = shouldRestoreProjectionAnchor
         ? _projectionAnchorCoordinator.capture(_sourcePidsFor(oldWidget))
         : null;
+    if (widget.enableBodyChunking && projectionAnchor != null) {
+      _pendingChunkAnchor = projectionAnchor;
+    }
     if (!identical(oldWidget.scrollController, widget.scrollController) ||
         !identical(
           oldWidget.onScrollStabilizerEvent,
@@ -223,6 +248,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
 
   @override
   void dispose() {
+    _retirePreparedBodies();
     _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
     _imageViewportCoordinator?.dispose();
     _scrollStabilizer.dispose();
@@ -232,6 +258,32 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
 
   @override
   Widget build(BuildContext context) {
+    if (_canChunkBodies) {
+      final activePids = _sourcePidsFor(widget).toSet();
+      _bodyHandoffs.retainPids(activePids);
+      _preparedBodies.retainWhere((pid, _) => activePids.contains(pid));
+      if (_preparedBodies.bodies.isNotEmpty) {
+        final preferences = ref
+            .watch(forumHtmlReaderPreferencesControllerProvider)
+            .value;
+        final layoutIdentity = (
+          preferences,
+          Theme.of(context),
+          MediaQuery.sizeOf(context),
+          MediaQuery.textScalerOf(context),
+          Directionality.of(context),
+        );
+        if (_renderLayoutIdentity != null &&
+            _renderLayoutIdentity != layoutIdentity) {
+          final snapshot = _projectionAnchorCoordinator.capture(
+            _sourcePidsFor(widget),
+          );
+          _pendingChunkAnchor = snapshot;
+          _projectionAnchorCoordinator.restoreAfterFrame(snapshot);
+        }
+        _renderLayoutIdentity = layoutIdentity;
+      }
+    }
     final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
     widget.bodyReadingCoordinator?.bindContent(
       tid: widget.state.tid,
@@ -258,6 +310,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
       posts: _postProjections,
       targetPid: widget.targetPid,
       landing: widget.landing,
+      preparedBodies: _preparedBodies.bodies,
     );
     _projectionAnchorCoordinator.prune(
       _postProjections.map((post) => post.sourcePost.pid),
@@ -268,10 +321,11 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         ? -1
         : entries.indexWhere(
             (entry) =>
-                entry.kind ==
-                    (widget.landing == ThreadPostLanding.bodyEnd
-                        ? ThreadDetailRenderEntryKind.postFooter
-                        : ThreadDetailRenderEntryKind.postCard) &&
+                (widget.landing == ThreadPostLanding.bodyEnd
+                    ? entry.kind == ThreadDetailRenderEntryKind.postFooter
+                    : entry.kind == ThreadDetailRenderEntryKind.postCard ||
+                          entry.kind ==
+                              ThreadDetailRenderEntryKind.postHeader) &&
                 entry.sourcePost?.pid == targetPid,
           );
     if (targetEntryIndex >= 0) {
@@ -279,6 +333,40 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         entries: entries,
         targetEntryIndex: targetEntryIndex,
         palette: palette,
+      );
+    }
+    if (_canChunkBodies) {
+      return SizedBox.expand(
+        key: _viewportKey,
+        child: CustomScrollView(
+          key: const Key('thread-detail-list'),
+          controller: widget.scrollController,
+          physics: ForumPullToRefresh.scrollPhysics,
+          scrollCacheExtent: _imagePreloadPolicy.layoutCacheExtent,
+          semanticChildCount: entries.length,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                ForumContentSpacing.pageHorizontal,
+                ForumContentSpacing.listTop,
+                ForumContentSpacing.pageHorizontal,
+                ForumContentSpacing.listBottom,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => KeyedSubtree(
+                    key: ValueKey(entries[index].key),
+                    child: _buildEntry(context, entries[index], palette),
+                  ),
+                  childCount: entries.length,
+                  addAutomaticKeepAlives: true,
+                  findChildIndexCallback: (key) =>
+                      _entryIndexForKey(entries, key),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
     return SizedBox.expand(
@@ -296,12 +384,121 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         ),
         scrollCacheExtent: _imagePreloadPolicy.layoutCacheExtent,
         itemCount: entries.length,
+        findChildIndexCallback: (key) => _entryIndexForKey(entries, key),
         itemBuilder: (context, index) {
           final entry = entries[index];
-          return _buildEntry(context, entry, palette);
+          return KeyedSubtree(
+            key: ValueKey(entry.key),
+            child: _buildEntry(context, entry, palette),
+          );
         },
       ),
     );
+  }
+
+  int? _entryIndexForKey(List<ThreadDetailRenderEntry> entries, Key key) {
+    for (var index = 0; index < entries.length; index++) {
+      if (key == ValueKey(entries[index].key)) return index;
+    }
+    return null;
+  }
+
+  void _retirePreparedBodies() {
+    _bodyGeneration++;
+    _bodyHandoffs.clear();
+    _preparedBodies.clear();
+    _pendingChunkAnchor = null;
+    _renderLayoutIdentity = null;
+  }
+
+  bool _handoffPreparedBody(
+    BuildContext bodyContext,
+    ForumHtmlPreparationRequest request,
+    ForumHtmlPreparedRenderDocument document,
+  ) {
+    if (!_canChunkBodies) {
+      return false;
+    }
+    final pid = request.sourceId;
+    final identity = request.identity;
+    _bodyHandoffs.retireDeclinedInput(pid, identity);
+    if (_bodyHandoffs.isDeclined(pid, identity)) return false;
+    if (_bodyHandoffs.pendingFor(pid)?.identity == identity) return true;
+    final candidate = ThreadDetailPreparedBody(
+      request: request,
+      document: document,
+    );
+    final previousLease = _bodyHandoffs.pendingFor(pid);
+    if (previousLease != null) _bodyHandoffs.release(previousLease);
+    final generation = _bodyGeneration;
+    if (!_bodyHandoffs.canReserve(pid, candidate)) {
+      if (_preparedBodies[pid] == null) return false;
+      final rejected = _bodyHandoffs.begin(
+        pid: pid,
+        identity: identity,
+        reservedCodeUnits: 0,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            generation != _bodyGeneration ||
+            !_bodyHandoffs.isCurrent(rejected)) {
+          return;
+        }
+        if (!_isCurrentPreparedRequest(request)) {
+          _bodyHandoffs.release(rejected);
+          return;
+        }
+        setState(() => _bodyHandoffs.decline(rejected));
+      });
+      return true;
+    }
+    final lease = _bodyHandoffs.begin(
+      pid: pid,
+      identity: identity,
+      reservedCodeUnits: candidate.retainedCodeUnits,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !bodyContext.mounted ||
+          generation != _bodyGeneration ||
+          !_bodyHandoffs.isCurrent(lease) ||
+          !_isCurrentPreparedRequest(request)) {
+        _bodyHandoffs.release(lease);
+        return;
+      }
+      late ThreadBodyPreparationHandoffResult result;
+      setState(() {
+        result = _bodyHandoffs.complete(lease, candidate, currentInput: true);
+      });
+      if (result == ThreadBodyPreparationHandoffResult.admitted &&
+          _pendingChunkAnchor?.pid == pid) {
+        _projectionAnchorCoordinator.restoreAfterFrame(_pendingChunkAnchor);
+        _pendingChunkAnchor = null;
+      }
+    });
+    return true;
+  }
+
+  bool _isCurrentPreparedRequest(ForumHtmlPreparationRequest request) {
+    final post = _postProjections
+        .where((post) => post.sourcePost.pid.trim() == request.sourceId)
+        .firstOrNull;
+    if (post == null || request.threadId != widget.state.tid) return false;
+    final preferences =
+        ref.read(forumHtmlReaderPreferencesControllerProvider).value ??
+        ForumHtmlReaderPreferences.defaults();
+    final palette = ThreadDetailNativePalette.resolve(Theme.of(context));
+    final theme = const ForumHtmlRenderThemeFactory().fromThreadPalette(
+      palette: palette,
+      brightness: Theme.of(context).brightness,
+    );
+    return post.displayPost.message.trim() == request.html &&
+        theme.signature == request.theme.signature &&
+        request.preparer.preparationPreferencesIdentity(preferences) ==
+            request.preparer.preparationPreferencesIdentity(
+              request.preferences,
+            ) &&
+        _canChunkBodies;
   }
 
   List<ThreadDetailPostProjection> get _postProjections {
@@ -457,7 +654,9 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           if (entry.sourcePost?.pid == widget.targetPid?.trim() &&
               (entry.kind == ThreadDetailRenderEntryKind.postFooter &&
                       widget.landing == ThreadPostLanding.bodyEnd ||
-                  entry.kind == ThreadDetailRenderEntryKind.postCard &&
+                  (entry.kind == ThreadDetailRenderEntryKind.postCard ||
+                          entry.kind ==
+                              ThreadDetailRenderEntryKind.postHeader) &&
                       widget.landing == ThreadPostLanding.top)) {
             child = KeyedSubtree(key: _targetVisibilityKey, child: child);
           }
@@ -475,10 +674,21 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
               child: child,
             );
           }
-          return IndexedSemantics(index: entryIndex, child: child);
+          return KeyedSubtree(
+            key: ValueKey(entry.key),
+            child: IndexedSemantics(index: entryIndex, child: child),
+          );
         },
         childCount: count,
+        addAutomaticKeepAlives: true,
         addSemanticIndexes: false,
+        findChildIndexCallback: (key) {
+          final index = _entryIndexForKey(entries, key);
+          if (index == null || index < start || index >= start + count) {
+            return null;
+          }
+          return reverse ? start + count - index - 1 : index - start;
+        },
       ),
     );
   }
@@ -515,7 +725,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         return KeyedSubtree(
           key: _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardEntry(
-            key: Key(entry.key),
             sourcePost: entry.sourcePost!,
             displayPost: entry.displayPost!,
             displaySubject:
@@ -543,6 +752,8 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
                 ?.anchorsFor(entry.sourcePost!.pid),
             imagePrecacheService: widget.htmlImagePrecacheService,
             bodyReadingCoordinator: widget.bodyReadingCoordinator,
+            onPreparedBody: _canChunkBodies ? _handoffPreparedBody : null,
+            enableSafeDisplayPlanning: _canChunkBodies,
             onOpenPostActions: widget.onOpenPostActions,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
             onTogglePollOption: widget.onTogglePollOption,
@@ -559,7 +770,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         );
       case ThreadDetailRenderEntryKind.postHeader:
         final header = _ThreadPostCardHeaderEntry(
-          key: Key(entry.key),
           sourcePost: entry.sourcePost!,
           displayPost: entry.displayPost!,
           displaySubject:
@@ -571,41 +781,70 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
           onOpenPostActions: widget.onOpenPostActions,
         );
-        return _PostBuildObserver(
-          index: entry.postIndex,
-          onPostBuilt: _handlePostBuilt,
-          child: header,
+        return KeyedSubtree(
+          key: _preparedBodies[entry.sourcePost!.pid] == null
+              ? null
+              : _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
+          child: _PostBuildObserver(
+            index: entry.postIndex,
+            onPostBuilt: _handlePostBuilt,
+            child: header,
+          ),
         );
       case ThreadDetailRenderEntryKind.postBody:
-        return _ThreadPostCardBodyEntry(
-          key: Key(entry.key),
-          sourcePost: entry.sourcePost!,
-          displayPost: entry.displayPost!,
-          threadId: widget.state.tid,
-          highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
-          imageReferer: widget.imageReferer,
-          palette: palette,
-          onOpenPostLink: widget.onOpenPostLink,
-          onOpenPostImages: widget.onOpenPostImages,
-          onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
-          onHtmlFirstImageLayoutShift: stabilizeImageLayout
-              ? _scrollStabilizer.handleLayoutShift
-              : _ignoreImageLayoutShift,
-          onHtmlFirstImageFallbackAspectRatio:
-              _fallbackAspectRatioForBlockImage,
-          onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
-          imageViewportCoordinator: _imageViewportCoordinator,
-          imageAnchorController: widget.imageReaderReturnCoordinator
-              ?.anchorsFor(entry.sourcePost!.pid),
-          imagePrecacheService: widget.htmlImagePrecacheService,
-          bodyReadingCoordinator: widget.bodyReadingCoordinator,
-          onOpenPostActions: widget.onOpenPostActions,
+      case ThreadDetailRenderEntryKind.postBodyChunk:
+        return KeyedSubtree(
+          key: entry.preparedBody == null
+              ? null
+              : _projectionAnchorCoordinator.keyForChunk(
+                  entry.sourcePost!.pid,
+                  entry
+                      .preparedBody!
+                      .document
+                      .safeDisplayPlan!
+                      .chunks[entry.chunkOrdinal!]
+                      .startUnit,
+                  endUnit: entry
+                      .preparedBody!
+                      .document
+                      .safeDisplayPlan!
+                      .chunks[entry.chunkOrdinal!]
+                      .endUnit,
+                ),
+          child: _ThreadPostCardBodyEntry(
+            sourcePost: entry.sourcePost!,
+            displayPost: entry.displayPost!,
+            threadId: widget.state.tid,
+            highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
+            imageReferer: widget.imageReferer,
+            palette: palette,
+            onOpenPostLink: widget.onOpenPostLink,
+            onOpenPostImages: widget.onOpenPostImages,
+            onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
+            onHtmlFirstImageLayoutShift: stabilizeImageLayout
+                ? _scrollStabilizer.handleLayoutShift
+                : _ignoreImageLayoutShift,
+            onHtmlFirstImageFallbackAspectRatio:
+                _fallbackAspectRatioForBlockImage,
+            onHtmlFirstBlockImageResolved: _handleBlockImageResolved,
+            imageViewportCoordinator: _imageViewportCoordinator,
+            imageAnchorController: widget.imageReaderReturnCoordinator
+                ?.anchorsFor(entry.sourcePost!.pid),
+            imagePrecacheService: widget.htmlImagePrecacheService,
+            bodyReadingCoordinator: widget.bodyReadingCoordinator,
+            onPreparedBody: _canChunkBodies ? _handoffPreparedBody : null,
+            enableSafeDisplayPlanning: _canChunkBodies,
+            preparedBody: entry.preparedBody,
+            chunkOrdinal: entry.chunkOrdinal,
+            onOpenPostActions: widget.onOpenPostActions,
+          ),
         );
       case ThreadDetailRenderEntryKind.postFooter:
         return KeyedSubtree(
-          key: _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
+          key: _preparedBodies[entry.sourcePost!.pid] != null
+              ? null
+              : _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardFooterEntry(
-            key: Key(entry.key),
             sourcePost: entry.sourcePost!,
             displayPost: entry.displayPost!,
             displayRatingsByPostId:
@@ -631,7 +870,6 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
         );
       case ThreadDetailRenderEntryKind.pagination:
         return ThreadLoadMoreSection(
-          key: const Key('thread-detail-pagination'),
           hasMore: widget.state.hasMore,
           isLoadingMore: widget.state.isLoadingMore,
           currentPage: widget.state.currentPage <= 0
@@ -644,10 +882,7 @@ class _ThreadDetailContentState extends State<ThreadDetailContent> {
           onLoadPageNumber: widget.onLoadPageNumber,
         );
       case ThreadDetailRenderEntryKind.targetSpacer:
-        return SizedBox(
-          key: const Key('thread-detail-target-scroll-spacer'),
-          height: MediaQuery.sizeOf(context).height * 0.72,
-        );
+        return SizedBox(height: MediaQuery.sizeOf(context).height * 0.72);
     }
   }
 

@@ -1224,11 +1224,20 @@ void main() {
         expect(find.byTooltip(l10n.threadDetailScrollBottom), findsOneWidget);
         expect(requestCount, 1);
 
-        final list = tester.widget<ListView>(
-          find.byKey(const Key('thread-detail-list')),
-        );
+        final listFinder = find.byKey(const Key('thread-detail-list'));
+        final list = tester.widget<ScrollView>(listFinder);
+        final padding = list is ListView
+            ? list.padding!
+            : tester
+                  .widget<SliverPadding>(
+                    find.descendant(
+                      of: listFinder,
+                      matching: find.byType(SliverPadding),
+                    ),
+                  )
+                  .padding;
         expect(
-          (list.padding! as EdgeInsets).left,
+          padding.resolve(Directionality.of(tester.element(listFinder))).left,
           ForumContentSpacing.pageHorizontal,
         );
         final scrollController = list.controller!;
@@ -1457,7 +1466,7 @@ void main() {
       expect(_richTextContaining('第 1 次加载'), findsOneWidget);
       expect(
         tester
-            .widget<ListView>(find.byKey(const Key('thread-detail-list')))
+            .widget<ScrollView>(find.byKey(const Key('thread-detail-list')))
             .physics,
         ForumPullToRefresh.scrollPhysics,
       );
@@ -4533,7 +4542,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      final list = tester.widget<ListView>(
+      final list = tester.widget<ScrollView>(
         find.byKey(const Key('thread-detail-list')),
       );
       expect(list.scrollCacheExtent, const ScrollCacheExtent.viewport(2));

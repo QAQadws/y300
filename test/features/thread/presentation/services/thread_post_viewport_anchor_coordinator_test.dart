@@ -3,6 +3,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_viewport_anchor_coordinator.dart';
 
 void main() {
+  testWidgets('explicit navigation retires an already queued correction', (
+    tester,
+  ) async {
+    final key = GlobalKey<_AnchorHarnessState>();
+    await tester.pumpWidget(MaterialApp(home: _AnchorHarness(key: key)));
+    await tester.pump();
+    final state = key.currentState!;
+    state.controller.jumpTo(120);
+    await tester.pump();
+    state.applyProjection();
+    state.controller.jumpTo(160);
+    await tester.pump();
+    await tester.pump();
+    expect(state.controller.offset, closeTo(160, 0.5));
+  });
+
+  testWidgets(
+    'late prepared content cannot restore a retired navigation snapshot',
+    (tester) async {
+      final key = GlobalKey<_AnchorHarnessState>();
+      await tester.pumpWidget(MaterialApp(home: _AnchorHarness(key: key)));
+      await tester.pump();
+      final state = key.currentState!;
+      state.controller.jumpTo(120);
+      await tester.pump();
+      final snapshot = state.coordinator.capture(state.pids);
+      state.controller.jumpTo(160);
+      state.coordinator.restoreAfterFrame(snapshot);
+      await tester.pump();
+      await tester.pump();
+      expect(state.controller.offset, closeTo(160, 0.5));
+    },
+  );
+
   testWidgets('restores the first visible pid and its local offset', (
     tester,
   ) async {

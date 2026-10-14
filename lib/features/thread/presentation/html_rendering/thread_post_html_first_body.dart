@@ -14,6 +14,13 @@ import 'package:y300/features/thread/presentation/services/thread_body_reading_i
 
 typedef ThreadPostHtmlFirstImageFallback =
     void Function(ThreadPost post, ForumHtmlImageRequest request);
+
+typedef ThreadPreparedBodyHandoff =
+    bool Function(
+      BuildContext context,
+      ForumHtmlPreparationRequest request,
+      ForumHtmlPreparedRenderDocument document,
+    );
 typedef ThreadPostHtmlFirstImageDiagnostics =
     void Function(
       ThreadPost post,
@@ -44,6 +51,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.fallback,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.preparationExecutor,
+    this.onPreparedBody,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
 
@@ -74,6 +82,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final Widget? fallback;
   final ForumHtmlRenderPreparer renderPreparer;
   final ForumHtmlPreparationExecutor? preparationExecutor;
+  final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -184,6 +193,12 @@ class _ThreadPostHtmlFirstBodyState
       }
       final preparedDocument = _preparation.resolve(request);
       if (preparedDocument == null) {
+        return const ForumHtmlPreparationPlaceholder();
+      }
+      if (widget.onPreparedBody?.call(context, request, preparedDocument) ==
+          true) {
+        widget.readingCoordinator?.unregister(this);
+        _clearReading();
         return const ForumHtmlPreparationPlaceholder();
       }
       final coordinator = widget.readingCoordinator;
@@ -450,6 +465,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.imagePrecacheService,
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.preparationExecutor,
+    this.onPreparedBody,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
 
@@ -479,6 +495,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ForumImagePrecacheService? imagePrecacheService;
   final ForumHtmlRenderPreparer renderPreparer;
   final ForumHtmlPreparationExecutor? preparationExecutor;
+  final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -503,6 +520,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       imagePrecacheService: imagePrecacheService,
       renderPreparer: renderPreparer,
       preparationExecutor: preparationExecutor,
+      onPreparedBody: onPreparedBody,
       imageReaderBridge: imageReaderBridge,
     );
   }

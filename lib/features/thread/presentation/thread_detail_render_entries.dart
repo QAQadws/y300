@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
+import 'thread_detail_prepared_body.dart';
 
 /// Builds stable visual entries without parsing or caching post bodies.
 @immutable
@@ -12,6 +13,7 @@ class ThreadDetailRenderEntryPlanner {
     required List<ThreadPost> posts,
     String? targetPid,
     ThreadPostLanding landing = ThreadPostLanding.top,
+    Map<String, ThreadDetailPreparedBody> preparedBodies = const {},
   }) {
     return buildProjectionEntries(
       posts: [
@@ -20,6 +22,7 @@ class ThreadDetailRenderEntryPlanner {
       ],
       targetPid: targetPid,
       landing: landing,
+      preparedBodies: preparedBodies,
     );
   }
 
@@ -27,13 +30,16 @@ class ThreadDetailRenderEntryPlanner {
     required List<ThreadDetailPostProjection> posts,
     String? targetPid,
     ThreadPostLanding landing = ThreadPostLanding.top,
+    Map<String, ThreadDetailPreparedBody> preparedBodies = const {},
   }) {
     final entries = <ThreadDetailRenderEntry>[];
     final normalizedTargetPid = targetPid?.trim();
     for (var index = 0; index < posts.length; index++) {
       final post = posts[index];
-      if (landing == ThreadPostLanding.bodyEnd &&
-          post.sourcePost.pid == normalizedTargetPid) {
+      final preparedBody = preparedBodies[post.sourcePost.pid];
+      if (preparedBody != null ||
+          landing == ThreadPostLanding.bodyEnd &&
+              post.sourcePost.pid == normalizedTargetPid) {
         final pid = post.sourcePost.pid;
         entries.addAll([
           ThreadDetailRenderEntry.postHeader(
@@ -42,12 +48,23 @@ class ThreadDetailRenderEntryPlanner {
             displayPost: post.displayPost,
             postIndex: index,
           ),
-          ThreadDetailRenderEntry.postBody(
-            key: 'thread-post-body-entry-$pid',
-            sourcePost: post.sourcePost,
-            displayPost: post.displayPost,
-            postIndex: index,
-          ),
+          if (preparedBody == null)
+            ThreadDetailRenderEntry.postBody(
+              key: 'thread-post-body-entry-$pid',
+              sourcePost: post.sourcePost,
+              displayPost: post.displayPost,
+              postIndex: index,
+            )
+          else
+            for (final chunk in preparedBody.document.safeDisplayPlan!.chunks)
+              ThreadDetailRenderEntry.postBodyChunk(
+                key: 'thread-post-body-chunk-$pid-${chunk.ordinal}',
+                sourcePost: post.sourcePost,
+                displayPost: post.displayPost,
+                postIndex: index,
+                preparedBody: preparedBody,
+                chunkOrdinal: chunk.ordinal,
+              ),
           ThreadDetailRenderEntry.postFooter(
             key: 'thread-post-footer-entry-$pid',
             sourcePost: post.sourcePost,
@@ -78,6 +95,7 @@ enum ThreadDetailRenderEntryKind {
   postCard,
   postHeader,
   postBody,
+  postBodyChunk,
   postFooter,
   pagination,
   targetSpacer,
@@ -91,6 +109,8 @@ class ThreadDetailRenderEntry {
     this.sourcePost,
     this.displayPost,
     required this.postIndex,
+    this.preparedBody,
+    this.chunkOrdinal,
   });
 
   const ThreadDetailRenderEntry.postCard({
@@ -145,6 +165,23 @@ class ThreadDetailRenderEntry {
          postIndex: postIndex,
        );
 
+  const ThreadDetailRenderEntry.postBodyChunk({
+    required String key,
+    required ThreadPost sourcePost,
+    required ThreadPost displayPost,
+    required int postIndex,
+    required ThreadDetailPreparedBody preparedBody,
+    required int chunkOrdinal,
+  }) : this._(
+         kind: ThreadDetailRenderEntryKind.postBodyChunk,
+         key: key,
+         sourcePost: sourcePost,
+         displayPost: displayPost,
+         postIndex: postIndex,
+         preparedBody: preparedBody,
+         chunkOrdinal: chunkOrdinal,
+       );
+
   const ThreadDetailRenderEntry.pagination()
     : this._(
         kind: ThreadDetailRenderEntryKind.pagination,
@@ -164,4 +201,6 @@ class ThreadDetailRenderEntry {
   final ThreadPost? sourcePost;
   final ThreadPost? displayPost;
   final int postIndex;
+  final ThreadDetailPreparedBody? preparedBody;
+  final int? chunkOrdinal;
 }

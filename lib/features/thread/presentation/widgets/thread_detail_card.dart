@@ -112,6 +112,10 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     this.imageAnchorController,
     required this.imagePrecacheService,
     this.bodyReadingCoordinator,
+    this.onPreparedBody,
+    this.preparedBody,
+    this.chunkOrdinal,
+    this.enableSafeDisplayPlanning = false,
   });
 
   final ThreadPost sourcePost;
@@ -143,6 +147,10 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
+  final ThreadPreparedBodyHandoff? onPreparedBody;
+  final ThreadDetailPreparedBody? preparedBody;
+  final int? chunkOrdinal;
+  final bool enableSafeDisplayPlanning;
   final ValueChanged<ThreadPost> onOpenPostActions;
 
   @override
@@ -152,9 +160,11 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
       behavior: HitTestBehavior.translucent,
       onLongPress: () => onOpenPostActions(sourcePost),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           ForumContentSpacing.postBodyHorizontal,
-          ForumContentSpacing.postCardBodyTop,
+          chunkOrdinal == null || chunkOrdinal == 0
+              ? ForumContentSpacing.postCardBodyTop
+              : 0,
           ForumContentSpacing.postBodyHorizontal,
           0,
         ),
@@ -168,33 +178,62 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
             color: palette.bodyText,
             height: 1.5,
           ),
-          child: ThreadPostHtmlBody(
-            post: post,
-            sourcePost: sourcePost,
-            renderPreparer: const DefaultForumHtmlRenderPreparer(
-              enablePlainTextLinks: true,
-            ),
-            threadId: threadId,
-            imageReferer: imageReferer,
-            onOpenPostLink: onOpenPostLink,
-            onOpenPostImage: onOpenPostImages == null
-                ? null
-                : (_, request) => onOpenPostImages!.call(sourcePost, request),
-            theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
-              palette: palette,
-              brightness: Theme.of(context).brightness,
-            ),
-            onImageFallback: onHtmlFirstImageFallback,
-            onImageLayoutShift: onHtmlFirstImageLayoutShift,
-            imageFallbackAspectRatioFor: (spec, request) =>
-                onHtmlFirstImageFallbackAspectRatio(sourcePost, spec, request),
-            onBlockImageResolved: (spec, request, size) =>
-                onHtmlFirstBlockImageResolved(sourcePost, spec, request, size),
-            imageViewportCoordinator: imageViewportCoordinator,
-            imageAnchorController: imageAnchorController,
-            imagePrecacheService: imagePrecacheService,
-            readingCoordinator: bodyReadingCoordinator,
-          ),
+          child: preparedBody != null
+              ? _ThreadPostChunkBody(
+                  preparedBody: preparedBody!,
+                  ordinal: chunkOrdinal!,
+                  post: post,
+                  sourcePost: sourcePost,
+                  theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                    palette: palette,
+                    brightness: Theme.of(context).brightness,
+                  ),
+                  onPreparedBody: onPreparedBody!,
+                  onOpenPostLink: onOpenPostLink,
+                )
+              : ThreadPostHtmlBody(
+                  post: post,
+                  sourcePost: sourcePost,
+                  renderPreparer: enableSafeDisplayPlanning
+                      ? const DefaultForumHtmlRenderPreparer(
+                          enablePlainTextLinks: true,
+                          enableSafeDisplayPlanning: true,
+                        )
+                      : const DefaultForumHtmlRenderPreparer(
+                          enablePlainTextLinks: true,
+                        ),
+                  threadId: threadId,
+                  imageReferer: imageReferer,
+                  onOpenPostLink: onOpenPostLink,
+                  onOpenPostImage: onOpenPostImages == null
+                      ? null
+                      : (_, request) =>
+                            onOpenPostImages!.call(sourcePost, request),
+                  theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                    palette: palette,
+                    brightness: Theme.of(context).brightness,
+                  ),
+                  onImageFallback: onHtmlFirstImageFallback,
+                  onImageLayoutShift: onHtmlFirstImageLayoutShift,
+                  imageFallbackAspectRatioFor: (spec, request) =>
+                      onHtmlFirstImageFallbackAspectRatio(
+                        sourcePost,
+                        spec,
+                        request,
+                      ),
+                  onBlockImageResolved: (spec, request, size) =>
+                      onHtmlFirstBlockImageResolved(
+                        sourcePost,
+                        spec,
+                        request,
+                        size,
+                      ),
+                  imageViewportCoordinator: imageViewportCoordinator,
+                  imageAnchorController: imageAnchorController,
+                  imagePrecacheService: imagePrecacheService,
+                  readingCoordinator: bodyReadingCoordinator,
+                  onPreparedBody: onPreparedBody,
+                ),
         ),
       ),
     );
@@ -366,7 +405,6 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 
 class _ThreadPostCardEntry extends StatefulWidget {
   const _ThreadPostCardEntry({
-    super.key,
     required this.sourcePost,
     required this.displayPost,
     required this.displaySubject,
@@ -396,6 +434,8 @@ class _ThreadPostCardEntry extends StatefulWidget {
     this.imageAnchorController,
     required this.imagePrecacheService,
     this.bodyReadingCoordinator,
+    this.onPreparedBody,
+    this.enableSafeDisplayPlanning = false,
   });
 
   final ThreadPost sourcePost;
@@ -441,6 +481,8 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumImagePrecacheService? imagePrecacheService;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
+  final ThreadPreparedBodyHandoff? onPreparedBody;
+  final bool enableSafeDisplayPlanning;
 
   @override
   State<_ThreadPostCardEntry> createState() => _ThreadPostCardEntryState();
@@ -502,6 +544,8 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           imageAnchorController: widget.imageAnchorController,
           imagePrecacheService: widget.imagePrecacheService,
           bodyReadingCoordinator: widget.bodyReadingCoordinator,
+          onPreparedBody: widget.onPreparedBody,
+          enableSafeDisplayPlanning: widget.enableSafeDisplayPlanning,
         ),
         _ThreadPostCardFooterEntry(
           key: Key('thread-post-footer-${widget.sourcePost.pid}'),
