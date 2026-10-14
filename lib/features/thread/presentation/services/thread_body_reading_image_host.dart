@@ -40,7 +40,10 @@ final class ThreadBodyReadingImageTracker {
 /// Delegates the existing download, display and bounded predecode contracts.
 /// Adding reading evidence must not disable the thread image scheduler.
 final class ThreadBodyReadingImageHost
-    implements ForumHtmlImageHost, ForumHtmlImagePredecodeHost {
+    implements
+        ForumHtmlImageHost,
+        ForumHtmlImagePredecodeHost,
+        ForumHtmlImageDimensionPriorityHost {
   const ThreadBodyReadingImageHost({
     required this.delegate,
     required this.tracker,
@@ -66,6 +69,16 @@ final class ThreadBodyReadingImageHost
   Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
     ForumHtmlDisplayImage image,
   ) => delegate.loadDimensions(image);
+
+  @override
+  Future<({Size size, ForumHtmlImageLayout layout})?>
+  loadDimensionsWithPriority(
+    ForumHtmlDisplayImage image, {
+    required ForumHtmlImageDimensionPriority priority,
+  }) => delegate is ForumHtmlImageDimensionPriorityHost
+      ? (delegate as ForumHtmlImageDimensionPriorityHost)
+            .loadDimensionsWithPriority(image, priority: priority)
+      : delegate.loadDimensions(image);
 
   @override
   void onBlockImageResolved(ForumHtmlDisplayImage image, Size size) =>

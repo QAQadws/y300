@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:ui';
 
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
@@ -18,10 +17,23 @@ abstract interface class ForumImageDimensionIndex {
   });
 }
 
+enum ForumImageDimensionLookupPriority { background, nearby, visible }
+
+/// Optional queue admission and promotion; pending reads share the resolved
+/// cache key, while completed hints are still revalidated on the next request.
+abstract interface class PrioritizedForumImageDimensionIndex {
+  Future<ForumImageDimensions?> getBySpecWithPriority(
+    ForumImageLoadSpec spec, {
+    required ForumImageDimensionLookupPriority priority,
+  });
+}
+
 /// Shares only pending validated reads within this index instance.
-/// Additional keys beyond its work budget return no optional layout hint;
+/// Urgent hints may replace lower-priority waiting work within the same budget;
+/// other additional keys return no optional layout hint.
 /// successful reads and misses are checked again by calls after completion.
-class CacheRecordForumImageDimensionIndex implements ForumImageDimensionIndex {
+class CacheRecordForumImageDimensionIndex
+    implements ForumImageDimensionIndex, PrioritizedForumImageDimensionIndex {
   CacheRecordForumImageDimensionIndex({
     required ImageCacheService imageCacheService,
     required ForumImageRequestResolver imageRequestResolver,
@@ -39,7 +51,17 @@ class CacheRecordForumImageDimensionIndex implements ForumImageDimensionIndex {
   final _DimensionLookupQueue _lookups;
 
   @override
-  Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) async {
+  Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) =>
+      getBySpecWithPriority(
+        spec,
+        priority: ForumImageDimensionLookupPriority.background,
+      );
+
+  @override
+  Future<ForumImageDimensions?> getBySpecWithPriority(
+    ForumImageLoadSpec spec, {
+    required ForumImageDimensionLookupPriority priority,
+  }) async {
     final request = _imageRequestResolver.resolveCacheRequest(spec);
     final cacheKey = request?.cacheKey.trim();
     if (cacheKey == null || cacheKey.isEmpty) {
@@ -47,7 +69,7 @@ class CacheRecordForumImageDimensionIndex implements ForumImageDimensionIndex {
     }
     // The resolved key is the complete input of this service's metadata lookup.
     // Display indices, owner hints and referers do not change the cached file.
-    return _lookups.lookup(cacheKey, () => _readDimensions(cacheKey));
+    return _lookups.lookup(cacheKey, () => _readDimensions(cacheKey), priority);
   }
 
   Future<ForumImageDimensions?> _readDimensions(String cacheKey) async {
@@ -132,26 +154,45 @@ final class _DimensionLookupQueue {
   final int maxConcurrent;
   final int maxPending;
   final _inFlight = <String, _DimensionLookup>{};
-  final _pending = Queue<_DimensionLookup>();
+  final _pending = <_DimensionLookup>[];
   int _running = 0;
 
   Future<ForumImageDimensions?> lookup(
     String identity,
     Future<ForumImageDimensions?> Function() read,
+    ForumImageDimensionLookupPriority priority,
   ) {
     final existing = _inFlight[identity];
-    if (existing != null) return existing.result.future;
-    if (_running >= maxConcurrent && _pending.length >= maxPending) {
-      // Dimensions are optional layout hints. Saturation must not launch an
-      // unbounded metadata burst; image decode can still provide real sizing.
-      return Future<ForumImageDimensions?>.value();
+    if (existing != null) {
+      if (priority.index > existing.priority.index) {
+        existing.priority = priority;
+      }
+      return existing.result.future;
     }
-    final lookup = _DimensionLookup(identity, read);
+    if (_running >= maxConcurrent && _pending.length >= maxPending) {
+      // Retire only a lower-priority waiting hint, never active file I/O. Pick
+      // the newest among equal-priority hints so the remaining backlog is FIFO.
+      _DimensionLookup? displaced;
+      for (final lookup in _pending.reversed) {
+        if (lookup.priority.index < priority.index &&
+            (displaced == null ||
+                lookup.priority.index < displaced.priority.index)) {
+          displaced = lookup;
+        }
+      }
+      if (displaced == null) return Future<ForumImageDimensions?>.value();
+      _pending.remove(displaced);
+      if (identical(_inFlight[displaced.identity], displaced)) {
+        _inFlight.remove(displaced.identity);
+      }
+      displaced.result.complete(null);
+    }
+    final lookup = _DimensionLookup(identity, read, priority);
     _inFlight[identity] = lookup;
     if (_running < maxConcurrent) {
       _start(lookup);
     } else {
-      _pending.addLast(lookup);
+      _pending.add(lookup);
     }
     return lookup.result.future;
   }
@@ -175,15 +216,23 @@ final class _DimensionLookupQueue {
         _inFlight.remove(lookup.identity);
       }
       _running--;
-      if (_pending.isNotEmpty) _start(_pending.removeFirst());
+      if (_pending.isNotEmpty) {
+        var next = _pending.first;
+        for (final candidate in _pending.skip(1)) {
+          if (candidate.priority.index > next.priority.index) next = candidate;
+        }
+        _pending.remove(next);
+        _start(next);
+      }
     }
   }
 }
 
 final class _DimensionLookup {
-  _DimensionLookup(this.identity, this.read);
+  _DimensionLookup(this.identity, this.read, this.priority);
 
   final String identity;
   final Future<ForumImageDimensions?> Function() read;
+  ForumImageDimensionLookupPriority priority;
   final result = Completer<ForumImageDimensions?>();
 }

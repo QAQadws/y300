@@ -91,6 +91,226 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('visible dimension promotion joins a pending initial hint', (
+    tester,
+  ) async {
+    final host = _PriorityImageHost();
+    final viewport = ForumHtmlImageViewportCoordinator();
+    addTearDown(viewport.dispose);
+    final shifts = <ForumHtmlImageLayoutShift>[];
+    await tester.pumpWidget(
+      _host(
+        host,
+        viewport: viewport,
+        htmlDimensions: false,
+        onImageLayoutShift: shifts.add,
+      ),
+    );
+    await _frames(tester);
+    expect(host.dimensionReads, hasLength(1));
+    expect(host.dimensionCalls.map((call) => call.priority), [
+      ForumHtmlImageDimensionPriority.background,
+      ForumHtmlImageDimensionPriority.visible,
+    ]);
+    final image = find.byType(_DisplayedImage);
+    final element = tester.element(image);
+    final body = tester.element(find.byType(HtmlWidget));
+    host.dimensionReads.single.result.complete(_wideDimensions);
+    await _frames(tester);
+    expect(tester.getSize(image).aspectRatio, closeTo(2, 0.001));
+    expect(tester.element(image), same(element));
+    expect(tester.element(find.byType(HtmlWidget)), same(body));
+    expect(host.blockSizes, [const Size(400, 200)]);
+    expect(shifts, hasLength(1));
+    expect(shifts.single.oldAspectRatio, 0.7);
+    expect(shifts.single.newAspectRatio, 2);
+    expect(host.dimensionReads, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final recovered in [true, false]) {
+    testWidgets(
+      'a shared missing hint retries once while still visible: $recovered',
+      (tester) async {
+        final host = _PriorityImageHost();
+        final viewport = ForumHtmlImageViewportCoordinator();
+        addTearDown(viewport.dispose);
+        await tester.pumpWidget(
+          _host(host, viewport: viewport, htmlDimensions: false),
+        );
+        await _frames(tester);
+        expect(host.dimensionReads, hasLength(1));
+        host.dimensionReads.single.result.complete(null);
+        await _frames(tester);
+        expect(host.dimensionReads, hasLength(2));
+        expect(
+          host.dimensionCalls.last.priority,
+          ForumHtmlImageDimensionPriority.visible,
+        );
+        host.dimensionReads.last.result.complete(
+          recovered ? _wideDimensions : null,
+        );
+        for (var frame = 0; frame < 12; frame++) {
+          await tester.pump();
+        }
+        expect(host.dimensionReads, hasLength(2));
+        expect(host.dimensionCalls, hasLength(3));
+        expect(
+          tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+          closeTo(recovered ? 2 : 0.7, 0.001),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'nearby hints are promoted while distant initial geometry still loads',
+    (tester) async {
+      final host = _PriorityImageHost();
+      final viewport = ForumHtmlImageViewportCoordinator(
+        prefetchExtentFactor: 1,
+      );
+      addTearDown(viewport.dispose);
+      await tester.pumpWidget(
+        _host(
+          host,
+          viewport: viewport,
+          imageCount: 3,
+          height: 150,
+          htmlDimensions: false,
+        ),
+      );
+      await _frames(tester);
+      expect(host.dimensionReads, hasLength(3));
+      expect(
+        host.dimensionCalls.where(
+          (call) => call.priority == ForumHtmlImageDimensionPriority.background,
+        ),
+        hasLength(3),
+      );
+      expect(
+        host.dimensionCalls
+            .where(
+              (call) =>
+                  call.priority == ForumHtmlImageDimensionPriority.visible,
+            )
+            .map((call) => call.url),
+        ['https://example.invalid/image-0.jpg'],
+      );
+      expect(
+        host.dimensionCalls
+            .where(
+              (call) => call.priority == ForumHtmlImageDimensionPriority.nearby,
+            )
+            .map((call) => call.url),
+        ['https://example.invalid/image-1.jpg'],
+      );
+      for (final read in host.dimensionReads.toList()) {
+        read.result.complete(_wideDimensions);
+      }
+      await _frames(tester);
+      expect(host.blockSizes, hasLength(3));
+      expect(host.dimensionReads, hasLength(3));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('late metadata cannot replace an earlier image size callback', (
+    tester,
+  ) async {
+    final host = _PriorityImageHost();
+    final viewport = ForumHtmlImageViewportCoordinator();
+    addTearDown(viewport.dispose);
+    final shifts = <ForumHtmlImageLayoutShift>[];
+    await tester.pumpWidget(
+      _host(
+        host,
+        viewport: viewport,
+        htmlDimensions: false,
+        onImageLayoutShift: shifts.add,
+      ),
+    );
+    await _frames(tester);
+    tester.widget<_DisplayedImage>(find.byType(_DisplayedImage)).onResolved!(
+      const Size(800, 400),
+    );
+    await _frames(tester);
+    host.dimensionReads.single.result.complete((
+      size: const Size(100, 200),
+      layout: const ForumHtmlImageLayout(aspectRatio: 0.5),
+    ));
+    await _frames(tester);
+    expect(
+      tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+      closeTo(2, 0.001),
+    );
+    expect(host.blockSizes, [const Size(800, 400)]);
+    expect(shifts, hasLength(1));
+    expect(host.dimensionReads, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final change in ['Host', 'source', 'unmount']) {
+    testWidgets('promoted dimension completion is retired after $change', (
+      tester,
+    ) async {
+      final host = _PriorityImageHost();
+      final nextHost = _PriorityImageHost();
+      final viewport = ForumHtmlImageViewportCoordinator();
+      addTearDown(viewport.dispose);
+      final shifts = <ForumHtmlImageLayoutShift>[];
+      Widget build(
+        _ImageHost current, {
+        bool shown = true,
+        String prefix = 'image',
+      }) => _host(
+        current,
+        viewport: viewport,
+        htmlDimensions: false,
+        shown: shown,
+        imagePrefix: prefix,
+        onImageLayoutShift: shifts.add,
+      );
+      await tester.pumpWidget(build(host));
+      await _frames(tester);
+      final old = host.dimensionReads.single;
+      switch (change) {
+        case 'Host':
+          await tester.pumpWidget(build(nextHost));
+        case 'source':
+          await tester.pumpWidget(build(host, prefix: 'next'));
+        case 'unmount':
+          await tester.pumpWidget(build(host, shown: false));
+      }
+      await _frames(tester);
+      old.result.complete(_wideDimensions);
+      await _frames(tester);
+      expect(host.blockSizes, isEmpty);
+      expect(nextHost.blockSizes, isEmpty);
+      expect(shifts, isEmpty);
+      if (change != 'unmount') {
+        expect(
+          tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+          closeTo(0.7, 0.001),
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('HTML dimensions keep the existing no-query path', (
+    tester,
+  ) async {
+    final host = _PriorityImageHost();
+    final viewport = ForumHtmlImageViewportCoordinator();
+    addTearDown(viewport.dispose);
+    await tester.pumpWidget(_host(host, viewport: viewport));
+    await _frames(tester);
+    expect(host.dimensionCalls, isEmpty);
+    expect(host.dimensionReads, isEmpty);
+  });
+
   for (final change in ['inactive', 'unmounted', 'Host', 'width', 'DPR']) {
     testWidgets('predecode rejects late results after $change changes', (
       tester,
@@ -483,6 +703,8 @@ Widget _host(
   ForumHtmlBodyPresentation? bodyPresentation,
   VoidCallback? onBodyBuilt,
   bool enableCaching = false,
+  bool htmlDimensions = true,
+  ValueChanged<ForumHtmlImageLayoutShift>? onImageLayoutShift,
 }) => MaterialApp(
   home: Scaffold(
     body: Align(
@@ -504,7 +726,7 @@ Widget _host(
                         [
                           for (var image = 0; image < imageCount; image++)
                             '<div><img src="https://example.invalid/$imagePrefix-$image.jpg" '
-                                '${viewport == null ? '' : 'width="200" height="200"'}></div>',
+                                '${viewport == null || !htmlDimensions ? '' : 'width="200" height="200"'}></div>',
                         ].join(),
                     sourceId: 'host-lifecycle',
                   ),
@@ -512,6 +734,9 @@ Widget _host(
                   imageViewportCoordinator: viewport,
                   bodyPresentation: bodyPresentation,
                   onBodyBuilt: onBodyBuilt,
+                  callbacks: ForumHtmlRenderCallbacks(
+                    onImageLayoutShift: onImageLayoutShift,
+                  ),
                 )
               : const SizedBox.shrink(),
         ),
@@ -521,6 +746,11 @@ Widget _host(
 );
 
 typedef _DimensionResult = ({Size size, ForumHtmlImageLayout layout});
+
+const _wideDimensions = (
+  size: Size(400, 200),
+  layout: ForumHtmlImageLayout(aspectRatio: 2),
+);
 
 final class _Dimensions {
   _Dimensions({this.deferred = false});
@@ -591,6 +821,38 @@ final class _ImageHost implements ForumHtmlImageHost {
     onFirstFrame: onFirstFrameRendered,
     onFailed: onImageFailed,
   );
+}
+
+final class _PriorityImageHost extends _ImageHost
+    implements ForumHtmlImageDimensionPriorityHost {
+  _PriorityImageHost() : super(_Dimensions());
+  final dimensionCalls =
+      <({String url, ForumHtmlImageDimensionPriority priority})>[];
+  final dimensionReads =
+      <({String url, Completer<_DimensionResult?> result})>[];
+  final _pendingDimensions = <String, Completer<_DimensionResult?>>{};
+
+  @override
+  Future<_DimensionResult?> loadDimensions(ForumHtmlDisplayImage image) =>
+      loadDimensionsWithPriority(
+        image,
+        priority: ForumHtmlImageDimensionPriority.background,
+      );
+
+  @override
+  Future<_DimensionResult?> loadDimensionsWithPriority(
+    ForumHtmlDisplayImage image, {
+    required ForumHtmlImageDimensionPriority priority,
+  }) {
+    final url = image.sourceUrl;
+    dimensionCalls.add((url: url, priority: priority));
+    final existing = _pendingDimensions[url];
+    if (existing != null && !existing.isCompleted) return existing.future;
+    final result = Completer<_DimensionResult?>();
+    _pendingDimensions[url] = result;
+    dimensionReads.add((url: url, result: result));
+    return result.future;
+  }
 }
 
 final class _PredecodeHost extends _ImageHost

@@ -37,3 +37,17 @@ abstract interface class ForumHtmlImageHost {
     int retryToken = 0,
   });
 }
+
+enum ForumHtmlImageDimensionPriority { background, nearby, visible }
+
+/// Optional metadata scheduling. Hosts without this capability keep their
+/// initial lookup and are not asked to perform viewport-driven retries.
+abstract interface class ForumHtmlImageDimensionPriorityHost {
+  /// Joins/promotes an existing lookup for this image instead of starting a
+  /// duplicate. A completed miss may be retried; active I/O must not be retired.
+  Future<({Size size, ForumHtmlImageLayout layout})?>
+  loadDimensionsWithPriority(
+    ForumHtmlDisplayImage image, {
+    required ForumHtmlImageDimensionPriority priority,
+  });
+}

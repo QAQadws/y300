@@ -12,7 +12,10 @@ import 'package:y300/features/content_rendering_shared/application/host/cache_fo
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 final class CacheForumHtmlImageHost
-    implements ForumHtmlImageHost, ForumHtmlImagePredecodeHost {
+    implements
+        ForumHtmlImageHost,
+        ForumHtmlImagePredecodeHost,
+        ForumHtmlImageDimensionPriorityHost {
   const CacheForumHtmlImageHost({
     required ForumImageDimensionIndex dimensionIndex,
   }) : this._(dimensionIndex: dimensionIndex);
@@ -121,9 +124,33 @@ final class CacheForumHtmlImageHost
   @override
   Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
     ForumHtmlDisplayImage image,
-  ) async {
+  ) => loadDimensionsWithPriority(
+    image,
+    priority: ForumHtmlImageDimensionPriority.background,
+  );
+
+  @override
+  Future<({Size size, ForumHtmlImageLayout layout})?>
+  loadDimensionsWithPriority(
+    ForumHtmlDisplayImage image, {
+    required ForumHtmlImageDimensionPriority priority,
+  }) async {
     final cachedImage = image as CacheForumHtmlDisplayImage;
-    final dimensions = await dimensionIndex.getBySpec(cachedImage.spec);
+    final index = dimensionIndex;
+    final dimensions = index is PrioritizedForumImageDimensionIndex
+        ? await (index as PrioritizedForumImageDimensionIndex)
+              .getBySpecWithPriority(
+                cachedImage.spec,
+                priority: switch (priority) {
+                  ForumHtmlImageDimensionPriority.background =>
+                    ForumImageDimensionLookupPriority.background,
+                  ForumHtmlImageDimensionPriority.nearby =>
+                    ForumImageDimensionLookupPriority.nearby,
+                  ForumHtmlImageDimensionPriority.visible =>
+                    ForumImageDimensionLookupPriority.visible,
+                },
+              )
+        : await index.getBySpec(cachedImage.spec);
     if (dimensions == null) return null;
     return (
       size: dimensions.size,

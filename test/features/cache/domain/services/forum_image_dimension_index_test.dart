@@ -230,6 +230,184 @@ void main() {
       },
     );
 
+    test(
+      'pending priority joins share one read and preserve FIFO peers',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+          maxConcurrentLookups: 1,
+        );
+        final specs = List.generate(4, _lookupSpec);
+        for (final spec in specs) {
+          cacheService.setDimensions(spec, const Size(320, 200));
+        }
+        final reads = specs.map(index.getBySpec).toList();
+        final promoted = index.getBySpecWithPriority(
+          specs.last,
+          priority: ForumImageDimensionLookupPriority.visible,
+        );
+        final joined = index.getBySpecWithPriority(
+          specs.last,
+          priority: ForumImageDimensionLookupPriority.nearby,
+        );
+        expect(cacheService.metadataKeys, hasLength(1));
+        await cacheService.drain();
+        final keys = specs.map(_lookupKey).toList();
+        expect(cacheService.metadataKeys, [keys[0], keys[3], keys[1], keys[2]]);
+        expect(cacheService.peakActive, 1);
+        expect(
+          await Future.wait([...reads, promoted, joined]),
+          everyElement(isNotNull),
+        );
+      },
+    );
+
+    test(
+      'visible demand at default saturation replaces one queued hint',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+        );
+        final specs = List.generate(69, _lookupSpec);
+        for (final spec in specs) {
+          cacheService.setDimensions(spec, const Size(320, 200));
+        }
+        final reads = specs.take(68).map(index.getBySpec).toList();
+        final displacedJoin = index.getBySpec(specs[67]);
+        final urgent = index.getBySpecWithPriority(
+          specs.last,
+          priority: ForumImageDimensionLookupPriority.visible,
+        );
+        expect(await reads.last, isNull);
+        expect(await displacedJoin, isNull);
+        expect(cacheService.pending, hasLength(4));
+        expect(
+          cacheService.pending.every((read) => !read.result.isCompleted),
+          isTrue,
+        );
+        await cacheService.drain();
+        expect((await urgent)?.size, const Size(320, 200));
+        expect(cacheService.metadataKeys, hasLength(68));
+        expect(cacheService.metadataKeys[4], _lookupKey(specs.last));
+        expect(
+          cacheService.metadataKeys,
+          isNot(contains(_lookupKey(specs[67]))),
+        );
+        expect(cacheService.peakActive, 4);
+        expect(
+          (await Future.wait(reads)).where((value) => value != null),
+          hasLength(67),
+        );
+      },
+    );
+
+    test(
+      'urgent admission cannot displace active or equal-priority reads',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+          maxConcurrentLookups: 1,
+          maxPendingLookups: 2,
+        );
+        final specs = List.generate(6, _lookupSpec);
+        for (final spec in specs) {
+          cacheService.setDimensions(spec, const Size(320, 200));
+        }
+        final active = index.getBySpec(specs[0]);
+        final nearby = index.getBySpecWithPriority(
+          specs[1],
+          priority: ForumImageDimensionLookupPriority.nearby,
+        );
+        final visible = index.getBySpecWithPriority(
+          specs[2],
+          priority: ForumImageDimensionLookupPriority.visible,
+        );
+        final replacement = index.getBySpecWithPriority(
+          specs[3],
+          priority: ForumImageDimensionLookupPriority.visible,
+        );
+        expect(await nearby, isNull);
+        for (final priority in [
+          ForumImageDimensionLookupPriority.nearby,
+          ForumImageDimensionLookupPriority.visible,
+        ]) {
+          expect(
+            await index.getBySpecWithPriority(specs[4], priority: priority),
+            isNull,
+          );
+        }
+        expect(cacheService.pending.single.result.isCompleted, isFalse);
+        await cacheService.drain();
+        expect(
+          await Future.wait([active, visible, replacement]),
+          everyElement(isNotNull),
+        );
+        expect(
+          cacheService.metadataKeys,
+          [specs[0], specs[2], specs[3]].map(_lookupKey),
+        );
+        expect(cacheService.peakActive, 1);
+      },
+    );
+
+    test(
+      'zero backlog rejects urgency without cancelling the active lookup',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+          maxConcurrentLookups: 1,
+          maxPendingLookups: 0,
+        );
+        final active = index.getBySpec(_lookupSpec(0));
+        expect(
+          await index.getBySpecWithPriority(
+            _lookupSpec(1),
+            priority: ForumImageDimensionLookupPriority.visible,
+          ),
+          isNull,
+        );
+        expect(cacheService.pending.single.result.isCompleted, isFalse);
+        await cacheService.drain();
+        expect(await active, isNull);
+        expect(cacheService.metadataKeys, hasLength(1));
+      },
+    );
+
+    test(
+      'completed priority hints do not hide removed cache metadata',
+      () async {
+        final cacheService = _BlockedMetadataImageCacheService();
+        final index = CacheRecordForumImageDimensionIndex(
+          imageCacheService: cacheService,
+          imageRequestResolver: const DefaultForumImageRequestResolver(),
+        );
+        final spec = _lookupSpec(0);
+        cacheService.setDimensions(spec, const Size(320, 200));
+        final first = index.getBySpecWithPriority(
+          spec,
+          priority: ForumImageDimensionLookupPriority.visible,
+        );
+        await cacheService.drain();
+        expect((await first)?.size, const Size(320, 200));
+        cacheService.cachedResults.remove(_lookupKey(spec));
+        final next = index.getBySpecWithPriority(
+          spec,
+          priority: ForumImageDimensionLookupPriority.visible,
+        );
+        await cacheService.drain();
+        expect(await next, isNull);
+        expect(cacheService.metadataKeys, hasLength(2));
+      },
+    );
+
     test('same source URL with different resolved keys cannot share', () async {
       final cacheService = _BlockedMetadataImageCacheService();
       final index = CacheRecordForumImageDimensionIndex(
@@ -563,6 +741,11 @@ ForumImageLoadSpec _lookupSpec(
   ownerId: ownerId,
   imageIndex: imageIndex,
 );
+
+String _lookupKey(ForumImageLoadSpec spec) =>
+    const DefaultForumImageRequestResolver()
+        .resolveCacheRequest(spec)!
+        .cacheKey;
 
 class _BlockedMetadataImageCacheService extends _RecordingImageCacheService
     implements ImageCacheMetadataLookup, ImageCacheDimensionRecorder {

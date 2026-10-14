@@ -16,6 +16,55 @@ import '../../../test_support/localized_test_app.dart';
 import '../../thread/presentation/html_rendering/forum_html_test_theme.dart';
 
 void main() {
+  test(
+    'dimension priority maps to the optional App index without changing layout',
+    () async {
+      final index = _PrioritizedDimensions();
+      final host = CacheForumHtmlImageHost(
+        dimensionIndex: index,
+      ).forContent(threadId: '100');
+      final image = host.resolveImage(
+        url: _source,
+        imageIndex: 3,
+        isSticker: false,
+      )!;
+      for (final priority in ForumHtmlImageDimensionPriority.values) {
+        final result = await host.loadDimensionsWithPriority(
+          image,
+          priority: priority,
+        );
+        expect(result?.size, const Size(320, 200));
+        expect(result?.layout.aspectRatio, 1.6);
+      }
+      expect(index.priorities, ForumImageDimensionLookupPriority.values);
+      expect(index.legacyCalls, 0);
+      expect(index.specs.map((spec) => spec.url), everyElement(_source));
+      expect(index.specs.map((spec) => spec.ownerId), everyElement('100'));
+      expect(index.specs.map((spec) => spec.imageIndex), everyElement(3));
+    },
+  );
+
+  test(
+    'legacy dimension index remains usable by the priority-capable Host',
+    () async {
+      final index = _RecordingDimensions();
+      final host = CacheForumHtmlImageHost(
+        dimensionIndex: index,
+      ).forContent(threadId: '100');
+      final image = host.resolveImage(
+        url: _source,
+        imageIndex: 0,
+        isSticker: false,
+      )!;
+      final result = await host.loadDimensionsWithPriority(
+        image,
+        priority: ForumHtmlImageDimensionPriority.visible,
+      );
+      expect(result?.size, const Size(320, 200));
+      expect(index.legacyCalls, 1);
+    },
+  );
+
   test('display retention is bounded without starting disk or decode work', () {
     final service = _BoundedPrecache();
     final host = CacheForumHtmlImageHost(
@@ -366,6 +415,37 @@ final class _NoDimensions implements ForumImageDimensionIndex {
     required ForumImageLoadSpec spec,
     required Size size,
   }) async {}
+}
+
+final class _RecordingDimensions extends _NoDimensions {
+  int legacyCalls = 0;
+  static const dimensions = ForumImageDimensions(
+    width: 320,
+    height: 200,
+    source: ForumImageDimensionSource.cacheMetadata,
+  );
+
+  @override
+  Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) async {
+    legacyCalls++;
+    return dimensions;
+  }
+}
+
+final class _PrioritizedDimensions extends _RecordingDimensions
+    implements PrioritizedForumImageDimensionIndex {
+  final priorities = <ForumImageDimensionLookupPriority>[];
+  final specs = <ForumImageLoadSpec>[];
+
+  @override
+  Future<ForumImageDimensions?> getBySpecWithPriority(
+    ForumImageLoadSpec spec, {
+    required ForumImageDimensionLookupPriority priority,
+  }) async {
+    priorities.add(priority);
+    specs.add(spec);
+    return _RecordingDimensions.dimensions;
+  }
 }
 
 final class _ScopedDiskPrecache
