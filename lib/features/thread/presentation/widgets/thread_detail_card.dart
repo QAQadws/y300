@@ -113,6 +113,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.imagePrecacheService,
     this.bodyReadingCoordinator,
     this.onPreparedBody,
+    this.preparerSelector,
     this.preparedBody,
     this.chunkOrdinal,
     this.enableSafeDisplayPlanning = false,
@@ -148,6 +149,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final ForumImagePrecacheService? imagePrecacheService;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
   final ThreadPreparedBodyHandoff? onPreparedBody;
+  final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final ThreadDetailPreparedBody? preparedBody;
   final int? chunkOrdinal;
   final bool enableSafeDisplayPlanning;
@@ -189,6 +191,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                     brightness: Theme.of(context).brightness,
                   ),
                   onPreparedBody: onPreparedBody!,
+                  preparerSelector: preparerSelector,
                   onOpenPostLink: onOpenPostLink,
                 )
               : ThreadPostHtmlBody(
@@ -233,6 +236,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                   imagePrecacheService: imagePrecacheService,
                   readingCoordinator: bodyReadingCoordinator,
                   onPreparedBody: onPreparedBody,
+                  preparerSelector: preparerSelector,
                 ),
         ),
       ),
@@ -435,6 +439,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.imagePrecacheService,
     this.bodyReadingCoordinator,
     this.onPreparedBody,
+    this.preparerSelector,
     this.enableSafeDisplayPlanning = false,
   });
 
@@ -482,6 +487,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ForumImagePrecacheService? imagePrecacheService;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
   final ThreadPreparedBodyHandoff? onPreparedBody;
+  final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final bool enableSafeDisplayPlanning;
 
   @override
@@ -545,6 +551,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           imagePrecacheService: widget.imagePrecacheService,
           bodyReadingCoordinator: widget.bodyReadingCoordinator,
           onPreparedBody: widget.onPreparedBody,
+          preparerSelector: widget.preparerSelector,
           enableSafeDisplayPlanning: widget.enableSafeDisplayPlanning,
         ),
         _ThreadPostCardFooterEntry(

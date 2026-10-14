@@ -21,6 +21,8 @@ typedef ThreadPreparedBodyHandoff =
       ForumHtmlPreparationRequest request,
       ForumHtmlPreparedRenderDocument document,
     );
+typedef ThreadPreparedBodyPreparerSelector =
+    ForumHtmlRenderPreparer Function(ForumHtmlPreparationRequest request);
 typedef ThreadPostHtmlFirstImageDiagnostics =
     void Function(
       ThreadPost post,
@@ -52,6 +54,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.preparationExecutor,
     this.onPreparedBody,
+    this.preparerSelector,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
 
@@ -83,6 +86,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final ForumHtmlRenderPreparer renderPreparer;
   final ForumHtmlPreparationExecutor? preparationExecutor;
   final ThreadPreparedBodyHandoff? onPreparedBody;
+  final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -176,7 +180,7 @@ class _ThreadPostHtmlFirstBodyState
       final sourceId = sourcePost.pid.trim().isEmpty
           ? 'post'
           : sourcePost.pid.trim();
-      final request = ForumHtmlPreparationRequest(
+      final baseRequest = ForumHtmlPreparationRequest(
         html: html,
         preferences: preferences,
         theme: widget.theme,
@@ -185,6 +189,11 @@ class _ThreadPostHtmlFirstBodyState
         imageCacheOwnerId: widget.threadId,
         preparer: widget.renderPreparer,
       );
+      final selected = widget.preparerSelector?.call(baseRequest);
+      final request =
+          selected == null || identical(selected, baseRequest.preparer)
+          ? baseRequest
+          : baseRequest.withPreparer(selected);
       final identity = request.identity;
       if (_preparation.identity != identity) {
         // Retire the previous reading handle before a new asynchronous wait.
@@ -466,6 +475,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.preparationExecutor,
     this.onPreparedBody,
+    this.preparerSelector,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
   });
 
@@ -496,6 +506,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ForumHtmlRenderPreparer renderPreparer;
   final ForumHtmlPreparationExecutor? preparationExecutor;
   final ThreadPreparedBodyHandoff? onPreparedBody;
+  final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
 
   @override
@@ -521,6 +532,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       renderPreparer: renderPreparer,
       preparationExecutor: preparationExecutor,
       onPreparedBody: onPreparedBody,
+      preparerSelector: preparerSelector,
       imageReaderBridge: imageReaderBridge,
     );
   }

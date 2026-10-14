@@ -28,6 +28,17 @@ final class ForumHtmlPreparationRequest {
   final String? imageCacheOwnerId;
   final ForumHtmlRenderPreparer preparer;
 
+  ForumHtmlPreparationRequest withPreparer(ForumHtmlRenderPreparer preparer) =>
+      ForumHtmlPreparationRequest(
+        html: html,
+        preferences: preferences,
+        theme: theme,
+        sourceId: sourceId,
+        threadId: threadId,
+        imageCacheOwnerId: imageCacheOwnerId,
+        preparer: preparer,
+      );
+
   Object get identity => (
     html,
     preparer.preparationPreferencesIdentity(preferences),
@@ -62,6 +73,8 @@ final class ForumHtmlPreparationRequest {
       imageCacheOwnerId: imageCacheOwnerId,
       enablePlainTextLinks: candidate.enablePlainTextLinks,
       enableSafeDisplayPlanning: candidate.enableSafeDisplayPlanning,
+      safeDisplayPlanningCodeUnitBudget:
+          candidate.safeDisplayPlanningCodeUnitBudget,
     );
   }
 }
@@ -77,6 +90,7 @@ final class ForumHtmlBackgroundPreparationInput {
     required this.imageCacheOwnerId,
     required this.enablePlainTextLinks,
     this.enableSafeDisplayPlanning = false,
+    this.safeDisplayPlanningCodeUnitBudget,
   });
 
   final String html;
@@ -87,11 +101,13 @@ final class ForumHtmlBackgroundPreparationInput {
   final String? imageCacheOwnerId;
   final bool enablePlainTextLinks;
   final bool enableSafeDisplayPlanning;
+  final int? safeDisplayPlanningCodeUnitBudget;
 
   ForumHtmlPreparedRenderDocument prepare() =>
       DefaultForumHtmlRenderPreparer(
         enablePlainTextLinks: enablePlainTextLinks,
         enableSafeDisplayPlanning: enableSafeDisplayPlanning,
+        safeDisplayPlanningCodeUnitBudget: safeDisplayPlanningCodeUnitBudget,
       ).prepare(
         html: html,
         preferences: preferences,

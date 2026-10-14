@@ -12,6 +12,72 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 void main() {
   group('ForumHtmlPreparationExecutor', () {
     test(
+      'prepared size budget skips planning consistently in the real worker',
+      () async {
+        final html = List.generate(
+          1800,
+          (i) => '<p>line-$i ${'字' * 14}</p>',
+        ).join();
+        final request = _request(
+          html,
+          preparer: const DefaultForumHtmlRenderPreparer(
+            enablePlainTextLinks: true,
+            enableSafeDisplayPlanning: true,
+          ),
+        );
+        final unlimited = request.prepareSynchronously();
+        expect(unlimited.safeDisplayPlan!.isChunked, isTrue);
+        final limited = request.withPreparer(
+          DefaultForumHtmlRenderPreparer(
+            enablePlainTextLinks: true,
+            enableSafeDisplayPlanning: true,
+            safeDisplayPlanningCodeUnitBudget: unlimited.preparedHtml.length,
+          ),
+        );
+        expect(limited.identity, isNot(request.identity));
+        expect(
+          limited.backgroundInput!.safeDisplayPlanningCodeUnitBudget,
+          unlimited.preparedHtml.length,
+        );
+        final direct = limited.prepareSynchronously();
+        expect(direct.safeDisplayPlan, isNull);
+        expect(_projection(direct), _projection(unlimited));
+        final executor = ForumHtmlPreparationExecutor();
+        addTearDown(executor.dispose);
+        final lease = executor.tryAcquire(limited)!;
+        final worker = (await lease.future)!;
+        lease.release();
+        expect(worker.safeDisplayPlan, isNull);
+        expect(_projection(worker), _projection(unlimited));
+      },
+    );
+
+    test(
+      'short source expansion is rejected by its known prepared size budget',
+      () {
+        final html = List.filled(1000, '&&&&&&&&&&').join('<br>');
+        expect(html.length, lessThan(32 * 1024));
+        final unlimited = _request(
+          html,
+          preparer: const DefaultForumHtmlRenderPreparer(
+            enableSafeDisplayPlanning: true,
+          ),
+        ).prepareSynchronously();
+        expect(unlimited.preparedHtml.length, greaterThan(32 * 1024));
+        expect(unlimited.safeDisplayPlan!.isChunked, isTrue);
+        final limited = _request(
+          html,
+          preparer: const DefaultForumHtmlRenderPreparer(
+            enableSafeDisplayPlanning: true,
+            safeDisplayPlanningCodeUnitBudget: 32 * 1024,
+          ),
+        ).prepareSynchronously();
+        expect(limited.safeDisplayPlan, isNull);
+        expect(_projection(limited), _projection(unlimited));
+      },
+    );
+
+    test(
       'optional safe plan has identical worker and synchronous boundaries',
       () async {
         final executor = ForumHtmlPreparationExecutor();

@@ -34,12 +34,17 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     ForumHtmlPreparationImagePolicy? imagePolicy,
     this.enablePlainTextLinks = false,
     this.enableSafeDisplayPlanning = false,
+    this.safeDisplayPlanningCodeUnitBudget,
   }) : _imageRequestResolver = imageRequestResolver,
        _imageDeduplicator = imageDeduplicator,
        _fragmentCodec = fragmentCodec,
        _themeAdapter = themeAdapter,
        _urlResolver = urlResolver,
-       _imagePolicy = imagePolicy;
+       _imagePolicy = imagePolicy,
+       assert(
+         safeDisplayPlanningCodeUnitBudget == null ||
+             safeDisplayPlanningCodeUnitBudget >= 0,
+       );
 
   final ForumImageRequestResolver _imageRequestResolver;
   final ForumHtmlImageDeduplicator? _imageDeduplicator;
@@ -53,6 +58,10 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
 
   /// Optional pure display plan, built alongside preparation in its worker.
   final bool enableSafeDisplayPlanning;
+
+  /// A request-fixed retained-value allowance; null preserves existing callers.
+  /// The full prepared HTML is a known lower bound before any plan is built.
+  final int? safeDisplayPlanningCodeUnitBudget;
 
   /// Unknown injections can retain services or change preparation semantics.
   /// Workers reconstruct this verified default configuration from pure values.
@@ -105,7 +114,10 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
           imageCacheOwnerId: imageCacheOwnerId,
         );
     return enableSafeDisplayPlanning &&
-            document.preparedHtml.length >= 32 * 1024
+            document.preparedHtml.length >= 32 * 1024 &&
+            (safeDisplayPlanningCodeUnitBudget == null ||
+                document.preparedHtml.length <
+                    safeDisplayPlanningCodeUnitBudget!)
         ? document.copyWith(
             safeDisplayPlan: const ForumHtmlSafeDisplayPlanner(
               targetChunkUnits: 48,

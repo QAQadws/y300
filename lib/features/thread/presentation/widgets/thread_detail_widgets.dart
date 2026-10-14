@@ -753,6 +753,9 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent> {
             imagePrecacheService: widget.htmlImagePrecacheService,
             bodyReadingCoordinator: widget.bodyReadingCoordinator,
             onPreparedBody: _canChunkBodies ? _handoffPreparedBody : null,
+            preparerSelector: _canChunkBodies
+                ? _bodyHandoffs.selectPreparer
+                : null,
             enableSafeDisplayPlanning: _canChunkBodies,
             onOpenPostActions: widget.onOpenPostActions,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
@@ -833,6 +836,9 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent> {
             imagePrecacheService: widget.htmlImagePrecacheService,
             bodyReadingCoordinator: widget.bodyReadingCoordinator,
             onPreparedBody: _canChunkBodies ? _handoffPreparedBody : null,
+            preparerSelector: _canChunkBodies
+                ? _bodyHandoffs.selectPreparer
+                : null,
             enableSafeDisplayPlanning: _canChunkBodies,
             preparedBody: entry.preparedBody,
             chunkOrdinal: entry.chunkOrdinal,

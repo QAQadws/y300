@@ -32,6 +32,7 @@ class _ThreadPostChunkBody extends ConsumerStatefulWidget {
     required this.sourcePost,
     required this.theme,
     required this.onPreparedBody,
+    this.preparerSelector,
     required this.onOpenPostLink,
   });
 
@@ -41,6 +42,7 @@ class _ThreadPostChunkBody extends ConsumerStatefulWidget {
   final ThreadPost sourcePost;
   final ForumHtmlThemeContext theme;
   final ThreadPreparedBodyHandoff onPreparedBody;
+  final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final ValueChanged<String> onOpenPostLink;
 
   @override
@@ -74,7 +76,7 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
     final preferences =
         ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
         ForumHtmlReaderPreferences.defaults();
-    final request = ForumHtmlPreparationRequest(
+    final baseRequest = ForumHtmlPreparationRequest(
       html: widget.post.message.trim(),
       preferences: preferences,
       theme: widget.theme,
@@ -86,6 +88,11 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
         enableSafeDisplayPlanning: true,
       ),
     );
+    final selected = widget.preparerSelector?.call(baseRequest);
+    final request =
+        selected == null || identical(selected, baseRequest.preparer)
+        ? baseRequest
+        : baseRequest.withPreparer(selected);
     final previousBox = _key.currentContext?.findRenderObject();
     if (previousBox is RenderBox && previousBox.hasSize) {
       _previousHeight = previousBox.size.height;

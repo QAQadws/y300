@@ -370,10 +370,13 @@ void main() {
         for (var i = 0; i < 5; i++)
           _post('long-$i', _html(3000, paragraphs: true), i + 1),
       ];
-      final host = _Host(posts, target: 'long-0');
+      // Introduce the fifth floor after four plans have committed. An input
+      // demanded earlier keeps its original choice while preparation awaits.
+      final host = _Host(posts.take(4).toList(), target: 'long-0');
       addTearDown(host.dispose);
       await _mount(tester, host);
       for (var i = 0; i < 5; i++) {
+        if (i == 4) host.replace(posts);
         if (i > 0) host.navigate('long-$i');
         await _pumpUntil(
           tester,
@@ -391,6 +394,7 @@ void main() {
         } else {
           expect(renderers, hasLength(1));
           expect(renderers.single.html, posts[i].message);
+          expect(renderers.single.preparedDocument!.safeDisplayPlan, isNull);
           expect(_bodyText(tester, 'long-$i'), contains('unit[2999]'));
         }
       }

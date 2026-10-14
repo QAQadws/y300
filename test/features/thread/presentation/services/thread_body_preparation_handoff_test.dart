@@ -6,6 +6,138 @@ import 'package:y300/features/thread/presentation/thread_detail_prepared_body.da
 
 void main() {
   test(
+    'new floor skips planning when retained and pending floor slots are full',
+    () {
+      final store = ThreadDetailPreparedBodyStore(maxBodies: 4);
+      final handoff = ThreadBodyPreparationHandoff(store);
+      for (var index = 0; index < 3; index++) {
+        store.admit('stored-$index', _body('stored-$index', 20));
+      }
+      final pending = _body('pending', 20);
+      handoff.begin(
+        pid: 'pending',
+        identity: 'pending',
+        reservedCodeUnits: pending.retainedCodeUnits,
+      );
+      final selected =
+          handoff.selectPreparer(_planningRequest('fifth'))
+              as DefaultForumHtmlRenderPreparer;
+      expect(selected.enableSafeDisplayPlanning, isFalse);
+      expect(selected.enablePlainTextLinks, isTrue);
+      final updating =
+          handoff.selectPreparer(_planningRequest('stored-0'))
+              as DefaultForumHtmlRenderPreparer;
+      expect(updating.enableSafeDisplayPlanning, isTrue);
+      expect(
+        updating.safeDisplayPlanningCodeUnitBudget,
+        store.maxRetainedCodeUnits -
+            store.retainedCodeUnits +
+            store['stored-0']!.retainedCodeUnits -
+            pending.retainedCodeUnits,
+      );
+    },
+  );
+
+  test(
+    'request choice stays fixed across capacity and layout-only preference changes',
+    () {
+      final store = ThreadDetailPreparedBodyStore(maxBodies: 1);
+      final handoff = ThreadBodyPreparationHandoff(store);
+      final request = _planningRequest('waiting');
+      final selected =
+          handoff.selectPreparer(request) as DefaultForumHtmlRenderPreparer;
+      expect(selected.enableSafeDisplayPlanning, isTrue);
+      store.admit('another', _body('another', 20));
+      expect(handoff.selectPreparer(request), same(selected));
+      final layout = request.preferences.copyWith(
+        typography: request.preferences.typography.copyWith(
+          fontScale: 1.7,
+          lineHeightScale: 1.9,
+        ),
+      );
+      final layoutRequest = _planningRequest('waiting', preferences: layout);
+      expect(handoff.selectPreparer(layoutRequest), same(selected));
+      expect(
+        layoutRequest.withPreparer(selected).identity,
+        request.withPreparer(selected).identity,
+      );
+      final newInput = _planningRequest('waiting', html: '<p>new source</p>');
+      final whole =
+          handoff.selectPreparer(newInput) as DefaultForumHtmlRenderPreparer;
+      expect(whole.enableSafeDisplayPlanning, isFalse);
+      store.clear();
+      expect(handoff.selectPreparer(newInput), same(whole));
+      handoff.clear();
+      final newOwner =
+          handoff.selectPreparer(newInput) as DefaultForumHtmlRenderPreparer;
+      expect(newOwner.enableSafeDisplayPlanning, isTrue);
+      expect(newOwner, isNot(same(whole)));
+    },
+  );
+
+  test(
+    'byte allowance counts pending replacement growth without predicting raw HTML',
+    () {
+      final stored = _body('stored', 20);
+      final growing = _body('stored', 64);
+      final store = ThreadDetailPreparedBodyStore(
+        maxRetainedCodeUnits: growing.retainedCodeUnits + 700,
+      );
+      store.admit('stored', stored);
+      final handoff = ThreadBodyPreparationHandoff(store);
+      handoff.begin(
+        pid: 'stored',
+        identity: 'growth',
+        reservedCodeUnits: growing.retainedCodeUnits,
+      );
+      final selected =
+          handoff.selectPreparer(_planningRequest('new', html: 'x'))
+              as DefaultForumHtmlRenderPreparer;
+      expect(selected.enableSafeDisplayPlanning, isTrue);
+      expect(selected.safeDisplayPlanningCodeUnitBudget, 700);
+      handoff.retainPids({'stored'});
+      handoff.release(handoff.pendingFor('stored')!);
+      final fresh =
+          handoff.selectPreparer(_planningRequest('new', html: 'x'))
+              as DefaultForumHtmlRenderPreparer;
+      expect(
+        fresh.safeDisplayPlanningCodeUnitBudget,
+        store.maxRetainedCodeUnits - stored.retainedCodeUnits,
+      );
+    },
+  );
+
+  test(
+    'explicit allowance is preserved and unknown preparers stay untouched',
+    () {
+      final handoff = ThreadBodyPreparationHandoff(
+        ThreadDetailPreparedBodyStore(),
+      );
+      final request = _planningRequest('floor');
+      final limited = request.withPreparer(
+        const DefaultForumHtmlRenderPreparer(
+          enableSafeDisplayPlanning: true,
+          safeDisplayPlanningCodeUnitBudget: 1234,
+        ),
+      );
+      final selected =
+          handoff.selectPreparer(limited) as DefaultForumHtmlRenderPreparer;
+      expect(selected.safeDisplayPlanningCodeUnitBudget, 1234);
+      expect(selected.enablePlainTextLinks, isFalse);
+      const custom = _CustomPreparer();
+      expect(
+        handoff.selectPreparer(request.withPreparer(custom)),
+        same(custom),
+      );
+      const disabled = DefaultForumHtmlRenderPreparer();
+      expect(
+        handoff.selectPreparer(request.withPreparer(disabled)),
+        same(disabled),
+      );
+    },
+  );
+
+  test(
     'new input releases declined identity without touching pending or store',
     () {
       final store = ThreadDetailPreparedBodyStore();
@@ -269,4 +401,28 @@ ThreadDetailPreparedBody _body(String pid, int repeat) {
     request: request,
     document: document.copyWith(safeDisplayPlan: plan),
   );
+}
+
+ForumHtmlPreparationRequest _planningRequest(
+  String pid, {
+  String? html,
+  ForumHtmlReaderPreferences? preferences,
+}) {
+  final base = _body(pid, 20).request;
+  return ForumHtmlPreparationRequest(
+    html: html ?? base.html,
+    preferences: preferences ?? base.preferences,
+    theme: base.theme,
+    sourceId: pid,
+    threadId: base.threadId,
+    imageCacheOwnerId: base.imageCacheOwnerId,
+    preparer: const DefaultForumHtmlRenderPreparer(
+      enablePlainTextLinks: true,
+      enableSafeDisplayPlanning: true,
+    ),
+  );
+}
+
+class _CustomPreparer extends DefaultForumHtmlRenderPreparer {
+  const _CustomPreparer() : super(enableSafeDisplayPlanning: true);
 }
