@@ -41,6 +41,53 @@ void main() {
     expect(plain.textAlign, TextAlign.start);
   });
 
+  testWidgets('document paragraphs apply the configured gap with fwfh 0.17.4', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(html: '<p>first</p><p>second</p>'));
+    await tester.pumpAndSettle();
+
+    final first = tester.getRect(find.text('first', findRichText: true));
+    final second = tester.getRect(find.text('second', findRichText: true));
+    expect(second.top - first.bottom, closeTo(_options.paragraphSpacing, 0.01));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('author list alignment receives the full available line width', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(html: '<ul><li style="text-align:right">aligned item</li></ul>'),
+    );
+    await tester.pumpAndSettle();
+
+    final paragraph = _paragraph(tester, 'aligned item');
+    expect(paragraph.textAlign, TextAlign.right);
+    // A right-aligned span in a shrink-wrapped paragraph cannot move right.
+    // fwfh 0.17.3 makes the list's content fill the width after its 40px indent.
+    expect(
+      tester.getSize(find.text('aligned item', findRichText: true)).width,
+      closeTo(260, 0.01),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('author xxx-large font size uses the upgraded renderer scale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(html: '<p style="font-size:xxx-large">large author text</p>'),
+    );
+    await tester.pumpAndSettle();
+
+    final style = _styleFor(
+      _paragraph(tester, 'large author text').text,
+      'large author text',
+    )!;
+    expect(style.fontSize, 60);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('cached body updates alignment and style without remounting', (
     tester,
   ) async {
@@ -124,6 +171,7 @@ const _options = ForumHtmlRenderOptions(
 );
 
 Widget _app({
+  String html = _html,
   TextStyle? style,
   TextAlign? alignment,
   TextAlign? ambientAlignment,
@@ -137,7 +185,7 @@ Widget _app({
       child: DefaultTextStyle.merge(
         textAlign: ambientAlignment,
         child: ForumHtmlRenderer(
-          preparedDocument: prepareRenderTestDocument(_html, options: _options),
+          preparedDocument: prepareRenderTestDocument(html, options: _options),
           theme: forumHtmlTestTheme,
           options: _options,
           labels: renderTestLabels,

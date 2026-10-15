@@ -10,6 +10,7 @@ import 'package:y300/features/cache/data/repositories/image_cache_repository.dar
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/image_cache_access_recorder.dart';
 import 'package:y300/features/cache/data/services/image_cache_failure_backoff.dart';
+import 'package:y300/features/cache/data/services/image_cache_file_access.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -69,6 +70,7 @@ class DefaultImageCacheService
     ImageCacheAccessRecorder? accessRecorder,
     ImageCacheRevalidator? revalidator,
     ImageCacheFailureBackoff? failureBackoff,
+    ImageCacheFileAccess? fileAccess,
     Object? Function()? failureScopeFor,
   }) : _repository = repository,
        _cacheManagerFuture = cacheManagerFuture,
@@ -80,6 +82,7 @@ class DefaultImageCacheService
        _accessRecorder = accessRecorder,
        _revalidator = revalidator,
        _failureBackoff = failureBackoff ?? ImageCacheFailureBackoff(),
+       _fileAccess = fileAccess ?? ImageCacheFileAccess(),
        _failureScopeFor = failureScopeFor;
 
   final ImageCacheRevalidator? _revalidator;
@@ -101,6 +104,7 @@ class DefaultImageCacheService
   final ImageCacheDiagnosticRecorder _diagnosticRecorder;
   final ImageCacheAccessRecorder? _accessRecorder;
   final ImageCacheFailureBackoff _failureBackoff;
+  final ImageCacheFileAccess _fileAccess;
   final Object? Function()? _failureScopeFor;
   Object? _failureScope;
   int _failureEpoch = 0;
@@ -143,11 +147,17 @@ class DefaultImageCacheService
       return existing;
     }
     late final Future<CachedImageResult> task;
-    task = _ensureCached(request, identity, _failureEpoch).whenComplete(() {
-      if (identical(_ensureTasks[flightIdentity], task)) {
-        _ensureTasks.remove(flightIdentity);
-      }
-    });
+    final failureEpoch = _failureEpoch;
+    task = _fileAccess
+        .protect(
+          identity.cacheKey,
+          () => _ensureCached(request, identity, failureEpoch),
+        )
+        .whenComplete(() {
+          if (identical(_ensureTasks[flightIdentity], task)) {
+            _ensureTasks.remove(flightIdentity);
+          }
+        });
     _ensureTasks[flightIdentity] = task;
     return task;
   }

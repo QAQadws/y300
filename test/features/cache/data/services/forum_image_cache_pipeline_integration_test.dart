@@ -19,6 +19,7 @@ import 'package:y300/features/cache/data/repositories/image_cache_repository.dar
 import 'package:y300/features/cache/data/services/default_image_cache_service.dart';
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/image_cache_manager_factory.dart';
+import 'package:y300/features/cache/data/services/image_cache_file_access.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 
@@ -270,18 +271,22 @@ Future<_PipelineHarness> _buildHarness(
     siteOrigin: Uri.parse(_siteOrigin),
     resourceUserAgent: 'Y300 integration test',
   );
+  final repository = _MemoryImageCacheRepository();
+  final fileAccess = ImageCacheFileAccess();
   final manager = ImageCacheManagerFactory(
+    repository: repository,
+    fileAccess: fileAccess,
     fileService: Y300ForumResourceFileService(
       client: resourceClient,
       siteOrigin: Uri.parse(_siteOrigin),
     ),
   ).create(cacheDirectoryPath: cacheRoot.path);
   await manager.emptyCache();
-  final repository = _MemoryImageCacheRepository();
   return _PipelineHarness(
     manager: manager,
     repository: repository,
     service: DefaultImageCacheService(
+      fileAccess: fileAccess,
       repository: repository,
       cacheManagerFuture: Future<BaseCacheManager>.value(manager),
       directoryResolver: const ImageCacheDirectoryResolver(),

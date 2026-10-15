@@ -684,6 +684,48 @@ void main() {
       anchorFormatVersion: 1,
       anchorTextIdentity: 'text:paragraph-2',
     );
+    NovelReaderPaginationKey layoutForRenderer(int revision) =>
+        NovelReaderPaginationKey(
+          episodeId: key.episodeId,
+          contentHash: key.contentHash,
+          viewportWidthPx: key.viewportWidthPx,
+          viewportHeightPx: key.viewportHeightPx,
+          typographySignature: key.typographySignature,
+          themeSignature: key.themeSignature,
+          imageDimensionRevision: key.imageDimensionRevision,
+          rendererRevision: revision,
+        );
+    final beforeRendererUpgrade = exact.copyWith(
+      paginationKey: layoutForRenderer(20).layoutFingerprint,
+      pageIndex: 2,
+    );
+    final upgradedRendererPlan = NovelReaderPaginationPlan(
+      key: layoutForRenderer(21),
+      episodeId: canonicalPlan.episodeId,
+      pages: canonicalPlan.pages,
+    );
+    final afterRendererUpgrade = restorePolicy.resolveAvailablePage(
+      plan: upgradedRendererPlan,
+      snapshot: beforeRendererUpgrade,
+      isPlanComplete: false,
+    );
+    // The old page exists, but new CSS geometry invalidates its page index.
+    // Restore the same canonical text rather than reusing that index.
+    expect(afterRendererUpgrade?.pageIndex, 1);
+    expect(afterRendererUpgrade?.isReadOnlyCompatibilityRestore, isFalse);
+    final unsupportedBeforeUpgrade = beforeRendererUpgrade.copyWith(
+      anchorFormatVersion: 37,
+    );
+    final compatibleAfterUpgrade = restorePolicy.resolveAvailablePage(
+      plan: upgradedRendererPlan,
+      snapshot: unsupportedBeforeUpgrade,
+      isPlanComplete: false,
+    );
+    expect(compatibleAfterUpgrade?.pageIndex, 1);
+    expect(compatibleAfterUpgrade?.isReadOnlyCompatibilityRestore, isTrue);
+    expect(unsupportedBeforeUpgrade.anchorFormatVersion, 37);
+    expect(unsupportedBeforeUpgrade.anchorTextOffset, 1);
+    expect(unsupportedBeforeUpgrade.anchorTextIdentity, 'text:paragraph-2');
     expect(
       restorePolicy
           .resolveInitialPage(plan: canonicalPlan, snapshot: exact)

@@ -39,6 +39,10 @@ void main() {
       expect(find.text('IGNORE'), findsOneWidget);
       expect(find.text('LATER'), findsOneWidget);
 
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('upgrader_alert_dialog')), findsOneWidget);
+
       await tester.tap(find.text('UPDATE NOW'));
       await tester.pumpAndSettle();
 

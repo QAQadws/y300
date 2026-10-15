@@ -16,6 +16,7 @@ import 'package:y300/features/cache/data/services/long_term_image_revalidator.da
 import 'package:y300/features/cache/data/services/document_cache_service.dart';
 import 'package:y300/features/cache/data/providers/image_cache_directory_provider.dart';
 import 'package:y300/features/cache/data/services/image_cache_manager_factory.dart';
+import 'package:y300/features/cache/data/services/image_cache_file_access.dart';
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/image_cache_access_recorder.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
@@ -48,12 +49,18 @@ final imageCacheManagerFactoryProvider = Provider<ImageCacheManagerFactory>((
   ref,
 ) {
   return ImageCacheManagerFactory(
+    repository: ref.watch(imageCacheRepositoryProvider),
+    fileAccess: ref.watch(imageCacheFileAccessProvider),
     fileService: Y300ForumResourceFileService(
       client: ref.watch(yamiboForumResourceClientProvider),
       siteOrigin: Uri.parse(AppConfig.siteBaseUrl),
     ),
   );
 });
+
+final imageCacheFileAccessProvider = Provider<ImageCacheFileAccess>(
+  (ref) => ImageCacheFileAccess(),
+);
 
 final imageCacheManagerProvider = FutureProvider<BaseCacheManager>((ref) async {
   final resolver = ref.read(imageCacheDirectoryResolverProvider);
@@ -142,6 +149,7 @@ final imageCacheServiceProvider = Provider<ImageCacheService>((ref) {
     unawaited(accessRecorder.dispose());
   });
   return DefaultImageCacheService(
+    fileAccess: ref.watch(imageCacheFileAccessProvider),
     repository: repository,
     cacheManagerFuture: ref.watch(imageCacheManagerProvider.future),
     directoryResolver: ref.watch(imageCacheDirectoryResolverProvider),

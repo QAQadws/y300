@@ -30,7 +30,7 @@ final class NovelReaderPaginationRenderEnvironment {
   }) {
     final defaults = DefaultTextStyle.of(context);
     final media = MediaQuery.of(context);
-    // fwfh 0.17.2 reads this compatibility factor, which can differ from a
+    // fwfh 0.17.4 reads this compatibility factor, which can differ from a
     // nonlinear scaler's 14px sample. Preserve its existing rendering scale.
     // ignore: deprecated_member_use
     final factor = media.textScaler.textScaleFactor;

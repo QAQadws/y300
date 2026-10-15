@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   # Keep the App's renderer version while extracting its lifecycle behavior.
-  flutter_widget_from_html_core: 0.17.2
+  flutter_widget_from_html_core: 0.17.4
   html: ^0.15.6
   csslib: ^1.0.2
   material_color_utilities: ^0.13.0

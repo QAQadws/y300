@@ -7,7 +7,7 @@ import 'package:y300/features/composer_shared/domain/models/composer_attachment_
 import 'package:y300/features/composer_shared/domain/models/composer_failure_models.dart';
 
 typedef PickMultiImage = Future<List<XFile>> Function();
-typedef PickImageFiles = Future<FilePickerResult?> Function();
+typedef PickImageFiles = Future<List<PlatformFile>> Function();
 
 abstract class ComposerImagePicker {
   Future<List<ComposerPickedImage>> pickImagesInOrder();
@@ -59,13 +59,9 @@ class ImagePickerComposerImagePicker implements ComposerImagePicker {
       }
 
       final pickImageFiles = _pickImageFiles;
-      final result = pickImageFiles == null
-          ? await FilePicker.pickFiles(
-              type: FileType.image,
-              allowMultiple: true,
-            )
+      final files = pickImageFiles == null
+          ? await FilePicker.pickFiles(type: FileType.image)
           : await pickImageFiles();
-      final files = result?.files ?? const <PlatformFile>[];
       return [
         for (var index = 0; index < files.length; index += 1)
           if (files[index].path != null)

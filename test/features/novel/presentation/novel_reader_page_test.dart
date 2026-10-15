@@ -540,6 +540,8 @@ void main() {
             updatedAt: DateTime(2026),
           ),
         );
+        final originalProgress = repository.readingProgress;
+        final originalSaveCount = repository.savedProgressOffsets.length;
         await tester.pumpWidget(_buildReaderApp(repository: repository));
         double? firstVisibleOffset;
         var visibleFrames = 0;
@@ -561,17 +563,28 @@ void main() {
             continue;
           }
           final position = tester.state<ScrollableState>(finder).position;
-          expect(
-            position.pixels,
-            closeTo(position.maxScrollExtent * fraction, 1),
-          );
+          if (fraction == 1) {
+            expect(position.pixels, closeTo(position.maxScrollExtent, 1));
+          } else {
+            // HTML margins are separate sliver children. Their active-range
+            // average can change the lazy total-height estimate even when the
+            // visible position is settled; it is not an exact chapter height.
+            expect(
+              position.pixels,
+              greaterThan(originalProgress!.scrollOffset),
+            );
+            expect(position.pixels, lessThan(position.maxScrollExtent));
+          }
           expect(position.isScrollingNotifier.value, isFalse);
           firstVisibleOffset ??= position.pixels;
           expect(position.pixels, closeTo(firstVisibleOffset, 0.01));
           visibleFrames++;
         }
+        expect(visibleFrames, 20);
         expect(firstVisibleOffset, isNotNull);
         expect(firstVisibleOffset, greaterThan(0));
+        expect(repository.readingProgress, same(originalProgress));
+        expect(repository.savedProgressOffsets, hasLength(originalSaveCount));
         expect(tester.takeException(), isNull);
       },
     );
@@ -1159,6 +1172,11 @@ void main() {
       await tester.tap(find.byKey(const Key('shared-reader-top-back-button')));
       await tester.pumpAndSettle();
       expect(find.byType(NovelReaderPage), findsNothing);
+      final saved = repository.readingProgress!;
+      // Seeking lays out previously estimated sliver children. Exit records the
+      // final visible position, whose percentage can refine from the slider's.
+      expect(saved.progressPercent, closeTo(0.59, 0.01));
+      final savedCount = repository.savedProgressOffsets.length;
 
       await tester.tap(find.byKey(const Key('continue-novel-reading')));
       await tester.pumpAndSettle();
@@ -1169,7 +1187,13 @@ void main() {
       );
       final position = tester.state<ScrollableState>(scrollable).position;
       // The legacy repository port retains the existing whole-layout basis.
-      expect(position.pixels, closeTo(position.maxScrollExtent * 0.59, 0.01));
+      expect(
+        position.pixels,
+        closeTo(position.maxScrollExtent * saved.progressPercent, 0.01),
+      );
+      expect(repository.readingProgress, same(saved));
+      expect(repository.readingProgress!.updatedAt, saved.updatedAt);
+      expect(repository.savedProgressOffsets, hasLength(savedCount));
 
       await _showReaderMenu(tester);
       expect(find.text('59%'), findsOneWidget);

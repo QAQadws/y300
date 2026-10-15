@@ -61,10 +61,10 @@ void main() {
       final picker = ImagePickerComposerImagePicker(
         platform: TargetPlatform.windows,
         pickImageFiles: () async {
-          return FilePickerResult([
-            PlatformFile(name: 'first.jpg', size: 1, path: 'C:/first.jpg'),
-            PlatformFile(name: 'second.png', size: 1, path: 'C:/second.png'),
-          ]);
+          return [
+            _PickedFile('first.jpg', Uri.file('C:/first.jpg', windows: true)),
+            _PickedFile('second.png', Uri.file('C:/second.png', windows: true)),
+          ];
         },
       );
 
@@ -75,6 +75,35 @@ void main() {
         'second.png',
       ]);
       expect(images.map((image) => image.originalIndex), [0, 1]);
+    });
+
+    test('returns empty list when desktop picker is cancelled', () async {
+      final picker = ImagePickerComposerImagePicker(
+        platform: TargetPlatform.windows,
+        pickImageFiles: () async => const <PlatformFile>[],
+      );
+
+      expect(await picker.pickImagesInOrder(), isEmpty);
+    });
+
+    test('skips non-local files and preserves selection order', () async {
+      final picker = ImagePickerComposerImagePicker(
+        platform: TargetPlatform.windows,
+        pickImageFiles: () async => [
+          _PickedFile('first.jpg', Uri.file('C:/first.jpg', windows: true)),
+          _PickedFile('remote.png', Uri.https('example.com', '/remote.png')),
+          _PickedFile('third.gif', Uri.file('C:/third.gif', windows: true)),
+        ],
+      );
+
+      final images = await picker.pickImagesInOrder();
+
+      expect(images.map((image) => image.fileName), ['first.jpg', 'third.gif']);
+      expect(images.map((image) => image.originalIndex), [0, 2]);
+      expect(images.map((image) => image.mimeType), [
+        'image/jpeg',
+        'image/gif',
+      ]);
     });
 
     test('wraps picker errors', () async {
@@ -89,4 +118,17 @@ void main() {
       );
     });
   });
+}
+
+final class _PickedFile extends PlatformFile {
+  _PickedFile(this.name, this.uri);
+
+  @override
+  final String name;
+
+  @override
+  final Uri uri;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

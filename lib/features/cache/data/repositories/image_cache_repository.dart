@@ -48,8 +48,17 @@ abstract interface class ImageCacheBatchAccessRepository {
   Future<void> touchMany(Map<String, DateTime> accesses);
 }
 
+/// Bulk ownership lookup for lower-level file cleanup without one SQL read per
+/// cache-manager entry. Keys remain bounded by each query's variable count.
+abstract interface class ImageCachePathLookup {
+  Future<Map<String, String>> lookupLocalPaths(Iterable<String> cacheKeys);
+}
+
 class LocalImageCacheRepository
-    implements ImageCacheRepository, ImageCacheBatchAccessRepository {
+    implements
+        ImageCacheRepository,
+        ImageCacheBatchAccessRepository,
+        ImageCachePathLookup {
   LocalImageCacheRepository(Future<Database> dbFuture)
     : _dbFutureFactory = (() => dbFuture);
 
@@ -60,6 +69,33 @@ class LocalImageCacheRepository
   Future<Database>? _dbFuture;
 
   Future<Database> get _db => _dbFuture ??= _dbFutureFactory();
+
+  @override
+  Future<Map<String, String>> lookupLocalPaths(
+    Iterable<String> cacheKeys,
+  ) async {
+    final keys = cacheKeys.toSet().toList(growable: false);
+    if (keys.isEmpty) return const {};
+    final db = await _db;
+    final paths = <String, String>{};
+    for (var offset = 0; offset < keys.length; offset += 500) {
+      final end = offset + 500 < keys.length ? offset + 500 : keys.length;
+      final batch = keys.sublist(offset, end);
+      final rows = await db.query(
+        AppDatabase.cachedImagesTable,
+        columns: const ['cache_key', 'local_path'],
+        where: 'cache_key IN (${List.filled(batch.length, '?').join(', ')})',
+        whereArgs: batch,
+      );
+      for (final row in rows) {
+        final path = row['local_path'] as String?;
+        if (path != null && path.isNotEmpty) {
+          paths[row['cache_key'] as String] = path;
+        }
+      }
+    }
+    return paths;
+  }
 
   @override
   Future<CachedImageRecord?> getByKey(String cacheKey) async {

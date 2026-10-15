@@ -78,19 +78,19 @@ void main() {
       expect(nativeCalls, isEmpty);
     });
 
-    test('toTraditional has s2t in id', () {
+    test('toTraditional identifies the current OpenCC dictionary revision', () {
       const converter = OpenccTextConverter(
         mode: TextConversionMode.toTraditional,
       );
-      expect(converter.id, contains('s2t'));
+      expect(converter.id, 'opencc:1.0:s2t');
       expect(converter.mode, TextConversionMode.toTraditional);
     });
 
-    test('toSimplified has t2s in id', () {
+    test('toSimplified identifies the current OpenCC dictionary revision', () {
       const converter = OpenccTextConverter(
         mode: TextConversionMode.toSimplified,
       );
-      expect(converter.id, contains('t2s'));
+      expect(converter.id, 'opencc:1.0:t2s');
       expect(converter.mode, TextConversionMode.toSimplified);
     });
 

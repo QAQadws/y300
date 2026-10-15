@@ -17,7 +17,7 @@ final class OpenccTextConverter implements IndependentTextValueConverter {
   final TextConversionMode mode;
 
   /// Package version baked into the id so a dependency bump busts the cache.
-  static const String _packageVersion = '0.9';
+  static const String _packageVersion = '1.0';
 
   @override
   String get id {

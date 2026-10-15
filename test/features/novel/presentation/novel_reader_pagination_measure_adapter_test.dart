@@ -244,7 +244,7 @@ void main() {
         typographySignature: environment.layoutSignature,
         themeSignature: chapter.themeSignature,
         imageDimensionRevision: chapter.imageDimensionRevision,
-        rendererRevision: 20,
+        rendererRevision: 21,
       );
       final adapter = NovelReaderHtmlPaginationMeasureAdapter(
         hostContext: hostContext,

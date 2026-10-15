@@ -114,8 +114,7 @@ class ForumHtmlRenderStylePolicy {
         _isAtContentEnd(element);
     final spacing = trimEnd ? 0.0 : options.paragraphSpacing;
     if (contentLayout == ForumHtmlContentLayout.compact) {
-      // fwfh 0.17.2 supports one, two and four values, but skips three-value
-      // margin shorthand. Spell out all sides to retain interior paragraph gaps.
+      // Keep all sides explicit: only a fragment's trailing gap is trimmed.
       return '0 0 ${spacing}px 0';
     }
     return '0 0 ${spacing}px';
