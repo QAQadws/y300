@@ -6,6 +6,54 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
 
 void main() {
+  test('default cache keeps sixteen chapter plans and evicts the coldest', () {
+    final cache = NovelReaderPaginationCache();
+    addTearDown(cache.dispose);
+    final plans = [
+      for (var index = 0; index < 17; index++)
+        _plan('episode-$index', html: '<p>page-$index</p>'),
+    ];
+    for (final plan in plans.take(16)) {
+      cache.put(plan);
+    }
+    for (final plan in plans.take(16)) {
+      expect(cache.get(plan.key), same(plan));
+    }
+    expect(cache.get(plans.first.key), same(plans.first));
+    cache.put(plans.last);
+
+    expect(cache.length, 16);
+    expect(cache.get(plans[1].key), isNull);
+    expect(cache.get(plans.first.key), same(plans.first));
+    for (final plan in plans.skip(2)) {
+      expect(cache.get(plan.key), same(plan));
+    }
+  });
+
+  test('default byte budget retains a large plan but still bounds the LRU', () {
+    const mib = 1024 * 1024;
+    final cache = NovelReaderPaginationCache();
+    addTearDown(cache.dispose);
+    final html = '<p>${'x' * (5 * mib)}</p>';
+    final first = _plan('one', html: html);
+    final second = _plan('two', html: html);
+    cache.put(first);
+    expect(cache.get(first.key), same(first));
+    expect(cache.estimatedRetainedBytes, greaterThan(8 * mib));
+    expect(cache.estimatedRetainedBytes, lessThanOrEqualTo(16 * mib));
+
+    cache.put(second);
+    expect(cache.length, 1);
+    expect(cache.get(first.key), isNull);
+    expect(cache.get(second.key), same(second));
+    expect(cache.estimatedRetainedBytes, lessThanOrEqualTo(16 * mib));
+
+    cache.put(_plan('two', html: '<p>${'x' * (9 * mib)}</p>'));
+    expect(cache.get(second.key), isNull);
+    expect(cache.length, 0);
+    expect(cache.estimatedRetainedBytes, 0);
+  });
+
   test('keeps a bounded LRU and refreshes recency on read', () {
     final cache = NovelReaderPaginationCache(capacity: 2);
     final first = _plan('one');

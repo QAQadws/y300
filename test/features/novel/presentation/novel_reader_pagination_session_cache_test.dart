@@ -20,6 +20,82 @@ import 'package:y300/features/novel/presentation/services/novel_reader_prepared_
 
 void main() {
   test(
+    'default owner reuses eight prepared chapters before LRU eviction',
+    () async {
+      final owner = NovelReaderPaginationSessionCache();
+      addTearDown(owner.dispose);
+      final chapters = [
+        for (var index = 0; index < 9; index++)
+          _chapter('<p>chapter-$index</p>', episodeId: 'episode-$index'),
+      ];
+      var preparations = 0;
+      for (var index = 0; index < 8; index++) {
+        expect(
+          await owner.preparedChapterCache.resolve(
+            key: 'chapter-$index',
+            prepare: () {
+              preparations += 1;
+              return Future.value(chapters[index]);
+            },
+          ),
+          same(chapters[index]),
+        );
+      }
+      for (var index = 0; index < 8; index++) {
+        expect(
+          await owner.preparedChapterCache.resolve(
+            key: 'chapter-$index',
+            prepare: () =>
+                throw StateError('cached chapter was prepared again'),
+          ),
+          same(chapters[index]),
+        );
+      }
+      expect(preparations, 8);
+      expect(owner.preparedChapterCache.get('chapter-0'), same(chapters.first));
+      owner.preparedChapterCache.put('chapter-8', chapters.last);
+
+      expect(owner.preparedChapterCache.length, 8);
+      expect(owner.preparedChapterCache.get('chapter-1'), isNull);
+      expect(owner.preparedChapterCache.get('chapter-0'), same(chapters.first));
+      for (var index = 2; index < chapters.length; index++) {
+        expect(
+          owner.preparedChapterCache.get('chapter-$index'),
+          same(chapters[index]),
+        );
+      }
+    },
+  );
+
+  test(
+    'default owner retains a large prepared chapter within the byte budget',
+    () {
+      const mib = 1024 * 1024;
+      final owner = NovelReaderPaginationSessionCache();
+      addTearDown(owner.dispose);
+      final cache = owner.preparedChapterCache;
+      final html = '<p>${'x' * (5 * mib ~/ 2)}</p>';
+      final first = _chapter(html, episodeId: 'one');
+      final second = _chapter(html, episodeId: 'two');
+      cache.put('one', first);
+      expect(cache.get('one'), same(first));
+      expect(cache.estimatedRetainedBytes, greaterThan(8 * mib));
+      expect(cache.estimatedRetainedBytes, lessThanOrEqualTo(16 * mib));
+
+      cache.put('two', second);
+      expect(cache.length, 1);
+      expect(cache.get('one'), isNull);
+      expect(cache.get('two'), same(second));
+      expect(cache.estimatedRetainedBytes, lessThanOrEqualTo(16 * mib));
+
+      cache.put('two', _chapter('<p>${'x' * (5 * mib)}</p>', episodeId: 'two'));
+      expect(cache.get('two'), isNull);
+      expect(cache.length, 0);
+      expect(cache.estimatedRetainedBytes, 0);
+    },
+  );
+
+  test(
     'prepared key eviction preserves peers and fences an old flight',
     () async {
       final cache = NovelReaderPreparedChapterCache();
@@ -344,11 +420,12 @@ void main() {
 
 NovelReaderPreparedChapter _chapter(
   String html, {
+  String episodeId = 'episode',
   String? scrollHtml,
   List<String>? scrollFragments,
   List<NovelReaderFlowUnit> flowUnits = const [],
 }) => NovelReaderPreparedChapter(
-  episodeId: _episode.episodeId,
+  episodeId: episodeId,
   contentHash: 'content',
   html: html,
   scrollHtml: scrollHtml,

@@ -8,8 +8,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 /// are intentionally not written to SQLite or the downloaded content store.
 final class NovelReaderPaginationCache {
   NovelReaderPaginationCache({
-    this.capacity = 8,
-    this.maxEstimatedBytes = 8 * 1024 * 1024,
+    this.capacity = 16,
+    this.maxEstimatedBytes = 16 * 1024 * 1024,
   }) {
     if (capacity <= 0) {
       throw ArgumentError.value(capacity, 'capacity', 'must be positive');

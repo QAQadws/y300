@@ -17,8 +17,8 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 /// discard whenever memory pressure or a new content identity requires it.
 final class NovelReaderPreparedChapterCache {
   NovelReaderPreparedChapterCache({
-    this.capacity = 4,
-    this.maxEstimatedBytes = 8 * 1024 * 1024,
+    this.capacity = 8,
+    this.maxEstimatedBytes = 16 * 1024 * 1024,
   }) {
     if (capacity <= 0) {
       throw ArgumentError.value(capacity, 'capacity', 'must be positive');
