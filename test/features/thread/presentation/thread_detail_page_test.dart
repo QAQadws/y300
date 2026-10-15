@@ -19,6 +19,7 @@ import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
 import '../../profile/test_support/profile_repository_fixture.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
+import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/webview_cookie_sync_service.dart';
@@ -4507,48 +4508,84 @@ void main() {
       expect(historyRecorder.drafts.last.target.id, '572057');
     });
 
-    testWidgets('keeps large thread pages lazy built for smoother rendering', (
-      tester,
-    ) async {
-      final repository = _FakeThreadRepository((tid, page) async {
-        return ApiSuccess(
-          ThreadDetailData(
-            tid: tid,
-            fid: '55',
-            subject: '大文本帖子',
-            author: 'alice',
-            replies: 80,
-            views: 12,
-            currentPage: 1,
-            lastPage: 1,
-            perPage: 80,
-            posts: [
-              for (var index = 0; index < 80; index++)
-                ThreadPost(
-                  pid: 'bulk-$index',
-                  author: 'author',
-                  authorId: '$index',
-                  message: '<p>正文 $index ${'长文本 '.padRight(260, 'x')}</p>',
-                  number: index + 1,
-                  isFirst: index == 0,
-                  dateline: 'today',
-                ),
-            ],
-          ),
-        );
-      });
+    for (final lowRam in [false, true]) {
+      testWidgets(
+        'keeps large pages lazy with the ${lowRam ? 'low-memory' : 'ordinary'} production window',
+        (tester) async {
+          final previousProfile = DeviceMemoryProfileStore.current;
+          DeviceMemoryProfileStore.current = DeviceMemoryProfile(
+            isLowRamDevice: lowRam,
+            memoryClassMb: 256,
+          );
+          addTearDown(() => DeviceMemoryProfileStore.current = previousProfile);
+          final repository = _FakeThreadRepository((tid, page) async {
+            return ApiSuccess(
+              ThreadDetailData(
+                tid: tid,
+                fid: '55',
+                subject: '大文本帖子',
+                author: 'alice',
+                replies: 80,
+                views: 12,
+                currentPage: 1,
+                lastPage: 1,
+                perPage: 80,
+                posts: [
+                  for (var index = 0; index < 80; index++)
+                    ThreadPost(
+                      pid: 'bulk-$index',
+                      author: 'author',
+                      authorId: '$index',
+                      message: '<p>正文 $index ${'长文本 '.padRight(260, 'x')}</p>',
+                      number: index + 1,
+                      isFirst: index == 0,
+                      dateline: 'today',
+                    ),
+                ],
+              ),
+            );
+          });
 
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+          await tester.pumpWidget(
+            _buildTestApp(
+              repository,
+              forumImagePrecacheService: _RecordingForumImagePrecacheService(),
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 120));
 
-      final list = tester.widget<ScrollView>(
-        find.byKey(const Key('thread-detail-list')),
+          final list = tester.widget<ScrollView>(
+            find.byKey(const Key('thread-detail-list')),
+          );
+          expect(
+            list.scrollCacheExtent,
+            ScrollCacheExtent.viewport(lowRam ? 1 : 3),
+          );
+          final body = tester
+              .widgetList<ThreadPostHtmlFirstBody>(
+                find.byType(ThreadPostHtmlFirstBody),
+              )
+              .first;
+          final viewport = body.imageViewportCoordinator!;
+          expect(viewport.maxVisibleFirstFrames, lowRam ? 2 : 4);
+          expect(viewport.maxConcurrentOptionalWork, lowRam ? 1 : 2);
+          expect(viewport.predecodePolicy!.forwardImageCount, lowRam ? 1 : 3);
+          expect(
+            viewport.predecodePolicy!.forwardDiskExtentFactor,
+            lowRam ? 1 : 3,
+          );
+          expect(
+            find.byKey(const Key('thread-post-card-bulk-0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const Key('thread-post-card-bulk-79')),
+            findsNothing,
+          );
+        },
       );
-      expect(list.scrollCacheExtent, const ScrollCacheExtent.viewport(2));
-      expect(find.byKey(const Key('thread-post-card-bulk-0')), findsOneWidget);
-      expect(find.byKey(const Key('thread-post-card-bulk-79')), findsNothing);
-    });
+    }
 
     testWidgets('renders long text post as one HTML-first body', (
       tester,

@@ -25,12 +25,14 @@ final class ForumHtmlImageViewportCoordinator {
     this.prefetchExtentFactor = 0.5,
     this.maxVisibleFirstFrames = 2,
     this.maxPrefetchCandidates = 1,
+    this.maxConcurrentOptionalWork = 1,
     this.predecodePolicy,
-  });
+  }) : assert(maxConcurrentOptionalWork >= 0);
 
   final double prefetchExtentFactor;
   final int maxVisibleFirstFrames;
   final int maxPrefetchCandidates;
+  final int maxConcurrentOptionalWork;
   final ForumHtmlImagePredecodePolicy? predecodePolicy;
   final Set<ForumHtmlImageViewportWork> _runningWork = {};
   final Set<ForumHtmlImageViewportHandle> _handles =
@@ -193,26 +195,34 @@ final class ForumHtmlImageViewportCoordinator {
       modes[handle] = mode;
     }
 
-    // A nearby disk prefetch may use only the capacity left by visible images.
-    // This keeps the page-wide cache-miss budget at two while allowing one
-    // look-ahead request after the visible first-frame pressure subsides.
-    final prefetchLimit = (maxVisibleFirstFrames - waitingVisible).clamp(
-      0,
-      maxPrefetchCandidates,
-    );
+    // The legacy disk-only path also reserves initial capacity for visible
+    // images. Optional leases have their own actual-completion limit.
+    final prefetchLimit = (maxVisibleFirstFrames - waitingVisible)
+        .clamp(0, maxPrefetchCandidates)
+        .toInt();
     if (policy != null) {
       _scheduleLookAhead(placements, modes, position, waitingVisible, policy);
     } else {
-      var prefetched = 0;
+      final candidates =
+          <(ForumHtmlImageViewportHandle, ForumHtmlImageViewportMode)>[];
       for (final placement in placements) {
-        if (prefetched >= prefetchLimit) break;
+        placement.handle._setWindow(placement.visible || placement.near);
         if (!placement.visible &&
             placement.near &&
             modes[placement.handle] == ForumHtmlImageViewportMode.dormant) {
-          modes[placement.handle] = ForumHtmlImageViewportMode.prefetch;
-          prefetched += 1;
+          candidates.add((
+            placement.handle,
+            ForumHtmlImageViewportMode.prefetch,
+          ));
         }
       }
+      _admitOptionalWork(
+        candidates,
+        modes,
+        position,
+        waitingVisible,
+        newWorkLimit: prefetchLimit,
+      );
     }
     // Commit once: an unchanged prefetch must not emit dormant/prefetch on
     // every scroll tick and rebuild its image placeholder again.
@@ -285,25 +295,43 @@ final class ForumHtmlImageViewportCoordinator {
       ...candidates.where((c) => c.$2 == ForumHtmlImageViewportMode.predecode),
       ...candidates.where((c) => c.$2 == ForumHtmlImageViewportMode.prefetch),
     ];
-    final running = _runningWork.where((w) => w.isActive).firstOrNull;
-    if (running != null &&
-        candidates.any(
-          (c) => c.$1 == running._handle && c.$2 == running.mode,
-        )) {
-      modes[running._handle] = running.mode;
-      return;
+    _admitOptionalWork(ordered, modes, position, waitingVisible);
+  }
+
+  void _admitOptionalWork(
+    List<(ForumHtmlImageViewportHandle, ForumHtmlImageViewportMode)> candidates,
+    Map<ForumHtmlImageViewportHandle, ForumHtmlImageViewportMode> modes,
+    ScrollPosition position,
+    int waitingVisible, {
+    int? newWorkLimit,
+  }) {
+    final heldHandles = <ForumHtmlImageViewportHandle>{};
+    var continuing = 0;
+    for (final work in _runningWork) {
+      // Cancelled I/O still owns both its slot and its handle until completion.
+      heldHandles.add(work._handle);
+      if (work.isActive &&
+          candidates.any((c) => c.$1 == work._handle && c.$2 == work.mode)) {
+        modes[work._handle] = work.mode;
+        continuing++;
+      }
     }
-    if (_runningWork.isNotEmpty || waitingVisible >= maxVisibleFirstFrames) {
-      return;
+    if (waitingVisible >= maxVisibleFirstFrames) return;
+    var available = maxConcurrentOptionalWork - _runningWork.length;
+    if (newWorkLimit != null && newWorkLimit - continuing < available) {
+      available = newWorkLimit - continuing;
     }
-    for (final (handle, mode) in ordered) {
+    for (final (handle, mode) in candidates) {
+      if (available <= 0) break;
+      if (heldHandles.contains(handle)) continue;
       if (handle._finished(mode)) continue;
       if (mode == ForumHtmlImageViewportMode.predecode &&
           position.recommendDeferredLoading(handle._context!)) {
         continue;
       }
       modes[handle] = mode;
-      break;
+      heldHandles.add(handle);
+      available--;
     }
   }
 
@@ -407,6 +435,26 @@ final class ForumHtmlImageViewportHandle
   }
 
   ForumHtmlImageViewportWork beginWork() {
+    final work = tryBeginWork();
+    if (work == null) {
+      throw StateError('Optional image work has no available lease');
+    }
+    return work;
+  }
+
+  /// A binding can change while its cancelled operation still owns a slot.
+  /// The Host must not begin another operation before acquiring a fresh lease.
+  ForumHtmlImageViewportWork? tryBeginWork() {
+    if (_disposed ||
+        _coordinator._disposed ||
+        !_coordinator._active ||
+        (value != ForumHtmlImageViewportMode.prefetch &&
+            value != ForumHtmlImageViewportMode.predecode) ||
+        _coordinator._runningWork.length >=
+            _coordinator.maxConcurrentOptionalWork ||
+        _coordinator._runningWork.any((w) => identical(w._handle, this))) {
+      return null;
+    }
     final work = ForumHtmlImageViewportWork._(this, value, _generation);
     _work = work;
     _coordinator._runningWork.add(work);
@@ -543,7 +591,8 @@ final class ForumHtmlImageViewportWork implements ForumHtmlImageWorkScope {
 
   void complete(ForumHtmlImagePreparationOutcome outcome) {
     if (_completed) return;
-    if (isActive && outcome != ForumHtmlImagePreparationOutcome.cancelled) {
+    final wasActive = isActive;
+    if (wasActive && outcome != ForumHtmlImagePreparationOutcome.cancelled) {
       _handle._diskFinished = true;
       _handle._decoded = outcome == ForumHtmlImagePreparationOutcome.decoded;
       if (mode == ForumHtmlImageViewportMode.predecode ||
@@ -552,6 +601,16 @@ final class ForumHtmlImageViewportWork implements ForumHtmlImageWorkScope {
       }
     }
     _completed = true;
+    if (identical(_handle._work, this)) {
+      _handle._work = null;
+      // A rejected restart may have left the old optional mode unchanged.
+      // Publish retirement so a later grant rebuilds the current binding.
+      if (!wasActive &&
+          (_handle.value == ForumHtmlImageViewportMode.prefetch ||
+              _handle.value == ForumHtmlImageViewportMode.predecode)) {
+        _handle._applyMode(ForumHtmlImageViewportMode.dormant);
+      }
+    }
     _handle._coordinator._runningWork.remove(this);
     _handle._coordinator._scheduleEvaluation();
   }

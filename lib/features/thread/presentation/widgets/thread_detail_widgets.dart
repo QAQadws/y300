@@ -832,6 +832,8 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       return;
     }
     _imageViewportCoordinator ??= ForumHtmlImageViewportCoordinator(
+      maxVisibleFirstFrames: _imagePreloadPolicy.maxVisibleFirstFrames,
+      maxConcurrentOptionalWork: _imagePreloadPolicy.maxConcurrentOptionalWork,
       predecodePolicy: _imagePreloadPolicy.predecode,
     );
   }

@@ -24,12 +24,8 @@ abstract class GlobalImageCacheTuner {
   void applyTo(ImageCache cache);
 }
 
-/// 基于平台粗略分档的默认实现。
-///
-/// 移动端无法在不引入额外依赖的前提下精确读取物理内存，这里采用保守的平台分档：
-/// 桌面端内存充裕给到高档，移动端给中档，足以让“可见区 + 上下缓冲区”的解码
-/// bitmap 常驻而不被驱逐。配合 [ImageDownscalePolicy] 降采样后，单张 bitmap 很小，
-/// 该预算可容纳相当多的图片。
+/// 使用既有 Android 普通/低内存标记与 memoryClass 估算图片 LRU 预算。
+/// 未取得有效档位时沿平台默认值；不将其当作进程或 live 图片的内存上限。
 class PlatformImageCacheTuner implements GlobalImageCacheTuner {
   const PlatformImageCacheTuner({this.deviceProfile});
 
@@ -50,7 +46,7 @@ class PlatformImageCacheTuner implements GlobalImageCacheTuner {
       }
       return (memoryClassMb * _mb * 0.15)
           .round()
-          .clamp(48 * _mb, 192 * _mb)
+          .clamp(64 * _mb, 192 * _mb)
           .toInt();
     }
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {

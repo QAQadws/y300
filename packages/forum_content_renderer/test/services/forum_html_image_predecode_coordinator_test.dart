@@ -211,6 +211,134 @@ void main() {
     expect(fixture.mode(2), ForumHtmlImageViewportMode.predecode);
   });
 
+  testWidgets('two optional leases progress independently on distinct images', (
+    tester,
+  ) async {
+    final fixture = await _Fixture.mount(
+      tester,
+      maxConcurrentOptionalWork: 2,
+      heights: const [350, 100, 100, 100, 300],
+    );
+    fixture.settleVisible();
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.predecode);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.predecode);
+    expect(fixture.mode(3), ForumHtmlImageViewportMode.dormant);
+    final first = fixture.handles[1].beginWork();
+    final second = fixture.handles[2].beginWork();
+    expect(fixture.handles[1].tryBeginWork(), isNull);
+    final changes = <ForumHtmlImageViewportMode>[];
+    fixture.handles[2].addListener(() => changes.add(fixture.mode(2)));
+    fixture.controller.jumpTo(1);
+    await tester.pump();
+    expect(changes, isEmpty);
+    expect(first.isActive, isTrue);
+    expect(second.isActive, isTrue);
+
+    first.complete(ForumHtmlImagePreparationOutcome.decoded);
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.retained);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.predecode);
+    expect(fixture.mode(3), ForumHtmlImageViewportMode.prefetch);
+    final third = fixture.handles[3].beginWork();
+    first.complete(ForumHtmlImagePreparationOutcome.failed);
+    expect(second.isActive, isTrue);
+    expect(third.isActive, isTrue);
+    second.complete(ForumHtmlImagePreparationOutcome.diskOnly);
+    third.complete(ForumHtmlImagePreparationOutcome.diskOnly);
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.retained);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.dormant);
+    expect(fixture.mode(3), ForumHtmlImageViewportMode.dormant);
+  });
+
+  testWidgets('cancelled leases release two slots only at actual completion', (
+    tester,
+  ) async {
+    final fixture = await _Fixture.mount(tester, maxConcurrentOptionalWork: 2);
+    fixture.settleVisible();
+    await tester.pump();
+    final first = fixture.handles[1].beginWork();
+    final second = fixture.handles[2].beginWork();
+    fixture.coordinator.setActive(false);
+    expect(first.isActive, isFalse);
+    expect(second.isActive, isFalse);
+    fixture.coordinator.setActive(true);
+    await tester.pump();
+    fixture.settleVisible();
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.dormant);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.dormant);
+
+    first.complete(ForumHtmlImagePreparationOutcome.decoded);
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.predecode);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.dormant);
+    final current = fixture.handles[1].beginWork();
+    second.complete(ForumHtmlImagePreparationOutcome.decoded);
+    await tester.pump();
+    expect(current.isActive, isTrue);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.predecode);
+    expect(fixture.mode(2).keepsImageMounted, isFalse);
+    fixture.handles[2].beginWork().complete(
+      ForumHtmlImagePreparationOutcome.diskOnly,
+    );
+    current.complete(ForumHtmlImagePreparationOutcome.diskOnly);
+  });
+
+  testWidgets('a retired handle cannot restart using another available slot', (
+    tester,
+  ) async {
+    final fixture = await _Fixture.mount(tester, maxConcurrentOptionalWork: 2);
+    fixture.settleVisible();
+    await tester.pump();
+    final old = fixture.handles[1].beginWork();
+    old.cancel();
+    // The old mode is still observable before the next evaluation.
+    expect(fixture.handles[1].tryBeginWork(), isNull);
+    fixture.handles[1].configureWork(identity: 'new-width', canPredecode: true);
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.dormant);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.predecode);
+    final other = fixture.handles[2].beginWork();
+    old.complete(ForumHtmlImagePreparationOutcome.decoded);
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.predecode);
+    final current = fixture.handles[1].beginWork();
+    expect(current.isActive, isTrue);
+    expect(other.isActive, isTrue);
+    current.complete(ForumHtmlImagePreparationOutcome.diskOnly);
+    other.complete(ForumHtmlImagePreparationOutcome.diskOnly);
+  });
+
+  testWidgets(
+    'four visible first frames take priority over two optional slots',
+    (tester) async {
+      final fixture = await _Fixture.mount(
+        tester,
+        heights: List.filled(8, 70),
+        maxVisibleFirstFrames: 4,
+        maxConcurrentOptionalWork: 2,
+      );
+      expect(
+        fixture.handles.where(
+          (h) => h.value == ForumHtmlImageViewportMode.display,
+        ),
+        hasLength(4),
+      );
+      expect(fixture.mode(4), ForumHtmlImageViewportMode.dormant);
+      fixture.handles[2].reportFirstFrameSettled();
+      await tester.pump();
+      expect(fixture.mode(4), ForumHtmlImageViewportMode.display);
+      expect(fixture.mode(5), ForumHtmlImageViewportMode.dormant);
+      fixture.settleVisible();
+      await tester.pump();
+      expect(fixture.mode(5), ForumHtmlImageViewportMode.predecode);
+      expect(fixture.mode(6), ForumHtmlImageViewportMode.predecode);
+      expect(fixture.mode(7), ForumHtmlImageViewportMode.dormant);
+    },
+  );
+
   testWidgets(
     'prepared frame survives leaving and reentering the visible edge',
     (tester) async {
@@ -290,8 +418,12 @@ class _Fixture {
     WidgetTester tester, {
     List<double> heights = const [350, 120, 120, 250],
     ScrollPhysics? physics,
+    int maxVisibleFirstFrames = 2,
+    int maxConcurrentOptionalWork = 1,
   }) async {
     final coordinator = ForumHtmlImageViewportCoordinator(
+      maxVisibleFirstFrames: maxVisibleFirstFrames,
+      maxConcurrentOptionalWork: maxConcurrentOptionalWork,
       predecodePolicy: const ForumHtmlImagePredecodePolicy(
         maxDecodedBytesPerImage: 100000,
       ),

@@ -622,6 +622,63 @@ void main() {
     );
   }
 
+  testWidgets('two disk leases survive Host retirement until I/O completes', (
+    tester,
+  ) async {
+    final oldPrecache = _DiskPrecache();
+    final oldHost = _ImageHost(_Dimensions(), precache: oldPrecache);
+    final currentPrecache = _DiskPrecache();
+    final currentHost = _ImageHost(_Dimensions(), precache: currentPrecache);
+    final viewport = ForumHtmlImageViewportCoordinator(
+      maxVisibleFirstFrames: 2,
+      maxPrefetchCandidates: 2,
+      maxConcurrentOptionalWork: 2,
+      prefetchExtentFactor: 2,
+    );
+    addTearDown(viewport.dispose);
+    Widget build(_ImageHost host) =>
+        _host(host, viewport: viewport, imageCount: 4, height: 150);
+    await tester.pumpWidget(build(oldHost));
+    await _frames(tester);
+    tester
+        .widget<_DisplayedImage>(find.byType(_DisplayedImage))
+        .onFirstFrame!();
+    await _frames(tester);
+    expect(oldPrecache.work, hasLength(2));
+    expect(oldPrecache.work.map((w) => w.url).toSet(), hasLength(2));
+    final completed = oldPrecache.work.first;
+    final pending = oldPrecache.work.last;
+    completed.complete();
+    await _frames(tester);
+    expect(pending.scope.isActive, isTrue);
+
+    await tester.pumpWidget(build(currentHost));
+    await _frames(tester);
+    expect(pending.scope.isActive, isFalse);
+    tester
+        .widget<_DisplayedImage>(find.byType(_DisplayedImage))
+        .onFirstFrame!();
+    await _frames(tester);
+    // The available second slot belongs to a distinct handle. It cannot restart
+    // the retired binding of the image whose original I/O is still pending.
+    expect(currentPrecache.work, hasLength(1));
+    expect(currentPrecache.work.single.url, completed.url);
+    expect(currentPrecache.work.single.url, isNot(pending.url));
+    expect(currentPrecache.work.single.scope.isActive, isTrue);
+    pending.complete();
+    await _frames(tester);
+    expect(currentPrecache.work, hasLength(2));
+    expect(currentPrecache.work.last.url, pending.url);
+    expect(currentPrecache.work.every((w) => w.scope.isActive), isTrue);
+    for (final work in currentPrecache.work) {
+      work.complete();
+    }
+    await _frames(tester);
+    expect(currentPrecache.work, hasLength(2));
+    expect(viewport.registeredImageCount, 4);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final unmount in [false, true]) {
     testWidgets(
       'scoped disk prefetch is cancelled when ${unmount ? 'unmounted' : 'inactive'}',
@@ -797,7 +854,7 @@ final class _ImageHost implements ForumHtmlImageHost {
   Future<void> prefetchDisk(
     ForumHtmlDisplayImage image, {
     required ForumHtmlImageWorkScope scope,
-  }) => precache?.start(scope) ?? Future.value();
+  }) => precache?.start(scope, image.sourceUrl) ?? Future.value();
 
   @override
   Widget buildImage({
@@ -937,9 +994,10 @@ final class _DisplayedImage extends StatelessWidget {
 }
 
 final class _DiskWork {
-  _DiskWork(this.scope);
+  _DiskWork(this.scope, this.url);
 
   final ForumHtmlImageWorkScope scope;
+  final String url;
   final result = Completer<void>();
 
   void complete() => result.complete();
@@ -948,8 +1006,8 @@ final class _DiskWork {
 final class _DiskPrecache {
   final work = <_DiskWork>[];
 
-  Future<void> start(ForumHtmlImageWorkScope scope) {
-    final request = _DiskWork(scope);
+  Future<void> start(ForumHtmlImageWorkScope scope, String url) {
+    final request = _DiskWork(scope, url);
     work.add(request);
     return request.result.future;
   }

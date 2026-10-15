@@ -503,8 +503,9 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     );
     if (_prefetchIdentity == identity) return;
     _cancelPrefetch();
+    final token = handle.tryBeginWork();
+    if (token == null) return;
     _prefetchIdentity = identity;
-    final token = handle.beginWork();
     _prefetchToken = token;
     final host = widget.host;
     final image = widget.image;

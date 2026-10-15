@@ -271,7 +271,14 @@ void main() {
     (tester) async {
       for (final sourced in [false, true]) {
         final host = _Host(
-          [_post('long', _html(sourced ? 3000 : 50), 1)],
+          [
+            _post('long', _html(sourced ? 3000 : 50), 1),
+            // Put the ordinary first body beyond the production cache window.
+            // A single short floor now remains within the three-screen buffer.
+            if (!sourced)
+              for (var index = 0; index < 4; index++)
+                _post('after-$index', _html(50), index + 2),
+          ],
           quickScrolling: true,
           observer: sourced ? _ReadingObserver(tracked: false) : null,
         );
@@ -295,7 +302,7 @@ void main() {
           expect(_rendererElements(tester, 'long').single, isNot(same(body)));
           expect(
             _renderers(tester, 'long').single.html,
-            host.posts.single.message,
+            host.posts.first.message,
           );
           expect(
             RegExp(r'unit\[').allMatches(_bodyText(tester, 'long')),
