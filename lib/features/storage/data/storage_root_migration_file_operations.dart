@@ -130,7 +130,7 @@ final class LocalStorageRootMigrationFileOperations
   @override
   Future<Uint8List> readBytes(String path) async {
     try {
-      return io.File(path).readAsBytes();
+      return await io.File(path).readAsBytes();
     } on io.FileSystemException catch (error) {
       throw _mappedException(error);
     }

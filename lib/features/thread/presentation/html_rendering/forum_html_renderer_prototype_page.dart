@@ -228,7 +228,7 @@ class _ForumHtmlRendererPrototypePageState
       final rawHtml = await bundle.loadString(_selectedSample.assetPath);
       if (_selectedSample.renderMode ==
           ForumHtmlSampleRenderMode.threadDetail) {
-        return _loadThreadDetailSample(
+        return await _loadThreadDetailSample(
           rawHtml: rawHtml,
           preferences: preferences,
           conversionMode: conversionMode,
@@ -704,9 +704,8 @@ class _LoadedThreadDetailSampleViewState
       SnackBar(
         key: const Key('forum-html-prototype-jitter-log-copied-snackbar'),
         content: Text(
-          AppLocalizations.of(
-            context,
-          ).threadPrototypeJitterCopied(_jitterLog.length),
+          AppLocalizations.of(context)
+              .threadPrototypeJitterCopied(_jitterLog.length),
         ),
       ),
     );
@@ -874,9 +873,8 @@ class _JitterDiagnosticsControls extends StatelessWidget {
                         recording
                             ? l10n.threadPrototypeJitterRecording
                             : l10n.threadPrototypeJitterCount(logCount),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: colors.onSurfaceVariant),
                       ),
                     ],
                   ),

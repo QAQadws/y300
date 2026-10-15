@@ -1,7 +1,9 @@
 import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'package:y300/features/profile/domain/models/blog_draft_snapshot.dart';
+
 import '../test_support/blog_draft_fixture.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -640,9 +642,8 @@ void main() {
       final frame = await recording.toImage(240, 100);
       try {
         final bytes = await frame.toByteData(format: ui.ImageByteFormat.png);
-        return File(
-          '${directory.path}/fixture.png',
-        ).writeAsBytes(bytes!.buffer.asUint8List());
+        return await File('${directory.path}/fixture.png')
+            .writeAsBytes(bytes!.buffer.asUint8List());
       } finally {
         frame.dispose();
         recording.dispose();
@@ -753,9 +754,8 @@ Future<void> _save(WidgetTester tester, String name) async {
       try {
         final bytes = await frame.toByteData(format: ui.ImageByteFormat.png);
         final directory = await Directory(_output).create(recursive: true);
-        await File(
-          '${directory.path}/$name.png',
-        ).writeAsBytes(bytes!.buffer.asUint8List());
+        await File('${directory.path}/$name.png')
+            .writeAsBytes(bytes!.buffer.asUint8List());
       } finally {
         frame.dispose();
       }

@@ -142,7 +142,7 @@ final class DioForumClientNetwork
             ),
           );
         }
-        return _sendMultipart(request, recoveryAttempt: 1);
+        return await _sendMultipart(request, recoveryAttempt: 1);
       }
       await cookies.mergeSetCookie(
         request.uri,
@@ -314,7 +314,7 @@ final class DioForumClientNetwork
             ),
           );
         }
-        return _openResource(
+        return await _openResource(
           request,
           uri: target.removeFragment(),
           redirectCount: redirectCount + 1,
@@ -370,7 +370,7 @@ final class DioForumClientNetwork
             ),
           );
         }
-        return _openResource(
+        return await _openResource(
           request,
           uri: uri,
           redirectCount: redirectCount,
@@ -540,7 +540,7 @@ final class DioForumClientNetwork
                 ),
               );
         if (recovery == ForumWafRecoveryResult.verified) {
-          return _sendOnce(
+          return await _sendOnce(
             request,
             requestId: requestId,
             started: started,
@@ -584,10 +584,14 @@ final class DioForumClientNetwork
       );
       return ForumTransportError<ForumResponse<Object?>>(failure);
     } on StateError catch (_) {
-      return const ForumTransportError<ForumResponse<Object?>>(
+      // A replay's Cookie lookup can fail without the request being cancelled.
+      final cancelled = request.cancellation?.isCancelled ?? false;
+      return ForumTransportError<ForumResponse<Object?>>(
         ForumTransportFailure(
-          kind: ForumTransportFailureKind.cancelled,
-          code: 'cancelled',
+          kind: cancelled
+              ? ForumTransportFailureKind.cancelled
+              : ForumTransportFailureKind.unknown,
+          code: cancelled ? 'cancelled' : 'unknown',
         ),
       );
     } catch (_) {

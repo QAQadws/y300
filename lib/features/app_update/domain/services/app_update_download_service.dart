@@ -364,13 +364,17 @@ final class AppUpdateDownloadService {
     // A completed background task may already have been atomically promoted
     // to verified storage. Re-verify that file directly instead of asking a
     // plugin task whose staging path no longer exists to download it again.
+    String? existingVerifiedPath;
     try {
       final verifiedPath = await _fileStore.verifiedPath(artifact.identity);
       if (await _fileStore.exists(verifiedPath)) {
-        return _restoreVerifiedArtifact(artifact, verifiedPath);
+        existingVerifiedPath = verifiedPath;
       }
     } on Object {
       // Fall back to the normal staging download path below.
+    }
+    if (existingVerifiedPath != null) {
+      return _restoreVerifiedArtifact(artifact, existingVerifiedPath);
     }
 
     AppUpdateChecksumLookupResult checksumResult;

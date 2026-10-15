@@ -225,7 +225,7 @@ class YamiboHttpGateway {
             ),
           );
         }
-        return _openImageResource(
+        return await _openImageResource(
           target.removeFragment(),
           referer: referer,
           userAgent: userAgent,
@@ -287,7 +287,7 @@ class YamiboHttpGateway {
             ),
           );
         }
-        return _openImageResource(
+        return await _openImageResource(
           uri,
           referer: referer,
           userAgent: userAgent,
@@ -669,7 +669,7 @@ class YamiboHttpGateway {
               (allowWafReplay ? 'retryLimitReached' : 'replayDisabled'),
         );
         if (recovered) {
-          return _request<T>(
+          return await _request<T>(
             uri,
             method: method,
             context: context,

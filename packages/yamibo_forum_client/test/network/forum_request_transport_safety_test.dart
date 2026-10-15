@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -89,6 +90,118 @@ void main() {
       );
     },
   );
+
+  test(
+    'a Cookie read failure before WAF replay is unknown, not cancelled',
+    () async {
+      final http = _ScriptedHttpAdapter(<int>[405, 200]);
+      final cookies = _FailingReplayCookieStore();
+      final waf = _VerifiedWaf();
+      final network = DioForumClientNetwork(
+        config: ForumClientConfig(siteOrigin: site, userAgent: 'fixture-agent'),
+        cookies: cookies,
+        waf: waf,
+        dio: Dio()..httpClientAdapter = http,
+      );
+
+      final result = await network.send(
+        ForumRequest(
+          method: ForumRequestMethod.post,
+          uri: site.resolve('/forum.php?mod=fixture'),
+          context: const ForumRequestContext(operation: 'fixture.write'),
+          cancellation: ForumRequestCancellation(),
+        ),
+      );
+
+      final failure =
+          (result as ForumTransportError<ForumResponse<Object?>>).failure;
+      expect(failure.kind, ForumTransportFailureKind.unknown);
+      expect(failure.code, 'unknown');
+      expect(cookies.reads, 2);
+      expect(waf.calls, 1);
+      expect(http.requests, 1);
+    },
+  );
+
+  test(
+    'cancelling an in-flight request retains the cancelled failure',
+    () async {
+      final http = _PendingHttpAdapter();
+      final cancellation = ForumRequestCancellation();
+      final waf = _VerifiedWaf();
+      final network = DioForumClientNetwork(
+        config: ForumClientConfig(siteOrigin: site, userAgent: 'fixture-agent'),
+        cookies: MemoryForumCookieStore(),
+        waf: waf,
+        dio: Dio()..httpClientAdapter = http,
+      );
+
+      final resultFuture = network.send(
+        ForumRequest(
+          method: ForumRequestMethod.get,
+          uri: site.resolve('/forum.php?mod=fixture'),
+          context: const ForumRequestContext(operation: 'fixture.read'),
+          cancellation: cancellation,
+        ),
+      );
+      await http.started.future;
+      cancellation.cancel();
+      final result = await resultFuture;
+
+      final failure =
+          (result as ForumTransportError<ForumResponse<Object?>>).failure;
+      expect(failure.kind, ForumTransportFailureKind.cancelled);
+      expect(failure.code, 'cancelled');
+      expect(waf.calls, 0);
+    },
+  );
+}
+
+final class _FailingReplayCookieStore implements ForumCookieStore {
+  final _delegate = MemoryForumCookieStore();
+  int reads = 0;
+
+  @override
+  Future<Map<String, String>> read(Uri uri) async {
+    reads += 1;
+    if (reads == 2) {
+      await Future<void>.value();
+      throw StateError('Cookie storage is closed');
+    }
+    return _delegate.read(uri);
+  }
+
+  @override
+  Future<void> merge(Uri uri, Map<String, String> cookies) =>
+      _delegate.merge(uri, cookies);
+
+  @override
+  Future<void> mergeSetCookie(Uri uri, List<String> headers) =>
+      _delegate.mergeSetCookie(uri, headers);
+
+  @override
+  Future<void> clear() => _delegate.clear();
+}
+
+final class _PendingHttpAdapter implements HttpClientAdapter {
+  final started = Completer<void>();
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    started.complete();
+    await cancelFuture;
+    throw DioException.requestCancelled(
+      requestOptions: options,
+      reason: 'fixture cancelled',
+    );
+  }
 }
 
 final class _ScriptedHttpAdapter implements HttpClientAdapter {
