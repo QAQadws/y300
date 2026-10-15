@@ -43,8 +43,8 @@ void main() {
         final regular = _FakeBudgetParticipant(bytes: 1024, entryCount: 4);
         final budget = CacheBudgetCoordinator(participants: [regular]);
         final pruned = await budget.pruneToLimit(maxBytes: 512);
-        expect(pruned.targetBytes, 256);
-        expect(pruned.afterBytes, lessThanOrEqualTo(256));
+        expect(pruned.targetBytes, 409);
+        expect(pruned.afterBytes, lessThanOrEqualTo(pruned.targetBytes));
         final service = DefaultCacheMaintenanceService(
           imageCacheService: images,
           documentCacheService: _FakeDocumentCacheService(

@@ -122,7 +122,7 @@ final class ThreadDetailPreparedChunk {
 /// Display qualification belongs to the page manifest, independently of cache
 /// capacity. Eviction removes chunk values without changing the lazy entries.
 final class ThreadDetailPreparedBodyStore {
-  ThreadDetailPreparedBodyStore({this.maxRetainedCodeUnits = 2 * 1024 * 1024})
+  ThreadDetailPreparedBodyStore({this.maxRetainedCodeUnits = 4 * 1024 * 1024})
     : assert(maxRetainedCodeUnits >= 0);
 
   final int maxRetainedCodeUnits;

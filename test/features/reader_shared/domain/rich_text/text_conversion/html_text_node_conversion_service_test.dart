@@ -762,6 +762,61 @@ void main() {
       },
     );
 
+    test(
+      'default budget retains a long batch rejected by a smaller override',
+      () async {
+        final text = '甲' * (768 * 1024);
+        final fragments = [
+          for (var floor = 0; floor < 3; floor++)
+            '<p data-floor="$floor">floor-$floor $text</p>',
+        ];
+        for (final useSmallerBudget in [false, true]) {
+          final metrics = <HtmlTextNodeConversionMetrics>[];
+          final plainService = DefaultPlainTextBatchConversionService(
+            maxCacheEntries: 0,
+          );
+          final service = useSmallerBudget
+              ? DomHtmlTextNodeConversionService(
+                  plainTextBatchConversionService: plainService,
+                  maxCacheCodeUnits: 4 * 1024 * 1024,
+                  metricsListener: metrics.add,
+                )
+              : DomHtmlTextNodeConversionService(
+                  plainTextBatchConversionService: plainService,
+                  metricsListener: metrics.add,
+                );
+          final converter = _MapTextConverter({'甲': '乙'});
+          final first = await service.convertAll(
+            htmlFragments: fragments,
+            converter: converter,
+          );
+          final second = await service.convertAll(
+            htmlFragments: fragments,
+            converter: converter,
+          );
+
+          expect(
+            first.map((result) => result.html),
+            fragments.map((html) => html.replaceAll('甲', '乙')),
+          );
+          expect(
+            second.map((result) => result.html),
+            first.map((result) => result.html),
+          );
+          expect(metrics.last.cacheHit, !useSmallerBudget);
+          expect(
+            metrics.last.parsedHtmlFragmentCount,
+            useSmallerBudget ? fragments.length : 0,
+          );
+          expect(
+            metrics.last.submittedPlainSourceCount,
+            useSmallerBudget ? fragments.length : 0,
+          );
+          expect(converter.callCount, useSmallerBudget ? 2 : 1);
+        }
+      },
+    );
+
     test('does not cache a batch over the HTML code unit budget', () async {
       final service = DomHtmlTextNodeConversionService(
         plainTextBatchConversionService: DefaultPlainTextBatchConversionService(

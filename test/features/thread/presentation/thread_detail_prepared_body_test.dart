@@ -10,7 +10,9 @@ void main() {
   test(
     'twenty manifests survive cumulative HTML above the bounded chunk cache',
     () {
-      final store = ThreadDetailPreparedBodyStore();
+      final store = ThreadDetailPreparedBodyStore(
+        maxRetainedCodeUnits: 2 * 1024 * 1024,
+      );
       var transientUnits = 0;
       final manifests = <ThreadDetailBodyManifest>[];
       for (var floor = 0; floor < 20; floor++) {
@@ -29,6 +31,42 @@ void main() {
         expect(manifests[floor].chunks, hasLength(63));
       }
       expect(() => store.bodies.clear(), throwsUnsupportedError);
+    },
+  );
+
+  test(
+    'default cache preserves a cross-floor working set above two M units',
+    () {
+      final store = ThreadDetailPreparedBodyStore();
+      final bodies = [
+        _body('a', units: 7000, repeat: 140),
+        _body('b', units: 7000, repeat: 140),
+      ];
+      var chunkUnits = 0;
+      for (final body in bodies) {
+        final plan = body.document.safeDisplayPlan!;
+        chunkUnits += plan.chunks.fold<int>(
+          0,
+          (total, chunk) => total + chunk.html.length,
+        );
+        expect(store.admit(body.request.sourceId, body), isTrue);
+      }
+
+      expect(chunkUnits, greaterThan(2 * 1024 * 1024));
+      expect(store.retainedCodeUnits, chunkUnits);
+      expect(
+        store.retainedCodeUnits,
+        lessThanOrEqualTo(store.maxRetainedCodeUnits),
+      );
+      for (final body in bodies) {
+        final manifest = store[body.request.sourceId]!;
+        for (var ordinal = 0; ordinal < manifest.chunks.length; ordinal++) {
+          expect(
+            store.chunkFor(manifest, ordinal)?.html,
+            body.document.safeDisplayPlan!.chunks[ordinal].html,
+          );
+        }
+      }
     },
   );
 

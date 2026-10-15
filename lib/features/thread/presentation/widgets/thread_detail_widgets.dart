@@ -127,8 +127,12 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
 
 class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     with _ThreadDetailEndpointNavigation {
+  late final _isLowRamDevice =
+      DeviceMemoryProfileStore.current?.isLowRamDevice ?? false;
   @override
-  final _preparedBodies = ThreadDetailPreparedBodyStore();
+  late final _preparedBodies = ThreadDetailPreparedBodyStore(
+    maxRetainedCodeUnits: (_isLowRamDevice ? 2 : 4) * 1024 * 1024,
+  );
   late final _bodyHandoffs = ThreadBodyPreparationHandoff(_preparedBodies);
   late final _chunkPreparation = ThreadBodyChunkPreparation(_preparedBodies);
   final _footerExpansions = <String, _ThreadPostFooterExpansion>{};
@@ -161,7 +165,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   ForumHtmlImageViewportCoordinator? _imageViewportCoordinator;
   late final _imagePreloadPolicy = ThreadImagePreloadPolicy(
     imageCacheBudgetBytes: PaintingBinding.instance.imageCache.maximumSizeBytes,
-    isLowRamDevice: DeviceMemoryProfileStore.current?.isLowRamDevice ?? false,
+    isLowRamDevice: _isLowRamDevice,
   );
   ValueListenable<TickerModeData>? _tickerModeNotifier;
   final _imageAspectRatioTracker = _ThreadDetailImageAspectRatioTracker();

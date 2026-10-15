@@ -64,7 +64,7 @@ final class DomHtmlTextNodeConversionService
   DomHtmlTextNodeConversionService({
     PlainTextBatchConversionService? plainTextBatchConversionService,
     int maxCacheEntries = 8,
-    int maxCacheCodeUnits = 2 * 1024 * 1024,
+    int maxCacheCodeUnits = 8 * 1024 * 1024,
     this.metricsListener,
   }) : _plainTextBatchConversionService =
            plainTextBatchConversionService ??

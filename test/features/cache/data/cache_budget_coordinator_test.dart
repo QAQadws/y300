@@ -85,14 +85,48 @@ void main() {
 
     final result = await coordinator.pruneToLimit(maxBytes: 300);
 
-    expect(result.targetBytes, 150);
+    expect(result.targetBytes, 240);
+    expect(result.afterBytes, 200);
+    expect(deleted, <String>['older-image', 'newer-image', 'snapshot-1']);
+    expect(document.budgetedBytes, 100);
+    expect(image.budgetedBytes, 100);
+  });
+
+  test('an explicit lower watermark still controls the prune target', () async {
+    final participant = _FakeParticipant(
+      id: 'image',
+      budgetedBytes: 300,
+      candidates: [
+        for (var entry = 0; entry < 3; entry++)
+          _CandidateSeed(
+            key: 'image-$entry',
+            bytes: 100,
+            accessedAt: DateTime(2026, 1, entry + 1),
+            priority: CacheEvictionPriority.regularImage,
+          ),
+      ],
+    );
+    final coordinator = CacheBudgetCoordinator(
+      participants: [participant],
+      lowWatermarkRatio: 0.5,
+    );
+
+    final result = await coordinator.pruneToLimit(maxBytes: 250);
+
+    expect(result.targetBytes, 125);
     expect(result.afterBytes, 100);
-    expect(deleted, <String>[
-      'older-image',
-      'newer-image',
-      'snapshot-1',
-      'document-1',
-    ]);
+    expect(result.deletedEntries, 2);
+  });
+
+  test('usage at the limit does not trigger low watermark pruning', () async {
+    final participant = _FakeParticipant(id: 'image', budgetedBytes: 250);
+    final coordinator = CacheBudgetCoordinator(participants: [participant]);
+
+    final result = await coordinator.pruneToLimit(maxBytes: 250);
+
+    expect(result.targetBytes, 250);
+    expect(result.afterBytes, 250);
+    expect(result.deletedEntries, 0);
   });
 
   test('concurrent equivalent prune requests share one operation', () async {

@@ -6,7 +6,7 @@ final class CacheBudgetCoordinator {
   CacheBudgetCoordinator({
     required List<CacheBudgetParticipant> participants,
     DateTime Function()? now,
-    this.lowWatermarkRatio = 0.5,
+    this.lowWatermarkRatio = 0.8,
   }) : _participants = List<CacheBudgetParticipant>.unmodifiable(participants),
        _now = now ?? DateTime.now;
 
