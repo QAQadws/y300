@@ -2819,9 +2819,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               hint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: chromePalette.onChromeVariant,
-              ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: chromePalette.onChromeVariant),
             ),
           ),
         Expanded(
@@ -2982,14 +2981,12 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 }
 
 class _ReaderVerticalTrailingSpec {
-  const _ReaderVerticalTrailingSpec({
-    this.builder,
-    this.itemCount = 0,
-    this.indexedBuilder,
-  });
+  const _ReaderVerticalTrailingSpec({this.itemCount = 0, this.indexedBuilder})
+    : builder = null;
 
-  const _ReaderVerticalTrailingSpec.single(WidgetBuilder? builder)
-    : this(builder: builder, itemCount: builder == null ? 0 : 1);
+  const _ReaderVerticalTrailingSpec.single(this.builder)
+    : itemCount = builder == null ? 0 : 1,
+      indexedBuilder = null;
 
   final WidgetBuilder? builder;
   final int itemCount;
