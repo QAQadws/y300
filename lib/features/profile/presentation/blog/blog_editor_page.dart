@@ -11,6 +11,7 @@ import 'package:y300/features/profile/domain/models/blog_draft_snapshot.dart';
 import 'package:y300/features/profile/presentation/blog/blog_draft_coordinator.dart';
 import 'package:y300/features/profile/presentation/blog/blog_draft_mapper.dart';
 import 'package:y300/features/profile/presentation/blog/blog_draft_status.dart';
+import 'package:y300/features/profile/presentation/blog/blog_composer_layout.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_app_bar_action_style.dart';
@@ -662,6 +663,7 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage>
           }
         },
         child: Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: native.card,
           appBar: AppBar(
             title: Text(
@@ -709,219 +711,219 @@ class _BlogEditorPageState extends ConsumerState<BlogEditorPage>
               ),
             ],
           ),
-          bottomNavigationBar: state.options != null && !_preview
-              ? Padding(
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.viewInsetsOf(context).bottom,
-                  ),
-                  child: BlogRichTextToolbar(
-                    controller: _body,
-                    enabled:
-                        !state.busy &&
-                        !_resettingDraft &&
-                        _drafts?.pending != true &&
-                        _media?.value.busy != true &&
-                        {
-                          BlogEditorPhase.ready,
-                          BlogEditorPhase.failed,
-                        }.contains(state.phase),
-                    smilies: _controller.preparation?.blogSmilies ?? const [],
-                    onImagePressed:
-                        _media != null &&
-                            _controller.preparation?.imageUploadLimits != null
-                        ? _pickImages
-                        : null,
-                  ),
-                )
-              : null,
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) => ListView(
-                key: const Key('blog-editor-scroll'),
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                children: [
-                  if (_drafts != null && state.phase != BlogEditorPhase.expired)
-                    BlogDraftStatus(
-                      loadFailed: _drafts!.loadFailed,
-                      saveFailed: _drafts!.saveFailed,
-                      pending: _drafts!.pending && !state.busy,
-                      imagesBlocked: !_imagesReady,
-                      verifyingImages: _media?.value.verifyingDraft == true,
-                      onLoadRetry: _prepareEditor,
-                      onSaveRetry: () => unawaited(_drafts!.flush()),
-                      onImageRetry: _media?.retryDraftImages,
-                      onCheck: _checkPublishedLogs,
-                      onResume: _resumeDraft,
-                    ),
-                  if (_drafts?.loadFailed == true)
-                    TextButton(
-                      key: const Key('blog-draft-reset-load-error'),
-                      onPressed: _resetDraft,
-                      child: Text(l10n.composerResetDraft),
-                    ),
-                  if (_draftSettingsChanged) ...[
-                    Text(
-                      l10n.profileBlogDraftSettingsChanged,
-                      key: const Key('blog-draft-settings-changed'),
-                      style: TextStyle(color: native.supportingText),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  if (_media?.value.busy == true) ...[
-                    LinearProgressIndicator(
-                      value: _media!.value.total == 0
-                          ? null
-                          : ((_media!.value.current - 1) +
-                                    _media!.value.progress) /
-                                _media!.value.total,
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  if (state.busy) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        state.phase == BlogEditorPhase.preparing
-                            ? l10n.profileBlogPreparingEditor
-                            : l10n.profileBlogSubmittingEditor,
+          body: LayoutBuilder(
+            builder: (context, constraints) => BlogComposerLayout(
+              toolbar: state.options != null && !_preview
+                  ? BlogRichTextToolbar(
+                      controller: _body,
+                      enabled:
+                          !state.busy &&
+                          !_resettingDraft &&
+                          _drafts?.pending != true &&
+                          _media?.value.busy != true &&
+                          {
+                            BlogEditorPhase.ready,
+                            BlogEditorPhase.failed,
+                          }.contains(state.phase),
+                      smilies: _controller.preparation?.blogSmilies ?? const [],
+                      onImagePressed:
+                          _media != null &&
+                              _controller.preparation?.imageUploadLimits != null
+                          ? _pickImages
+                          : null,
+                    )
+                  : null,
+              body: SafeArea(
+                child: ListView(
+                  key: const Key('blog-editor-scroll'),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  children: [
+                    if (_drafts != null &&
+                        state.phase != BlogEditorPhase.expired)
+                      BlogDraftStatus(
+                        loadFailed: _drafts!.loadFailed,
+                        saveFailed: _drafts!.saveFailed,
+                        pending: _drafts!.pending && !state.busy,
+                        imagesBlocked: !_imagesReady,
+                        verifyingImages: _media?.value.verifyingDraft == true,
+                        onLoadRetry: _prepareEditor,
+                        onSaveRetry: () => unawaited(_drafts!.flush()),
+                        onImageRetry: _media?.retryDraftImages,
+                        onCheck: _checkPublishedLogs,
+                        onResume: _resumeDraft,
+                      ),
+                    if (_drafts?.loadFailed == true)
+                      TextButton(
+                        key: const Key('blog-draft-reset-load-error'),
+                        onPressed: _resetDraft,
+                        child: Text(l10n.composerResetDraft),
+                      ),
+                    if (_draftSettingsChanged) ...[
+                      Text(
+                        l10n.profileBlogDraftSettingsChanged,
+                        key: const Key('blog-draft-settings-changed'),
                         style: TextStyle(color: native.supportingText),
                       ),
-                    ),
-                    if (!MediaQuery.disableAnimationsOf(context)) ...[
                       const SizedBox(height: 8),
-                      const LinearProgressIndicator(),
                     ],
-                    const SizedBox(height: 12),
-                  ],
-                  if (state.phase == BlogEditorPhase.expired)
-                    Text(
-                      l10n.forumWebViewAccountChanged,
-                      style: TextStyle(color: native.body),
-                    ),
-                  if (state.phase == BlogEditorPhase.unknown ||
-                      state.failure != null ||
-                      state.issue != null) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        state.phase == BlogEditorPhase.unknown
-                            ? l10n.profileBlogEditorOutcomeUnknown
-                            : state.issue != null
-                            ? _issueText(l10n, state.issue!)
-                            : LocalizedErrorSummary.resolve(
-                                l10n,
-                                state.failure,
-                              ),
+                    if (_media?.value.busy == true) ...[
+                      LinearProgressIndicator(
+                        value: _media!.value.total == 0
+                            ? null
+                            : ((_media!.value.current - 1) +
+                                      _media!.value.progress) /
+                                  _media!.value.total,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (state.busy) ...[
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          state.phase == BlogEditorPhase.preparing
+                              ? l10n.profileBlogPreparingEditor
+                              : l10n.profileBlogSubmittingEditor,
+                          style: TextStyle(color: native.supportingText),
+                        ),
+                      ),
+                      if (!MediaQuery.disableAnimationsOf(context)) ...[
+                        const SizedBox(height: 8),
+                        const LinearProgressIndicator(),
+                      ],
+                      const SizedBox(height: 12),
+                    ],
+                    if (state.phase == BlogEditorPhase.expired)
+                      Text(
+                        l10n.forumWebViewAccountChanged,
                         style: TextStyle(color: native.body),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (state.needsReview) ...[
-                    Text(
-                      l10n.profileBlogServerChanged,
-                      style: TextStyle(color: native.body),
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        TextButton(
-                          key: const Key('blog-editor-show-server'),
-                          onPressed: () => setState(
-                            () => _showServerVersion = !_showServerVersion,
-                          ),
-                          child: Text(l10n.postEditServerVersion),
+                    if (state.phase == BlogEditorPhase.unknown ||
+                        state.failure != null ||
+                        state.issue != null) ...[
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          state.phase == BlogEditorPhase.unknown
+                              ? l10n.profileBlogEditorOutcomeUnknown
+                              : state.issue != null
+                              ? _issueText(l10n, state.issue!)
+                              : LocalizedErrorSummary.resolve(
+                                  l10n,
+                                  state.failure,
+                                ),
+                          style: TextStyle(color: native.body),
                         ),
-                        TextButton(
-                          key: const Key('blog-editor-use-server'),
-                          onPressed: state.busy
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _creatingCategory = false;
-                                    _categoryNameRequired = false;
-                                    _showServerVersion = false;
-                                  });
-                                  _controller.reviewServerVersion(
-                                    keepLocal: false,
-                                  );
-                                },
-                          child: Text(l10n.profileBlogUseServer),
-                        ),
-                        TextButton(
-                          key: const Key('blog-editor-keep-local'),
-                          onPressed: state.busy
-                              ? null
-                              : () {
-                                  setState(() => _showServerVersion = false);
-                                  _controller.reviewServerVersion(
-                                    keepLocal: true,
-                                  );
-                                },
-                          child: Text(l10n.profileBlogKeepLocal),
-                        ),
-                      ],
-                    ),
-                    if (_showServerVersion && state.serverVersion != null) ...[
-                      BlogEditorServerMetadata(
-                        draft: state.serverVersion!,
-                        options: state.options!,
-                      ),
-                      BlogEditorPreview(
-                        draft: state.serverVersion!,
-                        ownerId: owner,
                       ),
                       const SizedBox(height: 12),
                     ],
-                  ],
-                  if (state.options != null) ...[
-                    Offstage(
-                      offstage: _preview,
-                      child: BlogEditorFields(
-                        state: state,
-                        locked: _resettingDraft || _drafts?.pending == true,
-                        subject: _subject,
-                        creatingCategory: _creatingCategory,
-                        bodyController: _body,
-                        mediaBusy: _media?.value.busy == true,
-                        imagePreviews: _media?.previewPaths ?? const {},
-                        bodyMinLines:
-                            ((constraints.maxHeight - 240) /
-                                    (MediaQuery.textScalerOf(
-                                          context,
-                                        ).scale(16) *
-                                        1.6))
-                                .floor()
-                                .clamp(4, 24),
-                        onChanged: _changeDraft,
+                    if (state.needsReview) ...[
+                      Text(
+                        l10n.profileBlogServerChanged,
+                        style: TextStyle(color: native.body),
                       ),
-                    ),
-                    if (_preview)
-                      BlogEditorPreview(draft: state.draft, ownerId: owner),
-                    const SizedBox(height: 16),
-                  ],
-                  Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (state.phase == BlogEditorPhase.failed &&
-                          state.options == null)
-                        TextButton(
-                          key: const Key('blog-editor-open-web'),
-                          onPressed: _openWeb,
-                          child: Text(l10n.profileBlogOpenWeb),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          TextButton(
+                            key: const Key('blog-editor-show-server'),
+                            onPressed: () => setState(
+                              () => _showServerVersion = !_showServerVersion,
+                            ),
+                            child: Text(l10n.postEditServerVersion),
+                          ),
+                          TextButton(
+                            key: const Key('blog-editor-use-server'),
+                            onPressed: state.busy
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _creatingCategory = false;
+                                      _categoryNameRequired = false;
+                                      _showServerVersion = false;
+                                    });
+                                    _controller.reviewServerVersion(
+                                      keepLocal: false,
+                                    );
+                                  },
+                            child: Text(l10n.profileBlogUseServer),
+                          ),
+                          TextButton(
+                            key: const Key('blog-editor-keep-local'),
+                            onPressed: state.busy
+                                ? null
+                                : () {
+                                    setState(() => _showServerVersion = false);
+                                    _controller.reviewServerVersion(
+                                      keepLocal: true,
+                                    );
+                                  },
+                            child: Text(l10n.profileBlogKeepLocal),
+                          ),
+                        ],
+                      ),
+                      if (_showServerVersion &&
+                          state.serverVersion != null) ...[
+                        BlogEditorServerMetadata(
+                          draft: state.serverVersion!,
+                          options: state.options!,
                         ),
-                      if (state.phase == BlogEditorPhase.failed)
-                        FilledButton(
-                          key: const Key('blog-editor-retry'),
-                          onPressed: _prepareEditor,
-                          child: Text(l10n.commonRetry),
+                        BlogEditorPreview(
+                          draft: state.serverVersion!,
+                          ownerId: owner,
                         ),
+                        const SizedBox(height: 12),
+                      ],
                     ],
-                  ),
-                ],
+                    if (state.options != null) ...[
+                      Offstage(
+                        offstage: _preview,
+                        child: BlogEditorFields(
+                          state: state,
+                          locked: _resettingDraft || _drafts?.pending == true,
+                          subject: _subject,
+                          creatingCategory: _creatingCategory,
+                          bodyController: _body,
+                          mediaBusy: _media?.value.busy == true,
+                          imagePreviews: _media?.previewPaths ?? const {},
+                          // These constraints precede keyboard avoidance, so
+                          // the document's minimum height stays stable in flight.
+                          bodyMinLines:
+                              ((constraints.maxHeight - 240) /
+                                      (MediaQuery.textScalerOf(context)
+                                              .scale(16) *
+                                          1.6))
+                                  .floor()
+                                  .clamp(4, 24),
+                          onChanged: _changeDraft,
+                        ),
+                      ),
+                      if (_preview)
+                        BlogEditorPreview(draft: state.draft, ownerId: owner),
+                      const SizedBox(height: 16),
+                    ],
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (state.phase == BlogEditorPhase.failed &&
+                            state.options == null)
+                          TextButton(
+                            key: const Key('blog-editor-open-web'),
+                            onPressed: _openWeb,
+                            child: Text(l10n.profileBlogOpenWeb),
+                          ),
+                        if (state.phase == BlogEditorPhase.failed)
+                          FilledButton(
+                            key: const Key('blog-editor-retry'),
+                            onPressed: _prepareEditor,
+                            child: Text(l10n.commonRetry),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

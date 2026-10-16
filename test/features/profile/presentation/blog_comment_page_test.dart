@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -171,6 +172,9 @@ void main() {
       final service = BlogCommentFixture(autoPrepare: true);
       await _open(tester, service);
       await _enter(tester, '保留修改');
+      final editorState = tester.state<QuillRawEditorState>(
+        find.byType(QuillRawEditor),
+      );
       await _submit(tester);
       service.submissions.last.result.complete(
         const DataCommandRejected(blogCommentWriteFailure),
@@ -182,6 +186,10 @@ void main() {
       expect(service.preparations, hasLength(2));
       expect(service.submissions, hasLength(1));
       expect(_source(tester), '保留修改');
+      expect(
+        tester.state<QuillRawEditorState>(find.byType(QuillRawEditor)),
+        same(editorState),
+      );
       await _submit(tester);
       service.applied();
       await tester.pumpAndSettle();
@@ -425,8 +433,7 @@ void main() {
         commentId: '31',
         authorUserId: '404',
         authorName: '回复对象',
-        bodyHtml:
-            '<div class="quote"><blockquote>更早的引用</blockquote></div><p>原评论内容</p>',
+        bodyHtml: '<div class="quote"><blockquote>更早的引用</blockquote></div><p>原评论内容</p>',
       ),
       smilies: blogCommentFixtureSmilies,
     );
@@ -579,6 +586,266 @@ void main() {
     expect(_source(tester), text);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'keyboard transitions move comment input and actions together without losing selection',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final keyboardInsets = ValueNotifier<double>(0);
+      addTearDown(keyboardInsets.dispose);
+      final service = BlogCommentFixture(autoPrepare: true);
+      await _open(tester, service, keyboardInsets: keyboardInsets);
+      final text = List.generate(
+        30,
+        (index) => '第${index + 1}行保留的评论',
+      ).join('\n');
+      await _enter(tester, text);
+      final controller = _input(tester).controller;
+      final scrolling = _input(tester).scrollController;
+      const selection = TextSelection(baseOffset: 1, extentOffset: 4);
+      controller.updateSelection(selection, ChangeSource.local);
+      await tester.pumpAndSettle();
+      final toolbar = find.byKey(const Key('blog-comment-toolbar'));
+      final closedBottom = tester.getRect(toolbar).bottom;
+
+      void expectInputRetained() {
+        expect(_input(tester).controller, same(controller));
+        expect(_input(tester).scrollController, same(scrolling));
+        expect(controller.selection, selection);
+        expect(_source(tester), text);
+        expect(
+          tester.getRect(find.byKey(const Key('blog-comment-input'))).bottom,
+          lessThanOrEqualTo(tester.getRect(toolbar).top + 0.01),
+        );
+        expect(tester.takeException(), isNull);
+      }
+
+      keyboardInsets.value = 280;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(closedBottom, 0.01));
+      await tester.pump(const Duration(milliseconds: 45));
+      final openingBottom = tester.getRect(toolbar).bottom;
+      expect(openingBottom, greaterThan(closedBottom - 280));
+      expect(openingBottom, lessThan(closedBottom));
+      expectInputRetained();
+      await tester.pump(const Duration(milliseconds: 45));
+      expect(tester.getRect(toolbar).bottom, lessThan(openingBottom));
+      expectInputRetained();
+      await tester.pumpAndSettle();
+      final openBottom = tester.getRect(toolbar).bottom;
+      expect(openBottom, closeTo(closedBottom - 280, 0.01));
+      expectInputRetained();
+      expect(
+        find.byKey(const Key('blog-comment-submit')).hitTestable(),
+        findsOneWidget,
+      );
+
+      keyboardInsets.value = 0;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(openBottom, 0.01));
+      await tester.pump(const Duration(milliseconds: 45));
+      final closingBottom = tester.getRect(toolbar).bottom;
+      expect(closingBottom, greaterThan(openBottom));
+      expect(closingBottom, lessThan(closedBottom));
+      expectInputRetained();
+      await tester.pump(const Duration(milliseconds: 45));
+      expect(tester.getRect(toolbar).bottom, greaterThan(closingBottom));
+      expectInputRetained();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(toolbar).bottom, closeTo(closedBottom, 0.01));
+      expectInputRetained();
+      await _submit(tester);
+      expect(service.submissions.single.input.message, text);
+      service.applied();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'reversing keyboard transitions keeps comment actions continuous',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final keyboardInsets = ValueNotifier<double>(0);
+      addTearDown(keyboardInsets.dispose);
+      final service = BlogCommentFixture(autoPrepare: true);
+      await _open(tester, service, keyboardInsets: keyboardInsets);
+      await _enter(tester, '快速收起再展开时保留评论');
+      final toolbar = find.byKey(const Key('blog-comment-toolbar'));
+      final closedBottom = tester.getRect(toolbar).bottom;
+
+      keyboardInsets.value = 280;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      final openingBottom = tester.getRect(toolbar).bottom;
+      expect(openingBottom, inExclusiveRange(closedBottom - 280, closedBottom));
+
+      keyboardInsets.value = 0;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(openingBottom, 0.01));
+      await tester.pump(const Duration(milliseconds: 30));
+      final reversingBottom = tester.getRect(toolbar).bottom;
+      expect(reversingBottom, inExclusiveRange(openingBottom, closedBottom));
+
+      keyboardInsets.value = 280;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(reversingBottom, 0.01));
+      await tester.pump(const Duration(milliseconds: 45));
+      expect(tester.getRect(toolbar).bottom, lessThan(reversingBottom));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(toolbar).bottom, closeTo(closedBottom - 280, 0.01));
+      expect(
+        tester.getRect(find.byKey(const Key('blog-comment-input'))).bottom,
+        lessThanOrEqualTo(tester.getRect(toolbar).top + 0.01),
+      );
+      expect(_source(tester), '快速收起再展开时保留评论');
+      expect(tester.takeException(), isNull);
+      await _submit(tester);
+      expect(service.submissions.single.input.message, '快速收起再展开时保留评论');
+      service.applied();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'reduced motion places comment actions at the new keyboard inset',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final keyboardInsets = ValueNotifier<double>(0);
+      addTearDown(keyboardInsets.dispose);
+      final service = BlogCommentFixture(autoPrepare: true);
+      await _open(
+        tester,
+        service,
+        reducedMotion: true,
+        keyboardInsets: keyboardInsets,
+      );
+      await _enter(tester, '减少动态效果时也保留内容');
+      final toolbar = find.byKey(const Key('blog-comment-toolbar'));
+      final closedBottom = tester.getRect(toolbar).bottom;
+
+      keyboardInsets.value = 280;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(closedBottom - 280, 0.01));
+      expect(
+        tester.getRect(find.byKey(const Key('blog-comment-input'))).bottom,
+        lessThanOrEqualTo(tester.getRect(toolbar).top + 0.01),
+      );
+      expect(
+        find.byKey(const Key('blog-comment-submit')).hitTestable(),
+        findsOneWidget,
+      );
+      keyboardInsets.value = 0;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(closedBottom, 0.01));
+      expect(_source(tester), '减少动态效果时也保留内容');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'real keyboard metrics keep the last comment line visible and editable',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      final keyboardInsets = ValueNotifier<double>(0);
+      addTearDown(keyboardInsets.dispose);
+      final service = BlogCommentFixture(autoPrepare: true);
+      await _open(tester, service, keyboardInsets: keyboardInsets);
+      final text = List.generate(
+        60,
+        (index) => '第${index + 1}行末尾输入的评论',
+      ).join('\n');
+      await _enter(tester, text);
+      final controller = _input(tester).controller;
+      final focusNode = _input(tester).focusNode;
+      focusNode.requestFocus();
+      await tester.pump();
+      // Drain Quill's delayed keyboard request and its caret scroll before
+      // changing metrics, so they cannot hide a reveal against stale geometry.
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+
+      void expectCaretVisible(String expectedText) {
+        final input = _input(tester);
+        expect(input.controller, same(controller));
+        expect(input.focusNode, same(focusNode));
+        expect(focusNode.hasFocus, isTrue);
+        expect(
+          controller.selection,
+          TextSelection.collapsed(offset: expectedText.length),
+        );
+        expect(_source(tester), expectedText);
+        final editor = tester
+            .state<QuillRawEditorState>(find.byType(QuillRawEditor))
+            .renderEditor;
+        final caret = editor
+            .getLocalRectForCaret(controller.selection.extent)
+            .shift(editor.localToGlobal(Offset.zero));
+        final inputBounds = tester.getRect(
+          find.byKey(const Key('blog-comment-input')),
+        );
+        final toolbarBounds = tester.getRect(
+          find.byKey(const Key('blog-comment-toolbar')),
+        );
+        expect(caret.top, greaterThanOrEqualTo(inputBounds.top - 0.01));
+        expect(caret.bottom, lessThanOrEqualTo(inputBounds.bottom + 0.01));
+        expect(caret.bottom, lessThanOrEqualTo(toolbarBounds.top + 0.01));
+        expect(tester.takeException(), isNull);
+      }
+
+      expectCaretVisible(text);
+      keyboardInsets.value = 280;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      await tester.pump();
+      // Exercise Quill's 100 ms metrics debounce while the 180 ms keyboard
+      // layout is still moving, then let its 100 ms caret scroll finish.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      expectCaretVisible(text);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 100));
+      expectCaretVisible(text);
+
+      final editedText = '$text继续输入';
+      tester.testTextInput.updateEditingValue(
+        TextEditingValue(
+          text: '$editedText\n',
+          selection: TextSelection.collapsed(offset: editedText.length),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expectCaretVisible(editedText);
+
+      keyboardInsets.value = 0;
+      tester.view.viewInsets = const FakeViewPadding();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 180));
+      await tester.pump(const Duration(milliseconds: 100));
+      expectCaretVisible(editedText);
+      expect(
+        find.byKey(const Key('blog-comment-submit')).hitTestable(),
+        findsOneWidget,
+      );
+      focusNode.unfocus();
+      await tester.pump();
+    },
+  );
 
   testWidgets('orientation changes keep the action above a short keyboard', (
     tester,
@@ -762,6 +1029,7 @@ Future<_Host> _open(
   bool largeKeyboard = false,
   double? textScale,
   double? keyboardInset,
+  ValueListenable<double>? keyboardInsets,
 }) async {
   final host = _Host(service);
   addTearDown(host.container.dispose);
@@ -770,16 +1038,25 @@ Future<_Host> _open(
       container: host.container,
       child: LocalizedTestApp(
         theme: theme ?? AppTheme.light(),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            disableAnimations: reducedMotion,
-            textScaler: TextScaler.linear(textScale ?? (largeKeyboard ? 2 : 1)),
-            viewInsets: EdgeInsets.only(
-              bottom: keyboardInset ?? (largeKeyboard ? 280 : 0),
+        builder: (context, child) {
+          Widget withInsets(double inset) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              disableAnimations: reducedMotion,
+              textScaler: TextScaler.linear(
+                textScale ?? (largeKeyboard ? 2 : 1),
+              ),
+              viewInsets: EdgeInsets.only(bottom: inset),
             ),
-          ),
-          child: child!,
-        ),
+            child: child!,
+          );
+          if (keyboardInsets == null) {
+            return withInsets(keyboardInset ?? (largeKeyboard ? 280 : 0));
+          }
+          return ValueListenableBuilder<double>(
+            valueListenable: keyboardInsets,
+            builder: (context, inset, _) => withInsets(inset),
+          );
+        },
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(

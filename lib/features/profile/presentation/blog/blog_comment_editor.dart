@@ -22,9 +22,10 @@ StickerItem blogCommentSticker(UserBlogCommentSmiley smiley) => StickerItem(
 
 /// Comments remain lossless source text; only source-proved smileys are embeds.
 class BlogCommentInput extends StatelessWidget {
-  const BlogCommentInput({super.key, required this.controller});
+  const BlogCommentInput({super.key, required this.controller, this.editorKey});
 
   final ComposerStickerTextController controller;
+  final GlobalKey<EditorState>? editorKey;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +52,7 @@ class BlogCommentInput extends StatelessWidget {
           focusNode: controller.focusNode,
           scrollController: controller.scrollController,
           config: QuillEditorConfig(
+            editorKey: editorKey,
             expands: true,
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             placeholder: AppLocalizations.of(context).profileBlogCommentContent,
@@ -66,9 +68,8 @@ class BlogCommentInput extends StatelessWidget {
               ComposerQuillStickerEmbedBuilder(
                 stickers: controller.stickers,
                 fixedSize:
-                    MediaQuery.textScalerOf(
-                      context,
-                    ).scale(style.fontSize ?? 16) *
+                    MediaQuery.textScalerOf(context)
+                        .scale(style.fontSize ?? 16) *
                     1.25,
               ),
             ],
@@ -187,14 +188,12 @@ class BlogCommentReplyContext extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                AppLocalizations.of(
-                  context,
-                ).profileBlogCommentReplyTo(comment.authorName),
+                AppLocalizations.of(context)
+                    .profileBlogCommentReplyTo(comment.authorName),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge!.copyWith(color: native.author),
+                style: Theme.of(context).textTheme.labelLarge!
+                    .copyWith(color: native.author),
               ),
               if (excerpt.isNotEmpty) ...[
                 const SizedBox(height: 4),

@@ -1,10 +1,13 @@
 import 'package:y300/features/profile/data/providers/blog_draft_providers.dart';
 import 'package:y300/features/profile/domain/models/blog_draft_snapshot.dart';
+
 import '../test_support/blog_draft_fixture.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +30,7 @@ import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+
 import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_navigation_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
@@ -1178,6 +1182,166 @@ void main() {
     );
   }
 
+  testWidgets(
+    'keyboard transitions move blog actions and viewport together while retaining editing state',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final keyboardInsets = ValueNotifier<double>(0);
+      addTearDown(keyboardInsets.dispose);
+      final service = BlogOperationFixture(autoPrepare: true);
+      await _open(tester, service, keyboardInsets: keyboardInsets);
+      const text = '键盘开合时保留正文与选择范围';
+      await _replaceBody(tester, text);
+      final editor = _body(tester);
+      final controller = editor.controller;
+      const selection = TextSelection(baseOffset: 1, extentOffset: 4);
+      controller.updateSelection(selection, ChangeSource.local);
+      await tester.pumpAndSettle();
+      final toolbar = find.byKey(const Key('blog-editor-toolbar'));
+      final viewport = find.byKey(const Key('blog-editor-scroll'));
+      final body = find.byKey(const Key('blog-editor-body'));
+      final closedBottom = tester.getRect(toolbar).bottom;
+      final bodyHeight = tester.getSize(body).height;
+
+      void expectEditingRetained() {
+        final current = _body(tester);
+        expect(current.controller, same(controller));
+        expect(current.focusNode, same(editor.focusNode));
+        expect(current.scrollController, same(editor.scrollController));
+        expect(controller.document.toPlainText(), '$text\n');
+        expect(controller.selection, selection);
+        expect(tester.getSize(body).height, closeTo(bodyHeight, 0.01));
+        expect(
+          tester.getRect(viewport).bottom,
+          closeTo(tester.getRect(toolbar).top, 0.01),
+        );
+        expect(tester.takeException(), isNull);
+      }
+
+      keyboardInsets.value = 280;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(closedBottom, 0.01));
+      await tester.pump(const Duration(milliseconds: 45));
+      final openingBottom = tester.getRect(toolbar).bottom;
+      expect(openingBottom, inExclusiveRange(closedBottom - 280, closedBottom));
+      expectEditingRetained();
+      await tester.pump(const Duration(milliseconds: 45));
+      expect(tester.getRect(toolbar).bottom, lessThan(openingBottom));
+      expectEditingRetained();
+      await tester.pumpAndSettle();
+      final openBottom = tester.getRect(toolbar).bottom;
+      expect(openBottom, closeTo(closedBottom - 280, 0.01));
+      expectEditingRetained();
+
+      keyboardInsets.value = 0;
+      await tester.pump();
+      expect(tester.getRect(toolbar).bottom, closeTo(openBottom, 0.01));
+      await tester.pump(const Duration(milliseconds: 45));
+      final closingBottom = tester.getRect(toolbar).bottom;
+      expect(closingBottom, inExclusiveRange(openBottom, closedBottom));
+      expectEditingRetained();
+      await tester.pump(const Duration(milliseconds: 45));
+      expect(tester.getRect(toolbar).bottom, greaterThan(closingBottom));
+      expectEditingRetained();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(toolbar).bottom, closeTo(closedBottom, 0.01));
+      expectEditingRetained();
+      await _save(tester);
+      expect(_plainText(service.editorSubmissions.single.input.bodyHtml), text);
+      service.saved();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('reversing keyboard transitions keeps blog actions continuous', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final keyboardInsets = ValueNotifier<double>(0);
+    addTearDown(keyboardInsets.dispose);
+    final service = BlogOperationFixture(autoPrepare: true);
+    await _open(tester, service, keyboardInsets: keyboardInsets);
+    await _replaceBody(tester, '快速收起再展开时保留正文');
+    final toolbar = find.byKey(const Key('blog-editor-toolbar'));
+    final closedBottom = tester.getRect(toolbar).bottom;
+
+    keyboardInsets.value = 280;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final openingBottom = tester.getRect(toolbar).bottom;
+    expect(openingBottom, inExclusiveRange(closedBottom - 280, closedBottom));
+
+    keyboardInsets.value = 0;
+    await tester.pump();
+    expect(tester.getRect(toolbar).bottom, closeTo(openingBottom, 0.01));
+    await tester.pump(const Duration(milliseconds: 30));
+    final reversingBottom = tester.getRect(toolbar).bottom;
+    expect(reversingBottom, inExclusiveRange(openingBottom, closedBottom));
+
+    keyboardInsets.value = 280;
+    await tester.pump();
+    expect(tester.getRect(toolbar).bottom, closeTo(reversingBottom, 0.01));
+    await tester.pump(const Duration(milliseconds: 45));
+    expect(tester.getRect(toolbar).bottom, lessThan(reversingBottom));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(toolbar).bottom, closeTo(closedBottom - 280, 0.01));
+    expect(
+      tester.getRect(find.byKey(const Key('blog-editor-scroll'))).bottom,
+      closeTo(tester.getRect(toolbar).top, 0.01),
+    );
+    expect(_body(tester).controller.document.toPlainText(), '快速收起再展开时保留正文\n');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'preview keeps avoiding the keyboard without an editing toolbar',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final keyboardInsets = ValueNotifier<double>(0);
+      addTearDown(keyboardInsets.dispose);
+      final service = BlogOperationFixture(autoPrepare: true);
+      await _open(tester, service, keyboardInsets: keyboardInsets);
+      await _replaceBody(tester, '切换预览时保留正文');
+      final controller = _body(tester).controller;
+      keyboardInsets.value = 280;
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('blog-editor-preview-toggle')));
+      await tester.pumpAndSettle();
+      final viewport = find.byKey(const Key('blog-editor-scroll'));
+      expect(find.byKey(const Key('blog-editor-toolbar')), findsNothing);
+      expect(find.byType(ForumHtmlContentView), findsOneWidget);
+      final openBottom = tester.getRect(viewport).bottom;
+      expect(openBottom, closeTo(700 - 280, 0.01));
+
+      keyboardInsets.value = 0;
+      await tester.pump();
+      expect(tester.getRect(viewport).bottom, closeTo(openBottom, 0.01));
+      await tester.pump(const Duration(milliseconds: 45));
+      expect(
+        tester.getRect(viewport).bottom,
+        inExclusiveRange(openBottom, 700),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getRect(viewport).bottom, closeTo(700, 0.01));
+      expect(find.byKey(const Key('blog-editor-toolbar')), findsNothing);
+      await tester.tap(find.byKey(const Key('blog-editor-preview-toggle')));
+      await tester.pumpAndSettle();
+      expect(_body(tester).controller, same(controller));
+      expect(controller.document.toPlainText(), '切换预览时保留正文\n');
+      expect(service.editorSubmissions, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final family in AppThemeFamily.values) {
     for (final brightness in Brightness.values) {
       testWidgets(
@@ -1354,6 +1518,7 @@ Future<_Host> _open(
   bool create = false,
   ThemeData? theme,
   bool largeKeyboard = false,
+  ValueListenable<double>? keyboardInsets,
   ComposerImagePicker? imagePicker,
   UserBlogMediaOperations? media,
   MemoryBlogDraftRepository? drafts,
@@ -1377,16 +1542,23 @@ Future<_Host> _open(
       child: LocalizedTestApp(
         navigatorKey: host.navigator,
         theme: theme ?? AppTheme.light(),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            disableAnimations: largeKeyboard,
-            textScaler: TextScaler.linear(largeKeyboard ? 2 : 1),
-            viewInsets: largeKeyboard
-                ? const EdgeInsets.only(bottom: 260)
-                : EdgeInsets.zero,
-          ),
-          child: child!,
-        ),
+        builder: (context, child) {
+          Widget withInsets(double inset) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              disableAnimations: largeKeyboard,
+              textScaler: TextScaler.linear(largeKeyboard ? 2 : 1),
+              viewInsets: EdgeInsets.only(bottom: inset),
+            ),
+            child: child!,
+          );
+          if (keyboardInsets == null) {
+            return withInsets(largeKeyboard ? 260 : 0);
+          }
+          return ValueListenableBuilder<double>(
+            valueListenable: keyboardInsets,
+            builder: (context, inset, _) => withInsets(inset),
+          );
+        },
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
