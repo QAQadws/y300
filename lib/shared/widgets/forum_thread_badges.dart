@@ -54,7 +54,8 @@ class _ForumThreadBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minWidth: 30, minHeight: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      // Offset the line box slightly upward to balance visible glyph whitespace.
+      padding: const EdgeInsets.fromLTRB(6, 1, 6, 3),
       decoration: BoxDecoration(
         color: colors.background,
         borderRadius: BorderRadius.circular(8),
@@ -66,15 +67,20 @@ class _ForumThreadBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: colors.foreground,
-          height: 1.1,
-          fontWeight: FontWeight.w700,
+      child: Center(
+        // Center within the minimum size without expanding the badge in Wrap.
+        widthFactor: 1,
+        heightFactor: 1,
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: colors.foreground,
+            height: 1.1,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
