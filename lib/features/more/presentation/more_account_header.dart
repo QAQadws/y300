@@ -265,7 +265,7 @@ class MoreAccountHeader extends ConsumerWidget {
               else
                 MoreAccountIdentityLayout(
                   identity: identity,
-                  action: DailyAutoSignInToggle(enabled: !busy),
+                  action: const DailyAutoSignInToggle(),
                 ),
             ],
             if (current && summary.failure != null)

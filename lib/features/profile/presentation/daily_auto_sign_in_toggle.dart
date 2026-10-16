@@ -7,9 +7,7 @@ import 'package:y300/l10n/app_localizations.dart';
 /// Loads only the account preference; displaying this control never checks
 /// remote sign-in status or starts an automatic attempt.
 class DailyAutoSignInToggle extends ConsumerWidget {
-  const DailyAutoSignInToggle({super.key, this.enabled = true});
-
-  final bool enabled;
+  const DailyAutoSignInToggle({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,7 +17,6 @@ class DailyAutoSignInToggle extends ConsumerWidget {
 
     final l10n = AppLocalizations.of(context);
     final canChange =
-        enabled &&
         state.autoEnabled != null &&
         !state.isSavingAutoPreference &&
         !state.settingsUnavailable;
@@ -42,13 +39,25 @@ class DailyAutoSignInToggle extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Switch.adaptive(
-              key: const Key('daily-auto-sign-in-toggle'),
-              value: state.autoEnabled ?? false,
-              onChanged: canChange
-                  ? (value) => _setEnabled(context, ref, owner, value)
-                  : null,
-            ),
+            if (state.autoEnabled == null && !state.settingsUnavailable)
+              // Reserve the adaptive control's space without showing an
+              // invented off state. Mount the real switch only when known,
+              // so its first frame does not animate from disabled to enabled.
+              const Visibility(
+                visible: false,
+                maintainSize: true,
+                maintainAnimation: true,
+                maintainState: true,
+                child: Switch.adaptive(value: false, onChanged: null),
+              )
+            else
+              Switch.adaptive(
+                key: const Key('daily-auto-sign-in-toggle'),
+                value: state.autoEnabled ?? false,
+                onChanged: canChange
+                    ? (value) => _setEnabled(context, ref, owner, value)
+                    : null,
+              ),
           ],
         ),
       ),

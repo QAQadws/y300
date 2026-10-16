@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,7 @@ import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/preferences/preference_key.dart';
+import 'package:y300/core/preferences/preference_keys.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/profile/data/daily_sign_in_storage.dart';
@@ -19,6 +22,72 @@ import '../../../support/forum_auth_test_support.dart';
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
+  for (final enabled in [true, false]) {
+    testWidgets('delayed preference appears in its actual $enabled state', (
+      tester,
+    ) async {
+      final preferences = _MemoryPreferencesStore()
+        ..readGate = Completer<void>()
+        ..values[PreferenceKeys.dailyAutoSignInEnabledForUid('654321').name] =
+            enabled;
+      final repository = _SignRepository();
+      final command = _SignCommand();
+      await _pump(
+        tester,
+        repository: repository,
+        command: command,
+        preferences: preferences,
+      );
+
+      final toggle = find.byKey(const Key('daily-auto-sign-in-toggle'));
+      final control = find.byType(DailyAutoSignInToggle);
+      final pendingRect = tester.getRect(control);
+      expect(toggle, findsNothing);
+      final l10n = AppLocalizations.of(tester.element(control));
+      expect(find.text(l10n.dailyAutoSignInToggle), findsOneWidget);
+
+      preferences.readGate!.complete();
+      // Resolve the read, then render Riverpod's queued update without
+      // advancing an animation that could hide a first-frame regression.
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.widget<Switch>(toggle).value, enabled);
+      expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+      expect(tester.getRect(control), pendingRect);
+      // No animation from a fabricated off/disabled state on the first frame.
+      expect(tester.binding.transientCallbackCount, 0);
+      expect(repository.queries, isEmpty);
+      expect(command.requests, isEmpty);
+    });
+  }
+
+  testWidgets('failed preference read exposes a disabled control and reason', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferencesStore()..failReads = true;
+    final repository = _SignRepository();
+    final command = _SignCommand();
+    await _pump(
+      tester,
+      repository: repository,
+      command: command,
+      preferences: preferences,
+    );
+
+    final toggle = find.byKey(const Key('daily-auto-sign-in-toggle'));
+    expect(tester.widget<Switch>(toggle).onChanged, isNull);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(DailyAutoSignInToggle)),
+    );
+    expect(
+      find.byTooltip(l10n.dailyAutoSignInStorageUnavailable),
+      findsOneWidget,
+    );
+    expect(repository.queries, isEmpty);
+    expect(command.requests, isEmpty);
+  });
+
   testWidgets('automatic sign-in toggle defaults on and persists per account', (
     tester,
   ) async {
@@ -41,15 +110,13 @@ void main() {
     expect(tester.widget<Switch>(toggle).value, isFalse);
     final previousAccountToggle = tester.widget<Switch>(toggle).onChanged!;
     expect(
-      await SharedPreferencesDailyAutoSignInSettings(
-        preferences,
-      ).isEnabled('654321'),
+      await SharedPreferencesDailyAutoSignInSettings(preferences)
+          .isEnabled('654321'),
       isFalse,
     );
     expect(
-      await SharedPreferencesDailyAutoSignInSettings(
-        preferences,
-      ).isEnabled('777777'),
+      await SharedPreferencesDailyAutoSignInSettings(preferences)
+          .isEnabled('777777'),
       isTrue,
     );
     final container = ProviderScope.containerOf(
@@ -215,10 +282,14 @@ class _AuthRepository implements AuthRepository {
 
 final class _MemoryPreferencesStore implements PreferencesStore {
   final Map<String, Object> values = {};
+  Completer<void>? readGate;
+  bool failReads = false;
   bool failWrites = false;
 
   @override
   Future<T?> read<T extends Object>(PreferenceKey<T> key) async {
+    await readGate?.future;
+    if (failReads) throw StateError('synthetic read failure');
     final value = values[key.name];
     return value is T ? value : null;
   }

@@ -2,6 +2,7 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:animated_flip_counter/animated_flip_counter.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import 'package:y300/features/more/presentation/more_account_avatar.dart';
 import 'package:y300/features/more/presentation/more_account_header.dart';
 import 'package:y300/features/more/presentation/more_account_identity_layout.dart';
 import 'package:y300/features/more/presentation/more_account_action.dart';
+import 'package:y300/features/profile/data/providers/daily_sign_in_storage_providers.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/profile/presentation/daily_auto_sign_in_toggle.dart';
@@ -117,6 +119,59 @@ void main() {
       semantics.dispose();
     }
   });
+
+  testWidgets(
+    'automatic preference stays editable while account navigation and summary refresh are pending',
+    (tester) async {
+      final pending = Completer<_ReadResult>();
+      final repository = _Repository(
+        (read) =>
+            read == 1 ? Future<_ReadResult>.value(_success()) : pending.future,
+      );
+      await _pumpHeader(tester, repository: repository, pendingAction: true);
+      final toggle = find.byKey(const Key('daily-auto-sign-in-toggle'));
+      expect(tester.widget<Switch>(toggle).value, isTrue);
+      expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MoreAccountHeader)),
+      );
+      final refresh = container
+          .read(currentAccountSummaryControllerProvider.notifier)
+          .refresh();
+      try {
+        await tester.pump();
+        expect(
+          container.read(currentAccountSummaryControllerProvider).isLoading,
+          isTrue,
+        );
+        expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+        expect(_logoutButton(tester).onPressed, isNull);
+
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<Switch>(toggle).value, isFalse);
+        expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+        expect(
+          await container
+              .read(dailyAutoSignInSettingsProvider)
+              .isEnabled(_owner.uid),
+          isFalse,
+        );
+        expect(
+          container.read(currentAccountSummaryControllerProvider).isLoading,
+          isTrue,
+        );
+        expect(repository.reads, 2);
+      } finally {
+        pending.complete(_success(credits: 19));
+        await refresh;
+        await tester.pumpAndSettle();
+      }
+      expect(tester.widget<Switch>(toggle).value, isFalse);
+      expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+    },
+  );
 
   testWidgets(
     'numeric refresh keeps the counter state and uses the shared animation duration',
