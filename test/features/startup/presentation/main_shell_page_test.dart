@@ -18,6 +18,9 @@ import 'package:y300/app/navigation/main_navigation_settings_repository.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
+import 'package:y300/features/messages/application/message_attention_controller.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
+import 'package:y300/features/messages/presentation/widgets/message_attention_icon.dart';
 import '../../messages/support/message_test_repository.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -70,6 +73,126 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
+  testWidgets('attention follows configured navigation without reading feeds', (
+    tester,
+  ) async {
+    final attention = MessageAttentionController();
+    const owner = (
+      sessionOwner: (uid: '101', revision: 0),
+      sourceGeneration: 0,
+    );
+    attention.setOwner(owner);
+    attention.accept(
+      const ForumMessageAttentionObservation(
+        viewerUserId: '101',
+        source: ForumMessageAttentionSource.mobileHtml,
+        combinedHint: ForumMessageAttentionState.present,
+      ),
+      owner: owner,
+      sequence: attention.nextRequestSequence(),
+    );
+    final queue = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
+      ComicSearchRefreshQueueSnapshot.empty,
+    );
+    final selection = ShelfSelectionHostController();
+    final messages = MessageTestRepository();
+    addTearDown(attention.dispose);
+    addTearDown(queue.dispose);
+    addTearDown(selection.dispose);
+    await _pumpSelectionShell(
+      tester,
+      queueSnapshot: queue,
+      selectionHost: selection,
+      webViewDriver: _FakeForumWebViewDriver(),
+      attention: attention,
+      messages: messages,
+    );
+
+    NavigationDestination destination(MainShellDestination destination) =>
+        tester.widget<NavigationDestination>(
+          find.byKey(ValueKey('main-shell-destination-${destination.name}')),
+        );
+    void expectDot(MainShellDestination target, bool expected) {
+      final entry = destination(target);
+      expect((entry.icon as MessageAttentionIcon).showAttention, expected);
+      expect(
+        (entry.selectedIcon! as MessageAttentionIcon).showAttention,
+        expected,
+      );
+    }
+
+    expectDot(MainShellDestination.more, true);
+    final context = tester.element(find.byType(MainShellPage));
+    final l10n = AppLocalizations.of(context);
+    await tester.tap(find.text(l10n.appNavigationMore).last);
+    await _pumpShellTab(tester);
+    await tester.pumpAndSettle();
+    expectDot(MainShellDestination.more, false);
+    final myMessages = tester.widget<ListTile>(
+      find.byKey(const Key('more-my-messages-entry')),
+    );
+    expect((myMessages.leading! as MessageAttentionIcon).showAttention, true);
+    expect(attention.value.hasUnacknowledgedAttention, false);
+
+    await tester.tap(find.text(l10n.appNavigationForum).last);
+    await _pumpShellTab(tester);
+    attention.accept(
+      const ForumMessageAttentionObservation(
+        viewerUserId: '101',
+        source: ForumMessageAttentionSource.api,
+        privateMessages: ForumMessageAttentionState.present,
+        notifications: ForumMessageAttentionState.absent,
+        notificationCount: 0,
+      ),
+      owner: owner,
+      sequence: attention.nextRequestSequence(),
+    );
+    await tester.pump();
+    expectDot(MainShellDestination.more, false);
+
+    final navigation = ProviderScope.containerOf(
+      context,
+    ).read(mainNavigationSettingsControllerProvider.notifier);
+    await navigation.setVisibility(MainShellDestination.messages, true);
+    await tester.pump();
+    expectDot(MainShellDestination.messages, true);
+    expectDot(MainShellDestination.more, false);
+    await tester.tap(find.text(l10n.appNavigationMore).last);
+    await _pumpShellTab(tester);
+    expect(
+      (tester
+                  .widget<ListTile>(
+                    find.byKey(const Key('more-my-messages-entry')),
+                  )
+                  .leading!
+              as MessageAttentionIcon)
+          .showAttention,
+      false,
+    );
+    final epoch = attention.value.attentionEpoch;
+    await navigation.reorder(6, 0);
+    await tester.pump();
+    expectDot(MainShellDestination.messages, true);
+    expect(attention.value.attentionEpoch, epoch);
+    expect(messages.reads, isEmpty);
+    expect(messages.notificationReads, isEmpty);
+    await navigation.setVisibility(MainShellDestination.messages, false);
+    await tester.pump();
+    expectDot(MainShellDestination.more, false);
+    expect(attention.value.attentionEpoch, epoch);
+    expect(
+      (tester
+                  .widget<ListTile>(
+                    find.byKey(const Key('more-my-messages-entry')),
+                  )
+                  .leading!
+              as MessageAttentionIcon)
+          .showAttention,
+      true,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -1247,10 +1370,20 @@ Future<void> _pumpSelectionShell(
   required _FakeForumWebViewDriver webViewDriver,
   ForumHomeRepository? homeRepository,
   Future<void>? libraryReady,
+  MessageAttentionController? attention,
+  MessageTestRepository? messages,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        if (messages != null)
+          messageRepositoryProvider.overrideWithValue(messages),
+        if (attention != null) ...[
+          messageAttentionControllerProvider.overrideWithValue(attention),
+          messageAttentionOwnerProvider.overrideWithValue(
+            attention.value.owner,
+          ),
+        ],
         comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
         novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
         libraryStateRepositoryProvider.overrideWithValue(
@@ -1326,9 +1459,7 @@ int _selectedNavigationIndex(WidgetTester tester) {
 }
 
 IconData? _navigationIconData(Widget widget) {
-  final box = widget as SizedBox;
-  final center = box.child! as Center;
-  return (center.child! as Icon).icon;
+  return (widget as MessageAttentionIcon).icon;
 }
 
 ShelfSelectionHostDelegate _selectionDelegate({

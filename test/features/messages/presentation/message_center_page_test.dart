@@ -9,6 +9,7 @@ import 'package:y300/app/navigation/message_routes.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/messages/data/private_message_compose_repository_provider.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/private_message_compose_repository.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
@@ -33,6 +34,7 @@ void main() {
     compose = _CenterComposeRepository();
     container = ProviderContainer.test(
       overrides: [
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue('10'),
         messageRepositoryProvider.overrideWithValue(repository),
         privateMessageComposeRepositoryProvider.overrideWithValue(compose),
@@ -611,6 +613,7 @@ void main() {
       );
 
       container.updateOverrides([
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue('11'),
         messageRepositoryProvider.overrideWithValue(repository),
         privateMessageComposeRepositoryProvider.overrideWithValue(compose),

@@ -25,6 +25,76 @@ in [API_STABILITY.md](API_STABILITY.md). The package is licensed under
 Applications should consume the facade or contracts barrel. Do not import
 package `src/` files.
 
+## Passive message attention
+
+`ForumMessageAttentionObservation` describes verified viewer evidence using
+`unknown`, `absent`, and `present`. These are message-center arrival indicators,
+including Discuz announcements, rather than conversation unread flags. A mobile
+aggregate does not establish either category; incomplete evidence never implies
+zero. `notificationCount` is optional and never counts private messages.
+
+The experimental adapters barrel exports `DiscuzMessageAttentionHtmlParser`
+and `DiscuzMessageAttentionApiParser`. Both take `siteOrigin` and parse with
+`sourceUri` (the final response URI) and `expectedUserId`. They return `null`
+for unsupported or untrusted responses and retain individual unknown fields.
+HTML requires a complete document, a unique head `discuz_uid`, and supported
+public mobile/desktop navigation. API input is an already decoded envelope
+with `Variables.member_uid`; raw JSON decoding and duplicate-key handling are
+the decoder's responsibility. `space.uid` never establishes viewer identity.
+
+The initial route allowlists cover ordinary index/forum/public-space HTML and
+API modules `forumindex`, `forumdisplay`, `viewthread`, `profile`, `myfavforum`,
+`myfavthread`, and `smiley` (versions 1–4). Consuming message/notice pages,
+authentication, dispatch overrides, unknown routes, and business error envelopes
+are excluded. Supported templates have self-contained fixtures in the package.
+
+The parsers remain pure and perform no I/O or publication. To observe existing
+network reads, pass a `ForumMessageAttentionObserver` as
+`messageAttentionObserver` to the builder or adapter factory. Its synchronous
+`captureRequest()` may return null to skip a request; otherwise it binds the
+verified viewer, a positive send-time sequence, and an opaque immutable owner
+token. `onObservation()` receives that same context. Hosts must recheck current
+account/session/source ownership and merge evidence by sequence and coverage.
+Observer failures never change the business response.
+
+The package wraps the shared transport once and samples only eligible,
+uncancelled GETs with successful final 2xx responses and supported same-site
+request/response routes. Authentication and formhash preflights, consuming
+message/notice reads, writes, bytes, and cache replay do not publish. WAF replay
+remains transport-owned; resource streams and multipart capabilities are
+preserved. No observer keeps the original network identity. Advanced source
+overrides must use a factory with the same observer rather than construct reads
+against an unobserved transport.
+
+For explicit calibration, `loadMessageAttention(ForumMessageAttentionQuery(...))`
+uses the optional `messageAttention` source contract. Standard assembly provides
+a fresh, uncached `forumindex version=1&checknotice=1` read through the same
+transport. The query requires `expectedUserId` and supports cancellation;
+successful reads verify final status, exact same-site endpoint/query, API version,
+and `member_uid`. Unsupported sources fail closed. Partial evidence retains
+unknown fields and advertises only established capabilities. This read opens no
+message/notice list and does not synchronize UCenter arrival flags.
+
+Explicit probes bypass passive publication using the internal
+`message.attention.probe` request context. The caller assigns one sequence before
+the facade call and accepts its successful current network result once, after
+rechecking ownership. Scheduling, freshness, cancellation, retries, and polling
+policy remain Host responsibilities; the package starts no timers.
+
+Private-message and notification queries optionally accept `expectedUserId`.
+When supplied, standard adapters verify the issued endpoint/query, response
+version, and `member_uid` before merging session data or returning success.
+Omitting it preserves existing read behavior. Notification v3 and private-message
+v1 remain unchanged.
+
+Attention remains ephemeral and does not persist message state or sample WebView.
+Hosts establish per-category consumption barriers only after accepted active
+business reads succeed, using the maximum sequence issued at completion. A
+success does not itself clear attention; only newer verified evidence calibrates
+the affected category. Excluding a consuming response does not establish that
+the source has cleared attention. Cached documents can be parsed, but a parse
+result does not establish freshness.
+
 ## Installation
 
 Use a local path inside this repository:

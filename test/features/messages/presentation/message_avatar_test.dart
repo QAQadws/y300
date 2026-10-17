@@ -10,6 +10,7 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/image_loading/data/app_image_cache_manager.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
@@ -38,6 +39,7 @@ void main() {
           (ref) async => CacheManagerAppImageCacheManager(cache.network),
         ),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue('10'),
         if (repository != null)
           messageRepositoryProvider.overrideWithValue(repository),
@@ -310,6 +312,7 @@ void main() {
         (ref) async => CacheManagerAppImageCacheManager(cache.network),
       ),
       forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
+      messageAttentionOwnerProvider.overrideWithValue(null),
       messageAccountIdProvider.overrideWithValue(null),
       messageRepositoryProvider.overrideWithValue(repository),
     ]);

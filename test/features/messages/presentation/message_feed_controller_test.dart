@@ -6,9 +6,13 @@ import 'package:y300/features/messages/presentation/message_feed_controller.dart
 
 void main() {
   late List<_Read> reads;
+  late List<int> completedActiveReads;
+  late int captures;
   late MessageFeedController<int> controller;
   setUp(() {
     reads = [];
+    completedActiveReads = [];
+    captures = 0;
     controller = MessageFeedController<int>(
       initialPage: 1,
       load: (page, cancellation) {
@@ -18,6 +22,10 @@ void main() {
       },
       nextPage: (data) => data < 3 ? data + 1 : null,
       mergeMore: (_, next) => next,
+      captureActiveRead: () {
+        ++captures;
+        return completedActiveReads.add;
+      },
     );
   });
   tearDown(() => controller.dispose());
@@ -37,6 +45,127 @@ void main() {
       expect(controller.value.isBusy, isFalse);
     },
   );
+
+  test('active accepted network reads complete exactly once', () async {
+    controller.setActive(true);
+    final first = controller.refresh();
+    expect(captures, 1);
+    reads.last.succeed(1);
+    await first;
+    expect(completedActiveReads, [1]);
+    final more = controller.loadMore();
+    reads.last.succeed(2);
+    await more;
+    expect(completedActiveReads, [1, 2]);
+  });
+
+  test('inactive reads cannot capture consumption ownership', () async {
+    final pending = controller.refresh();
+    reads.last.succeed(1);
+    await pending;
+    expect(captures, 0);
+    expect(completedActiveReads, isEmpty);
+  });
+
+  test(
+    'leaving and returning retires the old active-read completion',
+    () async {
+      controller.setActive(true);
+      final old = controller.refresh();
+      controller.setActive(false);
+      controller.setActive(true);
+      reads.last.succeed(1);
+      await old;
+      expect(controller.value.data, 1);
+      expect(completedActiveReads, isEmpty);
+      final current = controller.refresh();
+      reads.last.succeed(2);
+      await current;
+      expect(completedActiveReads, [2]);
+    },
+  );
+
+  test('cancelled and failed reads never complete consumption', () async {
+    controller.setActive(true);
+    final cancelled = controller.refresh();
+    reads.last.cancellation.cancel();
+    reads.last.succeed(1);
+    await cancelled;
+    final failed = controller.refresh();
+    reads.last.result.complete(
+      const DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        diagnosticMessage: 'fixture',
+      ),
+    );
+    await failed;
+    expect(completedActiveReads, isEmpty);
+  });
+
+  test('superseded pagination cannot complete an obsolete read', () async {
+    controller.setActive(true);
+    final first = controller.refresh();
+    reads.last.succeed(1);
+    await first;
+    final more = controller.loadMore();
+    final olderRead = reads.last;
+    final refresh = controller.refresh();
+    reads.last.succeed(2);
+    await refresh;
+    olderRead.succeed(3);
+    await more;
+    expect(completedActiveReads, [1, 2]);
+  });
+
+  test('cache and noncurrent metadata cannot prove consumption', () async {
+    controller.setActive(true);
+    final cached = controller.refresh();
+    reads.last.result.complete(
+      _success(
+        1,
+        metadata: const DataReadMetadata(
+          origin: DataReadOrigin.freshSnapshot,
+          freshness: DataReadFreshness.freshCache,
+        ),
+      ),
+    );
+    await cached;
+    final stale = controller.refresh();
+    reads.last.result.complete(
+      _success(
+        2,
+        metadata: const DataReadMetadata(
+          origin: DataReadOrigin.network,
+          freshness: DataReadFreshness.staleOrUnknown,
+        ),
+      ),
+    );
+    await stale;
+    expect(controller.value.data, 2);
+    expect(completedActiveReads, isEmpty);
+  });
+
+  test('capture and completion failures preserve business success', () async {
+    controller.dispose();
+    var throwOnCapture = true;
+    controller = MessageFeedController<int>(
+      initialPage: 1,
+      load: (_, _) async => _success(1),
+      nextPage: (_) => null,
+      mergeMore: (_, next) => next,
+      captureActiveRead: () {
+        if (throwOnCapture) throw StateError('private capture');
+        return (_) => throw StateError('private completion');
+      },
+    );
+    controller.setActive(true);
+    await controller.refresh();
+    expect(controller.value.data, 1);
+    expect(controller.value.failure, isNull);
+    throwOnCapture = false;
+    await controller.refresh();
+    expect(controller.value.failure, isNull);
+  });
 
   test('load-more is single-flight and stops at the last page', () async {
     final first = controller.refresh();
@@ -199,8 +328,7 @@ final class _Read {
   void succeed(int value) => result.complete(_success(value));
 }
 
-DataReadResult<int, Object?> _success(int value) => DataReadSuccess(
-  data: value,
-  capabilities: null,
-  metadata: const DataReadMetadata.network(),
-);
+DataReadResult<int, Object?> _success(
+  int value, {
+  DataReadMetadata metadata = const DataReadMetadata.network(),
+}) => DataReadSuccess(data: value, capabilities: null, metadata: metadata);

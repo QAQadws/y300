@@ -14,6 +14,7 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/data/private_message_compose_repository_provider.dart';
 import 'package:y300/features/messages/domain/private_message_compose_repository.dart';
@@ -881,6 +882,7 @@ class _Harness {
     composeRepository = _VisualComposeRepository();
     final container = ProviderContainer.test(
       overrides: [
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue(account),
         messageRepositoryProvider.overrideWithValue(repository),
         privateMessageComposeRepositoryProvider.overrideWithValue(

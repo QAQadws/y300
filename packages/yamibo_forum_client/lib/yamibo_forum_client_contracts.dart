@@ -38,6 +38,7 @@ export 'src/contracts/user_blog_media.dart';
 export 'src/contracts/user_blog_favorites.dart';
 export 'src/contracts/user_blog_navigation.dart';
 export 'src/contracts/message_directories.dart';
+export 'src/contracts/forum_message_attention.dart';
 export 'src/contracts/private_message_command.dart';
 export 'src/contracts/notification_ignore_command.dart';
 export 'src/contracts/friend_directory.dart';

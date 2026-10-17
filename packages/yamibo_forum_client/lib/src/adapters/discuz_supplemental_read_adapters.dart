@@ -18,6 +18,7 @@ import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
 import '../parsing/loose_json.dart';
+import '../parsing/discuz_message_attention_identity.dart';
 import 'discuz_api_client.dart';
 import 'discuz_ucenter_avatar_resolver.dart';
 import 'thread_detail_api_mapper.dart';
@@ -42,6 +43,10 @@ final class DiscuzForumNotificationRepository
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     if (query.page < 1) return _businessFailure('notification_page_invalid');
+    if (query.expectedUserId != null &&
+        discuzMessageAttentionIdentity(query.expectedUserId) == null) {
+      return _businessFailure('notification_viewer_invalid');
+    }
     if (query.cancellation?.isCancelled ?? false) {
       return _messageReadCancelled();
     }
@@ -49,6 +54,7 @@ final class DiscuzForumNotificationRepository
       module: 'mynotelist',
       queryParameters: {'version': '3', 'page': query.page},
       cancellation: query.cancellation,
+      expectedUserId: query.expectedUserId,
     );
     if (query.cancellation?.isCancelled ?? false) {
       return _messageReadCancelled();
@@ -59,11 +65,13 @@ final class DiscuzForumNotificationRepository
       return _messageReadFailure(failure);
     }
     try {
-      final variables =
+      final verifiedResponse =
           (response as ForumTransportSuccess<ForumResponse<DiscuzApiEnvelope>>)
-              .response
-              .body
-              .variables;
+              .response;
+      final variables = verifiedResponse.body.variables;
+      if (!_messageViewerMatches(variables, query.expectedUserId)) {
+        return _messageViewerFailure();
+      }
       final avatars = _messageAvatars(_api.config, variables);
       final items = _messageRows(
         variables['list'],
@@ -134,28 +142,34 @@ final class DiscuzForumPrivateMessageRepository
         (target != null && !_positive(target.id))) {
       return _businessFailure('private_message_query_invalid');
     }
+    if (query.expectedUserId != null &&
+        discuzMessageAttentionIdentity(query.expectedUserId) == null) {
+      return _businessFailure('private_message_viewer_invalid');
+    }
     if (query.cancellation?.isCancelled ?? false) {
       return _messageReadCancelled();
     }
     // v4 drops group type, participant count and exact timestamps. v1 exposes
     // the same space_pm.php data used by the mobile page without those losses.
-    final response = await _api.get(
-      module: 'mypm',
-      queryParameters: {
-        'version': '1',
-        if (query.page > 0) 'page': query.page,
-        if (target == null) 'filter': 'privatepm',
-        if (target != null) ...{
-          'subop': 'view',
-          if (target.kind == ForumConversationKind.direct)
-            'touid': target.id
-          else ...{
-            'plid': target.id,
-            'type': '1',
-          },
+    final parameters = <String, Object?>{
+      'version': '1',
+      if (query.page > 0) 'page': query.page,
+      if (target == null) 'filter': 'privatepm',
+      if (target != null) ...{
+        'subop': 'view',
+        if (target.kind == ForumConversationKind.direct)
+          'touid': target.id
+        else ...{
+          'plid': target.id,
+          'type': '1',
         },
       },
+    };
+    final response = await _api.get(
+      module: 'mypm',
+      queryParameters: parameters,
       cancellation: query.cancellation,
+      expectedUserId: query.expectedUserId,
     );
     if (query.cancellation?.isCancelled ?? false) {
       return _messageReadCancelled();
@@ -166,11 +180,13 @@ final class DiscuzForumPrivateMessageRepository
       return _messageReadFailure(failure);
     }
     try {
-      final variables =
+      final verifiedResponse =
           (response as ForumTransportSuccess<ForumResponse<DiscuzApiEnvelope>>)
-              .response
-              .body
-              .variables;
+              .response;
+      final variables = verifiedResponse.body.variables;
+      if (!_messageViewerMatches(variables, query.expectedUserId)) {
+        return _messageViewerFailure();
+      }
       final avatars = _messageAvatars(_api.config, variables);
       final items = _messageRows(
         variables['list'],
@@ -250,6 +266,19 @@ DiscuzUCenterAvatarResolver _messageAvatars(
 
 // Message reads are intentionally uncached: the source marks rows as read and
 // their contents must never survive an account change in a shared disk cache.
+bool _messageViewerMatches(
+  Map<String, Object?> variables,
+  String? expectedUserId,
+) =>
+    expectedUserId == null ||
+    discuzMessageAttentionIdentity(variables['member_uid']) == expectedUserId;
+
+DataReadFailure<T, C> _messageViewerFailure<T, C>() => const DataReadFailure(
+  kind: DataReadFailureKind.unauthorized,
+  code: 'message_viewer_mismatch',
+  diagnosticMessage: 'message_viewer_mismatch',
+);
+
 DataReadFailure<T, C> _messageReadCancelled<T, C>() => const DataReadFailure(
   kind: DataReadFailureKind.cancelled,
   code: 'request_cancelled',

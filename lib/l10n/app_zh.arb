@@ -43,6 +43,10 @@
       }
     }
   },
+  "messageAttentionAvailable": "有新消息或提醒",
+  "@messageAttentionAvailable": {
+    "description": "消息提示红点的无障碍说明，表示新到达提示而不是全部内容未读"
+  },
   "messageNew": "发私信",
   "messageSend": "发送",
   "messageSending": "正在发送…",

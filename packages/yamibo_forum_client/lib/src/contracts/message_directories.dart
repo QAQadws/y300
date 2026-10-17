@@ -8,13 +8,20 @@ import '../network/forum_request.dart';
 /// Query parameters for forum notification.
 final class ForumNotificationQuery {
   /// Creates a [ForumNotificationQuery].
-  const ForumNotificationQuery({this.page = 1, this.cancellation});
+  const ForumNotificationQuery({
+    this.page = 1,
+    this.cancellation,
+    this.expectedUserId,
+  });
 
   /// One-based page; reading can mark notifications as read on the server.
   final int page;
 
   /// Cancels an obsolete page or account read.
   final ForumRequestCancellation? cancellation;
+
+  /// Optional verified viewer required before this consuming read can succeed.
+  final String? expectedUserId;
 }
 
 /// Source-neutral forum notification item.
@@ -151,8 +158,11 @@ abstract interface class ForumNotificationRepository {
 /// Query parameters for forum private message.
 final class ForumPrivateMessageQuery {
   /// Reads the conversation directory in most-recent-first order.
-  const ForumPrivateMessageQuery({this.page = 1, this.cancellation})
-    : target = null;
+  const ForumPrivateMessageQuery({
+    this.page = 1,
+    this.cancellation,
+    this.expectedUserId,
+  }) : target = null;
 
   /// Reads messages in chronological order within a conversation page.
   ///
@@ -161,6 +171,7 @@ final class ForumPrivateMessageQuery {
     required ForumConversationTarget this.target,
     this.page = 0,
     this.cancellation,
+    this.expectedUserId,
   });
 
   /// Null for the directory, otherwise the conversation to read.
@@ -171,6 +182,9 @@ final class ForumPrivateMessageQuery {
 
   /// Cancels an obsolete page or account read.
   final ForumRequestCancellation? cancellation;
+
+  /// Optional verified viewer required before this consuming read can succeed.
+  final String? expectedUserId;
 }
 
 /// A direct recipient and a group conversation use different server identities.

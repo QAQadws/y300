@@ -1,16 +1,75 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_refresh_bus.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
+import 'package:y300/features/messages/presentation/message_feed_controller.dart';
+import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../support/message_test_repository.dart';
 
 void main() {
+  testWidgets('background completion cannot prove an active message read', (
+    tester,
+  ) async {
+    final reads = <Completer<DataReadResult<int, Object?>>>[];
+    final completed = <int>[];
+    final controller = MessageFeedController<int>(
+      initialPage: 1,
+      load: (_, _) {
+        final result = Completer<DataReadResult<int, Object?>>();
+        reads.add(result);
+        return result.future;
+      },
+      nextPage: (_) => null,
+      mergeMore: (_, next) => next,
+      captureActiveRead: () => completed.add,
+    );
+    addTearDown(controller.dispose);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: MessageFeedView<int>(
+          controller: controller,
+          builder: (_, state) => Text('${state.data}'),
+        ),
+      ),
+    );
+    final initial = controller.refresh();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    reads.last.complete(
+      const DataReadSuccess(
+        data: 1,
+        capabilities: null,
+        metadata: DataReadMetadata.network(),
+      ),
+    );
+    await initial;
+    await tester.pump();
+    expect(completed, isEmpty);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    final visible = controller.refresh();
+    reads.last.complete(
+      const DataReadSuccess(
+        data: 2,
+        capabilities: null,
+        metadata: DataReadMetadata.network(),
+      ),
+    );
+    await visible;
+    expect(completed, [2]);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final initialTab in MessageCenterTab.values) {
     testWidgets(
       'hiding the shell during a ${initialTab.name} tab animation defers invalidation',
@@ -18,6 +77,7 @@ void main() {
         final repository = MessageTestRepository();
         final container = ProviderContainer.test(
           overrides: [
+            messageAttentionOwnerProvider.overrideWithValue(null),
             messageAccountIdProvider.overrideWithValue('10'),
             messageRepositoryProvider.overrideWithValue(repository),
           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
@@ -10,6 +11,8 @@ import 'package:y300/features/composer_shared/presentation/widgets/composer_unus
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
+import 'package:y300/features/messages/presentation/widgets/message_attention_icon.dart';
 import 'package:y300/features/more/presentation/about_page.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/data_storage_sheet.dart';
@@ -72,6 +75,15 @@ class _MorePageState extends ConsumerState<MorePage> {
         .watch(mainNavigationSettingsControllerProvider)
         .value;
     final l10n = AppLocalizations.of(context);
+    final messagesVisible =
+        (navigationState?.settings ?? MainNavigationSettings.defaults())
+            .isVisible(MainShellDestination.messages);
+    final hasMessageAttention = ref.watch(
+      messageAttentionStateProvider.select(
+        (state) =>
+            state.project(messagesVisible: messagesVisible).myMessagesDot,
+      ),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -111,7 +123,10 @@ class _MorePageState extends ConsumerState<MorePage> {
             ),
             ListTile(
               key: const Key('more-my-messages-entry'),
-              leading: const Icon(Icons.mail_outline),
+              leading: MessageAttentionIcon(
+                icon: Icons.mail_outline,
+                showAttention: hasMessageAttention,
+              ),
               title: Text(l10n.moreMyMessages),
               onTap: canOpenMyContent
                   ? () =>

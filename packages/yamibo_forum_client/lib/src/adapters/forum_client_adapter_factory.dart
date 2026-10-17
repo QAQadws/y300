@@ -3,6 +3,7 @@ import '../contracts/favorite_directories.dart';
 import '../contracts/favorite_commands.dart';
 import '../contracts/forum_authentication.dart';
 import '../contracts/forum_image_attachments.dart';
+import '../contracts/forum_message_attention.dart';
 import '../contracts/comic_contracts.dart';
 import '../contracts/forum_directory.dart';
 import '../contracts/forum_daily_sign_in.dart';
@@ -39,6 +40,7 @@ import '../contracts/thread_poll_vote_command.dart';
 import '../contracts/thread_post_edit.dart';
 import '../contracts/thread_supplemental_reads.dart';
 import '../network/forum_network.dart';
+import '../network/forum_message_attention_network.dart';
 import '../network/forum_multipart.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
@@ -50,6 +52,7 @@ import '../session/forum_cookie_store.dart';
 import 'discuz_authentication_adapter.dart';
 import 'discuz_image_attachment_adapters.dart';
 import 'discuz_api_client.dart';
+import 'discuz_message_attention_repository.dart';
 import 'discuz_comic_read_adapters.dart';
 import 'discuz_directory_adapters.dart';
 import 'discuz_daily_sign_in_adapter.dart';
@@ -83,7 +86,30 @@ import '../session/forum_formhash_provider.dart';
 /// Discuz implementation class.
 final class ForumClientAdapterFactory {
   /// Creates an adapter factory around Host transport and persistence ports.
-  ForumClientAdapterFactory({
+  factory ForumClientAdapterFactory({
+    required ForumClientConfig config,
+    required ForumClientNetwork network,
+    ForumRequestProfileResolver? requestProfiles,
+    ForumSessionStore? sessionStore,
+    ForumCookieStore? cookieStore,
+    ForumDocumentStore? documentStore,
+    ForumSnapshotStore? snapshotStore,
+    ForumMessageAttentionObserver? messageAttentionObserver,
+  }) => ForumClientAdapterFactory._(
+    config: config,
+    network: createForumMessageAttentionNetwork(
+      network: network,
+      siteOrigin: config.siteOrigin,
+      observer: messageAttentionObserver,
+    ),
+    requestProfiles: requestProfiles,
+    sessionStore: sessionStore,
+    cookieStore: cookieStore,
+    documentStore: documentStore,
+    snapshotStore: snapshotStore,
+  );
+
+  ForumClientAdapterFactory._({
     required this.config,
     required this.network,
     ForumRequestProfileResolver? requestProfiles,
@@ -165,6 +191,14 @@ final class ForumClientAdapterFactory {
   /// Creates the Discuz private-message directory source.
   ForumPrivateMessageRepository createPrivateMessages() =>
       DiscuzForumPrivateMessageRepository(_api);
+
+  /// Creates the uncached, non-consuming arrival-hint probe source.
+  ForumMessageAttentionRepository createMessageAttention() =>
+      DiscuzMessageAttentionRepository(
+        config: config,
+        network: network,
+        requestProfiles: requestProfiles,
+      );
 
   /// Creates the private-message command on the shared formhash boundary.
   ForumPrivateMessageCommand createPrivateMessageCommand(
@@ -568,7 +602,15 @@ final class ForumClientAdapterFactory {
     String module, {
     ForumRequestCancellation? cancellation,
   }) async {
-    final result = await _api.get(module: module, cancellation: cancellation);
+    final result = await _api.get(
+      module: module,
+      cancellation: cancellation,
+      requestContext: ForumRequestContext(
+        operation: 'formhash.load',
+        module: module,
+        pageKind: 'formhash',
+      ),
+    );
     return switch (result) {
       ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(:final failure) =>
         ForumFormhashError(failure),

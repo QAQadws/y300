@@ -23,6 +23,7 @@ import '../contracts/user_blog_media.dart';
 import '../contracts/user_blog_favorites.dart';
 import '../contracts/user_blog_navigation.dart';
 import '../contracts/message_directories.dart';
+import '../contracts/forum_message_attention.dart';
 import '../contracts/private_message_command.dart';
 import '../contracts/private_message_batch_command.dart';
 import '../contracts/friend_directory.dart';
@@ -356,6 +357,10 @@ final class YamiboForumClient {
   ForumPrivateMessageRepository? get privateMessages =>
       sourcePlan.privateMessages;
 
+  /// Configured non-consuming arrival-hint source, if installed.
+  ForumMessageAttentionRepository? get messageAttention =>
+      sourcePlan.messageAttention;
+
   /// Configured friend selector source, if installed.
   ForumFriendDirectoryRepository? get friendDirectory =>
       sourcePlan.friendDirectory;
@@ -518,6 +523,20 @@ final class YamiboForumClient {
       unsupported<
         ForumPrivateMessagePage,
         ForumPrivateMessageReadCapabilities
+      >();
+
+  /// Reads fresh arrival hints without opening or consuming a message list.
+  Future<
+    DataReadResult<
+      ForumMessageAttentionObservation,
+      ForumMessageAttentionReadCapabilities
+    >
+  >
+  loadMessageAttention(ForumMessageAttentionQuery query) =>
+      sourcePlan.messageAttention?.load(query) ??
+      unsupported<
+        ForumMessageAttentionObservation,
+        ForumMessageAttentionReadCapabilities
       >();
 
   /// Loads the current account's friends, optionally by username prefix.

@@ -8,6 +8,19 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
+- Explicit message-attention query, repository, facade, and source-plan port.
+  Standard assembly uses uncached `forumindex version=1&checknotice=1` with
+  cancellation and verified endpoint/query, version, and viewer identity; partial
+  evidence stays unknown and explicit probes bypass passive publication.
+- Optional expected-viewer checks on private-message and notification queries,
+  validating the final response before session merging or successful delivery.
+  Existing versions and callers without the new field retain their behavior.
+- Passive message-attention observations, request contexts, and an optional
+  Host observer on Builder/Factory assembly. Pure mobile/desktop HTML and API
+  extractors retain unknown evidence and distinguish arrival hints from unread
+  conversations. Existing eligible GETs publish only after successful final
+  responses; authentication/formhash preflights, consuming reads, caches,
+  resources, and writes are excluded without changing transport capabilities.
 - `ForumResourceMetadataPolicy`, a supported pure helper shared by package and
   Host image transports for MIME, signature, extension, and cache-lifetime
   decisions. Resource streaming, Cookie isolation, and WAF ownership are unchanged.

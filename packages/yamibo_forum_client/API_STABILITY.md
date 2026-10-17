@@ -14,7 +14,9 @@ The following APIs are covered by the compatibility policy in
   authentication/session, favorite-command, post-rating, post-comment,
   thread-creation, thread-reply, thread-poll-vote, thread-post-edit, and image-attachment
   preparation/command contracts, cache policy, cancellation, resource
-  contracts, and reference/image helpers;
+  contracts, message-attention observations/request contexts/observer ports,
+  explicit message-attention queries/repositories/read capabilities,
+  and reference/image helpers;
 - `yamibo_forum_client.dart`: `YamiboForumClient`,
   `YamiboForumClientBuilder`, `ForumClientConfig`, verified browser identities,
   the standard and ephemeral Dio runtimes,
@@ -26,6 +28,26 @@ The following APIs are covered by the compatibility policy in
   `YamiboForumClientBuilder.ephemeralDio` as supported third-party composition
   paths, with the ephemeral path explicitly excluded from persistence
   guarantees.
+
+`messageAttentionObserver` is an optional builder composition port. Hosts own
+verified viewer/session/source tokens, send-time request sequences, evidence
+merging, and consumption-success barriers. Standard assembly samples only fresh
+eligible network responses; it neither observes cached data nor adds requests.
+Observer errors cannot change read results, and resource/multipart capabilities
+remain intact. Concrete Discuz eligibility and extraction stay experimental.
+
+`YamiboForumClient.loadMessageAttention` consumes an optional source contract;
+standard assembly installs a fresh, uncached Discuz `checknotice` read. Missing
+sources return `unsupported`. The query requires an expected viewer and accepts
+cancellation. Partial evidence remains unknown and capabilities describe only
+verified fields. Explicit probes do not also publish through the passive
+observer. Hosts own sequence assignment, accepted-result publication, scheduling,
+and bounded retry policy; the package does not poll.
+
+Optional `expectedUserId` on private-message and notification queries enables
+strict final endpoint/query, version, and viewer checks before session merging.
+Omitting the field preserves existing behavior and API versions. These checks
+establish request ownership, not that every conversation has become read.
 
 `ForumResourceMetadataPolicy.cacheLifetime` preserves the existing transports'
 response-order handling of the first `Cache-Control` value. For example,
@@ -54,6 +76,7 @@ experimental:
 - `ForumClientSourcePlan` and direct construction of concrete source plans;
 - `ForumClientAdapterFactory`, `ThreadDetailHtmlParser`,
   `ThreadDetailApiMapper`, and `DataParseException`;
+- `DiscuzMessageAttentionHtmlParser` and `DiscuzMessageAttentionApiParser`;
 - concrete Discuz/HTML parsers, mappers, repositories, and snapshot codecs
   used internally by the factory;
 - direct multipart runtime composition through `ForumMultipartClient`;

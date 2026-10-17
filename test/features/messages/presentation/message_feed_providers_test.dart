@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/features/messages/application/message_attention_controller.dart';
+import 'package:y300/features/messages/application/message_attention_consumption_lifecycle.dart';
+import 'package:y300/features/messages/application/message_attention_consumption_lifecycle_provider.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_refresh_bus.dart';
 import 'package:y300/features/messages/domain/message_repository.dart';
@@ -16,6 +20,7 @@ void main() {
     container = ProviderContainer.test(
       overrides: [
         messageRepositoryProvider.overrideWithValue(repository),
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue('10'),
       ],
     );
@@ -176,6 +181,7 @@ void main() {
       final old = repository.messageReads.last;
       container.updateOverrides([
         messageRepositoryProvider.overrideWithValue(repository),
+        messageAttentionOwnerProvider.overrideWithValue(null),
         messageAccountIdProvider.overrideWithValue('11'),
       ]);
       final current = subscription.read();
@@ -327,6 +333,7 @@ void main() {
   test('signed-out feeds do not access private endpoints', () async {
     container.updateOverrides([
       messageRepositoryProvider.overrideWithValue(repository),
+      messageAttentionOwnerProvider.overrideWithValue(null),
       messageAccountIdProvider.overrideWithValue(null),
     ]);
     final controller = container
@@ -336,7 +343,307 @@ void main() {
     expect(controller.value.failure?.kind, DataReadFailureKind.unauthorized);
     expect(repository.messageReads, isEmpty);
   });
+
+  test('same-UID revision changes retire both old mailbox reads', () async {
+    const firstOwner = (
+      sessionOwner: (uid: '10', revision: 1),
+      sourceGeneration: 1,
+    );
+    const nextOwner = (
+      sessionOwner: (uid: '10', revision: 2),
+      sourceGeneration: 1,
+    );
+    container.updateOverrides([
+      messageRepositoryProvider.overrideWithValue(repository),
+      messageAttentionOwnerProvider.overrideWithValue(firstOwner),
+      messageAccountIdProvider.overrideWithValue('10'),
+    ]);
+    final pmSubscription = container.listen(
+      privateMessageFeedProvider(null),
+      (_, _) {},
+    );
+    final notificationSubscription = container.listen(
+      notificationFeedProvider,
+      (_, _) {},
+    );
+    final previousPm = pmSubscription.read();
+    final previousNotifications = notificationSubscription.read();
+    final oldPmFuture = previousPm.refresh();
+    final oldNotificationFuture = previousNotifications.refresh();
+    final oldPm = repository.messageReads.single;
+    final oldNotification = repository.notificationReads.single;
+    container.updateOverrides([
+      messageRepositoryProvider.overrideWithValue(repository),
+      messageAttentionOwnerProvider.overrideWithValue(nextOwner),
+      messageAccountIdProvider.overrideWithValue('10'),
+    ]);
+    expect(pmSubscription.read(), isNot(same(previousPm)));
+    expect(notificationSubscription.read(), isNot(same(previousNotifications)));
+    expect(oldPm.query.cancellation!.isCancelled, isTrue);
+    expect(
+      repository.notificationQueries.single.cancellation!.isCancelled,
+      isTrue,
+    );
+    oldPm.result.complete(_messages(['old']));
+    oldNotification.complete(_notices());
+    await Future.wait([oldPmFuture, oldNotificationFuture]);
+    expect(pmSubscription.read().value.data, isNull);
+    expect(notificationSubscription.read().value.data, isNull);
+  });
+
+  test(
+    'source lifetime changes discard a retained same-account feed',
+    () async {
+      const firstOwner = (
+        sessionOwner: (uid: '10', revision: 1),
+        sourceGeneration: 1,
+      );
+      const nextOwner = (
+        sessionOwner: (uid: '10', revision: 1),
+        sourceGeneration: 2,
+      );
+      container.updateOverrides([
+        messageRepositoryProvider.overrideWithValue(repository),
+        messageAttentionOwnerProvider.overrideWithValue(firstOwner),
+        messageAccountIdProvider.overrideWithValue('10'),
+      ]);
+      final subscription = container.listen(
+        privateMessageFeedProvider(null),
+        (_, _) {},
+      );
+      final previous = subscription.read();
+      final first = previous.refresh();
+      repository.messageReads.single.result.complete(_messages(['1']));
+      await first;
+      container.updateOverrides([
+        messageRepositoryProvider.overrideWithValue(repository),
+        messageAttentionOwnerProvider.overrideWithValue(nextOwner),
+        messageAccountIdProvider.overrideWithValue('10'),
+      ]);
+      expect(subscription.read(), isNot(same(previous)));
+      expect(subscription.read().value.data, isNull);
+    },
+  );
+
+  test('private and notification queries carry the expected viewer', () async {
+    final messages = container
+        .listen(privateMessageFeedProvider(null), (_, _) {})
+        .read();
+    final directory = messages.refresh();
+    expect(repository.messageReads.last.query.expectedUserId, '10');
+    repository.messageReads.last.result.complete(_messages([]));
+    await directory;
+    final conversation = container
+        .listen(
+          privateMessageFeedProvider(
+            const ForumConversationTarget.direct('20'),
+          ),
+          (_, _) {},
+        )
+        .read();
+    final read = conversation.refresh();
+    expect(repository.messageReads.last.query.expectedUserId, '10');
+    repository.messageReads.last.result.complete(_messages([]));
+    await read;
+    final notifications = container
+        .listen(notificationFeedProvider, (_, _) {})
+        .read();
+    final notice = notifications.refresh();
+    expect(repository.notificationQueries.last.expectedUserId, '10');
+    repository.notificationReads.last.complete(_notices());
+    await notice;
+  });
+
+  test(
+    'only a first accepted active conversation invalidates its directory',
+    () async {
+      final events = <MessageRefreshEvent>[];
+      final subscription = container
+          .read(messageRefreshBusProvider)
+          .events
+          .listen(events.add);
+      addTearDown(subscription.cancel);
+      final controller = container
+          .listen(
+            privateMessageFeedProvider(
+              const ForumConversationTarget.direct('20'),
+            ),
+            (_, _) {},
+          )
+          .read();
+      controller.setActive(true);
+      final first = controller.refresh();
+      controller.setActive(false);
+      repository.messageReads.last.result.complete(_messages(['1']));
+      await first;
+      expect(events, isEmpty);
+      controller.setActive(true);
+      final visible = controller.refresh();
+      repository.messageReads.last.result.complete(_messages(['2']));
+      await visible;
+      expect(events, hasLength(1));
+      expect(events.single.directoryOnly, isTrue);
+      expect(events.single.kind, MessageRefreshKind.messages);
+      final again = controller.refresh();
+      repository.messageReads.last.result.complete(_messages(['3']));
+      await again;
+      expect(events, hasLength(1));
+      expect(repository.messageReads, hasLength(3));
+    },
+  );
+
+  group('accepted-read attention lifecycle', () {
+    const owner = (sessionOwner: (uid: '10', revision: 7), sourceGeneration: 4);
+    late MessageAttentionController attention;
+    late List<int> calibrations;
+
+    setUp(() {
+      attention = MessageAttentionController()..setOwner(owner);
+      addTearDown(attention.dispose);
+      calibrations = [];
+      final lifecycle = MessageAttentionConsumptionLifecycle(
+        controller: attention,
+        readOwner: () => owner,
+        requestCalibration: (_, sequence) => calibrations.add(sequence),
+      );
+      container = ProviderContainer.test(
+        overrides: [
+          messageRepositoryProvider.overrideWithValue(repository),
+          messageAttentionOwnerProvider.overrideWithValue(owner),
+          messageAccountIdProvider.overrideWithValue('10'),
+          messageAttentionConsumptionLifecycleProvider.overrideWithValue(
+            lifecycle,
+          ),
+        ],
+      );
+      attention.accept(
+        _attention(privateMessages: true, notifications: true),
+        owner: owner,
+        sequence: attention.nextRequestSequence(),
+      );
+    });
+
+    test(
+      'private directory success requests calibration without synthetic zero',
+      () async {
+        final controller = container
+            .listen(privateMessageFeedProvider(null), (_, _) {})
+            .read();
+        controller.setActive(true);
+        final pending = controller.refresh();
+        final duringRead = attention.nextRequestSequence();
+        repository.messageReads.last.result.complete(_messages(['1']));
+        await pending;
+        expect(calibrations, [duringRead]);
+        expect(
+          attention.value.privateMessages,
+          ForumMessageAttentionState.present,
+        );
+        expect(
+          attention.value.notifications,
+          ForumMessageAttentionState.present,
+        );
+        attention.accept(
+          _attention(privateMessages: false),
+          owner: owner,
+          sequence: duringRead,
+        );
+        expect(
+          attention.value.privateMessages,
+          ForumMessageAttentionState.present,
+        );
+        attention.accept(
+          _attention(privateMessages: false, notifications: false),
+          owner: owner,
+          sequence: attention.nextRequestSequence(),
+        );
+        expect(attention.value.hasAttention, isFalse);
+      },
+    );
+
+    test(
+      'notification success blocks only stale notification coverage',
+      () async {
+        final controller = container
+            .listen(notificationFeedProvider, (_, _) {})
+            .read();
+        controller.setActive(true);
+        final pending = controller.refresh();
+        final duringRead = attention.nextRequestSequence();
+        repository.notificationReads.last.complete(_notices());
+        await pending;
+        expect(calibrations, [duringRead]);
+        attention.accept(
+          _attention(privateMessages: false, notifications: false),
+          owner: owner,
+          sequence: duringRead,
+        );
+        expect(
+          attention.value.privateMessages,
+          ForumMessageAttentionState.absent,
+        );
+        expect(
+          attention.value.notifications,
+          ForumMessageAttentionState.present,
+        );
+      },
+    );
+
+    test(
+      'hidden and failed mailbox reads do not request calibration',
+      () async {
+        final controller = container
+            .listen(privateMessageFeedProvider(null), (_, _) {})
+            .read();
+        final hidden = controller.refresh();
+        repository.messageReads.last.result.complete(_messages(['1']));
+        await hidden;
+        controller.setActive(true);
+        final failure = controller.refresh();
+        repository.messageReads.last.result.complete(
+          const DataReadFailure(
+            kind: DataReadFailureKind.parse,
+            diagnosticMessage: 'fixture',
+          ),
+        );
+        await failure;
+        expect(calibrations, isEmpty);
+      },
+    );
+
+    test('a wrong-viewer business response cannot prove consumption', () async {
+      final controller = container
+          .listen(privateMessageFeedProvider(null), (_, _) {})
+          .read();
+      controller.setActive(true);
+      final pending = controller.refresh();
+      repository.messageReads.last.result.complete(
+        _messages(['1'], owner: '11'),
+      );
+      await pending;
+      expect(controller.value.failure?.kind, DataReadFailureKind.unauthorized);
+      expect(calibrations, isEmpty);
+    });
+  });
 }
+
+ForumMessageAttentionObservation _attention({
+  bool? privateMessages,
+  bool? notifications,
+}) => ForumMessageAttentionObservation(
+  viewerUserId: '10',
+  source: ForumMessageAttentionSource.api,
+  privateMessages: privateMessages == null
+      ? ForumMessageAttentionState.unknown
+      : privateMessages
+      ? ForumMessageAttentionState.present
+      : ForumMessageAttentionState.absent,
+  notifications: notifications == null
+      ? ForumMessageAttentionState.unknown
+      : notifications
+      ? ForumMessageAttentionState.present
+      : ForumMessageAttentionState.absent,
+);
 
 PrivateMessageRead _messages(
   List<String> ids, {
@@ -390,6 +697,7 @@ final class _MessageRead {
 final class _Repository implements MessageRepository {
   final messageReads = <_MessageRead>[];
   final notificationReads = <Completer<NotificationRead>>[];
+  final notificationQueries = <ForumNotificationQuery>[];
   @override
   Future<PrivateMessageRead> loadMessages(ForumPrivateMessageQuery query) {
     final read = _MessageRead(query);
@@ -399,6 +707,7 @@ final class _Repository implements MessageRepository {
 
   @override
   Future<NotificationRead> loadNotifications(ForumNotificationQuery query) {
+    notificationQueries.add(query);
     final read = Completer<NotificationRead>();
     notificationReads.add(read);
     return read.future;

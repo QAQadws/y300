@@ -8,6 +8,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_message_attention_identity.dart';
 import '../session/forum_session_store.dart';
 
 final class DiscuzApiEnvelope {
@@ -42,6 +43,8 @@ final class DiscuzApiClient {
     Map<String, Object?> queryParameters = const {},
     bool treatMessageAsBusinessError = true,
     ForumRequestCancellation? cancellation,
+    ForumRequestContext? requestContext,
+    String? expectedUserId,
   }) async {
     final apiOrigin = config.apiOrigin;
     if (apiOrigin == null) {
@@ -66,7 +69,9 @@ final class DiscuzApiClient {
       ForumRequest(
         method: ForumRequestMethod.get,
         uri: uri,
-        context: ForumRequestContext(operation: module, module: module),
+        context:
+            requestContext ??
+            ForumRequestContext(operation: module, module: module),
         headers: requestProfiles
             .resolve(ForumRequestProfileKind.discuzApi)
             .headers,
@@ -82,11 +87,33 @@ final class DiscuzApiClient {
             _decode(
               response,
               treatMessageAsBusinessError: treatMessageAsBusinessError,
+              expectedSource: expectedUserId == null ? null : uri,
             ),
         };
     if (decoded case ForumTransportSuccess<ForumResponse<DiscuzApiEnvelope>>(
       :final response,
     )) {
+      if (expectedUserId != null && (cancellation?.isCancelled ?? false)) {
+        return const ForumTransportError(
+          ForumTransportFailure(
+            kind: ForumTransportFailureKind.cancelled,
+            code: 'request_cancelled',
+          ),
+        );
+      }
+      if (expectedUserId != null &&
+          discuzMessageAttentionIdentity(
+                response.body.variables['member_uid'],
+              ) !=
+              expectedUserId) {
+        return ForumTransportError(
+          ForumTransportFailure(
+            kind: ForumTransportFailureKind.unauthorized,
+            code: 'message_viewer_mismatch',
+            statusCode: response.statusCode,
+          ),
+        );
+      }
       await _mergeSession(response.body.variables, source: 'api:$module');
     }
     return decoded;
@@ -277,9 +304,29 @@ final class DiscuzApiClient {
   ForumTransportResult<ForumResponse<DiscuzApiEnvelope>> _decode(
     ForumResponse<Object?> response, {
     required bool treatMessageAsBusinessError,
+    Uri? expectedSource,
   }) {
     try {
       final root = _jsonMap(response.body);
+      // Opt-in message reads must prove the actual consuming response before
+      // merging any session values. Other API compatibility paths stay intact.
+      if (expectedSource != null &&
+          (!_matchesExpectedReadSource(response, expectedSource) ||
+              switch (root['Version']) {
+                String value =>
+                  value != expectedSource.queryParameters['version'],
+                int value =>
+                  value.toString() != expectedSource.queryParameters['version'],
+                _ => true,
+              })) {
+        return ForumTransportError(
+          ForumTransportFailure(
+            kind: ForumTransportFailureKind.parse,
+            code: 'message_response_unverified',
+            statusCode: response.statusCode,
+          ),
+        );
+      }
       final variables = _map(root['Variables']);
       final message = root['Message'] == null ? null : _map(root['Message']);
       if (treatMessageAsBusinessError &&
@@ -340,4 +387,41 @@ final class DiscuzApiClient {
   }
 
   String _text(Object? value) => value?.toString().trim() ?? '';
+
+  bool _matchesExpectedReadSource(
+    ForumResponse<Object?> response,
+    Uri expected,
+  ) {
+    final status = response.statusCode;
+    final uri = response.uri;
+    final origin = config.siteOrigin;
+    if (status == null ||
+        status < 200 ||
+        status >= 300 ||
+        !const {'http', 'https'}.contains(origin.scheme) ||
+        origin.host.isEmpty ||
+        origin.userInfo.isNotEmpty ||
+        uri.scheme != origin.scheme ||
+        uri.host.toLowerCase() != origin.host.toLowerCase() ||
+        uri.port != origin.port ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment ||
+        uri.path != '/api/mobile/index.php') {
+      return false;
+    }
+    try {
+      final actual = uri.queryParametersAll;
+      final wanted = expected.queryParametersAll;
+      return actual.length == wanted.length &&
+          wanted.entries.every((entry) {
+            final values = actual[entry.key];
+            return values != null &&
+                values.length == 1 &&
+                entry.value.length == 1 &&
+                values.single == entry.value.single;
+          });
+    } on FormatException {
+      return false;
+    }
+  }
 }

@@ -25,6 +25,7 @@ import 'package:y300/features/forum/presentation/webview/forum_webview_route_fac
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
+import 'package:y300/features/messages/presentation/widgets/message_attention_icon.dart';
 import 'package:y300/features/more/presentation/appearance_settings_sheet.dart';
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/profile/data/providers/daily_sign_in_providers.dart';
@@ -1433,7 +1434,9 @@ void _expectMyContentEntryOrderAndLabels(
     expect((tile.title! as Text).data, label);
     expect(tile.onTap, isNotNull);
     if (name == 'messages') {
-      expect((tile.leading! as Icon).icon, Icons.mail_outline);
+      final icon = tile.leading! as MessageAttentionIcon;
+      expect(icon.icon, Icons.mail_outline);
+      expect(icon.showAttention, isFalse);
     }
   }
 }

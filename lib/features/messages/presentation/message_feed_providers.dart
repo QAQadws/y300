@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
+import 'package:y300/features/messages/application/message_attention_consumption_lifecycle.dart';
+import 'package:y300/features/messages/application/message_attention_consumption_lifecycle_provider.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/domain/message_refresh_bus.dart';
 import 'package:y300/features/messages/domain/message_repository.dart';
@@ -28,7 +31,13 @@ final privateMessageFeedProvider = Provider.autoDispose
       ForumConversationTarget?
     >((ref, target) {
       final account = ref.watch(messageAccountIdProvider);
+      // UID alone cannot retire reads after same-account re-login or a source
+      // replacement. Rebuild the feed for the complete verified lifetime.
+      ref.watch(messageAttentionOwnerProvider);
       final repository = ref.watch(messageRepositoryProvider);
+      final consumption = ref.watch(
+        messageAttentionConsumptionLifecycleProvider,
+      );
       final conversation = target != null;
       var visited = false;
       final bus = ref.watch(messageRefreshBusProvider);
@@ -49,6 +58,7 @@ final privateMessageFeedProvider = Provider.autoDispose
             page,
             cancellation,
             controller.value.data,
+            account,
           );
           final owner = result.dataOrNull?.currentUserId;
           if (owner != null && owner.isNotEmpty && owner != account) {
@@ -58,20 +68,30 @@ final privateMessageFeedProvider = Provider.autoDispose
               diagnosticMessage: 'message_account_changed',
             );
           }
-          if (conversation &&
-              !visited &&
-              !cancellation.isCancelled &&
-              result.dataOrNull != null) {
-            visited = true;
-            bus.publish(
-              MessageRefreshEvent(
-                accountId: account,
-                kind: MessageRefreshKind.messages,
-                directoryOnly: true,
-              ),
-            );
-          }
           return result;
+        },
+        captureActiveRead: () {
+          final readOwner = consumption.captureOwner();
+          return (data) {
+            if (readOwner != null &&
+                readOwner.sessionOwner.uid == account &&
+                data.currentUserId == account) {
+              consumption.onReadSucceeded(
+                owner: readOwner,
+                kind: MessageAttentionConsumptionKind.privateMessages,
+              );
+            }
+            if (conversation && !visited && account != null) {
+              visited = true;
+              bus.publish(
+                MessageRefreshEvent(
+                  accountId: account,
+                  kind: MessageRefreshKind.messages,
+                  directoryOnly: true,
+                ),
+              );
+            }
+          };
         },
         nextPage: (data) => conversation
             ? (data.hasPrevious ? data.page - 1 : null)
@@ -102,7 +122,11 @@ final privateMessageFeedProvider = Provider.autoDispose
 final notificationFeedProvider =
     Provider.autoDispose<MessageFeedController<ForumNotificationPage>>((ref) {
       final account = ref.watch(messageAccountIdProvider);
+      ref.watch(messageAttentionOwnerProvider);
       final repository = ref.watch(messageRepositoryProvider);
+      final consumption = ref.watch(
+        messageAttentionConsumptionLifecycleProvider,
+      );
       final controller = MessageFeedController<ForumNotificationPage>(
         initialPage: 1,
         load: (page, cancellation) => account == null
@@ -114,8 +138,23 @@ final notificationFeedProvider =
                 ),
               )
             : repository.loadNotifications(
-                ForumNotificationQuery(page: page, cancellation: cancellation),
+                ForumNotificationQuery(
+                  page: page,
+                  expectedUserId: account,
+                  cancellation: cancellation,
+                ),
               ),
+        captureActiveRead: () {
+          final readOwner = consumption.captureOwner();
+          return (_) {
+            if (readOwner != null && readOwner.sessionOwner.uid == account) {
+              consumption.onReadSucceeded(
+                owner: readOwner,
+                kind: MessageAttentionConsumptionKind.notifications,
+              );
+            }
+          };
+        },
         nextPage: (data) =>
             data.perPage > 0 && data.page * data.perPage < data.count
             ? data.page + 1
@@ -206,6 +245,7 @@ Future<PrivateMessageRead> _loadMessages(
   int page,
   ForumRequestCancellation cancellation,
   ForumPrivateMessagePage? previous,
+  String expectedUserId,
 ) async {
   var requestedPage = page;
   // A new message can move the page boundary while an older-page read is in
@@ -223,11 +263,13 @@ Future<PrivateMessageRead> _loadMessages(
       target == null
           ? ForumPrivateMessageQuery(
               page: requestedPage,
+              expectedUserId: expectedUserId,
               cancellation: cancellation,
             )
           : ForumPrivateMessageQuery.conversation(
               target: target,
               page: requestedPage,
+              expectedUserId: expectedUserId,
               cancellation: cancellation,
             ),
     );

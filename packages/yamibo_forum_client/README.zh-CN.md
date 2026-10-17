@@ -142,3 +142,23 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 - `yamibo_forum_client_adapters.dart`：实验性的 adapter factory 及少量公开 parser/mapper。
 
 第三方代码不得导入 `package:yamibo_forum_client/src/...`。贡献和发布检查见 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [RELEASING.md](RELEASING.md)。
+
+## 被动消息提示的纯提取
+
+`ForumMessageAttentionObservation` 使用 `unknown`、`absent`、`present` 表达已核对 viewer 的到达提示证据。消息中心提示可能包含 Discuz 公告位，不等于会话未读标志。移动端合并点不会伪造私信／提醒分项；缺字段、受限显示或未知结构不补零。`notificationCount` 仅表示完整可核对的提醒数量，不表示私信条数。
+
+实验性 adapters 入口公开 `DiscuzMessageAttentionHtmlParser` 和 `DiscuzMessageAttentionApiParser`，构造时传 `siteOrigin`，解析时传最终响应 `sourceUri` 和预期 `expectedUserId`。不可信或不支持的响应返回 `null`，局部缺失保留分项未知。HTML 要求完整文档、唯一 head `discuz_uid` 以及受支持的移动／桌面公共导航结构；API 接受已解码的 envelope，以 `Variables.member_uid` 核对身份。原始 JSON 解码及重复键检测属于 decoder 边界，`space.uid` 不能充当 viewer。
+
+首版保守接纳普通 index／forum／公共 space HTML，以及 API 的 `forumindex`、`forumdisplay`、`viewthread`、`profile`、`myfavforum`、`myfavthread`、`smiley`（版本 1–4）。消息／提醒消费页面、认证、调度覆盖、未知路由与业务错误响应均排除。包内测试使用自包含脱敏 fixture，不依赖外部论坛目录或 App 测试数据。
+
+纯提取器仍不发请求或发布观察。Builder／adapter factory 可选传入 `messageAttentionObserver`，通过 contracts 入口的 `ForumMessageAttentionObserver` 观察已有网络读取。同步 `captureRequest()` 可返回 `null` 跳过请求，否则绑定已验证 viewer、正数发起序号和不可变 opaque owner token；`onObservation()` 收到同一上下文。Host 必须在接收时再次核对当前账号／session／source 归属，按序号和覆盖范围合并证据。观察异常不影响原业务响应。
+
+包内 decorator 只包装一次共享传输，仅发布未取消、最终 2xx、发起与最终 URI 均受支持的同站 GET。认证和 formhash 预检、消息／提醒消费读取、写请求、字节资源及缓存回放不发布；WAF 单次重放仍归原传输，resource stream／multipart 能力原样保留。不提供 observer 时保持原 network 对象。自定义 source override 应经携带同一 observer 的 factory 装配，直接使用原始 network 的自定义读取不在观察范围。
+
+显式校准通过 `loadMessageAttention(ForumMessageAttentionQuery(...))` 和可选 `messageAttention` source 契约读取。标准装配使用同一传输发起不缓存的 `forumindex version=1&checknotice=1`，要求 `expectedUserId`，支持取消，并核对最终状态码、同站精确端点／查询、API 版本和 `member_uid`。未装配该来源时返回 unsupported；局部证据保持未知，只提供已建立的 capability。它不打开消息／提醒列表，也不补齐 UCenter 到达标志同步。
+
+显式探测以内部 `message.attention.probe` request context 排除被动发布。调用方在 facade 请求前分配一个序号，接收时再次核对归属，仅接纳一次成功且 current 的网络结果。调度、新鲜性、取消、退避与轮询策略归 Host，包内不启动定时器。
+
+私信和提醒 query 可选传入 `expectedUserId`；传入时，标准 adapter 在合并 session 或返回成功前核对发起端点／查询、响应版本和 `member_uid`。不传时保留既有读取行为。提醒 v3、私信 v1 和作者帖 `viewthread version=1` 不变。
+
+提示状态只保留在 Host 内存，不持久化，也不从 WebView 采样。Host 只在活跃业务读取的有效结果成功接纳后，以完成时已发起的最大序号建立对应类别的消费屏障；成功本身不清零，由屏障后的可靠证据重新校准。排除消费响应并不证明服务端已清除提示。缓存 HTML 可以被解析，但解析成功不代表新鲜。

@@ -1,6 +1,7 @@
 import '../adapters/forum_client_adapter_factory.dart';
 import '../cache/forum_cache.dart';
 import '../contracts/forum_resource.dart';
+import '../contracts/forum_message_attention.dart';
 import '../contracts/sticker_catalog.dart';
 import '../logging/forum_client_logger.dart';
 import '../network/dio_forum_network.dart';
@@ -36,6 +37,7 @@ final class YamiboForumClientBuilder {
     this.resourceClient,
     this.multipartClient,
     this.stickerCatalogStore,
+    this.messageAttentionObserver,
   });
 
   /// Creates the standard pure-Dart Dio runtime.
@@ -49,6 +51,7 @@ final class YamiboForumClientBuilder {
     required ForumClientCachePorts caches,
     ForumWafRecoveryDelegate? waf,
     ForumClientLogger? logger,
+    ForumMessageAttentionObserver? messageAttentionObserver,
   }) {
     final network = DioForumClientNetwork(
       config: config,
@@ -66,6 +69,7 @@ final class YamiboForumClientBuilder {
       multipartClient: network,
       cookieStore: cookies,
       stickerCatalogStore: caches.stickers,
+      messageAttentionObserver: messageAttentionObserver,
     );
   }
 
@@ -78,12 +82,14 @@ final class YamiboForumClientBuilder {
     ForumClientConfig? config,
     ForumWafRecoveryDelegate? waf,
     ForumClientLogger? logger,
+    ForumMessageAttentionObserver? messageAttentionObserver,
   }) => YamiboForumClientBuilder.standardDio(
     config: config ?? ForumClientConfig.yamibo(),
     cookies: MemoryForumCookieStore(),
     caches: ForumClientCachePorts.memory(),
     waf: waf,
     logger: logger,
+    messageAttentionObserver: messageAttentionObserver,
   );
 
   /// Forum origins, request identities, and timeout configuration.
@@ -116,6 +122,9 @@ final class YamiboForumClientBuilder {
   /// Optional persistent sticker catalog store.
   final ForumStickerCatalogStore? stickerCatalogStore;
 
+  /// Optional fresh-response observer, sharing this Host transport and session.
+  final ForumMessageAttentionObserver? messageAttentionObserver;
+
   /// Builds the currently verified read and basic-authentication matrix.
   YamiboForumClient buildStandardClient({
     ForumClientSourcePlan sourceOverrides = const ForumClientSourcePlan(),
@@ -129,6 +138,7 @@ final class YamiboForumClientBuilder {
       documentStore: documentStore,
       snapshotStore: snapshotStore,
       cookieStore: cookieStore,
+      messageAttentionObserver: messageAttentionObserver,
     );
     final formhash =
         formhashProvider ?? factory.createStandardFormhashProvider(sessions);
@@ -184,6 +194,7 @@ final class YamiboForumClientBuilder {
       dailySignInCommand: dailySignIn.command,
       notifications: factory.createNotifications(),
       privateMessages: factory.createPrivateMessages(),
+      messageAttention: factory.createMessageAttention(),
       privateMessageCommand: factory.createPrivateMessageCommand(formhash),
       friendDirectory: factory.createFriendDirectory(),
       friendFeed: factory.createFriendFeed(),
@@ -238,7 +249,7 @@ final class YamiboForumClientBuilder {
     );
     return YamiboForumClient(
       config: config,
-      network: network,
+      network: factory.network,
       resources: resourceClient,
       multipart: multipartClient,
       formhashProvider: formhash,

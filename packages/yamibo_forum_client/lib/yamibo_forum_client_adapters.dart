@@ -8,4 +8,6 @@ library;
 export 'src/parsing/data_parse_exception.dart';
 export 'src/adapters/thread_detail_api_mapper.dart';
 export 'src/adapters/thread_detail_html_parser.dart';
+export 'src/adapters/discuz_message_attention_api_parser.dart';
+export 'src/adapters/discuz_message_attention_html_parser.dart';
 export 'src/adapters/forum_client_adapter_factory.dart';

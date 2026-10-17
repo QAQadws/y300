@@ -1,5 +1,6 @@
 import '../contracts/data_command_contract.dart';
 import '../contracts/forum_authentication.dart';
+import '../network/forum_request.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_cookie_store.dart';
@@ -31,6 +32,11 @@ final class DiscuzAuthenticationAdapter
       module: 'profile',
       treatMessageAsBusinessError: false,
       cancellation: request.cancellation,
+      requestContext: const ForumRequestContext(
+        operation: 'authentication.resolve',
+        module: 'profile',
+        pageKind: 'authentication',
+      ),
     );
     return switch (response) {
       ForumTransportError<ForumResponse<DiscuzApiEnvelope>>(:final failure) =>
