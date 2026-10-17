@@ -16,6 +16,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import '../parsing/loose_json.dart';
 import '../parsing/discuz_message_attention_identity.dart';
@@ -1045,7 +1046,7 @@ final class DiscuzThreadPostLocatorRepository
       if (resolved.body is! String) {
         throw const FormatException('thread_post_location_text_expected');
       }
-      final document = html_parser.parse(resolved.body as String);
+      final document = DiscuzHtmlDocument.forResponse(resolved).document;
       if (document.querySelector('form[action*="mod=logging"]') != null &&
           document.querySelector('.viewthread .plc[id^="pid"]') == null) {
         return const DataReadFailure(
@@ -1083,8 +1084,8 @@ final class DiscuzThreadPostLocatorRepository
           const FormatException('unconfirmed mobile view'),
         );
       }
-      final detail = _parser.parse(
-        resolved.body as String,
+      final detail = _parser.parseDocument(
+        document,
         fallbackTid: query.tid,
         fallbackPage: _pageFromUri(resolved.uri) ?? 1,
       );

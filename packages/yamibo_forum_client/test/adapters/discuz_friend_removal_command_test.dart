@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:test/test.dart';
+import 'package:yamibo_forum_client/src/parsing/discuz_html_document.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
@@ -18,6 +19,25 @@ void main() {
       sessionStore: sessions,
     ).createFriendRemovalCommand();
   });
+
+  test(
+    'removal actor and hidden fields reuse the prepared response DOM',
+    () async {
+      network.beforeGetReturn = (response) {
+        // A test-only field change proves validation uses the shared DOM.
+        DiscuzHtmlDocument.forResponse(response).document
+                .querySelector('input[name="formhash"]')!
+                .attributes['value'] =
+            'b1b2c3d4';
+      };
+
+      final result = await command.execute(_submission);
+
+      expect(result, isA<DataCommandApplied<ForumFriendRemovalReceipt>>());
+      expect(network.requests.last.body, containsPair('formhash', 'b1b2c3d4'));
+      expect(network.requests, hasLength(2));
+    },
+  );
 
   test(
     'prepares fresh actor-bound form and submits once for the exact friend',
@@ -293,6 +313,7 @@ final class _Network implements ForumClientNetwork {
   int postStatus = 200;
   Completer<void>? getGate;
   Completer<void>? postGate;
+  void Function(ForumResponse<Object?> response)? beforeGetReturn;
   @override
   Future<ForumTransportResult<ForumResponse<Object?>>> send(
     ForumRequest request,
@@ -308,13 +329,13 @@ final class _Network implements ForumClientNetwork {
         ),
       );
     }
-    return ForumTransportSuccess(
-      ForumResponse<Object?>(
-        uri: request.uri,
-        statusCode: post ? postStatus : 200,
-        headers: const {},
-        body: post ? response : form,
-      ),
+    final htmlResponse = ForumResponse<Object?>(
+      uri: request.uri,
+      statusCode: post ? postStatus : 200,
+      headers: const {},
+      body: post ? response : form,
     );
+    if (!post) beforeGetReturn?.call(htmlResponse);
+    return ForumTransportSuccess(htmlResponse);
   }
 }

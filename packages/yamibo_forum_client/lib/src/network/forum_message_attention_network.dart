@@ -4,6 +4,7 @@ import '../adapters/discuz_message_attention_api_parser.dart';
 import '../adapters/discuz_message_attention_html_parser.dart';
 import '../contracts/forum_message_attention.dart';
 import '../contracts/forum_resource.dart';
+import '../parsing/discuz_html_document.dart';
 import '../parsing/discuz_message_attention_source.dart';
 import 'forum_multipart.dart';
 import 'forum_network.dart';
@@ -74,11 +75,12 @@ final class _MessageAttentionNetwork implements ForumClientNetwork {
     if (status == null || status < 200 || status >= 300) return result;
     try {
       final observation = switch (request.responseType) {
-        ForumResponseType.text when response.body is String => _html.parse(
-          response.body as String,
-          sourceUri: response.uri,
-          expectedUserId: context.viewerUserId,
-        ),
+        ForumResponseType.text when response.body is String =>
+          _html.parseDocument(
+            DiscuzHtmlDocument.forResponse(response),
+            sourceUri: response.uri,
+            expectedUserId: context.viewerUserId,
+          ),
         ForumResponseType.json => _api.parse(
           _decodedJson(response.body),
           sourceUri: response.uri,

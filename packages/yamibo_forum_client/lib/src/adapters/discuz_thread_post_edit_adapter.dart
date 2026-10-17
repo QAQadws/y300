@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:html/dom.dart' as html_dom;
-import 'package:html/parser.dart' as html_parser;
 
 import '../client/forum_client_config.dart';
 import '../contracts/data_command_contract.dart';
@@ -17,6 +16,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 
 /// Experimental Discuz HTML adapter for ordinary post and reply editing.
@@ -90,7 +90,7 @@ final class DiscuzThreadPostEditAdapter
       return _readFailure('post_edit_response_not_text');
     }
     return _parsePreparation(
-      body,
+      DiscuzHtmlDocument.forResponse(documentResponse),
       target: request.target,
       sourceUri: documentResponse.uri,
       profileKind: profileKind,
@@ -338,14 +338,15 @@ final class DiscuzThreadPostEditAdapter
 
   Future<DataReadResult<ThreadPostEditPreparation, ThreadPostEditCapabilities>>
   _parsePreparation(
-    String source, {
+    DiscuzHtmlDocument html, {
     required ThreadPostEditTarget target,
     required Uri sourceUri,
     required ForumRequestProfileKind profileKind,
     required Uri referer,
     ForumRequestCancellation? cancellation,
   }) async {
-    final document = html_parser.parse(source);
+    final source = html.source;
+    final document = html.document;
     final pageFailure = _documentFailure(document, source);
     if (pageFailure != null) return pageFailure;
     final forms = document.querySelectorAll('form#postform');

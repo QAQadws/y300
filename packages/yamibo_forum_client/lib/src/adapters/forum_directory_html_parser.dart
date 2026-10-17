@@ -12,8 +12,10 @@ final class ForumDirectoryHtmlParser {
 
   final ForumUriResolver _resolver;
 
-  ForumDirectoryData parse(String source) {
-    final document = html_parser.parse(source);
+  ForumDirectoryData parse(String source) =>
+      parseDocument(html_parser.parse(source));
+
+  ForumDirectoryData parseDocument(html_dom.Document document) {
     final forumList = document.querySelector('.forumlist');
     if (forumList == null) {
       throw const FormatException('forum_directory_root_missing');

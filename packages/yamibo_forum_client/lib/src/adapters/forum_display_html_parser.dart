@@ -17,8 +17,17 @@ class ForumDisplayHtmlParser {
     String html, {
     required String fallbackFid,
     required int fallbackPage,
+  }) => parseDocument(
+    html_parser.parse(html),
+    fallbackFid: fallbackFid,
+    fallbackPage: fallbackPage,
+  );
+
+  ForumDisplayData parseDocument(
+    html_dom.Document document, {
+    required String fallbackFid,
+    required int fallbackPage,
   }) {
-    final document = html_parser.parse(html);
     final fid = _extractFidFromDocument(document) ?? fallbackFid;
     final threads = _parseThreads(document);
     final currentPage = _parseCurrentPage(document, fallback: fallbackPage);

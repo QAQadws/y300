@@ -78,6 +78,9 @@ experimental:
   `ThreadDetailApiMapper`, and `DataParseException`;
 - `DiscuzMessageAttentionHtmlParser` and `DiscuzMessageAttentionApiParser`;
 - concrete Discuz/HTML parsers, mappers, repositories, and snapshot codecs
+  (standalone string entry points remain available; internal shared-response
+  decoding contexts are implementation details, not supported transport or
+  persistence contracts)
   used internally by the factory;
 - direct multipart runtime composition through `ForumMultipartClient`;
 - source-specific behavior that has not yet been validated by a second

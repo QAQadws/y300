@@ -11,6 +11,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_html_document.dart';
 import 'discuz_account_summary_parser.dart';
 import 'discuz_profile_html_parsers.dart';
 
@@ -153,9 +154,13 @@ final class DiscuzCurrentAccountSummaryRepository
     final response =
         (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
     final body = response.body;
+    final document = body is String
+        ? DiscuzHtmlDocument.forResponse(response).document
+        : null;
     if (response.statusCode == 401 ||
         response.statusCode == 403 ||
-        (body is String && DiscuzProfileAuthPageDetector.isLoginPage(body))) {
+        (document != null &&
+            DiscuzProfileAuthPageDetector.isLoginDocument(document))) {
       return _failure(
         DataReadFailureKind.unauthorized,
         'account_summary_unauthorized',
@@ -174,7 +179,7 @@ final class DiscuzCurrentAccountSummaryRepository
           'account_summary_identity_invalid',
         );
       }
-      final data = _parser.parse(body, uid);
+      final data = _parser.parseDocument(document!, uid);
       final present = <CurrentUserProfileCapability>[
         CurrentUserProfileCapability.stableUserIdentity,
         CurrentUserProfileCapability.userName,

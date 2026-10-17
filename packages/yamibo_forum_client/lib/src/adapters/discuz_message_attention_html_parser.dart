@@ -1,7 +1,7 @@
 import 'package:html/dom.dart';
-import 'package:html/parser.dart' as html;
 
 import '../contracts/forum_message_attention.dart';
+import '../parsing/discuz_html_document.dart';
 import '../parsing/discuz_message_attention_source.dart';
 import '../parsing/discuz_navigation_viewer.dart';
 
@@ -19,11 +19,27 @@ final class DiscuzMessageAttentionHtmlParser {
 
   /// Parses a complete response for [expectedUserId] at its final [sourceUri].
   ///
-  /// Only ordinary forum, index, and supported public-space page routes are
-  /// accepted. Message/notice pages can expose pre-consumption indicators and
-  /// are deliberately excluded. `unknown` fields must never clear prior state.
+  /// Public navigation can occur in searches, tags and editor preparation as
+  /// well as content pages. Consuming responses are deliberately excluded:
+  /// their navigation may retain pre-consumption flags. `unknown` fields must
+  /// never clear prior state.
   ForumMessageAttentionObservation? parse(
     String source, {
+    required Uri sourceUri,
+    required String expectedUserId,
+  }) => parseDocument(
+    DiscuzHtmlDocument.fromSource(source),
+    sourceUri: sourceUri,
+    expectedUserId: expectedUserId,
+  );
+
+  /// Extracts evidence from the same request-local document as business reads.
+  ///
+  /// The shared document remains unmodified. Completeness and EOF diagnostics
+  /// still describe the original response; a repaired DOM alone cannot prove
+  /// that the server sent a complete inactive navigation shell.
+  ForumMessageAttentionObservation? parseDocument(
+    DiscuzHtmlDocument source, {
     required Uri sourceUri,
     required String expectedUserId,
   }) {
@@ -32,16 +48,11 @@ final class DiscuzMessageAttentionHtmlParser {
           sourceUri,
           siteOrigin: siteOrigin,
         ) ||
-        !_completeDocument(source)) {
+        !source.isCompleteDocument ||
+        source.hasUnexpectedEof) {
       return null;
     }
-    final parser = html.HtmlParser(source);
-    final document = parser.parse();
-    // Raw script/style/comment text can contain apparent closing HTML tags.
-    // Tokenizer EOF diagnostics distinguish those from a complete document.
-    if (parser.errors.any((error) => error.errorCode.contains('eof'))) {
-      return null;
-    }
+    final document = source.document;
     final body = document.body;
     if (body == null ||
         document.querySelector('#messagetext, .jump_c') != null ||
@@ -83,12 +94,25 @@ final class DiscuzMessageAttentionHtmlParser {
     final profileLinks = links.where(
       (element) => _ownSpaceLink(element, sourceUri, viewer),
     );
-    if (messageLinks.length != 1 || profileLinks.length != 1) return null;
-    final messageIcon = _mobileIcon(messageLinks.single, 'mb');
+    if (messageLinks.length > 1 || profileLinks.length != 1) return null;
     final profileIcon = _mobileIcon(profileLinks.single, 'me');
-    if (messageIcon == null || profileIcon == null) return null;
-    final message = _mobileDot(messageIcon);
+    if (profileIcon == null) return null;
     final profile = _mobileDot(profileIcon);
+    if (messageLinks.isEmpty) {
+      // The default touch footer can use the second slot for portal/group/
+      // feed rather than PM. Its profile dot proves a combined positive only;
+      // the template conditionally suppresses this dot, so absence is unknown.
+      return profile == true
+          ? ForumMessageAttentionObservation(
+              viewerUserId: viewer,
+              source: ForumMessageAttentionSource.mobileHtml,
+              combinedHint: _present,
+            )
+          : null;
+    }
+    final messageIcon = _mobileIcon(messageLinks.single, 'mb');
+    if (messageIcon == null) return null;
+    final message = _mobileDot(messageIcon);
     if (message == null || profile == null || (!message && profile)) {
       return null;
     }
@@ -229,8 +253,18 @@ final class DiscuzMessageAttentionHtmlParser {
 
   bool _ownSpaceLink(Element element, Uri sourceUri, String viewer) {
     final uri = _link(element, sourceUri);
-    if (uri == null || uri.path != '/home.php') return false;
+    if (uri == null) return false;
     final query = _query(uri);
+    final rewrite = _ownSpaceRewrite.firstMatch(uri.path);
+    if (rewrite != null) {
+      // This link identifies the navigation's owner; it is not itself a
+      // sampled response. Bare space rewrites may still consume on navigation.
+      return rewrite[1] == viewer &&
+          query != null &&
+          (query['do'] == null || query['do'] == 'profile') &&
+          query.keys.every(const {'do', 'mycenter', 'mobile'}.contains);
+    }
+    if (uri.path != '/home.php') return false;
     return query != null &&
         query['mod'] == 'space' &&
         query['uid'] == viewer &&
@@ -270,24 +304,6 @@ final class DiscuzMessageAttentionHtmlParser {
     }
   }
 
-  bool _completeDocument(String source) {
-    // The HTML parser repairs truncated documents, so DOM nodes alone are not
-    // evidence that an absent indicator was really sent by the server.
-    final markup = source
-        .replaceAll(_rawTextElements, '')
-        .replaceAll(_comments, '');
-    if (!_documentStart.hasMatch(markup) || !_documentEnd.hasMatch(markup)) {
-      return false;
-    }
-    var previous = -1;
-    for (final boundary in _boundaries) {
-      final matches = boundary.allMatches(markup).toList();
-      if (matches.length != 1 || matches.single.start <= previous) return false;
-      previous = matches.single.end - 1;
-    }
-    return true;
-  }
-
   int? _notificationCount(String text) {
     final match = _countSuffix.firstMatch(text);
     if (match == null ||
@@ -305,18 +321,5 @@ final class DiscuzMessageAttentionHtmlParser {
   static const _present = ForumMessageAttentionState.present;
   static final _positiveId = RegExp(r'^[1-9][0-9]*$');
   static final _countSuffix = RegExp(r'\(([0-9]+)\)\s*$');
-  static final _comments = RegExp(r'<!--[\s\S]*?-->');
-  static final _rawTextElements = RegExp(
-    r'<(script|style|textarea|title|xmp|iframe|noembed|noframes)(?=[\s/>])[^>]*>[\s\S]*?</\1\s*>',
-    caseSensitive: false,
-  );
-  static final _documentStart = RegExp(
-    r'^\s*(?:<!doctype\s+html[^>]*>\s*)?<html(?=[\s/>])[^>]*>',
-    caseSensitive: false,
-  );
-  static final _documentEnd = RegExp(r'</html\s*>\s*$', caseSensitive: false);
-  static final _boundaries = [
-    for (final tag in ['html', 'head', '/head', 'body', '/body', '/html'])
-      RegExp('<$tag(?=[\\s/>])[^>]*>', caseSensitive: false),
-  ];
+  static final _ownSpaceRewrite = RegExp(r'^/space-uid-([1-9][0-9]*)\.html$');
 }

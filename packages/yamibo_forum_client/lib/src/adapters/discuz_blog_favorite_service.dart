@@ -50,13 +50,14 @@ final class DiscuzBlogFavoriteService implements UserBlogFavoriteService {
     );
     if (source.failureOrNull case final failure?) return failure.retype();
     try {
-      final article = UserBlogDetailHtmlParser(siteOrigin: _origin).parse(
-        html: source.dataOrNull!,
-        query: UserBlogDetailQuery(
-          ownerUserId: target.ownerUserId,
-          blogId: target.blogId,
-        ),
-      );
+      final article = UserBlogDetailHtmlParser(siteOrigin: _origin)
+          .parseDocument(
+            source.dataOrNull!.document,
+            query: UserBlogDetailQuery(
+              ownerUserId: target.ownerUserId,
+              blogId: target.blogId,
+            ),
+          );
       if (!article.socialActions.contains(UserBlogSocialAction.favorite)) {
         return _readFailure(
           'blog_favorite_denied',
@@ -74,7 +75,7 @@ final class DiscuzBlogFavoriteService implements UserBlogFavoriteService {
       );
       if (result.failureOrNull case final failure?) return failure.retype();
       final content = result.dataOrNull!;
-      if (DiscuzBlogFavoriteForm.isNotice(content)) {
+      if (DiscuzBlogFavoriteForm.isNoticeDocument(content.document)) {
         // A duplicate message alone carries neither an account-owned bookmark
         // ID nor a safe write receipt. Prove it using the targeted read-only GET.
         final existing = await _boundary.read(
@@ -86,8 +87,8 @@ final class DiscuzBlogFavoriteService implements UserBlogFavoriteService {
           requireExactUri: true,
         );
         if (existing.failureOrNull case final failure?) return failure.retype();
-        final id = DiscuzBlogFavoriteForm.existingId(
-          existing.dataOrNull!,
+        final id = DiscuzBlogFavoriteForm.existingIdDocument(
+          existing.dataOrNull!.document,
           _origin,
         );
         return _ready(
@@ -97,7 +98,11 @@ final class DiscuzBlogFavoriteService implements UserBlogFavoriteService {
           ),
         );
       }
-      final form = DiscuzBlogFavoriteForm.parse(content, _origin, target);
+      final form = DiscuzBlogFavoriteForm.parseDocument(
+        content.document,
+        _origin,
+        target,
+      );
       return _ready(
         UserBlogFavoritePreparation.ready(
           target: target,

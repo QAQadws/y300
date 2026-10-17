@@ -1,5 +1,3 @@
-import 'package:html/parser.dart' as html;
-
 import '../client/forum_client_config.dart';
 import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
@@ -8,6 +6,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_friend_feed_parser.dart';
@@ -133,14 +132,13 @@ final class DiscuzFriendFeedRepository implements ForumFriendFeedRepository {
         DataReadFailureKind.server,
       );
     }
-    final source = response.body as String;
-    if (DiscuzProfileAuthPageDetector.isLoginPage(source)) {
+    final document = DiscuzHtmlDocument.forResponse(response).document;
+    if (DiscuzProfileAuthPageDetector.isLoginDocument(document)) {
       return _failure(
         'friend_feed_login_required',
         DataReadFailureKind.unauthorized,
       );
     }
-    final document = html.parse(source);
     if (document.querySelector('#messagetext, .jump_c, .alert_error') != null) {
       return _failure('friend_feed_unavailable', DataReadFailureKind.business);
     }
@@ -151,7 +149,7 @@ final class DiscuzFriendFeedRepository implements ForumFriendFeedRepository {
           DataReadFailureKind.parse,
         );
       }
-      final page = _parser.parse(source, query);
+      final page = _parser.parseDocument(document, query);
       var values = capabilities.values;
       final optional = {
         ForumFriendFeedCapability.avatar: page.items.any(

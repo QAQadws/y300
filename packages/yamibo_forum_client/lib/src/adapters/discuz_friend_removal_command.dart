@@ -1,5 +1,4 @@
 import 'package:html/dom.dart' as dom;
-import 'package:html/parser.dart' as html;
 
 import '../client/forum_client_config.dart';
 import '../contracts/data_command_contract.dart';
@@ -9,6 +8,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_html_document.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_friend_feed_parser.dart';
 import 'discuz_friend_literal_parser.dart';
@@ -123,8 +123,8 @@ final class DiscuzFriendRemovalCommand implements ForumFriendRemovalCommand {
         DataCommandFailureKind.parse,
       );
     }
-    final source = formResponse.body as String;
-    if (DiscuzProfileAuthPageDetector.isLoginPage(source)) {
+    final document = DiscuzHtmlDocument.forResponse(formResponse).document;
+    if (DiscuzProfileAuthPageDetector.isLoginDocument(document)) {
       return _notSent(
         'friend_removal_login_required',
         DataCommandFailureKind.unauthenticated,
@@ -132,7 +132,7 @@ final class DiscuzFriendRemovalCommand implements ForumFriendRemovalCommand {
     }
     final String hash;
     try {
-      hash = _formHash(html.parse(source), submission);
+      hash = _formHash(document, submission);
     } on FormatException {
       return _notSent(
         'friend_removal_form_unverified',
@@ -211,7 +211,10 @@ final class DiscuzFriendRemovalCommand implements ForumFriendRemovalCommand {
         response.body is! String) {
       return _unknown('friend_removal_response_unverified');
     }
-    final outcome = _outcome(response.body as String, submission.userId);
+    final outcome = _outcome(
+      DiscuzHtmlDocument.forResponse(response),
+      submission.userId,
+    );
     return switch (outcome) {
       _Outcome.applied => DataCommandApplied(
         ForumFriendRemovalReceipt(
@@ -298,7 +301,8 @@ final class DiscuzFriendRemovalCommand implements ForumFriendRemovalCommand {
     return hash;
   }
 
-  _Outcome _outcome(String source, String userId) {
+  _Outcome _outcome(DiscuzHtmlDocument decoded, String userId) {
+    final source = decoded.source;
     var payload = source;
     if (source.contains('<![CDATA[')) {
       final envelope = RegExp(
@@ -310,7 +314,11 @@ final class DiscuzFriendRemovalCommand implements ForumFriendRemovalCommand {
         return _Outcome.unknown;
       }
     }
-    final document = html.parse(payload);
+    // CDATA extraction changes the parser input. Only that derived fragment
+    // owns a separate decoding context; an ordinary HTML reply reuses its DOM.
+    final document = identical(payload, source)
+        ? decoded.document
+        : DiscuzHtmlDocument.fromSource(payload).document;
     if (document.querySelector('form') != null) return _Outcome.unknown;
     const quoted = r'''(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")''';
     final call = RegExp(

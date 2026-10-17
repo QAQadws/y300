@@ -48,8 +48,20 @@ final class DiscuzDailySignInPageParser {
     required Uri requestedUri,
     required Uri sourceUri,
     required String expectedUserId,
+  }) => parseDocument(
+    html_parser.parse(source),
+    requestedUri: requestedUri,
+    sourceUri: sourceUri,
+    expectedUserId: expectedUserId,
+  );
+
+  /// Validates the page without reparsing an existing read-only response DOM.
+  DiscuzDailySignInPage parseDocument(
+    html_dom.Document document, {
+    required Uri requestedUri,
+    required Uri sourceUri,
+    required String expectedUserId,
   }) {
-    final document = html_parser.parse(source);
     if (document.querySelector('form#loginform, .loginbox') != null) {
       throw const DiscuzDailySignInParseFailure(
         'daily_sign_in_login_required',

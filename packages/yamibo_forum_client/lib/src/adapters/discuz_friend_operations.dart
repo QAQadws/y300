@@ -8,6 +8,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_html_document.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_blog_command_response.dart';
 import 'discuz_friend_form.dart';
@@ -129,16 +130,16 @@ final class DiscuzFriendOperations implements ForumFriendOperations {
         response.body is! String) {
       return _readFailure('friend_response_invalid', DataReadFailureKind.parse);
     }
-    final source = response.body as String;
-    if (DiscuzProfileAuthPageDetector.isLoginPage(source)) {
+    final document = DiscuzHtmlDocument.forResponse(response).document;
+    if (DiscuzProfileAuthPageDetector.isLoginDocument(document)) {
       return _readFailure(
         'friend_unauthorized',
         DataReadFailureKind.unauthorized,
       );
     }
     try {
-      final form = DiscuzFriendForm.parse(
-        source,
+      final form = DiscuzFriendForm.parseDocument(
+        document,
         origin: config.siteOrigin,
         actor: actor,
         target: target,

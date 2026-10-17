@@ -8,6 +8,15 @@ and versions follow the policy in [VERSIONING.md](VERSIONING.md).
 
 ### Added
 
+- Response-local lazy HTML decoding shared by navigation observation, business
+  reads, login/access checks, and editor preparation. Weak response identity
+  avoids a second full-page DOM without adding a persistent cache or changing
+  business models, transport result/body identity, or cache freshness semantics.
+- Public-navigation sampling for supported search, tag, portal/group and
+  read-only preparation routes, including positive default-touch profile-only
+  hints. Missing navigation remains unknown; consuming PM/notice/follow pages,
+  GET commands, unknown plugins and partial responses remain excluded.
+
 - Explicit message-attention query, repository, facade, and source-plan port.
   Standard assembly uses uncached `forumindex version=1&checknotice=1` with
   cancellation and verified endpoint/query, version, and viewer identity; partial

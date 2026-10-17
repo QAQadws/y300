@@ -1,7 +1,5 @@
 // ignore_for_file: public_member_api_docs
 
-import 'package:html/parser.dart' as html;
-
 import '../client/forum_client_config.dart';
 import '../contracts/cache_load_policy.dart';
 import '../contracts/data_read_contract.dart';
@@ -11,6 +9,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_html_document.dart';
 import 'discuz_profile_html_parsers.dart';
 import 'discuz_user_thread_directory_parser.dart';
 
@@ -121,7 +120,8 @@ final class DiscuzUserThreadDirectoryRepository
         'user_thread_directory_body_invalid',
       );
     }
-    if (DiscuzProfileAuthPageDetector.isLoginPage(source)) {
+    final document = DiscuzHtmlDocument.forResponse(response).document;
+    if (DiscuzProfileAuthPageDetector.isLoginDocument(document)) {
       return _failure(
         DataReadFailureKind.unauthorized,
         'user_thread_directory_login_required',
@@ -133,7 +133,6 @@ final class DiscuzUserThreadDirectoryRepository
         'user_thread_directory_http_failed',
       );
     }
-    final document = html.parse(source);
     if (document.querySelector('#messagetext, .jump_c, .alert_error') != null ||
         (document.querySelector('#ct .nfl .f_c table .avt') != null &&
             document.querySelector('#ct a[href*="do=friend"]') != null)) {
@@ -149,7 +148,7 @@ final class DiscuzUserThreadDirectoryRepository
           'user_thread_directory_context_invalid',
         );
       }
-      final data = _parser.parse(source: source, query: query);
+      final data = _parser.parseDocument(document, query: query);
       return DataReadSuccess(
         data: data,
         capabilities: _readCapabilities(data),

@@ -13,8 +13,10 @@ final class ForumHomeHtmlParser {
 
   final ForumUriResolver _resolver;
 
-  ForumHomeDocument parse(String source) {
-    final document = html_parser.parse(source);
+  ForumHomeDocument parse(String source) =>
+      parseDocument(html_parser.parse(source));
+
+  ForumHomeDocument parseDocument(html_dom.Document document) {
     final forumList = document.querySelector('.forumlist');
     if (forumList == null) {
       throw const FormatException('forum_home_directory_missing');

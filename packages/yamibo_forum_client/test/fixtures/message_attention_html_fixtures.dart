@@ -23,6 +23,7 @@ $body
 String mobileAttentionFooter({
   bool messageDot = false,
   bool profileDot = false,
+  bool defaultTouchProfileOnly = false,
   String messageHref = 'home.php?mod=space&amp;do=pm',
   String profileHref =
       'home.php?mod=space&amp;uid=42&amp;do=profile&amp;mycenter=1',
@@ -33,9 +34,9 @@ String mobileAttentionFooter({
     <span class="foot-ico"><em class="ma"></em></span>
     <span class="foot-txt">Forum</span>
   </a>
-  <a href="$messageHref" class="flex">
-    <span class="foot-ico"><em class="mb">${messageDot ? '<i class="ico_msg"></i>' : ''}</em></span>
-    <span class="foot-txt">Messages</span>
+  <a href="${defaultTouchProfileOnly ? 'portal.php' : messageHref}" class="flex">
+    <span class="foot-ico"><em class="mb">${!defaultTouchProfileOnly && messageDot ? '<i class="ico_msg"></i>' : ''}</em></span>
+    <span class="foot-txt">${defaultTouchProfileOnly ? 'Portal' : 'Messages'}</span>
   </a>
   <a href="$profileHref" class="flex">
     <span class="foot-ico"><em class="me">${profileDot ? '<i class="ico_msg"></i>' : ''}</em></span>
@@ -47,6 +48,7 @@ String mobileAttentionFooter({
 String mobileAttentionHtml({
   bool messageDot = false,
   bool profileDot = false,
+  bool defaultTouchProfileOnly = false,
   bool includeFooter = true,
   String content = '<div id="ct"><p>Public forum content.</p></div>',
   String viewerUserId = '42',
@@ -57,7 +59,7 @@ String mobileAttentionHtml({
 }) => attentionHtmlDocument(
   '''
 $content
-${includeFooter ? mobileAttentionFooter(messageDot: messageDot, profileDot: profileDot, messageHref: messageHref, profileHref: profileHref) : ''}
+${includeFooter ? mobileAttentionFooter(messageDot: messageDot, profileDot: profileDot, defaultTouchProfileOnly: defaultTouchProfileOnly, messageHref: messageHref, profileHref: profileHref) : ''}
 <script src="home.php?mod=spacecp&amp;ac=pm&amp;op=checknewpm"></script>
 ''',
   viewerUserId: viewerUserId,

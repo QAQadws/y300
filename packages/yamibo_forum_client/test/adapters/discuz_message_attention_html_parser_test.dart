@@ -1,6 +1,7 @@
 import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:yamibo_forum_client/src/parsing/discuz_html_document.dart';
 
 import '../fixtures/message_attention_html_fixtures.dart';
 
@@ -84,6 +85,47 @@ void main() {
       expect(parse(mobileAttentionHtml(includeFooter: false)), isNull);
     });
 
+    test('default touch profile-only dot proves a combined positive', () {
+      final observation = parse(
+        mobileAttentionHtml(defaultTouchProfileOnly: true, profileDot: true),
+      )!;
+      expect(observation.source, ForumMessageAttentionSource.mobileHtml);
+      expect(observation.combinedHint, ForumMessageAttentionState.present);
+      expect(observation.privateMessages, ForumMessageAttentionState.unknown);
+      expect(observation.notifications, ForumMessageAttentionState.unknown);
+      expect(observation.notificationCount, isNull);
+    });
+
+    test('default touch profile-only absence is unknown', () {
+      expect(parse(mobileAttentionHtml(defaultTouchProfileOnly: true)), isNull);
+    });
+
+    test('profile-only evidence still requires the authenticated own link', () {
+      expect(
+        parse(
+          mobileAttentionHtml(
+            defaultTouchProfileOnly: true,
+            profileDot: true,
+            profileHref: 'home.php?mod=space&amp;uid=99&amp;do=profile',
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('nofooter cannot borrow a profile-only dot from body content', () {
+      expect(
+        parse(
+          mobileAttentionHtml(
+            includeFooter: false,
+            content:
+                '<div id="ct">${mobileAttentionFooter(defaultTouchProfileOnly: true, profileDot: true)}</div>',
+          ),
+        ),
+        isNull,
+      );
+    });
+
     test('content dots and action footers are not navigation evidence', () {
       final observation = parse(
         mobileAttentionHtml(
@@ -125,6 +167,27 @@ void main() {
         ),
       );
       expect(observation?.combined, ForumMessageAttentionState.present);
+    });
+
+    test('a standard rewritten own-profile link retains viewer proof', () {
+      expect(
+        parse(
+          mobileAttentionHtml(
+            messageDot: true,
+            profileHref: 'space-uid-42.html',
+          ),
+        )?.combined,
+        ForumMessageAttentionState.present,
+      );
+      expect(
+        parse(
+          mobileAttentionHtml(
+            messageDot: true,
+            profileHref: 'space-uid-99.html',
+          ),
+        ),
+        isNull,
+      );
     });
 
     for (final href in <String>[
@@ -179,6 +242,16 @@ void main() {
       expect(observation.source, ForumMessageAttentionSource.desktopHtml);
       expect(observation.privateMessages, ForumMessageAttentionState.present);
     });
+
+    test(
+      'desktop rewrite of the avatar profile link retains identity proof',
+      () {
+        final source = desktopAttentionHtml(
+          privateMessageDot: true,
+        ).replaceFirst('home.php?mod=space&amp;uid=42', 'space-uid-42.html');
+        expect(parse(source)?.combined, ForumMessageAttentionState.present);
+      },
+    );
 
     test(
       'suppressed menu does not turn missing notification class into zero',
@@ -282,6 +355,147 @@ void main() {
         },
       );
     }
+  });
+
+  group('shared full-page decoding', () {
+    test('business and attention reads keep one unmodified document', () {
+      final source = DiscuzHtmlDocument.fromSource(
+        mobileAttentionHtml(
+          messageDot: true,
+          content: '<div id="ct"><p id="body">Business content.</p></div>',
+        ),
+      );
+      final document = source.document;
+      final before = document.outerHtml;
+      expect(document.querySelector('#body')?.text, 'Business content.');
+
+      final observation = parser.parseDocument(
+        source,
+        sourceUri: pageUri,
+        expectedUserId: '42',
+      );
+
+      expect(observation?.combined, ForumMessageAttentionState.present);
+      expect(source.document, same(document));
+      expect(document.outerHtml, before);
+    });
+
+    test(
+      'a business parser repairing an incomplete page cannot prove absence',
+      () {
+        final source = DiscuzHtmlDocument.fromSource(
+          mobileAttentionHtml().replaceFirst('</html>', ''),
+        );
+        expect(source.document.body, isNotNull);
+        expect(
+          parser.parseDocument(
+            source,
+            sourceUri: pageUri,
+            expectedUserId: '42',
+          ),
+          isNull,
+        );
+      },
+    );
+
+    test('navigation evidence does not depend on a business content root', () {
+      final source = DiscuzHtmlDocument.fromSource(
+        mobileAttentionHtml(content: '<p>No thread-detail rows.</p>'),
+      );
+      expect(source.document.querySelector('.viewthread'), isNull);
+      expect(
+        parser
+            .parseDocument(source, sourceUri: pageUri, expectedUserId: '42')
+            ?.combined,
+        ForumMessageAttentionState.absent,
+      );
+    });
+  });
+
+  group('global public shell coverage', () {
+    final shells = <String, String>{
+      'custom touch': mobileAttentionHtml(messageDot: true),
+      'default touch profile-only': mobileAttentionHtml(
+        defaultTouchProfileOnly: true,
+        profileDot: true,
+      ),
+      'custom desktop': desktopAttentionHtml(privateMessageDot: true),
+      'default desktop': desktopAttentionHtml(
+        defaultTemplate: true,
+        privateMessageDot: true,
+      ),
+    };
+    final paths = <String>[
+      '/search.php?mod=forum&searchid=9&searchsubmit=yes&page=2',
+      '/search.php?mod=curforum&srhfid=6&searchid=9&searchsubmit=yes',
+      '/misc.php?mod=tag&id=3&page=2',
+      '/misc.php?mod=faq',
+      '/portal.php?mod=view&aid=4',
+      '/portal.php?mod=comment&id=4&idtype=aid',
+      '/group.php?mod=my&view=groupthread',
+      '/forum.php?mod=group&fid=6&action=memberlist',
+      '/forum.php?mod=post&action=newthread&fid=6',
+      '/forum.php?mod=post&action=reply&tid=7',
+      '/forum.php?mod=post&action=edit&tid=7&pid=8&cedit=yes',
+      '/home.php?mod=spacecp&ac=blog&blogid=9',
+      '/home.php?mod=spacecp&ac=friend&op=add&uid=8',
+      '/home.php?mod=spacecp&ac=comment&op=edit&cid=9',
+      '/thread-7-2-1.html',
+      '/forum-6-2.html',
+      '/article-4-2.html',
+      '/blog-8-9.html',
+      '/space-uid-8.html?do=profile',
+    ];
+    for (final shell in shells.entries) {
+      for (final path in paths) {
+        test('${shell.key} supplies evidence on $path', () {
+          expect(
+            parse(shell.value, sourceUri: origin.resolve(path))?.combined,
+            ForumMessageAttentionState.present,
+          );
+        });
+      }
+      for (final path in <String>[
+        '/home.php?mod=space&do=pm',
+        '/home.php?mod=space&do=notice',
+        '/home.php?mod=follow&do=follower',
+        '/home.php?mod=space&do=follow',
+        '/forum.php?mod=post&action=reply&replysubmit=yes',
+        '/forum.php?mod=post&action=edit&inajax=1',
+        '/home.php?mod=spacecp&ac=friend&op=addconfirm&key=opaque',
+        '/home.php?mod=spacecp&ac=pm&op=checknewpm',
+        '/plugin.php?id=unknown:page',
+        '/space-uid-8.html',
+        '/home.php?mod=space&do=index&uid=8&additional=removevlog',
+      ]) {
+        test('${shell.key} cannot rescue an excluded source $path', () {
+          expect(parse(shell.value, sourceUri: origin.resolve(path)), isNull);
+        });
+      }
+    }
+
+    test('default desktop search without a message shell remains unknown', () {
+      final source = attentionHtmlDocument('''
+<div id="toptb"><div class="y">
+  <strong><a href="home.php?mod=space">Viewer profile</a></strong>
+</div></div>
+<div class="threadlist"><p>Search results.</p></div>
+''');
+      expect(
+        parse(source, sourceUri: origin.resolve('/search.php?mod=forum')),
+        isNull,
+      );
+    });
+
+    test('a supported route with a wrong viewer still cannot publish', () {
+      expect(
+        parse(
+          mobileAttentionHtml(viewerUserId: '43', messageDot: true),
+          sourceUri: origin.resolve('/misc.php?mod=tag&id=3'),
+        ),
+        isNull,
+      );
+    });
   });
 
   group('response trust and consumption boundaries', () {

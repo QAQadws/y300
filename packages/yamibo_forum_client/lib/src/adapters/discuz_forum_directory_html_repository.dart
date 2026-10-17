@@ -10,6 +10,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_session_store.dart';
 import 'forum_directory_html_parser.dart';
@@ -115,7 +116,9 @@ final class DiscuzForumDirectoryHtmlRepository
           (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
       final body = response.body;
       if (body is! String) throw const FormatException('text_expected');
-      final data = _parser.parse(body);
+      final data = _parser.parseDocument(
+        DiscuzHtmlDocument.forResponse(response).document,
+      );
       await _putDocument(document, body, response);
       return _success(data, const DataReadMetadata.network());
     } catch (_) {

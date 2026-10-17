@@ -8,6 +8,7 @@ import '../contracts/user_blog_comments.dart';
 import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
+import '../parsing/discuz_html_document.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_blog_command_response.dart';
 import 'discuz_blog_mutation_session.dart';
@@ -67,8 +68,8 @@ final class DiscuzBlogCommentService implements UserBlogCommentService {
     if (article.failureOrNull case final failure?) return failure.retype();
     try {
       final data = UserBlogDetailHtmlParser(siteOrigin: config.siteOrigin)
-          .parse(
-            html: article.dataOrNull!,
+          .parseDocument(
+            article.dataOrNull!.document,
             query: UserBlogDetailQuery(
               ownerUserId: target.ownerUserId,
               blogId: target.blogId,
@@ -111,8 +112,8 @@ final class DiscuzBlogCommentService implements UserBlogCommentService {
         if (form.failureOrNull case final failure?) return failure.retype();
         formSource = form.dataOrNull!;
       }
-      final parsed = DiscuzBlogCommentForm.parse(
-        formSource,
+      final parsed = DiscuzBlogCommentForm.parseDocument(
+        formSource.document,
         siteOrigin: config.siteOrigin,
         target: target,
       );
@@ -204,7 +205,7 @@ final class DiscuzBlogCommentService implements UserBlogCommentService {
     );
   }
 
-  Future<DataReadResult<String, Object?>> _get(
+  Future<DataReadResult<DiscuzHtmlDocument, Object?>> _get(
     Uri uri,
     UserBlogCommentTarget target,
     ForumRequestCancellation? cancellation,

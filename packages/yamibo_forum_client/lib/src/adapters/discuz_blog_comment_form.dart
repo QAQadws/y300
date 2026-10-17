@@ -1,3 +1,4 @@
+import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 
 import '../contracts/user_blog_comments.dart';
@@ -35,7 +36,19 @@ final class DiscuzBlogCommentForm {
     final payload =
         RegExp(r'<!\[CDATA\[([\s\S]*?)\]\]>').firstMatch(source)?.group(1) ??
         source;
-    final document = html.parse(payload);
+    return parseDocument(
+      html.parse(payload),
+      siteOrigin: siteOrigin,
+      target: target,
+    );
+  }
+
+  /// Reuses a full response's access-checked document for its comment form.
+  static DiscuzBlogCommentForm parseDocument(
+    Document document, {
+    required Uri siteOrigin,
+    required UserBlogCommentTarget target,
+  }) {
     final forms = document.querySelectorAll('form').where((form) {
       final action = form.attributes['action'] ?? '';
       return action.contains('ac=comment');

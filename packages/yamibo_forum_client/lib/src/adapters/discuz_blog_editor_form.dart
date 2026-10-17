@@ -138,8 +138,15 @@ final class DiscuzBlogEditorForm {
     String source, {
     required Uri siteOrigin,
     required UserBlogTarget target,
+  }) =>
+      parseDocument(html.parse(source), siteOrigin: siteOrigin, target: target);
+
+  /// Reads the editor from the response already checked for access and actor.
+  static DiscuzBlogEditorForm parseDocument(
+    Document document, {
+    required Uri siteOrigin,
+    required UserBlogTarget target,
   }) {
-    final document = html.parse(source);
     final forms = document.querySelectorAll('form#ttHtmlEditor');
     if (forms.length != 1) {
       throw const FormatException('blog_complete_editor_missing');

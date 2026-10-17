@@ -81,6 +81,21 @@ final class DiscuzThreadCreationFormParser {
     required Uri requestedUri,
     required String fid,
     required ThreadCreationKind kind,
+  }) => parseDocument(
+    html_parser.parse(source),
+    sourceUri: sourceUri,
+    requestedUri: requestedUri,
+    fid: fid,
+    kind: kind,
+  );
+
+  /// Validates controls in the shared, read-only response document.
+  DiscuzThreadCreationForm parseDocument(
+    Document document, {
+    required Uri sourceUri,
+    required Uri requestedUri,
+    required String fid,
+    required ThreadCreationKind kind,
   }) {
     if (!_sameOrigin(sourceUri, requestedUri) ||
         sourceUri.path != '/forum.php') {
@@ -100,7 +115,6 @@ final class DiscuzThreadCreationFormParser {
         );
       }
     }
-    final document = html_parser.parse(source);
     if (document.querySelector('form#loginform, .loginbox') != null) {
       throw const DiscuzCreationFormFailure(
         'thread_creation_login_required',

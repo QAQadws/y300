@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
+import 'package:yamibo_forum_client/src/parsing/discuz_html_document.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
@@ -81,6 +82,104 @@ void main() {
         );
         expect(observer.deliveries, hasLength(1));
       }
+    },
+  );
+
+  test(
+    'HTML observation reuses the response DOM already used by business',
+    () async {
+      final source = mobileAttentionHtml(messageDot: true);
+      final original = _success(source, uri: _htmlUri);
+      final decoded = DiscuzHtmlDocument.forResponse(original.response);
+      final document = decoded.document;
+      // A test-only DOM change distinguishes reuse from reparsing the original
+      // source. Production consumers must treat the shared DOM as read-only.
+      document.querySelector('.foot em.mb .ico_msg')!.remove();
+      final observer = _Observer();
+
+      final result = await _client(
+        _Network(original),
+        observer,
+      ).network.send(_htmlRequest());
+
+      expect(result, same(original));
+      expect(original.response.body, same(source));
+      expect(DiscuzHtmlDocument.forResponse(original.response), same(decoded));
+      expect(decoded.document, same(document));
+      expect(
+        observer.deliveries.single.observation.combined,
+        ForumMessageAttentionState.absent,
+      );
+    },
+  );
+
+  test(
+    'a reused HTML response never reuses request ownership or sequence',
+    () async {
+      final original = _success(
+        mobileAttentionHtml(messageDot: true),
+        uri: _htmlUri,
+      );
+      final observer = _Observer();
+      final client = _client(_Network(original), observer);
+      final firstOwner = Object();
+      final nextOwner = Object();
+      final firstContext = ForumMessageAttentionRequestContext(
+        viewerUserId: '42',
+        requestSequence: 10,
+        ownerToken: firstOwner,
+      );
+      final otherContext = ForumMessageAttentionRequestContext(
+        viewerUserId: '84',
+        requestSequence: 11,
+        ownerToken: Object(),
+      );
+      final nextContext = ForumMessageAttentionRequestContext(
+        viewerUserId: '42',
+        requestSequence: 12,
+        ownerToken: nextOwner,
+      );
+
+      observer.context = firstContext;
+      expect(await client.network.send(_htmlRequest()), same(original));
+      final document = DiscuzHtmlDocument.forResponse(
+        original.response,
+      ).document;
+      observer.context = otherContext;
+      expect(await client.network.send(_htmlRequest()), same(original));
+      observer.context = nextContext;
+      expect(await client.network.send(_htmlRequest()), same(original));
+
+      expect(observer.captures, 3);
+      expect(observer.deliveries.map((delivery) => delivery.context), [
+        same(firstContext),
+        same(nextContext),
+      ]);
+      expect(
+        DiscuzHtmlDocument.forResponse(original.response).document,
+        same(document),
+      );
+    },
+  );
+
+  test(
+    'without an observer business retains its response and decoded DOM',
+    () async {
+      final source = mobileAttentionHtml(messageDot: true);
+      final original = _success(source, uri: _htmlUri);
+      final network = _Network(original);
+      final client = _client(network);
+      expect(client.network, same(network));
+      expect(await client.network.send(_htmlRequest()), same(original));
+
+      final decoded = DiscuzHtmlDocument.forResponse(original.response);
+      final document = decoded.document;
+      expect(
+        DiscuzHtmlDocument.forResponse(original.response).document,
+        same(document),
+      );
+      expect(decoded.hasUnexpectedEof, isFalse);
+      expect(original.response.body, same(source));
     },
   );
 

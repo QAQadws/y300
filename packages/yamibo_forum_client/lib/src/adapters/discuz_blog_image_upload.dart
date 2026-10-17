@@ -227,7 +227,7 @@ final class DiscuzBlogImageUpload {
       );
       if (source.failureOrNull case final failure?) return failure.retype();
       try {
-        final document = html.parse(source.dataOrNull!);
+        final document = source.dataOrNull!.document;
         final tables = document.querySelectorAll('table.imgl');
         if (tables.length != 1) {
           throw const FormatException('album_table_missing');

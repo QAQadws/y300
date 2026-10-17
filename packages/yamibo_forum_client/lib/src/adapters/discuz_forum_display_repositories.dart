@@ -11,6 +11,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_api_client.dart';
@@ -134,12 +135,13 @@ final class ForumDisplayHtmlRepository implements ForumDisplayRepository {
         diagnosticMessage: failure.code,
       );
     }
-    final body =
-        (result as ForumTransportSuccess<ForumResponse<Object?>>).response.body;
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    final body = response.body;
     if (body is! String) return _parseFailure('forum_display_text_expected');
     try {
-      final data = _parser.parse(
-        body,
+      final data = _parser.parseDocument(
+        DiscuzHtmlDocument.forResponse(response).document,
         fallbackFid: query.fid,
         fallbackPage: query.page,
       );

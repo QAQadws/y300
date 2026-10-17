@@ -20,8 +20,20 @@ class ThreadDetailHtmlParser {
     required String fallbackTid,
     required int fallbackPage,
     String fallbackSubject = '',
+  }) => parseDocument(
+    html_parser.parse(html),
+    fallbackTid: fallbackTid,
+    fallbackPage: fallbackPage,
+    fallbackSubject: fallbackSubject,
+  );
+
+  /// Extracts detail from an existing, read-only response document.
+  ThreadDetailData parseDocument(
+    html_dom.Document document, {
+    required String fallbackTid,
+    required int fallbackPage,
+    String fallbackSubject = '',
   }) {
-    final document = html_parser.parse(html);
     if (_looksLikeMobileThreadDetail(document)) {
       return _parseMobile(
         document,

@@ -42,11 +42,17 @@ public mobile/desktop navigation. API input is an already decoded envelope
 with `Variables.member_uid`; raw JSON decoding and duplicate-key handling are
 the decoder's responsibility. `space.uid` never establishes viewer identity.
 
-The initial route allowlists cover ordinary index/forum/public-space HTML and
-API modules `forumindex`, `forumdisplay`, `viewthread`, `profile`, `myfavforum`,
-`myfavthread`, and `smiley` (versions 1–4). Consuming message/notice pages,
-authentication, dispatch overrides, unknown routes, and business error envelopes
-are excluded. Supported templates have self-contained fixtures in the package.
+HTML evidence belongs to the public navigation shell across supported index,
+forum, public-space, search, tag, portal/group, and read-only editor-preparation
+routes. Request and final-response policies distinguish these reads from
+commands and consuming PM/notice/follow pages, whose shell can retain a
+pre-consumption member snapshot. Unknown plugin operations and partial/AJAX
+responses are not inferred safe. Missing navigation, including a template's
+`nofooter` mode, remains unknown. The default touch profile-only footer can
+establish a positive aggregate hint, but its absent dot alone cannot establish
+zero. API modules remain `forumindex`, `forumdisplay`, `viewthread`, `profile`,
+`myfavforum`, `myfavthread`, and `smiley` (versions 1–4). Supported templates have
+self-contained fixtures in the package.
 
 The parsers remain pure and perform no I/O or publication. To observe existing
 network reads, pass a `ForumMessageAttentionObserver` as
@@ -65,6 +71,24 @@ remains transport-owned; resource streams and multipart capabilities are
 preserved. No observer keeps the original network identity. Advanced source
 overrides must use a factory with the same observer rather than construct reads
 against an unobserved transport.
+
+HTML decoding is shared at the response boundary rather than moving observation
+into individual repositories. A package-internal, lazy decoding context is
+weakly associated with the exact `ForumResponse` object. Navigation extraction,
+business parsers, login/access checks, and editor preparation reuse its one DOM
+and tokenizer diagnostics. This is derived response data, not a URL/source-text
+cache; equal text in separate responses never shares mutable DOM. Consumers
+treat the source document as read-only and clone subtrees they change. Retaining
+a response can retain its decoded document; releasing response references lets
+the weak attachment be collected. No DOM or hint field is added to persistent
+business models, cached documents, or snapshots.
+
+Request ownership, sequence, cancellation and publication stay per send and are
+never cached in the decoding context. A valid navigation observation does not
+depend on successful business extraction; observer failure cannot fail a read.
+Cached HTML can be decoded independently but never publishes fresh evidence.
+The original response/result/body identities and standalone string-parser entry
+points are retained. Internal decoding contexts are not a supported public API.
 
 For explicit calibration, `loadMessageAttention(ForumMessageAttentionQuery(...))`
 uses the optional `messageAttention` source contract. Standard assembly provides

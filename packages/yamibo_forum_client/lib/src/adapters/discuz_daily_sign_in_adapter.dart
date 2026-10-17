@@ -7,6 +7,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_html_document.dart';
 import 'discuz_daily_sign_in_command_evidence.dart';
 import 'discuz_daily_sign_in_page_parser.dart';
 
@@ -364,8 +365,8 @@ final class DiscuzDailySignInAdapter {
       );
     }
     try {
-      final page = parser.parse(
-        response.body as String,
+      final page = parser.parseDocument(
+        DiscuzHtmlDocument.forResponse(response).document,
         requestedUri: _pageUri,
         sourceUri: response.uri,
         expectedUserId: userId,

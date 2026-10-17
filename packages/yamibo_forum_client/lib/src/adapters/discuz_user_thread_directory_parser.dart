@@ -27,8 +27,13 @@ final class DiscuzUserThreadDirectoryParser {
   UserThreadDirectoryData parse({
     required String source,
     required UserThreadDirectoryQuery query,
+  }) => parseDocument(html.parse(source), query: query);
+
+  /// Reads the directory after shared identity and access checks.
+  UserThreadDirectoryData parseDocument(
+    dom.Document document, {
+    required UserThreadDirectoryQuery query,
   }) {
-    final document = html.parse(source);
     _verifyViewer(document, query.viewerUserId ?? query.userId);
     _verifyDirectory(document, query);
     final items = <UserThreadSummary>[];

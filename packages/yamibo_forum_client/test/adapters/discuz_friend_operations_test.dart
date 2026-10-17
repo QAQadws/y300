@@ -1,8 +1,54 @@
+import 'package:html/dom.dart' as dom;
 import 'package:test/test.dart';
+import 'package:yamibo_forum_client/src/parsing/discuz_html_document.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_adapters.dart';
 
 void main() {
+  test(
+    'friend form validation reuses the response DOM without changing it',
+    () async {
+      final scenario = await _Scenario.create();
+      String? preparedMarkup;
+      scenario.network.beforeGetReturn = (response) {
+        final document = DiscuzHtmlDocument.forResponse(response).document;
+        // This test-owned change detects an accidental second source parse.
+        document.querySelector('select[name="gid"] option[value="0"]')!.text =
+            'Shared decoded group';
+        preparedMarkup = document.outerHtml;
+      };
+
+      final preparation = (await scenario.prepare()).dataOrNull!;
+
+      expect(preparation.groups.first.name, 'Shared decoded group');
+      expect(scenario.network.lastGetResponse!.body, scenario.network.source);
+      expect(
+        DiscuzHtmlDocument.forResponse(
+          scenario.network.lastGetResponse!,
+        ).document.outerHtml,
+        preparedMarkup,
+      );
+    },
+  );
+
+  test(
+    'friend login detection uses the same DOM before form validation',
+    () async {
+      final scenario = await _Scenario.create();
+      scenario.network.beforeGetReturn = (response) {
+        DiscuzHtmlDocument.forResponse(
+          response,
+        ).document.body!.nodes.add(dom.Element.tag('form')..id = 'loginform');
+      };
+
+      final result = await scenario.prepare();
+
+      expect(result.failureOrNull?.kind, DataReadFailureKind.unauthorized);
+      expect(result.failureOrNull?.code, 'friend_unauthorized');
+      expect(scenario.network.requests, hasLength(1));
+    },
+  );
+
   test(
     'request prepare reads complete form and submit sends only advertised gid',
     () async {
@@ -271,23 +317,28 @@ final class _Network implements ForumClientNetwork {
   final String source;
   final String reply;
   final requests = <ForumRequest>[];
+  void Function(ForumResponse<Object?> response)? beforeGetReturn;
+  ForumResponse<Object?>? lastGetResponse;
   @override
   Future<ForumTransportResult<ForumResponse<Object?>>> send(
     ForumRequest request,
   ) async {
     requests.add(request);
-    return ForumTransportSuccess(
-      ForumResponse(
-        uri: request.uri,
-        statusCode: 200,
-        headers: const {},
-        body: request.method == ForumRequestMethod.get
-            ? source
-            : reply.replaceAll(
-                'y300friend_7654_4242',
-                request.uri.queryParameters['handlekey']!,
-              ),
-      ),
+    final response = ForumResponse<Object?>(
+      uri: request.uri,
+      statusCode: 200,
+      headers: const {},
+      body: request.method == ForumRequestMethod.get
+          ? source
+          : reply.replaceAll(
+              'y300friend_7654_4242',
+              request.uri.queryParameters['handlekey']!,
+            ),
     );
+    if (request.method == ForumRequestMethod.get) {
+      lastGetResponse = response;
+      beforeGetReturn?.call(response);
+    }
+    return ForumTransportSuccess(response);
   }
 }

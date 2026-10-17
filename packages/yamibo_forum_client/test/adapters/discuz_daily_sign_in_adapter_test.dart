@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'package:yamibo_forum_client/src/parsing/discuz_html_document.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 
 void main() {
@@ -21,6 +22,30 @@ void main() {
     config: config,
     network: network,
   ).buildStandardClient();
+
+  test(
+    'sign-in status uses an existing response DOM without mutating it',
+    () async {
+      final response = _page(pageUri, unsigned);
+      final document = DiscuzHtmlDocument.forResponse(
+        response.response,
+      ).document;
+      // A test-only DOM update distinguishes sharing from a second raw parse.
+      document.querySelector('.day.today')!.classes.add('on');
+      document.querySelector('.signbtn a.btna')!.text = '今日已打卡';
+      final markup = document.outerHtml;
+      final network = _QueueNetwork([response]);
+
+      final result = await client(
+        network,
+      ).loadDailySignIn(const ForumDailySignInQuery(userId: '42'));
+
+      expect(result.dataOrNull?.status, ForumDailySignInStatus.signed);
+      expect(response.response.body, same(unsigned));
+      expect(document.outerHtml, markup);
+      expect(network.requests, hasLength(1));
+    },
+  );
 
   test('standard facade reads a network-only unsigned snapshot', () async {
     final network = _QueueNetwork([_page(pageUri, unsigned)]);

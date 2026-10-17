@@ -1,4 +1,4 @@
-import 'package:html/parser.dart' as html_parser;
+import 'package:html/dom.dart' as html_dom;
 
 import '../client/forum_client_config.dart';
 import '../contracts/data_command_contract.dart';
@@ -8,6 +8,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_formhash_provider.dart';
 import 'discuz_api_client.dart';
@@ -92,8 +93,8 @@ final class DiscuzThreadCreationAdapter
       if (response.body is! String) {
         throw const FormatException('thread_creation_form_not_text');
       }
-      final form = const DiscuzThreadCreationFormParser().parse(
-        response.body as String,
+      final form = const DiscuzThreadCreationFormParser().parseDocument(
+        DiscuzHtmlDocument.forResponse(response).document,
         sourceUri: response.uri,
         requestedUri: uri,
         fid: fid,
@@ -449,7 +450,7 @@ final class DiscuzThreadReplyAdapter
         throw const FormatException('thread_reply_desktop_form_uri_invalid');
       }
       final preparation = _parseReplyForm(
-        value.body as String,
+        DiscuzHtmlDocument.forResponse(value).document,
         sourceUri: desktopFormUri,
         expected: target,
         referer: referer,
@@ -562,12 +563,11 @@ final class DiscuzThreadReplyAdapter
   }
 
   ThreadReplyPreparation _parseReplyForm(
-    String source, {
+    html_dom.Document document, {
     required Uri sourceUri,
     required ThreadReplyTarget expected,
     required Uri referer,
   }) {
-    final document = html_parser.parse(source);
     final form = document.querySelector('#postform');
     if (form == null) {
       throw const FormatException('thread_reply_form_missing');

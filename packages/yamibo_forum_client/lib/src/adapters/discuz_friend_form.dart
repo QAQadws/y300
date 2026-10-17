@@ -1,3 +1,4 @@
+import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html;
 
 import '../contracts/forum_friend_operations.dart';
@@ -35,8 +36,22 @@ final class DiscuzFriendForm {
     required String actor,
     required String target,
     required bool removing,
+  }) => parseDocument(
+    html.parse(source),
+    origin: origin,
+    actor: actor,
+    target: target,
+    removing: removing,
+  );
+
+  /// Validates the same form using an already decoded, read-only response DOM.
+  static DiscuzFriendForm parseDocument(
+    dom.Document document, {
+    required Uri origin,
+    required String actor,
+    required String target,
+    required bool removing,
   }) {
-    final document = html.parse(source);
     final actors = document
         .querySelectorAll('script')
         .expand(

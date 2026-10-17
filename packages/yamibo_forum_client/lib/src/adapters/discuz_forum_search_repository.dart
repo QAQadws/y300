@@ -8,6 +8,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_formhash_provider.dart';
 import '../url/forum_uri_resolver.dart';
@@ -209,12 +210,13 @@ final class DiscuzForumSearchRepository implements ForumSearchRepository {
     )) {
       return _failure(failure, 'forum_search_result_failed');
     }
-    final body =
-        (result as ForumTransportSuccess<ForumResponse<Object?>>).response.body;
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    final body = response.body;
     if (body is! String) return _parseFailure('forum_search_response_invalid');
     try {
-      final parsed = _parser.parse(
-        html: body,
+      final parsed = _parser.parseDocument(
+        DiscuzHtmlDocument.forResponse(response).document,
         pageUri: uri,
         query: query,
         requestedPage: page,

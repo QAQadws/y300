@@ -1,3 +1,4 @@
+import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 
 import '../contracts/data_read_contract.dart';
@@ -7,14 +8,18 @@ import 'discuz_profile_html_parsers.dart';
 abstract final class DiscuzBlogAccess {
   /// Returns a classified failure only for an observed access boundary.
   static DataReadFailure<T, C>? failure<T, C>(String source) {
-    if (DiscuzProfileAuthPageDetector.isLoginPage(source)) {
+    return failureDocument<T, C>(html.parse(source));
+  }
+
+  /// Applies the same access gates to an already parsed response.
+  static DataReadFailure<T, C>? failureDocument<T, C>(Document document) {
+    if (DiscuzProfileAuthPageDetector.isLoginDocument(document)) {
       return const DataReadFailure(
         kind: DataReadFailureKind.unauthorized,
         code: 'user_blog_login_required',
         diagnosticMessage: 'user_blog_login_required',
       );
     }
-    final document = html.parse(source);
     if (document.querySelector('form#invalueform input[name="viewpwd"]') !=
         null) {
       return const DataReadFailure(

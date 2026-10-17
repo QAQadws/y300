@@ -45,8 +45,25 @@ final class DiscuzSearchHtmlParser {
     required ForumSearchQuery query,
     required int requestedPage,
     required String expectedSearchContextId,
+  }) => parseDocument(
+    html_parser.parse(html),
+    pageUri: pageUri,
+    query: query,
+    requestedPage: requestedPage,
+    expectedSearchContextId: expectedSearchContextId,
+  );
+
+  DiscuzSearchParsedPage parseDocument(
+    html_dom.Document document, {
+    required Uri pageUri,
+    required ForumSearchQuery query,
+    required int requestedPage,
+    required String expectedSearchContextId,
   }) {
-    if (_looksLikeLoginPage(html)) {
+    if (document.querySelector(
+          'form[action*="logging"], #lsform, .loginbox, input[name="password"]',
+        ) !=
+        null) {
       throw const DiscuzSearchUnauthorizedException();
     }
     if (requestedPage < 1) {
@@ -58,7 +75,6 @@ final class DiscuzSearchHtmlParser {
       expectedSearchContextId: expectedSearchContextId,
       requestedPage: requestedPage,
     );
-    final document = html_parser.parse(html);
     final root = document.querySelector('.threadlist');
     if (root == null) {
       throw const DiscuzSearchHtmlParseException('search_root_missing');
@@ -229,14 +245,6 @@ final class DiscuzSearchHtmlParser {
       return null;
     }
   }
-
-  bool _looksLikeLoginPage(String html) =>
-      html_parser
-          .parse(html)
-          .querySelector(
-            'form[action*="logging"], #lsform, .loginbox, input[name="password"]',
-          ) !=
-      null;
 }
 
 final class _ForumSummary {

@@ -1,3 +1,4 @@
+import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 
 import '../contracts/forum_image_attachments.dart';
@@ -30,20 +31,26 @@ final class DiscuzBlogEditorMedia {
     String source, {
     required Uri siteOrigin,
     required String actor,
+  }) => parseDocument(html.parse(source), siteOrigin: siteOrigin, actor: actor);
+
+  /// Reuses the checked editor document for optional upload controls.
+  static DiscuzBlogEditorMedia? parseDocument(
+    Document document, {
+    required Uri siteOrigin,
+    required String actor,
   }) {
     try {
-      return _parse(source, siteOrigin: siteOrigin, actor: actor);
+      return _parse(document, siteOrigin: siteOrigin, actor: actor);
     } on FormatException {
       return null;
     }
   }
 
   static DiscuzBlogEditorMedia? _parse(
-    String source, {
+    Document document, {
     required Uri siteOrigin,
     required String actor,
   }) {
-    final document = html.parse(source);
     if (document.querySelector('#icoImg_btn_imgattachlist') == null) {
       return null;
     }
@@ -119,15 +126,22 @@ final class DiscuzBlogEditorMedia {
 
   /// The standard home editor has exactly thirty comcom image smileys.
   static List<UserBlogSmiley> smileys(String source, Uri siteOrigin) {
+    return smileysDocument(html.parse(source), siteOrigin);
+  }
+
+  /// Reuses the checked editor document for its dedicated smiley resources.
+  static List<UserBlogSmiley> smileysDocument(
+    Document document,
+    Uri siteOrigin,
+  ) {
     try {
-      return _smileys(source, siteOrigin);
+      return _smileys(document, siteOrigin);
     } on FormatException {
       return const [];
     }
   }
 
-  static List<UserBlogSmiley> _smileys(String source, Uri siteOrigin) {
-    final document = html.parse(source);
+  static List<UserBlogSmiley> _smileys(Document document, Uri siteOrigin) {
     final editor = document.querySelector(
       'iframe[name="uchome-ifrHtmlEditor"]',
     );

@@ -149,9 +149,11 @@ Cookie 是认证事实来源，Session/formhash 是可重新获取的投影。�
 
 实验性 adapters 入口公开 `DiscuzMessageAttentionHtmlParser` 和 `DiscuzMessageAttentionApiParser`，构造时传 `siteOrigin`，解析时传最终响应 `sourceUri` 和预期 `expectedUserId`。不可信或不支持的响应返回 `null`，局部缺失保留分项未知。HTML 要求完整文档、唯一 head `discuz_uid` 以及受支持的移动／桌面公共导航结构；API 接受已解码的 envelope，以 `Variables.member_uid` 核对身份。原始 JSON 解码及重复键检测属于 decoder 边界，`space.uid` 不能充当 viewer。
 
-首版保守接纳普通 index／forum／公共 space HTML，以及 API 的 `forumindex`、`forumdisplay`、`viewthread`、`profile`、`myfavforum`、`myfavthread`、`smiley`（版本 1–4）。消息／提醒消费页面、认证、调度覆盖、未知路由与业务错误响应均排除。包内测试使用自包含脱敏 fixture，不依赖外部论坛目录或 App 测试数据。
+HTML 提示属于公共页面壳，支持范围包括普通 index／forum／公共 space、搜索、标签、门户／群组及明确只读的编辑准备页面。发起与最终响应均检查操作语义；PM／notice／follow 消费页面可能仍输出消费前成员快照，不能用于证明消费后的提示状态。未知插件操作、写命令及 AJAX／片段不推断为安全读取。`nofooter` 等缺失导航保持未知；默认触屏仅“我的”入口红点可证明合并提示存在，单独缺失该点不能证明零值。API 仍接纳 `forumindex`、`forumdisplay`、`viewthread`、`profile`、`myfavforum`、`myfavthread`、`smiley`（版本 1–4）。包内测试使用自包含脱敏 fixture，不依赖外部论坛目录或 App 测试数据。
 
 纯提取器仍不发请求或发布观察。Builder／adapter factory 可选传入 `messageAttentionObserver`，通过 contracts 入口的 `ForumMessageAttentionObserver` 观察已有网络读取。同步 `captureRequest()` 可返回 `null` 跳过请求，否则绑定已验证 viewer、正数发起序号和不可变 opaque owner token；`onObservation()` 收到同一上下文。Host 必须在接收时再次核对当前账号／session／source 归属，按序号和覆盖范围合并证据。观察异常不影响原业务响应。
+
+HTML 解析复用位于统一响应边界，消息采样继续覆盖共享 network，而不依赖各业务仓储单独发布。包内按原始 `ForumResponse` 对象弱关联一个惰性解析上下文，导航提取、业务 parser、登录／访问检查及表单准备共用一次 DOM 与 tokenizer 诊断。上下文仅包含响应派生信息，不按 URL／正文字符串跨请求缓存，也不保存 owner、请求序号、取消或投递状态；不同响应即使原文相同也各自解析。原 DOM 按只读消费，需要修改的子树先克隆。保留响应引用可能保留其 DOM；释放响应引用后弱关联可回收。缓存／快照与业务模型不增加 DOM 或消息字段，读取缓存不发布新鲜提示；业务提取失败与消息证据独立判断。原 response／result／body 身份及字符串 parser 入口兼容保留；内部上下文不是支持的公共 API。
 
 包内 decorator 只包装一次共享传输，仅发布未取消、最终 2xx、发起与最终 URI 均受支持的同站 GET。认证和 formhash 预检、消息／提醒消费读取、写请求、字节资源及缓存回放不发布；WAF 单次重放仍归原传输，resource stream／multipart 能力原样保留。不提供 observer 时保持原 network 对象。自定义 source override 应经携带同一 observer 的 factory 装配，直接使用原始 network 的自定义读取不在观察范围。
 

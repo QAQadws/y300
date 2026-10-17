@@ -9,6 +9,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_html_document.dart';
 import 'discuz_profile_html_parsers.dart';
 import 'discuz_blog_access.dart';
 
@@ -96,17 +97,17 @@ final class DiscuzForumUserProfileRepository
     if (body case DataReadFailure<String, Object?> failure) {
       return failure.retype();
     }
-    final html = (body as DataReadSuccess<String, Object?>).data;
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    final document = DiscuzHtmlDocument.forResponse(response).document;
     if (query.view == ForumUserProfileView.self &&
-        DiscuzProfileAuthPageDetector.isLoginPage(html)) {
+        DiscuzProfileAuthPageDetector.isLoginDocument(document)) {
       return const DataReadFailure(
         kind: DataReadFailureKind.unauthorized,
         code: 'forum_user_profile_unauthorized',
         diagnosticMessage: 'forum_user_profile_unauthorized',
       );
     }
-    final response =
-        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
     if (query.view == ForumUserProfileView.self &&
         (response.statusCode != 200 ||
             !_parser.isExpectedSelfResponseUri(
@@ -120,8 +121,8 @@ final class DiscuzForumUserProfileRepository
       );
     }
     try {
-      final data = _parser.parse(
-        html: html,
+      final data = _parser.parseDocument(
+        document,
         expectedUserId: userId,
         view: query.view,
         expectedViewerUserId: query.viewerUserId,
@@ -234,15 +235,17 @@ final class DiscuzUserBlogDirectoryRepository
     if (body case DataReadFailure<String, Object?> failure) {
       return failure.retype();
     }
-    final html = (body as DataReadSuccess<String, Object?>).data;
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    final document = DiscuzHtmlDocument.forResponse(response).document;
     final accessFailure =
-        DiscuzBlogAccess.failure<
+        DiscuzBlogAccess.failureDocument<
           UserBlogDirectoryData,
           UserBlogDirectoryReadCapabilities
-        >(html);
+        >(document);
     if (accessFailure != null) return accessFailure;
     try {
-      final parsed = _parser.parse(html: html, query: query);
+      final parsed = _parser.parseDocument(document, query: query);
       return DataReadSuccess(
         data: parsed.data,
         capabilities: _blogDirectoryReadCapabilities(
@@ -338,15 +341,17 @@ final class DiscuzUserBlogDetailRepository implements UserBlogDetailRepository {
     if (body case DataReadFailure<String, Object?> failure) {
       return failure.retype();
     }
-    final html = (body as DataReadSuccess<String, Object?>).data;
+    final response =
+        (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+    final document = DiscuzHtmlDocument.forResponse(response).document;
     final accessFailure =
-        DiscuzBlogAccess.failure<
+        DiscuzBlogAccess.failureDocument<
           UserBlogDetailData,
           UserBlogDetailReadCapabilities
-        >(html);
+        >(document);
     if (accessFailure != null) return accessFailure;
     try {
-      final data = _parser.parse(html: html, query: query);
+      final data = _parser.parseDocument(document, query: query);
       return DataReadSuccess(
         data: data,
         capabilities: _blogDetailReadCapabilities(data),

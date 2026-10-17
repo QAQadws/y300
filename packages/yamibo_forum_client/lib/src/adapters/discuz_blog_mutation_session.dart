@@ -1,5 +1,3 @@
-import 'package:html/parser.dart' as html;
-
 import '../client/forum_client_config.dart';
 import '../contracts/data_command_contract.dart';
 import '../contracts/data_read_contract.dart';
@@ -8,6 +6,7 @@ import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../parsing/discuz_html_document.dart';
 import '../session/forum_session_store.dart';
 import 'discuz_blog_access.dart';
 import 'discuz_blog_command_response.dart';
@@ -51,7 +50,7 @@ final class DiscuzBlogMutationSession {
   /// Reads a form and verifies both local and server-reported actor identity.
   /// A caller handling business notices must verify its own result; login and
   /// privacy gates still fail closed. Identity lookups can reject redirects.
-  Future<DataReadResult<String, Object?>> read(
+  Future<DataReadResult<DiscuzHtmlDocument, Object?>> read(
     Uri uri, {
     required String actor,
     required Uri referer,
@@ -108,15 +107,16 @@ final class DiscuzBlogMutationSession {
         response.body is! String) {
       return _readFailure('blog_response_invalid');
     }
-    final source = response.body as String;
-    final access = DiscuzBlogAccess.failure<String, Object?>(source);
+    final source = DiscuzHtmlDocument.forResponse(response);
+    final document = source.document;
+    final access =
+        DiscuzBlogAccess.failureDocument<DiscuzHtmlDocument, Object?>(document);
     if (access != null &&
         !(allowBusinessNotice && access.code == 'user_blog_unavailable')) {
       return access;
     }
     // Normal mobile and desktop GETs expose this identity in header.htm.
-    final actors = html
-        .parse(source)
+    final actors = document
         .querySelectorAll('script')
         .expand(
           (script) => RegExp(

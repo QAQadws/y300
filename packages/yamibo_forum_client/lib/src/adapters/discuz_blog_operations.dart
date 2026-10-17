@@ -1,5 +1,3 @@
-import 'package:html/parser.dart' as html;
-
 import '../client/forum_client_config.dart';
 import '../contracts/data_command_contract.dart';
 import '../contracts/data_read_contract.dart';
@@ -68,15 +66,16 @@ final class DiscuzBlogOperations
     );
     if (source.failureOrNull case final failure?) return failure.retype();
     try {
-      final form = DiscuzBlogEditorForm.parse(
-        source.dataOrNull!,
+      final document = source.dataOrNull!.document;
+      final form = DiscuzBlogEditorForm.parseDocument(
+        document,
         siteOrigin: config.siteOrigin,
         target: target,
       );
       final media = multipart == null
           ? null
-          : DiscuzBlogEditorMedia.parse(
-              source.dataOrNull!,
+          : DiscuzBlogEditorMedia.parseDocument(
+              document,
               siteOrigin: config.siteOrigin,
               actor: target.actorUserId,
             );
@@ -91,8 +90,8 @@ final class DiscuzBlogOperations
           target,
           token,
           imageUploadLimits: media?.limits,
-          blogSmilies: DiscuzBlogEditorMedia.smileys(
-            source.dataOrNull!,
+          blogSmilies: DiscuzBlogEditorMedia.smileysDocument(
+            document,
             config.siteOrigin,
           ),
         ),
@@ -249,8 +248,8 @@ final class DiscuzBlogOperations
     if (source.failureOrNull case final failure?) return failure.retype();
     try {
       final article = UserBlogDetailHtmlParser(siteOrigin: config.siteOrigin)
-          .parse(
-            html: source.dataOrNull!,
+          .parseDocument(
+            source.dataOrNull!.document,
             query: UserBlogDetailQuery(
               ownerUserId: target.ownerUserId,
               blogId: target.blogId!,
@@ -273,8 +272,7 @@ final class DiscuzBlogOperations
       if (confirmation.failureOrNull case final failure?) {
         return failure.retype();
       }
-      final forms = html
-          .parse(confirmation.dataOrNull!)
+      final forms = confirmation.dataOrNull!.document
           .querySelectorAll('form')
           .where(
             (form) => (form.attributes['action'] ?? '').contains('ac=blog'),

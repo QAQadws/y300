@@ -8,6 +8,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import 'discuz_tag_directory_html_parser.dart';
 
@@ -81,12 +82,12 @@ final class DiscuzForumTagDirectoryRepository
       );
     }
     try {
-      final body = (result as ForumTransportSuccess<ForumResponse<Object?>>)
-          .response
-          .body;
+      final response =
+          (result as ForumTransportSuccess<ForumResponse<Object?>>).response;
+      final body = response.body;
       if (body is! String) throw const FormatException('text_expected');
-      final data = _parser.parse(
-        html: body,
+      final data = _parser.parseDocument(
+        DiscuzHtmlDocument.forResponse(response).document,
         pageUrl: uri.toString(),
         expectedTagId: tagId,
         requestedPage: query.page,

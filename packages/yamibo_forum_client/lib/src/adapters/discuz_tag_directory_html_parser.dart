@@ -19,8 +19,19 @@ final class DiscuzTagDirectoryHtmlParser {
     required String pageUrl,
     required String expectedTagId,
     required int requestedPage,
+  }) => parseDocument(
+    html_parser.parse(html),
+    pageUrl: pageUrl,
+    expectedTagId: expectedTagId,
+    requestedPage: requestedPage,
+  );
+
+  ForumTagDirectoryData parseDocument(
+    html_dom.Document document, {
+    required String pageUrl,
+    required String expectedTagId,
+    required int requestedPage,
   }) {
-    final document = html_parser.parse(html);
     final root = document.querySelector('.bm.tl');
     if (root == null) {
       throw const FormatException('Tag topic list root is missing.');

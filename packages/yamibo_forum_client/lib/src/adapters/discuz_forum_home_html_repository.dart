@@ -13,6 +13,7 @@ import '../network/forum_network.dart';
 import '../network/forum_request.dart';
 import '../network/forum_request_profile.dart';
 import '../network/forum_response.dart';
+import '../parsing/discuz_html_document.dart';
 import '../network/forum_transport.dart';
 import '../session/forum_session_store.dart';
 import 'forum_home_html_parser.dart';
@@ -184,7 +185,9 @@ final class DiscuzForumHomeHtmlRepository
       if (response.body is! String) {
         throw const FormatException('forum_home_text_expected');
       }
-      final data = _parser.parse(response.body as String);
+      final data = _parser.parseDocument(
+        DiscuzHtmlDocument.forResponse(response).document,
+      );
       if (!_valid(data)) {
         throw const FormatException('forum_home_identity_invalid');
       }

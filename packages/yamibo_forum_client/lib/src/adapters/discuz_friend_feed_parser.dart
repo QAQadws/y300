@@ -20,8 +20,14 @@ final class DiscuzFriendFeedParser {
       _page(uri) == query.page;
 
   /// Projects rows only after the response proves the current account/list.
-  ForumFriendFeedPage parse(String source, ForumFriendFeedQuery query) {
-    final document = html.parse(source);
+  ForumFriendFeedPage parse(String source, ForumFriendFeedQuery query) =>
+      parseDocument(html.parse(source), query);
+
+  /// Extracts a list without modifying the shared response document.
+  ForumFriendFeedPage parseDocument(
+    dom.Document document,
+    ForumFriendFeedQuery query,
+  ) {
     if (!discuzFriendActorMatches(document, query.accountUserId)) {
       throw const FormatException('friend_feed_account_unverified');
     }

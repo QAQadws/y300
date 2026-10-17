@@ -18,7 +18,11 @@ final class DiscuzAccountSummaryParser {
       _queryMatches(uri, {'mod': 'space', 'uid': userId, 'do': 'profile'});
 
   CurrentUserProfileData parse(String source, String userId) {
-    final document = html.parse(source);
+    return parseDocument(html.parse(source), userId);
+  }
+
+  /// Reads account details without reparsing the response's shared document.
+  CurrentUserProfileData parseDocument(Document document, String userId) {
     final assignmentCount = document
         .querySelectorAll('script')
         .fold<int>(

@@ -17,8 +17,15 @@ final class DiscuzBlogFavoriteForm {
     String source,
     Uri origin,
     UserBlogFavoriteTarget target,
+  ) => parseDocument(html.parse(source), origin, target);
+
+  /// Reuses the checked form response instead of rebuilding its DOM.
+  static DiscuzBlogFavoriteForm parseDocument(
+    Document document,
+    Uri origin,
+    UserBlogFavoriteTarget target,
   ) {
-    final (form, uri) = _form(source, origin);
+    final (form, uri) = _form(document, origin);
     final query = uri.queryParameters;
     if (form.id != 'favoriteform_${target.blogId}' ||
         query['id'] != target.blogId ||
@@ -34,7 +41,12 @@ final class DiscuzBlogFavoriteForm {
   /// Proves a current-account bookmark ID after reading its exact targeted GET.
   /// This never returns a delete ticket or allows the delete form to be posted.
   static String existingId(String source, Uri origin) {
-    final (form, uri) = _form(source, origin);
+    return existingIdDocument(html.parse(source), origin);
+  }
+
+  /// Proves the existing ID from the same checked response document.
+  static String existingIdDocument(Document document, Uri origin) {
+    final (form, uri) = _form(document, origin);
     final query = uri.queryParameters;
     final id = query['favid'] ?? '';
     if (query['op'] != 'delete' ||
@@ -51,13 +63,16 @@ final class DiscuzBlogFavoriteForm {
 
   /// A source business notice may mean a duplicate. Text alone is not proof.
   static bool isNotice(String source) {
-    final document = html.parse(source);
+    return isNoticeDocument(html.parse(source));
+  }
+
+  /// Classifies the notice without reparsing a previously checked form.
+  static bool isNoticeDocument(Document document) {
     return document.querySelector('form') == null &&
         document.querySelector('#messagetext, .jump_c, .alert_error') != null;
   }
 
-  static (Element, Uri) _form(String source, Uri origin) {
-    final document = html.parse(source);
+  static (Element, Uri) _form(Document document, Uri origin) {
     final forms = document.querySelectorAll('form[id^="favoriteform_"]');
     if (forms.length != 1) {
       throw const FormatException('blog_favorite_form_missing');

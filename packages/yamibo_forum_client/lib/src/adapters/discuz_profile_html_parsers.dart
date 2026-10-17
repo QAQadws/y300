@@ -14,7 +14,10 @@ import 'discuz_profile_action_links.dart';
 
 abstract final class DiscuzProfileAuthPageDetector {
   static bool isLoginPage(String html) {
-    final document = html_parser.parse(html);
+    return isLoginDocument(html_parser.parse(html));
+  }
+
+  static bool isLoginDocument(html_dom.Document document) {
     return document.querySelector(
           'form#loginform, form[name="login"], .loginbox',
         ) !=
@@ -52,8 +55,19 @@ final class ForumUserProfileHtmlParser {
     required String expectedUserId,
     ForumUserProfileView view = ForumUserProfileView.public,
     String? expectedViewerUserId,
+  }) => parseDocument(
+    html_parser.parse(html),
+    expectedUserId: expectedUserId,
+    view: view,
+    expectedViewerUserId: expectedViewerUserId,
+  );
+
+  ForumUserProfileData parseDocument(
+    html_dom.Document document, {
+    required String expectedUserId,
+    ForumUserProfileView view = ForumUserProfileView.public,
+    String? expectedViewerUserId,
   }) {
-    final document = html_parser.parse(html);
     final signedInUserId = _optionalSignedInUserId(document);
     if (view == ForumUserProfileView.self) {
       if (signedInUserId == '0') {
@@ -320,8 +334,12 @@ final class UserBlogDirectoryHtmlParser {
   ParsedUserBlogDirectory parse({
     required String html,
     required UserBlogDirectoryQuery query,
+  }) => parseDocument(html_parser.parse(html), query: query);
+
+  ParsedUserBlogDirectory parseDocument(
+    html_dom.Document document, {
+    required UserBlogDirectoryQuery query,
   }) {
-    final document = html_parser.parse(html);
     final root = document.querySelector('.threadlist');
     if (root == null) {
       throw const FormatException('blog_directory_root_missing');
@@ -565,8 +583,12 @@ final class UserBlogDetailHtmlParser {
   UserBlogDetailData parse({
     required String html,
     required UserBlogDetailQuery query,
+  }) => parseDocument(html_parser.parse(html), query: query);
+
+  UserBlogDetailData parseDocument(
+    html_dom.Document document, {
+    required UserBlogDetailQuery query,
   }) {
-    final document = html_parser.parse(html);
     final root = document.querySelector('.viewthread');
     final post = root?.querySelector('.plc');
     final message = post?.querySelector('.message');
