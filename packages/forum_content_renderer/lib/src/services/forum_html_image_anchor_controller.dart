@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../html_rendering/forum_html_prepared_render_document.dart';
+import 'forum_html_image_viewport_geometry.dart';
 
 typedef _ImageIdentity = ({int index, String cacheKey, String url});
 
@@ -108,12 +108,15 @@ final class ForumHtmlImageAnchorController {
     if (anchor == null ||
         !anchor.mounted ||
         !position.hasContentDimensions ||
-        !identical(Scrollable.maybeOf(anchor.context)?.position, position)) {
+        !identical(
+          Scrollable.maybeOf(anchor.context, axis: position.axis)?.position,
+          position,
+        )) {
       return null;
     }
     final box = anchor.context.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-    final viewport = RenderAbstractViewport.maybeOf(box);
+    final viewport = forumHtmlImageViewportFor(box, position);
     if (viewport == null) return null;
     final target = viewport.getOffsetToReveal(box, 0).offset;
     if (!target.isFinite) return null;

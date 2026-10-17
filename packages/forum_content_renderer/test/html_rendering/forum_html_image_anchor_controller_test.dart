@@ -28,6 +28,51 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'nested table images retain distinct anchors across width changes',
+    (tester) async {
+      final anchors = ForumHtmlImageAnchorController();
+      final scroll = ScrollController();
+      addTearDown(anchors.dispose);
+      addTearDown(scroll.dispose);
+      final document = prepareRenderTestDocument(
+        '<table><tr><td>Details</td><td><table><tr><td>'
+        '${_images(['same', 'middle', 'same'])}'
+        '</td></tr></table></td></tr></table>',
+        sourceId: 'table',
+      );
+      ForumHtmlImageRequest? tapped;
+      final callbacks = ForumHtmlRenderCallbacks(
+        onTapImage: (value) => tapped = value,
+      );
+      await tester.pumpWidget(
+        _host(anchors, scroll, document, callbacks: callbacks),
+      );
+      await _frames(tester);
+      final target = find.byKey(
+        const Key('thread-post-html-first-readable-image-table-2'),
+      );
+      final element = tester.element(target);
+      for (final width in [220.0, 280.0, 240.0]) {
+        await tester.pumpWidget(
+          _host(anchors, scroll, document, width: width, callbacks: callbacks),
+        );
+        await _frames(tester);
+        expect(tester.element(target), same(element));
+      }
+
+      final result = _reveal(anchors, scroll, document.sequence.entries[2]);
+      await _frames(tester);
+      expect(await result, isTrue);
+      expect(_top(tester, 'table', 2), closeTo(_viewportTop(tester), 0.5));
+      expect(_top(tester, 'table', 0), lessThan(_viewportTop(tester)));
+      await tester.tap(target);
+      expect(tapped?.readableIndex, 2);
+      expect(tapped?.url, document.sequence.entries[2].url);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final expanded in [true, false]) {
     testWidgets(
       '${expanded ? 'expanded' : 'closed'} nested folds share root image identity',
@@ -344,6 +389,7 @@ Widget _host(
   ScrollController scroll,
   ForumHtmlPreparedRenderDocument document, {
   bool shown = true,
+  double width = 240,
   Map<String, bool>? collapseExpansion,
   ForumHtmlRenderCallbacks callbacks = const ForumHtmlRenderCallbacks(),
 }) => MaterialApp(
@@ -352,7 +398,7 @@ Widget _host(
       alignment: Alignment.topLeft,
       child: SizedBox(
         key: const Key('viewport'),
-        width: 240,
+        width: width,
         height: 200,
         child: SingleChildScrollView(
           controller: scroll,

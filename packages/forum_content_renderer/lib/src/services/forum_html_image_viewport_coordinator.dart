@@ -1,8 +1,8 @@
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_predecode_host.dart';
 import 'forum_html_image_predecode_policy.dart';
+import 'forum_html_image_viewport_geometry.dart';
 
 enum ForumHtmlImageViewportMode {
   dormant,
@@ -354,21 +354,14 @@ final class ForumHtmlImageViewportCoordinator {
         !identical(scrollable.position, _position)) {
       return null;
     }
-    final boundary = scrollable.position.context.notificationContext
-        ?.findRenderObject();
-    if (boundary == null || !boundary.attached) return null;
     // Pair the viewport with the same vertical ScrollPosition we listen to.
     // The nearest viewport may belong to a horizontally scrolling table, and
     // SingleChildScrollView's viewport does not expose a public axis property.
-    RenderAbstractViewport? viewport;
-    RenderObject? ancestor = renderObject;
-    while (ancestor != null && !identical(ancestor, boundary)) {
-      if (ancestor is RenderAbstractViewport) viewport = ancestor;
-      ancestor = ancestor.parent;
-    }
-    if (viewport == null || !identical(ancestor, boundary)) {
-      return null;
-    }
+    final viewport = forumHtmlImageViewportFor(
+      renderObject,
+      scrollable.position,
+    );
+    if (viewport == null) return null;
     final bounds = MatrixUtils.transformRect(
       renderObject.getTransformTo(viewport),
       renderObject.paintBounds,

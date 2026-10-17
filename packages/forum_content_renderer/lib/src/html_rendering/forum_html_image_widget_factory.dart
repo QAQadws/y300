@@ -95,6 +95,10 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
     final imageIndex = isSticker ? null : readableIndex ?? _nextImageIndex++;
     final htmlSize = _explicitSize(src);
     return ValueListenableBuilder<ForumHtmlImageFactoryBinding>(
+      // fwfh caches this widget per DOM image. A table can insert/remove a
+      // scroll wrapper during width measurement, so its image binding must
+      // survive reparenting. Each DOM slot owns a key, including repeated URLs.
+      key: _hasTableAncestor(tree.element) ? GlobalKey() : null,
       valueListenable: binding,
       builder: (context, binding, child) {
         final host = binding.host;
@@ -129,6 +133,13 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
         );
       },
     );
+  }
+
+  bool _hasTableAncestor(html_dom.Element element) {
+    for (var parent = element.parent; parent != null; parent = parent.parent) {
+      if (parent.localName == 'table') return true;
+    }
+    return false;
   }
 
   Widget? _fallback(BuildTree tree, ImageSource src) {
