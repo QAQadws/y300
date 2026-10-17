@@ -17,6 +17,7 @@ import 'package:y300/features/cache/presentation/services/default_forum_image_pr
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/thread/presentation/services/thread_image_preload_policy.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 import 'forum_html_test_theme.dart';
@@ -260,12 +261,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final animated in [false, true]) {
+  for (final scenario in [
+    (animated: false, highDpr: false),
+    (animated: true, highDpr: false),
+    (animated: false, highDpr: true),
+  ]) {
+    final animated = scenario.animated;
+    final highDpr = scenario.highDpr;
+    final devicePixelRatio = highDpr ? 4.0 : 1.0;
+    final displayWidth = highDpr ? 336.0 : 200.0;
+    final viewportHeight = highDpr ? 400.0 : 250.0;
+    final imageHeight = highDpr ? 483.0 : 100.0;
+    final firstImageHeight = highDpr ? imageHeight : 300.0;
+    final intrinsicSize = highDpr
+        ? const Size(2688, 3860)
+        : animated
+        ? const Size(1, 1)
+        : const Size(400, 200);
     testWidgets(
-      'prepared ${animated ? 'GIF' : 'PNG'} keeps its rendered frame across viewport edges',
+      'prepared ${highDpr ? 'high-DPR ' : ''}${animated ? 'GIF' : 'PNG'} keeps its rendered frame across viewport edges',
       (tester) async {
-        tester.view.devicePixelRatio = 1;
+        tester.view.devicePixelRatio = devicePixelRatio;
         addTearDown(tester.view.resetDevicePixelRatio);
+        if (highDpr) {
+          tester.view.physicalSize = const Size(1440, 2560);
+          addTearDown(tester.view.resetPhysicalSize);
+        }
         final extension = animated ? 'gif' : 'png';
         final directory = (await tester.runAsync(
           () => Directory.systemTemp.createTemp('y300-predecode-'),
@@ -274,18 +295,18 @@ void main() {
           await directory.delete(recursive: true);
         });
         final paths = await tester.runAsync(() async {
-          final bytes = await _imageBytes(animated: animated);
+          final bytes = await _imageBytes(
+            animated: animated,
+            size: intrinsicSize,
+          );
           return [
             for (var i = 0; i < 8; i++)
-              (await File(
-                '${directory.path}/$i.$extension',
-              ).writeAsBytes(bytes)).path,
+              (await File('${directory.path}/$i.$extension')
+                      .writeAsBytes(bytes))
+                  .path,
           ];
         });
-        final cache = _FileCache(
-          paths!,
-          intrinsicSize: animated ? const Size(1, 1) : const Size(400, 200),
-        );
+        final cache = _FileCache(paths!, intrinsicSize: intrinsicSize);
         final decodedKeys = <Object>[];
         final service = DefaultForumImagePrecacheService(
           imageCacheService: cache,
@@ -302,9 +323,14 @@ void main() {
           ),
         ).forContent(threadId: '100', imagePrecacheService: service);
         final coordinator = ForumHtmlImageViewportCoordinator(
-          predecodePolicy: const ForumHtmlImagePredecodePolicy(
-            maxDecodedBytesPerImage: 1000000,
-          ),
+          predecodePolicy: highDpr
+              ? ThreadImagePreloadPolicy(
+                  imageCacheBudgetBytes: 64 * 1024 * 1024,
+                  isLowRamDevice: false,
+                ).predecode
+              : const ForumHtmlImagePredecodePolicy(
+                  maxDecodedBytesPerImage: 1000000,
+                ),
         );
         final controller = ScrollController();
         addTearDown(coordinator.dispose);
@@ -320,15 +346,16 @@ void main() {
                 body: Align(
                   alignment: Alignment.topLeft,
                   child: SizedBox(
-                    width: 200,
-                    height: 250,
+                    width: displayWidth,
+                    height: viewportHeight,
                     child: SingleChildScrollView(
                       controller: controller,
                       child: ForumHtmlWidgetPostRenderer(
                         html: [
                           for (var i = 0; i < paths.length; i++)
                             '<div><img src="https://example.invalid/$i.$extension" '
-                                'width="200" height="${i == 0 ? 300 : 100}"></div>',
+                                'width="${displayWidth.toInt()}" '
+                                'height="${(i == 0 ? firstImageHeight : imageHeight).toInt()}"></div>',
                         ].join(),
                         sourceId: 'real-predecode',
                         theme: forumHtmlTestTheme,
@@ -353,7 +380,7 @@ void main() {
         final next = find.byKey(
           const Key('thread-post-html-first-readable-image-real-predecode-1'),
         );
-        expect(tester.getTopLeft(next).dy, greaterThan(250));
+        expect(tester.getTopLeft(next).dy, greaterThan(viewportHeight));
         final nextImage = find.descendant(
           of: next,
           matching: find.byType(Image),
@@ -364,6 +391,9 @@ void main() {
         );
         expect(nextImage, findsOneWidget);
         expect(tester.widget<RawImage>(nextFrame).image, isNotNull);
+        if (highDpr) {
+          expect(tester.widget<RawImage>(nextFrame).image!.width, 1344);
+        }
         final imageElement = tester.element(nextImage);
         expect(TickerMode.valuesOf(imageElement).enabled, isFalse);
         final pausedFrame = tester.widget<RawImage>(nextFrame).image;
@@ -373,7 +403,7 @@ void main() {
         );
         await tester.pump();
         expect(tester.widget<RawImage>(nextFrame).image, same(pausedFrame));
-        final enteringOffset = tester.getTopLeft(next).dy - 250;
+        final enteringOffset = tester.getTopLeft(next).dy - viewportHeight;
         for (final delta in [0.5, -0.5, 0.5, -0.5, 0.5]) {
           controller.jumpTo(enteringOffset + delta);
           for (var frame = 0; frame < 3; frame++) {
@@ -386,8 +416,8 @@ void main() {
         final display = resolveDownscaledFileImageProvider(
           localPath: paths[1],
           fit: BoxFit.fitWidth,
-          displaySize: const Size(200, 100),
-          devicePixelRatio: 1,
+          displaySize: Size(displayWidth, imageHeight),
+          devicePixelRatio: devicePixelRatio,
         );
         final key = await display.obtainKey(ImageConfiguration.empty);
         expect(decodedKeys, contains(key));

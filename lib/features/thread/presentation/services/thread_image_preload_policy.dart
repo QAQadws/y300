@@ -12,6 +12,7 @@ final class ThreadImagePreloadPolicy {
        maxConcurrentOptionalWork = isLowRamDevice ? 1 : 2,
        predecode = ForumHtmlImagePredecodePolicy(
          forwardImageCount: isLowRamDevice ? 1 : 3,
+         decodeExtentFactor: isLowRamDevice ? 1 : 1.5,
          forwardDiskExtentFactor: isLowRamDevice ? 1 : 3,
          maxDecodedBytesPerImage: _perImageBudget(
            imageCacheBudgetBytes,
@@ -28,8 +29,7 @@ final class ThreadImagePreloadPolicy {
     const mib = 1024 * 1024;
     // This is an independent per-image admission limit, not a cumulative
     // window budget. More neighboring targets do not dilute their image size.
-    return (cacheBytes ~/ (lowRam ? 8 : 12))
-        .clamp(0, (lowRam ? 4 : 8) * mib)
-        .toInt();
+    // A normal comic page at high DPR can exceed 8 MiB after width-bound decode.
+    return (cacheBytes ~/ 4).clamp(0, (lowRam ? 8 : 24) * mib).toInt();
   }
 }
