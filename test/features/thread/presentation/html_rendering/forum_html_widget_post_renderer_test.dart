@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -16,6 +18,7 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+
 import 'forum_html_test_theme.dart';
 
 void main() {
@@ -988,16 +991,11 @@ void main() {
     );
     await tester.pump();
 
-    final aspectRatio = tester.widget<AspectRatio>(
-      find
-          .ancestor(
-            of: find.byType(CachedLibraryImage).first,
-            matching: find.byType(AspectRatio),
-          )
-          .first,
-    );
+    final aspectRatio = tester
+        .getSize(find.byType(CachedLibraryImage).first)
+        .aspectRatio;
 
-    expect(aspectRatio.aspectRatio, 0.7);
+    expect(aspectRatio, closeTo(0.7, 0.001));
   });
 
   testWidgets('uses learned fallback ratio and reports decoded block size', (
@@ -1036,16 +1034,11 @@ void main() {
     );
     await tester.pump();
 
-    final aspectRatio = tester.widget<AspectRatio>(
-      find
-          .ancestor(
-            of: find.byType(CachedLibraryImage).first,
-            matching: find.byType(AspectRatio),
-          )
-          .first,
-    );
+    final aspectRatio = tester
+        .getSize(find.byType(CachedLibraryImage).first)
+        .aspectRatio;
 
-    expect(aspectRatio.aspectRatio, 1.6);
+    expect(aspectRatio, closeTo(1.6, 0.001));
 
     tester
         .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
@@ -1086,18 +1079,10 @@ void main() {
     );
     await tester.pump();
 
-    AspectRatio currentAspectRatio() {
-      return tester.widget<AspectRatio>(
-        find
-            .ancestor(
-              of: find.byType(CachedLibraryImage).first,
-              matching: find.byType(AspectRatio),
-            )
-            .first,
-      );
-    }
+    double currentAspectRatio() =>
+        tester.getSize(find.byType(CachedLibraryImage).first).aspectRatio;
 
-    expect(currentAspectRatio().aspectRatio, 0.7);
+    expect(currentAspectRatio(), closeTo(0.7, 0.001));
 
     tester
         .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
@@ -1105,7 +1090,7 @@ void main() {
         ?.call(const Size(1600, 900));
     await tester.pump();
 
-    expect(currentAspectRatio().aspectRatio, 1600 / 900);
+    expect(currentAspectRatio(), closeTo(1600 / 900, 0.001));
     expect(shifts, hasLength(1));
     expect(shifts.single.oldAspectRatio, 0.7);
     expect(shifts.single.newAspectRatio, 1600 / 900);
@@ -1140,16 +1125,8 @@ void main() {
       );
       await tester.pump();
 
-      AspectRatio currentAspectRatio() {
-        return tester.widget<AspectRatio>(
-          find
-              .ancestor(
-                of: find.byType(CachedLibraryImage).first,
-                matching: find.byType(AspectRatio),
-              )
-              .first,
-        );
-      }
+      double currentAspectRatio() =>
+          tester.getSize(find.byType(CachedLibraryImage).first).aspectRatio;
 
       ClipRRect currentClip() {
         return tester.widget<ClipRRect>(
@@ -1162,7 +1139,7 @@ void main() {
         );
       }
 
-      expect(currentAspectRatio().aspectRatio, 0.7);
+      expect(currentAspectRatio(), closeTo(0.7, 0.001));
       expect(
         currentClip().borderRadius,
         const BorderRadius.all(Radius.circular(4)),
@@ -1174,7 +1151,7 @@ void main() {
           ?.call(const Size(720, 1000));
       await tester.pump();
 
-      expect(currentAspectRatio().aspectRatio, 0.72);
+      expect(currentAspectRatio(), closeTo(0.72, 0.001));
       expect(shifts, isEmpty);
       expect(
         currentClip().borderRadius,
@@ -1244,9 +1221,11 @@ void main() {
       await tester.pump();
 
       final imageHeight = find
-          .byType(AspectRatio)
+          .byType(CachedLibraryImage)
           .evaluate()
-          .map((element) => (element.renderObject! as RenderBox).size.height)
+          .map(
+            (element) => (element.findRenderObject()! as RenderBox).size.height,
+          )
           .fold<double>(0, (sum, height) => sum + height);
       final rendererHeight = tester
           .getSize(
@@ -1290,16 +1269,11 @@ void main() {
         ?.call(const Size(700, 1000));
     await tester.pump();
 
-    final aspectRatio = tester.widget<AspectRatio>(
-      find
-          .ancestor(
-            of: find.byType(CachedLibraryImage).first,
-            matching: find.byType(AspectRatio),
-          )
-          .first,
-    );
+    final aspectRatio = tester
+        .getSize(find.byType(CachedLibraryImage).first)
+        .aspectRatio;
 
-    expect(aspectRatio.aspectRatio, 0.7);
+    expect(aspectRatio, closeTo(0.7, 0.001));
   });
 
   testWidgets('uses cached aspect ratio for unsized thread images', (
@@ -1337,30 +1311,20 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final aspectRatio = tester.widget<AspectRatio>(
-      find
-          .ancestor(
-            of: find.byType(CachedLibraryImage).first,
-            matching: find.byType(AspectRatio),
-          )
-          .first,
-    );
+    final aspectRatio = tester
+        .getSize(find.byType(CachedLibraryImage).first)
+        .aspectRatio;
     final image = tester.widget<CachedLibraryImage>(
       find.byType(CachedLibraryImage).first,
     );
     image.onImageResolved?.call(const Size(1600, 900));
     await tester.pump();
-    final stableAspectRatio = tester.widget<AspectRatio>(
-      find
-          .ancestor(
-            of: find.byType(CachedLibraryImage).first,
-            matching: find.byType(AspectRatio),
-          )
-          .first,
-    );
+    final stableAspectRatio = tester
+        .getSize(find.byType(CachedLibraryImage).first)
+        .aspectRatio;
 
-    expect(aspectRatio.aspectRatio, 1.6);
-    expect(stableAspectRatio.aspectRatio, 1.6);
+    expect(aspectRatio, closeTo(1.6, 0.001));
+    expect(stableAspectRatio, closeTo(1.6, 0.001));
     expect(image.width, isNull);
     expect(image.height, isNull);
   });
@@ -1402,60 +1366,51 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final aspectRatio = tester.widget<AspectRatio>(
-      find
-          .ancestor(
-            of: find.byType(CachedLibraryImage).first,
-            matching: find.byType(AspectRatio),
-          )
-          .first,
-    );
+    final aspectRatio = tester
+        .getSize(find.byType(CachedLibraryImage).first)
+        .aspectRatio;
     tester
         .widget<CachedLibraryImage>(find.byType(CachedLibraryImage).first)
         .onImageResolved
         ?.call(const Size(1600, 900));
     await tester.pump();
-    final stableAspectRatio = tester.widget<AspectRatio>(
-      find
-          .ancestor(
-            of: find.byType(CachedLibraryImage).first,
-            matching: find.byType(AspectRatio),
-          )
-          .first,
-    );
+    final stableAspectRatio = tester
+        .getSize(find.byType(CachedLibraryImage).first)
+        .aspectRatio;
 
-    expect(aspectRatio.aspectRatio, 640 / 480);
-    expect(stableAspectRatio.aspectRatio, 640 / 480);
+    expect(aspectRatio, closeTo(640 / 480, 0.001));
+    expect(stableAspectRatio, closeTo(640 / 480, 0.001));
   });
 
-  testWidgets('keeps non-network data images on the html library default path', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const LocalizedTestApp(
-        home: Scaffold(
-          body: ForumHtmlWidgetPostRenderer(
-            theme: forumHtmlTestTheme,
-            sourceId: 'data-image',
-            threadId: '573279',
-            html:
-                '<img src="data:image/png;base64,'
-                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=">',
+  testWidgets(
+    'keeps non-network data images on the html library default path',
+    (tester) async {
+      await tester.pumpWidget(
+        const LocalizedTestApp(
+          home: Scaffold(
+            body: ForumHtmlWidgetPostRenderer(
+              theme: forumHtmlTestTheme,
+              sourceId: 'data-image',
+              threadId: '573279',
+              html:
+                  '<img src="data:image/png;base64,'
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=">',
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    expect(find.byType(CachedLibraryImage), findsNothing);
-    expect(find.byType(Image), findsOneWidget);
-    final clip = tester.widget<ClipRRect>(
-      find
-          .ancestor(of: find.byType(Image), matching: find.byType(ClipRRect))
-          .first,
-    );
-    expect(clip.borderRadius, const BorderRadius.all(Radius.circular(4)));
-  });
+      expect(find.byType(CachedLibraryImage), findsNothing);
+      expect(find.byType(Image), findsOneWidget);
+      final clip = tester.widget<ClipRRect>(
+        find
+            .ancestor(of: find.byType(Image), matching: find.byType(ClipRRect))
+            .first,
+      );
+      expect(clip.borderRadius, const BorderRadius.all(Radius.circular(4)));
+    },
+  );
 
   testWidgets(
     'deduplicates repeated forum attachment images before rendering',

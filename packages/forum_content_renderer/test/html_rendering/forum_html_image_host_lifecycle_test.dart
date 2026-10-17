@@ -8,53 +8,62 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
-  for (final caption in ['', 'Image caption<br><br>']) {
-    testWidgets('unsized table image displays with caption "$caption"', (
-      tester,
-    ) async {
-      final dimensions = _Dimensions(deferred: true);
-      final host = _ImageHost(dimensions);
-      final viewport = ForumHtmlImageViewportCoordinator();
-      addTearDown(viewport.dispose);
-      await tester.pumpWidget(
-        _host(
-          host,
-          viewport: viewport,
-          width: 376,
-          height: 600,
-          html:
-              '<div align="center"><table><tr><td><div align="center">'
-              '$caption<a href="data/attachment/forum/example.png" class="orange" />'
-              '<img id="aimg_1058403" src="data/attachment/forum/example.png" '
-              'alt="image" loading="lazy" /></a>'
-              '</div></td></tr></table></div>',
-        ),
-      );
-      await _frames(tester);
-      for (var frame = 0; frame < 10; frame++) {
-        await tester.pump();
-      }
-      expect(tester.takeException(), isNull);
-      final image = find.byType(_DisplayedImage);
-      expect(image, findsOneWidget);
-      final bounds = tester.getRect(image);
-      expect(bounds.width, greaterThan(0));
-      expect(bounds.height, greaterThan(0));
-      expect(bounds.width, lessThanOrEqualTo(376));
-      final element = tester.element(image);
-      tester.widget<_DisplayedImage>(image).onFirstFrame!();
-      dimensions.pending.single.complete((
-        size: const Size(1100, 720),
-        layout: const ForumHtmlImageLayout(aspectRatio: 1100 / 720),
-      ));
-      for (var frame = 0; frame < 4; frame++) {
-        await tester.pump();
+  for (final (caption, viewportEnabled) in [
+    ('', false),
+    ('', true),
+    ('Image caption<br><br>', false),
+    ('Image caption<br><br>', true),
+  ]) {
+    testWidgets(
+      'unsized table image displays with caption "$caption", viewport: $viewportEnabled',
+      (tester) async {
+        final dimensions = _Dimensions(deferred: true);
+        final host = _ImageHost(dimensions);
+        final viewport = ForumHtmlImageViewportCoordinator();
+        addTearDown(viewport.dispose);
+        await tester.pumpWidget(
+          _host(
+            host,
+            viewport: viewportEnabled ? viewport : null,
+            width: 376,
+            height: 600,
+            html:
+                '<div align="center"><table><tr><td><div align="center">'
+                '$caption<a href="data/attachment/forum/example.png" class="orange" />'
+                '<img id="aimg_1058403" src="data/attachment/forum/example.png" '
+                'alt="image" loading="lazy" /></a>'
+                '</div></td></tr></table></div>',
+          ),
+        );
+        await _frames(tester);
+        for (var frame = 0; frame < 10; frame++) {
+          await tester.pump();
+        }
+        expect(tester.takeException(), isNull);
+        final image = find.byType(_DisplayedImage);
         expect(image, findsOneWidget);
-        expect(tester.element(image), same(element));
-      }
-      expect(tester.getSize(image).aspectRatio, closeTo(1100 / 720, 0.001));
-      expect(tester.takeException(), isNull);
-    });
+        final bounds = tester.getRect(image);
+        expect(bounds.width, greaterThan(0));
+        expect(bounds.height, greaterThan(0));
+        expect(bounds.width, lessThanOrEqualTo(376));
+        expect(bounds.size.aspectRatio, closeTo(0.7, 0.001));
+        expect(viewport.registeredImageCount, viewportEnabled ? 1 : 0);
+        final element = tester.element(image);
+        tester.widget<_DisplayedImage>(image).onFirstFrame!();
+        dimensions.pending.single.complete((
+          size: const Size(1100, 720),
+          layout: const ForumHtmlImageLayout(aspectRatio: 1100 / 720),
+        ));
+        for (var frame = 0; frame < 4; frame++) {
+          await tester.pump();
+          expect(image, findsOneWidget);
+          expect(tester.element(image), same(element));
+          expect(viewport.registeredImageCount, viewportEnabled ? 1 : 0);
+        }
+        expect(tester.getSize(image).aspectRatio, closeTo(1100 / 720, 0.001));
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('late dimension hints preserve the mounted visible image', (
@@ -84,8 +93,8 @@ void main() {
       expect(image, findsOneWidget);
       expect(tester.element(image), same(element));
       expect(
-        tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
-        2,
+        tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+        closeTo(2, 0.001),
       );
     }
     expect(tester.takeException(), isNull);
@@ -387,16 +396,16 @@ void main() {
     await tester.pump();
 
     expect(
-      tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
-      0.7,
+      tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+      closeTo(0.7, 0.001),
     );
     dimensions.pending.single.completeError(StateError('metadata unavailable'));
     await tester.pump();
 
     expect(find.byType(_DisplayedImage), findsOneWidget);
     expect(
-      tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
-      0.7,
+      tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+      closeTo(0.7, 0.001),
     );
     expect(host.blockSizes, isEmpty);
     expect(tester.takeException(), isNull);
@@ -440,8 +449,8 @@ void main() {
       await tester.pump();
       expect(host.blockSizes, isEmpty);
       expect(
-        tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
-        0.7,
+        tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+        closeTo(0.7, 0.001),
       );
     }
     dimensions.pending.last.complete((
@@ -451,7 +460,10 @@ void main() {
     await _frames(tester);
 
     expect(host.blockSizes, [const Size(300, 150)]);
-    expect(tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio, 2);
+    expect(
+      tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+      closeTo(2, 0.001),
+    );
     expect(tester.takeException(), isNull);
   });
 

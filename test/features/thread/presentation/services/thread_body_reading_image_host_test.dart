@@ -8,45 +8,42 @@ import 'package:y300/features/thread/presentation/services/thread_body_reading_i
 import '../html_rendering/forum_html_test_theme.dart';
 
 void main() {
-  test(
-    'dimension promotion forwards the optional port and falls back for legacy Hosts',
-    () async {
-      final tracker = ThreadBodyReadingImageTracker(() {});
-      addTearDown(tracker.dispose);
-      final delegate = _PriorityHost();
-      final host = ThreadBodyReadingImageHost(
-        delegate: delegate,
-        tracker: tracker,
-      );
-      final image = _Image('forwarded');
-      final initial = host.loadDimensions(image);
-      final promoted = host.loadDimensionsWithPriority(
+  test('dimension promotion forwards the optional port and falls back for legacy Hosts', () async {
+    final tracker = ThreadBodyReadingImageTracker(() {});
+    addTearDown(tracker.dispose);
+    final delegate = _PriorityHost();
+    final host = ThreadBodyReadingImageHost(
+      delegate: delegate,
+      tracker: tracker,
+    );
+    final image = _Image('forwarded');
+    final initial = host.loadDimensions(image);
+    final promoted = host.loadDimensionsWithPriority(
+      image,
+      priority: ForumHtmlImageDimensionPriority.visible,
+    );
+    expect(promoted, same(initial));
+    expect(delegate.priorities, [
+      ForumHtmlImageDimensionPriority.background,
+      ForumHtmlImageDimensionPriority.visible,
+    ]);
+    delegate.pending.values.single.complete(_dimensions);
+    expect((await promoted)?.size, const Size(400, 200));
+
+    final legacy = _Host();
+    final legacyWrapper = ThreadBodyReadingImageHost(
+      delegate: legacy,
+      tracker: tracker,
+    );
+    expect(
+      await legacyWrapper.loadDimensionsWithPriority(
         image,
         priority: ForumHtmlImageDimensionPriority.visible,
-      );
-      expect(promoted, same(initial));
-      expect(delegate.priorities, [
-        ForumHtmlImageDimensionPriority.background,
-        ForumHtmlImageDimensionPriority.visible,
-      ]);
-      delegate.pending.values.single.complete(_dimensions);
-      expect((await promoted)?.size, const Size(400, 200));
-
-      final legacy = _Host();
-      final legacyWrapper = ThreadBodyReadingImageHost(
-        delegate: legacy,
-        tracker: tracker,
-      );
-      expect(
-        await legacyWrapper.loadDimensionsWithPriority(
-          image,
-          priority: ForumHtmlImageDimensionPriority.visible,
-        ),
-        isNull,
-      );
-      expect(legacy.dimensionCalls, 1);
-    },
-  );
+      ),
+      isNull,
+    );
+    expect(legacy.dimensionCalls, 1);
+  });
 
   for (final sizeCallbackFirst in [false, true]) {
     testWidgets(
@@ -61,8 +58,7 @@ void main() {
         final shifts = <ForumHtmlImageLayoutShift>[];
         final viewportKey = GlobalKey();
         final document = const DefaultForumHtmlRenderPreparer().prepare(
-          html:
-              '<img src="https://bbs.yamibo.com/data/attachment/forum/one.jpg">',
+          html: '<img src="https://bbs.yamibo.com/data/attachment/forum/one.jpg">',
           preferences: ForumHtmlReaderPreferences.defaults(),
           theme: forumHtmlTestTheme,
           sourceId: 'reading-priority',
@@ -142,8 +138,16 @@ void main() {
         );
         await frames();
         expect(
-          tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
-          2,
+          tester
+              .getSize(
+                find.byKey(
+                  const Key(
+                    'thread-post-html-first-readable-image-reading-priority-0',
+                  ),
+                ),
+              )
+              .aspectRatio,
+          closeTo(2, 0.001),
         );
         expect(shifts, hasLength(1));
         expect(currentDelegate.blockSizes, [

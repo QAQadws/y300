@@ -10,6 +10,7 @@ import '../contracts/forum_html_image_host.dart';
 import '../contracts/forum_html_image_predecode_host.dart';
 import 'forum_html_prepared_render_document.dart';
 import 'forum_html_render_callbacks.dart';
+import 'widgets/forum_html_block_image_frame.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
 import '../services/forum_html_image_anchor_controller.dart';
 
@@ -342,41 +343,38 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   Widget build(BuildContext context) {
     final handle = _viewportHandle;
     if (handle == null) return _buildImage();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        _scheduleWorkConfiguration();
-        handle.bind(context);
-        return ValueListenableBuilder<ForumHtmlImageViewportMode>(
-          valueListenable: handle,
-          builder: (context, mode, child) {
-            _scheduleDimensionPromotion();
-            if (_lastMode != mode) {
-              if (_lastMode?.keepsImageMounted != mode.keepsImageMounted) {
-                _callbackRevision++;
-                if (!mode.keepsImageMounted) _firstFrameRendered = false;
+    return _buildBlockImage(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          _scheduleWorkConfiguration();
+          handle.bind(context);
+          return ValueListenableBuilder<ForumHtmlImageViewportMode>(
+            valueListenable: handle,
+            builder: (context, mode, child) {
+              _scheduleDimensionPromotion();
+              if (_lastMode != mode) {
+                if (_lastMode?.keepsImageMounted != mode.keepsImageMounted) {
+                  _callbackRevision++;
+                  if (!mode.keepsImageMounted) _firstFrameRendered = false;
+                }
+                _lastMode = mode;
               }
-              _lastMode = mode;
-            }
-            if (mode == ForumHtmlImageViewportMode.prefetch ||
-                mode == ForumHtmlImageViewportMode.predecode) {
-              _schedulePrefetch();
-            } else {
-              _cancelPrefetch();
-            }
-            return mode.keepsImageMounted
-                ? TickerMode(
-                    enabled: mode == ForumHtmlImageViewportMode.display,
-                    child: _buildImage(),
-                  )
-                : _clipMedia(
-                    AspectRatio(
-                      aspectRatio: _layout.aspectRatio ?? 0.7,
-                      child: const _ImageSurface(),
-                    ),
-                  );
-          },
-        );
-      },
+              if (mode == ForumHtmlImageViewportMode.prefetch ||
+                  mode == ForumHtmlImageViewportMode.predecode) {
+                _schedulePrefetch();
+              } else {
+                _cancelPrefetch();
+              }
+              return mode.keepsImageMounted
+                  ? TickerMode(
+                      enabled: mode == ForumHtmlImageViewportMode.display,
+                      child: _buildImageContent(),
+                    )
+                  : const _ImageSurface();
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -423,6 +421,24 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       (_viewportHandle == null || _viewportHandle!.value.keepsImageMounted);
 
   Widget _buildImage() {
+    final image = _buildImageContent();
+    if (!widget.image.isSticker) return _buildBlockImage(image);
+    final size = _layout.displaySize;
+    return _clipMedia(
+      size == null
+          ? image
+          : SizedBox(width: size.width, height: size.height, child: image),
+    );
+  }
+
+  Widget _buildBlockImage(Widget child) => ForumHtmlBlockImageFrame(
+    aspectRatio: _layout.aspectRatio ?? 0.7,
+    // LayoutBuilder's build scope also relayouts on mode changes. Keep it inside
+    // the tight clip so content changes do not invalidate surrounding tables.
+    child: _clipMedia(child),
+  );
+
+  Widget _buildImageContent() {
     final revision = _callbackRevision;
     final sticker = widget.image.isSticker;
     final size = _layout.displaySize;
@@ -440,7 +456,7 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       }
     }
 
-    final image = widget.host.buildImage(
+    return widget.host.buildImage(
       image: widget.image,
       fit: sticker ? BoxFit.contain : BoxFit.fitWidth,
       width: sticker ? size?.width : null,
@@ -474,13 +490,6 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       onImageFailed: sticker ? null : failed,
       waitForCacheWrite: !sticker,
       retryToken: _retryToken,
-    );
-    return _clipMedia(
-      sticker
-          ? size == null
-                ? image
-                : SizedBox(width: size.width, height: size.height, child: image)
-          : AspectRatio(aspectRatio: _layout.aspectRatio ?? 0.7, child: image),
     );
   }
 
