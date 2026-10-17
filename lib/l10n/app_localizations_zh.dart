@@ -223,6 +223,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageLinkFailed => '暂时无法打开此链接';
 
   @override
+  String get linkCopied => '链接已复制';
+
+  @override
+  String get linkCopyFailed => '链接复制失败，请重试';
+
+  @override
   String get messageOnlyFriends => '对方只接收好友发送的私信';
 
   @override
@@ -5656,6 +5662,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageLinkFailed => '暫時無法開啟此連結';
+
+  @override
+  String get linkCopied => '連結已複製';
+
+  @override
+  String get linkCopyFailed => '連結複製失敗，請重試';
 
   @override
   String get messageOnlyFriends => '對方只接收好友傳送的私訊';

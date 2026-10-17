@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/navigation/forum_link_opener.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
@@ -34,6 +35,9 @@ void main() {
   late List<YamiboForumLinkDestination> native;
   late List<ForumWebViewLaunchConfig> web;
   late List<String> copied;
+  late List<Completer<void>> copyRequests;
+  late bool deferCopy;
+  Object? copyError;
   late Object owner;
   late bool active;
   late bool sourceValid;
@@ -46,6 +50,9 @@ void main() {
     native = [];
     web = [];
     copied = [];
+    copyRequests = [];
+    deferCopy = false;
+    copyError = null;
     owner = (uid: '101', revision: 0);
     active = true;
     sourceValid = true;
@@ -61,8 +68,15 @@ void main() {
         web.add(config);
         return MaterialPageRoute(builder: (_) => const SizedBox());
       },
-      externalLauncher: () => launcher,
       postResolver: () => ThreadPostRouteResolver(locator),
+      writeText: (text) {
+        copied.add(text);
+        if (copyError != null) return Future<void>.error(copyError!);
+        if (!deferCopy) return Future<void>.value();
+        final request = Completer<void>();
+        copyRequests.add(request);
+        return request.future;
+      },
     );
   });
   tearDown(() => session.dispose());
@@ -143,39 +157,43 @@ void main() {
     expect(locator.requests, isEmpty);
   });
 
-  testWidgets('external URLs use the existing launcher once while pending', (
+  testWidgets('external URLs copy once while pending and report success', (
     tester,
   ) async {
     await pumpHost(tester);
+    deferCopy = true;
     const url = 'https://example.org/read?a=1#chapter';
     await open(tester, url);
     await open(tester, url);
-    expect(launcher.opened, [Uri.parse(url)]);
+    expect(launcher.opened, isEmpty);
     expect(observer.pushed, isEmpty);
-    expect(copied, isEmpty);
-    launcher.requests.single.complete(true);
+    expect(copied, [url]);
+    expect(find.byType(SnackBar), findsNothing);
+    copyRequests.single.complete();
+    await tester.pump();
+    expect(find.text(AppLocalizations.of(source).linkCopied), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
     await tester.idle();
     await open(tester, url);
-    expect(launcher.opened, hasLength(2));
-    launcher.requests.last.complete(true);
+    expect(copied, [url, url]);
+    copyRequests.last.complete();
     await tester.idle();
   });
 
-  testWidgets('launcher failure offers localized feedback and explicit copy', (
+  testWidgets('failed external copy never launches or reports success', (
     tester,
   ) async {
     await pumpHost(tester);
+    copyError = PlatformException(code: 'clipboard-unavailable');
     const url = 'https://example.org/read';
     await open(tester, url);
-    launcher.requests.single.complete(false);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(copied, isEmpty);
-    final l10n = AppLocalizations.of(source);
-    expect(find.text(l10n.messageLinkFailed), findsOneWidget);
-    await tester.tap(find.text(l10n.threadDetailCopyLink));
-    await tester.idle();
     expect(copied, [url]);
+    final l10n = AppLocalizations.of(source);
+    expect(find.text(l10n.linkCopyFailed), findsOneWidget);
+    expect(find.text(l10n.linkCopied), findsNothing);
+    expect(launcher.opened, isEmpty);
+    expect(observer.pushed, isEmpty);
   });
 
   testWidgets(
@@ -187,17 +205,16 @@ void main() {
         'https://example.org/read?next=https://bbs.yamibo.com/',
       ]) {
         await open(tester, url);
-        expect(launcher.opened.last, Uri.parse(url));
-        launcher.requests.last.complete(true);
+        expect(copied.last, url);
         await tester.idle();
       }
       for (final url in ['javascript:alert(1)', 'file:///tmp/secret']) {
         await open(tester, url);
       }
-      expect(launcher.opened, hasLength(2));
+      expect(launcher.opened, isEmpty);
       expect(native, isEmpty);
       expect(web, isEmpty);
-      expect(copied, isEmpty);
+      expect(copied, hasLength(2));
       expect(tester.takeException(), isNull);
     },
   );
@@ -286,9 +303,10 @@ void main() {
     tester,
   ) async {
     await pumpHost(tester);
+    deferCopy = true;
     await open(tester, 'https://example.org/read');
     await open(tester, 'forum.php?mod=redirect&goto=findpost&ptid=42&pid=90');
-    launcher.requests.single.completeError(StateError('old launch failure'));
+    copyRequests.single.completeError(StateError('old copy failure'));
     await tester.pump();
     expect(find.byType(SnackBar), findsNothing);
     locator.requests.single.complete(_location('90', 3));
@@ -296,8 +314,45 @@ void main() {
     expect(takePage(), isA<ThreadDetailPage>());
   });
 
+  for (final invalidation in [
+    'owner',
+    'source',
+    'dispose',
+    'covered',
+    'unmounted',
+  ]) {
+    testWidgets('late external copy feedback is retired by $invalidation', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      deferCopy = true;
+      await open(tester, 'https://example.org/read?a=1#chapter');
+      Route<void>? covering;
+      switch (invalidation) {
+        case 'owner':
+          owner = (uid: '101', revision: 1);
+        case 'source':
+          sourceValid = false;
+        case 'dispose':
+          active = false;
+          session.dispose();
+        case 'covered':
+          covering = MaterialPageRoute<void>(builder: (_) => const Scaffold());
+          unawaited(Navigator.of(source).push(covering));
+        case 'unmounted':
+          await tester.pumpWidget(const SizedBox());
+      }
+      copyRequests.single.complete();
+      await tester.pump();
+      expect(find.byType(SnackBar), findsNothing);
+      expect(launcher.opened, isEmpty);
+      if (covering != null) Navigator.of(source).removeRoute(covering);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
-    'App provider fallback Copy records successful shared writer evidence',
+    'App provider external copy records successful shared writer evidence',
     (tester) async {
       await pumpHost(tester);
       final platformCalls = <MethodCall>[];
@@ -332,12 +387,10 @@ void main() {
             ),
       );
       await tester.idle();
-      launcher.requests.single.complete(false);
       await tester.pumpAndSettle();
-      expect(platformCalls, isEmpty);
       final l10n = AppLocalizations.of(source);
-      await tester.tap(find.text(l10n.threadDetailCopyLink));
-      await tester.pumpAndSettle();
+      expect(find.text(l10n.linkCopied), findsOneWidget);
+      expect(launcher.opened, isEmpty);
       expect(platformCalls, hasLength(1));
       expect(platformCalls.single.arguments, {'text': url});
       expect(
@@ -360,6 +413,7 @@ void main() {
           fail('Ordinary links must not evaluate auth validation.');
         }),
         forumWebViewExternalLauncherProvider.overrideWithValue(launcher),
+        clipboardTextWriterProvider.overrideWithValue(_Writer(copied)),
         nativeForumLinkPageFactoryProvider.overrideWithValue((
           destination, {
           isActive = true,
@@ -372,8 +426,8 @@ void main() {
     addTearDown(container.dispose);
     opener = container.read(forumLinkOpenerProvider);
     await open(tester, 'https://example.org/read');
-    expect(launcher.opened, [Uri.parse('https://example.org/read')]);
-    launcher.requests.single.complete(true);
+    expect(copied, ['https://example.org/read']);
+    expect(launcher.opened, isEmpty);
     await tester.idle();
     await open(tester, 'https://bbs.yamibo.com/thread-42-2-1.html');
     expect(native.single.page, 2);
@@ -444,12 +498,18 @@ class _Locator implements ThreadPostLocator {
 
 class _ExternalLauncher implements ForumWebViewExternalLauncher {
   final opened = <Uri>[];
-  final requests = <Completer<bool>>[];
   @override
-  Future<bool> launch(Uri uri) {
+  Future<bool> launch(Uri uri) async {
     opened.add(uri);
-    final request = Completer<bool>();
-    requests.add(request);
-    return request.future;
+    return true;
   }
+}
+
+class _Writer implements ClipboardTextWriter {
+  _Writer(this.copied);
+
+  final List<String> copied;
+
+  @override
+  Future<void> writeText(String text) async => copied.add(text);
 }

@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -3400,6 +3402,110 @@ void main() {
     expect(find.byType(ThreadDetailPage), findsOneWidget);
   });
 
+  for (final flowMode in [
+    NovelReaderFlowMode.vertical,
+    NovelReaderFlowMode.pagedLtr,
+  ]) {
+    testWidgets('reader external links are copied in ${flowMode.name}', (
+      tester,
+    ) async {
+      const url = 'https://elsewhere.test/read?a=1&a=2#section';
+      final clipboard = _ClipboardWriter();
+      final launcher = _FakeForumWebViewExternalLauncher();
+      await tester.pumpWidget(
+        _buildReaderApp(
+          repository: _FakeNovelRepository(
+            preferences: NovelReaderPreferences.defaults().copyWith(
+              flowMode: flowMode,
+            ),
+            firstRawHtml:
+                '<p><a href="https://elsewhere.test/read?a=1&amp;a=2#section">External link</a></p>',
+            firstParagraphs: const ['External link'],
+          ),
+          clipboardWriter: clipboard,
+          externalLauncher: launcher,
+        ),
+      );
+      if (flowMode == NovelReaderFlowMode.vertical) {
+        await tester.pumpAndSettle();
+      } else {
+        await _pumpPagedCacheReady(tester);
+      }
+      await tester.tapAt(
+        tester.getTopLeft(_readerText('External link')) + const Offset(8, 8),
+      );
+      await tester.pumpAndSettle();
+      expect(clipboard.writes, [url]);
+      expect(launcher.opened, isEmpty);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(NovelReaderPage)),
+      );
+      expect(find.text(l10n.linkCopied), findsOneWidget);
+      expect(find.byType(ThreadDetailPage), findsNothing);
+    });
+  }
+
+  testWidgets('reader keeps the existing same-site non-thread fallback', (
+    tester,
+  ) async {
+    const url = 'https://bbs.yamibo.com/misc.php?mod=tag&id=28';
+    final clipboard = _ClipboardWriter();
+    final launcher = _FakeForumWebViewExternalLauncher();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(
+          firstRawHtml:
+              '<p><a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;id=28">Forum tag</a></p>',
+          firstParagraphs: const ['Forum tag'],
+        ),
+        clipboardWriter: clipboard,
+        externalLauncher: launcher,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tapAt(
+      tester.getTopLeft(_readerText('Forum tag')) + const Offset(8, 8),
+    );
+    await tester.pumpAndSettle();
+    expect(launcher.opened, [Uri.parse(url)]);
+    expect(clipboard.writes, isEmpty);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('reader discards late copy feedback after changing chapters', (
+    tester,
+  ) async {
+    final clipboard = _ClipboardWriter()..pending = Completer<void>();
+    await tester.pumpWidget(
+      _buildReaderApp(
+        repository: _FakeNovelRepository(
+          firstRawHtml:
+              '<p><a href="https://elsewhere.test/read">External link</a></p>',
+          firstParagraphs: const ['External link'],
+        ),
+        clipboardWriter: clipboard,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tapAt(
+      tester.getTopLeft(_readerText('External link')) + const Offset(8, 8),
+    );
+    await tester.pump();
+    expect(clipboard.writes, ['https://elsewhere.test/read']);
+    await _showReaderMenu(tester);
+    await tester.tap(
+      find.byKey(const Key('shared-reader-bottom-action-catalog')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('第2章').last);
+    await tester.pumpAndSettle();
+    clipboard.pending!.complete();
+    await tester.pumpAndSettle();
+    expect(_readerText('第三段。'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final filtered in [false, true]) {
     testWidgets(
       'reader floor link preserves identity and return position filtered=$filtered',
@@ -3814,6 +3920,8 @@ Widget _buildReaderApp({
   LibraryStateRepository? stateRepository,
   ThreadRepository? threadRepository,
   ThreadPostLocator? threadPostLocator,
+  ClipboardTextWriter? clipboardWriter,
+  ForumWebViewExternalLauncher? externalLauncher,
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderSupplementalHydrationService? supplementalHydrationService,
   NovelChapterUpdateService? chapterUpdateService,
@@ -3841,8 +3949,10 @@ Widget _buildReaderApp({
         chapterUpdateService ?? _RecordingNovelChapterUpdateService(),
       ),
       forumWebViewExternalLauncherProvider.overrideWithValue(
-        _FakeForumWebViewExternalLauncher(),
+        externalLauncher ?? _FakeForumWebViewExternalLauncher(),
       ),
+      if (clipboardWriter != null)
+        clipboardTextWriterProvider.overrideWithValue(clipboardWriter),
       forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
       if (documentBuildService != null)
@@ -3970,8 +4080,24 @@ class _RecordingNovelChapterUpdateService implements NovelChapterUpdateService {
 
 class _FakeForumWebViewExternalLauncher
     implements ForumWebViewExternalLauncher {
+  final opened = <Uri>[];
+
   @override
-  Future<bool> launch(Uri uri) async => true;
+  Future<bool> launch(Uri uri) async {
+    opened.add(uri);
+    return true;
+  }
+}
+
+class _ClipboardWriter implements ClipboardTextWriter {
+  final writes = <String>[];
+  Completer<void>? pending;
+
+  @override
+  Future<void> writeText(String text) {
+    writes.add(text);
+    return pending?.future ?? Future<void>.value();
+  }
 }
 
 class _NoopImageCacheService implements ImageCacheService {

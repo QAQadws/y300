@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/link_copy_feedback.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
-/// The source resolves native blog identities; existing browser boundaries
-/// handle other forum flows and external links. A link never proves a write.
+/// The source resolves native blog identities; other forum flows keep the
+/// browser boundary, while external links are copied. A link never proves a write.
 Future<void> openBlogContentLink(
   BuildContext context,
   WidgetRef ref,
@@ -91,10 +92,13 @@ Future<void> openBlogContentLink(
           ),
         ),
       );
-    } else if (!await ref
-        .read(forumWebViewExternalLauncherProvider)
-        .launch(uri)) {
-      failed();
+    } else {
+      await copyLinkWithFeedback(
+        context,
+        url: uri.toString(),
+        writeText: ref.read(clipboardTextWriterProvider).writeText,
+        isCurrent: stillCurrent,
+      );
     }
   } catch (_) {
     failed();

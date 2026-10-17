@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
+import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
@@ -25,6 +27,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
+import 'package:y300/shared/widgets/link_copy_feedback.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 
@@ -397,6 +400,7 @@ class _ForumHomeContent extends ConsumerStatefulWidget {
 
 class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   final Set<String> _collapsedSectionKeys = <String>{};
+  int _carouselCopyGeneration = 0;
 
   @override
   void didUpdateWidget(covariant _ForumHomeContent oldWidget) {
@@ -409,6 +413,11 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(verifiedSessionOwnerProvider, (previous, next) {
+      if (previous != next) {
+        _carouselCopyGeneration++;
+      }
+    });
     final l10n = AppLocalizations.of(context);
     final palette = ForumHomeNativePalette.resolve(Theme.of(context));
     return RefreshIndicator(
@@ -527,8 +536,27 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
       return;
     }
 
-    final uri = ref.read(forumWebViewNavigatorProvider).resolve(item.targetUrl);
-    await ref.read(forumWebViewExternalLauncherProvider).launch(uri);
+    final navigator = ref.read(forumWebViewNavigatorProvider);
+    final uri = navigator.resolve(item.targetUrl);
+    if (navigator.isManagedSite(uri)) {
+      await ref.read(forumWebViewExternalLauncherProvider).launch(uri);
+      return;
+    }
+    final owner = ref.read(verifiedSessionOwnerProvider);
+    final source = widget.state.viewData;
+    final generation = ++_carouselCopyGeneration;
+    await copyLinkWithFeedback(
+      context,
+      url: uri.toString(),
+      writeText: ref.read(clipboardTextWriterProvider).writeText,
+      isCurrent: () =>
+          mounted &&
+          widget.isActive &&
+          generation == _carouselCopyGeneration &&
+          identical(widget.state.viewData, source) &&
+          ref.read(verifiedSessionOwnerProvider) == owner &&
+          ModalRoute.of(context)?.isCurrent != false,
+    );
   }
 }
 

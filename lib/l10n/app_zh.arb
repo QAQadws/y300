@@ -111,6 +111,8 @@
   "messageGroup": "群组对话",
   "messageLoginRequired": "登录后查看消息和提醒",
   "messageLinkFailed": "暂时无法打开此链接",
+  "linkCopied": "链接已复制",
+  "linkCopyFailed": "链接复制失败，请重试",
   "messageOnlyFriends": "对方只接收好友发送的私信",
   "messageRecipientUnavailable": "收件人不存在或暂时不可用，请检查收件人信息",
   "messageCannotSendToSelf": "不能给自己发送私信",

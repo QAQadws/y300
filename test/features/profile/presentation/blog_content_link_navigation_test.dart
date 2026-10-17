@@ -7,6 +7,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -445,17 +447,20 @@ void main() {
   );
 
   for (final link in [
-    'https://elsewhere.test/article',
+    'https://elsewhere.test/article?a=1&a=2#section',
     'mailto:fixture@example.test',
     'https://bbs.yamibo.com:8443/article',
   ]) {
-    testWidgets('external destination uses the existing launcher: $link', (
+    testWidgets('external destination is copied without launching: $link', (
       tester,
     ) async {
       final host = _Host();
       await host.pump(tester, _Link(link));
       await _tapLink(tester);
-      expect(host.external.uris.single, Uri.parse(link));
+      expect(host.clipboard.writes, [link]);
+      expect(host.external.uris, isEmpty);
+      final l10n = AppLocalizations.of(tester.element(find.byType(_Link)));
+      expect(find.text(l10n.linkCopied), findsOneWidget);
       expect(host.webLaunches, isEmpty);
       expect(host.details.queries, isEmpty);
     });
@@ -474,6 +479,7 @@ void main() {
       final host = _Host();
       await host.pump(tester, _Link(link));
       await _tapLink(tester);
+      expect(host.clipboard.writes, isEmpty);
       expect(host.external.uris, isEmpty);
       expect(host.webLaunches, isEmpty);
       final l10n = AppLocalizations.of(tester.element(find.byType(_Link)));
@@ -482,11 +488,11 @@ void main() {
   }
 
   for (final change in ['account', 'cover', 'dispose']) {
-    testWidgets('late external failure does not affect a changed $change', (
+    testWidgets('late copy failure does not affect a changed $change', (
       tester,
     ) async {
       final host = _Host();
-      host.external.pending = Completer<bool>();
+      host.clipboard.pending = Completer<void>();
       await host.pump(tester, const _Link('https://elsewhere.test/article'));
       await tester.tap(find.byKey(const Key('open-content-link')));
       await tester.pump();
@@ -507,7 +513,7 @@ void main() {
       } else {
         await tester.pumpWidget(const SizedBox.shrink());
       }
-      host.external.pending!.complete(false);
+      host.clipboard.pending!.completeError(StateError('clipboard unavailable'));
       await tester.pumpAndSettle();
       expect(find.byType(SnackBar), findsNothing);
       expect(tester.takeException(), isNull);
@@ -849,6 +855,7 @@ class _Host {
   final details = BlogDetailFixture();
   final profiles = ProfileRepositoryFixture();
   final external = _External();
+  final clipboard = _ClipboardWriter();
   final preferences = _Preferences();
   final navigator = GlobalKey<NavigatorState>();
   final webLaunches = <ForumWebViewLaunchConfig>[];
@@ -866,6 +873,7 @@ class _Host {
     forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
     forumWebViewRouteFactoryProvider.overrideWithValue(_webRoute),
     forumWebViewExternalLauncherProvider.overrideWithValue(external),
+    clipboardTextWriterProvider.overrideWithValue(clipboard),
     forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(preferences),
     if (imageCache != null)
       imageCacheServiceProvider.overrideWithValue(imageCache!),
@@ -912,11 +920,21 @@ class _Host {
 
 class _External implements ForumWebViewExternalLauncher {
   final uris = <Uri>[];
-  Completer<bool>? pending;
   @override
   Future<bool> launch(Uri uri) {
     uris.add(uri);
-    return pending?.future ?? Future.value(true);
+    return Future.value(true);
+  }
+}
+
+class _ClipboardWriter implements ClipboardTextWriter {
+  final writes = <String>[];
+  Completer<void>? pending;
+
+  @override
+  Future<void> writeText(String text) {
+    writes.add(text);
+    return pending?.future ?? Future<void>.value();
   }
 }
 

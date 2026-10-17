@@ -8,6 +8,8 @@ import 'package:y300/l10n/app_localizations.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -1867,35 +1869,57 @@ void main() {
     });
   }
 
-  testWidgets('ForumWebViewPage opens external links in system browser', (
+  testWidgets('ForumWebViewPage copies external links and reports success', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver();
     final launcher = _FakeForumWebViewExternalLauncher();
+    final clipboard = _FakeClipboardTextWriter();
 
-    await tester.pumpWidget(_buildTestApp(driver: driver, launcher: launcher));
-    await tester.pump();
-
-    final decision = await driver.dispatchNavigationRequest(
-      'https://example.com/thread/123',
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        launcher: launcher,
+        clipboardWriter: clipboard,
+      ),
     );
     await tester.pump();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ForumWebViewPage)),
+    );
+
+    final decision = await driver.dispatchNavigationRequest(
+      'https://example.com/thread/123?ref=a%2Fb&value=two#part',
+    );
+    await tester.pumpAndSettle();
 
     expect(decision, ForumWebViewNavigationDecision.prevent);
     expect(
-      launcher.launchedUris.single.toString(),
-      'https://example.com/thread/123',
+      clipboard.written.single,
+      'https://example.com/thread/123?ref=a%2Fb&value=two#part',
     );
+    expect(launcher.launchedUris, isEmpty);
+    expect(find.text(l10n.linkCopied), findsOneWidget);
   });
 
-  testWidgets('ForumWebViewPage shows snackbar when external launch fails', (
+  testWidgets('ForumWebViewPage reports an external link copy failure', (
     tester,
   ) async {
     final driver = _FakeForumWebViewDriver();
-    final launcher = _FakeForumWebViewExternalLauncher(shouldSucceed: false);
+    final launcher = _FakeForumWebViewExternalLauncher();
+    final clipboard = _FakeClipboardTextWriter(error: StateError('clipboard'));
 
-    await tester.pumpWidget(_buildTestApp(driver: driver, launcher: launcher));
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        launcher: launcher,
+        clipboardWriter: clipboard,
+      ),
+    );
     await tester.pump();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ForumWebViewPage)),
+    );
 
     final decision = await driver.dispatchNavigationRequest(
       'https://example.com/thread/123',
@@ -1903,7 +1927,73 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(decision, ForumWebViewNavigationDecision.prevent);
-    expect(find.text('打开外部链接失败'), findsOneWidget);
+    expect(clipboard.written.single, 'https://example.com/thread/123');
+    expect(launcher.launchedUris, isEmpty);
+    expect(find.text(l10n.linkCopyFailed), findsOneWidget);
+    expect(find.text(l10n.linkCopied), findsNothing);
+  });
+
+  for (final invalidation in ['owner', 'navigation', 'dispose']) {
+    testWidgets('ForumWebViewPage suppresses stale copy feedback after $invalidation', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      final clipboard = _FakeClipboardTextWriter(pending: Completer<void>());
+      final launcher = _FakeForumWebViewExternalLauncher();
+      var accountCurrent = true;
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          launcher: launcher,
+          clipboardWriter: clipboard,
+          isAccountCurrent: () => accountCurrent,
+        ),
+      );
+      await tester.pump();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ForumWebViewPage)),
+      );
+      await driver.dispatchNavigationRequest('https://example.com/late');
+      expect(clipboard.written, ['https://example.com/late']);
+      switch (invalidation) {
+        case 'owner':
+          accountCurrent = false;
+        case 'navigation':
+          await driver.dispatchPageStarted(
+            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=6',
+          );
+        case 'dispose':
+          await tester.pumpWidget(const SizedBox());
+      }
+      clipboard.pending!.complete();
+      await tester.pump();
+      expect(launcher.launchedUris, isEmpty);
+      expect(find.text(l10n.linkCopied), findsNothing);
+      expect(find.text(l10n.linkCopyFailed), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('ForumWebViewPage still rejects javascript without copying', (
+    tester,
+  ) async {
+    final driver = _FakeForumWebViewDriver();
+    final clipboard = _FakeClipboardTextWriter();
+    final launcher = _FakeForumWebViewExternalLauncher();
+    await tester.pumpWidget(
+      _buildTestApp(
+        driver: driver,
+        launcher: launcher,
+        clipboardWriter: clipboard,
+      ),
+    );
+    await tester.pump();
+    expect(
+      await driver.dispatchNavigationRequest('javascript:void(0)'),
+      ForumWebViewNavigationDecision.prevent,
+    );
+    expect(clipboard.written, isEmpty);
+    expect(launcher.launchedUris, isEmpty);
   });
 
   testWidgets('ForumWebViewPage home more menu shows unfavorite action', (
@@ -3050,6 +3140,7 @@ Widget _buildTestApp({
   ForumTagRepository? tagRepository,
   _FakeForumFavoriteRepository? favoriteRepository,
   ForumWebViewExternalLauncher? launcher,
+  ClipboardTextWriter? clipboardWriter,
   _FakeThreadReplyAdapter? replyRepository,
   ComposerDraftRepository? replyDraftRepository,
   ThreadCreationPreparationRepository? postingFormMetadataRepository,
@@ -3089,6 +3180,8 @@ Widget _buildTestApp({
       forumWebViewExternalLauncherProvider.overrideWithValue(
         launcher ?? _FakeForumWebViewExternalLauncher(),
       ),
+      if (clipboardWriter != null)
+        clipboardTextWriterProvider.overrideWithValue(clipboardWriter),
       cookieStoreProvider.overrideWithValue(cookieStore ?? _FakeCookieStore()),
       forumTagRepositoryProvider.overrideWithValue(
         tagRepository ?? _FakeForumTagRepository(),
@@ -3561,15 +3654,27 @@ class _NoopImageCacheService implements ImageCacheService {
 
 class _FakeForumWebViewExternalLauncher
     implements ForumWebViewExternalLauncher {
-  _FakeForumWebViewExternalLauncher({this.shouldSucceed = true});
-
-  final bool shouldSucceed;
   final List<Uri> launchedUris = <Uri>[];
 
   @override
   Future<bool> launch(Uri uri) async {
     launchedUris.add(uri);
-    return shouldSucceed;
+    return true;
+  }
+}
+
+class _FakeClipboardTextWriter implements ClipboardTextWriter {
+  _FakeClipboardTextWriter({this.error, this.pending});
+
+  final Object? error;
+  final Completer<void>? pending;
+  final written = <String>[];
+
+  @override
+  Future<void> writeText(String text) async {
+    written.add(text);
+    await pending?.future;
+    if (error != null) throw error!;
   }
 }
 

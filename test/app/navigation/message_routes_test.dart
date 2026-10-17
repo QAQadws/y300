@@ -6,7 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/app/navigation/message_routes.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/core/network/api_result.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
+import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
@@ -30,6 +35,9 @@ void main() {
   late _RouteObserver observer;
   late _Locator locator;
   late _ExternalLauncher launcher;
+  late _ClipboardWriter clipboard;
+  late YamiboSessionStore sessions;
+  late int verifiedOwnerReads;
   late List<ForumWebViewLaunchConfig> web;
   late BuildContext source;
 
@@ -37,14 +45,19 @@ void main() {
     observer = _RouteObserver();
     locator = _Locator();
     launcher = _ExternalLauncher();
+    clipboard = _ClipboardWriter();
+    sessions = YamiboSessionStore();
+    verifiedOwnerReads = 0;
     web = [];
     container = ProviderContainer.test(
       overrides: [
-        verifiedSessionOwnerProvider.overrideWithValue((
-          uid: '101',
-          revision: 0,
-        )),
+        verifiedSessionOwnerProvider.overrideWith((_) {
+          verifiedOwnerReads++;
+          return (uid: '101', revision: 0);
+        }),
+        yamiboSessionStoreProvider.overrideWithValue(sessions),
         threadPostLocatorProvider.overrideWithValue(locator),
+        clipboardTextWriterProvider.overrideWithValue(clipboard),
         forumWebViewExternalLauncherProvider.overrideWithValue(launcher),
         forumWebViewRouteFactoryProvider.overrideWithValue((config) {
           web.add(config);
@@ -386,7 +399,7 @@ void main() {
   );
 
   testWidgets(
-    'other site pages use shared webview and only HTTP external links launch',
+    'other site pages use shared webview and HTTP external links are copied',
     (tester) async {
       await pumpHost(tester);
       await open(tester, 'home.php?mod=space&do=blog&uid=20');
@@ -403,14 +416,80 @@ void main() {
         takeDestination();
         expect(web.last.initialUri.query, Uri.parse(link).query);
       }
-      await open(tester, 'https://example.org/read');
-      expect(launcher.opened, [Uri.parse('https://example.org/read')]);
+      const external = 'https://example.org/read?a=1&a=2#section';
+      await tester.pumpAndSettle();
+      await open(tester, external);
+      await tester.pump();
+      expect(clipboard.writes, [external]);
+      expect(find.text(AppLocalizations.of(source).linkCopied), findsOneWidget);
       await open(tester, 'javascript:alert(1)');
       await open(tester, 'file:///tmp/secret');
-      expect(launcher.opened, hasLength(1));
+      expect(clipboard.writes, [external]);
+      expect(launcher.opened, isEmpty);
       expect(observer.pushed, isEmpty);
     },
   );
+
+  testWidgets('copy failures stay in the message page without launching', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    clipboard.pending = Completer<void>();
+    await open(tester, 'https://example.org/read');
+    expect(clipboard.writes, ['https://example.org/read']);
+    expect(find.byType(SnackBar), findsNothing);
+    clipboard.pending!.completeError(StateError('clipboard unavailable'));
+    await tester.pumpAndSettle();
+    expect(find.text(AppLocalizations.of(source).linkCopyFailed), findsOneWidget);
+    expect(launcher.opened, isEmpty);
+    expect(observer.pushed, isEmpty);
+  });
+
+  testWidgets('external copying does not read verified authentication', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    await open(tester, 'https://example.org/read');
+    await tester.pumpAndSettle();
+    expect(clipboard.writes, ['https://example.org/read']);
+    expect(verifiedOwnerReads, 0);
+    expect(launcher.opened, isEmpty);
+  });
+
+  testWidgets('late copied feedback is discarded after same UID relogin', (
+    tester,
+  ) async {
+    final snapshot = YamiboSessionSnapshot(
+      isLoggedIn: true,
+      uid: '101',
+      username: 'member',
+      formhash: '',
+      updatedAt: DateTime.utc(2026, 10, 10),
+      source: 'test',
+    );
+    sessions.saveExtracted(snapshot);
+    await pumpHost(tester);
+    clipboard.pending = Completer<void>();
+    await open(tester, 'https://example.org/read');
+    sessions.clear();
+    sessions.saveExtracted(snapshot);
+    clipboard.pending!.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing);
+    expect(verifiedOwnerReads, 0);
+    expect(launcher.opened, isEmpty);
+  });
+}
+
+class _ClipboardWriter implements ClipboardTextWriter {
+  final writes = <String>[];
+  Completer<void>? pending;
+
+  @override
+  Future<void> writeText(String text) {
+    writes.add(text);
+    return pending?.future ?? Future<void>.value();
+  }
 }
 
 class _RouteObserver extends NavigatorObserver {

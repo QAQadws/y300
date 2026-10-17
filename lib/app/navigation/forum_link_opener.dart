@@ -9,7 +9,6 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
@@ -17,6 +16,7 @@ import 'package:y300/features/thread/domain/services/thread_post_navigation_sess
 import 'package:y300/features/thread/domain/services/thread_post_route_resolver.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/link_copy_feedback.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 
 final forumLinkOpenerProvider = Provider<ForumLinkOpener>((ref) {
@@ -41,7 +41,6 @@ final forumLinkOpenerProvider = Provider<ForumLinkOpener>((ref) {
         ref.read(nativeForumLinkPageFactoryProvider)(destination),
     webViewRoute: (config) =>
         ref.read(forumWebViewRouteFactoryProvider)(config),
-    externalLauncher: () => ref.read(forumWebViewExternalLauncherProvider),
     postResolver: () => ref.read(threadPostRouteResolverProvider),
     writeText: (text) => ref.read(clipboardTextWriterProvider).writeText(text),
   );
@@ -56,7 +55,6 @@ final class ForumLinkOpener {
     required this.isActive,
     required this.nativePage,
     required this.webViewRoute,
-    required this.externalLauncher,
     required this.postResolver,
     Future<void> Function(String text)? writeText,
   }) : writeText = writeText ?? _writePlatformText;
@@ -66,7 +64,6 @@ final class ForumLinkOpener {
   final bool Function() isActive;
   final Widget? Function(YamiboForumLinkDestination) nativePage;
   final ForumWebViewRouteFactory webViewRoute;
-  final ForumWebViewExternalLauncher Function() externalLauncher;
   final ThreadPostRouteResolver Function() postResolver;
   final Future<void> Function(String text) writeText;
   final _sessionOwners = Expando<Object>();
@@ -150,8 +147,12 @@ final class ForumLinkOpener {
               requestCurrent() && sourceRoute?.isCurrent != false;
           if (!requestCurrent() || sourceRoute?.isCurrent == false) return;
           if (destination.kind == YamiboForumLinkKind.external) {
-            final opened = await externalLauncher().launch(destination.uri);
-            if (!opened && requestCurrent()) failure();
+            await copyLinkWithFeedback(
+              context,
+              url: destination.uri.toString(),
+              writeText: writeText,
+              isCurrent: failureCurrent,
+            );
             return;
           }
           if (destination.kind == YamiboForumLinkKind.managedWebView) {
@@ -171,9 +172,8 @@ final class ForumLinkOpener {
             failure();
             return;
           }
-          await Navigator.of(
-            context,
-          ).push(MaterialPageRoute<void>(builder: (_) => page));
+          await Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: (_) => page));
         },
       );
     } on Object {

@@ -83,6 +83,8 @@
   "messageGroup": "群組對話",
   "messageLoginRequired": "登入後查看訊息與提醒",
   "messageLinkFailed": "暫時無法開啟此連結",
+  "linkCopied": "連結已複製",
+  "linkCopyFailed": "連結複製失敗，請重試",
   "messageOnlyFriends": "對方只接收好友傳送的私訊",
   "messageRecipientUnavailable": "收件人不存在或暫時無法使用，請檢查收件人資訊",
   "messageCannotSendToSelf": "不能傳送私訊給自己",

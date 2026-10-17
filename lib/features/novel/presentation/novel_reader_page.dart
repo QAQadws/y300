@@ -9,6 +9,7 @@ import 'package:y300/features/thread/data/providers/thread_repository_providers.
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
@@ -58,6 +59,7 @@ import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/link_copy_feedback.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
@@ -2450,6 +2452,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         MaterialPageRoute<void>(
           builder: (_) => ThreadDetailPage(tid: tid, subject: link.text),
         ),
+      );
+      return;
+    }
+    if (destination?.kind == YamiboForumLinkKind.external) {
+      final owner = _postRouteOwner;
+      final sourceRoute = ModalRoute.of(context);
+      await copyLinkWithFeedback(
+        context,
+        url: destination!.uri.toString(),
+        writeText: ref.read(clipboardTextWriterProvider).writeText,
+        isCurrent: () =>
+            owner != null &&
+            _isCurrentReaderSurface(owner) &&
+            sourceRoute?.isCurrent != false,
       );
       return;
     }

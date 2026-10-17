@@ -7,6 +7,7 @@ import 'package:y300/features/thread/domain/services/thread_post_navigation_sess
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/features/composer_shared/presentation/services/read_access_feedback.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -27,7 +28,6 @@ import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
 import 'package:y300/features/forum/presentation/mappers/forum_webview_history_visit_mapper.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_driver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_history_coordinator.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_resource_diagnostic_recorder.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_state.dart';
@@ -49,6 +49,7 @@ import 'package:y300/features/composer_shared/presentation/services/composer_tex
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
+import 'package:y300/shared/widgets/link_copy_feedback.dart';
 
 class ForumWebViewPage extends ConsumerStatefulWidget {
   const ForumWebViewPage({super.key, this.isAccountCurrent});
@@ -86,6 +87,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
   bool _didScheduleInitialization = false;
   bool _keepBrowserAfterFallback = false;
   int _navigationGeneration = 0;
+  int _externalCopyGeneration = 0;
   Timer? _delayedCleanupTimer;
   ForumWebViewBootstrapConfig? _bootstrapConfig;
   late final ForumWebViewHistoryCoordinator _historyCoordinator;
@@ -465,7 +467,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       if (navigator.isManagedSite(uri)) {
         return _navigateInWebView(url);
       }
-      unawaited(_launchExternalUri(uri));
+      unawaited(_copyExternalUri(uri));
       return ForumWebViewNavigationDecision.prevent;
     }
     const resolver = YamiboForumLinkResolver();
@@ -545,7 +547,7 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
       return _navigateInWebView(url);
     }
 
-    unawaited(_launchExternalUri(uri));
+    unawaited(_copyExternalUri(uri));
     return ForumWebViewNavigationDecision.prevent;
   }
 
@@ -1156,22 +1158,21 @@ class _ForumWebViewPageState extends ConsumerState<ForumWebViewPage> {
         );
   }
 
-  Future<void> _launchExternalUri(Uri uri) async {
+  Future<void> _copyExternalUri(Uri uri) async {
     if (!_isCurrent) {
       return;
     }
-    final launcher = ref.read(forumWebViewExternalLauncherProvider);
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    final launched = await launcher.launch(uri);
-    if (!mounted || !_isCurrent || launched) {
-      return;
-    }
-    if (messenger != null) {
-      _showSnackBar(
-        messenger,
-        AppLocalizations.of(context).forumWebViewOpenExternalFailed,
-      );
-    }
+    final navigationGeneration = _navigationGeneration;
+    final copyGeneration = ++_externalCopyGeneration;
+    await copyLinkWithFeedback(
+      context,
+      url: uri.toString(),
+      writeText: ref.read(clipboardTextWriterProvider).writeText,
+      isCurrent: () =>
+          _canOpenNativeRoute &&
+          navigationGeneration == _navigationGeneration &&
+          copyGeneration == _externalCopyGeneration,
+    );
   }
 
   Future<String?> _readPageTitle(ForumWebViewDriver driver) async {

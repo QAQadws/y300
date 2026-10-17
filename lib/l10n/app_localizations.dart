@@ -499,6 +499,18 @@ abstract class AppLocalizations {
   /// **'暂时无法打开此链接'**
   String get messageLinkFailed;
 
+  /// No description provided for @linkCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接已复制'**
+  String get linkCopied;
+
+  /// No description provided for @linkCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接复制失败，请重试'**
+  String get linkCopyFailed;
+
   /// No description provided for @messageOnlyFriends.
   ///
   /// In zh, this message translates to:

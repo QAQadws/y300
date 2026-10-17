@@ -5,9 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/navigation/friend_routes.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
 import 'package:y300/features/forum/domain/services/yamibo_forum_link_resolver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
@@ -22,6 +23,7 @@ import 'package:y300/features/thread/domain/services/thread_post_navigation_sess
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/link_copy_feedback.dart';
 
 typedef PrivateConversationRouteFactory =
     Route<void> Function(ForumConversationTarget target, {String title});
@@ -66,8 +68,16 @@ final privateConversationRouteFactoryProvider =
 final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
   final postSessions = <ModalRoute<dynamic>?, ThreadPostNavigationSession>{};
   var active = true;
+  var identity = Object();
+  // Retire clipboard feedback on every identity transition without starting
+  // authentication just to handle an ordinary content link.
+  final identitySubscription = ref
+      .read(yamiboSessionStoreProvider)
+      .identityChanges
+      .listen((_) => identity = Object());
   ref.onDispose(() {
     active = false;
+    unawaited(identitySubscription.cancel());
     for (final session in postSessions.values) {
       session.dispose();
     }
@@ -218,10 +228,16 @@ final messageLinkOpenerProvider = Provider<MessageLinkOpener>((ref) {
             return;
           }
         case YamiboForumLinkKind.external:
-          final opened = await ref
-              .read(forumWebViewExternalLauncherProvider)
-              .launch(uri);
-          if (!opened && context.mounted) _showLinkFailure(context);
+          final owner = identity;
+          await copyLinkWithFeedback(
+            context,
+            url: uri.toString(),
+            writeText: ref.read(clipboardTextWriterProvider).writeText,
+            isCurrent: () =>
+                active &&
+                sourceRoute?.isCurrent != false &&
+                identical(identity, owner),
+          );
           return;
       }
       if (context.mounted) {
