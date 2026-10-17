@@ -1,5 +1,4 @@
 import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter/widgets.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_predecode_host.dart';
@@ -122,17 +121,17 @@ final class ForumHtmlImageViewportCoordinator {
   }
 
   void _scheduleEvaluation() {
-    if (_disposed || _evaluationScheduled) {
-      return;
+    if (_disposed) return;
+    if (!_evaluationScheduled) {
+      _evaluationScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _evaluationScheduled = false;
+        _evaluate();
+      });
     }
-    _evaluationScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _evaluationScheduled = false;
-      _evaluate();
-    });
-    if (WidgetsBinding.instance.schedulerPhase == SchedulerPhase.idle) {
-      WidgetsBinding.instance.scheduleFrame();
-    }
+    // Post-frame callbacks do not request a frame. Re-arm even when an earlier
+    // callback is pending so idle I/O completion cannot leave it asleep.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _evaluate() {

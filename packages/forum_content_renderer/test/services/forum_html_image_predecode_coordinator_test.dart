@@ -211,6 +211,33 @@ void main() {
     expect(fixture.mode(2), ForumHtmlImageViewportMode.predecode);
   });
 
+  testWidgets('a post-frame first frame wakes the waiting look-ahead', (
+    tester,
+  ) async {
+    final fixture = await _Fixture.mount(tester, heights: List.filled(5, 200));
+    await tester.pumpAndSettle();
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.dormant);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    var firstFrameReported = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      firstFrameReported = true;
+      fixture.handles[0].reportFirstFrameSettled();
+    });
+    // Simulate the current image frame; only the subsequent frame must be
+    // requested by the coordinator itself.
+    tester.binding.scheduleFrame();
+    await tester.pump();
+
+    // Pumping again unconditionally would hide a missing frame request and
+    // allow look-ahead to remain stalled until the user next scrolls.
+    expect(firstFrameReported, isTrue);
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.dormant);
+    await tester.pump();
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.predecode);
+  });
+
   testWidgets('two optional leases progress independently on distinct images', (
     tester,
   ) async {
