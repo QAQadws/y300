@@ -1,13 +1,14 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:forum_content_renderer/src/html_rendering/widgets/forum_html_block_image_frame.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
+
+import 'render_test_support.dart';
 
 void main() {
   testWidgets('block frame geometry never queries transient image content', (
     tester,
   ) async {
-    final frameKey = GlobalKey();
     final contentKey = GlobalKey();
     final meterKey = GlobalKey();
     await tester.pumpWidget(
@@ -15,17 +16,17 @@ void main() {
         width: 240,
         child: _IntrinsicLayoutMeter(
           key: meterKey,
-          child: ForumHtmlBlockImageFrame(
-            key: frameKey,
-            aspectRatio: 2,
+          geometryContentKey: contentKey,
+          child: _renderBlockImage(
+            ratio: 2,
             child: _ContentProbe(key: contentKey, rejectGeometryQueries: true),
           ),
         ),
       ),
     );
-    final frame = frameKey.currentContext!.findRenderObject()! as RenderBox;
     final content =
         contentKey.currentContext!.findRenderObject()! as _ContentProbeBox;
+    final frame = _imageFrame(content);
     final meter =
         meterKey.currentContext!.findRenderObject()!
             as _IntrinsicLayoutMeterBox;
@@ -69,8 +70,9 @@ void main() {
             width: width,
             child: _IntrinsicLayoutMeter(
               key: meterKey,
+              geometryContentKey: isolateContent ? contentKey : null,
               child: isolateContent
-                  ? ForumHtmlBlockImageFrame(aspectRatio: ratio, child: content)
+                  ? _renderBlockImage(ratio: ratio, child: content)
                   : AspectRatio(aspectRatio: ratio, child: content),
             ),
           );
@@ -108,35 +110,150 @@ void main() {
   }
 }
 
-Widget _host({required double width, required Widget child}) => Directionality(
-  textDirection: TextDirection.ltr,
-  child: Align(
-    alignment: Alignment.topLeft,
-    child: SizedBox(width: width, child: child),
+Widget _host({required double width, required Widget child}) => MediaQuery(
+  data: const MediaQueryData(),
+  child: Directionality(
+    textDirection: TextDirection.ltr,
+    child: Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(width: width, child: child),
+    ),
   ),
 );
 
+Widget _renderBlockImage({required double ratio, required Widget child}) =>
+    ForumHtmlRenderer(
+      preparedDocument: prepareRenderTestDocument(
+        '<img src="https://example.invalid/frame.png">',
+      ),
+      theme: forumHtmlTestTheme,
+      options: renderTestOptions,
+      labels: renderTestLabels,
+      imageHost: _ProbeImageHost(ratio: ratio, child: child),
+      buildAsync: false,
+      enableCaching: true,
+    );
+
+RenderAspectRatio _imageFrame(RenderObject content) {
+  // Locate the frame produced by the public renderer, keeping its concrete
+  // widget and render-object implementation private to the package.
+  RenderObject? ancestor = content.parent;
+  while (ancestor != null) {
+    if (ancestor is RenderAspectRatio) return ancestor;
+    ancestor = ancestor.parent;
+  }
+  throw StateError('The block image has no aspect-ratio frame');
+}
+
+final class _ProbeImageHost implements ForumHtmlImageHost {
+  const _ProbeImageHost({required this.ratio, required this.child});
+
+  final double ratio;
+  final Widget child;
+
+  @override
+  ForumHtmlDisplayImage resolveImage({
+    required Uri url,
+    required int? imageIndex,
+    required bool isSticker,
+    Size? htmlSize,
+  }) => _ProbeImage(url.toString(), ratio);
+
+  @override
+  Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
+    ForumHtmlDisplayImage image,
+  ) async => null;
+
+  @override
+  void onBlockImageResolved(ForumHtmlDisplayImage image, Size size) {}
+
+  @override
+  Future<void> prefetchDisk(
+    ForumHtmlDisplayImage image, {
+    required ForumHtmlImageWorkScope scope,
+  }) async {}
+
+  @override
+  Widget buildImage({
+    required ForumHtmlDisplayImage image,
+    required BoxFit fit,
+    required Widget placeholder,
+    double? width,
+    double? height,
+    Widget? errorPlaceholder,
+    VoidCallback? onRetry,
+    ValueChanged<Size>? onImageResolved,
+    VoidCallback? onImageFailed,
+    VoidCallback? onFirstFrameRendered,
+    bool showDelayedLoadingIndicator = false,
+    bool waitForCacheWrite = false,
+    int retryToken = 0,
+  }) => child;
+}
+
+final class _ProbeImage implements ForumHtmlDisplayImage {
+  const _ProbeImage(this.sourceUrl, this.ratio);
+
+  @override
+  final String sourceUrl;
+  final double ratio;
+
+  @override
+  String get cacheKey => sourceUrl;
+  @override
+  Object get identity => (sourceUrl, ratio);
+  @override
+  bool get isSticker => false;
+  @override
+  Size? get htmlSize => null;
+  @override
+  ForumHtmlImageLayout get initialLayout =>
+      ForumHtmlImageLayout(aspectRatio: ratio);
+}
+
 class _IntrinsicLayoutMeter extends SingleChildRenderObjectWidget {
-  const _IntrinsicLayoutMeter({super.key, required super.child});
+  const _IntrinsicLayoutMeter({
+    super.key,
+    required super.child,
+    this.geometryContentKey,
+  });
+
+  final GlobalKey? geometryContentKey;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _IntrinsicLayoutMeterBox();
+      _IntrinsicLayoutMeterBox(geometryContentKey);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _IntrinsicLayoutMeterBox renderObject,
+  ) {
+    renderObject.geometryContentKey = geometryContentKey;
+  }
 }
 
 class _IntrinsicLayoutMeterBox extends RenderProxyBox {
+  _IntrinsicLayoutMeterBox(this.geometryContentKey);
+
+  GlobalKey? geometryContentKey;
   var layouts = 0;
   double? actualBaseline;
 
   @override
   void performLayout() {
     layouts++;
+    final geometry = geometryContentKey == null
+        ? child!
+        : _imageFrame(geometryContentKey!.currentContext!.findRenderObject()!);
     // A crowded table can ask these before assigning a final cell width.
-    child!.getMinIntrinsicWidth(double.infinity);
-    child!.getMaxIntrinsicWidth(double.infinity);
-    child!.getMinIntrinsicHeight(double.infinity);
-    child!.getMaxIntrinsicHeight(double.infinity);
-    child!.getDryBaseline(
+    // Gesture wrappers do not implement dry baselines; query the real frame
+    // while still laying out the complete public renderer below this meter.
+    geometry.getMinIntrinsicWidth(double.infinity);
+    geometry.getMaxIntrinsicWidth(double.infinity);
+    geometry.getMinIntrinsicHeight(double.infinity);
+    geometry.getMaxIntrinsicHeight(double.infinity);
+    geometry.getDryBaseline(
       BoxConstraints.tightFor(width: constraints.maxWidth),
       TextBaseline.alphabetic,
     );
@@ -144,6 +261,8 @@ class _IntrinsicLayoutMeterBox extends RenderProxyBox {
       BoxConstraints.tightFor(width: constraints.maxWidth),
       parentUsesSize: true,
     );
+    // The SDK requires actual baselines to be requested by the direct parent
+    // during layout. Proxy boxes delegate this call down to the image frame.
     actualBaseline = child!.getDistanceToBaseline(
       TextBaseline.alphabetic,
       onlyReal: true,

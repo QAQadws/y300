@@ -3,7 +3,8 @@ import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph, ScrollCacheExtent;
+import 'package:flutter/rendering.dart'
+    show RenderAspectRatio, RenderParagraph, ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
@@ -4333,7 +4334,11 @@ void main() {
       final body = find.byKey(const Key('thread-post-body-entry-image-target'));
       final imageLayout = find.descendant(
         of: body,
-        matching: find.byType(AspectRatio),
+        matching: find.byElementPredicate(
+          (element) =>
+              element is RenderObjectElement &&
+              element.renderObject is RenderAspectRatio,
+        ),
       );
       expect(imageLayout, findsOneWidget);
       final initialImageSize = tester.getSize(imageLayout);
