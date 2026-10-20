@@ -337,6 +337,182 @@ void main() {
     },
   );
 
+  for (final scope in ForumFriendFeedScope.values) {
+    testWidgets(
+      '$scope pagination returns to the top after each successful read',
+      (tester) async {
+        final repository = FriendFeedFixture();
+        final firstPageItems = _longFriendFeedItems(200);
+        final secondPageItems = _longFriendFeedItems(400);
+        await _pumpPage(
+          tester,
+          repository: repository,
+          page: MyFriendsPage(
+            initialScope: scope,
+            onOpenLink: (_, _) {},
+            onOpenConversation: (_, _, _) {},
+          ),
+          settle: false,
+        );
+        await tester.pump();
+        repository.succeed(0, items: firstPageItems);
+        await tester.pumpAndSettle();
+
+        for (final step in [
+          (button: 'next', page: 2, items: secondPageItems),
+          (button: 'previous', page: 1, items: firstPageItems),
+        ]) {
+          final button = find.byKey(Key('my-friends-page-${step.button}'));
+          await tester.scrollUntilVisible(
+            button,
+            400,
+            scrollable: _scopeScrollable(scope),
+          );
+          await tester.pumpAndSettle();
+          final oldOffset = _scopePosition(tester, scope).pixels;
+          expect(oldOffset, greaterThan(0));
+          await tester.tap(button);
+          await tester.pump();
+
+          expect(repository.requests.last.query.page, step.page);
+          expect(_scopePosition(tester, scope).pixels, closeTo(oldOffset, 0.5));
+          repository.succeed(repository.requests.length - 1, items: step.items);
+          await tester.pump();
+          await tester.pump();
+          final animationStart = _scopePosition(tester, scope).pixels;
+          expect(animationStart, greaterThan(0));
+          await tester.pump(const Duration(milliseconds: 55));
+          expect(
+            _scopePosition(tester, scope).pixels,
+            allOf(greaterThan(0), lessThan(animationStart)),
+          );
+          await tester.pumpAndSettle();
+
+          expect(_scopePosition(tester, scope).pixels, 0);
+          expect(
+            find.byKey(Key('my-friends-user-${step.items.first.userId}')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
+
+  testWidgets('switching scopes retires an in-progress pagination return', (
+    tester,
+  ) async {
+    final repository = FriendFeedFixture(autoComplete: true)
+      ..items = _longFriendFeedItems(200);
+    await _pumpPage(tester, repository: repository);
+    final l10n = _l10n(tester);
+    const friends = ForumFriendFeedScope.friends;
+    final next = find.byKey(const Key('my-friends-page-next'));
+    await tester.scrollUntilVisible(
+      next,
+      400,
+      scrollable: _scopeScrollable(friends),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(next);
+    await tester.pump();
+    await tester.pump();
+    final animationStart = _scopePosition(tester, friends).pixels;
+    await tester.pump(const Duration(milliseconds: 55));
+    final interruptedOffset = _scopePosition(tester, friends).pixels;
+    expect(interruptedOffset, allOf(greaterThan(0), lessThan(animationStart)));
+
+    await tester.tap(find.text(l10n.profileFriendsOnlineTab));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(repository.requests.last.query.scope, ForumFriendFeedScope.online);
+    await tester.tap(find.text(l10n.profileFriendsTab));
+    await tester.pumpAndSettle();
+    expect(
+      _scopePosition(tester, friends).pixels,
+      closeTo(interruptedOffset, 0.5),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      _scopePosition(tester, friends).pixels,
+      closeTo(interruptedOffset, 0.5),
+    );
+    expect(
+      repository.requests
+          .where((request) => request.query.scope == friends)
+          .last
+          .query
+          .page,
+      2,
+    );
+    expect(repository.requests, hasLength(3));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed pagination retains the current list position', (
+    tester,
+  ) async {
+    final repository = FriendFeedFixture();
+    await _pumpPage(tester, repository: repository, settle: false);
+    await tester.pump();
+    repository.succeed(0, items: _longFriendFeedItems(200));
+    await tester.pumpAndSettle();
+    const scope = ForumFriendFeedScope.friends;
+    final next = find.byKey(const Key('my-friends-page-next'));
+    await tester.scrollUntilVisible(
+      next,
+      400,
+      scrollable: _scopeScrollable(scope),
+    );
+    await tester.pumpAndSettle();
+    final oldOffset = _scopePosition(tester, scope).pixels;
+    expect(oldOffset, greaterThan(0));
+
+    await tester.tap(next);
+    await tester.pump();
+    repository.fail(1, DataReadFailureKind.network);
+    await tester.pumpAndSettle();
+
+    expect(_scopePosition(tester, scope).pixels, closeTo(oldOffset, 0.5));
+    final bar = tester.widget<NativePaginationBar>(
+      find.byType(NativePaginationBar),
+    );
+    expect(bar.currentPage, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('switching friend scopes preserves each list position', (
+    tester,
+  ) async {
+    final repository = FriendFeedFixture(autoComplete: true)
+      ..items = _longFriendFeedItems(200);
+    await _pumpPage(tester, repository: repository);
+    final l10n = _l10n(tester);
+    const friends = ForumFriendFeedScope.friends;
+    const online = ForumFriendFeedScope.online;
+    await tester.drag(_scopeList(friends), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    final friendsOffset = _scopePosition(tester, friends).pixels;
+    expect(friendsOffset, greaterThan(0));
+
+    await tester.tap(find.text(l10n.profileFriendsOnlineTab));
+    await tester.pumpAndSettle();
+    expect(_scopePosition(tester, online).pixels, 0);
+    await tester.drag(_scopeList(online), const Offset(0, -650));
+    await tester.pumpAndSettle();
+    final onlineOffset = _scopePosition(tester, online).pixels;
+    expect(onlineOffset, greaterThan(0));
+
+    await tester.tap(find.text(l10n.profileFriendsTab));
+    await tester.pumpAndSettle();
+    expect(_scopePosition(tester, friends).pixels, closeTo(friendsOffset, 0.5));
+    await tester.tap(find.text(l10n.profileFriendsOnlineTab));
+    await tester.pumpAndSettle();
+    expect(_scopePosition(tester, online).pixels, closeTo(onlineOffset, 0.5));
+    expect(repository.requests, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
   for (final region in _friendRegions) {
     testWidgets(
       'friends long press on $region opens actions without navigating',
@@ -788,9 +964,8 @@ Future<void> _pumpPage(
       child: LocalizedTestApp(
         locale: locale,
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
           child: child!,
         ),
         home: page ?? _page(),
@@ -811,6 +986,17 @@ Finder _scopeList(ForumFriendFeedScope scope) => find.byWidgetPredicate(
         'my-friends-list-${scope.name}:',
       ),
 );
+
+Finder _scopeScrollable(ForumFriendFeedScope scope) =>
+    find.descendant(of: _scopeList(scope), matching: find.byType(Scrollable));
+
+ScrollPosition _scopePosition(
+  WidgetTester tester,
+  ForumFriendFeedScope scope,
+) => tester.state<ScrollableState>(_scopeScrollable(scope)).position;
+
+List<ForumFriendFeedItem> _longFriendFeedItems(int firstUserId) =>
+    List.generate(24, (index) => friendFeedItem('${firstUserId + index}'));
 
 String _scopeLabel(AppLocalizations l10n, ForumFriendFeedScope scope) =>
     switch (scope) {

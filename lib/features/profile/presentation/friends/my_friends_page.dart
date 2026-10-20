@@ -12,6 +12,7 @@ import 'package:y300/features/profile/presentation/friends/friend_list_row.dart'
 import 'package:y300/features/profile/presentation/friends/friend_read_status.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_controller.dart';
 import 'package:y300/features/profile/presentation/friends/my_friends_scope_pager.dart';
+import 'package:y300/features/profile/presentation/widgets/feed_pagination_scroll_controller.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
@@ -247,7 +248,7 @@ class _MyFriendsPageState extends ConsumerState<MyFriendsPage> {
   }
 }
 
-class _FriendsFeed extends StatelessWidget {
+class _FriendsFeed extends StatefulWidget {
   const _FriendsFeed({
     required this.controller,
     required this.state,
@@ -266,21 +267,91 @@ class _FriendsFeed extends StatelessWidget {
   final ValueChanged<ForumFriendFeedItem> onOpenLink;
   final ValueChanged<ForumFriendFeedItem> onShowActions;
 
+  @override
+  State<_FriendsFeed> createState() => _FriendsFeedState();
+}
+
+class _FriendsFeedState extends State<_FriendsFeed> {
+  final _scrollController = FeedPaginationScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleFeedChanged);
+  }
+
+  void _handleFeedChanged() {
+    // TabBarView can defer child updates until its transition finishes.
+    // Retire the old feed's animation at the source notification instead.
+    if (!widget.controller.isCurrentOwner ||
+        widget.controller.value.query.scope != widget.state.query.scope) {
+      _scrollController.cancelReturn();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _FriendsFeed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.removeListener(_handleFeedChanged);
+      widget.controller.addListener(_handleFeedChanged);
+    }
+    if (!widget.isActive ||
+        !identical(oldWidget.controller, widget.controller)) {
+      _scrollController.cancelReturn();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (ModalRoute.isCurrentOf(context) == false) {
+      _scrollController.cancelReturn();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleFeedChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   // Outgoing tabs can receive gestures while a swipe is still animating.
   bool _current(BuildContext context) =>
-      isActive &&
-      controller.isCurrentOwner &&
-      controller.value.query.scope == state.query.scope &&
-      controller.value.currentPage == state.currentPage &&
+      widget.isActive &&
+      widget.controller.isCurrentOwner &&
+      widget.controller.value.query.scope == widget.state.query.scope &&
+      widget.controller.value.currentPage == widget.state.currentPage &&
       (ModalRoute.isCurrentOf(context) ?? true);
+
+  Future<void> _loadPage(int page) {
+    if (!_current(context) || widget.state.isLoading) return Future.value();
+    final controller = widget.controller;
+    final scope = widget.state.query.scope;
+    return _scrollController.changePage(
+      load: () => controller.loadPageNumber(page),
+      currentPage: () => controller.value.data?.page,
+      isCurrent: () =>
+          mounted &&
+          identical(widget.controller, controller) &&
+          widget.isActive &&
+          controller.isCurrentOwner &&
+          controller.value.query.scope == scope &&
+          (ModalRoute.isCurrentOf(context) ?? true),
+      animate: () => !MediaQuery.disableAnimationsOf(context),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final state = widget.state;
     final data = state.data;
     final scope = state.query.scope;
     final l10n = AppLocalizations.of(context);
     return TickerMode(
-      enabled: isActive,
+      enabled: widget.isActive,
       child: Column(
         children: [
           if (data != null &&
@@ -299,123 +370,130 @@ class _FriendsFeed extends StatelessWidget {
             child: ForumPullToRefresh(
               onRefresh: () =>
                   _current(context) ? controller.refresh() : Future.value(),
-              child: CustomScrollView(
-                key: listKey,
-                physics: ForumPullToRefresh.scrollPhysics,
-                slivers: [
-                  if (data == null)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: !isActive
-                          ? const SizedBox.shrink()
-                          : state.isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : Center(
-                              child: FriendReadFailure(
-                                failure: state.failure,
-                                onRetry: () {
-                                  if (_current(context)) {
-                                    unawaited(controller.refresh());
-                                  }
-                                },
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _scrollController.handleScrollNotification,
+                child: CustomScrollView(
+                  key: widget.listKey,
+                  controller: _scrollController,
+                  physics: ForumPullToRefresh.scrollPhysics,
+                  slivers: [
+                    if (data == null)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: !widget.isActive
+                            ? const SizedBox.shrink()
+                            : state.isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : Center(
+                                child: FriendReadFailure(
+                                  failure: state.failure,
+                                  onRetry: () {
+                                    if (_current(context)) {
+                                      unawaited(controller.refresh());
+                                    }
+                                  },
+                                ),
                               ),
-                            ),
-                    )
-                  else if (data.items.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: FriendEmptyState(scope: scope)),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-                      sliver: SliverList.separated(
-                        itemCount: data.items.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final item = data.items[index];
-                          final hasIdentity = RegExp(
-                            r'^[1-9]\d*$',
-                          ).hasMatch(item.userId);
-                          return FriendListRow(
-                            key: Key(
-                              hasIdentity
-                                  ? 'my-friends-user-${item.userId}'
-                                  : 'my-friends-anonymous-$index',
-                            ),
-                            item: item,
-                            imageReferer: imageReferer,
-                            onOpenLink:
-                                hasIdentity &&
-                                    item.profileUrl?.isNotEmpty == true
-                                ? () {
-                                    if (_current(context)) onOpenLink(item);
-                                  }
-                                : null,
-                            onShowActions: hasIdentity
-                                ? () {
-                                    if (_current(context)) onShowActions(item);
-                                  }
-                                : null,
-                          );
-                        },
-                      ),
-                    ),
-                  if (data != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          children: [
-                            if (state.failure != null)
-                              FriendReadFailure(
-                                failure: state.failure,
-                                onRetry: () {
-                                  if (_current(context)) {
-                                    unawaited(controller.refresh());
-                                  }
-                                },
+                      )
+                    else if (data.items.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(child: FriendEmptyState(scope: scope)),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                        sliver: SliverList.separated(
+                          itemCount: data.items.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final item = data.items[index];
+                            final hasIdentity = RegExp(r'^[1-9]\d*$')
+                                .hasMatch(item.userId);
+                            return FriendListRow(
+                              key: Key(
+                                hasIdentity
+                                    ? 'my-friends-user-${item.userId}'
+                                    : 'my-friends-anonymous-$index',
                               ),
-                            NativePaginationBar(
-                              currentPage: state.currentPage,
-                              lastPage: state.lastPage,
-                              hasMore: state.canLoadNext,
-                              canLoadPrevious: state.canLoadPrevious,
-                              isLoading: state.isLoading || state.isRemoving,
-                              onLoadPrevious: () {
-                                if (_current(context)) {
-                                  unawaited(controller.loadPreviousPage());
-                                }
-                              },
-                              onLoadNext: () {
-                                if (_current(context)) {
-                                  unawaited(controller.loadNextPage());
-                                }
-                              },
-                              onSelectPage: (page) async {
-                                await WidgetsBinding.instance.endOfFrame;
-                                if (!context.mounted || !_current(context)) {
-                                  return;
-                                }
-                                await controller.loadPageNumber(page);
-                              },
-                              previousLabel: l10n.commonPreviousPage,
-                              currentLabel: l10n.commonPage(state.currentPage),
-                              nextLabel: l10n.commonNextPage,
-                              previousButtonKey: const Key(
-                                'my-friends-page-previous',
-                              ),
-                              currentPageButtonKey: const Key(
-                                'my-friends-page-current',
-                              ),
-                              nextButtonKey: const Key('my-friends-page-next'),
-                              menuKeyPrefix: 'my-friends-page',
-                            ),
-                          ],
+                              item: item,
+                              imageReferer: widget.imageReferer,
+                              onOpenLink:
+                                  hasIdentity &&
+                                      item.profileUrl?.isNotEmpty == true
+                                  ? () {
+                                      if (_current(context)) {
+                                        widget.onOpenLink(item);
+                                      }
+                                    }
+                                  : null,
+                              onShowActions: hasIdentity
+                                  ? () {
+                                      if (_current(context)) {
+                                        widget.onShowActions(item);
+                                      }
+                                    }
+                                  : null,
+                            );
+                          },
                         ),
                       ),
-                    ),
-                ],
+                    if (data != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              if (state.failure != null)
+                                FriendReadFailure(
+                                  failure: state.failure,
+                                  onRetry: () {
+                                    if (_current(context)) {
+                                      unawaited(controller.refresh());
+                                    }
+                                  },
+                                ),
+                              NativePaginationBar(
+                                currentPage: state.currentPage,
+                                lastPage: state.lastPage,
+                                hasMore: state.canLoadNext,
+                                canLoadPrevious: state.canLoadPrevious,
+                                isLoading: state.isLoading || state.isRemoving,
+                                onLoadPrevious: () {
+                                  unawaited(_loadPage(state.currentPage - 1));
+                                },
+                                onLoadNext: () {
+                                  unawaited(_loadPage(state.currentPage + 1));
+                                },
+                                onSelectPage: (page) async {
+                                  await WidgetsBinding.instance.endOfFrame;
+                                  if (!context.mounted || !_current(context)) {
+                                    return;
+                                  }
+                                  await _loadPage(page);
+                                },
+                                previousLabel: l10n.commonPreviousPage,
+                                currentLabel: l10n.commonPage(
+                                  state.currentPage,
+                                ),
+                                nextLabel: l10n.commonNextPage,
+                                previousButtonKey: const Key(
+                                  'my-friends-page-previous',
+                                ),
+                                currentPageButtonKey: const Key(
+                                  'my-friends-page-current',
+                                ),
+                                nextButtonKey: const Key(
+                                  'my-friends-page-next',
+                                ),
+                                menuKeyPrefix: 'my-friends-page',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

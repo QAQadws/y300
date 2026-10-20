@@ -1032,10 +1032,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('successful page navigation starts the new list at the top', (
+  testWidgets('previous and next pages smoothly return long lists to the top', (
     tester,
   ) async {
-    final repository = _FakeBlogDirectoryRepository(longList: true);
+    final nextPageGate = Completer<void>();
+    final repository = _FakeBlogDirectoryRepository(
+      longList: true,
+      longListPages: const {1, 2},
+      nextPageGate: nextPageGate,
+    );
     await _pumpBlogPage(
       tester,
       directoryRepository: repository,
@@ -1046,24 +1051,119 @@ void main() {
       of: list,
       matching: find.byType(Scrollable),
     );
+    for (final direction in ['next', 'previous']) {
+      final button = find.byKey(Key('profile-blog-$direction-page-button'));
+      await tester.scrollUntilVisible(button, 500, scrollable: scrollable);
+      await tester.pumpAndSettle();
+      final oldOffset = tester
+          .state<ScrollableState>(scrollable)
+          .position
+          .pixels;
+      expect(oldOffset, greaterThan(400));
+      await tester.tap(button);
+      if (direction == 'next') {
+        await tester.pump();
+        expect(
+          tester.state<ScrollableState>(scrollable).position.pixels,
+          oldOffset,
+        );
+        nextPageGate.complete();
+      }
+      await tester.pump();
+      await tester.pump();
+      final animationStart = tester
+          .state<ScrollableState>(scrollable)
+          .position
+          .pixels;
+      expect(animationStart, greaterThan(0));
+      await tester.pump(const Duration(milliseconds: 55));
+      expect(
+        tester.state<ScrollableState>(scrollable).position.pixels,
+        allOf(greaterThan(0), lessThan(animationStart)),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
+    }
+    expect(find.text('Entry 0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'switching blog scopes retires an in-progress pagination return',
+    (tester) async {
+      final repository = _FakeBlogDirectoryRepository(
+        longList: true,
+        longListPages: const {1, 2},
+      );
+      await _pumpBlogPage(
+        tester,
+        directoryRepository: repository,
+        detailRepository: _FakeBlogDetailRepository(),
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileBlogPage)),
+      );
+      final scrollable = find
+          .descendant(
+            of: find.byKey(const Key('profile-blog-list')).hitTestable(),
+            matching: find.byType(Scrollable),
+          )
+          .hitTestable();
+      double offset() =>
+          tester.state<ScrollableState>(scrollable).position.pixels;
+      final next = find.byKey(const Key('profile-blog-next-page-button'));
+      await tester.scrollUntilVisible(next, 500, scrollable: scrollable);
+      await tester.pumpAndSettle();
+      await tester.tap(next);
+      await tester.pump();
+      await tester.pump();
+      final animationStart = offset();
+      await tester.pump(const Duration(milliseconds: 55));
+      final interruptedOffset = offset();
+      expect(
+        interruptedOffset,
+        allOf(greaterThan(0), lessThan(animationStart)),
+      );
+
+      await tester.tap(find.text(l10n.profileBlogFriends));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(repository.queries.last.scope, UserBlogFeedScope.friends);
+      await tester.tap(find.text(l10n.profileBlogExplore));
+      await tester.pumpAndSettle();
+      expect(offset(), closeTo(interruptedOffset, 0.5));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(offset(), closeTo(interruptedOffset, 0.5));
+      expect(repository.queries, hasLength(3));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('failed page navigation preserves a scrolled blog list', (
+    tester,
+  ) async {
+    final repository = _FakeBlogDirectoryRepository(longList: true)
+      ..failedPages.add(2);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: repository,
+      detailRepository: _FakeBlogDetailRepository(),
+    );
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('profile-blog-list')),
+      matching: find.byType(Scrollable),
+    );
     final next = find.byKey(const Key('profile-blog-next-page-button'));
     await tester.scrollUntilVisible(next, 500, scrollable: scrollable);
     await tester.pumpAndSettle();
-    expect(
-      tester.state<ScrollableState>(scrollable).position.pixels,
-      greaterThan(400),
-    );
+    final oldOffset = tester.state<ScrollableState>(scrollable).position.pixels;
     await tester.tap(next);
     await tester.pumpAndSettle();
-    expect(find.text('第二页日志'), findsOneWidget);
-    expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
-
-    await tester.tap(
-      find.byKey(const Key('profile-blog-previous-page-button')),
+    expect(
+      tester.state<ScrollableState>(scrollable).position.pixels,
+      closeTo(oldOffset, 0.5),
     );
-    await tester.pumpAndSettle();
-    expect(find.text('Entry 0'), findsOneWidget);
-    expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
+    expect(repository.queries.last.page, 2);
     expect(tester.takeException(), isNull);
   });
 
@@ -1307,6 +1407,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
     this.nextPageGate,
     this.unknownTotalPages = false,
     this.longList = false,
+    this.longListPages = const {1},
     this.longListScopes = const {UserBlogFeedScope.public},
     this.scopeGates = const {},
     this.blogActions = const {},
@@ -1328,6 +1429,7 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   final bool unknownTotalPages;
   final failedPages = <int>{};
   final bool longList;
+  final Set<int> longListPages;
   final Set<UserBlogFeedScope> longListScopes;
   final Map<UserBlogFeedScope, Completer<void>> scopeGates;
   final Set<UserBlogAction> blogActions;
@@ -1374,7 +1476,9 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
   }
 
   UserBlogDirectoryData _directoryData(UserBlogDirectoryQuery query) {
-    if (longList && longListScopes.contains(query.scope) && query.page == 1) {
+    if (longList &&
+        longListScopes.contains(query.scope) &&
+        longListPages.contains(query.page)) {
       return UserBlogDirectoryData(
         scope: query.scope,
         order: query.order,
@@ -1382,19 +1486,21 @@ class _FakeBlogDirectoryRepository implements UserBlogDirectoryRepository {
           for (var i = 0; i < 30; i++)
             UserBlogSummary(
               blogId:
-                  '${i + (query.scope == UserBlogFeedScope.self ? 1001 : 1)}',
+                  '${i + (query.scope == UserBlogFeedScope.self ? 1001 : 1) + (query.page - 1) * 10000}',
               ownerUserId: '101',
-              title: query.scope == UserBlogFeedScope.self
+              title: query.page > 1
+                  ? 'Page ${query.page} entry $i'
+                  : query.scope == UserBlogFeedScope.self
                   ? 'Self entry $i'
                   : 'Entry $i',
-              excerpt:
-                  'A longer journal excerpt for checking retained scroll position.',
+              excerpt: 'A longer journal excerpt for checking retained scroll position.',
             ),
         ],
-        pagination: const UserBlogPagination(
-          currentPage: 1,
+        pagination: UserBlogPagination(
+          currentPage: query.page,
           totalPages: 2,
-          hasNext: true,
+          hasPrevious: query.page > 1,
+          hasNext: query.page < 2,
         ),
       );
     }

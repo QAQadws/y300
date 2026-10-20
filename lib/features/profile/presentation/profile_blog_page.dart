@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +33,7 @@ import 'package:y300/features/profile/data/providers/profile_read_providers.dart
 
 import 'package:y300/features/profile/presentation/profile_text_resolver.dart';
 import 'package:y300/features/profile/presentation/profile_user_link.dart';
+import 'package:y300/features/profile/presentation/widgets/feed_pagination_scroll_controller.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/services/localized_error_summary.dart';
@@ -205,7 +208,9 @@ class _ProfileBlogFeedPage extends ConsumerWidget {
                       state.query.categoryId,
                       state.query.personalCategoryId,
                     )),
+                    controller: controller,
                     state: state,
+                    isActive: isActive,
                     accountId: controller.accountId,
                     palette: palette,
                     imageReferer: imageReferer,
@@ -220,15 +225,6 @@ class _ProfileBlogFeedPage extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    onLoadPreviousPage: () =>
-                        _whenCurrent(controller.loadPreviousPage),
-                    onLoadNextPage: () => _whenCurrent(controller.loadNextPage),
-                    onSelectPage: (page) async {
-                      // The picker must close before the active route can read.
-                      await WidgetsBinding.instance.endOfFrame;
-                      if (!context.mounted || !_isCurrent) return;
-                      await controller.loadPageNumber(page);
-                    },
                     onAction: (item, action) => _whenCurrent(
                       () => action == UserBlogAction.edit
                           ? openBlogEditorPage(
@@ -476,25 +472,23 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
 class _ProfileBlogListContent extends StatefulWidget {
   const _ProfileBlogListContent({
     super.key,
+    required this.controller,
     required this.state,
+    required this.isActive,
     required this.accountId,
     required this.palette,
     required this.imageReferer,
     required this.onOpenBlog,
-    required this.onLoadPreviousPage,
-    required this.onLoadNextPage,
-    required this.onSelectPage,
     required this.onAction,
   });
 
+  final ProfileBlogPageController controller;
   final UserBlogDirectoryPageState state;
+  final bool isActive;
   final String? accountId;
   final Y300NativeContentColors palette;
   final String imageReferer;
   final ValueChanged<UserBlogSummary> onOpenBlog;
-  final VoidCallback onLoadPreviousPage;
-  final VoidCallback onLoadNextPage;
-  final ValueChanged<int> onSelectPage;
   final void Function(UserBlogSummary item, UserBlogAction action) onAction;
 
   @override
@@ -503,29 +497,75 @@ class _ProfileBlogListContent extends StatefulWidget {
 }
 
 class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
-  final _scrollController = ScrollController();
+  final _scrollController = FeedPaginationScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleFeedChanged);
+  }
+
+  void _handleFeedChanged() {
+    // TabBarView can retain the outgoing widget during its transition.
+    // The source notification retires work before that widget updates.
+    if (_feedIdentity(widget.controller.value.query) !=
+        _feedIdentity(widget.state.query)) {
+      _scrollController.cancelReturn();
+    }
+  }
 
   @override
   void didUpdateWidget(covariant _ProfileBlogListContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.state.currentPage == widget.state.currentPage) return;
-    final page = widget.state.currentPage;
-    // Only a successful page change resets the current feed's scroll position.
-    // PageStorage continues to restore the last position when switching tabs.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          widget.state.currentPage == page &&
-          !widget.state.isLoading &&
-          _scrollController.hasClients) {
-        _scrollController.jumpTo(0);
-      }
-    });
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.removeListener(_handleFeedChanged);
+      widget.controller.addListener(_handleFeedChanged);
+    }
+    if (!widget.isActive ||
+        !identical(oldWidget.controller, widget.controller)) {
+      _scrollController.cancelReturn();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (ModalRoute.isCurrentOf(context) == false) {
+      _scrollController.cancelReturn();
+    }
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_handleFeedChanged);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Object _feedIdentity(UserBlogDirectoryQuery query) => (
+    query.scope,
+    query.order,
+    query.ownerUserId,
+    query.categoryId,
+    query.personalCategoryId,
+  );
+
+  Future<void> _loadPage(int page) {
+    final controller = widget.controller;
+    final feed = _feedIdentity(widget.state.query);
+    bool isCurrent() =>
+        mounted &&
+        identical(widget.controller, controller) &&
+        widget.isActive &&
+        _feedIdentity(controller.value.query) == feed &&
+        (ModalRoute.isCurrentOf(context) ?? true);
+    if (!isCurrent() || widget.state.isLoading) return Future.value();
+    return _scrollController.changePage(
+      load: () => controller.loadPageNumber(page),
+      currentPage: () => controller.value.data?.pagination.currentPage,
+      isCurrent: isCurrent,
+      animate: () => !MediaQuery.disableAnimationsOf(context),
+    );
   }
 
   @override
@@ -536,64 +576,73 @@ class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
     final l10n = AppLocalizations.of(context);
     return KeyedSubtree(
       key: const Key('profile-blog-list'),
-      child: ListView.builder(
-        key: PageStorageKey((
-          widget.accountId,
-          state.query.scope,
-          state.query.order,
-          state.query.ownerUserId,
-          state.query.categoryId,
-          state.query.personalCategoryId,
-        )),
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        itemCount: data.items.length + 2,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return state.failure == null
-                ? const SizedBox.shrink()
-                : Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      l10n.profileBlogLoadFailed(
-                        LocalizedErrorSummary.resolve(l10n, state.failure),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _scrollController.handleScrollNotification,
+        child: ListView.builder(
+          key: PageStorageKey((
+            widget.accountId,
+            state.query.scope,
+            state.query.order,
+            state.query.ownerUserId,
+            state.query.categoryId,
+            state.query.personalCategoryId,
+          )),
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          itemCount: data.items.length + 2,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return state.failure == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        l10n.profileBlogLoadFailed(
+                          LocalizedErrorSummary.resolve(l10n, state.failure),
+                        ),
+                        style: TextStyle(color: palette.muted),
                       ),
-                      style: TextStyle(color: palette.muted),
+                    );
+            }
+            if (index == data.items.length + 1) {
+              return Column(
+                children: [
+                  if (data.items.isEmpty)
+                    _ProfileBlogEmptyState(
+                      message: l10n.profileBlogEmpty,
+                      palette: palette,
                     ),
-                  );
-          }
-          if (index == data.items.length + 1) {
-            return Column(
-              children: [
-                if (data.items.isEmpty)
-                  _ProfileBlogEmptyState(
-                    message: l10n.profileBlogEmpty,
-                    palette: palette,
+                  _PaginationBar(
+                    state: state,
+                    onLoadPreviousPage: () =>
+                        unawaited(_loadPage(state.currentPage - 1)),
+                    onLoadNextPage: () =>
+                        unawaited(_loadPage(state.currentPage + 1)),
+                    onSelectPage: (page) async {
+                      // The picker route must close before checking ownership.
+                      await WidgetsBinding.instance.endOfFrame;
+                      if (mounted) await _loadPage(page);
+                    },
                   ),
-                _PaginationBar(
-                  state: state,
-                  onLoadPreviousPage: widget.onLoadPreviousPage,
-                  onLoadNextPage: widget.onLoadNextPage,
-                  onSelectPage: widget.onSelectPage,
-                ),
-              ],
+                ],
+              );
+            }
+            final item = data.items[index - 1];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _ProfileBlogListCard(
+                key: Key('profile-blog-item-${item.blogId}'),
+                item: item,
+                capabilities: state.capabilities,
+                palette: palette,
+                imageReferer: widget.imageReferer,
+                onTap: () => widget.onOpenBlog(item),
+                onAction: (action) => widget.onAction(item, action),
+              ),
             );
-          }
-          final item = data.items[index - 1];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _ProfileBlogListCard(
-              key: Key('profile-blog-item-${item.blogId}'),
-              item: item,
-              capabilities: state.capabilities,
-              palette: palette,
-              imageReferer: widget.imageReferer,
-              onTap: () => widget.onOpenBlog(item),
-              onAction: (action) => widget.onAction(item, action),
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }
