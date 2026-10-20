@@ -69,8 +69,10 @@ class DefaultForumWebViewScriptInjector implements ForumWebViewScriptInjector {
       );
     }
     if (visualPolicy.disableHorizontalOverflow) {
+      // Keep clipping on the viewport; applying it to body creates a second
+      // vertical scroll container that can consume Android touch gestures.
       blocks.add(
-        'html, body { overflow-x: hidden !important; overscroll-behavior-x: none !important; }',
+        'html { overflow-x: hidden !important; overscroll-behavior-x: none !important; }',
       );
     }
     final extraCss = visualPolicy.extraCss.trim();

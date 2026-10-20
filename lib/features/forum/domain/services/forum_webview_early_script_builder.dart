@@ -79,8 +79,10 @@ class DefaultForumWebViewEarlyScriptBuilder
       );
     }
     if (visualPolicy.disableHorizontalOverflow) {
+      // On body, hidden overflow-x also makes overflow-y auto, creating an
+      // inner scroll container that can consume vertical drags on Android.
       blocks.add(
-        'html, body { overflow-x: hidden !important; overscroll-behavior-x: none !important; }',
+        'html { overflow-x: hidden !important; overscroll-behavior-x: none !important; }',
       );
     }
     final extraCss = visualPolicy.extraCss.trim();
