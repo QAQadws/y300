@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
@@ -54,6 +55,10 @@ import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   for (final flowMode in [
     NovelReaderFlowMode.pagedLtr,
     NovelReaderFlowMode.pagedRtl,

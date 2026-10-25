@@ -4,6 +4,7 @@ import 'package:y300/core/preferences/preferences_store.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/domain/repositories/forum_html_reader_preferences_repository.dart';
 import 'package:y300/features/content_rendering_shared/domain/services/forum_html_reader_preference_policy.dart';
+import 'package:y300/features/fonts/fonts.dart' show FontIdentity;
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 
@@ -48,6 +49,9 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
             PreferenceKeys.forumHtmlReaderPreserveAuthorFontSize,
           ) ??
           defaults.preserveAuthorFontSize,
+      fontFamily: _fontId(
+        await _preferencesStore.read(PreferenceKeys.forumHtmlReaderFontFamily),
+      ),
     );
   }
 
@@ -71,6 +75,10 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
     await _preferencesStore.write(
       PreferenceKeys.forumHtmlReaderPreserveAuthorFontSize,
       preferences.preserveAuthorFontSize,
+    );
+    await _preferencesStore.write(
+      PreferenceKeys.forumHtmlReaderFontFamily,
+      _fontId(preferences.fontFamily),
     );
   }
 
@@ -123,4 +131,7 @@ class SharedPrefsForumHtmlReaderPreferencesRepository
     }
     return TextConversionMode.none;
   }
+
+  static String _fontId(String? raw) =>
+      raw != null && FontIdentity.isImported(raw) ? raw : FontIdentity.system;
 }

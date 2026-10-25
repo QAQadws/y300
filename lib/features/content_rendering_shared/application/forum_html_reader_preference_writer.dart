@@ -59,6 +59,23 @@ final class ForumHtmlReaderPreferenceWriter {
     return next.done.future;
   }
 
+  /// Repair only a confirmed font reference after previously accepted writes.
+  /// A live typography preview is not a durable baseline for this patch.
+  Future<void> repairFontReference(
+    String unavailableId, {
+    required bool Function() isCurrent,
+  }) async {
+    final loading = _loading;
+    if (loading != null) await loading;
+    while (_idle != null) {
+      await _idle!.future;
+    }
+    if (!isCurrent()) return;
+    final confirmed = lastSuccessful;
+    if (confirmed == null || confirmed.fontFamily != unavailableId) return;
+    await save(confirmed.copyWith(fontFamily: 'system'));
+  }
+
   Future<void> _drain() async {
     final loading = _loading;
     if (loading != null) {

@@ -2481,8 +2481,11 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(repository, imageCacheService: imageCacheService),
       );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await _pumpThreadBodyUntil(tester, () {
+        final roles = imageCacheService.requests.map((request) => request.role);
+        return roles.contains(ImageCacheRole.threadInline) &&
+            roles.contains(ImageCacheRole.remoteSmiley);
+      });
 
       expect(
         imageCacheService.requests.map((request) => request.role),
@@ -3381,7 +3384,13 @@ void main() {
       });
 
       await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
+      await _pumpThreadBodyUntil(
+        tester,
+        () => find
+            .byKey(const Key('thread-post-html-first-readable-image-p1-0'))
+            .evaluate()
+            .isNotEmpty,
+      );
       await tester.tap(
         find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
       );
@@ -7179,6 +7188,19 @@ Future<void> _pumpThreadUiTransition(WidgetTester tester) async {
   // waiting for unrelated image streams to become idle.
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
+}
+
+Future<void> _pumpThreadBodyUntil(
+  WidgetTester tester,
+  bool Function() ready,
+) async {
+  // Initial preferences and the selected runtime font resolve before body
+  // publication; media visibility then needs the following layout frame.
+  for (var frame = 0; frame < 30; frame++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    if (ready()) return;
+  }
+  fail('Thread body did not become ready');
 }
 
 Future<void> _longPressVisibleTop(WidgetTester tester, Finder finder) async {

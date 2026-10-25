@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
@@ -17,6 +18,8 @@ import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_navigation_fixture.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets(
     'records the first displayed success once across refresh and paging',
     (tester) async {

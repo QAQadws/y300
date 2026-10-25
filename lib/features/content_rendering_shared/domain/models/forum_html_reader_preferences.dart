@@ -8,6 +8,7 @@ class ForumHtmlReaderPreferences {
     required this.typography,
     required this.conversionMode,
     this.preserveAuthorFontSize = true,
+    this.fontFamily = 'system',
   });
 
   factory ForumHtmlReaderPreferences.defaults() =>
@@ -30,16 +31,21 @@ class ForumHtmlReaderPreferences {
   final TextConversionMode conversionMode;
   final bool preserveAuthorFontSize;
 
+  /// Stable local font choice, never an external path or engine family name.
+  final String fontFamily;
+
   ForumHtmlReaderPreferences copyWith({
     RichTextTypography? typography,
     TextConversionMode? conversionMode,
     bool? preserveAuthorFontSize,
+    String? fontFamily,
   }) {
     return ForumHtmlReaderPreferences(
       typography: typography ?? this.typography,
       conversionMode: conversionMode ?? this.conversionMode,
       preserveAuthorFontSize:
           preserveAuthorFontSize ?? this.preserveAuthorFontSize,
+      fontFamily: fontFamily ?? this.fontFamily,
     );
   }
 
@@ -48,10 +54,15 @@ class ForumHtmlReaderPreferences {
     return other is ForumHtmlReaderPreferences &&
         typography == other.typography &&
         conversionMode == other.conversionMode &&
-        preserveAuthorFontSize == other.preserveAuthorFontSize;
+        preserveAuthorFontSize == other.preserveAuthorFontSize &&
+        fontFamily == other.fontFamily;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(typography, conversionMode, preserveAuthorFontSize);
+  int get hashCode => Object.hash(
+    typography,
+    conversionMode,
+    preserveAuthorFontSize,
+    fontFamily,
+  );
 }

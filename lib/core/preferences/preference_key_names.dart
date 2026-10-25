@@ -11,6 +11,7 @@ abstract final class PreferenceKeyNames {
   static const threadQuickScrollDockSide = 'thread.quick_scroll.dock_side.v1';
 
   static const forumHtmlReaderFontScale = 'forum_html_reader_font_scale';
+  static const forumHtmlReaderFontFamily = 'reader.forum_html.font_family.v1';
   static const forumHtmlReaderLineHeightScale =
       'forum_html_reader_line_height_scale';
   static const forumHtmlReaderConversionMode =

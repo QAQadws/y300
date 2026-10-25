@@ -13,23 +13,24 @@ import 'package:y300/features/thread/presentation/services/thread_body_reading_c
 import 'package:y300/features/thread/presentation/services/thread_body_reading_image_host.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_presentation.dart';
 
-typedef ThreadPostHtmlFirstImageFallback =
-    void Function(ThreadPost post, ForumHtmlImageRequest request);
+typedef ThreadPostHtmlFirstImageFallback = void Function(
+  ThreadPost post,
+  ForumHtmlImageRequest request,
+);
 
-typedef ThreadPreparedBodyHandoff =
-    bool Function(
-      BuildContext context,
-      ForumHtmlPreparationRequest request,
-      ForumHtmlPreparedRenderDocument document,
-    );
-typedef ThreadPreparedBodyPreparerSelector =
-    ForumHtmlRenderPreparer Function(ForumHtmlPreparationRequest request);
-typedef ThreadPostHtmlFirstImageDiagnostics =
-    void Function(
-      ThreadPost post,
-      ForumHtmlImageRequest request,
-      ThreadHtmlImageReaderBridgeResult result,
-    );
+typedef ThreadPreparedBodyHandoff = bool Function(
+  BuildContext context,
+  ForumHtmlPreparationRequest request,
+  ForumHtmlPreparedRenderDocument document,
+);
+typedef ThreadPreparedBodyPreparerSelector = ForumHtmlRenderPreparer Function(
+  ForumHtmlPreparationRequest request,
+);
+typedef ThreadPostHtmlFirstImageDiagnostics = void Function(
+  ThreadPost post,
+  ForumHtmlImageRequest request,
+  ThreadHtmlImageReaderBridgeResult result,
+);
 
 class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   const ThreadPostHtmlFirstBody({
@@ -149,13 +150,13 @@ class _ThreadPostHtmlFirstBodyState
     _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
   }
 
-  void _clearReading() {
+  void _clearReading({bool preserveExpansion = false}) {
     _readingReady = false;
     _readingIdentity = null;
     _readingImageHost = null;
     _readingImages?.dispose();
     _readingImages = null;
-    _readingExpansion.clear();
+    if (!preserveExpansion) _readingExpansion.clear();
     _readingRevision++;
   }
 
@@ -187,9 +188,28 @@ class _ThreadPostHtmlFirstBodyState
       }
       return widget.fallback ?? const SizedBox.shrink();
     }
-    final preferences =
-        ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
-        ForumHtmlReaderPreferences.defaults();
+    final fontBinding = ref.watch(forumHtmlReaderFontBindingProvider);
+    final preferences = fontBinding.preferences;
+    final textStyle = resolveForumHtmlReaderTextStyle(
+      context,
+      preferences: preferences,
+      theme: widget.theme,
+      font: fontBinding.resolvedFont,
+    );
+    if (!fontBinding.isReady) {
+      _releaseBodyLayout();
+      widget.readingCoordinator?.unregister(this);
+      _clearReading();
+      // Font resolution blocks publication, not font-neutral HTML work. A
+      // later preference snapshot still retires preparation through identity.
+      return _buildHtmlBody(
+        html,
+        preferences,
+        textStyle: textStyle,
+        fontIdentity: fontBinding.cacheKey,
+        fontReady: false,
+      );
+    }
     // B-class conversion is owned by the page-level display projector. This
     // boundary only prepares and renders the already projected HTML.
     final presentation = widget.wholeBodyPresentation;
@@ -198,7 +218,12 @@ class _ThreadPostHtmlFirstBodyState
         !presentation.isActive ||
         presentation.html != widget.post.message) {
       _releaseBodyLayout();
-      return _buildHtmlBody(html, preferences);
+      return _buildHtmlBody(
+        html,
+        preferences,
+        textStyle: textStyle,
+        fontIdentity: fontBinding.cacheKey,
+      );
     }
     late ForumHtmlPreparationRequest request;
     try {
@@ -219,6 +244,8 @@ class _ThreadPostHtmlFirstBodyState
           layoutIdentity: (
             request.identity,
             preferences.renderOptions,
+            fontBinding.cacheKey,
+            textStyle,
             Theme.of(context),
             DefaultTextStyle.of(context).style,
             constraints.maxWidth,
@@ -237,6 +264,8 @@ class _ThreadPostHtmlFirstBodyState
           child: _buildHtmlBody(
             html,
             preferences,
+            textStyle: textStyle,
+            fontIdentity: fontBinding.cacheKey,
             bodyLayout: lease,
             preparationRequest: request,
           ),
@@ -271,6 +300,9 @@ class _ThreadPostHtmlFirstBodyState
   Widget _buildHtmlBody(
     String html,
     ForumHtmlReaderPreferences preferences, {
+    required TextStyle textStyle,
+    required Object fontIdentity,
+    bool fontReady = true,
     ThreadBodyLayoutLease? bodyLayout,
     ForumHtmlPreparationRequest? preparationRequest,
   }) {
@@ -287,7 +319,7 @@ class _ThreadPostHtmlFirstBodyState
         _clearReading();
       }
       final preparedDocument = _preparation.resolve(request);
-      if (preparedDocument == null) {
+      if (preparedDocument == null || !fontReady) {
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
         return const ForumHtmlPreparationPlaceholder();
       }
@@ -304,13 +336,17 @@ class _ThreadPostHtmlFirstBodyState
       final readingIdentity = (
         identity,
         // Preparation reuse does not remove reading layout/ready invalidation.
-        preferences,
+        preferences.renderOptions,
+        fontIdentity,
+        textStyle,
         sourcePost.message,
         widget.imageReferer,
         widget.imagePrecacheService,
       );
       if (tracked && _readingIdentity != readingIdentity) {
-        _clearReading();
+        // A font or image-host change retires layout readiness, while folds
+        // still belong to the same prepared HTML document.
+        _clearReading(preserveExpansion: true);
         _readingIdentity = readingIdentity;
         _readingImages = ThreadBodyReadingImageTracker(coordinator!.schedule);
         if (preparedDocument.sequence.entries.isNotEmpty) {
@@ -366,6 +402,7 @@ class _ThreadPostHtmlFirstBodyState
         child: ForumHtmlWidgetPostRenderer(
           html: html,
           theme: widget.theme,
+          textStyle: textStyle,
           preparedDocument: preparedDocument,
           sourceId: sourceId,
           threadId: widget.threadId,
@@ -655,9 +692,8 @@ class ThreadPostHtmlBodyError extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Text(
           AppLocalizations.of(context).threadHtmlRenderFailed,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: colors.onErrorContainer),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: colors.onErrorContainer),
         ),
       ),
     );

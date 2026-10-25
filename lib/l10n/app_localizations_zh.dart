@@ -5449,6 +5449,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fontSelectorTitle => '字体';
 
   @override
+  String get fontSelectorCustomFont => '自定义字体';
+
+  @override
   String get novelCustomFont => '自定义字体';
 
   @override
@@ -10935,6 +10938,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get fontSelectorTitle => '字型';
+
+  @override
+  String get fontSelectorCustomFont => '自訂字型';
 
   @override
   String get novelCustomFont => '自訂字型';

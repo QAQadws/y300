@@ -16,11 +16,13 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
+
 import '../thread_detail_prepared_body.dart';
 import '../services/thread_body_preparation_handoff.dart';
 import '../services/thread_body_chunk_preparation.dart';
 import '../services/thread_body_presentation.dart';
 import '../services/thread_detail_quick_scroll_coordinator.dart';
+
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_post_rate_form_projection.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
@@ -321,11 +323,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       _preparedBodies.retainWhere((pid, _) => activePids.contains(pid));
       _chunkPreparation.retainCurrent();
       if (_preparedBodies.bodies.isNotEmpty) {
-        final preferences = ref
-            .watch(forumHtmlReaderPreferencesControllerProvider)
-            .value;
+        final fontBinding = ref.watch(forumHtmlReaderFontBindingProvider);
         final layoutIdentity = (
-          preferences,
+          fontBinding.preferences.renderOptions,
+          fontBinding.isReady,
+          fontBinding.cacheKey,
           Theme.of(context),
           MediaQuery.sizeOf(context),
           MediaQuery.textScalerOf(context),
@@ -653,9 +655,8 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
               : MediaQuery.sizeOf(context).height;
           final textStyle = Theme.of(context).textTheme.bodyMedium;
           final lineHeight =
-              MediaQuery.textScalerOf(
-                context,
-              ).scale(textStyle?.fontSize ?? 14) *
+              MediaQuery.textScalerOf(context)
+                  .scale(textStyle?.fontSize ?? 14) *
               (textStyle?.height ?? 1.5);
           // The footer starts below a small, viewport-relative glimpse of
           // the rendered body; the center remains stable as that body grows.

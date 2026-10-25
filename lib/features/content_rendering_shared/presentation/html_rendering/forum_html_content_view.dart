@@ -6,8 +6,12 @@ import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
+
 import '../../application/forum_html_preparation_controller.dart';
 import '../../application/forum_html_preparation_executor.dart';
+import '../../application/forum_html_reader_font_binding.dart';
+import 'forum_html_reader_text_style.dart';
+
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 
 class ForumHtmlContentView extends ConsumerStatefulWidget {
@@ -27,6 +31,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
     this.preparationExecutor,
     this.linkBaseUri,
+    this.useSharedReaderFont = false,
   });
 
   final String html;
@@ -44,6 +49,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final ForumHtmlRenderPreparer renderPreparer;
   final ForumHtmlPreparationExecutor? preparationExecutor;
   final Uri? linkBaseUri;
+  final bool useSharedReaderFont;
 
   @override
   ConsumerState<ForumHtmlContentView> createState() =>
@@ -85,7 +91,14 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       return const SizedBox.shrink();
     }
     final ownerId = _ownerId();
+    final fontBinding = widget.useSharedReaderFont
+        ? ref.watch(forumHtmlReaderFontBindingProvider)
+        : null;
+    if (fontBinding != null && !fontBinding.isReady) {
+      return const ForumHtmlPreparationPlaceholder();
+    }
     final preferences =
+        fontBinding?.preferences ??
         ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
         ForumHtmlReaderPreferences.defaults();
     final materialTheme = Theme.of(context);
@@ -122,6 +135,14 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       imageCacheOwnerId: ownerId,
       preferences: preferences,
       preparedDocument: document,
+      textStyle: fontBinding == null
+          ? null
+          : resolveForumHtmlReaderTextStyle(
+              context,
+              preferences: preferences,
+              theme: renderTheme,
+              font: fontBinding.resolvedFont,
+            ),
       contentImageKind: widget.contentImageKind,
       linkBaseUri: widget.linkBaseUri,
       contentLayout: widget.contentLayout,

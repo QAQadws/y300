@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -45,6 +46,10 @@ const _next = 'novel:49:100:5002';
 const _args = NovelReaderArgs(novelId: _work, episodeId: _chapter);
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets(
     'source menu actual body reading returns to the latest common position',
     (tester) async {

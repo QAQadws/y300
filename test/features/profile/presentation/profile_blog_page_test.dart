@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
@@ -25,6 +26,8 @@ import '../test_support/blog_operation_fixture.dart';
 import '../test_support/profile_repository_fixture.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   for (final source in ['list', 'detail', 'comment']) {
     for (final avatar in [false, true]) {
       testWidgets(

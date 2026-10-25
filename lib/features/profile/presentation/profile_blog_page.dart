@@ -339,6 +339,13 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                 initialTitle: _allowInitialTitle ? widget.initialTitle : null,
               ),
               actions: [
+                if (state.data != null)
+                  IconButton(
+                    key: const Key('blog-detail-display-settings'),
+                    tooltip: l10n.threadHtmlConversionSettings,
+                    icon: const Icon(Icons.text_fields),
+                    onPressed: _openDisplaySettings,
+                  ),
                 if (state.data != null &&
                     blogCanReplyToArticle(state.data!, state.capabilities))
                   IconButton(
@@ -400,6 +407,21 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
     );
   }
 
+  void _openDisplaySettings() {
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: false,
+        builder: (_) => const ForumHtmlReaderSettingsSheet(
+          key: Key('blog-detail-display-settings-sheet'),
+          showConversionControls: false,
+          showAuthorStyleControls: false,
+          showResetButton: false,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openArticleAction(UserBlogAction action) async {
     if (action == UserBlogAction.edit) {
       await openBlogEditorPage(
@@ -431,9 +453,8 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
   ) async {
     final actor = ref.read(blogAccountIdProvider);
     if (actor == null) {
-      await Navigator.of(
-        context,
-      ).push<void>(MaterialPageRoute(builder: (_) => const LoginPage()));
+      await Navigator.of(context)
+          .push<void>(MaterialPageRoute(builder: (_) => const LoginPage()));
       return;
     }
     final receipt = await Navigator.of(context).push<UserBlogCommentReceipt>(
@@ -827,9 +848,8 @@ class _ProfileBlogListCard extends ConsumerWidget {
             const SizedBox(height: 6),
             Text(
               item.categoryNames.map(display.text).join(' · '),
-              style: Theme.of(
-                context,
-              ).textTheme.labelMedium?.copyWith(color: palette.muted),
+              style: Theme.of(context).textTheme.labelMedium
+                  ?.copyWith(color: palette.muted),
             ),
           ],
           if (capabilities?.supports(UserBlogDirectoryCapability.excerpt) ==
@@ -1228,13 +1248,12 @@ class _BlogDetailCard extends ConsumerWidget {
             ),
             const SizedBox(height: ForumContentSpacing.postCardBodyTop),
             DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: palette.body,
-                height: 1.5,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.body, height: 1.5),
               child: ForumHtmlContentView(
                 html: display.html(data.bodyHtml),
                 sourceId: 'profile-blog-${data.blogId}',
+                useSharedReaderFont: true,
                 theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
                   theme: theme,
                 ),
@@ -1346,13 +1365,12 @@ class _CommentCard extends ConsumerWidget {
             ),
             const SizedBox(height: ForumContentSpacing.postCardBodyTop),
             DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: palette.body,
-                height: 1.5,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.body, height: 1.5),
               child: ForumHtmlContentView(
                 html: display.html(comment.bodyHtml),
                 sourceId: 'profile-blog-comment-${comment.commentId}',
+                useSharedReaderFont: true,
                 theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
                   theme: Theme.of(context),
                 ),

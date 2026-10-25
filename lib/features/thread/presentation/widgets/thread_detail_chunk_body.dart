@@ -4,6 +4,7 @@ Widget _chunkRenderer(
   ThreadDetailBodyManifest manifest,
   ThreadDetailPreparedChunk chunk, {
   required ForumHtmlReaderPreferences preferences,
+  required TextStyle textStyle,
   ForumHtmlRenderCallbacks callbacks = const ForumHtmlRenderCallbacks(),
   VoidCallback? onBodyBuilt,
 }) {
@@ -12,6 +13,7 @@ Widget _chunkRenderer(
     html: chunk.html,
     theme: request.theme,
     preferences: preferences,
+    textStyle: textStyle,
     preparedDocument: chunk.document,
     sourceId: request.sourceId,
     threadId: request.threadId,
@@ -85,6 +87,9 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
       _bodyHasBuilt = false;
       widget.preparation.release(_demandOwner);
     }
+    if (oldWidget.layoutIdentity != widget.layoutIdentity) {
+      _bodyHasBuilt = false;
+    }
   }
 
   void _changed() {
@@ -101,9 +106,15 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
 
   @override
   Widget build(BuildContext context) {
-    final preferences =
-        ref.watch(forumHtmlReaderPreferencesControllerProvider).value ??
-        ForumHtmlReaderPreferences.defaults();
+    final fontBinding = ref.watch(forumHtmlReaderFontBindingProvider);
+    if (!fontBinding.isReady) {
+      _bodyHasBuilt = false;
+      return SizedBox(
+        height: _lastActualHeight ?? MediaQuery.sizeOf(context).height,
+        child: const ForumHtmlPreparationPlaceholder(),
+      );
+    }
+    final preferences = fontBinding.preferences;
     final baseRequest = ForumHtmlPreparationRequest(
       html: widget.post.message.trim(),
       preferences: preferences,
@@ -197,6 +208,12 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
           widget.manifest,
           _chunk!,
           preferences: preferences,
+          textStyle: resolveForumHtmlReaderTextStyle(
+            context,
+            preferences: preferences,
+            theme: widget.theme,
+            font: fontBinding.resolvedFont,
+          ),
           onBodyBuilt: () {
             if (!mounted ||
                 !identical(manifest, widget.manifest) ||

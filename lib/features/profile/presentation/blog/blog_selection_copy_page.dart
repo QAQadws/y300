@@ -77,6 +77,7 @@ class _BlogSelectionCopyPageState extends ConsumerState<BlogSelectionCopyPage> {
       child: ForumHtmlContentView(
         html: widget.displayHtml,
         sourceId: widget.sourceId,
+        useSharedReaderFont: true,
         imageReferer: widget.imageReferer,
         imageCacheOwnerId: widget.cacheOwnerId,
         contentImageKind: ForumImageKind.blogInline,

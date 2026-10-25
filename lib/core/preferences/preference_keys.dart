@@ -32,6 +32,9 @@ abstract final class PreferenceKeys {
   static const forumHtmlReaderFontScale = PreferenceKey<double>(
     PreferenceKeyNames.forumHtmlReaderFontScale,
   );
+  static const forumHtmlReaderFontFamily = PreferenceKey<String>(
+    PreferenceKeyNames.forumHtmlReaderFontFamily,
+  );
   static const forumHtmlReaderLineHeightScale = PreferenceKey<double>(
     PreferenceKeyNames.forumHtmlReaderLineHeightScale,
   );

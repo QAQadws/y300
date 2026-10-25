@@ -1,8 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/fonts/domain/repositories/font_library_repository.dart';
+import 'package:y300/features/fonts/domain/services/font_runtime_loader.dart';
+import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
@@ -16,6 +21,56 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
+  testWidgets(
+    'mounted chunks use the shared font without preparing HTML again',
+    (tester) async {
+      final fonts = FontLibraryService(
+        repository: _FontRepository(),
+        runtimeLoader: _FontRuntime(),
+      );
+      addTearDown(fonts.dispose);
+      final host = _Host(
+        [_post('long', _html(3000, paragraphs: true), 1)],
+        fonts: fonts,
+        readerPreferences: _FontPreferences(),
+      );
+      addTearDown(host.dispose);
+      await _mount(tester, host);
+      await _ready(tester, 'unit[0]');
+      final before = _renderers(tester, 'long').first;
+      final document = before.preparedDocument;
+      final element = _rendererElements(tester, 'long').first;
+      final systemFamily = Theme.of(element).textTheme.bodyMedium?.fontFamily;
+      final preferences = host.container.read(
+        forumHtmlReaderPreferencesControllerProvider.notifier,
+      );
+      await preferences.setFontFamily(_testFont.id);
+      await _pumpUntil(
+        tester,
+        () => _renderers(tester, 'long').any(
+          (renderer) =>
+              renderer.textStyle?.fontFamily ==
+              FontIdentity.runtimeFamily(_testFont.id),
+        ),
+      );
+      final custom = _renderers(tester, 'long').first;
+      expect(custom.html.length, lessThan(host.posts.first.message.length));
+      expect(custom.preparedDocument, same(document));
+      expect(_rendererElements(tester, 'long').first, same(element));
+      await preferences.setFontFamily(FontIdentity.system);
+      await _pumpUntil(
+        tester,
+        () => _renderers(tester, 'long').any(
+          (renderer) =>
+              renderer.textStyle != null &&
+              renderer.textStyle!.fontFamily == systemFamily,
+        ),
+      );
+      expect(_renderers(tester, 'long').first.preparedDocument, same(document));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final paragraphs in [false, true]) {
     testWidgets(
       '3000 ${paragraphs ? 'P' : 'TextBR'} units mount nearby chunks and release them across scrolling',
@@ -161,14 +216,12 @@ void main() {
           case 'fontScale':
             final preferences = ForumHtmlReaderPreferences.defaults();
             (host.container.read(
-                      forumHtmlReaderPreferencesControllerProvider.notifier,
-                    )
-                    as _Preferences)
-                .replace(
-                  preferences.copyWith(
-                    typography: preferences.typography.copyWith(fontScale: 1.5),
-                  ),
-                );
+              forumHtmlReaderPreferencesControllerProvider.notifier,
+            ) as _Preferences).replace(
+              preferences.copyWith(
+                typography: preferences.typography.copyWith(fontScale: 1.5),
+              ),
+            );
         }
         await tester.pump(const Duration(milliseconds: 16));
         if (changesLayout) {
@@ -490,11 +543,9 @@ void main() {
           ).every((renderer) => renderer.theme.signature != oldTheme),
     );
     expect(_bodyText(tester), contains('简体unit[0]'));
-    final prefs =
-        host.container.read(
-              forumHtmlReaderPreferencesControllerProvider.notifier,
-            )
-            as _Preferences;
+    final prefs = host.container.read(
+      forumHtmlReaderPreferencesControllerProvider.notifier,
+    ) as _Preferences;
     prefs.replace(
       ForumHtmlReaderPreferences.defaults().copyWith(
         conversionMode: TextConversionMode.toSimplified,
@@ -557,11 +608,9 @@ void main() {
         return box != null && box.top >= 0 && box.top < 720;
       });
       final before = _markerRect(tester, 'long', 96)!;
-      final prefs =
-          host.container.read(
-                forumHtmlReaderPreferencesControllerProvider.notifier,
-              )
-              as _Preferences;
+      final prefs = host.container.read(
+        forumHtmlReaderPreferencesControllerProvider.notifier,
+      ) as _Preferences;
       prefs.replace(
         ForumHtmlReaderPreferences.defaults().copyWith(
           conversionMode: TextConversionMode.toSimplified,
@@ -784,11 +833,20 @@ class _Host {
     this.quickScrolling = false,
     this.themeAnimationDuration = const Duration(milliseconds: 200),
     ThreadBodyReadingObserver? observer,
+    FontLibraryService? fonts,
+    ForumHtmlReaderPreferencesRepository? readerPreferences,
   }) : container = ProviderContainer(
          overrides: [
-           forumHtmlReaderPreferencesControllerProvider.overrideWith(
-             _Preferences.new,
-           ),
+           if (readerPreferences == null)
+             forumHtmlReaderPreferencesControllerProvider.overrideWith(
+               _Preferences.new,
+             )
+           else
+             forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+               readerPreferences,
+             ),
+           if (fonts != null)
+             fontLibraryServiceProvider.overrideWithValue(fonts),
          ],
        ) {
     readingCoordinator = observer == null
@@ -846,6 +904,41 @@ class _Host {
     readingCoordinator?.dispose();
     controller.dispose();
     container.dispose();
+  }
+}
+
+const _testFont = ImportedFont(
+  id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  displayName: 'Chunk font',
+  storageFileName: 'chunk.ttf',
+  byteLength: 1,
+);
+
+final class _FontRepository implements FontLibraryRepository {
+  @override
+  Stream<void> get changes => const Stream<void>.empty();
+  @override
+  Future<List<ImportedFont>> listFonts() async => [_testFont];
+  @override
+  Future<Uint8List> readFont(String fontId) async => Uint8List(1);
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected font repository call');
+}
+
+final class _FontRuntime implements FontRuntimeLoader {
+  @override
+  Future<String> load(ImportedFont font, Uint8List bytes) async =>
+      FontIdentity.runtimeFamily(font.id);
+}
+
+final class _FontPreferences implements ForumHtmlReaderPreferencesRepository {
+  ForumHtmlReaderPreferences value = ForumHtmlReaderPreferences.defaults();
+  @override
+  Future<ForumHtmlReaderPreferences> load() async => value;
+  @override
+  Future<void> save(ForumHtmlReaderPreferences preferences) async {
+    value = preferences;
   }
 }
 

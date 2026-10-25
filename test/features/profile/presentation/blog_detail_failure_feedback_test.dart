@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/forum/domain/models/forum_webview_launch_models.dart';
@@ -19,6 +20,8 @@ import '../../../test_support/localized_test_app.dart';
 import '../test_support/blog_navigation_fixture.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   for (final failure in [
     _failure('user_blog_private'),
     _failure('user_blog_password_required'),

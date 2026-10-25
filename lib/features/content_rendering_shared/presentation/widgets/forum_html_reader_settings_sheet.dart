@@ -1,11 +1,13 @@
-import 'package:y300/features/content_rendering_shared/application/forum_html_reader_preferences_controller.dart';
-import 'package:y300/features/content_rendering_shared/application/forum_html_typography_preview.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_reader_preferences_controller.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_typography_preview.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
+import 'package:y300/features/fonts/fonts.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlReaderSettingsSheet extends ConsumerStatefulWidget {
@@ -14,11 +16,13 @@ class ForumHtmlReaderSettingsSheet extends ConsumerStatefulWidget {
     this.showConversionControls = false,
     this.showAuthorStyleControls = true,
     this.showResetButton = true,
+    this.fontPreviewStyle,
   });
 
   final bool showConversionControls;
   final bool showAuthorStyleControls;
   final bool showResetButton;
+  final TextStyle? fontPreviewStyle;
 
   @override
   ConsumerState<ForumHtmlReaderSettingsSheet> createState() =>
@@ -29,9 +33,13 @@ class _ForumHtmlReaderSettingsSheetState
     extends ConsumerState<ForumHtmlReaderSettingsSheet> {
   ForumHtmlReaderPreferencesController? _controller;
   ForumHtmlTypographyPreview? _preview;
+  int _fontRequest = 0;
+  bool _isChoosingFont = false;
+  bool _wasReady = false;
 
   @override
   void dispose() {
+    _fontRequest++;
     _preview?.close();
     super.dispose();
   }
@@ -92,11 +100,18 @@ class _ForumHtmlReaderSettingsSheetState
       forumHtmlReaderPreferencesControllerProvider.notifier,
     );
     if (!identical(controller, _controller)) {
+      _fontRequest++;
+      _isChoosingFont = false;
       _preview?.cancel();
       _preview = null;
       _controller = controller;
     }
     final ready = preferenceState.hasValue && !preferenceState.isLoading;
+    if (_wasReady && !ready) {
+      _fontRequest++;
+      _isChoosingFont = false;
+    }
+    _wasReady = ready;
     final typography = _preview?.isActive == true
         ? _preview!.value
         : preferences.typography;
@@ -119,6 +134,21 @@ class _ForumHtmlReaderSettingsSheetState
               ),
               const SizedBox(height: 20),
             ],
+            ListTile(
+              key: const Key('forum-html-reader-font-family'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.fontSelectorTitle),
+              subtitle: Text(
+                preferences.fontFamily == FontIdentity.system
+                    ? l10n.fontSelectorSystemDefault
+                    : l10n.fontSelectorCustomFont,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: ready && !_isChoosingFont
+                  ? () => _chooseFont(preferences, typography)
+                  : null,
+            ),
+            const SizedBox(height: 8),
             _TypographySlider(
               key: const Key('forum-html-reader-font-scale-slider'),
               label: l10n.threadHtmlFontSize,
@@ -172,6 +202,52 @@ class _ForumHtmlReaderSettingsSheetState
         ),
       ),
     );
+  }
+
+  Future<void> _chooseFont(
+    ForumHtmlReaderPreferences preferences,
+    RichTextTypography typography,
+  ) async {
+    if (_isChoosingFont) return;
+    final controller = _controller;
+    if (controller == null) return;
+    final request = ++_fontRequest;
+    setState(() => _isChoosingFont = true);
+    try {
+      final base = Theme.of(context).textTheme.bodyMedium;
+      final selected = await showBodyFontSelector(
+        context: context,
+        initialFontId: preferences.fontFamily,
+        previewStyle: (widget.fontPreviewStyle ?? base ?? const TextStyle())
+            .copyWith(
+              fontSize: (base?.fontSize ?? 14) * typography.fontScale,
+              height: typography.lineHeightScale,
+            ),
+      );
+      if (!mounted ||
+          request != _fontRequest ||
+          !identical(_controller, controller) ||
+          selected == null) {
+        return;
+      }
+      final saving = controller.setFontFamily(selected.id);
+      setState(() => _preview = null);
+      await saving;
+    } catch (_) {
+      if (mounted && request == _fontRequest) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).fontSelectorStorageFailure,
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted && request == _fontRequest) {
+        setState(() => _isChoosingFont = false);
+      }
+    }
   }
 }
 
