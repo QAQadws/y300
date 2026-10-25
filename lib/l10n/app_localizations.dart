@@ -9077,6 +9077,90 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'精华'**
   String get forumThreadBadgeDigest;
+
+  /// No description provided for @fontSelectorTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体'**
+  String get fontSelectorTitle;
+
+  /// No description provided for @fontSelectorImport.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入字体'**
+  String get fontSelectorImport;
+
+  /// No description provided for @fontSelectorSystemDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统默认'**
+  String get fontSelectorSystemDefault;
+
+  /// No description provided for @fontSelectorPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览'**
+  String get fontSelectorPreview;
+
+  /// 字体选择器预览样文，包含简繁中文、拉丁字母、数字和标点
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读让故事继续。繁體中文 ABC abc 0123，。！？'**
+  String get fontSelectorSample;
+
+  /// No description provided for @fontSelectorLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取字体…'**
+  String get fontSelectorLoading;
+
+  /// No description provided for @fontSelectorUnsupportedFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择 TTF 或 OTF 字体文件'**
+  String get fontSelectorUnsupportedFormat;
+
+  /// No description provided for @fontSelectorInvalidFont.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体文件损坏或无法识别'**
+  String get fontSelectorInvalidFont;
+
+  /// No description provided for @fontSelectorTooLarge.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体文件过大，请选择较小的文件'**
+  String get fontSelectorTooLarge;
+
+  /// No description provided for @fontSelectorNotFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体文件已不存在，请重新选择字体'**
+  String get fontSelectorNotFound;
+
+  /// No description provided for @fontSelectorStorageFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体操作失败，请重试'**
+  String get fontSelectorStorageFailure;
+
+  /// No description provided for @fontSelectorCorruptLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体列表无法读取，请重试'**
+  String get fontSelectorCorruptLibrary;
+
+  /// No description provided for @fontSelectorUnsupportedLibraryVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体库版本暂不支持，请更新应用'**
+  String get fontSelectorUnsupportedLibraryVersion;
+
+  /// No description provided for @fontSelectorLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'字体无法加载，请选择其他字体'**
+  String get fontSelectorLoadFailed;
 }
 
 class _AppLocalizationsDelegate

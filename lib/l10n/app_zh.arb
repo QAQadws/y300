@@ -2173,5 +2173,20 @@
   "forumThreadBadgeDebate": "辩论",
   "forumThreadBadgeImage": "图",
   "forumThreadBadgeSticky": "置顶",
-  "forumThreadBadgeDigest": "精华"
+  "forumThreadBadgeDigest": "精华",
+  "fontSelectorTitle": "字体",
+  "fontSelectorImport": "导入字体",
+  "fontSelectorSystemDefault": "系统默认",
+  "fontSelectorPreview": "预览",
+  "fontSelectorSample": "阅读让故事继续。繁體中文 ABC abc 0123，。！？",
+  "@fontSelectorSample": {"description": "字体选择器预览样文，包含简繁中文、拉丁字母、数字和标点"},
+  "fontSelectorLoading": "正在读取字体…",
+  "fontSelectorUnsupportedFormat": "请选择 TTF 或 OTF 字体文件",
+  "fontSelectorInvalidFont": "字体文件损坏或无法识别",
+  "fontSelectorTooLarge": "字体文件过大，请选择较小的文件",
+  "fontSelectorNotFound": "字体文件已不存在，请重新选择字体",
+  "fontSelectorStorageFailure": "字体操作失败，请重试",
+  "fontSelectorCorruptLibrary": "字体列表无法读取，请重试",
+  "fontSelectorUnsupportedLibraryVersion": "字体库版本暂不支持，请更新应用",
+  "fontSelectorLoadFailed": "字体无法加载，请选择其他字体"
 }

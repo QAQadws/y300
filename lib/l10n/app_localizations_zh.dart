@@ -5444,6 +5444,48 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get forumThreadBadgeDigest => '精华';
+
+  @override
+  String get fontSelectorTitle => '字体';
+
+  @override
+  String get fontSelectorImport => '导入字体';
+
+  @override
+  String get fontSelectorSystemDefault => '系统默认';
+
+  @override
+  String get fontSelectorPreview => '预览';
+
+  @override
+  String get fontSelectorSample => '阅读让故事继续。繁體中文 ABC abc 0123，。！？';
+
+  @override
+  String get fontSelectorLoading => '正在读取字体…';
+
+  @override
+  String get fontSelectorUnsupportedFormat => '请选择 TTF 或 OTF 字体文件';
+
+  @override
+  String get fontSelectorInvalidFont => '字体文件损坏或无法识别';
+
+  @override
+  String get fontSelectorTooLarge => '字体文件过大，请选择较小的文件';
+
+  @override
+  String get fontSelectorNotFound => '字体文件已不存在，请重新选择字体';
+
+  @override
+  String get fontSelectorStorageFailure => '字体操作失败，请重试';
+
+  @override
+  String get fontSelectorCorruptLibrary => '字体列表无法读取，请重试';
+
+  @override
+  String get fontSelectorUnsupportedLibraryVersion => '字体库版本暂不支持，请更新应用';
+
+  @override
+  String get fontSelectorLoadFailed => '字体无法加载，请选择其他字体';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -10887,4 +10929,46 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get forumThreadBadgeDigest => '精華';
+
+  @override
+  String get fontSelectorTitle => '字型';
+
+  @override
+  String get fontSelectorImport => '匯入字型';
+
+  @override
+  String get fontSelectorSystemDefault => '系統預設';
+
+  @override
+  String get fontSelectorPreview => '預覽';
+
+  @override
+  String get fontSelectorSample => '閱讀讓故事繼續。简体中文 ABC abc 0123，。！？';
+
+  @override
+  String get fontSelectorLoading => '正在讀取字型…';
+
+  @override
+  String get fontSelectorUnsupportedFormat => '請選擇 TTF 或 OTF 字型檔案';
+
+  @override
+  String get fontSelectorInvalidFont => '字型檔案損壞或無法辨識';
+
+  @override
+  String get fontSelectorTooLarge => '字型檔案過大，請選擇較小的檔案';
+
+  @override
+  String get fontSelectorNotFound => '字型檔案已不存在，請重新選擇字型';
+
+  @override
+  String get fontSelectorStorageFailure => '字型操作失敗，請重試';
+
+  @override
+  String get fontSelectorCorruptLibrary => '字型清單無法讀取，請重試';
+
+  @override
+  String get fontSelectorUnsupportedLibraryVersion => '字型庫版本暫不支援，請更新應用程式';
+
+  @override
+  String get fontSelectorLoadFailed => '字型無法載入，請選擇其他字型';
 }

@@ -1802,5 +1802,19 @@
   "forumThreadBadgeDebate": "辯論",
   "forumThreadBadgeImage": "圖",
   "forumThreadBadgeSticky": "置頂",
-  "forumThreadBadgeDigest": "精華"
+  "forumThreadBadgeDigest": "精華",
+  "fontSelectorTitle": "字型",
+  "fontSelectorImport": "匯入字型",
+  "fontSelectorSystemDefault": "系統預設",
+  "fontSelectorPreview": "預覽",
+  "fontSelectorSample": "閱讀讓故事繼續。简体中文 ABC abc 0123，。！？",
+  "fontSelectorLoading": "正在讀取字型…",
+  "fontSelectorUnsupportedFormat": "請選擇 TTF 或 OTF 字型檔案",
+  "fontSelectorInvalidFont": "字型檔案損壞或無法辨識",
+  "fontSelectorTooLarge": "字型檔案過大，請選擇較小的檔案",
+  "fontSelectorNotFound": "字型檔案已不存在，請重新選擇字型",
+  "fontSelectorStorageFailure": "字型操作失敗，請重試",
+  "fontSelectorCorruptLibrary": "字型清單無法讀取，請重試",
+  "fontSelectorUnsupportedLibraryVersion": "字型庫版本暫不支援，請更新應用程式",
+  "fontSelectorLoadFailed": "字型無法載入，請選擇其他字型"
 }
