@@ -32,6 +32,7 @@ Future<ResolvedFont?> showBodyFontSelector({
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      showDragHandle: false,
       builder: (_) =>
           BodyFontSelector(controller: controller, previewStyle: previewStyle),
     );
@@ -68,14 +69,17 @@ class BodyFontSelector extends StatelessWidget {
                   fontFamily: selected.fontFamily ?? '',
                   fontFamilyFallback: const [],
                 );
-        return SizedBox(
+        return ConstrainedBox(
           key: const Key('body-font-selector'),
-          height: MediaQuery.sizeOf(context).height * 0.78,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
                 child: Row(
                   children: [
                     Expanded(
@@ -130,9 +134,13 @@ class BodyFontSelector extends StatelessWidget {
                     ],
                   ),
                 ),
-              Expanded(
+              // A short library sets the sheet height. Only the list consumes
+              // remaining space and scrolls once the screen limit is reached.
+              Flexible(
                 child: ListView(
                   key: const Key('body-font-list'),
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   children: [
                     _fontRow(
                       context,
@@ -149,38 +157,77 @@ class BodyFontSelector extends StatelessWidget {
                   ],
                 ),
               ),
-              const Divider(height: 1),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.fontSelectorPreview,
-                      style: theme.textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.sizeOf(context).height * 0.24,
-                      ),
-                      child: SingleChildScrollView(
-                        child: Text(
-                          l10n.fontSelectorSample,
-                          key: const Key('body-font-preview'),
-                          style: sampleStyle,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                l10n.fontSelectorPreview,
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            Flexible(
+                              child: Text(
+                                _selectedFontLabel(l10n),
+                                key: const Key('body-font-preview-name'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.sizeOf(context).height * 0.24,
+                          ),
+                          child: SingleChildScrollView(
+                            child: Text(
+                              l10n.fontSelectorSample,
+                              key: const Key('body-font-preview'),
+                              style: sampleStyle,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          l10n.fontSelectorGlyphSample,
+                          key: const Key('body-font-preview-glyphs'),
+                          style: sampleStyle.copyWith(
+                            fontSize: theme.textTheme.bodySmall?.fontSize ?? 12,
+                            height: 1.5,
+                            fontWeight: FontWeight.w400,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
               SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                   child: OverflowBar(
                     alignment: MainAxisAlignment.end,
                     overflowAlignment: OverflowBarAlignment.end,
@@ -194,6 +241,9 @@ class BodyFontSelector extends StatelessWidget {
                       ),
                       FilledButton(
                         key: const Key('body-font-apply'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(112, 44),
+                        ),
                         onPressed: controller.canConfirm
                             ? () => _confirm(context)
                             : null,
@@ -217,38 +267,68 @@ class BodyFontSelector extends StatelessWidget {
     bool removable = false,
   }) {
     final selected = controller.requestedFontId == id;
-    return Semantics(
-      checked: selected,
-      inMutuallyExclusiveGroup: true,
-      child: ListTile(
-        key: Key('body-font-item-$id'),
-        selected: selected,
-        leading: Icon(
-          selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: selected
+            ? colors.primaryContainer.withValues(alpha: 0.35)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Semantics(
+          checked: selected,
+          inMutuallyExclusiveGroup: true,
+          child: ListTile(
+            key: Key('body-font-item-$id'),
+            selected: selected,
+            selectedTileColor: Colors.transparent,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            minTileHeight: 52,
+            minLeadingWidth: 18,
+            horizontalTitleGap: 12,
+            leading: selected
+                ? const Icon(Icons.check, size: 18)
+                : const SizedBox(width: 18),
+            title: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
+            onTap: controller.canSelect
+                ? () => controller.selectFont(id)
+                : null,
+            trailing: !removable
+                ? null
+                : IconButton(
+                    key: Key('body-font-delete-$id'),
+                    iconSize: 20,
+                    constraints: const BoxConstraints(
+                      minWidth: 44,
+                      minHeight: 44,
+                    ),
+                    tooltip: AppLocalizations.of(context).commonDelete,
+                    onPressed: controller.canMutate
+                        ? () => controller.deleteFont(id)
+                        : null,
+                    icon: controller.deletingFontId == id
+                        ? SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              semanticsLabel: AppLocalizations.of(context)
+                                  .fontSelectorLoading,
+                            ),
+                          )
+                        : const Icon(Icons.delete_outline),
+                  ),
+          ),
         ),
-        title: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
-        onTap: controller.canSelect ? () => controller.selectFont(id) : null,
-        trailing: !removable
-            ? null
-            : IconButton(
-                key: Key('body-font-delete-$id'),
-                tooltip: AppLocalizations.of(context).commonDelete,
-                onPressed: controller.canMutate
-                    ? () => controller.deleteFont(id)
-                    : null,
-                icon: controller.deletingFontId == id
-                    ? SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          semanticsLabel: AppLocalizations.of(context)
-                              .fontSelectorLoading,
-                        ),
-                      )
-                    : const Icon(Icons.delete_outline),
-              ),
       ),
     );
+  }
+
+  String _selectedFontLabel(AppLocalizations l10n) {
+    for (final font in controller.fonts) {
+      if (font.id == controller.selectedFont.id) return font.displayName;
+    }
+    return l10n.fontSelectorSystemDefault;
   }
 
   Future<void> _confirm(BuildContext context) async {

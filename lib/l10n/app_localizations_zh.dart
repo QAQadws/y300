@@ -5467,7 +5467,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fontSelectorPreview => '预览';
 
   @override
-  String get fontSelectorSample => '阅读让故事继续。繁體中文 ABC abc 0123，。！？';
+  String get fontSelectorSample => '正文字体预览';
+
+  @override
+  String get fontSelectorGlyphSample => '简体中文 · 繁體中文 · Aa 0123';
 
   @override
   String get fontSelectorLoading => '正在读取字体…';
@@ -10961,7 +10964,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get fontSelectorPreview => '預覽';
 
   @override
-  String get fontSelectorSample => '閱讀讓故事繼續。简体中文 ABC abc 0123，。！？';
+  String get fontSelectorSample => '正文字型預覽';
+
+  @override
+  String get fontSelectorGlyphSample => '简体中文 · 繁體中文 · Aa 0123';
 
   @override
   String get fontSelectorLoading => '正在讀取字型…';

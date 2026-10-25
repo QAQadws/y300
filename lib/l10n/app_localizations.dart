@@ -9120,11 +9120,17 @@ abstract class AppLocalizations {
   /// **'预览'**
   String get fontSelectorPreview;
 
-  /// 字体选择器预览样文，包含简繁中文、拉丁字母、数字和标点
+  /// 字体选择器中的简短正文样文
   ///
   /// In zh, this message translates to:
-  /// **'阅读让故事继续。繁體中文 ABC abc 0123，。！？'**
+  /// **'正文字体预览'**
   String get fontSelectorSample;
+
+  /// 字体预览中的补充字形样文，保留简繁中文、拉丁字母和数字以便对照
+  ///
+  /// In zh, this message translates to:
+  /// **'简体中文 · 繁體中文 · Aa 0123'**
+  String get fontSelectorGlyphSample;
 
   /// No description provided for @fontSelectorLoading.
   ///
