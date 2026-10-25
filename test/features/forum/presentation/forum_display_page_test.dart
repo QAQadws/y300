@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/data_source/api_result_data_read_adapter.dart';
@@ -40,6 +41,8 @@ import 'package:y300/shared/widgets/forum_native_surface.dart';
 import '../../../support/favorite_command_test_support.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   group('ForumDisplayPage', () {
     testWidgets('fast entry shows cards without a spinner or a second fade', (
       tester,

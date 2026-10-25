@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart' as date_symbol_data;
 import 'package:y300/app/y300_app.dart';
+import 'package:y300/app/startup/app_bootstrap.dart';
 import 'package:y300/core/media/global_image_cache_tuner.dart';
 import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:y300/core/preferences/legacy_cache_root_preference_migrator.dart';
-import 'package:y300/core/preferences/preferences_providers.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
 
 Future<void> main() async {
@@ -16,20 +15,18 @@ Future<void> main() async {
   final deviceMemoryProfile = await const DeviceMemoryProfileResolver()
       .resolve();
   DeviceMemoryProfileStore.current = deviceMemoryProfile;
-  PlatformImageCacheTuner(
-    deviceProfile: deviceMemoryProfile,
-  ).applyTo(PaintingBinding.instance.imageCache);
+  PlatformImageCacheTuner(deviceProfile: deviceMemoryProfile)
+      .applyTo(PaintingBinding.instance.imageCache);
   final preferencesStore = SharedPreferencesStore();
   try {
-    await LegacyCacheRootPreferenceMigrator(
-      preferencesStore: preferencesStore,
-    ).migrate();
+    await LegacyCacheRootPreferenceMigrator(preferencesStore: preferencesStore)
+        .migrate();
   } catch (_) {
     // Cache-root retirement is retryable and must never block app startup.
   }
   runApp(
-    ProviderScope(
-      overrides: [preferencesStoreProvider.overrideWithValue(preferencesStore)],
+    await bootstrapApplication(
+      preferencesStore: preferencesStore,
       child: const Y300App(),
     ),
   );
