@@ -7,7 +7,7 @@ import 'schema/favorites_database_schema.dart';
 import 'schema/library_database_schema.dart';
 import 'schema/cache_database_schema.dart';
 
-/// One global version chain; each step delegates SQL to its owning schema module.
+/// One global upgrade chain, grouped by database versions shipped in release tags.
 Future<void> upgradeAppDatabaseSchema(
   Database db,
   int oldVersion,
@@ -18,46 +18,20 @@ Future<void> upgradeAppDatabaseSchema(
     return;
   }
 
-  // Sqflite invokes onUpgrade once with the installed and target versions.
-  // Apply every intervening migration so skipping an app release stays safe.
-  if (oldVersion < 28 && newVersion >= 28) {
-    await upgradeComicFrom27To28(db);
-  }
-  if (oldVersion < 29 && newVersion >= 29) {
-    await upgradeNovelFrom28To29(db);
-  }
-  if (oldVersion < 30 && newVersion >= 30) {
-    await upgradeNovelFrom29To30(db);
-  }
-  if (oldVersion < 31 && newVersion >= 31) {
-    await upgradeNovelFrom30To31(db);
-  }
-  if (oldVersion < 32 && newVersion >= 32) {
-    await upgradeComicFrom31To32(db);
-  }
-  if (oldVersion < 33 && newVersion >= 33) {
-    await upgradeFavoritesFrom32To33(db);
-  }
-  if (oldVersion < 34 && newVersion >= 34) {
-    await upgradeNovelFrom33To34(db);
-  }
-  if (oldVersion < 35 && newVersion >= 35) {
-    await upgradeNovelFrom34To35(db);
-  }
+  // Released schemas: v1.0.0=27, v1.0.2=36, v1.1.0–v1.1.2=38,
+  // v1.1.3–v1.2.1=40, v1.3.0=41, v1.3.1=42, v1.3.2=43.
+  // Keep independent conditions: a user can skip any number of releases.
   if (oldVersion < 36 && newVersion >= 36) {
-    await upgradeComicFrom35To36(db);
-  }
-  if (oldVersion < 37 && newVersion >= 37) {
-    await upgradeComicFrom36To37(db);
+    await upgradeComicFrom27To36(db);
+    await upgradeNovelFrom27To36(db);
+    await upgradeFavoritesFrom27To36(db);
   }
   if (oldVersion < 38 && newVersion >= 38) {
-    await upgradeComicFrom37To38(db);
-  }
-  if (oldVersion < 39 && newVersion >= 39) {
-    await upgradeLibraryFrom38To39(db);
+    await upgradeComicFrom36To38(db);
   }
   if (oldVersion < 40 && newVersion >= 40) {
-    await upgradeComicFrom39To40(db);
+    await upgradeLibraryFrom38To40(db);
+    await upgradeComicFrom38To40(db);
   }
   if (oldVersion < 41 && newVersion >= 41) {
     await upgradeCacheFrom40To41(db);

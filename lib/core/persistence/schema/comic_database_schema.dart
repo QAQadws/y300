@@ -263,13 +263,24 @@ Future<void> createComicDownloadQueueTable(Database db) async {
   );
 }
 
-Future<void> upgradeComicFrom27To28(Database db) async {
-  await db.execute(
-    'ALTER TABLE $comicsTable ADD COLUMN custom_catalog_url TEXT',
+/// v1.0.0 -> v1.0.2: catalog overrides, per-chapter progress and downloads.
+Future<void> upgradeComicFrom27To36(Database db) async {
+  await addColumnIfMissing(
+    db,
+    table: comicsTable,
+    column: 'custom_catalog_url',
+    definition: 'TEXT',
   );
+  await _upgradeComicProgressPrimaryKey(db);
+  await createComicDownloadQueueTable(db);
 }
 
-Future<void> upgradeComicFrom31To32(Database db) async {
+Future<void> _upgradeComicProgressPrimaryKey(Database db) async {
+  final columns = await db.rawQuery('PRAGMA table_info($readingProgressTable)');
+  if (columns.any((row) => row['name'] == 'episode_id' && row['pk'] != 0)) {
+    await createComicReadingProgressIndex(db);
+    return;
+  }
   const migratedTable = '${readingProgressTable}_v32';
   await db.execute('DROP TABLE IF EXISTS $migratedTable');
   await db.execute('''
@@ -302,15 +313,8 @@ Future<void> upgradeComicFrom31To32(Database db) async {
   await createComicReadingProgressIndex(db);
 }
 
-Future<void> upgradeComicFrom35To36(Database db) async {
-  await createComicDownloadQueueTable(db);
-}
-
-/// 章节管理：区分“解析章节”与“手动添加章节”，并支持隐藏而不删除。
-///
-/// 两个标记都落在章节行上而不是独立表：隐藏与来源归属是章节自身属性，
-/// 放在同一行才能让读取路径用一次查询同时完成过滤与归属判断。
-Future<void> upgradeComicFrom36To37(Database db) async {
+/// v1.0.2 -> v1.1.0: chapter management and source/custom title separation.
+Future<void> upgradeComicFrom36To38(Database db) async {
   await addColumnIfMissing(
     db,
     table: episodesTable,
@@ -323,14 +327,6 @@ Future<void> upgradeComicFrom36To37(Database db) async {
     column: 'is_hidden',
     definition: 'INTEGER NOT NULL DEFAULT 0',
   );
-}
-
-/// 章节重命名：拆出「来源章节名」与「用户自定义章节名」两列。
-///
-/// 与漫画标题同一套三列结构（source / custom / 解析后的展示值）：`episode_title`
-/// 继续作为展示值，所有既有读取点不用改。存量行的标题都来自解析，因此直接
-/// 回填为来源名——否则清空自定义名后会退成空标题，而不是退回原本的章节名。
-Future<void> upgradeComicFrom37To38(Database db) async {
   await addColumnIfMissing(
     db,
     table: episodesTable,
@@ -357,6 +353,6 @@ Future<void> upgradeComicFrom37To38(Database db) async {
     ''');
 }
 
-Future<void> upgradeComicFrom39To40(Database db) async {
+Future<void> upgradeComicFrom38To40(Database db) async {
   await createComicCoverMergeJournalTables(db);
 }

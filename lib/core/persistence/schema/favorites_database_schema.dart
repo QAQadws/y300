@@ -89,7 +89,7 @@ Future<void> createFavoriteDetailStateIndex(Database db) {
   );
 }
 
-Future<void> upgradeFavoritesFrom32To33(Database db) async {
+Future<void> upgradeFavoritesFrom27To36(Database db) async {
   await addColumnIfMissing(
     db,
     table: favoriteThreadsTable,

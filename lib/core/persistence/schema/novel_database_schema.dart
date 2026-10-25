@@ -255,12 +255,10 @@ Future<void> createNovelShelfTables(Database db) async {
   );
 }
 
-Future<void> upgradeNovelFrom28To29(Database db) async {
+/// v1.0.0 -> v1.0.2: source hydration, custom metadata and reader positions.
+Future<void> upgradeNovelFrom27To36(Database db) async {
   await createNovelHydrationTables(db);
   await backfillLegacyNovelSourceState(db);
-}
-
-Future<void> upgradeNovelFrom29To30(Database db) async {
   await addColumnIfMissing(
     db,
     table: worksTable,
@@ -279,18 +277,12 @@ Future<void> upgradeNovelFrom29To30(Database db) async {
     column: 'custom_cover_focus_y',
     definition: 'REAL',
   );
-}
-
-Future<void> upgradeNovelFrom30To31(Database db) async {
   await addColumnIfMissing(
     db,
     table: worksTable,
     column: 'cover_hidden',
     definition: 'INTEGER NOT NULL DEFAULT 0',
   );
-}
-
-Future<void> upgradeNovelFrom33To34(Database db) async {
   await addColumnIfMissing(
     db,
     table: novelReadingProgressTable,
@@ -303,9 +295,6 @@ Future<void> upgradeNovelFrom33To34(Database db) async {
     column: 'anchor_text_offset',
     definition: 'INTEGER NOT NULL DEFAULT 0',
   );
-}
-
-Future<void> upgradeNovelFrom34To35(Database db) async {
   await addColumnIfMissing(
     db,
     table: novelReadingProgressTable,

@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:y300/core/persistence/app_database.dart';
 
+import '../../../core/persistence/fixtures/released_database_schemas.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -24,24 +26,31 @@ void main() {
     var db = await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 33,
-        onCreate: (db, _) async {
-          await db.execute('''
-            CREATE TABLE ${AppDatabase.novelReadingProgressTable} (
-              novel_id TEXT PRIMARY KEY,
-              episode_id TEXT NOT NULL,
-              scroll_offset REAL NOT NULL,
-              flow_mode TEXT,
-              page_index INTEGER,
-              anchor_node_id TEXT,
-              progress_percent REAL,
-              updated_at INTEGER NOT NULL
-            )
-          ''');
+        version: 27,
+        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+        onCreate: (db, version) async {
+          await createReleasedDatabaseFixture(db, version);
+          await db.insert(AppDatabase.worksTable, {
+            'work_id': 'novel:legacy',
+            'content_type': 'novel',
+            'source_tid': '100',
+            'source_fid': '49',
+            'title': 'Legacy novel',
+            'updated_at': 1,
+          });
+          await db.insert(AppDatabase.workEpisodesTable, {
+            'episode_id': 'episode:legacy',
+            'work_id': 'novel:legacy',
+            'content_type': 'novel',
+            'source_tid': '100',
+            'source_pid': '1001',
+            'order_index': 0,
+          });
           await db.insert(AppDatabase.novelReadingProgressTable, {
             'novel_id': 'novel:legacy',
             'episode_id': 'episode:legacy',
             'scroll_offset': 10.0,
+            'flow_mode': 'pagedLtr',
             'page_index': 4,
             'anchor_node_id': 'node-4',
             'progress_percent': 0.4,
@@ -73,10 +82,16 @@ void main() {
       whereArgs: <Object?>['novel:legacy'],
       limit: 1,
     )).single;
+    expect(row['episode_id'], 'episode:legacy');
+    expect(row['scroll_offset'], 10.0);
+    expect(row['flow_mode'], 'pagedLtr');
     expect(row['page_index'], 4);
     expect(row['anchor_node_id'], 'node-4');
+    expect(row['progress_percent'], 0.4);
+    expect(row['updated_at'], 1);
     expect(row['anchor_text_offset'], 0);
     expect(row['pagination_key'], isNull);
     expect(row['page_count'], isNull);
+    expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 }

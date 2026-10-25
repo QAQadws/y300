@@ -4,6 +4,8 @@ import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/comic/data/repositories/local_comic_download_queue_repository.dart';
 import 'package:y300/features/comic/domain/models/comic_download_queue_models.dart';
 
+import '../../../core/persistence/fixtures/released_database_schemas.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -35,43 +37,42 @@ void main() {
       );
     });
 
-    test('upgrades a version 35 database with the queue table', () async {
-      const dbName = 'comic_download_queue_migration_test.db';
-      await deleteDatabase(dbName);
-      final legacy = await openDatabase(
-        dbName,
-        version: 35,
-        onCreate: (db, _) async {
-          await db.execute('''
-            CREATE TABLE ${AppDatabase.comicsTable} (
-              comic_id TEXT PRIMARY KEY
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE ${AppDatabase.episodesTable} (
-              episode_id TEXT PRIMARY KEY,
-              comic_id TEXT NOT NULL
-            )
-          ''');
-        },
-      );
-      await legacy.close();
-
-      final upgraded = await AppDatabase.open(databaseName: dbName);
-      addTearDown(() async {
-        await upgraded.close();
+    test(
+      'upgrades a released version 27 database with the queue table',
+      () async {
+        const dbName = 'comic_download_queue_migration_test.db';
         await deleteDatabase(dbName);
-      });
-      final tables = await upgraded.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type = 'table'",
-      );
+        final legacy = await openDatabase(
+          dbName,
+          version: 27,
+          onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+          onCreate: createReleasedDatabaseFixture,
+        );
+        await _seedEpisode(legacy, comicId: 'comic:1', episodeId: 'comic:1:10');
+        await legacy.close();
 
-      expect(await upgraded.getVersion(), AppDatabase.dbVersion);
-      expect(
-        tables.map((row) => row['name']),
-        contains(AppDatabase.comicDownloadQueueTable),
-      );
-    });
+        final upgraded = await AppDatabase.open(databaseName: dbName);
+        addTearDown(() async {
+          await upgraded.close();
+          await deleteDatabase(dbName);
+        });
+        final tables = await upgraded.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        );
+
+        expect(await upgraded.getVersion(), AppDatabase.dbVersion);
+        expect(
+          tables.map((row) => row['name']),
+          contains(AppDatabase.comicDownloadQueueTable),
+        );
+        expect(
+          (await upgraded.query(AppDatabase.episodesTable))
+              .single['episode_id'],
+          'comic:1:10',
+        );
+        expect(await upgraded.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      },
+    );
 
     test('deduplicates active entries and requeues a failed entry', () async {
       const dbName = 'comic_download_queue_dedupe_test.db';
@@ -96,15 +97,17 @@ void main() {
         original,
         original,
       ], now: now);
-      final duplicate = await repository
-          .enqueueTargets(const <ComicDownloadTarget>[
-            ComicDownloadTarget(
-              comicId: 'comic:1',
-              episodeId: 'comic:1:10',
-              comicTitle: '新作品名',
-              episodeTitle: '新章节名',
-            ),
-          ], now: now.add(const Duration(seconds: 1)));
+      final duplicate = await repository.enqueueTargets(
+        const <ComicDownloadTarget>[
+          ComicDownloadTarget(
+            comicId: 'comic:1',
+            episodeId: 'comic:1:10',
+            comicTitle: '新作品名',
+            episodeTitle: '新章节名',
+          ),
+        ],
+        now: now.add(const Duration(seconds: 1)),
+      );
       final entry = (await repository.loadVisibleEntries()).single;
       await repository.updateProgress(
         id: entry.id,
@@ -117,15 +120,17 @@ void main() {
         error: 'network failed',
         now: now.add(const Duration(seconds: 3)),
       );
-      final retried = await repository
-          .enqueueTargets(const <ComicDownloadTarget>[
-            ComicDownloadTarget(
-              comicId: 'comic:1',
-              episodeId: 'comic:1:10',
-              comicTitle: '新作品名',
-              episodeTitle: '新章节名',
-            ),
-          ], now: now.add(const Duration(seconds: 4)));
+      final retried = await repository.enqueueTargets(
+        const <ComicDownloadTarget>[
+          ComicDownloadTarget(
+            comicId: 'comic:1',
+            episodeId: 'comic:1:10',
+            comicTitle: '新作品名',
+            episodeTitle: '新章节名',
+          ),
+        ],
+        now: now.add(const Duration(seconds: 4)),
+      );
       final visible = (await repository.loadVisibleEntries()).single;
 
       expect(first.enqueuedCount, 1);

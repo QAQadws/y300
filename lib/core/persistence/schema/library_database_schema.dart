@@ -175,7 +175,7 @@ Future<void> createLibraryCoverRevisionTriggers(Database db) async {
   }
 }
 
-Future<void> upgradeLibraryFrom38To39(Database db) async {
+Future<void> upgradeLibraryFrom38To40(Database db) async {
   await addColumnIfMissing(
     db,
     table: comicsTable,
