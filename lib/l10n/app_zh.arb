@@ -1196,6 +1196,7 @@
   "moreStorageBucketHistory": "浏览记录",
   "moreStorageBucketComposerDraft": "草稿",
   "moreStorageBucketDownload": "离线内容",
+  "moreStorageBucketFontLibrary": "导入字体",
   "moreStorageBucketAppSettings": "应用设置",
   "moreStorageCategoryClearable": "可清缓存",
   "moreStorageCategorySticky": "长期缓存",

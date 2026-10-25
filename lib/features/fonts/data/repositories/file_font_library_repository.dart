@@ -9,12 +9,14 @@ import 'package:y300/features/fonts/data/services/font_library_index_codec.dart'
 import 'package:y300/features/fonts/domain/models/font_library_failure.dart';
 import 'package:y300/features/fonts/domain/models/imported_font.dart';
 import 'package:y300/features/fonts/domain/repositories/font_library_repository.dart';
+import 'package:y300/features/fonts/domain/repositories/font_library_storage_usage.dart';
 import 'package:y300/features/fonts/domain/services/font_file_validator.dart';
 
 typedef FontLibraryDirectoryProvider = Future<Directory> Function();
 
 /// A single instance owns mutations to an application-private font directory.
-final class FileFontLibraryRepository implements FontLibraryRepository {
+final class FileFontLibraryRepository
+    implements FontLibraryRepository, FontLibraryStorageUsage {
   FileFontLibraryRepository({
     required FontLibraryDirectoryProvider directoryProvider,
     FontFileValidator validator = const FontFileValidator(),
@@ -41,6 +43,36 @@ final class FileFontLibraryRepository implements FontLibraryRepository {
   Future<List<ImportedFont>> listFonts() => _enqueue(() async {
     final directory = await _directory();
     return _readIndex(directory);
+  });
+
+  @override
+  Future<int> calculateUsageBytes() => _enqueue(() async {
+    // Share the mutation queue, but do not create the directory or recover an
+    // index: accounting includes uncommitted/orphan bytes and changes nothing.
+    final directory = await _directoryProvider();
+    final type = await FileSystemEntity.type(
+      directory.path,
+      followLinks: false,
+    );
+    if (type == FileSystemEntityType.notFound ||
+        type == FileSystemEntityType.link) {
+      return 0;
+    }
+    if (type != FileSystemEntityType.directory) {
+      throw const FileSystemException('Expected a private font directory.');
+    }
+    var total = 0;
+    await for (final entity in directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is File &&
+          await FileSystemEntity.type(entity.path, followLinks: false) ==
+              FileSystemEntityType.file) {
+        total += await entity.length();
+      }
+    }
+    return total;
   });
 
   @override

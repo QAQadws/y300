@@ -90,9 +90,12 @@ class BodyFontSelector extends StatelessWidget {
                           ? controller.importFont
                           : null,
                       icon: controller.isImporting
-                          ? const SizedBox.square(
+                          ? SizedBox.square(
                               dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                semanticsLabel: l10n.fontSelectorLoading,
+                              ),
                             )
                           : const Icon(Icons.add),
                       label: Text(l10n.fontSelectorImport),
@@ -234,9 +237,13 @@ class BodyFontSelector extends StatelessWidget {
                     ? () => controller.deleteFont(id)
                     : null,
                 icon: controller.deletingFontId == id
-                    ? const SizedBox.square(
+                    ? SizedBox.square(
                         dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          semanticsLabel: AppLocalizations.of(context)
+                              .fontSelectorLoading,
+                        ),
                       )
                     : const Icon(Icons.delete_outline),
               ),

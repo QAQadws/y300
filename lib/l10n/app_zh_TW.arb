@@ -639,6 +639,7 @@
   "moreStorageBucketHistory": "瀏覽記錄",
   "moreStorageBucketComposerDraft": "草稿",
   "moreStorageBucketDownload": "離線內容",
+  "moreStorageBucketFontLibrary": "匯入字型",
   "moreStorageBucketAppSettings": "應用程式設定",
   "moreStorageCategoryClearable": "可清理快取",
   "moreStorageCategorySticky": "長期快取",

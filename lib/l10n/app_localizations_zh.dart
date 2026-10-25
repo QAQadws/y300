@@ -2857,6 +2857,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreStorageBucketDownload => '离线内容';
 
   @override
+  String get moreStorageBucketFontLibrary => '导入字体';
+
+  @override
   String get moreStorageBucketAppSettings => '应用设置';
 
   @override
@@ -8344,6 +8347,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreStorageBucketDownload => '離線內容';
+
+  @override
+  String get moreStorageBucketFontLibrary => '匯入字型';
 
   @override
   String get moreStorageBucketAppSettings => '應用程式設定';

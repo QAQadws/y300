@@ -1,10 +1,12 @@
 import 'dart:io' as io;
 import 'dart:typed_data';
+
 import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/services/cache_maintenance_service.dart';
 import 'package:y300/features/cache/data/services/cache_budget_coordinator.dart';
+import 'package:y300/features/cache/data/services/storage_accounting_service.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
@@ -12,8 +14,74 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/domain/models/parsed_snapshot_cache_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
+import 'package:y300/features/fonts/data/repositories/file_font_library_repository.dart';
+import 'package:y300/features/fonts/data/services/font_library_storage_accounting_adapter.dart';
+
+import '../../fonts/test_support/font_test_fixtures.dart';
 
 void main() {
+  for (final scope in CacheClearScope.values) {
+    test(
+      'ordinary $scope and pruning preserve the imported font library',
+      () async {
+        final root = await io.Directory.systemTemp.createTemp(
+          'persistent-fonts-',
+        );
+        final directory = io.Directory('${root.path}/fonts');
+        final fonts = FileFontLibraryRepository(
+          directoryProvider: () async => directory,
+        );
+        addTearDown(() async {
+          await fonts.dispose();
+          await root.delete(recursive: true);
+        });
+        final bytes = loadTestFont();
+        final imported = await fonts.importFont(
+          fileName: 'reading.ttf',
+          bytes: bytes,
+        );
+        final accounting = DefaultStorageAccountingService(
+          adapters: [FontLibraryStorageAccountingAdapter(storageUsage: fonts)],
+        );
+        final before = await accounting.loadUsageReport();
+        final ordinary = _FakeBudgetParticipant(bytes: 1024, entryCount: 4);
+        final maintenance = DefaultCacheMaintenanceService(
+          imageCacheService: _FakeImageCacheService(),
+          documentCacheService: _FakeDocumentCacheService(
+            deleteOlderThanResult: 0,
+          ),
+          snapshotCacheService: _FakeSnapshotCacheService(
+            deleteExpiredResult: 0,
+          ),
+          storageAccountingService: accounting,
+          cacheBudgetCoordinator: CacheBudgetCoordinator(
+            participants: [ordinary],
+          ),
+        );
+
+        await maintenance.prune(const CachePruneRequest(maxCacheBytes: 512));
+        await maintenance.clear(CacheClearRequest(scope: scope));
+        final after = await maintenance.usageAfterMaintenance();
+
+        expect(before.totalBytes, greaterThan(bytes.length));
+        expect(after.totalBytes, before.totalBytes);
+        expect(after.sections.single.clearable, isFalse);
+        expect(after.sections.single.slices.single.protected, isTrue);
+        expect(await fonts.readFont(imported.id), bytes);
+        // A fresh owner must still find the private file and committed index.
+        final reopened = FileFontLibraryRepository(
+          directoryProvider: () async => directory,
+        );
+        try {
+          expect((await reopened.listFonts()).single.id, imported.id);
+          expect(await reopened.readFont(imported.id), bytes);
+        } finally {
+          await reopened.dispose();
+        }
+      },
+    );
+  }
+
   for (final scope in CacheClearScope.values) {
     test(
       'ordinary $scope preserves persistent covers and their write tickets',

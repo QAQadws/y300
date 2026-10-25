@@ -7,6 +7,8 @@ import 'package:y300/features/cache/data/services/storage_usage_adapters.dart';
 import 'package:y300/features/cache/domain/models/cache_maintenance_models.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/composer_shared/data/providers/composer_draft_providers.dart';
+import 'package:y300/features/fonts/data/services/font_library_storage_accounting_adapter.dart';
+import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/history/data/providers/history_providers.dart';
 import 'package:y300/features/history/data/services/history_storage_accounting_adapter.dart';
 import 'package:y300/features/library_shared/data/providers/library_cover_providers.dart';
@@ -42,6 +44,9 @@ final storageAccountingServiceProvider = Provider<StorageAccountingService>((
       composeLibraryMetadataStorageAccountingAdapter(),
       HistoryStorageAccountingAdapter(
         databaseProvider: ref.watch(historyDatabaseManagerProvider).open,
+      ),
+      FontLibraryStorageAccountingAdapter(
+        storageUsage: ref.watch(fontLibraryStorageUsageProvider),
       ),
     ],
   );

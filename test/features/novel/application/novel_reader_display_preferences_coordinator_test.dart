@@ -254,6 +254,90 @@ void main() {
   });
 
   test(
+    'font repair waits for accepted writes and keeps the draft debounce',
+    () {
+      fakeAsync((clock) {
+        final fixture = _PreferencesFixture();
+        final accepted = fixture.initial.copyWith(
+          fontSize: 20,
+          fontFamily: 'a' * 64,
+        );
+        final draft = accepted.copyWith(fontSize: 24);
+        fixture.coordinator.commitImmediately(accepted);
+        clock.flushMicrotasks();
+        fixture.coordinator.change(draft);
+        var repairCalls = 0;
+        fixture.coordinator.repairPersistedFontReference(() async {
+          repairCalls++;
+          expect(fixture.persisted, accepted);
+          fixture.persisted = accepted.copyWith(fontFamily: 'system');
+          return fixture.persisted;
+        });
+        clock.flushMicrotasks();
+        expect(repairCalls, 0);
+        expect(fixture.saves, hasLength(1));
+
+        fixture.saves.first.complete();
+        clock.flushMicrotasks();
+        expect(repairCalls, 1);
+        expect(fixture.effective, draft);
+        expect(fixture.saves, hasLength(1));
+        clock.elapse(const Duration(milliseconds: 519));
+        expect(fixture.saves, hasLength(1));
+        clock.elapse(const Duration(milliseconds: 1));
+        expect(fixture.saves.map((save) => save.preferences), [
+          accepted,
+          draft,
+        ]);
+        fixture.saves.last.complete();
+        clock.flushMicrotasks();
+        expect(fixture.persisted, draft);
+        fixture.coordinator.dispose();
+      });
+    },
+  );
+
+  test('failed font repair leaves the preview and pending save intact', () {
+    fakeAsync((clock) {
+      final fixture = _PreferencesFixture();
+      final draft = fixture.initial.copyWith(fontSize: 24);
+      fixture.coordinator.change(draft);
+      fixture.coordinator.repairPersistedFontReference(() async {
+        throw StateError('font repair storage failure');
+      });
+      clock.flushMicrotasks();
+      expect(fixture.effective, draft);
+      expect(fixture.rollbackCount, 0);
+      expect(fixture.failureCount, 1);
+      expect(fixture.saves, isEmpty);
+      clock.elapse(const Duration(milliseconds: 520));
+      expect(fixture.saves.single.preferences, draft);
+      fixture.saves.single.complete();
+      clock.flushMicrotasks();
+      fixture.coordinator.dispose();
+    });
+  });
+
+  test('retired coordinator does not start a queued font repair', () {
+    fakeAsync((clock) {
+      final fixture = _PreferencesFixture();
+      fixture.coordinator.commitImmediately(
+        fixture.initial.copyWith(fontSize: 20),
+      );
+      clock.flushMicrotasks();
+      var repairCalls = 0;
+      fixture.coordinator.repairPersistedFontReference(() async {
+        repairCalls++;
+        return fixture.persisted;
+      });
+      fixture.coordinator.dispose();
+      fixture.saves.single.complete();
+      clock.flushMicrotasks();
+      expect(repairCalls, 0);
+    });
+  });
+
+  test(
     'replacement confirms a baseline selected after an old successful write',
     () {
       fakeAsync((clock) {

@@ -291,6 +291,129 @@ void main() {
   );
 
   testWidgets(
+    'a temporary font fallback survives a real settings edit and later recovers',
+    (tester) async {
+      runtime.failures[fonts.first.id] = FontLibraryFailure.loadFailed;
+      final preferences = _Preferences(
+        NovelReaderPreferences.defaults().copyWith(fontFamily: fonts.first.id),
+      );
+      await tester.pumpWidget(_app(novels, preferences, fontService));
+      await _pumpReady(tester, fontId: FontIdentity.system);
+      expect(_state(tester).editablePreferences.fontFamily, fonts.first.id);
+
+      await _openDisplaySettings(tester);
+      _fontSizeSlider(tester).onChanged!(24);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(preferences.value.fontFamily, fonts.first.id);
+      expect(preferences.value.fontSize, 24);
+      expect(_state(tester).bodyFont, ResolvedFont.system);
+      expect(_state(tester).fontResolution.requestedId, fonts.first.id);
+      await _closeDisplaySettings(tester);
+
+      runtime.failures.clear();
+      fonts.announceChange();
+      await _pumpReady(tester, fontId: fonts.first.id);
+      expect(_state(tester).preferences.fontSize, 24);
+      expect(preferences.saved, hasLength(1));
+      await _close(tester);
+    },
+  );
+
+  testWidgets(
+    'an explicit system choice replaces a temporarily failed imported font',
+    (tester) async {
+      runtime.failures[fonts.first.id] = FontLibraryFailure.loadFailed;
+      final preferences = _Preferences(
+        NovelReaderPreferences.defaults().copyWith(fontFamily: fonts.first.id),
+      );
+      await tester.pumpWidget(_app(novels, preferences, fontService));
+      await _pumpReady(tester, fontId: FontIdentity.system);
+      await _openDisplaySettings(tester);
+      await tester.tap(find.byKey(const Key('novel-reader-font-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('body-font-item-system')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('body-font-apply')));
+      await tester.pumpAndSettle();
+      await _closeDisplaySettings(tester);
+      expect(preferences.value.fontFamily, FontIdentity.system);
+      expect(preferences.saved, hasLength(1));
+
+      runtime.failures.clear();
+      fonts.announceChange();
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(_state(tester).bodyFont, ResolvedFont.system);
+      expect(_state(tester).fontResolution.failure, isNull);
+      await _close(tester);
+    },
+  );
+
+  testWidgets(
+    'deletion repairs confirmed data without saving or discarding a local draft',
+    (tester) async {
+      final stored = NovelReaderPreferences.defaults().copyWith(
+        fontFamily: fonts.first.id,
+      );
+      final preferences = _Preferences(stored);
+      await tester.pumpWidget(_app(novels, preferences, fontService));
+      await _pumpReady(tester, fontId: fonts.first.id);
+      _controller(
+        tester,
+      ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 24));
+      await _pumpReady(tester, fontId: fonts.first.id);
+
+      await tester.runAsync(() => fontService.deleteFont(fonts.first.id));
+      await _pumpReady(tester, fontId: FontIdentity.system);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(preferences.saved, [
+        stored.copyWith(fontFamily: FontIdentity.system),
+      ]);
+      expect(_state(tester).preferences.fontSize, 24);
+      expect(_state(tester).persistedPreferences.fontSize, stored.fontSize);
+      expect(_state(tester).bodyFont, ResolvedFont.system);
+      await _close(tester);
+    },
+  );
+
+  testWidgets(
+    'deletion repair waits for an accepted settings save and preserves its fields',
+    (tester) async {
+      final stored = NovelReaderPreferences.defaults().copyWith(
+        fontFamily: fonts.first.id,
+      );
+      final preferences = _Preferences(stored);
+      await tester.pumpWidget(_app(novels, preferences, fontService));
+      await _pumpReady(tester, fontId: fonts.first.id);
+      await _openDisplaySettings(tester);
+      final saving = Completer<void>();
+      preferences.holdNext = saving;
+      _fontSizeSlider(tester).onChanged!(20);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(preferences.saveAttempts, 1);
+      _controller(
+        tester,
+      ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 24));
+      await tester.pump();
+
+      await tester.runAsync(() => fontService.deleteFont(fonts.first.id));
+      await _pumpReady(tester, fontId: FontIdentity.system);
+      expect(preferences.saveAttempts, 1);
+      expect(_state(tester).preferences.fontSize, 24);
+      saving.complete();
+      await tester.pumpAndSettle();
+      expect(preferences.saved, [
+        stored.copyWith(fontSize: 20),
+        stored.copyWith(fontSize: 20, fontFamily: FontIdentity.system),
+      ]);
+      expect(_state(tester).persistedPreferences.fontSize, 20);
+      expect(_state(tester).preferences.fontSize, 24);
+      await _closeDisplaySettings(tester);
+      expect(preferences.saved, hasLength(2));
+      await _close(tester);
+    },
+  );
+
+  testWidgets(
     'a failed deleted-font repair keeps a readable fallback without retry loops',
     (tester) async {
       final stored = NovelReaderPreferences.defaults().copyWith(
@@ -450,6 +573,37 @@ Future<void> _close(WidgetTester tester) async {
   expect(tester.takeException(), isNull);
 }
 
+Future<void> _openDisplaySettings(WidgetTester tester) async {
+  await tester.tapAt(const Offset(400, 300));
+  await tester.pump(const Duration(milliseconds: 330));
+  await tester.pump(const Duration(milliseconds: 260));
+  await tester.pump();
+  await tester.tap(
+    find.byKey(const Key('shared-reader-bottom-action-display')),
+  );
+  await tester.pumpAndSettle();
+  expect(
+    find.byKey(const Key('novel-reader-display-settings-sheet')),
+    findsOneWidget,
+  );
+}
+
+Future<void> _closeDisplaySettings(WidgetTester tester) async {
+  Navigator.of(
+    tester.element(
+      find.byKey(const Key('novel-reader-display-settings-sheet')),
+    ),
+  ).pop();
+  await tester.pumpAndSettle();
+}
+
+Slider _fontSizeSlider(WidgetTester tester) => tester.widget<Slider>(
+  find.descendant(
+    of: find.byKey(const Key('novel-reader-font-size-slider')),
+    matching: find.byType(Slider),
+  ),
+);
+
 ScrollPosition _verticalPosition(WidgetTester tester) => tester
     .state<ScrollableState>(
       find.descendant(
@@ -559,11 +713,14 @@ final class _Fonts implements FontLibraryRepository {
 
 final class _FontRuntime implements FontRuntimeLoader {
   final gates = <String, Completer<void>>{};
+  final failures = <String, FontLibraryFailure>{};
   final requested = <String>[];
   @override
   Future<String> load(ImportedFont font, Uint8List bytes) async {
     requested.add(font.id);
     await gates[font.id]?.future;
+    final failure = failures[font.id];
+    if (failure != null) throw FontLibraryException(failure);
     return FontIdentity.runtimeFamily(font.id);
   }
 }
@@ -573,12 +730,16 @@ final class _Preferences implements NovelReaderPreferencesRepository {
   NovelReaderPreferences value;
   bool rejectWrites = false;
   int saveAttempts = 0;
+  Completer<void>? holdNext;
   final saved = <NovelReaderPreferences>[];
   @override
   Future<NovelReaderPreferences> load() async => value;
   @override
   Future<void> save(NovelReaderPreferences preferences) async {
     saveAttempts++;
+    final held = holdNext;
+    holdNext = null;
+    await held?.future;
     if (rejectWrites) throw StateError('Preference storage unavailable');
     value = preferences;
     saved.add(preferences);

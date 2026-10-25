@@ -6,6 +6,7 @@ enum StorageBucket {
   history('history'),
   composerDraft('composer_draft'),
   download('download'),
+  fontLibrary('font_library'),
   appSettings('app_settings');
 
   const StorageBucket(this.id);

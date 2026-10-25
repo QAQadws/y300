@@ -19,6 +19,7 @@ const _businessOwners = <String>[
   'profile',
   'history',
   'library_shared',
+  'fonts',
 ];
 
 void main() {
@@ -36,12 +37,17 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason:
-          'Business statistics belong to their owners; only the app assembles the report.',
+      reason: 'Business statistics belong to their owners; only the app assembles the report.',
     );
   });
 
   test('reverse assembly and business imports are rejected', () {
+    expect(
+      _violations(_cacheAdapters, '''
+import 'package:y300/features/fonts/data/services/font_library_storage_accounting_adapter.dart';
+'''),
+      hasLength(1),
+    );
     expect(
       _violations(_cacheAdapters, '''
 import 'package:y300/features/profile/domain/repositories/blog_draft_repository.dart';

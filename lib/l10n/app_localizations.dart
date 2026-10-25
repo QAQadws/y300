@@ -4709,6 +4709,12 @@ abstract class AppLocalizations {
   /// **'离线内容'**
   String get moreStorageBucketDownload;
 
+  /// No description provided for @moreStorageBucketFontLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入字体'**
+  String get moreStorageBucketFontLibrary;
+
   /// No description provided for @moreStorageBucketAppSettings.
   ///
   /// In zh, this message translates to:

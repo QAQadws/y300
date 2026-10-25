@@ -170,6 +170,7 @@ final class MoreTextResolver {
       'history' => l10n.moreStorageBucketHistory,
       'composer_draft' => l10n.moreStorageBucketComposerDraft,
       'download' => l10n.moreStorageBucketDownload,
+      'font_library' => l10n.moreStorageBucketFontLibrary,
       'app_settings' => l10n.moreStorageBucketAppSettings,
       _ => code,
     };

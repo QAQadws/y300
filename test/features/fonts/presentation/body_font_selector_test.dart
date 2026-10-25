@@ -158,6 +158,32 @@ void main() {
   );
 
   for (final locale in [const Locale('zh'), const Locale('zh', 'TW')]) {
+    testWidgets(
+      'an active font import exposes a localized loading label for $locale',
+      (tester) async {
+        final picking = Completer<void>();
+        driver.onPick = () async {
+          await picking.future;
+          return null;
+        };
+        await _open(tester, controller, locale: locale);
+        final strings = _strings(tester);
+        await tester.tap(find.byKey(const Key('body-font-import')));
+        await tester.pump();
+        expect(
+          tester
+              .widget<CircularProgressIndicator>(
+                find.byType(CircularProgressIndicator),
+              )
+              .semanticsLabel,
+          strings.fontSelectorLoading,
+        );
+        picking.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
+
     testWidgets('typed import failure is localized for $locale', (
       tester,
     ) async {

@@ -86,6 +86,31 @@ class NovelReaderDisplayPreferencesCoordinator {
     return _enqueuePendingCommit();
   }
 
+  /// Patch confirmed data after accepted saves without confirming or retiring
+  /// the live draft, its preview throttle, or its normal save debounce.
+  Future<void> repairPersistedFontReference(
+    Future<NovelReaderPreferences?> Function() repair,
+  ) {
+    if (_disposed) return _commitTail;
+    _commitTail = _commitTail.then((_) async {
+      if (_disposed) return;
+      try {
+        final repaired = await repair();
+        if (repaired != null) {
+          _lastPersisted = repaired;
+          _baselineConfirmed = true;
+        }
+      } catch (_) {
+        _lastPersisted = null;
+        _baselineConfirmed = false;
+        // The runtime fallback is already readable; failure must not roll back
+        // an unrelated draft or start another automatic repair attempt.
+        if (!_disposed) _onFailure();
+      }
+    });
+    return _commitTail;
+  }
+
   Future<void> dispose() {
     _disposed = true;
     _revision += 1;

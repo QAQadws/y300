@@ -88,6 +88,21 @@ void main() {
     );
   });
 
+  for (final strings in [AppLocalizationsZh(), AppLocalizationsZhTw()]) {
+    test('maps the font library bucket for ${strings.localeName}', () {
+      expect(
+        MoreTextResolver.storageLabel(
+          strings,
+          const StorageUsageLabelRef(
+            kind: StorageUsageLabelKind.bucket,
+            code: 'font_library',
+          ),
+        ),
+        strings.moreStorageBucketFontLibrary,
+      );
+    });
+  }
+
   test(
     'resolves version and notice parameters without storing localized text',
     () {

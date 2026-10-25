@@ -2214,14 +2214,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     _fontRepairId = resolution.requestedId;
-    final revision = controller.fontPreferenceRevision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           !identical(
             ref.read(novelReaderControllerProvider(_args).notifier),
             controller,
-          ) ||
-          revision != controller.fontPreferenceRevision) {
+          )) {
         return;
       }
       final latest = ref
@@ -2237,12 +2235,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       // Repairs share the existing preference write barrier. A failed repair
       // is attempted once, so storage failure cannot produce a save/reflow loop.
       final coordinator = _displayPreferencesCoordinatorFor(controller);
-      coordinator.begin(
-        preferences: latest.preferences,
-        persistedPreferences: latest.persistedPreferences,
-      );
-      coordinator.change(
-        latest.preferences.copyWith(fontFamily: FontIdentity.system),
+      unawaited(
+        coordinator.repairPersistedFontReference(
+          () => controller.repairPersistedFontReference(
+            resolution.requestedId,
+            isCurrent: () =>
+                mounted &&
+                identical(
+                  ref.read(novelReaderControllerProvider(_args).notifier),
+                  controller,
+                ),
+          ),
+        ),
       );
       _showReaderSnackBar(
         resolution.failure == FontLibraryFailure.notFound
@@ -2261,7 +2265,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.5;
     final coordinator = _displayPreferencesCoordinatorFor(controller);
     coordinator.begin(
-      preferences: viewState.preferences,
+      preferences: viewState.editablePreferences,
       persistedPreferences: viewState.persistedPreferences,
     );
     await _runWithReaderSemanticsSuspended(() async {
@@ -2269,7 +2273,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         context: context,
         constraints: BoxConstraints(maxHeight: maxSheetHeight),
         builder: (context) => NovelReaderDisplaySettingsSheet(
-          initialPreferences: viewState.preferences,
+          initialPreferences: viewState.editablePreferences,
           onPreferencesChanged: coordinator.change,
           fontPreviewStyle: _typographyResolver
               .resolve(

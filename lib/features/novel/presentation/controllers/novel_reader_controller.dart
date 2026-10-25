@@ -27,6 +27,11 @@ import 'package:y300/features/novel/presentation/services/novel_reader_preferenc
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
 
+bool _isUnavailableReaderFont(FontLibraryFailure? failure) =>
+    failure == FontLibraryFailure.notFound ||
+    failure == FontLibraryFailure.invalidFont ||
+    failure == FontLibraryFailure.unsupportedFormat;
+
 class NovelReaderArgs {
   const NovelReaderArgs({
     required this.novelId,
@@ -119,6 +124,19 @@ class NovelReaderViewState {
   final FontResolution fontResolution;
 
   ResolvedFont get bodyFont => fontResolution.font;
+
+  /// Editing retains a temporarily unavailable choice; rendering still uses
+  /// the effective system fallback until that runtime font can load again.
+  NovelReaderPreferences get editablePreferences {
+    if (fontResolution.failure != null &&
+        !_isUnavailableReaderFont(fontResolution.failure) &&
+        FontIdentity.isImported(fontResolution.requestedId)) {
+      return effectivePreferences.copyWith(
+        fontFamily: fontResolution.requestedId,
+      );
+    }
+    return effectivePreferences;
+  }
 
   int get currentEpisodeIndex {
     return episodes.indexWhere(
@@ -261,7 +279,6 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   int _fontPreviewSerial = 0;
   bool _fontPreviewPending = false;
 
-  int get fontPreferenceRevision => _fontPreviewSerial;
   // A refreshed state may load its baseline before an older write reaches disk.
   bool _persistedPreferenceSnapshotDirty = false;
   final Map<
@@ -416,7 +433,12 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         sessionToken != _activeSessionToken) {
       return;
     }
-    final next = requested.copyWith(fontFamily: resolution.font.id);
+    final effectiveNext = requested.copyWith(fontFamily: resolution.font.id);
+    final next =
+        resolution.failure != null &&
+            !_isUnavailableReaderFont(resolution.failure)
+        ? requested
+        : effectiveNext;
     final persistedDiff = _preferenceImpactAnalyzer.compare(
       current.persistedPreferences,
       next,
@@ -458,7 +480,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         sessionToken == _activeSessionToken &&
             previewSerial == _fontPreviewSerial &&
             latest.effectivePreferences == current.effectivePreferences
-        ? next
+        ? effectiveNext
         : latest.effectivePreferences;
     state = AsyncData(
       latest.copyWith(
@@ -475,6 +497,53 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
             : null,
       ),
     );
+  }
+
+  /// Called inside the display coordinator's write queue so earlier accepted
+  /// settings finish before selecting this confirmed, font-only patch.
+  Future<NovelReaderPreferences?> repairPersistedFontReference(
+    String unavailableId, {
+    required bool Function() isCurrent,
+  }) async {
+    if (!ref.mounted) return null;
+    final current = state.value;
+    if (state.isLoading ||
+        current == null ||
+        !isCurrent() ||
+        current.persistedPreferences.fontFamily != unavailableId ||
+        current.fontResolution.requestedId != unavailableId ||
+        !_isUnavailableReaderFont(current.fontResolution.failure)) {
+      return null;
+    }
+    final serial = ++_preferenceCommitSerial;
+    final sessionToken = _activeSessionToken;
+    final next = current.persistedPreferences.copyWith(
+      fontFamily: FontIdentity.system,
+    );
+    _preferenceWritesInFlight += 1;
+    try {
+      await ref.read(novelReaderPreferencesRepositoryProvider).save(next);
+    } catch (_) {
+      _persistedPreferenceSnapshotDirty = true;
+      rethrow;
+    } finally {
+      _preferenceWritesInFlight -= 1;
+    }
+    if (!ref.mounted ||
+        serial != _preferenceCommitSerial ||
+        sessionToken != _activeSessionToken ||
+        !isCurrent()) {
+      _persistedPreferenceSnapshotDirty = true;
+      return null;
+    }
+    _persistedPreferenceSnapshotDirty = _preferenceWritesInFlight > 0;
+    final latest = state.value;
+    if (latest != null) {
+      // Keep the current preview and loaded font. Repairing persistent data
+      // does not confirm a draft or start another layout/reading transition.
+      state = AsyncData(latest.copyWith(persistedPreferences: next));
+    }
+    return next;
   }
 
   Future<FontResolution> _resolveReaderFont(String fontId) {
