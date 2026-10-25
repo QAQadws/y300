@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 
@@ -52,6 +54,93 @@ Widget _hostScrollableZoomableImage(
   );
 }
 
+Widget _hostZoomableReader(
+  ScrollController controller, {
+  required double contentHeight,
+  Widget? image,
+}) {
+  return LocalizedTestApp(
+    home: Scaffold(
+      body: Center(
+        child: SizedBox(
+          key: const Key('zoom-reader-test-viewport'),
+          width: 240,
+          height: 240,
+          // Match production: the zoom surface wraps the scrolling viewport.
+          child: ReaderZoomableImage(
+            behavior: ReaderZoomBehavior.continuousVertical,
+            child: ListView(
+              controller: controller,
+              padding: EdgeInsets.zero,
+              physics: const ClampingScrollPhysics(),
+              children: [
+                const SizedBox(
+                  key: Key('zoom-reader-test-top'),
+                  height: 12,
+                  child: ColoredBox(color: Colors.red),
+                ),
+                SizedBox(
+                  key: const Key('zoom-reader-test-body'),
+                  height: contentHeight - 24,
+                  child: image ?? const ColoredBox(color: Colors.blue),
+                ),
+                const SizedBox(
+                  key: Key('zoom-reader-test-bottom'),
+                  height: 12,
+                  child: ColoredBox(color: Colors.green),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _zoomReader(WidgetTester tester, {required bool pinch}) async {
+  final center = tester.getCenter(
+    find.byKey(const Key('zoom-reader-test-viewport')),
+  );
+  if (!pinch) {
+    await tester.tapAt(center);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    return;
+  }
+  final first = await tester.createGesture(pointer: 1);
+  final second = await tester.createGesture(pointer: 2);
+  await first.down(center - const Offset(24, 0));
+  await second.down(center + const Offset(24, 0));
+  await tester.pump();
+  await first.moveTo(center - const Offset(48, 0));
+  await second.moveTo(center + const Offset(48, 0));
+  await tester.pump();
+  await first.up();
+  await second.up();
+  await tester.pumpAndSettle();
+}
+
+Future<void> _dragReaderVertically(WidgetTester tester, double dy) async {
+  final center = tester.getCenter(
+    find.byKey(const Key('zoom-reader-test-viewport')),
+  );
+  for (var drag = 0; drag < 6; drag++) {
+    await tester.dragFrom(center, Offset(0, dy));
+    await tester.pumpAndSettle();
+  }
+}
+
+void _expectMarkerVerticallyVisible(WidgetTester tester, Key marker) {
+  final viewport = tester.getRect(
+    find.byKey(const Key('zoom-reader-test-viewport')),
+  );
+  final rect = tester.getRect(find.byKey(marker));
+  expect(rect.top, greaterThanOrEqualTo(viewport.top - 0.01));
+  expect(rect.bottom, lessThanOrEqualTo(viewport.bottom + 0.01));
+}
+
 Transform _readBoundedTransform(WidgetTester tester) {
   return tester.widget<Transform>(
     find.byKey(const Key('reader-bounded-zoom-transform')),
@@ -59,6 +148,142 @@ Transform _readBoundedTransform(WidgetTester tester) {
 }
 
 void main() {
+  for (final pinch in [false, true]) {
+    final zoomGesture = pinch ? 'pinch' : 'double tap';
+    for (final contentHeight in [1440.0, 180.0]) {
+      final content = contentHeight > 240 ? 'long' : 'initially non-scrollable';
+      testWidgets(
+        '$zoomGesture keeps both ends of a $content continuous reader reachable',
+        (tester) async {
+          final controller = ScrollController();
+          addTearDown(controller.dispose);
+          await tester.pumpWidget(
+            _hostZoomableReader(controller, contentHeight: contentHeight),
+          );
+          if (contentHeight < 240) {
+            expect(controller.position.maxScrollExtent, 0);
+          }
+
+          await _zoomReader(tester, pinch: pinch);
+          expect(
+            tester
+                .widget<Transform>(
+                  find.byKey(const Key('reader-continuous-zoom-transform')),
+                )
+                .transform
+                .getMaxScaleOnAxis(),
+            greaterThan(1),
+          );
+          await _dragReaderVertically(tester, 100);
+          _expectMarkerVerticallyVisible(
+            tester,
+            const Key('zoom-reader-test-top'),
+          );
+
+          // Reach the final list slot without relying on the number of drags
+          // needed for the unscaled document, then pan its zoomed bottom in.
+          controller.jumpTo(controller.position.maxScrollExtent);
+          await tester.pump();
+          await _dragReaderVertically(tester, -100);
+          _expectMarkerVerticallyVisible(
+            tester,
+            const Key('zoom-reader-test-bottom'),
+          );
+        },
+      );
+    }
+  }
+
+  testWidgets('zoomed middle-of-list drags move content only once', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _hostZoomableReader(controller, contentHeight: 1440),
+    );
+    controller.jumpTo(400);
+    await tester.pump();
+    await _zoomReader(tester, pinch: false);
+    final center = tester.getCenter(
+      find.byKey(const Key('zoom-reader-test-viewport')),
+    );
+    final gesture = await tester.startGesture(center);
+    // Establish the list drag before checking its next physical movement.
+    await gesture.moveBy(const Offset(0, -80));
+    await tester.pump();
+    final body = find.byKey(const Key('zoom-reader-test-body'));
+    final before = tester.getTopLeft(body).dy;
+    final transform = find.byKey(const Key('reader-continuous-zoom-transform'));
+    final translation = tester
+        .widget<Transform>(transform)
+        .transform
+        .getTranslation()
+        .y;
+
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump();
+
+    expect(tester.getTopLeft(body).dy, closeTo(before - 40, 0.01));
+    expect(
+      tester.widget<Transform>(transform).transform.getTranslation().y,
+      closeTo(translation, 0.01),
+    );
+    await gesture.cancel();
+  });
+
+  testWidgets('continuous zoom cycle keeps the list and image mounted', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final provider = MemoryImage(Uint8List.fromList(_transparentImageBytes));
+    await tester.pumpWidget(
+      _hostZoomableReader(
+        controller,
+        contentHeight: 180,
+        image: Image(image: provider),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final list = find.byType(ListView);
+    final image = find.byType(Image);
+    final listElement = tester.element(list);
+    final imageElement = tester.element(image);
+    ScrollPosition position() =>
+        tester.state<ScrollableState>(find.byType(Scrollable)).position;
+    expect(position().physics.shouldAcceptUserOffset(position()), isFalse);
+
+    await _zoomReader(tester, pinch: false);
+    expect(position().physics.shouldAcceptUserOffset(position()), isTrue);
+    await _dragReaderVertically(tester, -100);
+    expect(tester.element(list), same(listElement));
+    expect(tester.element(image), same(imageElement));
+    expect(tester.widget<ListView>(list).controller, same(controller));
+
+    await _zoomReader(tester, pinch: false);
+    await _dragReaderVertically(tester, -100);
+    final transform = tester
+        .widget<Transform>(
+          find.byKey(const Key('reader-continuous-zoom-transform')),
+        )
+        .transform;
+    expect(transform.getMaxScaleOnAxis(), closeTo(1, 0.001));
+    expect(transform.getTranslation().y, closeTo(0, 0.001));
+    expect(position().physics.shouldAcceptUserOffset(position()), isFalse);
+    expect(controller.offset, 0);
+    expect(controller.position.maxScrollExtent, 0);
+    expect(tester.element(list), same(listElement));
+    expect(tester.element(image), same(imageElement));
+    expect(tester.widget<ListView>(list).controller, same(controller));
+    expect(tester.widget<Image>(image).image, same(provider));
+    _expectMarkerVerticallyVisible(tester, const Key('zoom-reader-test-top'));
+    _expectMarkerVerticallyVisible(
+      tester,
+      const Key('zoom-reader-test-bottom'),
+    );
+  });
+
   testWidgets('double tap toggles zoom state callback', (tester) async {
     final states = <bool>[];
 

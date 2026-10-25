@@ -281,14 +281,35 @@ class _ReaderZoomSurfaceState extends State<ReaderZoomSurface>
         ? const Key('reader-continuous-zoom-transform')
         : const Key('reader-bounded-zoom-transform');
     return ClipRect(
-      child: AnimatedBuilder(
-        animation: _transformationController,
-        child: widget.child,
-        builder: (context, child) => Transform(
-          key: transformKey,
-          transform: _transformationController.value,
-          alignment: Alignment.topLeft,
-          child: child,
+      child: NotificationListener<OverscrollNotification>(
+        onNotification: _onContinuousOverscroll,
+        child: AnimatedBuilder(
+          animation: _transformationController,
+          child: widget.child,
+          builder: (context, child) {
+            final scrollBehavior = ScrollConfiguration.of(context);
+            final continuousZoomed =
+                widget.behavior == ReaderZoomBehavior.continuousVertical &&
+                _isZoomed;
+            return Transform(
+              key: transformKey,
+              transform: _transformationController.value,
+              alignment: Alignment.topLeft,
+              child: ScrollConfiguration(
+                behavior: continuousZoomed
+                    ? scrollBehavior.copyWith(
+                        overscroll: false,
+                        // Even a list shorter than its viewport can have
+                        // clipped content after zooming.
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: ClampingScrollPhysics(),
+                        ),
+                      )
+                    : scrollBehavior,
+                child: child!,
+              ),
+            );
+          },
         ),
       ),
     );
@@ -531,6 +552,32 @@ class _ReaderZoomSurfaceState extends State<ReaderZoomSurface>
       _currentScale,
     );
     _transformationController.value = _matrixFor(translation, _currentScale);
+  }
+
+  bool _onContinuousOverscroll(OverscrollNotification notification) {
+    if (widget.behavior != ReaderZoomBehavior.continuousVertical ||
+        !_isZoomed ||
+        _rawPinchActive ||
+        notification.depth != 0 ||
+        notification.metrics.axis != Axis.vertical ||
+        notification.dragDetails == null) {
+      return false;
+    }
+    final scale = _currentScale;
+    final previous = _transformationController.value.getTranslation();
+    // The list consumes ordinary vertical drags. Only its unconsumed edge
+    // movement pans the scaled viewport, so the first/last pixels remain
+    // reachable without applying the same drag to both list and transform.
+    final translation = _clampTranslation(
+      Offset(previous.x, previous.y - notification.overscroll * scale),
+      scale,
+    );
+    if (translation.dy != previous.y) {
+      _stopAnimation();
+      _transformationController.value = _matrixFor(translation, scale);
+      _syncZoomStateFromMatrix();
+    }
+    return false;
   }
 
   Offset _clampTranslation(Offset translation, double scale) {

@@ -1,9 +1,12 @@
 import 'package:y300/features/comic/domain/services/comic_download_service.dart';
+
 import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -11,7 +14,9 @@ import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
+
 import '../data/comic_interaction_fixtures.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1225,6 +1230,18 @@ void main() {
     await tester.dragFrom(surfaceCenter, const Offset(0, -160));
     await pumpReaderUiTransition(tester);
     expect(readerList().controller!.offset, greaterThan(previousOffset));
+
+    readerList().controller!.jumpTo(0);
+    await pumpReaderUiTransition(tester);
+    final viewport = tester.getRect(zoomSurface);
+    for (var drag = 0; drag < 2; drag += 1) {
+      await tester.dragFrom(viewport.center, Offset(0, viewport.height * 0.4));
+      await pumpReaderUiTransition(tester);
+    }
+    expect(
+      tester.getTopLeft(find.byKey(const Key('comic-reader-image-slot-0'))).dy,
+      closeTo(viewport.top, 0.5),
+    );
 
     await tester.tapAt(surfaceCenter);
     await tester.pump(const Duration(milliseconds: 40));
