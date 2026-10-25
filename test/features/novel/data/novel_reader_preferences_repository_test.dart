@@ -47,11 +47,9 @@ void main() {
 
     final loaded = await repository.load();
     final preferences = await SharedPreferences.getInstance();
-    final snapshot =
-        jsonDecode(
-              preferences.getString(PreferenceKeys.novelReaderSnapshotV1.name)!,
-            )
-            as Map<String, dynamic>;
+    final snapshot = jsonDecode(
+      preferences.getString(PreferenceKeys.novelReaderSnapshotV1.name)!,
+    ) as Map<String, dynamic>;
 
     expect(loaded.fontSize, 21);
     expect(loaded.lineHeight, 1.85);
@@ -63,6 +61,7 @@ void main() {
       'schemaVersion',
       'fontSize',
       'lineHeight',
+      'fontFamily',
       'flowMode',
       'themePreset',
       'conversionMode',
@@ -117,6 +116,94 @@ void main() {
     expect(loaded.flowMode, NovelReaderFlowMode.vertical);
     expect(legacySource.callCount, 0);
   });
+
+  test(
+    'saved font content identity survives repository reconstruction',
+    () async {
+      const fontId =
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      await repository.save(
+        NovelReaderPreferences.defaults().copyWith(
+          fontFamily: fontId,
+          fontSize: 23,
+        ),
+      );
+      repository = SharedPreferencesNovelReaderPreferencesRepository(
+        preferencesStore: SharedPreferencesStore(),
+        legacySource: legacySource,
+      );
+
+      final loaded = await repository.load();
+      final storage = await SharedPreferences.getInstance();
+      final snapshot = jsonDecode(
+        storage.getString(PreferenceKeys.novelReaderSnapshotV1.name)!,
+      ) as Map<String, dynamic>;
+      expect(loaded.fontFamily, fontId);
+      expect(loaded.fontSize, 23);
+      expect(snapshot['fontFamily'], fontId);
+      expect(legacySource.callCount, 0);
+    },
+  );
+
+  test('codec stores stable font IDs and defaults snapshots without them', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+    const fontId =
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    final value = NovelReaderPreferences.defaults().copyWith(
+      fontFamily: fontId,
+    );
+    expect(codec.decode(codec.encode(value)).fontFamily, fontId);
+    expect(
+      codec.decode('{"schemaVersion":1,"fontSize":21}').fontFamily,
+      'system',
+    );
+    expect(
+      codec.decode('{"schemaVersion":1,"fontFamily":"system"}').fontFamily,
+      'system',
+    );
+  });
+
+  test(
+    'codec rejects paths and runtime families without dropping other fields',
+    () {
+      const codec = NovelReaderPreferencesSnapshotCodec();
+      for (final value in <Object?>[
+        null,
+        true,
+        1,
+        <String>['font.ttf'],
+        '',
+        'serif',
+        '/private/font.ttf',
+        r'C:\Fonts\font.ttf',
+        'Y300ImportedFont_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'future-font:123',
+      ]) {
+        final decoded = codec.decode(
+          jsonEncode(<String, Object?>{
+            'schemaVersion': 1,
+            'fontFamily': value,
+            'fontSize': 22,
+            'lineHeight': 1.9,
+            'flowMode': 'pagedRtl',
+          }),
+        );
+        expect(decoded.fontFamily, 'system', reason: '$value');
+        expect(decoded.fontSize, 22, reason: '$value');
+        expect(decoded.lineHeight, 1.9, reason: '$value');
+        expect(
+          decoded.flowMode,
+          NovelReaderFlowMode.pagedRtl,
+          reason: '$value',
+        );
+      }
+      final normalized = codec.normalize(
+        NovelReaderPreferences.defaults().copyWith(fontFamily: 'serif'),
+      );
+      expect(normalized.fontFamily, 'system');
+    },
+  );
 
   test('codec round-trips every supported flow mode', () {
     const codec = NovelReaderPreferencesSnapshotCodec();

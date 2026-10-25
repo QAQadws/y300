@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/fonts/fonts.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
@@ -109,6 +110,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   NovelReaderDisplayPreferencesCoordinator? _displayPreferencesCoordinator;
   NovelReaderController? _displayPreferencesOwner;
   Future<void>? _displayCommitTail;
+  NovelReaderController? _fontRepairOwner;
+  String? _fontRepairId;
   int _readerSemanticsSuspendCount = 0;
   final _verticalSession = NovelReaderVerticalSessionCoordinator();
   Object? _verticalSeekRequest;
@@ -230,8 +233,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final readerProvider = novelReaderControllerProvider(_args);
     ref.listen(readerProvider, (previous, next) {
       if (previous?.asData?.value.readingAuthorityRevision !=
-          next.asData?.value.readingAuthorityRevision) {
+              next.asData?.value.readingAuthorityRevision ||
+          previous?.asData?.value.readingSurfaceRevision !=
+              next.asData?.value.readingSurfaceRevision) {
         _pagedPosition = null;
+        // A source route/reset supplied a newer public position. A visible
+        // hint from before that handoff must not override its restore target.
+        _conversionPosition = null;
       }
       if (next.isLoading) {
         _retireDisplayPreferencesCoordinator();
@@ -311,6 +319,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             );
           },
           data: (viewState) {
+            _scheduleFontReferenceRepair(viewState, controller);
             final systemPadding = MediaQuery.paddingOf(context);
             final readerSurfaceIdentity = _readerSurfaceIdentity(viewState);
             if (viewState.preferences.flowMode ==
@@ -410,6 +419,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             );
             final typography = _typographyResolver.resolve(
               preferences: viewState.preferences,
+              resolvedFont: viewState.bodyFont,
               theme: theme,
               palette: palette,
             );
@@ -504,7 +514,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         '${viewState.readingSurfaceRevision}|'
         '${viewState.document.rawHtmlHash}|'
         '${viewState.preferences.flowMode.name}|'
-        '${viewState.renderPreferences.hashCode}';
+        '${viewState.renderPreferences.hashCode}|'
+        '${viewState.bodyFont.cacheKey}';
   }
 
   void _suspendVerticalSurface({
@@ -2152,9 +2163,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       } catch (_) {
                         if (mounted) {
                           _showReaderSnackBar(
-                            AppLocalizations.of(
-                              this.context,
-                            ).libraryDetailReadStateUpdateFailed,
+                            AppLocalizations.of(this.context)
+                                .libraryDetailReadStateUpdateFailed,
                           );
                         }
                       }
@@ -2180,6 +2190,68 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     });
   }
 
+  void _scheduleFontReferenceRepair(
+    NovelReaderViewState viewState,
+    NovelReaderController controller,
+  ) {
+    if (!identical(_fontRepairOwner, controller)) {
+      _fontRepairOwner = controller;
+      _fontRepairId = null;
+    }
+    final resolution = viewState.fontResolution;
+    if (resolution.failure == null &&
+        viewState.persistedPreferences.fontFamily == viewState.bodyFont.id) {
+      _fontRepairId = null;
+      return;
+    }
+    final unavailable =
+        resolution.failure == FontLibraryFailure.notFound ||
+        resolution.failure == FontLibraryFailure.invalidFont ||
+        resolution.failure == FontLibraryFailure.unsupportedFormat;
+    if (!unavailable ||
+        viewState.persistedPreferences.fontFamily != resolution.requestedId ||
+        _fontRepairId == resolution.requestedId) {
+      return;
+    }
+    _fontRepairId = resolution.requestedId;
+    final revision = controller.fontPreferenceRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !identical(
+            ref.read(novelReaderControllerProvider(_args).notifier),
+            controller,
+          ) ||
+          revision != controller.fontPreferenceRevision) {
+        return;
+      }
+      final latest = ref
+          .read(novelReaderControllerProvider(_args))
+          .asData
+          ?.value;
+      if (latest == null ||
+          latest.fontResolution.failure == null ||
+          latest.fontResolution.requestedId != resolution.requestedId ||
+          latest.persistedPreferences.fontFamily != resolution.requestedId) {
+        return;
+      }
+      // Repairs share the existing preference write barrier. A failed repair
+      // is attempted once, so storage failure cannot produce a save/reflow loop.
+      final coordinator = _displayPreferencesCoordinatorFor(controller);
+      coordinator.begin(
+        preferences: latest.preferences,
+        persistedPreferences: latest.persistedPreferences,
+      );
+      coordinator.change(
+        latest.preferences.copyWith(fontFamily: FontIdentity.system),
+      );
+      _showReaderSnackBar(
+        resolution.failure == FontLibraryFailure.notFound
+            ? AppLocalizations.of(context).fontSelectorNotFound
+            : AppLocalizations.of(context).fontSelectorInvalidFont,
+      );
+    });
+  }
+
   Future<void> _showDisplaySettingsSheet(
     NovelReaderViewState viewState,
     NovelReaderController controller,
@@ -2199,6 +2271,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         builder: (context) => NovelReaderDisplaySettingsSheet(
           initialPreferences: viewState.preferences,
           onPreferencesChanged: coordinator.change,
+          fontPreviewStyle: _typographyResolver
+              .resolve(
+                preferences: viewState.preferences,
+                resolvedFont: viewState.bodyFont,
+                theme: Theme.of(this.context),
+                palette: _themeResolver.resolve(
+                  preferences: viewState.preferences,
+                  theme: Theme.of(this.context),
+                ),
+              )
+              .body,
         ),
       );
       if (!mounted) {
@@ -2652,9 +2735,9 @@ class _NovelReaderChapterListSheetState
                           progressSnapshot: viewState.progressSnapshot,
                           bookmarkEpisodeIds: viewState.bookmarkEpisodeIds,
                           readingState: viewState.readingState,
-                          onTap: () => Navigator.of(
-                            context,
-                          ).pop(_NovelReaderCatalogSelection(episode)),
+                          onTap: () =>
+                              Navigator.of(context)
+                                  .pop(_NovelReaderCatalogSelection(episode)),
                           onLongPress: () async {
                             final fromBeginning =
                                 await showModalBottomSheet<bool>(
@@ -2663,9 +2746,8 @@ class _NovelReaderChapterListSheetState
                                     child: ListTile(
                                       leading: const Icon(Icons.restart_alt),
                                       title: Text(
-                                        AppLocalizations.of(
-                                          context,
-                                        ).libraryDetailStartFromBeginning,
+                                        AppLocalizations.of(context)
+                                            .libraryDetailStartFromBeginning,
                                       ),
                                       onTap: () =>
                                           Navigator.of(context).pop(true),

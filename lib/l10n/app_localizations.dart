@@ -9084,6 +9084,12 @@ abstract class AppLocalizations {
   /// **'字体'**
   String get fontSelectorTitle;
 
+  /// No description provided for @novelCustomFont.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义字体'**
+  String get novelCustomFont;
+
   /// No description provided for @fontSelectorImport.
   ///
   /// In zh, this message translates to:

@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -284,6 +286,112 @@ void main() {
     },
   );
 
+  testWidgets(
+    'font-only reflow reuses preparation and reports the new ready geometry',
+    (tester) async {
+      final preparer = _DeferredNovelHtmlChapterPreparer();
+      var ready = 0;
+      await tester.pumpWidget(
+        _host(
+          theme: _lightTheme,
+          preparer: preparer,
+          typography: _fontTypography('Y300ImportedFont_fixtureA'),
+          onContentReady: () => ready++,
+        ),
+      );
+      preparer.calls.single.completer.complete(
+        _prepared(theme: _lightTheme, text: '字体切换正文'),
+      );
+      await tester.pumpAndSettle();
+      final rendererFinder = find.byKey(
+        const Key('forum-html-renderer-episode-1'),
+      );
+      final rendererElement = tester.element(rendererFinder);
+      final oldBodyBuilt = tester
+          .widget<ForumHtmlWidgetPostRenderer>(
+            find.byType(ForumHtmlWidgetPostRenderer),
+          )
+          .onBodyBuilt;
+      expect(
+        tester.widget<HtmlWidget>(rendererFinder).textStyle?.fontFamily,
+        'Y300ImportedFont_fixtureA',
+      );
+      expect(ready, 1);
+
+      await tester.pumpWidget(
+        _host(
+          theme: _lightTheme,
+          preparer: preparer,
+          typography: _fontTypography('Y300ImportedFont_fixtureB'),
+          onContentReady: () => ready++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(preparer.calls, hasLength(1));
+      expect(tester.element(rendererFinder), same(rendererElement));
+      final style = tester.widget<HtmlWidget>(rendererFinder).textStyle!;
+      expect(style.fontFamily, 'Y300ImportedFont_fixtureB');
+      expect(style.fontSize, 20);
+      expect(style.height, 1.6);
+      expect(style.fontWeight, FontWeight.w400);
+      expect(ready, 2);
+      oldBodyBuilt?.call();
+      await tester.pump();
+      expect(ready, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'custom body font retains author emphasis and expanded collapse on reflow',
+    (tester) async {
+      const rawHtml =
+          '<p>默认正文</p>'
+          '<p style="font-family: AuthorFont; font-weight:700">'
+          '<i>作者强调</i></p>'
+          '<div id="font-collapse" class="showcollapse_box">'
+          '<div class="showcollapse_title">目录</div>'
+          '<div class="showcollapse_content">展开内容</div></div>';
+      Widget host(String family) => _host(
+        theme: _lightTheme,
+        preparer: const NovelHtmlChapterRenderPreparer(),
+        rawHtml: rawHtml,
+        typography: _fontTypography(family),
+      );
+
+      await tester.pumpWidget(host('Y300ImportedFont_fixtureA'));
+      await tester.pumpAndSettle();
+      expect(
+        _styleForText(tester, '默认正文').fontFamily,
+        'Y300ImportedFont_fixtureA',
+      );
+      final author = _styleForText(tester, '作者强调');
+      expect(author.fontFamily, 'AuthorFont');
+      expect(author.fontWeight, FontWeight.w700);
+      expect(author.fontStyle, FontStyle.italic);
+      await tester.tap(
+        find.byKey(
+          const Key('forum-html-collapse-toggle-episode-1-font-collapse'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('展开内容', findRichText: true), findsOneWidget);
+
+      await tester.pumpWidget(host('Y300ImportedFont_fixtureB'));
+      await tester.pumpAndSettle();
+      expect(
+        _styleForText(tester, '默认正文').fontFamily,
+        'Y300ImportedFont_fixtureB',
+      );
+      final changedAuthor = _styleForText(tester, '作者强调');
+      expect(changedAuthor.fontFamily, 'AuthorFont');
+      expect(changedAuthor.fontWeight, FontWeight.w700);
+      expect(changedAuthor.fontStyle, FontStyle.italic);
+      expect(find.textContaining('展开内容', findRichText: true), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('forwards links through the HTML-first reader callback', (
     tester,
   ) async {
@@ -350,6 +458,8 @@ Widget _host({
   String rawHtml = '<p>待准备正文</p>',
   ValueChanged<NovelReaderLink>? onLinkTap,
   ImageCacheService? imageCacheService,
+  NovelReaderTypography typography = _typography,
+  VoidCallback? onContentReady,
 }) {
   return ProviderScope(
     overrides: [
@@ -357,18 +467,56 @@ Widget _host({
         imageCacheServiceProvider.overrideWithValue(imageCacheService),
     ],
     child: LocalizedTestApp(
-      home: NovelReaderHtmlDocumentView(
-        rawHtml: rawHtml,
-        episode: _episode,
-        preferences: preferences ?? NovelReaderPreferences.defaults(),
-        typography: _typography,
-        theme: theme,
-        imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
-        onLinkTap: onLinkTap,
-        preparer: preparer,
+      home: Material(
+        child: NovelReaderHtmlDocumentView(
+          rawHtml: rawHtml,
+          episode: _episode,
+          preferences: preferences ?? NovelReaderPreferences.defaults(),
+          typography: typography,
+          theme: theme,
+          imageReferer: 'https://bbs.yamibo.com/thread-100-1-1.html',
+          onLinkTap: onLinkTap,
+          onContentReady: onContentReady,
+          preparer: preparer,
+        ),
       ),
     ),
   );
+}
+
+NovelReaderTypography _fontTypography(String family) => NovelReaderTypography(
+  body: TextStyle(
+    fontFamily: family,
+    color: _lightTheme.foreground,
+    fontSize: 20,
+    height: 1.6,
+    fontWeight: FontWeight.w400,
+  ),
+  chapterTitle: _typography.chapterTitle,
+  quote: _typography.quote,
+  link: _typography.link,
+  textAlign: TextAlign.start,
+  firstLineIndent: 0,
+  contentMaxWidth: 720,
+);
+
+TextStyle _styleForText(WidgetTester tester, String text) {
+  TextStyle? walk(InlineSpan span, TextStyle inherited) {
+    if (span is! TextSpan) return null;
+    final effective = inherited.merge(span.style);
+    if (span.text?.contains(text) == true) return effective;
+    for (final child in span.children ?? const <InlineSpan>[]) {
+      final style = walk(child, effective);
+      if (style != null) return style;
+    }
+    return null;
+  }
+
+  for (final richText in tester.widgetList<RichText>(find.byType(RichText))) {
+    final style = walk(richText.text, const TextStyle());
+    if (style != null) return style;
+  }
+  throw StateError('Expected rendered text: $text');
 }
 
 NovelHtmlPreparedChapter _prepared({

@@ -102,6 +102,10 @@ class _NovelReaderHtmlDocumentViewState
   @override
   Widget build(BuildContext context) {
     final preferences = widget.preferencesAdapter.map(widget.preferences);
+    final bodyStyle = ForumHtmlStylePolicy(
+      preferences,
+      theme: widget.theme,
+    ).baseTextStyle(context).merge(widget.typography.body);
     return KeyedSubtree(
       key: const Key('novel-reader-html-document-view'),
       child: DefaultTextStyle.merge(
@@ -130,7 +134,7 @@ class _NovelReaderHtmlDocumentViewState
                 ),
               );
             }
-            final signature = _signature;
+            final signature = _layoutIdentity;
             if (prepared.renderDocument.sequence.entries.isNotEmpty) {
               _imageHost ??= NovelReadingImageHost(
                 delegate: ref
@@ -165,10 +169,12 @@ class _NovelReaderHtmlDocumentViewState
               // visible range. No whole-chapter sync HtmlWidget build first.
               buildAsync: fragment == null ? null : false,
               enableCaching: true,
+              textStyle: bodyStyle,
+              textAlign: widget.typography.textAlign,
               collapseExpansion: _collapseExpansion,
               onBodyBuilt: () {
                 // An async HtmlWidget build can outlive its chapter/theme.
-                if (mounted && _signature == signature) {
+                if (mounted && _layoutIdentity == signature) {
                   _scheduleContentReady();
                 }
               },
@@ -202,6 +208,12 @@ class _NovelReaderHtmlDocumentViewState
 
   Widget _boxOrSliver(Widget child) =>
       widget.asSliver ? SliverToBoxAdapter(child: child) : child;
+
+  // Font-only changes reuse prepared HTML, but require a new ready signal for
+  // the resulting geometry. Older async body callbacks cannot confirm it.
+  Object? get _layoutIdentity => _signature == null
+      ? null
+      : (_signature, widget.typography.body, widget.typography.textAlign);
 
   void _ensureFuture() {
     final owner = (widget.episode.episodeId, widget.rawHtml);
@@ -244,13 +256,13 @@ class _NovelReaderHtmlDocumentViewState
   }
 
   void _scheduleContentReady() {
-    final signature = _signature;
+    final signature = _layoutIdentity;
     if (signature == null || _reportedReadySignature == signature) {
       return;
     }
     _reportedReadySignature = signature;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _signature == signature) {
+      if (mounted && _layoutIdentity == signature) {
         widget.onImagesReadyChanged?.call(_imageTracker.isReady);
         widget.onContentReady?.call();
       }
@@ -258,13 +270,13 @@ class _NovelReaderHtmlDocumentViewState
   }
 
   void _scheduleContentTerminal() {
-    final signature = _signature;
+    final signature = _layoutIdentity;
     if (signature == null || _reportedTerminalSignature == signature) {
       return;
     }
     _reportedTerminalSignature = signature;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _signature == signature) {
+      if (mounted && _layoutIdentity == signature) {
         widget.onContentTerminal?.call();
       }
     });

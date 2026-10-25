@@ -6,11 +6,80 @@ import 'package:y300/features/novel/presentation/models/novel_reader_conversion_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_background_work.dart';
 
-/// Projects a visible DOM position through a conversion of the same source.
+/// Retains a visible semantic position across typography-only reflow, or
+/// projects its DOM position through a conversion of the same source.
 /// Text identities remain checked on both sides; no old layout/page is reused.
 /// The result is a display hint and must remain read-only until user navigation.
 final class NovelReaderConversionRestoreService {
   const NovelReaderConversionRestoreService();
+
+  /// A typography-only reflow can retain the verified visible semantic point
+  /// without projecting through HTML or interpreting a previous page index.
+  NovelReaderTextAnchor? sameProjectionAnchor({
+    required NovelReaderConversionPosition source,
+    required String rawHtml,
+    required String conversionIdentity,
+    required NovelReaderPreparedChapter target,
+  }) {
+    final before = source.chapter;
+    final anchor = source.anchor;
+    if (rawHtml.isEmpty ||
+        source.rawHtml != rawHtml ||
+        source.conversionIdentity != conversionIdentity ||
+        before.episodeId != target.episodeId ||
+        anchor.episodeId != target.episodeId ||
+        before.contentHash != target.contentHash ||
+        before.html != target.html ||
+        before.legacyMarkupNormalization.revision !=
+            target.legacyMarkupNormalization.revision ||
+        !anchor.hasCanonicalTextOffset ||
+        !_coversAnchor(before, anchor) ||
+        !_coversAnchor(target, anchor)) {
+      return null;
+    }
+    return anchor;
+  }
+
+  bool _coversAnchor(
+    NovelReaderPreparedChapter chapter,
+    NovelReaderTextAnchor anchor,
+  ) {
+    var interiors = 0;
+    var ends = 0;
+    for (final unit in chapter.flowUnits) {
+      final start = unit.startAnchor;
+      final end = unit.endAnchor;
+      final projection = unit.sourceAnchorProjection;
+      if (projection == null ||
+          start.episodeId != anchor.episodeId ||
+          end.episodeId != anchor.episodeId ||
+          start.nodeId != anchor.nodeId ||
+          end.nodeId != anchor.nodeId ||
+          start.formatVersion != anchor.formatVersion ||
+          end.formatVersion != anchor.formatVersion ||
+          start.textIdentity != anchor.textIdentity ||
+          end.textIdentity != anchor.textIdentity ||
+          projection.baseAnchor.episodeId != anchor.episodeId ||
+          projection.baseAnchor.nodeId != anchor.nodeId ||
+          projection.baseAnchor.formatVersion != anchor.formatVersion ||
+          projection.baseAnchor.textIdentity != anchor.textIdentity ||
+          !projection.semanticOffsetsBySourceRuneBoundary.contains(
+            anchor.textOffset,
+          )) {
+        continue;
+      }
+      if (anchor.textOffset >= start.textOffset &&
+          (anchor.textOffset < end.textOffset ||
+              anchor.textOffset == start.textOffset)) {
+        interiors++;
+      } else if (anchor.textOffset == end.textOffset) {
+        ends++;
+      }
+    }
+    // Shared boundaries prefer the next unit; overlapping identities are not
+    // sufficient proof of a unique source location.
+    return interiors == 1 || (interiors == 0 && ends == 1);
+  }
 
   Future<NovelReaderTextAnchor?> projectInBackground({
     required NovelReaderConversionPosition source,

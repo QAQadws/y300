@@ -184,6 +184,8 @@ class NovelReaderPreferences {
   final double lineHeight;
   final double paragraphSpacing;
   final double pagePadding;
+
+  /// Persisted choice: `system` or a font content ID, never an engine family.
   final String fontFamily;
   final NovelReaderFlowMode flowMode;
   final NovelReaderThemePreset themePreset;

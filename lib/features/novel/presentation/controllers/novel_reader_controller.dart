@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:y300/features/fonts/fonts.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
@@ -88,6 +90,10 @@ class NovelReaderViewState {
     this.readingState,
     this.readingSurfaceRevision = 0,
     this.readingAuthorityRevision = 0,
+    this.fontResolution = const FontResolution(
+      requestedId: FontIdentity.system,
+      font: ResolvedFont.system,
+    ),
   });
 
   final NovelItem? novel;
@@ -110,6 +116,9 @@ class NovelReaderViewState {
   final NovelReadingStateSnapshot? readingState;
   final int readingSurfaceRevision;
   final int readingAuthorityRevision;
+  final FontResolution fontResolution;
+
+  ResolvedFont get bodyFont => fontResolution.font;
 
   int get currentEpisodeIndex {
     return episodes.indexWhere(
@@ -174,6 +183,7 @@ class NovelReaderViewState {
     NovelReaderDocument? document,
     NovelReaderPreferences? persistedPreferences,
     NovelReaderPreferences? effectivePreferences,
+    FontResolution? fontResolution,
     NovelReadingProgress? readingProgress,
     NovelReadingStateSnapshot? readingState,
     int? readingSurfaceRevision,
@@ -198,6 +208,7 @@ class NovelReaderViewState {
       document: document ?? this.document,
       persistedPreferences: persistedPreferences ?? this.persistedPreferences,
       effectivePreferences: effectivePreferences ?? this.effectivePreferences,
+      fontResolution: fontResolution ?? this.fontResolution,
       readingProgress: clearReadingProgress
           ? null
           : (readingProgress ?? this.readingProgress),
@@ -247,6 +258,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   int _readingRefreshSerial = 0;
   int _preferenceCommitSerial = 0;
   int _preferenceWritesInFlight = 0;
+  int _fontPreviewSerial = 0;
+  bool _fontPreviewPending = false;
+
+  int get fontPreferenceRevision => _fontPreviewSerial;
   // A refreshed state may load its baseline before an older write reaches disk.
   bool _persistedPreferenceSnapshotDirty = false;
   final Map<
@@ -276,6 +291,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     // Rebuild retires old progress completions before the new load finishes,
     // including a reload that returns to the same episode on this notifier.
     final sessionToken = ++_activeSessionToken;
+    _fontPreviewSerial++;
+    _fontPreviewPending = false;
     _readingSession.retire();
     _preferenceDocumentFlights.clear();
     _transitionRequestSerial += 1;
@@ -284,8 +301,15 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
     _preferenceCommitSerial += 1;
     final progressCommitter = ref.read(novelReaderProgressCommitterProvider);
+    final fontChanges = ref.read(fontLibraryServiceProvider).changes.listen((
+      _,
+    ) {
+      unawaited(_refreshBodyFont());
+    });
     ref.onDispose(() {
       _activeSessionToken += 1;
+      _fontPreviewSerial++;
+      unawaited(fontChanges.cancel());
       _preferenceDocumentFlights.clear();
       _transitionRequestSerial += 1;
       if (_preferenceWritesInFlight > 0) {
@@ -308,36 +332,91 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
   void previewPreferences(NovelReaderPreferences next) {
     final current = state.value;
-    if (current == null) {
+    if (current == null || state.isLoading) {
       return;
     }
-    final effectiveNext = next;
+    final serial = ++_fontPreviewSerial;
+    if (next.fontFamily != current.bodyFont.id) {
+      _fontPreviewPending = true;
+      unawaited(_previewFontPreferences(next, serial, _activeSessionToken));
+      return;
+    }
+    _fontPreviewPending = false;
+    _publishPreferencePreview(
+      next,
+      FontResolution(requestedId: next.fontFamily, font: current.bodyFont),
+    );
+  }
+
+  Future<void> _previewFontPreferences(
+    NovelReaderPreferences next,
+    int serial,
+    int sessionToken,
+  ) async {
+    final resolution = await _resolveReaderFont(next.fontFamily);
+    if (!ref.mounted ||
+        serial != _fontPreviewSerial ||
+        sessionToken != _activeSessionToken ||
+        state.isLoading) {
+      return;
+    }
+    _fontPreviewPending = false;
+    _publishPreferencePreview(next, resolution);
+  }
+
+  void _publishPreferencePreview(
+    NovelReaderPreferences next,
+    FontResolution resolution,
+  ) {
+    final current = state.value;
+    if (current == null) return;
+    final effectiveNext = next.copyWith(fontFamily: resolution.font.id);
     final diff = _preferenceImpactAnalyzer.compare(
       current.effectivePreferences,
       effectiveNext,
     );
-    if (diff.hasChanges) {
-      state = AsyncData(current.copyWith(effectivePreferences: effectiveNext));
+    if (diff.hasChanges ||
+        current.fontResolution.font != resolution.font ||
+        current.fontResolution.failure != resolution.failure ||
+        current.fontResolution.requestedId != resolution.requestedId) {
+      state = AsyncData(
+        current.copyWith(
+          effectivePreferences: effectiveNext,
+          fontResolution: resolution,
+        ),
+      );
     }
     if (current.document.textConversionIdentity !=
         effectiveNext.conversionMode.name) {
       // Persistence owns error presentation; preview work must not produce an
       // unhandled error or delay the next selection/reader session.
       unawaited(
-        _resolvePreferenceDocument(
-          effectiveNext,
-        ).then<void>((_) {}, onError: (Object error, StackTrace stack) {}),
+        _resolvePreferenceDocument(effectiveNext)
+            .then<void>((_) {}, onError: (Object error, StackTrace stack) {}),
       );
     }
   }
 
-  Future<void> commitPreferences(NovelReaderPreferences next) async {
+  Future<void> commitPreferences(NovelReaderPreferences requested) async {
     final current = state.value;
     if (current == null) {
       return;
     }
     final commitSerial = ++_preferenceCommitSerial;
     final sessionToken = _activeSessionToken;
+    final previewSerial = _fontPreviewSerial;
+    final resolution = requested.fontFamily == FontIdentity.system
+        ? const FontResolution(
+            requestedId: FontIdentity.system,
+            font: ResolvedFont.system,
+          )
+        : await _resolveReaderFont(requested.fontFamily);
+    if (!ref.mounted ||
+        commitSerial != _preferenceCommitSerial ||
+        sessionToken != _activeSessionToken) {
+      return;
+    }
+    final next = requested.copyWith(fontFamily: resolution.font.id);
     final persistedDiff = _preferenceImpactAnalyzer.compare(
       current.persistedPreferences,
       next,
@@ -346,7 +425,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         !_persistedPreferenceSnapshotDirty &&
         _preferenceWritesInFlight == 0) {
       final persistedEffective = current.persistedPreferences;
-      previewPreferences(persistedEffective);
+      if (previewSerial == _fontPreviewSerial) {
+        previewPreferences(persistedEffective);
+      }
       return;
     }
     NovelReaderDocument? convertedDocument;
@@ -375,6 +456,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final latest = state.value ?? current;
     final effectivePreferences =
         sessionToken == _activeSessionToken &&
+            previewSerial == _fontPreviewSerial &&
             latest.effectivePreferences == current.effectivePreferences
         ? next
         : latest.effectivePreferences;
@@ -382,6 +464,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       latest.copyWith(
         persistedPreferences: next,
         effectivePreferences: effectivePreferences,
+        fontResolution: effectivePreferences.fontFamily == resolution.font.id
+            ? resolution
+            : latest.fontResolution,
         document:
             sessionToken == _activeSessionToken &&
                 identical(latest.currentContent, current.currentContent) &&
@@ -390,6 +475,50 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
             : null,
       ),
     );
+  }
+
+  Future<FontResolution> _resolveReaderFont(String fontId) {
+    if (fontId == FontIdentity.system || !ref.mounted) {
+      return Future.value(
+        const FontResolution(
+          requestedId: FontIdentity.system,
+          font: ResolvedFont.system,
+        ),
+      );
+    }
+    return ref.read(fontLibraryServiceProvider).resolveFont(fontId);
+  }
+
+  Future<void> _refreshBodyFont() async {
+    final current = state.value;
+    if (current == null || state.isLoading || _fontPreviewPending) {
+      return;
+    }
+    final fontId = current.bodyFont.isSystem
+        ? (current.fontResolution.failure != null &&
+                  current.persistedPreferences.fontFamily ==
+                      current.fontResolution.requestedId
+              ? current.fontResolution.requestedId
+              : FontIdentity.system)
+        : current.bodyFont.id;
+    if (fontId == FontIdentity.system) return;
+    final serial = ++_fontPreviewSerial;
+    final sessionToken = _activeSessionToken;
+    final resolution = await _resolveReaderFont(fontId);
+    if (!ref.mounted ||
+        serial != _fontPreviewSerial ||
+        sessionToken != _activeSessionToken ||
+        state.isLoading) {
+      return;
+    }
+    final latest = state.value;
+    if (latest == null ||
+        latest.bodyFont.id != current.bodyFont.id ||
+        latest.fontResolution.requestedId !=
+            current.fontResolution.requestedId) {
+      return;
+    }
+    _publishPreferencePreview(latest.effectivePreferences, resolution);
   }
 
   Future<NovelReaderDocument> _resolvePreferenceDocument(
@@ -833,16 +962,20 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       openPolicy: openPolicy,
       preservedProgress: preservedProgress,
     );
-    final critical = await _loadCriticalBootstrap(context);
+    final loaded = await _loadCriticalBootstrap(context);
+    final critical = loaded.critical;
     if (!ref.mounted || loadingSessionToken != _activeSessionToken) {
-      return _initialStateFromCritical(critical);
+      return _initialStateFromCritical(critical, fontResolution: loaded.font);
     }
     _markBeginningCommitIfNeeded(
       episodeId: critical.currentEpisode.episodeId,
       openPolicy: openPolicy,
     );
     _beginReadingSession(critical, openPolicy);
-    final viewState = _initialStateFromCritical(critical);
+    final viewState = _initialStateFromCritical(
+      critical,
+      fontResolution: loaded.font,
+    );
     _scheduleHydrateSupplemental(
       context: context,
       critical: critical,
@@ -851,10 +984,15 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     return viewState;
   }
 
-  Future<NovelReaderCriticalBootstrap> _loadCriticalBootstrap(
-    NovelReaderLoadContext context,
-  ) {
-    return ref.read(novelReaderBootstrapServiceProvider).loadCritical(context);
+  Future<({NovelReaderCriticalBootstrap critical, FontResolution font})>
+  _loadCriticalBootstrap(NovelReaderLoadContext context) async {
+    final critical = await ref
+        .read(novelReaderBootstrapServiceProvider)
+        .loadCritical(context);
+    final font = await _resolveReaderFont(
+      critical.effectivePreferences.fontFamily,
+    );
+    return (critical: critical, font: font);
   }
 
   Future<bool> _runEpisodeTransition({
@@ -897,7 +1035,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
           return false;
         }
       }
-      final critical = await _loadCriticalBootstrap(context);
+      final loaded = await _loadCriticalBootstrap(context);
+      final critical = loaded.critical;
       if (!ref.mounted || serial != _transitionRequestSerial) {
         return false;
       }
@@ -906,6 +1045,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       final nextState = _transitionedStateFromCritical(
         previous: current,
         critical: critical,
+        fontResolution: loaded.font,
       );
       state = AsyncData(nextState);
       _beginReadingSession(critical, openPolicy);
@@ -1087,8 +1227,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   }
 
   NovelReaderViewState _initialStateFromCritical(
-    NovelReaderCriticalBootstrap critical,
-  ) {
+    NovelReaderCriticalBootstrap critical, {
+    required FontResolution fontResolution,
+  }) {
     return NovelReaderViewState(
       novel: null,
       episodes: critical.episodes,
@@ -1096,7 +1237,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       currentContent: critical.currentContent,
       document: critical.document,
       persistedPreferences: critical.persistedPreferences,
-      effectivePreferences: critical.effectivePreferences,
+      effectivePreferences: critical.effectivePreferences.copyWith(
+        fontFamily: fontResolution.font.id,
+      ),
+      fontResolution: fontResolution,
       readingProgress: critical.readingProgress,
       readingState: critical.readingState,
       progressSnapshot: critical.progressSnapshot,
@@ -1113,6 +1257,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   NovelReaderViewState _transitionedStateFromCritical({
     required NovelReaderViewState previous,
     required NovelReaderCriticalBootstrap critical,
+    required FontResolution fontResolution,
   }) {
     final currentEpisodeBookmarks = _bookmarksForEpisode(
       previous.bookmarks,
@@ -1125,7 +1270,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       currentContent: critical.currentContent,
       document: critical.document,
       persistedPreferences: critical.persistedPreferences,
-      effectivePreferences: critical.effectivePreferences,
+      effectivePreferences: critical.effectivePreferences.copyWith(
+        fontFamily: fontResolution.font.id,
+      ),
+      fontResolution: fontResolution,
       readingProgress: critical.readingProgress,
       readingState: critical.readingState,
       progressSnapshot: critical.progressSnapshot,

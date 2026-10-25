@@ -5,11 +5,93 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_conversion_restore_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
 
 void main() {
   const service = NovelReaderConversionRestoreService();
+
+  test('same-projection reflow retains the verified semantic point', () {
+    const html = '<p>前👩‍👩‍👧‍👦臺正文。</p><p>尾段。</p>';
+    final before = _chapter(html);
+    final after = _chapter(html);
+    final anchor = before.flowUnits.first.startAnchor.copyWith(textOffset: 8);
+    expect(
+      service.sameProjectionAnchor(
+        source: _position(html, before, anchor),
+        rawHtml: html,
+        conversionIdentity: 'none',
+        target: after,
+      ),
+      same(anchor),
+    );
+  });
+
+  test('same-projection reflow accepts a covered terminal boundary', () {
+    const html = '<p>正文。</p>';
+    final chapter = _chapter(html);
+    final anchor = chapter.flowUnits.single.endAnchor;
+    expect(
+      service.sameProjectionAnchor(
+        source: _position(html, chapter, anchor),
+        rawHtml: html,
+        conversionIdentity: 'none',
+        target: chapter,
+      ),
+      same(anchor),
+    );
+  });
+
+  for (final reason in [
+    'raw source',
+    'conversion',
+    'chapter',
+    'prepared HTML',
+    'content hash',
+    'normalizer revision',
+    'legacy format',
+    'future format',
+    'text identity',
+    'coverage',
+    'target coverage',
+    'ambiguous coverage',
+  ]) {
+    test('same-projection reflow rejects mismatched $reason', () {
+      const html = '<p>正文。</p><p>尾段。</p>';
+      final before = _chapter(html);
+      var anchor = before.flowUnits.first.startAnchor;
+      if (reason == 'legacy format') anchor = anchor.copyWith(formatVersion: 0);
+      if (reason == 'future format') {
+        anchor = anchor.copyWith(formatVersion: 99);
+      }
+      if (reason == 'text identity') {
+        anchor = anchor.copyWith(textIdentity: 'other');
+      }
+      if (reason == 'coverage') anchor = anchor.copyWith(textOffset: 999);
+      var after = _chapter(
+        reason == 'prepared HTML' ? '<p>正文改变。</p><p>尾段。</p>' : html,
+        episodeId: reason == 'chapter' ? 'other' : 'episode',
+        contentHash: reason == 'content hash' ? 'different' : html,
+        normalizerRevision: reason == 'normalizer revision' ? 17 : 0,
+      );
+      if (reason == 'target coverage') {
+        after = _withUnits(after, after.flowUnits.skip(1).toList());
+      }
+      if (reason == 'ambiguous coverage') {
+        after = _withUnits(after, [...after.flowUnits, after.flowUnits.first]);
+      }
+      expect(
+        service.sameProjectionAnchor(
+          source: _position(html, before, anchor),
+          rawHtml: reason == 'raw source' ? '$html<p>新增。</p>' : html,
+          conversionIdentity: reason == 'conversion' ? 'toSimplified' : 'none',
+          target: after,
+        ),
+        isNull,
+      );
+    });
+  }
 
   test(
     'maps a semantic code-point boundary through inline DOM and normalization',
@@ -244,6 +326,8 @@ NovelReaderConversionPosition _position(
 NovelReaderPreparedChapter _chapter(
   String html, {
   String episodeId = 'episode',
+  String? contentHash,
+  int normalizerRevision = 0,
 }) {
   final rendered = const DefaultForumHtmlRenderPreparer().prepare(
     html: html,
@@ -269,7 +353,7 @@ NovelReaderPreparedChapter _chapter(
   );
   return NovelReaderPreparedChapter(
     episodeId: episodeId,
-    contentHash: html,
+    contentHash: contentHash ?? html,
     html: rendered.preparedHtml,
     renderDocument: rendered,
     flowUnits: const DefaultNovelReaderHtmlFlowUnitExtractor().extract(
@@ -280,5 +364,24 @@ NovelReaderPreparedChapter _chapter(
     themeSignature: rendered.themeSignature,
     imageDimensionRevision: 0,
     convertedTextNodeCount: 0,
+    legacyMarkupNormalization: NovelReaderLegacyMarkupNormalizationSummary(
+      revision: normalizerRevision,
+      normalizedAttributeCount: 0,
+    ),
   );
 }
+
+NovelReaderPreparedChapter _withUnits(
+  NovelReaderPreparedChapter chapter,
+  List<NovelReaderFlowUnit> units,
+) => NovelReaderPreparedChapter(
+  episodeId: chapter.episodeId,
+  contentHash: chapter.contentHash,
+  html: chapter.html,
+  renderDocument: chapter.renderDocument,
+  flowUnits: units,
+  themeSignature: chapter.themeSignature,
+  imageDimensionRevision: chapter.imageDimensionRevision,
+  convertedTextNodeCount: chapter.convertedTextNodeCount,
+  legacyMarkupNormalization: chapter.legacyMarkupNormalization,
+);

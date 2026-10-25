@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 
 class NovelReaderPalette {
@@ -107,10 +108,11 @@ class NovelReaderTypographyResolver {
     required NovelReaderPreferences preferences,
     required ThemeData theme,
     required NovelReaderPalette palette,
+    ResolvedFont? resolvedFont,
   }) {
-    final fontFamily = preferences.fontFamily == 'system'
-        ? null
-        : preferences.fontFamily;
+    // Preferences store content identity. Only a completed runtime resolution
+    // may provide a family name to the renderer or its measurement paths.
+    final fontFamily = (resolvedFont ?? ResolvedFont.system).fontFamily;
     final body = TextStyle(
       color: palette.foreground,
       fontSize: preferences.fontSize,

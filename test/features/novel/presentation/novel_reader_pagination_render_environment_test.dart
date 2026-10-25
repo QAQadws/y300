@@ -96,6 +96,58 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'family-only changes invalidate layout and preserve probe style',
+    (tester) async {
+      late NovelReaderPaginationRenderEnvironment environment;
+      Future<NovelReaderPaginationRenderEnvironment> capture(
+        String family,
+      ) async {
+        await tester.pumpWidget(
+          _captureApp(
+            onCapture: (value) => environment = value,
+            style: TextStyle(
+              fontSize: 20,
+              height: 1.5,
+              fontFamily: family,
+              fontWeight: FontWeight.w500,
+            ),
+            alignment: TextAlign.justify,
+            direction: TextDirection.ltr,
+            scaler: const TextScaler.linear(1.3),
+          ),
+        );
+        return environment;
+      }
+
+      final first = await capture('Y300ImportedFont_fixtureA');
+      final equivalent = await capture('Y300ImportedFont_fixtureA');
+      final second = await capture('Y300ImportedFont_fixtureB');
+      expect(equivalent.layoutSignature, first.layoutSignature);
+      expect(second.layoutSignature, isNot(first.layoutSignature));
+      expect(second.sessionSignature, isNot(first.sessionSignature));
+      late BuildContext probeContext;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: environment.wrap(
+            Builder(
+              builder: (context) {
+                probeContext = context;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      final probe = DefaultTextStyle.of(probeContext).style;
+      expect(probe.fontFamily, 'Y300ImportedFont_fixtureB');
+      expect(probe.fontWeight, FontWeight.w500);
+      expect(probe.fontSize, 20);
+      expect(probe.height, 1.5);
+      expect(MediaQuery.textScalerOf(probeContext).scale(20), 26);
+    },
+  );
 }
 
 Widget _captureApp({

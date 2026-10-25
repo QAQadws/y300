@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
@@ -13,10 +14,12 @@ class NovelReaderDisplaySettingsSheet extends StatefulWidget {
     super.key,
     required this.initialPreferences,
     required this.onPreferencesChanged,
+    this.fontPreviewStyle,
   });
 
   final NovelReaderPreferences initialPreferences;
   final ValueChanged<NovelReaderPreferences> onPreferencesChanged;
+  final TextStyle? fontPreviewStyle;
 
   @override
   State<NovelReaderDisplaySettingsSheet> createState() =>
@@ -26,11 +29,27 @@ class NovelReaderDisplaySettingsSheet extends StatefulWidget {
 class _NovelReaderDisplaySettingsSheetState
     extends State<NovelReaderDisplaySettingsSheet> {
   late NovelReaderPreferences _draft;
+  int _fontRequest = 0;
+  bool _isChoosingFont = false;
 
   @override
   void initState() {
     super.initState();
     _draft = widget.initialPreferences;
+  }
+
+  @override
+  void didUpdateWidget(covariant NovelReaderDisplaySettingsSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialPreferences != widget.initialPreferences ||
+        oldWidget.onPreferencesChanged != widget.onPreferencesChanged) {
+      // A replacement settings owner must not receive the old picker's result.
+      _fontRequest++;
+      _isChoosingFont = false;
+      if (oldWidget.initialPreferences != widget.initialPreferences) {
+        _draft = widget.initialPreferences;
+      }
+    }
   }
 
   @override
@@ -52,6 +71,18 @@ class _NovelReaderDisplaySettingsSheetState
               _SettingsSection(
                 title: l10n.novelTypography,
                 children: [
+                  ListTile(
+                    key: const Key('novel-reader-font-selector'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    title: Text(l10n.fontSelectorTitle),
+                    subtitle: Text(
+                      _draft.fontFamily == FontIdentity.system
+                          ? l10n.fontSelectorSystemDefault
+                          : l10n.novelCustomFont,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _isChoosingFont ? null : _chooseFont,
+                  ),
                   _SettingsSlider(
                     key: const Key('novel-reader-font-size-slider'),
                     label: l10n.novelFontSize,
@@ -227,6 +258,34 @@ class _NovelReaderDisplaySettingsSheetState
       _draft = next;
     });
     widget.onPreferencesChanged(next);
+  }
+
+  Future<void> _chooseFont() async {
+    if (_isChoosingFont) return;
+    final request = ++_fontRequest;
+    setState(() => _isChoosingFont = true);
+    try {
+      final selected = await showBodyFontSelector(
+        context: context,
+        initialFontId: _draft.fontFamily,
+        previewStyle: (widget.fontPreviewStyle ?? const TextStyle()).copyWith(
+          fontSize: _draft.fontSize,
+          height: _draft.lineHeight,
+        ),
+      );
+      if (!mounted || request != _fontRequest || selected == null) return;
+      _applyPreferences(_draft.copyWith(fontFamily: selected.id));
+    } finally {
+      if (mounted && request == _fontRequest) {
+        setState(() => _isChoosingFont = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _fontRequest++;
+    super.dispose();
   }
 
   double _snap(double value, double step) {

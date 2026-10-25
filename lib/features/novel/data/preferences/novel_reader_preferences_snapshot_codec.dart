@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 
 final class NovelReaderPreferencesSnapshotCodec {
@@ -19,6 +20,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       'schemaVersion': schemaVersion,
       'fontSize': normalized.fontSize,
       'lineHeight': normalized.lineHeight,
+      'fontFamily': normalized.fontFamily,
       'flowMode': normalized.flowMode.storageValue,
       'themePreset': normalized.themePreset.storageValue,
       'conversionMode': normalized.conversionMode.storageValue,
@@ -50,6 +52,7 @@ final class NovelReaderPreferencesSnapshotCodec {
           max: maximumLineHeight,
           fallback: defaults.lineHeight,
         ),
+        fontFamily: _fontId(decoded['fontFamily']),
         // A persisted schema-1 snapshot predates the new-reader default.
         // Preserve its former implicit vertical mode when this field is
         // absent or unknown instead of silently migrating an existing user.
@@ -84,6 +87,7 @@ final class NovelReaderPreferencesSnapshotCodec {
         max: maximumLineHeight,
         fallback: defaults.lineHeight,
       ),
+      fontFamily: _fontId(preferences.fontFamily),
       flowMode: preferences.flowMode,
       themePreset: preferences.themePreset,
       conversionMode: preferences.conversionMode,
@@ -103,6 +107,9 @@ final class NovelReaderPreferencesSnapshotCodec {
     }
     return value;
   }
+
+  String _fontId(Object? raw) =>
+      raw is String && FontIdentity.isImported(raw) ? raw : FontIdentity.system;
 
   bool _validBool(Object? raw, {required bool fallback}) {
     return raw is bool ? raw : fallback;

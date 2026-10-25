@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/fonts/fonts.dart';
+import 'package:y300/features/fonts/domain/repositories/font_library_repository.dart';
+import 'package:y300/features/fonts/domain/services/font_runtime_loader.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/repositories/library_state_repository.dart';
@@ -35,6 +39,180 @@ import 'package:y300/features/novel/presentation/services/novel_reader_progress_
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 
 void main() {
+  group('imported novel fonts', () {
+    late _FontRepositoryForNovel fonts;
+    late _DelayedFontRuntime runtime;
+    late FontLibraryService fontService;
+    late _ControllerNovelRepository repository;
+    late ProviderContainer container;
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+
+    setUp(() {
+      fonts = _FontRepositoryForNovel();
+      runtime = _DelayedFontRuntime();
+      fontService = FontLibraryService(
+        repository: fonts,
+        runtimeLoader: runtime,
+      );
+      repository = _ControllerNovelRepository();
+      container = _buildContainer(
+        repository: repository,
+        fontService: fontService,
+      );
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+    });
+
+    tearDown(() async {
+      container.dispose();
+      fontService.dispose();
+      await fonts.dispose();
+    });
+
+    test(
+      'cold start waits for the persisted font before publishing text',
+      () async {
+        repository.preferences = repository.preferences.copyWith(
+          fontFamily: fonts.firstId,
+        );
+        final gate = runtime.block(fonts.firstId);
+        final loading = container.read(provider.future);
+        await runtime.started(fonts.firstId);
+        expect(container.read(provider).isLoading, isTrue);
+        gate.complete(FontIdentity.runtimeFamily(fonts.firstId));
+        final loaded = await loading;
+        expect(loaded.preferences.fontFamily, fonts.firstId);
+        expect(
+          loaded.bodyFont.fontFamily,
+          FontIdentity.runtimeFamily(fonts.firstId),
+        );
+      },
+    );
+
+    test('a later preview supersedes an older font still loading', () async {
+      final loaded = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      final gate = runtime.block(fonts.firstId);
+      controller.previewPreferences(
+        loaded.preferences.copyWith(fontFamily: fonts.firstId),
+      );
+      await runtime.started(fonts.firstId);
+      expect(container.read(provider).value!.bodyFont.isSystem, isTrue);
+      controller.previewPreferences(
+        loaded.preferences.copyWith(fontFamily: fonts.secondId),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(provider).value!.bodyFont.id, fonts.secondId);
+      gate.complete(FontIdentity.runtimeFamily(fonts.firstId));
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        container.read(provider).value!.preferences.fontFamily,
+        fonts.secondId,
+      );
+      expect(container.read(provider).value!.bodyFont.id, fonts.secondId);
+    });
+
+    test(
+      'older save cannot publish over a newer pending font preview',
+      () async {
+        final loaded = await container.read(provider.future);
+        final controller = container.read(provider.notifier);
+        final firstGate = runtime.block(fonts.firstId);
+        final secondGate = runtime.block(fonts.secondId);
+        final first = loaded.preferences.copyWith(fontFamily: fonts.firstId);
+        controller.previewPreferences(first);
+        final saving = controller.commitPreferences(first);
+        await runtime.started(fonts.firstId);
+        controller.previewPreferences(
+          loaded.preferences.copyWith(fontFamily: fonts.secondId),
+        );
+        await runtime.started(fonts.secondId);
+        firstGate.complete(FontIdentity.runtimeFamily(fonts.firstId));
+        await saving;
+        expect(container.read(provider).value!.bodyFont.isSystem, isTrue);
+        secondGate.complete(FontIdentity.runtimeFamily(fonts.secondId));
+        await Future<void>.delayed(Duration.zero);
+        expect(container.read(provider).value!.bodyFont.id, fonts.secondId);
+      },
+    );
+
+    test(
+      'deleted active font falls back without altering the reading snapshot',
+      () async {
+        repository.preferences = repository.preferences.copyWith(
+          fontFamily: fonts.firstId,
+        );
+        final loaded = await container.read(provider.future);
+        await fontService.deleteFont(fonts.firstId);
+        await Future<void>.delayed(Duration.zero);
+        final latest = container.read(provider).value!;
+        expect(latest.bodyFont.isSystem, isTrue);
+        expect(latest.preferences.fontFamily, FontIdentity.system);
+        expect(latest.fontResolution.failure, FontLibraryFailure.notFound);
+        expect(latest.fontResolution.requestedId, fonts.firstId);
+        expect(latest.progressSnapshot, loaded.progressSnapshot);
+        expect(identical(latest.document, loaded.document), isTrue);
+      },
+    );
+
+    test(
+      'missing saved font retains unrelated preferences on system fallback',
+      () async {
+        repository.preferences = repository.preferences.copyWith(
+          fontFamily: fonts.firstId,
+          fontSize: 23,
+          lineHeight: 1.9,
+        );
+        await fontService.deleteFont(fonts.firstId);
+        final loaded = await container.read(provider.future);
+        expect(loaded.bodyFont.isSystem, isTrue);
+        expect(loaded.preferences.fontSize, 23);
+        expect(loaded.preferences.lineHeight, 1.9);
+        expect(loaded.fontResolution.failure, FontLibraryFailure.notFound);
+        await container
+            .read(provider.notifier)
+            .commitPreferences(loaded.preferences);
+        expect(repository.preferences.fontFamily, FontIdentity.system);
+        expect(repository.preferences.fontSize, 23);
+      },
+    );
+
+    test('catalog repair retries a temporarily unavailable saved font', () async {
+      repository.preferences = repository.preferences.copyWith(fontFamily: fonts.firstId);
+      fonts.failReads = true;
+      final loaded = await container.read(provider.future);
+      expect(loaded.bodyFont.isSystem, isTrue);
+      expect(loaded.persistedPreferences.fontFamily, fonts.firstId);
+      expect(loaded.fontResolution.failure, FontLibraryFailure.storage);
+      fonts.failReads = false;
+      fonts.announceChange();
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(provider).value!.bodyFont.id, fonts.firstId);
+      expect(container.read(provider).value!.preferences.fontFamily, fonts.firstId);
+    });
+
+    test('chapter navigation retires a pending font preview', () async {
+      final loaded = await container.read(provider.future);
+      final controller = container.read(provider.notifier);
+      final gate = runtime.block(fonts.firstId);
+      controller.previewPreferences(
+        loaded.preferences.copyWith(fontFamily: fonts.firstId),
+      );
+      await runtime.started(fonts.firstId);
+      await controller.openEpisodeFromCatalog('novel:49:100:5002');
+      gate.complete(FontIdentity.runtimeFamily(fonts.firstId));
+      await Future<void>.delayed(Duration.zero);
+      final latest = container.read(provider).value!;
+      expect(latest.currentEpisode.episodeId, 'novel:49:100:5002');
+      expect(latest.bodyFont.isSystem, isTrue);
+      expect(latest.preferences.fontFamily, FontIdentity.system);
+    });
+  });
+
   test('NovelReaderViewState derives episode boundaries', () {
     final episodes = _episodes();
 
@@ -2291,9 +2469,12 @@ ProviderContainer _buildContainer({
   NovelReaderDocumentBuildService? documentBuildService,
   NovelReaderProgressCommitter? progressCommitter,
   NovelChapterUpdateService? chapterUpdateService,
+  FontLibraryService? fontService,
 }) {
   return ProviderContainer(
     overrides: [
+      if (fontService != null)
+        fontLibraryServiceProvider.overrideWithValue(fontService),
       novelRepositoryProvider.overrideWithValue(repository),
       novelReaderPreferencesRepositoryProvider.overrideWithValue(
         preferencesRepository ??
@@ -2721,6 +2902,72 @@ class _ControllerNovelRepository implements NovelRepository {
         ),
       );
     }
+  }
+}
+
+final class _FontRepositoryForNovel implements FontLibraryRepository {
+  final firstId = 'a' * 64;
+  final secondId = 'b' * 64;
+  late final entries = <String, ImportedFont>{
+    for (final id in [firstId, secondId])
+      id: ImportedFont(
+        id: id,
+        displayName: 'test font',
+        storageFileName: '$id.ttf',
+        byteLength: 1,
+      ),
+  };
+  final _changes = StreamController<void>.broadcast(sync: true);
+  bool failReads = false;
+
+  void announceChange() => _changes.add(null);
+
+  @override
+  Stream<void> get changes => _changes.stream;
+
+  @override
+  Future<List<ImportedFont>> listFonts() async => entries.values.toList();
+
+  @override
+  Future<Uint8List> readFont(String fontId) async {
+    if (failReads) throw const FontLibraryException(FontLibraryFailure.storage);
+    if (!entries.containsKey(fontId)) {
+      throw const FontLibraryException(FontLibraryFailure.notFound);
+    }
+    return Uint8List(1);
+  }
+
+  @override
+  Future<void> deleteFont(String fontId) async {
+    entries.remove(fontId);
+    _changes.add(null);
+  }
+
+  @override
+  Future<ImportedFont> importFont({
+    required String fileName,
+    required Uint8List bytes,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> dispose() => _changes.close();
+}
+
+final class _DelayedFontRuntime implements FontRuntimeLoader {
+  final _gates = <String, Completer<String>>{};
+  final _started = <String, Completer<void>>{};
+
+  Completer<String> block(String id) =>
+      _gates.putIfAbsent(id, Completer<String>.new);
+  Future<void> started(String id) =>
+      _started.putIfAbsent(id, Completer<void>.new).future;
+
+  @override
+  Future<String> load(ImportedFont font, Uint8List bytes) {
+    final began = _started.putIfAbsent(font.id, Completer<void>.new);
+    if (!began.isCompleted) began.complete();
+    return _gates[font.id]?.future ??
+        Future.value(FontIdentity.runtimeFamily(font.id));
   }
 }
 

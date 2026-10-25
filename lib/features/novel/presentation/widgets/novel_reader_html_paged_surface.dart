@@ -266,6 +266,7 @@ class _NovelReaderHtmlPagedSurfaceState
   int _demandPageIndex = 0;
   int? _pendingForwardPage;
   NovelReaderTextAnchor? _conversionRestoreAnchor;
+  NovelReaderPaginationKey? _sameProjectionRestoreLayoutKey;
 
   @override
   void initState() {
@@ -455,6 +456,23 @@ class _NovelReaderHtmlPagedSurfaceState
                   bottomChromeInset,
                 ),
               );
+              if (_sameProjectionRestoreLayoutKey != key) {
+                _sameProjectionRestoreLayoutKey = key;
+                if (_planKey != null && _planKey != key) {
+                  final visible = widget.conversionPosition;
+                  if (visible != null) {
+                    final anchor = const NovelReaderConversionRestoreService()
+                        .sameProjectionAnchor(
+                          source: visible,
+                          rawHtml: widget.rawHtml,
+                          conversionIdentity:
+                              widget.preferences.conversionMode.name,
+                          target: prepared,
+                        );
+                    if (anchor != null) _conversionRestoreAnchor = anchor;
+                  }
+                }
+              }
               _ensurePlanStream(
                 context: context,
                 prepared: prepared,
@@ -713,7 +731,7 @@ class _NovelReaderHtmlPagedSurfaceState
                                 _planKey == plan.key &&
                                 _requestGeneration == requestGeneration) {
                               _visiblePosition = position;
-                              if (!position.isReadOnlyCompatibilityRestore) {
+                              if (position.hasUserNavigated) {
                                 _conversionRestoreGeneration++;
                                 _conversionRestoreAnchor = null;
                               }
@@ -1134,6 +1152,7 @@ class _NovelReaderHtmlPagedSurfaceState
   }
 
   Object _navigationIdentity(NovelReaderHtmlPagedSurface surface) => (
+    surface.readingAuthorityIdentity,
     surface.navigationRequest?.requestId,
     surface.chapterEntryRequest?.requestId,
   );
@@ -1175,8 +1194,7 @@ class _NovelReaderHtmlPagedSurfaceState
         _pausePagination(
           const NovelReaderPaginationException(
             code: 'targetPageWaitExceeded',
-            message:
-                'The requested page is not available within the waiting budget.',
+            message: 'The requested page is not available within the waiting budget.',
           ),
         );
       }
@@ -1426,17 +1444,26 @@ class _NovelReaderHtmlPagedSurfaceState
           refresh: _refreshPreparation,
         )
         .then((prepared) async {
-          final anchor =
-              conversionPosition == null ||
-                  conversionPosition.conversionIdentity == conversionIdentity
-              ? null
-              : await const NovelReaderConversionRestoreService()
-                    .projectInBackground(
-                      source: conversionPosition,
-                      rawHtml: rawHtml,
-                      conversionIdentity: conversionIdentity,
-                      target: prepared,
-                    );
+          const restore = NovelReaderConversionRestoreService();
+          final NovelReaderTextAnchor? anchor;
+          if (conversionPosition == null) {
+            anchor = null;
+          } else if (conversionPosition.conversionIdentity ==
+              conversionIdentity) {
+            anchor = restore.sameProjectionAnchor(
+              source: conversionPosition,
+              rawHtml: rawHtml,
+              conversionIdentity: conversionIdentity,
+              target: prepared,
+            );
+          } else {
+            anchor = await restore.projectInBackground(
+              source: conversionPosition,
+              rawHtml: rawHtml,
+              conversionIdentity: conversionIdentity,
+              target: prepared,
+            );
+          }
           if (mounted &&
               _conversionRestoreGeneration == conversionRestoreGeneration) {
             _conversionRestoreAnchor = anchor;
