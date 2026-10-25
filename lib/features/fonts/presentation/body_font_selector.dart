@@ -107,11 +107,6 @@ class BodyFontSelector extends StatelessWidget {
                   ],
                 ),
               ),
-              if (controller.isLoading || controller.isResolving)
-                LinearProgressIndicator(
-                  key: const Key('body-font-loading'),
-                  semanticsLabel: l10n.fontSelectorLoading,
-                ),
               if (failure != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -171,15 +166,14 @@ class BodyFontSelector extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Expanded(
-                              child: Text(
-                                l10n.fontSelectorPreview,
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
+                            Text(
+                              l10n.fontSelectorPreview,
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
-                            Flexible(
+                            const SizedBox(width: 12),
+                            Expanded(
                               child: Text(
                                 _selectedFontLabel(l10n),
                                 key: const Key('body-font-preview-name'),
@@ -267,6 +261,12 @@ class BodyFontSelector extends StatelessWidget {
     bool removable = false,
   }) {
     final selected = controller.requestedFontId == id;
+    final pending =
+        selected &&
+        (controller.isLoading ||
+            controller.isResolving ||
+            controller.isConfirming);
+    final confirmed = selected && !pending && controller.selectedFont.id == id;
     final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -277,7 +277,7 @@ class BodyFontSelector extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         clipBehavior: Clip.antiAlias,
         child: Semantics(
-          checked: selected,
+          checked: confirmed,
           inMutuallyExclusiveGroup: true,
           child: ListTile(
             key: Key('body-font-item-$id'),
@@ -287,9 +287,19 @@ class BodyFontSelector extends StatelessWidget {
             minTileHeight: 52,
             minLeadingWidth: 18,
             horizontalTitleGap: 12,
-            leading: selected
-                ? const Icon(Icons.check, size: 18)
-                : const SizedBox(width: 18),
+            leading: SizedBox.square(
+              dimension: 18,
+              child: pending
+                  ? CircularProgressIndicator(
+                      key: Key('body-font-loading-$id'),
+                      strokeWidth: 2,
+                      semanticsLabel: AppLocalizations.of(context)
+                          .fontSelectorLoading,
+                    )
+                  : confirmed
+                  ? Icon(Icons.check, key: Key('body-font-check-$id'), size: 18)
+                  : null,
+            ),
             title: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
             onTap: controller.canSelect
                 ? () => controller.selectFont(id)

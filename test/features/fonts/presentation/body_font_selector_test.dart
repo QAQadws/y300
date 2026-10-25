@@ -81,15 +81,74 @@ void main() {
     expect(preview.style?.fontFamilyFallback, isEmpty);
   });
 
+  testWidgets('short and long font names share the preview right edge', (
+    tester,
+  ) async {
+    const longName =
+        'A long imported reading font name that must fit within the preview.ttf';
+    driver.fonts[0] = ImportedFont(
+      id: selectorFontA.id,
+      displayName: longName,
+      storageFileName: selectorFontA.storageFileName,
+      byteLength: selectorFontA.byteLength,
+    );
+    await _open(tester, controller);
+    final nameFinder = find.byKey(const Key('body-font-preview-name'));
+    final glyphsFinder = find.byKey(const Key('body-font-preview-glyphs'));
+
+    void expectRightEdge() {
+      expect(tester.widget<Text>(nameFinder).textAlign, TextAlign.end);
+      expect(
+        tester.getRect(nameFinder).right,
+        closeTo(tester.getRect(glyphsFinder).right, 0.01),
+      );
+    }
+
+    expect(
+      tester.widget<Text>(nameFinder).data,
+      _strings(tester).fontSelectorSystemDefault,
+    );
+    expectRightEdge();
+
+    await tester.tap(find.byKey(Key('body-font-item-${selectorFontA.id}')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(nameFinder).data, longName);
+    expectRightEdge();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('apply stays disabled until the chosen font is ready', (
     tester,
   ) async {
     final results = <ResolvedFont?>[];
     await _open(tester, controller, results: results);
+    final stableBounds = <Finder, Rect>{
+      find.byKey(const Key('body-font-selector')): tester.getRect(
+        find.byKey(const Key('body-font-selector')),
+      ),
+      find.byKey(const Key('body-font-preview')): tester.getRect(
+        find.byKey(const Key('body-font-preview')),
+      ),
+      find.byKey(const Key('body-font-apply')): tester.getRect(
+        find.byKey(const Key('body-font-apply')),
+      ),
+    };
     final pending = Completer<FontResolution>();
     driver.pendingResolutions[selectorFontA.id] = pending;
     await tester.tap(find.byKey(Key('body-font-item-${selectorFontA.id}')));
     await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(
+      find.byKey(Key('body-font-loading-${selectorFontA.id}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(Key('body-font-check-${selectorFontA.id}')),
+      findsNothing,
+    );
+    for (final entry in stableBounds.entries) {
+      expect(tester.getRect(entry.key), entry.value);
+    }
     expect(
       tester
           .widget<FilledButton>(find.byKey(const Key('body-font-apply')))
@@ -99,9 +158,89 @@ void main() {
 
     pending.complete(selectorResolution(selectorFontA.id));
     await tester.pumpAndSettle();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(
+      find.byKey(Key('body-font-loading-${selectorFontA.id}')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(Key('body-font-check-${selectorFontA.id}')),
+      findsOneWidget,
+    );
+    for (final entry in stableBounds.entries) {
+      expect(tester.getRect(entry.key), entry.value);
+    }
     await tester.tap(find.byKey(const Key('body-font-apply')));
     await tester.pumpAndSettle();
     expect(results, [selectorResolution(selectorFontA.id).font]);
+  });
+
+  testWidgets('only the latest requested font owns the loading indicator', (
+    tester,
+  ) async {
+    await _open(tester, controller);
+    final first = Completer<FontResolution>();
+    final latest = Completer<FontResolution>();
+    driver.pendingResolutions[selectorFontA.id] = first;
+    driver.pendingResolutions[selectorFontB.id] = latest;
+
+    await tester.tap(find.byKey(Key('body-font-item-${selectorFontA.id}')));
+    await tester.pump();
+    await tester.tap(find.byKey(Key('body-font-item-${selectorFontB.id}')));
+    await tester.pump();
+    expect(
+      find.byKey(Key('body-font-loading-${selectorFontA.id}')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(Key('body-font-loading-${selectorFontB.id}')),
+      findsOneWidget,
+    );
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    first.complete(selectorResolution(selectorFontA.id));
+    await tester.pump();
+    expect(
+      find.byKey(Key('body-font-loading-${selectorFontB.id}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(Key('body-font-check-${selectorFontA.id}')),
+      findsNothing,
+    );
+
+    latest.complete(selectorResolution(selectorFontB.id));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+      find.byKey(Key('body-font-check-${selectorFontB.id}')),
+      findsOneWidget,
+    );
+    expect(controller.selectedFont.id, selectorFontB.id);
+  });
+
+  testWidgets('a failed font load settles on the fallback without a spinner', (
+    tester,
+  ) async {
+    await _open(tester, controller);
+    final loading = Completer<FontResolution>();
+    driver.pendingResolutions[selectorFontA.id] = loading;
+    await tester.tap(find.byKey(Key('body-font-item-${selectorFontA.id}')));
+    await tester.pump();
+
+    loading.complete(
+      FontResolution(
+        requestedId: selectorFontA.id,
+        font: ResolvedFont.system,
+        failure: FontLibraryFailure.loadFailed,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byKey(const Key('body-font-check-system')), findsOneWidget);
+    expect(find.byKey(const Key('body-font-error')), findsOneWidget);
+    expect(controller.selectedFont, ResolvedFont.system);
   });
 
   testWidgets('import selects the imported font only inside the draft', (
