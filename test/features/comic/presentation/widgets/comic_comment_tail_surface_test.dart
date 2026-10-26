@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/comic/domain/models/comic_comment_models.dart';
 import 'package:y300/features/comic/domain/services/comic_comment_loader.dart';
 import 'package:y300/features/comic/presentation/comic_comment_content_projector.dart';
@@ -21,6 +24,10 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surf
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('vertical tail waits for an explicit load action', (
     tester,
   ) async {
@@ -209,8 +216,7 @@ void main() {
       ),
     );
     await session.load();
-    await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('回复者'), findsOneWidget);
     expect(find.text('回覆者'), findsNothing);

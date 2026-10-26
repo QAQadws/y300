@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
 import 'package:y300/features/thread/data/services/thread_detail_document_decoder.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
@@ -9,7 +10,9 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.da
 import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
 import 'package:y300/features/thread/presentation/thread_post_interaction_models.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+
 import '../../data/comic_comment_fixtures.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:y300/features/comic/presentation/comic_comment_body_projector.dart';
@@ -17,9 +20,12 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -33,6 +39,10 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets(
     'parsed 53-image sample leaves ratings immediately after its text',
     (tester) async {
@@ -40,9 +50,8 @@ void main() {
           ThreadDetailDocumentDecoder(
             createY300ThreadDetailHtmlDecoder(),
           ).decode(
-            File(
-              'test/features/comic/data/comic_comment_image_spacing.html',
-            ).readAsStringSync(),
+            File('test/features/comic/data/comic_comment_image_spacing.html')
+                .readAsStringSync(),
             fallbackTid: '573314',
             fallbackPage: 1,
           );
@@ -211,8 +220,7 @@ void main() {
     (tester) async {
       final post = commentPost(
         1,
-        message:
-            '<p>comic body 软件正文</p><img src="https://example.test/comic-page.jpg"><p>after image</p>',
+        message: '<p>comic body 软件正文</p><img src="https://example.test/comic-page.jpg"><p>after image</p>',
       );
       final displayedHtml = post.message.replaceAll('软件', '軟體');
       final readResult = ComicCommentLoadResult.fromRead(
@@ -499,8 +507,7 @@ void main() {
         ComicCommentCard(
           projection: ComicCommentItemProjection.raw(
             _comment(
-              avatarUrl:
-                  'https://bbs.yamibo.com/uc_server/data/avatar/000/42/20/14_avatar_middle.jpg',
+              avatarUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/000/42/20/14_avatar_middle.jpg',
             ),
           ),
           sourceTid: '573279',
@@ -556,7 +563,7 @@ void main() {
         imageCacheService: _NoopImageCacheService(),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
       find.byType(ForumHtmlWidgetPostRenderer),
@@ -615,7 +622,7 @@ void main() {
           imageCacheService: _NoopImageCacheService(),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('发型用户名'), findsOneWidget);
       expect(find.text('髮型用戶名'), findsNothing);
