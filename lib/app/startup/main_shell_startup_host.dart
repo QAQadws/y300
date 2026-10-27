@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/favorites/data/providers/favorite_parse_providers.dart';
 import 'package:y300/features/library_shared/data/providers/library_task_workflow_providers.dart';
 import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
 import 'package:y300/features/profile/presentation/account_display_controller.dart';
@@ -34,6 +35,7 @@ class MainShellReadyTaskHost extends ConsumerWidget {
     // Keep the foreground subtree mounted while only library task assembly
     // waits for cover recovery. Forum startup does not consume cover assets.
     if (!isReady) return child;
+    ref.watch(favoriteParseRecoveryProvider);
     final l10n = AppLocalizations.of(context);
     ref.watch(favoriteSyncTaskProgressRegistrationProvider);
     ref.watch(comicSearchQueueTaskProgressRegistrationProvider);

@@ -44,7 +44,7 @@ void main() {
   for (final release in releasedDatabaseTags.entries) {
     for (final tag in release.value) {
       test(
-        '$tag database v${release.key} opens directly at v43 without losing user data',
+        '$tag database v${release.key} opens directly at the current schema without losing user data',
         () async {
           var db = await install(release.key);
           final media = await _seedUserData(db, directory);
@@ -55,7 +55,7 @@ void main() {
 
           db = await AppDatabase.open(databaseName: databasePath);
           database = db;
-          expect(await db.getVersion(), 43);
+          expect(await db.getVersion(), AppDatabase.dbVersion);
           await _expectOldFields(db, before);
           await _expectCurrentSemantics(db, release.key);
           expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
@@ -135,6 +135,9 @@ void main() {
         await _expectOldFields(db, before);
         expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
       }
+      await db.close();
+      db = await AppDatabase.open(databaseName: databasePath);
+      database = db;
       await _expectCurrentSemantics(db, 27);
       fresh = await AppDatabase.open(
         databaseName: p.join(directory.path, 'fresh.db'),
@@ -183,7 +186,7 @@ void main() {
 
     db = await AppDatabase.open(databaseName: databasePath);
     database = db;
-    expect(await db.getVersion(), 43);
+    expect(await db.getVersion(), AppDatabase.dbVersion);
     await _expectOldFields(db, before);
     expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });

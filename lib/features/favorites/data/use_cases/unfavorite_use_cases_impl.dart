@@ -14,13 +14,16 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     required LocalFavoriteRepository localFavoriteRepository,
     required WorkPurgeService workPurgeService,
     required LibraryShelfRefreshBus shelfRefreshBus,
-  }) : _favoriteThreadCommand = favoriteThreadCommand,
+    Future<void> Function(Set<String>)? cancelParseJobs,
+  }) : _cancelParseJobs = cancelParseJobs,
+       _favoriteThreadCommand = favoriteThreadCommand,
        _favoriteLinkService = favoriteLinkService,
        _localFavoriteRepository = localFavoriteRepository,
        _workPurgeService = workPurgeService,
        _shelfRefreshBus = shelfRefreshBus;
 
   final FavoriteThreadCommand _favoriteThreadCommand;
+  final Future<void> Function(Set<String>)? _cancelParseJobs;
   final FavoriteLinkService _favoriteLinkService;
   final LocalFavoriteRepository _localFavoriteRepository;
   final WorkPurgeService _workPurgeService;
@@ -67,6 +70,7 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     var changedCount = 0;
     final purgedWorkIds = <String>[];
     if (succeededTids.isNotEmpty) {
+      await _cancelParseJobs?.call(succeededTids.toSet());
       changedCount = await _localFavoriteRepository.markRemovedByTids(
         succeededTids.toSet(),
       );
@@ -142,13 +146,16 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
     required LocalFavoriteRepository localFavoriteRepository,
     required WorkPurgeService workPurgeService,
     required LibraryShelfRefreshBus shelfRefreshBus,
-  }) : _favoriteThreadCommand = favoriteThreadCommand,
+    Future<void> Function(Set<String>)? cancelParseJobs,
+  }) : _cancelParseJobs = cancelParseJobs,
+       _favoriteThreadCommand = favoriteThreadCommand,
        _favoriteLinkService = favoriteLinkService,
        _localFavoriteRepository = localFavoriteRepository,
        _workPurgeService = workPurgeService,
        _shelfRefreshBus = shelfRefreshBus;
 
   final FavoriteThreadCommand _favoriteThreadCommand;
+  final Future<void> Function(Set<String>)? _cancelParseJobs;
   final FavoriteLinkService _favoriteLinkService;
   final LocalFavoriteRepository _localFavoriteRepository;
   final WorkPurgeService _workPurgeService;
@@ -159,12 +166,6 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
     final normalizedTid = tid.trim();
     if (normalizedTid.isEmpty) {
       throw ArgumentError('tid must not be empty');
-    }
-
-    final workId = await _favoriteLinkService.workIdForThread(normalizedTid);
-    FavoriteWorkLinks? links;
-    if (workId != null) {
-      links = await _favoriteLinkService.linksForWork(workId);
     }
 
     final result = await _favoriteThreadCommand.execute(
@@ -182,6 +183,13 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
       );
     }
 
+    await _cancelParseJobs?.call({normalizedTid});
+    // A parse already in progress may have committed its first work binding
+    // while the remote unfavorite command was being confirmed.
+    final workId = await _favoriteLinkService.workIdForThread(normalizedTid);
+    final links = workId == null
+        ? null
+        : await _favoriteLinkService.linksForWork(workId);
     final changedCount = await _localFavoriteRepository.markRemovedByTids(
       <String>{normalizedTid},
     );

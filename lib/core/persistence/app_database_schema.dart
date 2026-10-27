@@ -21,6 +21,7 @@ Future<void> createAppDatabaseSchema(Database db) async {
   await createLibraryStateTables(db);
   await createLibraryPerformanceIndexes(db);
   await createFavoriteTables(db);
+  await createFavoriteParseJobsTable(db);
   await createImageCacheTables(db);
   await createLibraryCoverMigrationTable(db);
   await createComicCoverMergeJournalTables(db);
@@ -41,6 +42,7 @@ Future<void> rebuildAppDatabaseSchema(Database db) async {
 }
 
 const List<String> _managedTablesInDropOrder = <String>[
+  favoriteParseJobsTable,
   comicCoverMergeAssetsTable,
   comicCoverMergeMembersTable,
   comicCoverMergeOperationsTable,

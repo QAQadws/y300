@@ -9185,6 +9185,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'字体无法加载，请选择其他字体'**
   String get fontSelectorLoadFailed;
+
+  /// No description provided for @librarySelectionActionParse.
+  ///
+  /// In zh, this message translates to:
+  /// **'解析'**
+  String get librarySelectionActionParse;
+
+  /// No description provided for @librarySelectionParseQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增 {enqueued} 项，已在队列 {existing} 项，未能加入 {failed} 项'**
+  String librarySelectionParseQueued(int enqueued, int existing, int failed);
+
+  /// No description provided for @threadFavoriteParseQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏成功，已加入解析队列'**
+  String get threadFavoriteParseQueued;
+
+  /// No description provided for @threadFavoriteParseQueueFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏成功，但未能加入解析队列，可在收藏页手动解析'**
+  String get threadFavoriteParseQueueFailed;
 }
 
 class _AppLocalizationsDelegate

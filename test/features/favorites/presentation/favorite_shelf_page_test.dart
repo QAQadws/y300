@@ -2,16 +2,25 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/network/api_result.dart';
+
 import '../../../support/forum_auth_test_support.dart';
+
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/comic/data/providers/comic_refresh_workflow_providers.dart';
 import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_models.dart';
 import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
+import 'package:y300/features/favorites/data/providers/favorite_parse_providers.dart';
+import 'package:y300/features/favorites/domain/services/favorite_parse_service.dart';
+import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
+    show ThreadFavoriteReceipt;
+import 'package:y300/features/library_shared/presentation/selection/shelf_selection_bottom_bar.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -30,6 +39,25 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
+
+class _RecordingParseService implements FavoriteParseService {
+  final List<Set<String>> requests = [];
+  @override
+  Future<FavoriteParseAdmission> requestThreads(Set<String> tids) async {
+    requests.add(tids);
+    return FavoriteParseAdmission(enqueued: tids.length);
+  }
+
+  @override
+  Future<void> requestConfirmed(
+    ThreadFavoriteReceipt receipt, {
+    String? title,
+  }) async {}
+  @override
+  Future<void> resume() async {}
+  @override
+  Future<void> cancelThreads(Set<String> tids) async {}
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -215,9 +243,10 @@ void main() {
     },
   );
 
-  testWidgets('FavoriteShelfPage long press activates 2 selection actions', (
+  testWidgets('FavoriteShelfPage long press activates 3 selection actions', (
     tester,
   ) async {
+    final parse = _RecordingParseService();
     final bootstrapper = _RecordingFavoriteShelfBootstrapper();
     final authRepository = _FakeAuthRepository(isLoggedIn: true);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
@@ -236,6 +265,7 @@ void main() {
             (ref) => _FakeFavoriteSyncService(),
           ),
           favoriteShelfBootstrapperProvider.overrideWith((ref) => bootstrapper),
+          favoriteParseServiceProvider.overrideWithValue(parse),
           ...forumAuthOverrides(authRepository),
           libraryStateRepositoryProvider.overrideWithValue(
             _FakeLibraryStateRepository(),
@@ -245,7 +275,12 @@ void main() {
           ),
           shelfSelectionHostControllerProvider.overrideWithValue(selectionHost),
         ],
-        child: const LocalizedTestApp(home: FavoriteShelfPage()),
+        child: const LocalizedTestApp(
+          home: Scaffold(
+            body: FavoriteShelfPage(),
+            bottomNavigationBar: ShelfSelectionBottomBar(),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -257,8 +292,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(selectionHost.state?.selectionActions.length, 2);
+    expect(selectionHost.state?.selectionActions.length, 3);
     expect(bootstrapper.startCallCount, 1);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(FavoriteShelfPage)),
+    );
+    expect(find.byTooltip(l10n.librarySelectionActionParse), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('selection-action-parse')),
+    );
+    await tester.pumpAndSettle();
+    expect(parse.requests, [
+      {'100'},
+    ]);
+    expect(selectionHost.isActive, isFalse);
+    expect(
+      find.text(l10n.librarySelectionParseQueued(1, 0, 0)),
+      findsOneWidget,
+    );
   });
 
   testWidgets('FavoriteShelfPage select all follows first visible category', (

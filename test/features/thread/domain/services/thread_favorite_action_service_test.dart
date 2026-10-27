@@ -13,10 +13,11 @@ void main() {
       final reasons = <String>[];
       final service = DefaultThreadFavoriteActionService(
         command: command,
-        refreshFavoriteModule: ({required String tid}) async {
-          refreshCalled = true;
-          expect(tid, '570617');
-        },
+        enqueueFavoriteParse:
+            ({required ThreadFavoriteReceipt receipt, String? title}) async {
+              refreshCalled = true;
+              expect(receipt.tid, '570617');
+            },
         notifyFavoriteModule: ({required String reason, required String tid}) {
           reasons.add(reason);
         },
@@ -28,7 +29,7 @@ void main() {
       expect(
         (result as DataCommandApplied<ThreadFavoriteActionResult>)
             .receipt
-            .refreshedFavoriteModule,
+            .parseQueued,
         isTrue,
       );
       expect(command.requests.single.tid, '570617');
@@ -45,9 +46,10 @@ void main() {
       final reasons = <String>[];
       final service = DefaultThreadFavoriteActionService(
         command: command,
-        refreshFavoriteModule: ({required String tid}) async {
-          throw StateError('fixture sync failure');
-        },
+        enqueueFavoriteParse:
+            ({required ThreadFavoriteReceipt receipt, String? title}) async {
+              throw StateError('fixture sync failure');
+            },
         notifyFavoriteModule: ({required String reason, required String tid}) {
           reasons.add(reason);
         },
@@ -59,7 +61,7 @@ void main() {
       expect(
         (result as DataCommandApplied<ThreadFavoriteActionResult>)
             .receipt
-            .refreshedFavoriteModule,
+            .parseQueued,
         isFalse,
       );
       expect(reasons, <String>['thread_favorite_added_sync_failed']);
@@ -78,9 +80,10 @@ void main() {
         final reasons = <String>[];
         final service = DefaultThreadFavoriteActionService(
           command: command,
-          refreshFavoriteModule: ({required String tid}) async {
-            refreshCalled = true;
-          },
+          enqueueFavoriteParse:
+              ({required ThreadFavoriteReceipt receipt, String? title}) async {
+                refreshCalled = true;
+              },
           notifyFavoriteModule:
               ({required String reason, required String tid}) {
                 reasons.add(reason);

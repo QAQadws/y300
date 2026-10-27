@@ -6445,7 +6445,8 @@ void main() {
       expect(favoriteActionService.called, isTrue);
       expect(favoriteActionService.lastTid, '100');
       expect(find.byIcon(Icons.star), findsOneWidget);
-      expect(find.text('收藏成功'), findsOneWidget);
+      final l10n = AppLocalizations.of(tester.element(find.byType(ThreadDetailPage)));
+      expect(find.text(l10n.threadFavoriteParseQueued), findsOneWidget);
     });
 
     testWidgets('opens reply composer and submits reply via shared composer', (
@@ -7322,7 +7323,7 @@ class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
   final DataCommandResult<ThreadFavoriteActionResult> result =
       const DataCommandApplied<ThreadFavoriteActionResult>(
         ThreadFavoriteActionResult(
-          refreshedFavoriteModule: true,
+          parseQueued: true,
           alreadyFavorited: false,
         ),
       );
@@ -7332,6 +7333,7 @@ class _FakeThreadFavoriteActionService implements ThreadFavoriteActionService {
   @override
   Future<DataCommandResult<ThreadFavoriteActionResult>> favoriteThread({
     required String tid,
+    String? title,
   }) async {
     called = true;
     lastTid = tid;
@@ -7908,6 +7910,7 @@ class _MemoryComposerDraftRepository implements ComposerDraftRepository {
   Future<List<ComposerDraftSnapshot>> listDraftsForThread({
     required String fid,
     required String tid,
+    String? title,
   }) async {
     return _drafts.values
         .where(

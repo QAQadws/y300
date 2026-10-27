@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/favorites/data/providers/favorite_parse_providers.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
@@ -83,5 +84,6 @@ final favoriteShelfAdapterProvider = Provider<FavoriteShelfAdapter>((ref) {
         ref.read(favoriteShelfCategoryAssignUseCaseProvider),
     unfavoriteThreadUseCaseResolver: () =>
         ref.read(unfavoriteThreadUseCaseProvider),
+    parseServiceResolver: () => ref.read(favoriteParseServiceProvider),
   );
 });

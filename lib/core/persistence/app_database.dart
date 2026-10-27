@@ -9,7 +9,7 @@ class AppDatabase {
   AppDatabase._();
 
   static const String dbName = 'comic_shelf.db';
-  static const int dbVersion = 43;
+  static const int dbVersion = 44;
 
   static const String comicsTable = tables.comicsTable;
   static const String episodesTable = tables.episodesTable;
@@ -37,6 +37,7 @@ class AppDatabase {
       tables.libraryDisplaySettingsTable;
   static const String favoriteSyncStateTable = tables.favoriteSyncStateTable;
   static const String favoriteThreadsTable = tables.favoriteThreadsTable;
+  static const String favoriteParseJobsTable = tables.favoriteParseJobsTable;
   static const String favoriteCategoriesTable = tables.favoriteCategoriesTable;
   static const String favoriteThreadCategoryTable =
       tables.favoriteThreadCategoryTable;

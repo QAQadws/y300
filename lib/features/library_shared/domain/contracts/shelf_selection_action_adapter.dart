@@ -82,4 +82,5 @@ class SelectionActionIds {
   static const String markAllUnread = 'mark-all-unread';
   static const String download = 'download';
   static const String unfavorite = 'unfavorite';
+  static const String parse = 'parse';
 }

@@ -3,6 +3,23 @@ import 'package:sqflite/sqflite.dart';
 import '../app_database_tables.dart';
 import 'migration_helpers.dart';
 
+Future<void> createFavoriteParseJobsTable(Database db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS $favoriteParseJobsTable (
+      account_id TEXT NOT NULL,
+      tid TEXT NOT NULL,
+      state TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      confirmed INTEGER NOT NULL DEFAULT 0,
+      favid TEXT,
+      title TEXT,
+      error_code TEXT,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (account_id, tid)
+    )
+  ''');
+}
+
 /// Phase 03：收藏线程缓存与收藏页自定义分类。
 ///
 /// 收藏是漫画/小说同步入口，但数据表保持独立，避免收藏页状态和

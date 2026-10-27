@@ -187,10 +187,19 @@ class FavoriteDetailFiller {
     bool forceComicSearchOnCatalogMiss = false,
     DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>?
     preloadedDetail,
+    Future<bool> Function()? isCurrent,
   }) async {
+    Future<void> check() async {
+      if (isCurrent != null && !await isCurrent()) {
+        throw StateError('favorite_parse_retired');
+      }
+    }
+
+    await check();
     // Preserve the last useful metadata, but never let a failed reread keep a
     // stale resolved/invalid marker that prevents the next bootstrap retry.
     await _localRepository.markThreadDetailPending(tid: record.tid);
+    await check();
     final result = await _detailContextLoader.load(
       record,
       preloadedDetail: preloadedDetail,
@@ -198,6 +207,7 @@ class FavoriteDetailFiller {
     );
     return result.when(
       success: (resolution, _, _) async {
+        await check();
         if (resolution is InvalidFavoriteDetail) {
           await _localRepository.markThreadDetailInvalid(
             tid: resolution.record.tid,
@@ -219,6 +229,7 @@ class FavoriteDetailFiller {
             ),
           ),
         );
+        await check();
         // 阶段 3：handler 只声明后处理任务（自动刷新、重复合并、书架通知），
         // 由 runner 集中执行并捕获非关键失败。命中重复合并时 runner 会回传
         // 合并目标 workId，写回收藏缓存的 work_id 字段。
@@ -227,6 +238,8 @@ class FavoriteDetailFiller {
           executionContext: context,
         );
         final finalWorkId = taskReport.resolvedWorkId ?? ingestResult.workId;
+
+        await check();
 
         await _localRepository.updateThreadDetailMeta(
           tid: detailContext.record.tid,

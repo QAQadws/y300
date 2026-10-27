@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/core/persistence/app_database.dart';
-import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
-import 'package:y300/features/favorites/data/providers/favorite_providers.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/data/services/default_favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
@@ -20,13 +17,13 @@ import 'package:y300/features/favorites/data/services/library_post_ingest_task_r
 import 'package:y300/features/favorites/data/use_cases/unfavorite_use_cases_impl.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
 import 'package:y300/features/library_shared/domain/services/library_shelf_refresh_bus.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/services/work_purge_service.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/services/novel_favorite_ingest_service.dart';
 import 'package:y300/features/novel/data/services/novel_source_metadata_ingest_service.dart';
 import 'package:y300/features/novel/domain/services/novel_source_metadata_parser.dart';
 import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
-import 'package:y300/features/thread/data/providers/thread_favorite_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 import 'package:y300/features/thread/domain/services/thread_favorite_action_service.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
@@ -107,21 +104,27 @@ void main() {
     );
   }
 
-  ThreadFavoriteActionService actionFor(
+  ThreadFavoriteActionService legacyActionFor(
     FavoriteSyncService service, {
     FakeFavoriteThreadCommand? command,
   }) {
-    final container = ProviderContainer(
-      overrides: [
-        favoriteSyncServiceProvider.overrideWithValue(service),
-        favoriteThreadCommandProvider.overrideWithValue(
-          command ?? FakeFavoriteThreadCommand(),
-        ),
-        libraryShelfRefreshBusProvider.overrideWithValue(bus),
-      ],
+    return DefaultThreadFavoriteActionService(
+      command: command ?? FakeFavoriteThreadCommand(),
+      enqueueFavoriteParse: ({required receipt, title}) async {
+        final result = await service.syncRecentlyAddedThread(tid: receipt.tid);
+        if (result.failedDetailTids.contains(receipt.tid)) {
+          throw StateError('legacy_target_sync_failed');
+        }
+      },
+      notifyFavoriteModule: ({required reason, required tid}) {
+        bus.notify(
+          modules: {LibraryModuleKey.favorite},
+          reason: reason,
+          source: LibraryMutationSource.threadFavoriteAction,
+          tid: tid,
+        );
+      },
     );
-    addTearDown(container.dispose);
-    return container.read(threadFavoriteActionServiceProvider);
   }
 
   Future<void> seed({
@@ -220,14 +223,14 @@ void main() {
             shelfRefreshBus: bus,
           );
           expect((await unfavorite.call('200')).succeededTids, ['200']);
-          final result = await actionFor(
+          final result = await legacyActionFor(
             service,
             command: command,
           ).favoriteThread(tid: '200');
           expect(
             (result as DataCommandApplied<ThreadFavoriteActionResult>)
                 .receipt
-                .refreshedFavoriteModule,
+                .parseQueued,
             isTrue,
           );
           expect(command.requests.map((e) => e.targetState), [
@@ -358,14 +361,14 @@ void main() {
             shelfRefreshBus: bus,
           );
           expect((await unfavorite.call('200')).succeededTids, ['200']);
-          final result = await actionFor(
+          final result = await legacyActionFor(
             service,
             command: command,
           ).favoriteThread(tid: '200');
           expect(
             (result as DataCommandApplied<ThreadFavoriteActionResult>)
                 .receipt
-                .refreshedFavoriteModule,
+                .parseQueued,
             isTrue,
           );
           expect(command.requests.map((e) => e.targetState), [
@@ -403,7 +406,7 @@ void main() {
       expect(await local.getSyncSnapshot(), isNull);
 
       final source = _ThreadSource((_) async => _success(_detail()));
-      final result = await actionFor(
+      final result = await legacyActionFor(
         buildService(source),
         command: command,
       ).favoriteThread(tid: '200');
@@ -411,7 +414,7 @@ void main() {
       expect(
         (result as DataCommandApplied<ThreadFavoriteActionResult>)
             .receipt
-            .refreshedFavoriteModule,
+            .parseQueued,
         isTrue,
       );
       expect(source.calls, 1);
@@ -436,7 +439,7 @@ void main() {
       );
       final source = _ThreadSource((_) async => _success(_detail()));
 
-      final result = await actionFor(
+      final result = await legacyActionFor(
         buildService(source),
         command: command,
       ).favoriteThread(tid: '200');
@@ -444,7 +447,7 @@ void main() {
       final receipt =
           (result as DataCommandApplied<ThreadFavoriteActionResult>).receipt;
       expect(receipt.alreadyFavorited, isTrue);
-      expect(receipt.refreshedFavoriteModule, isTrue);
+      expect(receipt.parseQueued, isTrue);
       expect(source.calls, 1);
       await expectNovel();
     },
@@ -453,13 +456,13 @@ void main() {
   test(
     'historical detail failures do not hide a successful target refresh',
     () async {
-      final result = await actionFor(_HistoricalFailureSync())
+      final result = await legacyActionFor(_HistoricalFailureSync())
           .favoriteThread(tid: '200');
 
       expect(
         (result as DataCommandApplied<ThreadFavoriteActionResult>)
             .receipt
-            .refreshedFavoriteModule,
+            .parseQueued,
         isTrue,
       );
       expect(bus.signal.value?.reason, 'thread_favorite_added');
@@ -542,14 +545,14 @@ void main() {
     await bootstrap.startIfNeeded();
     final command = FakeFavoriteThreadCommand();
 
-    final result = await actionFor(
+    final result = await legacyActionFor(
       service,
       command: command,
     ).favoriteThread(tid: '200');
     expect(
       (result as DataCommandApplied<ThreadFavoriteActionResult>)
           .receipt
-          .refreshedFavoriteModule,
+          .parseQueued,
       isFalse,
     );
     expect(bus.signal.value?.reason, 'thread_favorite_added_sync_failed');
@@ -566,12 +569,12 @@ void main() {
     final source = _ThreadSource((_) async => _success(_detail(authorId: '0')));
     final service = buildService(source);
 
-    final result = await actionFor(service).favoriteThread(tid: '200');
+    final result = await legacyActionFor(service).favoriteThread(tid: '200');
 
     expect(
       (result as DataCommandApplied<ThreadFavoriteActionResult>)
           .receipt
-          .refreshedFavoriteModule,
+          .parseQueued,
       isFalse,
     );
     expect((await local.getSyncSnapshot())?.status, 'partial');
@@ -607,7 +610,7 @@ void main() {
         }
         final command = FakeFavoriteThreadCommand();
 
-        final result = await actionFor(
+        final result = await legacyActionFor(
           service,
           command: command,
         ).favoriteThread(tid: '200');
@@ -615,7 +618,7 @@ void main() {
         expect(
           (result as DataCommandApplied<ThreadFavoriteActionResult>)
               .receipt
-              .refreshedFavoriteModule,
+              .parseQueued,
           isFalse,
         );
         final failedRecord = await local.getActiveThreadByTid('200');

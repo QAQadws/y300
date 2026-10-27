@@ -1820,5 +1820,12 @@
   "fontSelectorStorageFailure": "字型操作失敗，請重試",
   "fontSelectorCorruptLibrary": "字型清單無法讀取，請重試",
   "fontSelectorUnsupportedLibraryVersion": "字型庫版本暫不支援，請更新應用程式",
-  "fontSelectorLoadFailed": "字型無法載入，請選擇其他字型"
+  "fontSelectorLoadFailed": "字型無法載入，請選擇其他字型",
+  "librarySelectionActionParse": "解析",
+  "librarySelectionParseQueued": "新增 {enqueued} 項，已在佇列 {existing} 項，未能加入 {failed} 項",
+  "@librarySelectionParseQueued": {
+    "placeholders": {"enqueued": {"type": "int"}, "existing": {"type": "int"}, "failed": {"type": "int"}}
+  },
+  "threadFavoriteParseQueued": "收藏成功，已加入解析佇列",
+  "threadFavoriteParseQueueFailed": "收藏成功，但未能加入解析佇列，可在收藏頁手動解析"
 }

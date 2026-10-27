@@ -86,7 +86,7 @@ void main() {
       await db.close();
       db = await AppDatabase.open(databaseName: path);
       database = db;
-      expect(await db.getVersion(), 43);
+      expect(await db.getVersion(), AppDatabase.dbVersion);
       expect((await db.query(AppDatabase.novelReadingProgressTable)).single, {
         ...oldProgress,
         'percent_basis': 'legacyReaderLayout',
@@ -226,7 +226,7 @@ void main() {
 
       db = await AppDatabase.open(databaseName: databasePath);
       database = db;
-      expect(await db.getVersion(), 43);
+      expect(await db.getVersion(), AppDatabase.dbVersion);
       expect(
         (await db.query(AppDatabase.cachedImagesTable)).single,
         <String, Object?>{...oldImage, 'etag': null, 'content_hash': null},
@@ -328,7 +328,7 @@ void main() {
 
       db = await AppDatabase.open(databaseName: databasePath);
       database = db;
-      expect(await db.getVersion(), 43);
+      expect(await db.getVersion(), AppDatabase.dbVersion);
       const legacyMetadata = <String, Object?>{
         'anchor_format_version': 0,
         'anchor_text_identity': null,

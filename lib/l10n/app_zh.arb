@@ -2193,5 +2193,12 @@
   "fontSelectorStorageFailure": "字体操作失败，请重试",
   "fontSelectorCorruptLibrary": "字体列表无法读取，请重试",
   "fontSelectorUnsupportedLibraryVersion": "字体库版本暂不支持，请更新应用",
-  "fontSelectorLoadFailed": "字体无法加载，请选择其他字体"
+  "fontSelectorLoadFailed": "字体无法加载，请选择其他字体",
+  "librarySelectionActionParse": "解析",
+  "librarySelectionParseQueued": "新增 {enqueued} 项，已在队列 {existing} 项，未能加入 {failed} 项",
+  "@librarySelectionParseQueued": {
+    "placeholders": {"enqueued": {"type": "int"}, "existing": {"type": "int"}, "failed": {"type": "int"}}
+  },
+  "threadFavoriteParseQueued": "收藏成功，已加入解析队列",
+  "threadFavoriteParseQueueFailed": "收藏成功，但未能加入解析队列，可在收藏页手动解析"
 }

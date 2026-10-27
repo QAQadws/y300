@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:y300/features/favorites/domain/services/favorite_parse_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
 import 'package:y300/features/favorites/domain/models/favorite_cache_models.dart';
@@ -33,7 +34,9 @@ class FavoriteShelfAdapter
     ShelfCategoryAssignUseCaseResolver? categoryAssignUseCaseResolver,
     UnfavoriteThreadUseCase? unfavoriteThreadUseCase,
     UnfavoriteThreadUseCaseResolver? unfavoriteThreadUseCaseResolver,
-  }) : _syncService = syncService,
+    FavoriteParseService Function()? parseServiceResolver,
+  }) : _parseServiceResolver = parseServiceResolver,
+       _syncService = syncService,
        _shelfRefreshBus = shelfRefreshBus,
        _categoryAssignUseCaseResolver =
            categoryAssignUseCaseResolver ?? (() => categoryAssignUseCase),
@@ -48,6 +51,7 @@ class FavoriteShelfAdapter
        _taskProgress = taskProgressHub?.progressFor(LibraryModuleKey.favorite);
 
   final LocalFavoriteRepository _repository;
+  final FavoriteParseService Function()? _parseServiceResolver;
   final FavoriteSyncService _syncService;
   final LibraryShelfRefreshBus? _shelfRefreshBus;
   final ShelfCategoryAssignUseCaseResolver _categoryAssignUseCaseResolver;
@@ -62,6 +66,14 @@ class FavoriteShelfAdapter
   @override
   List<SelectionAction> get selectionActions {
     final actions = <SelectionAction>[];
+    if (_parseServiceResolver != null) {
+      actions.add(
+        const SelectionAction(
+          id: SelectionActionIds.parse,
+          icon: Icons.refresh,
+        ),
+      );
+    }
     if (_supportsCategoryAssign) {
       actions.add(
         const SelectionAction(
@@ -268,6 +280,33 @@ class FavoriteShelfAdapter
     SelectionActionExecutionRequest request,
   ) async {
     switch (request.actionId) {
+      case SelectionActionIds.parse:
+        final service = _parseServiceResolver?.call();
+        if (service == null) {
+          return const SelectionActionOutcome(
+            code: SelectionActionOutcomeCode.unsupported,
+          );
+        }
+        final tids = <String>{};
+        var invalid = 0;
+        for (final id in request.workIds) {
+          final tid = FavoriteShelfWorkId.parseTid(id);
+          if (tid == null) {
+            invalid++;
+          } else {
+            tids.add(tid);
+          }
+        }
+        final result = await service.requestThreads(tids);
+        return SelectionActionOutcome(
+          code: invalid + result.rejected > 0
+              ? SelectionActionOutcomeCode.partialFailure
+              : SelectionActionOutcomeCode.success,
+          changed: result.enqueued + result.existing > 0,
+          enqueuedCount: result.enqueued,
+          deduplicatedCount: result.existing,
+          failedCount: invalid + result.rejected,
+        );
       case SelectionActionIds.assignCategory:
         return _runAssignCategory(request);
       case SelectionActionIds.unfavorite:

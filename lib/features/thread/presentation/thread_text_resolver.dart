@@ -101,7 +101,7 @@ final class ThreadTextResolver {
     if (notice.code == ThreadActionNoticeCode.success) {
       final detail = _nonEmpty(notice.detail ?? notice.message);
       return switch (notice.action) {
-        ThreadActionKind.favorite => detail ?? l10n.threadFavoriteSuccess,
+        ThreadActionKind.favorite => detail ?? l10n.threadFavoriteParseQueued,
         ThreadActionKind.vote => detail ?? l10n.threadPollVoteSuccess,
         ThreadActionKind.rate => detail ?? l10n.threadRatingSuccess,
         ThreadActionKind.comment => detail ?? l10n.threadCommentSuccess,
@@ -111,7 +111,7 @@ final class ThreadTextResolver {
     }
     if (notice.code == ThreadActionNoticeCode.partialSuccess &&
         notice.action == ThreadActionKind.favorite) {
-      return l10n.threadFavoriteSuccessSyncFailed;
+      return l10n.threadFavoriteParseQueueFailed;
     }
     if (notice.code == ThreadActionNoticeCode.unknown) {
       if (notice.action == ThreadActionKind.vote) {

@@ -1,4 +1,5 @@
 import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -359,7 +360,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
 
     final result = await ref
         .read(threadFavoriteActionServiceProvider)
-        .favoriteThread(tid: snapshot.tid);
+        .favoriteThread(tid: snapshot.tid, title: snapshot.subject);
     if (!ref.mounted) {
       return;
     }
@@ -372,7 +373,7 @@ class ThreadDetailController extends AsyncNotifier<ThreadDetailPageState> {
             isThreadFavorited: true,
             clearThreadFavoriteHint: true,
             threadFavoriteNotice: ThreadActionNotice(
-              code: receipt.refreshedFavoriteModule
+              code: receipt.parseQueued
                   ? ThreadActionNoticeCode.success
                   : ThreadActionNoticeCode.partialSuccess,
               action: ThreadActionKind.favorite,

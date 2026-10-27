@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:y300/features/favorites/domain/services/favorite_parse_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_filler.dart';
@@ -80,7 +81,8 @@ abstract class FavoriteSyncService {
   ValueListenable<FavoriteSyncProgress> get progress;
 }
 
-class NetworkFavoriteSyncService implements FavoriteSyncService {
+class NetworkFavoriteSyncService
+    implements FavoriteSyncService, FavoriteThreadParseExecutor {
   NetworkFavoriteSyncService({
     required FavoriteThreadDirectoryRepository remoteRepository,
     required LocalFavoriteRepository localRepository,
@@ -132,6 +134,94 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
 
   @override
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
+
+  @override
+  Future<void> waitForPendingOperations() => _operationTail;
+
+  @override
+  Future<void> parseThread(
+    FavoriteParseTarget target, {
+    required Future<bool> Function() isCurrent,
+  }) {
+    _pendingSyncOperations++;
+    return _enqueueOperation(() async {
+      Future<void> check() async {
+        if (!await isCurrent()) throw StateError('favorite_parse_retired');
+      }
+
+      try {
+        await check();
+        var record = await _localRepository.getActiveThreadByTid(target.tid);
+        if (target.confirmed) {
+          // Seed only inside the shared lane: an older directory round cannot
+          // remove a newly confirmed favorite before this task executes.
+          await check();
+          await _localRepository.upsertRemoteThreads([
+            FavoriteThreadCacheUpsert(
+              tid: target.tid,
+              title: record?.title ?? target.title ?? target.tid,
+              replyCount: record?.replyCount ?? 0,
+              remoteFavoriteId:
+                  target.remoteFavoriteId ?? record?.remoteFavoriteId,
+              description: record?.description,
+              authorName: record?.authorName,
+              favoritedAt: record?.favoritedAt,
+              remoteOrder: record?.remoteOrder,
+            ),
+          ]);
+          record = await _localRepository.getActiveThreadByTid(target.tid);
+        }
+        if (record == null) throw StateError('favorite_parse_target_inactive');
+        _emitProgress(
+          FavoriteSyncProgress(
+            phase: FavoriteSyncProgressPhase.loadingDetails,
+            subject: record.title,
+            current: 1,
+            total: 1,
+          ),
+        );
+        final loaded = await _detailFiller.fillOneDetail(
+          record,
+          context: FavoriteSyncExecutionContext.manualRecentAdd(
+            governor: _requestGovernor,
+          ),
+          mergeIngestedComics: true,
+          forceComicSearchOnCatalogMiss: true,
+          isCurrent: isCurrent,
+        );
+        if (!loaded) throw StateError('favorite_parse_detail_failed');
+        await check();
+        final snapshot = await _localRepository.getSyncSnapshot();
+        await check();
+        await _snapshotWriter.write(
+          remoteCount:
+              snapshot?.remoteCount ??
+              await _localRepository.countActiveThreads(),
+        );
+        await check();
+        _notifyFavoriteShelfChanged(
+          reason: 'favorite_single_parse_completed',
+          detailLoadedCount: 1,
+        );
+        if (_pendingSyncOperations == 1) {
+          _emitProgress(
+            const FavoriteSyncProgress(
+              phase: FavoriteSyncProgressPhase.completed,
+            ),
+          );
+        }
+      } catch (_) {
+        if (_pendingSyncOperations == 1) {
+          _emitProgress(
+            const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
+          );
+        }
+        rethrow;
+      } finally {
+        _pendingSyncOperations--;
+      }
+    });
+  }
 
   @override
   Future<void> runBackgroundMaintenance() => _enqueueOperation(() {

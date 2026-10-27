@@ -1,9 +1,9 @@
 class ThreadFavoriteActionResult {
   const ThreadFavoriteActionResult({
-    required this.refreshedFavoriteModule,
+    required this.parseQueued,
     required this.alreadyFavorited,
   });
 
-  final bool refreshedFavoriteModule;
+  final bool parseQueued;
   final bool alreadyFavorited;
 }

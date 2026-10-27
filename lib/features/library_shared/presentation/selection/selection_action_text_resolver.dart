@@ -7,6 +7,7 @@ final class SelectionActionTextResolver {
 
   static String label(AppLocalizations l10n, String actionId) {
     return switch (actionId) {
+      SelectionActionIds.parse => l10n.librarySelectionActionParse,
       SelectionActionIds.assignCategory =>
         l10n.librarySelectionActionAssignCategory,
       SelectionActionIds.markAllRead => l10n.librarySelectionActionMarkAllRead,
@@ -24,6 +25,13 @@ final class SelectionActionTextResolver {
     SelectionActionOutcome result,
   ) {
     final actionLabel = label(l10n, actionId);
+    if (actionId == SelectionActionIds.parse) {
+      return l10n.librarySelectionParseQueued(
+        result.enqueuedCount,
+        result.deduplicatedCount,
+        result.failedCount,
+      );
+    }
     switch (result.code) {
       case SelectionActionOutcomeCode.success:
         return _successMessage(l10n, actionId, result, actionLabel);

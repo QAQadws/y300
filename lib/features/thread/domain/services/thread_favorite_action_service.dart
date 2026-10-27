@@ -1,14 +1,19 @@
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_favorite_models.dart';
 
-typedef ThreadFavoriteModuleRefresh =
-    Future<void> Function({required String tid});
-typedef ThreadFavoriteModuleRefreshNotifier =
-    void Function({required String reason, required String tid});
+typedef ThreadFavoriteParseEnqueue = Future<void> Function({
+  required ThreadFavoriteReceipt receipt,
+  String? title,
+});
+typedef ThreadFavoriteModuleRefreshNotifier = void Function({
+  required String reason,
+  required String tid,
+});
 
 abstract class ThreadFavoriteActionService {
   Future<DataCommandResult<ThreadFavoriteActionResult>> favoriteThread({
     required String tid,
+    String? title,
   });
 }
 
@@ -16,19 +21,20 @@ class DefaultThreadFavoriteActionService
     implements ThreadFavoriteActionService {
   DefaultThreadFavoriteActionService({
     required FavoriteThreadCommand command,
-    required ThreadFavoriteModuleRefresh refreshFavoriteModule,
+    required ThreadFavoriteParseEnqueue enqueueFavoriteParse,
     required ThreadFavoriteModuleRefreshNotifier notifyFavoriteModule,
   }) : _command = command,
-       _refreshFavoriteModule = refreshFavoriteModule,
+       _enqueueFavoriteParse = enqueueFavoriteParse,
        _notifyFavoriteModule = notifyFavoriteModule;
 
   final FavoriteThreadCommand _command;
-  final ThreadFavoriteModuleRefresh _refreshFavoriteModule;
+  final ThreadFavoriteParseEnqueue _enqueueFavoriteParse;
   final ThreadFavoriteModuleRefreshNotifier _notifyFavoriteModule;
 
   @override
   Future<DataCommandResult<ThreadFavoriteActionResult>> favoriteThread({
     required String tid,
+    String? title,
   }) async {
     final result = await _command.execute(
       SetThreadFavoriteRequest(
@@ -41,28 +47,28 @@ class DefaultThreadFavoriteActionService
     }
 
     final favoriteReceipt = result.receipt;
-    var refreshed = false;
+    var parseQueued = false;
 
     try {
-      await _refreshFavoriteModule(tid: tid);
-      refreshed = true;
+      await _enqueueFavoriteParse(receipt: favoriteReceipt, title: title);
+      parseQueued = true;
     } catch (_) {
       // The remote command is already confirmed. Local ingest remains a
       // separate App workflow and is reported through structured state.
     }
 
     // The favorite shelf listens to this signal and reloads its local snapshot.
-    // We still emit it when sync fails so the page can retry from its adapter.
+    // Admission failures keep remote success and allow a later manual retry.
     _notifyFavoriteModule(
       tid: tid,
-      reason: refreshed
+      reason: parseQueued
           ? 'thread_favorite_added'
           : 'thread_favorite_added_sync_failed',
     );
 
     return DataCommandApplied<ThreadFavoriteActionResult>(
       ThreadFavoriteActionResult(
-        refreshedFavoriteModule: refreshed,
+        parseQueued: parseQueued,
         alreadyFavorited:
             favoriteReceipt.disposition ==
             FavoriteMutationDisposition.alreadyApplied,

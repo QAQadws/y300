@@ -5498,6 +5498,20 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fontSelectorLoadFailed => '字体无法加载，请选择其他字体';
+
+  @override
+  String get librarySelectionActionParse => '解析';
+
+  @override
+  String librarySelectionParseQueued(int enqueued, int existing, int failed) {
+    return '新增 $enqueued 项，已在队列 $existing 项，未能加入 $failed 项';
+  }
+
+  @override
+  String get threadFavoriteParseQueued => '收藏成功，已加入解析队列';
+
+  @override
+  String get threadFavoriteParseQueueFailed => '收藏成功，但未能加入解析队列，可在收藏页手动解析';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -10995,4 +11009,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get fontSelectorLoadFailed => '字型無法載入，請選擇其他字型';
+
+  @override
+  String get librarySelectionActionParse => '解析';
+
+  @override
+  String librarySelectionParseQueued(int enqueued, int existing, int failed) {
+    return '新增 $enqueued 項，已在佇列 $existing 項，未能加入 $failed 項';
+  }
+
+  @override
+  String get threadFavoriteParseQueued => '收藏成功，已加入解析佇列';
+
+  @override
+  String get threadFavoriteParseQueueFailed => '收藏成功，但未能加入解析佇列，可在收藏頁手動解析';
 }
