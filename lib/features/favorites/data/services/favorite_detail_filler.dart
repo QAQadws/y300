@@ -77,6 +77,12 @@ class FavoriteDetailFiller {
     bool mergeIngestedComics = true,
     Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
     Set<String> forceDetailTids = const <String>{},
+    Future<bool> Function(
+      FavoriteThreadCacheRecord,
+      DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>?,
+    )?
+    execute,
+    bool Function()? shouldContinue,
   }) async {
     final failedTids = <String>[];
     final failedTidSet = <String>{};
@@ -120,6 +126,7 @@ class FavoriteDetailFiller {
     var processForcedRecords = forcedRecords.isNotEmpty;
 
     while (true) {
+      if (shouldContinue?.call() == false) break;
       // A confirmed recent favorite must be read even when a full-sync fallback
       // finds an old resolved record. Process it once before the pending batches.
       final records = processForcedRecords
@@ -136,20 +143,24 @@ class FavoriteDetailFiller {
       var madeProgress = false;
       final failedCountBefore = failedTidSet.length;
       for (final record in records) {
+        if (shouldContinue?.call() == false) break;
         onProgress(
           subject: record.title,
           current: processedCount + 1,
           total: totalMissingDetails,
         );
         try {
-          final loaded = await fillOneDetail(
-            record,
-            context: context,
-            mergeIngestedComics: mergeIngestedComics,
-            forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMissTids
-                .contains(record.tid),
-            preloadedDetail: preloadedDetails.remove(record.tid),
-          );
+          final preloaded = preloadedDetails.remove(record.tid);
+          final loaded = execute != null
+              ? await execute(record, preloaded)
+              : await fillOneDetail(
+                  record,
+                  context: context,
+                  mergeIngestedComics: mergeIngestedComics,
+                  forceComicSearchOnCatalogMiss:
+                      forceComicSearchOnCatalogMissTids.contains(record.tid),
+                  preloadedDetail: preloaded,
+                );
           if (loaded) {
             loadedCount++;
             madeProgress = true;

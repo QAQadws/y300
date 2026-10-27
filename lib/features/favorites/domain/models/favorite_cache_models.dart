@@ -51,6 +51,7 @@ class FavoriteSyncResult {
     required this.failedDetailTids,
     this.directoryCapabilities,
     this.directoryMetadata,
+    this.needsReconciliation = false,
   });
 
   final FavoriteSyncMode mode;
@@ -62,6 +63,7 @@ class FavoriteSyncResult {
   final List<String> failedDetailTids;
   final FavoriteThreadDirectoryReadCapabilities? directoryCapabilities;
   final DataReadMetadata? directoryMetadata;
+  final bool needsReconciliation;
 }
 
 class FavoriteThreadCacheUpsert {

@@ -43,6 +43,28 @@ class FavoriteParseJobRepository {
       if (!isCurrent()) throw StateError('favorite_parse_owner_changed');
       if (old.isNotEmpty &&
           ['queued', 'running'].contains(old.single['state'])) {
+        final upgraded =
+            target.confirmed &&
+            (old.single['confirmed'] != 1 ||
+                (target.remoteFavoriteId != null &&
+                    target.remoteFavoriteId != old.single['favid']));
+        if (upgraded && old.single['state'] == 'running') {
+          // Preserve a stronger request across a crash while its predecessor is
+          // running. The old revision may no longer acknowledge this row.
+          await txn.update(
+            AppDatabase.favoriteParseJobsTable,
+            {
+              'state': 'queued',
+              'revision': (old.single['revision'] as int) + 1,
+              'confirmed': 1,
+              'favid': target.remoteFavoriteId,
+              'title': target.title,
+            },
+            where: 'account_id = ? AND tid = ?',
+            whereArgs: [accountId, target.tid],
+          );
+          return true;
+        }
         // A confirmed add upgrades a waiting manual retry without losing its
         // evidence. A running request is covered by its existing execution.
         if (target.confirmed && old.single['state'] == 'queued') {

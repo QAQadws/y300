@@ -56,7 +56,7 @@ class _RecordingParseService implements FavoriteParseService {
   @override
   Future<void> resume() async {}
   @override
-  Future<void> cancelThreads(Set<String> tids) async {}
+  Future<Set<String>> cancelThreads(Set<String> tids) async => tids;
 }
 
 void main() {

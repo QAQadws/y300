@@ -21,8 +21,9 @@ final unfavoriteWorkUseCaseProvider = Provider<UnfavoriteWorkUseCase>((ref) {
         throw StateError('favorite_parse_owner_changed');
       }
       if (owner != null) {
-        await ref.read(favoriteParseServiceProvider).cancelThreads(tids);
+        return ref.read(favoriteParseServiceProvider).cancelThreads(tids);
       }
+      return tids;
     },
   );
 });
@@ -42,8 +43,9 @@ final unfavoriteThreadUseCaseProvider = Provider<UnfavoriteThreadUseCase>((
         throw StateError('favorite_parse_owner_changed');
       }
       if (owner != null) {
-        await ref.read(favoriteParseServiceProvider).cancelThreads(tids);
+        return ref.read(favoriteParseServiceProvider).cancelThreads(tids);
       }
+      return tids;
     },
   );
 });

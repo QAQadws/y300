@@ -15,6 +15,40 @@ import '../../../support/favorite_command_test_support.dart';
 
 void main() {
   group('DefaultUnfavoriteWorkUseCase', () {
+    test('superseded unfavorites cannot purge a work even when its old binding has moved', () async {
+      final local = _FakeLocalFavoriteRepository();
+      final purge = _FakeWorkPurgeService();
+      final bus = LibraryShelfRefreshBus();
+      addTearDown(bus.dispose);
+      final useCase = DefaultUnfavoriteWorkUseCase(
+        favoriteThreadCommand: _FakeThreadFavoriteRepository(
+          results: {'100': _applied('100')},
+        ),
+        favoriteLinkService: _FakeFavoriteLinkService(
+          linksByWorkId: {
+            'yamibo:1': const FavoriteWorkLinks(
+              workId: 'yamibo:1',
+              kind: ThreadContentKind.comic,
+              threads: [FavoriteThreadRef(tid: '100')],
+            ),
+          },
+          activeByWorkId: {'yamibo:1': false},
+        ),
+        localFavoriteRepository: local,
+        workPurgeService: purge,
+        shelfRefreshBus: bus,
+        cancelParseJobs: (_) async => <String>{},
+      );
+      final result = await useCase.call(
+        workId: 'yamibo:1',
+        kind: ThreadContentKind.comic,
+      );
+      expect(result.succeededTids, ['100']);
+      expect(result.purgedWorkIds, isEmpty);
+      expect(local.markRemovedByTidsCalls, isEmpty);
+      expect(purge.calls, isEmpty);
+    });
+
     test('all tids succeed then marks removed purges and notifies', () async {
       final repository = _FakeThreadFavoriteRepository(
         results: <String, DataCommandResult<ThreadFavoriteReceipt>>{

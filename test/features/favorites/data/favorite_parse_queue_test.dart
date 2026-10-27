@@ -69,7 +69,11 @@ void main() {
     await directory.delete();
   });
 
-  NetworkFavoriteSyncService executor(_Source source, {_Directory? remote}) {
+  NetworkFavoriteSyncService executor(
+    _Source source, {
+    _Directory? remote,
+    Object? Function()? readOwner,
+  }) {
     const forum = ForumFavoriteContentIngestHandler();
     return NetworkFavoriteSyncService(
       remoteRepository: remote ?? _Directory(),
@@ -100,11 +104,12 @@ void main() {
       shelfRefreshBus: bus,
       governorFactory: () =>
           DefaultFavoriteSyncRequestGovernor(cooldown: Duration.zero),
+      readOwner: readOwner,
     );
   }
 
   DefaultFavoriteParseCoordinator coordinator(
-    NetworkFavoriteSyncService parser, {
+    FavoriteThreadParseExecutor parser, {
     String account = '123',
     bool Function()? valid,
   }) {
@@ -418,6 +423,377 @@ void main() {
     expect(source.calls, 0);
   });
 
+  for (final ordinary in [false, true]) {
+    test(
+      'manual queue jumps ahead of the cached auto batch (ordinary=$ordinary)',
+      () async {
+        await local.upsertRemoteThreads([
+          for (final tid in ['100', '200', '300'])
+            FavoriteThreadCacheUpsert(tid: tid, title: 'Novel', replyCount: 1),
+        ]);
+        if (ordinary) {
+          await local.finishSync(
+            mode: FavoriteSyncMode.fullDiff,
+            remoteCount: 3,
+          );
+        }
+        final started = Completer<void>(),
+            gate = Completer<void>(),
+            submitted = Completer<void>();
+        final source = _Source(() async {})
+          ..beforeTid = (tid) async {
+            if (tid == '100') {
+              started.complete();
+              await gate.future;
+            }
+          };
+        final remote = _Directory(tids: const ['100', '200', '300']);
+        final parser = executor(source, remote: remote);
+        final sync = parser.sync();
+        await started.future;
+        final service = coordinator(_ObservedExecutor(parser, submitted));
+        await service.requestThreads({'300'});
+        await submitted.future;
+        gate.complete();
+        final result = await sync;
+        await service.settled;
+        expect(source.tids, ['100', '300', '200']);
+        expect(await db.query(AppDatabase.worksTable), hasLength(3));
+        expect(remote.calls, 1);
+        expect(result.needsReconciliation, isFalse);
+        expect(
+          (await local.getActiveThreadByTid('300'))?.detailState,
+          FavoriteDetailState.resolved,
+        );
+      },
+    );
+  }
+
+  test('a manual request joins a currently reading novel without a second detail read', () async {
+    final started = Completer<void>(),
+        gate = Completer<void>(),
+        submitted = Completer<void>();
+    final source = _Source(() async {})
+      ..beforeTid = (tid) async {
+        if (tid == '200') {
+          started.complete();
+          await gate.future;
+        }
+      };
+    final parser = executor(source, remote: _Directory(tids: const ['200']));
+    final sync = parser.sync();
+    await started.future;
+    final service = coordinator(_ObservedExecutor(parser, submitted));
+    await service.requestThreads({'200'});
+    await submitted.future;
+    gate.complete();
+    await sync;
+    await service.settled;
+    expect(source.tids, ['200']);
+    await expectNovel();
+  });
+
+  test('a confirmed add during automatic parsing survives the older directory and leaves reconciliation pending', () async {
+    final started = Completer<void>(),
+        gate = Completer<void>(),
+        submitted = Completer<void>();
+    final source = _Source(() async {})
+      ..beforeTid = (tid) async {
+        if (tid == '100') {
+          started.complete();
+          await gate.future;
+        }
+      };
+    final parser = executor(
+      source,
+      remote: _Directory(tids: const ['100', '300']),
+    );
+    final sync = parser.sync();
+    await started.future;
+    final service = coordinator(_ObservedExecutor(parser, submitted));
+    await service.requestConfirmed(confirmed(), title: 'Novel');
+    await submitted.future;
+    gate.complete();
+    final result = await sync;
+    await service.settled;
+    expect(source.tids, ['100', '200', '300']);
+    expect((await local.getActiveThreadByTid('200'))?.workId, 'novel:55:200');
+    expect(result.needsReconciliation, isTrue);
+    final baseline = await local.getSyncSnapshot();
+    expect(baseline?.status, 'failed');
+    expect(baseline?.lastFullSyncedAt, isNull);
+  });
+
+  test('an applied unfavorite retires an unstarted automatic target', () async {
+    final started = Completer<void>(),
+        gate = Completer<void>(),
+        retiring = Completer<void>();
+    final source = _Source(() async {})
+      ..beforeTid = (tid) async {
+        if (tid == '100') {
+          started.complete();
+          await gate.future;
+        }
+      };
+    final parser = executor(
+      source,
+      remote: _Directory(tids: const ['100', '200']),
+    );
+    final sync = parser.sync();
+    await started.future;
+    final service = coordinator(parser);
+    final unfavorite = DefaultUnfavoriteThreadUseCase(
+      favoriteThreadCommand: FakeFavoriteThreadCommand(),
+      favoriteLinkService: DefaultFavoriteLinkService(repository: local),
+      localFavoriteRepository: local,
+      workPurgeService: _DatabasePurge(db),
+      shelfRefreshBus: bus,
+      cancelParseJobs: (tids) {
+        final future = service.cancelThreads(tids);
+        retiring.complete();
+        return future;
+      },
+    );
+    final removal = unfavorite.call('200');
+    await retiring.future;
+    gate.complete();
+    expect((await removal).succeededTids, ['200']);
+    expect((await sync).needsReconciliation, isTrue);
+    expect(source.tids, ['100']);
+    expect(await local.getActiveThreadByTid('200'), isNull);
+  });
+
+  test('a newer confirmed favorite supersedes an older unfavorite waiting for the slot', () async {
+    final started = Completer<void>(),
+        gate = Completer<void>(),
+        retiring = Completer<void>(),
+        submitted = Completer<void>();
+    final source = _Source(() async {})
+      ..beforeTid = (tid) async {
+        if (tid == '100') {
+          started.complete();
+          await gate.future;
+        }
+      };
+    final parser = executor(
+      source,
+      remote: _Directory(tids: const ['100', '200']),
+    );
+    final sync = parser.sync();
+    await started.future;
+    final service = coordinator(_ObservedExecutor(parser, submitted));
+    final unfavorite = DefaultUnfavoriteThreadUseCase(
+      favoriteThreadCommand: FakeFavoriteThreadCommand(),
+      favoriteLinkService: DefaultFavoriteLinkService(repository: local),
+      localFavoriteRepository: local,
+      workPurgeService: _DatabasePurge(db),
+      shelfRefreshBus: bus,
+      cancelParseJobs: (tids) {
+        final future = service.cancelThreads(tids);
+        retiring.complete();
+        return future;
+      },
+    );
+    final removal = unfavorite.call('200');
+    await retiring.future;
+    await service.requestConfirmed(confirmed(), title: 'Novel');
+    await submitted.future;
+    gate.complete();
+    expect((await removal).purgedWorkIds, isEmpty);
+    await sync;
+    await service.settled;
+    expect((await local.getActiveThreadByTid('200'))?.remoteFavoriteId, '88');
+    expect(source.tids.where((tid) => tid == '200'), hasLength(1));
+  });
+
+  test(
+    'automatic parsing rejects late results after the verified owner changes',
+    () async {
+      Object owner = (uid: '123', revision: 1);
+      final started = Completer<void>(), gate = Completer<void>();
+      final parser = executor(
+        _Source(() async {
+          started.complete();
+          await gate.future;
+        }),
+        remote: _Directory(tids: const ['200']),
+        readOwner: () => owner,
+      );
+      final sync = expectLater(parser.sync(), throwsA(isA<Exception>()));
+      await started.future;
+      owner = (uid: '456', revision: 2);
+      gate.complete();
+      await sync;
+      expect(await db.query(AppDatabase.worksTable), isEmpty);
+      expect(await local.getSyncSnapshot(), isNull);
+    },
+  );
+
+  test(
+    'a cached automatic record with a dangling work binding is reloaded',
+    () async {
+      final started = Completer<void>(), gate = Completer<void>();
+      final source = _Source(() async {})
+        ..beforeTid = (tid) async {
+          if (tid == '100') {
+            started.complete();
+            await gate.future;
+          }
+        };
+      final parser = executor(
+        source,
+        remote: _Directory(tids: const ['100', '200']),
+      );
+      final sync = parser.sync();
+      await started.future;
+      await local.updateThreadDetailMeta(
+        tid: '200',
+        fid: '55',
+        typeid: '295',
+        tagName: null,
+        contentKind: ThreadContentKind.novel,
+        workId: 'novel:55:missing',
+      );
+      gate.complete();
+      await sync;
+      expect(source.tids, ['100', '200']);
+      expect((await local.getActiveThreadByTid('200'))?.workId, 'novel:55:200');
+    },
+  );
+
+  test('a stronger persisted request survives an obsolete acknowledgement and reopening', () async {
+    await seed();
+    await jobs.enqueue(
+      '123',
+      const FavoriteParseTarget(tid: '200'),
+      isCurrent: () => true,
+    );
+    final obsolete = (await jobs.claim('123'))!;
+    await jobs.enqueue(
+      '123',
+      const FavoriteParseTarget(
+        tid: '200',
+        confirmed: true,
+        remoteFavoriteId: '88',
+        title: 'Novel',
+      ),
+      isCurrent: () => true,
+    );
+    await jobs.finish(obsolete);
+    final pending = (await db.query(AppDatabase.favoriteParseJobsTable)).single;
+    expect(pending['state'], 'queued');
+    expect(pending['revision'], greaterThan(obsolete.revision));
+    await db.close();
+    db = await AppDatabase.open(databaseName: path);
+    local = SqfliteLocalFavoriteRepository(Future.value(db));
+    jobs = FavoriteParseJobRepository(Future.value(db));
+    final source = _Source(() async {});
+    await coordinator(executor(source)).resume();
+    expect(source.calls, 1);
+    await expectNovel();
+    expect((await local.getActiveThreadByTid('200'))?.remoteFavoriteId, '88');
+  });
+
+  test(
+    'an older directory response cannot overwrite a newly unfavorited row',
+    () async {
+      await local.upsertRemoteThreads(const [
+        FavoriteThreadCacheUpsert(tid: '200', title: 'Original', replyCount: 1),
+      ]);
+      final started = Completer<void>(),
+          gate = Completer<void>(),
+          retiring = Completer<void>();
+      final source = _Source(() async {});
+      final parser = executor(
+        source,
+        remote: _Directory(
+          tids: const ['200'],
+          beforeRead: () async {
+            started.complete();
+            await gate.future;
+          },
+        ),
+      );
+      final sync = parser.sync();
+      await started.future;
+      final service = coordinator(parser);
+      final unfavorite = DefaultUnfavoriteThreadUseCase(
+        favoriteThreadCommand: FakeFavoriteThreadCommand(),
+        favoriteLinkService: DefaultFavoriteLinkService(repository: local),
+        localFavoriteRepository: local,
+        workPurgeService: _DatabasePurge(db),
+        shelfRefreshBus: bus,
+        cancelParseJobs: (tids) {
+          final future = service.cancelThreads(tids);
+          retiring.complete();
+          return future;
+        },
+      );
+      final removal = unfavorite.call('200');
+      await retiring.future;
+      gate.complete();
+      await removal;
+      expect((await sync).needsReconciliation, isTrue);
+      expect(source.calls, 0);
+      expect(await local.getActiveThreadByTid('200'), isNull);
+      expect(
+        (await db.query(AppDatabase.favoriteThreadsTable)).single['title'],
+        'Original',
+      );
+    },
+  );
+
+  test(
+    'a delayed claimed confirmation cannot replay over a newer cancellation',
+    () async {
+      final started = Completer<void>(),
+          gate = Completer<void>(),
+          claimed = Completer<void>(),
+          claimGate = Completer<void>(),
+          retiring = Completer<void>(),
+          submitted = Completer<void>();
+      final source = _Source(() async {})
+        ..beforeTid = (tid) async {
+          if (tid == '100') {
+            started.complete();
+            await gate.future;
+          }
+        };
+      final parser = executor(
+        source,
+        remote: _Directory(tids: const ['100', '200']),
+      );
+      final sync = parser.sync();
+      await started.future;
+      jobs = _DelayedEligibility(Future.value(db), claimed, claimGate);
+      final service = coordinator(_ObservedExecutor(parser, submitted));
+      await service.requestConfirmed(confirmed(), title: 'Novel');
+      await claimed.future;
+      final unfavorite = DefaultUnfavoriteThreadUseCase(
+        favoriteThreadCommand: FakeFavoriteThreadCommand(),
+        favoriteLinkService: DefaultFavoriteLinkService(repository: local),
+        localFavoriteRepository: local,
+        workPurgeService: _DatabasePurge(db),
+        shelfRefreshBus: bus,
+        cancelParseJobs: (tids) {
+          final future = service.cancelThreads(tids);
+          retiring.complete();
+          return future;
+        },
+      );
+      final removal = unfavorite.call('200');
+      await retiring.future;
+      claimGate.complete();
+      await submitted.future;
+      gate.complete();
+      await removal;
+      await sync;
+      await service.settled;
+      expect(source.tids, ['100']);
+      expect(await local.getActiveThreadByTid('200'), isNull);
+    },
+  );
+
   test('admission stays fast behind an entire sync and does not start another directory scan', () async {
     final started = Completer<void>(), gate = Completer<void>();
     final remote = _Directory(
@@ -445,6 +821,8 @@ void main() {
 class _Source implements ThreadRepository {
   _Source(this.beforeRead);
   final Future<void> Function() beforeRead;
+  Future<void> Function(String)? beforeTid;
+  final List<String> tids = [];
   int calls = 0;
   bool fail = false;
   @override
@@ -460,7 +838,12 @@ class _Source implements ThreadRepository {
     ThreadDetailQuery query = const ThreadDetailQuery(),
   }) async {
     calls++;
-    await beforeRead();
+    tids.add(tid);
+    if (beforeTid != null) {
+      await beforeTid!(tid);
+    } else {
+      await beforeRead();
+    }
     if (fail) {
       return const DataReadFailure(
         kind: DataReadFailureKind.network,
@@ -497,8 +880,9 @@ class _Source implements ThreadRepository {
 }
 
 class _Directory implements FavoriteThreadDirectoryRepository {
-  _Directory({this.beforeRead});
+  _Directory({this.beforeRead, this.tids});
   final Future<void> Function()? beforeRead;
+  final List<String>? tids;
   int calls = 0;
   @override
   final capabilities = FavoriteThreadDirectorySourceCapabilities(
@@ -520,6 +904,26 @@ class _Directory implements FavoriteThreadDirectoryRepository {
   }) async {
     calls++;
     await beforeRead?.call();
+    if (tids != null) {
+      return DataReadSuccess(
+        data: FavoriteThreadDirectoryData(
+          items: [
+            for (final tid in tids!)
+              FavoriteThreadReference(tid: tid, title: 'Novel', replyCount: 1),
+          ],
+          pagination: FavoriteThreadPagination(
+            currentPage: 1,
+            pageSize: 20,
+            totalItems: tids!.length,
+            totalPages: 1,
+            hasPrevious: false,
+            hasNext: false,
+          ),
+        ),
+        capabilities: capabilities.toReadCapabilities(),
+        metadata: const DataReadMetadata.network(),
+      );
+    }
     return const DataReadFailure(
       kind: DataReadFailureKind.network,
       diagnosticMessage: 'directory_not_expected_for_single_parse',
@@ -561,5 +965,53 @@ class _RecoveryFailsOnce extends FavoriteParseJobRepository {
       throw StateError('temporary_database_failure');
     }
     await super.recover(accountId);
+  }
+}
+
+class _ObservedExecutor implements FavoriteThreadParseExecutor {
+  _ObservedExecutor(this.inner, this.submitted);
+  final FavoriteThreadParseExecutor inner;
+  final Completer<void> submitted;
+  @override
+  Future<void> parseThread(
+    FavoriteParseTarget target, {
+    required Future<bool> Function() isCurrent,
+  }) {
+    final future = inner.parseThread(target, isCurrent: isCurrent);
+    if (!submitted.isCompleted) submitted.complete();
+    return future;
+  }
+
+  @override
+  void noteMembershipChange(
+    Set<String> tids, {
+    required bool favorited,
+    String? remoteFavoriteId,
+    bool onlyIfUnknown = false,
+  }) => inner.noteMembershipChange(
+    tids,
+    favorited: favorited,
+    remoteFavoriteId: remoteFavoriteId,
+    onlyIfUnknown: onlyIfUnknown,
+  );
+  @override
+  bool isUnfavorited(String tid) => inner.isUnfavorited(tid);
+  @override
+  Future<void> waitForPendingOperations() => inner.waitForPendingOperations();
+}
+
+class _DelayedEligibility extends FavoriteParseJobRepository {
+  _DelayedEligibility(super.database, this.claimed, this.release);
+  final Completer<void> claimed, release;
+  bool first = true;
+  @override
+  Future<bool> isCurrent(FavoriteParseJob job) async {
+    final valid = await super.isCurrent(job);
+    if (first) {
+      first = false;
+      claimed.complete();
+      await release.future;
+    }
+    return valid;
   }
 }

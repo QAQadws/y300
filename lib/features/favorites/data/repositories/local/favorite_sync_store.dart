@@ -14,6 +14,27 @@ class FavoriteSyncStore {
       "(ft.detail_state = 'pending' OR "
       "(ft.detail_state = 'resolved' AND ft.content_kind = 'unknown'))";
 
+  Future<bool> hasUsableDetail(FavoriteThreadCacheRecord record) async {
+    if (record.needsDetail || !record.isActive) return false;
+    if (record.detailState == FavoriteDetailState.invalid) return true;
+    if (record.contentKind == ThreadContentKind.forum) {
+      return record.workId == 'thread:${record.tid}';
+    }
+    if (record.workId == null || record.sourceFid?.isNotEmpty != true) {
+      return false;
+    }
+    final db = await _dbFuture;
+    final comic = record.contentKind == ThreadContentKind.comic;
+    final rows = await db.query(
+      comic ? AppDatabase.comicsTable : AppDatabase.worksTable,
+      columns: [comic ? 'comic_id' : 'work_id'],
+      where: comic ? 'comic_id = ?' : "work_id = ? AND content_type = 'novel'",
+      whereArgs: [record.workId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async {
     final db = await _dbFuture;
     final rows = await db.query(

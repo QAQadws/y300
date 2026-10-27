@@ -20,6 +20,8 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
   Future<void>? _recovery;
   bool _closed = false;
   bool _wakeRequested = false;
+  Completer<void>? _wake;
+  final Set<Future<void>> _executing = {};
   final Set<String> _cancelled = {};
 
   bool get _valid => !_closed && isOwnerCurrent();
@@ -92,6 +94,11 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
       isCurrent: () => _valid,
     );
     _cancelled.remove(receipt.tid.trim());
+    executor.noteMembershipChange(
+      {receipt.tid.trim()},
+      favorited: true,
+      remoteFavoriteId: receipt.remoteFavoriteId,
+    );
     _kick();
   }
 
@@ -106,6 +113,8 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
   void _kick() {
     if (!_valid) return;
     _wakeRequested = true;
+    final wake = _wake;
+    if (wake != null && !wake.isCompleted) wake.complete();
     if (_draining != null) return;
     _draining = _drain()
         .catchError((Object _) {
@@ -119,46 +128,83 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
   }
 
   Future<void> _drain() async {
-    do {
-      _wakeRequested = false;
+    try {
       while (_valid) {
-        final job = await repository.claim(accountId);
-        if (job == null) break;
-        Future<bool> current() async {
-          if (!_valid || _cancelled.contains(job.target.tid)) return false;
-          final stored = await repository.isCurrent(job);
-          return stored && _valid && !_cancelled.contains(job.target.tid);
+        _wakeRequested = false;
+        while (_valid && _executing.length < 20) {
+          final job = await repository.claim(accountId);
+          if (job == null) break;
+          late final Future<void> execution;
+          execution = _runJob(job)
+              .catchError((Object _) {
+                _recovery = null;
+              })
+              .whenComplete(() {
+                _executing.remove(execution);
+                _wakeRequested = true;
+                final wake = _wake;
+                if (wake != null && !wake.isCompleted) wake.complete();
+              });
+          _executing.add(execution);
         }
-
-        if (!await current()) {
-          if (!_valid) break;
-          continue;
-        }
-        try {
-          await executor.parseThread(job.target, isCurrent: current);
-          if (await current()) await repository.finish(job);
-        } catch (_) {
-          if (await current()) {
-            await repository.finish(job, errorCode: 'favorite_parse_failed');
-          }
+        if (!_valid || (_executing.isEmpty && !_wakeRequested)) break;
+        if (!_wakeRequested) {
+          _wake = Completer<void>();
+          await _wake!.future;
+          _wake = null;
         }
       }
-    } while (_wakeRequested && _valid);
+    } finally {
+      await Future.wait(_executing.toList());
+    }
+  }
+
+  Future<void> _runJob(FavoriteParseJob job) async {
+    Future<bool> current() async {
+      if (!_valid || _cancelled.contains(job.target.tid)) return false;
+      final stored = await repository.isCurrent(job);
+      return stored && _valid && !_cancelled.contains(job.target.tid);
+    }
+
+    if (!await current()) {
+      return;
+    }
+    try {
+      if (job.target.confirmed) {
+        executor.noteMembershipChange(
+          {job.target.tid},
+          favorited: true,
+          remoteFavoriteId: job.target.remoteFavoriteId,
+          onlyIfUnknown: true,
+        );
+      }
+      await executor.parseThread(job.target, isCurrent: current);
+      if (await current()) await repository.finish(job);
+    } catch (_) {
+      if (await current()) {
+        await repository.finish(job, errorCode: 'favorite_parse_failed');
+      }
+    }
   }
 
   @override
-  Future<void> cancelThreads(Set<String> tids) async {
+  Future<Set<String>> cancelThreads(Set<String> tids) async {
     if (!_valid) throw StateError('favorite_parse_owner_changed');
+    executor.noteMembershipChange(tids, favorited: false);
     // The caller removes shelf entries after any already-started ingest has
     // settled. Do not retire an ingest halfway through its module writes: its
     // final binding is needed by the unfavorite use case for shelf cleanup.
     await executor.waitForPendingOperations();
     if (!_valid) throw StateError('favorite_parse_owner_changed');
-    _cancelled.addAll(tids);
-    await repository.cancel(accountId, tids);
+    final current = tids.where(executor.isUnfavorited).toSet();
+    _cancelled.addAll(current);
+    await repository.cancel(accountId, current);
+    return current;
   }
 
   void close() {
     _closed = true;
+    final wake = _wake;
+    if (wake != null && !wake.isCompleted) wake.complete();
   }
 }

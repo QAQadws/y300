@@ -14,7 +14,7 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     required LocalFavoriteRepository localFavoriteRepository,
     required WorkPurgeService workPurgeService,
     required LibraryShelfRefreshBus shelfRefreshBus,
-    Future<void> Function(Set<String>)? cancelParseJobs,
+    Future<Set<String>> Function(Set<String>)? cancelParseJobs,
   }) : _cancelParseJobs = cancelParseJobs,
        _favoriteThreadCommand = favoriteThreadCommand,
        _favoriteLinkService = favoriteLinkService,
@@ -23,7 +23,7 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
        _shelfRefreshBus = shelfRefreshBus;
 
   final FavoriteThreadCommand _favoriteThreadCommand;
-  final Future<void> Function(Set<String>)? _cancelParseJobs;
+  final Future<Set<String>> Function(Set<String>)? _cancelParseJobs;
   final FavoriteLinkService _favoriteLinkService;
   final LocalFavoriteRepository _localFavoriteRepository;
   final WorkPurgeService _workPurgeService;
@@ -70,9 +70,19 @@ class DefaultUnfavoriteWorkUseCase implements UnfavoriteWorkUseCase {
     var changedCount = 0;
     final purgedWorkIds = <String>[];
     if (succeededTids.isNotEmpty) {
-      await _cancelParseJobs?.call(succeededTids.toSet());
+      final removalTids =
+          await _cancelParseJobs?.call(succeededTids.toSet()) ??
+          succeededTids.toSet();
+      if (removalTids.isEmpty) {
+        return UnfavoriteResult(
+          requestedTids: requestedTids,
+          succeededTids: succeededTids,
+          failedTids: failedTids,
+          purgedWorkIds: const [],
+        );
+      }
       changedCount = await _localFavoriteRepository.markRemovedByTids(
-        succeededTids.toSet(),
+        removalTids,
       );
       final hasAnyActiveThread = await _favoriteLinkService.hasAnyActiveThread(
         normalizedWorkId,
@@ -146,7 +156,7 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
     required LocalFavoriteRepository localFavoriteRepository,
     required WorkPurgeService workPurgeService,
     required LibraryShelfRefreshBus shelfRefreshBus,
-    Future<void> Function(Set<String>)? cancelParseJobs,
+    Future<Set<String>> Function(Set<String>)? cancelParseJobs,
   }) : _cancelParseJobs = cancelParseJobs,
        _favoriteThreadCommand = favoriteThreadCommand,
        _favoriteLinkService = favoriteLinkService,
@@ -155,7 +165,7 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
        _shelfRefreshBus = shelfRefreshBus;
 
   final FavoriteThreadCommand _favoriteThreadCommand;
-  final Future<void> Function(Set<String>)? _cancelParseJobs;
+  final Future<Set<String>> Function(Set<String>)? _cancelParseJobs;
   final FavoriteLinkService _favoriteLinkService;
   final LocalFavoriteRepository _localFavoriteRepository;
   final WorkPurgeService _workPurgeService;
@@ -183,7 +193,16 @@ class DefaultUnfavoriteThreadUseCase implements UnfavoriteThreadUseCase {
       );
     }
 
-    await _cancelParseJobs?.call({normalizedTid});
+    final removalTids =
+        await _cancelParseJobs?.call({normalizedTid}) ?? {normalizedTid};
+    if (!removalTids.contains(normalizedTid)) {
+      return UnfavoriteResult(
+        requestedTids: [normalizedTid],
+        succeededTids: [normalizedTid],
+        failedTids: const [],
+        purgedWorkIds: const [],
+      );
+    }
     // A parse already in progress may have committed its first work binding
     // while the remote unfavorite command was being confirmed.
     final workId = await _favoriteLinkService.workIdForThread(normalizedTid);

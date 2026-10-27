@@ -17,7 +17,7 @@ abstract interface class FavoriteParseService {
   Future<FavoriteParseAdmission> requestThreads(Set<String> tids);
   Future<void> requestConfirmed(ThreadFavoriteReceipt receipt, {String? title});
   Future<void> resume();
-  Future<void> cancelThreads(Set<String> tids);
+  Future<Set<String>> cancelThreads(Set<String> tids);
 }
 
 class FavoriteParseTarget {
@@ -36,6 +36,13 @@ class FavoriteParseTarget {
 
 /// Uses the same execution lane and governor as directory synchronization.
 abstract interface class FavoriteThreadParseExecutor {
+  void noteMembershipChange(
+    Set<String> tids, {
+    required bool favorited,
+    String? remoteFavoriteId,
+    bool onlyIfUnknown = false,
+  });
+  bool isUnfavorited(String tid);
   Future<void> parseThread(
     FavoriteParseTarget target, {
     required Future<bool> Function() isCurrent,

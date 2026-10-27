@@ -130,9 +130,16 @@ abstract class FavoriteShelfSnapshotRepository {
   });
 }
 
+abstract interface class FavoriteDetailReadinessRepository {
+  Future<bool> hasUsableDetail(FavoriteThreadCacheRecord record);
+}
+
 /// Keeps the public repository stable while stores own their SQLite operations.
 class SqfliteLocalFavoriteRepository
-    implements LocalFavoriteRepository, FavoriteShelfSnapshotRepository {
+    implements
+        LocalFavoriteRepository,
+        FavoriteShelfSnapshotRepository,
+        FavoriteDetailReadinessRepository {
   SqfliteLocalFavoriteRepository(Future<Database> database)
     : _syncStore = FavoriteSyncStore(database),
       _categoryStore = FavoriteCategoryStore(database) {
@@ -156,6 +163,10 @@ class SqfliteLocalFavoriteRepository
   @override
   Future<int> countMissingDetailRecords() =>
       _syncStore.countMissingDetailRecords();
+
+  @override
+  Future<bool> hasUsableDetail(FavoriteThreadCacheRecord record) =>
+      _syncStore.hasUsableDetail(record);
 
   @override
   Future<Set<String>> getActiveTids() => _syncStore.getActiveTids();
