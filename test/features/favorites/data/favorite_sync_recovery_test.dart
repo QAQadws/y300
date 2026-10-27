@@ -482,6 +482,47 @@ void main() {
     },
   );
 
+  test(
+    'ordinary bootstrap repairs an old unknown resolved classification',
+    () async {
+      await seed(resolved: true, baseline: true);
+      expect(await local.countMissingDetailRecords(), 1);
+      final source = _ThreadSource((_) async => _success(_detail()));
+      final bootstrap = DefaultFavoriteShelfBootstrapper(
+        repository: local,
+        syncService: buildService(source),
+      );
+
+      await bootstrap.startIfNeeded();
+
+      expect(source.calls, 1);
+      expect(await local.countMissingDetailRecords(), 0);
+      await expectNovel();
+    },
+  );
+
+  test(
+    'missing forum identity remains retryable instead of resolved',
+    () async {
+      final source = _ThreadSource(
+        (call) async => _success(_detail(fid: call == 1 ? '' : '55')),
+      );
+      final service = buildService(source);
+
+      final failed = await service.sync();
+      expect(failed.failedDetailTids, ['200']);
+      expect(
+        (await local.getActiveThreadByTid('200'))?.detailState,
+        FavoriteDetailState.pending,
+      );
+      expect((await local.getSyncSnapshot())?.status, 'partial');
+
+      await service.sync();
+      expect(source.calls, 2);
+      await expectNovel();
+    },
+  );
+
   test('completed bootstrap resumes a later failed recent-add', () async {
     await local.finishSync(mode: FavoriteSyncMode.fullDiff, remoteCount: 0);
     final source = _ThreadSource((call) async {

@@ -131,8 +131,11 @@ class FavoriteThreadCacheRecord {
 
   bool get isActive => removedAt == null;
 
-  /// Whether a regular sync should load this record's detail.
-  bool get needsDetail => detailState == FavoriteDetailState.pending;
+  /// Unknown classifications saved by older syncs still need a real detail read.
+  bool get needsDetail =>
+      detailState == FavoriteDetailState.pending ||
+      (detailState == FavoriteDetailState.resolved &&
+          contentKind == ThreadContentKind.unknown);
 
   String get shelfWorkId => FavoriteShelfWorkId.fromTid(tid);
 

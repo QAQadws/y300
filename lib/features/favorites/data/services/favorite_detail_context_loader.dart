@@ -102,6 +102,13 @@ class DefaultFavoriteDetailContextLoader
       typeid: detail.typeid,
       tagName: tagName,
     );
+    if (kind == ThreadContentKind.unknown) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.parse,
+        code: 'favorite_detail_forum_identity_missing',
+        diagnosticMessage: 'favorite_detail_forum_identity_missing',
+      );
+    }
     return DataReadSuccess(
       data: ResolvedFavoriteDetail(
         FavoriteDetailContext(

@@ -10,7 +10,9 @@ class FavoriteSyncStore {
 
   final Future<Database> _dbFuture;
 
-  static const _needsDetailCondition = "ft.detail_state = 'pending'";
+  static const _needsDetailCondition =
+      "(ft.detail_state = 'pending' OR "
+      "(ft.detail_state = 'resolved' AND ft.content_kind = 'unknown'))";
 
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async {
     final db = await _dbFuture;
