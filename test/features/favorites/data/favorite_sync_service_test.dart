@@ -2329,7 +2329,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         .where(
           (record) =>
               record.isActive &&
-              record.detailState == FavoriteDetailState.pending,
+              record.needsDetail,
         )
         .length;
   }
@@ -2459,7 +2459,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         .where(
           (record) =>
               record.isActive &&
-              record.detailState == FavoriteDetailState.pending &&
+              record.needsDetail &&
               !excludedTids.contains(record.tid),
         )
         .take(limit)
@@ -2599,6 +2599,32 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
+  Future<void> markThreadDetailPending({required String tid}) async {
+    final old = records[tid]!;
+    records[tid] = FavoriteThreadCacheRecord(
+      tid: tid,
+      remoteFavoriteId: old.remoteFavoriteId,
+      title: old.title,
+      description: old.description,
+      authorName: old.authorName,
+      replyCount: old.replyCount,
+      favoritedAt: old.favoritedAt,
+      remoteOrder: old.remoteOrder,
+      sourceFid: old.sourceFid,
+      sourceTypeid: old.sourceTypeid,
+      sourceTagName: old.sourceTagName,
+      contentKind: old.contentKind,
+      workId: old.workId,
+      detailLoadedAt: old.detailLoadedAt,
+      detailState: FavoriteDetailState.pending,
+      firstSeenAt: old.firstSeenAt,
+      lastSeenAt: old.lastSeenAt,
+      removedAt: old.removedAt,
+      customCategoryId: old.customCategoryId,
+    );
+  }
+
+  @override
   Future<void> markThreadDetailInvalid({required String tid}) async {
     final old = records[tid]!;
     records[tid] = FavoriteThreadCacheRecord(
@@ -2630,6 +2656,10 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
     final now = DateTime(2026, 1, 1);
     for (final item in items) {
       final old = records[item.tid];
+      final restored = old != null &&
+          (old.removedAt != null ||
+              (old.remoteFavoriteId != null && item.remoteFavoriteId != null &&
+                  old.remoteFavoriteId != item.remoteFavoriteId));
       records[item.tid] = FavoriteThreadCacheRecord(
         tid: item.tid,
         remoteFavoriteId: item.remoteFavoriteId,
@@ -2645,7 +2675,9 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
         contentKind: old?.contentKind ?? ThreadContentKind.unknown,
         workId: old?.workId,
         detailLoadedAt: old?.detailLoadedAt,
-        detailState: old?.detailState ?? FavoriteDetailState.pending,
+        detailState: restored
+            ? FavoriteDetailState.pending
+            : old?.detailState ?? FavoriteDetailState.pending,
         firstSeenAt: old?.firstSeenAt ?? now,
         lastSeenAt: now,
         removedAt: null,

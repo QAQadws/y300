@@ -2006,6 +2006,9 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
+  @override
+  Future<void> markThreadDetailPending({required String tid}) async {}
+
   final _category = LibraryCategory(
     categoryId: favoriteDefaultCategoryId,
     name: '默认',

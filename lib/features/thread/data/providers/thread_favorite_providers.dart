@@ -11,9 +11,12 @@ final threadFavoriteActionServiceProvider =
       return DefaultThreadFavoriteActionService(
         command: ref.watch(favoriteThreadCommandProvider),
         refreshFavoriteModule: ({required String tid}) async {
-          await ref
+          final result = await ref
               .read(favoriteSyncServiceProvider)
               .syncRecentlyAddedThread(tid: tid);
+          if (result.failedDetailTids.contains(tid.trim())) {
+            throw StateError('favorite_target_detail_sync_incomplete');
+          }
         },
         notifyFavoriteModule: ({required String reason, required String tid}) {
           shelfRefreshBus.notify(

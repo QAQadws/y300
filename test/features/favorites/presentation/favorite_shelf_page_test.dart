@@ -688,6 +688,9 @@ class _FakeLibraryTaskNotificationService
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
+  @override
+  Future<void> markThreadDetailPending({required String tid}) async {}
+
   _FakeLocalFavoriteRepository({
     this.hasSnapshot = true,
     List<LibraryCategory>? categories,

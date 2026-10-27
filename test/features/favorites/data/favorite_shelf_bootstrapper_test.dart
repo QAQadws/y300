@@ -223,6 +223,9 @@ class _FakeFavoriteSyncService implements FavoriteSyncService {
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
+  @override
+  Future<void> markThreadDetailPending({required String tid}) async {}
+
   _FakeLocalFavoriteRepository({
     this.snapshot,
     this.missingDetailCount = 0,

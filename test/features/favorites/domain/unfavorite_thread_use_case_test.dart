@@ -324,6 +324,9 @@ class _FakeFavoriteLinkService implements FavoriteLinkService {
 }
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
+  @override
+  Future<void> markThreadDetailPending({required String tid}) async {}
+
   _FakeLocalFavoriteRepository({this.changedCount});
 
   final List<Set<String>> markRemovedByTidsCalls = <Set<String>>[];

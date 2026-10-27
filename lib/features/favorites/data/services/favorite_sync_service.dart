@@ -125,18 +125,22 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   final ValueNotifier<FavoriteSyncProgress> _progress =
       ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
   Future<FavoriteSyncResult>? _inflightSync;
+  final Map<String, Future<FavoriteSyncResult>> _inflightRecentAdds = {};
+  Future<void> _operationTail = Future<void>.value();
+  int _pendingSyncOperations = 0;
+  late final FavoriteSyncRequestGovernor _requestGovernor = _governorFactory();
 
   @override
   ValueListenable<FavoriteSyncProgress> get progress => _progress;
 
   @override
-  Future<void> runBackgroundMaintenance() async {
-    await runBackgroundMaintenanceWithContext(
+  Future<void> runBackgroundMaintenance() => _enqueueOperation(() {
+    return runBackgroundMaintenanceWithContext(
       context: FavoriteSyncExecutionContext.automaticResume(
-        governor: _governorFactory(),
+        governor: _requestGovernor,
       ),
     );
-  }
+  });
 
   @override
   Future<FavoriteSyncResult> sync() async {
@@ -146,14 +150,17 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     }
     late final Future<FavoriteSyncResult> future;
     future =
-        _runSync(() async {
+        _enqueueSync(() async {
           final snapshot = await _localRepository.getSyncSnapshot();
-          final context = snapshot == null
+          final context =
+              snapshot == null ||
+                  (snapshot.requiresFullSync &&
+                      snapshot.lastFullSyncedAt == null)
               ? FavoriteSyncExecutionContext.bootstrapInitial(
-                  governor: _governorFactory(),
+                  governor: _requestGovernor,
                 )
               : FavoriteSyncExecutionContext.automaticResume(
-                  governor: _governorFactory(),
+                  governor: _requestGovernor,
                 );
           return _syncInternal(context: context);
         }).whenComplete(() {
@@ -173,21 +180,60 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     if (normalizedTid.isEmpty) {
       throw StateError('收藏帖子 tid 不能为空');
     }
-    return _runSync(() async {
-      final snapshot = await _localRepository.getSyncSnapshot();
-      final context = FavoriteSyncExecutionContext.manualRecentAdd(
-        governor: _governorFactory(),
-      );
-      if (snapshot == null) {
-        // No baseline exists yet, so keep correctness by doing the regular
-        // first sync while still forcing the just-favorited comic through the
-        // search queue if catalog discovery misses.
-        return _syncInternal(
-          context: context,
-          forceComicSearchOnCatalogMissTids: <String>{normalizedTid},
-        );
+    final existing = _inflightRecentAdds[normalizedTid];
+    if (existing != null) {
+      return existing;
+    }
+    late final Future<FavoriteSyncResult> future;
+    future =
+        _enqueueSync(() async {
+          final snapshot = await _localRepository.getSyncSnapshot();
+          final context = FavoriteSyncExecutionContext.manualRecentAdd(
+            governor: _requestGovernor,
+          );
+          if (snapshot == null || snapshot.requiresFullSync) {
+            // Rebuild an absent or interrupted baseline, while still forcing
+            // this explicit target through detail loading and comic discovery.
+            return _syncInternal(
+              context: context,
+              forceComicSearchOnCatalogMissTids: <String>{normalizedTid},
+              forceDetailTids: <String>{normalizedTid},
+            );
+          }
+          return _syncRecentlyAddedThreadInternal(
+            normalizedTid,
+            context: context,
+          );
+        }).whenComplete(() {
+          if (identical(_inflightRecentAdds[normalizedTid], future)) {
+            _inflightRecentAdds.remove(normalizedTid);
+          }
+        });
+    _inflightRecentAdds[normalizedTid] = future;
+    return future;
+  }
+
+  Future<T> _enqueueOperation<T>(Future<T> Function() body) {
+    final operation = _operationTail.then((_) => body());
+    // A failed read must not prevent a later explicit retry from starting.
+    _operationTail = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return operation;
+  }
+
+  Future<FavoriteSyncResult> _enqueueSync(
+    Future<FavoriteSyncResult> Function() body,
+  ) {
+    // Keep task progress alive until every already-queued sync has settled.
+    _pendingSyncOperations++;
+    return _enqueueOperation(() async {
+      try {
+        return await _runSync(body);
+      } finally {
+        _pendingSyncOperations--;
       }
-      return _syncRecentlyAddedThreadInternal(normalizedTid, context: context);
     });
   }
 
@@ -196,20 +242,28 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   ) async {
     try {
       final result = await body();
-      _emitProgress(
-        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.completed),
-      );
+      if (_pendingSyncOperations == 1) {
+        _emitProgress(
+          const FavoriteSyncProgress(
+            phase: FavoriteSyncProgressPhase.completed,
+          ),
+        );
+      }
       return result;
     } on _FavoriteSyncFailure catch (error) {
-      _emitProgress(
-        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
-      );
+      if (_pendingSyncOperations == 1) {
+        _emitProgress(
+          const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
+        );
+      }
       await _localRepository.markSyncFailure(error.message);
       throw StateError(error.message);
     } catch (error) {
-      _emitProgress(
-        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
-      );
+      if (_pendingSyncOperations == 1) {
+        _emitProgress(
+          const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
+        );
+      }
       await _localRepository.markSyncFailure('$error');
       rethrow;
     }
@@ -218,6 +272,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
   Future<FavoriteSyncResult> _syncInternal({
     required FavoriteSyncExecutionContext context,
     Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
+    Set<String> forceDetailTids = const <String>{},
   }) async {
     _emitProgress(
       const FavoriteSyncProgress(
@@ -301,7 +356,10 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         : const <FavoriteThreadCacheRecord>[];
     await _removeModuleShelfItems(removedRecords);
 
-    final firstFullSync = snapshot == null && mode == FavoriteSyncMode.fullDiff;
+    final firstFullSync =
+        mode == FavoriteSyncMode.fullDiff &&
+        (snapshot == null ||
+            (snapshot.requiresFullSync && snapshot.lastFullSyncedAt == null));
     await runBackgroundMaintenanceWithContext(context: context);
     final newlySeenTids = mode == FavoriteSyncMode.incremental
         ? remoteTids.difference(activeBefore)
@@ -319,6 +377,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         );
       },
       mergeIngestedComics: !firstFullSync,
+      forceDetailTids: forceDetailTids,
       forceComicSearchOnCatalogMissTids: <String>{
         ...forceComicSearchOnCatalogMissTids,
         ...newlySeenTids,
@@ -525,7 +584,7 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
     required Set<String> activeBefore,
     required FavoriteSyncSnapshot? snapshot,
   }) {
-    if (snapshot == null) {
+    if (snapshot == null || snapshot.requiresFullSync) {
       return FavoriteSyncMode.fullDiff;
     }
 
@@ -543,6 +602,11 @@ class NetworkFavoriteSyncService implements FavoriteSyncService {
         .map((item) => item.tid.trim())
         .where((tid) => tid.isNotEmpty);
     final pageOneAllKnown = pageOneTids.every(activeBefore.contains);
+    // An interrupted commit can leave a known first page but a missing tail.
+    // Incremental scanning would stop immediately and preserve that gap.
+    if (pageOneAllKnown && totalItems != activeBefore.length) {
+      return FavoriteSyncMode.fullDiff;
+    }
     if (totalItems == snapshot.localActiveCount && !pageOneAllKnown) {
       return FavoriteSyncMode.fullDiff;
     }

@@ -45,6 +45,9 @@ void main() {
 
 class _FakeLocalFavoriteRepository implements LocalFavoriteRepository {
   @override
+  Future<void> markThreadDetailPending({required String tid}) async {}
+
+  @override
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async => null;
 
   @override

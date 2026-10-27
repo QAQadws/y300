@@ -10,6 +10,8 @@ class FavoriteSyncStore {
 
   final Future<Database> _dbFuture;
 
+  static const _needsDetailCondition = "ft.detail_state = 'pending'";
+
   Future<FavoriteSyncSnapshot?> getSyncSnapshot() async {
     final db = await _dbFuture;
     final rows = await db.query(
@@ -38,9 +40,9 @@ class FavoriteSyncStore {
     final db = await _dbFuture;
     final rows = await db.rawQuery('''
       SELECT COUNT(*) AS count
-      FROM ${AppDatabase.favoriteThreadsTable}
-      WHERE removed_at IS NULL
-        AND detail_state = 'pending'
+      FROM ${AppDatabase.favoriteThreadsTable} ft
+      WHERE ft.removed_at IS NULL
+        AND $_needsDetailCondition
       ''');
     return rows.first['count'] as int? ?? 0;
   }
@@ -171,12 +173,22 @@ class FavoriteSyncStore {
         );
         final old = oldRows.isEmpty ? null : oldRows.first;
         final firstSeenAt = (old?['first_seen_at'] as int?) ?? now;
+        final remoteFavoriteId = FavoriteCacheRowMapper.normalizeNullable(
+          item.remoteFavoriteId,
+        );
+        final previousFavoriteId = FavoriteCacheRowMapper.normalizeNullable(
+          old?['favid'] as String?,
+        );
+        final restoredFavorite =
+            old != null &&
+            (old['removed_at'] != null ||
+                (remoteFavoriteId != null &&
+                    previousFavoriteId != null &&
+                    remoteFavoriteId != previousFavoriteId));
 
         final values = <String, Object?>{
           'tid': tid,
-          'favid': FavoriteCacheRowMapper.normalizeNullable(
-            item.remoteFavoriteId,
-          ),
+          'favid': remoteFavoriteId,
           'title': FavoriteCacheRowMapper.nonEmpty(
             item.title,
             fallback: '未命名收藏',
@@ -195,6 +207,10 @@ class FavoriteSyncStore {
           'first_seen_at': firstSeenAt,
           'last_seen_at': now,
           'removed_at': null,
+          if (restoredFavorite)
+            'detail_state': favoriteDetailStateToDb(
+              FavoriteDetailState.pending,
+            ),
         };
 
         if (old == null) {
@@ -238,7 +254,7 @@ class FavoriteSyncStore {
       LEFT JOIN ${AppDatabase.favoriteThreadCategoryTable} fc
         ON fc.tid = ft.tid
       WHERE ft.removed_at IS NULL
-        AND ft.detail_state = 'pending'
+        AND $_needsDetailCondition
       ORDER BY ft.remote_order ASC, ft.last_seen_at DESC
       LIMIT ?
       ''',
@@ -328,6 +344,18 @@ class FavoriteSyncStore {
         'detail_state': favoriteDetailStateToDb(FavoriteDetailState.invalid),
       },
       where: 'tid = ?',
+      whereArgs: <Object>[tid.trim()],
+    );
+  }
+
+  Future<void> markThreadDetailPending({required String tid}) async {
+    final db = await _dbFuture;
+    await db.update(
+      AppDatabase.favoriteThreadsTable,
+      <String, Object?>{
+        'detail_state': favoriteDetailStateToDb(FavoriteDetailState.pending),
+      },
+      where: 'tid = ? AND removed_at IS NULL',
       whereArgs: <Object>[tid.trim()],
     );
   }

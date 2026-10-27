@@ -31,6 +31,13 @@ class FavoriteSyncSnapshot {
   final DateTime? lastFullSyncedAt;
   final String? status;
   final String? message;
+
+  // A failure may have interrupted the per-page commits, even when a sync
+  // record exists. Only a complete directory read can restore that baseline.
+  bool get requiresFullSync =>
+      status == 'failed' || remoteCount != localActiveCount;
+
+  bool get needsResume => requiresFullSync || status == 'partial';
 }
 
 class FavoriteSyncResult {
@@ -123,6 +130,9 @@ class FavoriteThreadCacheRecord {
   final String? customCategoryId;
 
   bool get isActive => removedAt == null;
+
+  /// Whether a regular sync should load this record's detail.
+  bool get needsDetail => detailState == FavoriteDetailState.pending;
 
   String get shelfWorkId => FavoriteShelfWorkId.fromTid(tid);
 

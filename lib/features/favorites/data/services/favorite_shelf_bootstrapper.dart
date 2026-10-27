@@ -16,9 +16,6 @@ class DefaultFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
 
   @override
   Future<void> startIfNeeded() {
-    if (_hasCompletedBootstrap) {
-      return Future<void>.value();
-    }
     final existing = _startFuture;
     if (existing != null) {
       return existing;
@@ -33,7 +30,7 @@ class DefaultFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
   Future<void> _run() async {
     try {
       final snapshot = await _repository.getSyncSnapshot();
-      if (snapshot == null) {
+      if (snapshot == null || snapshot.needsResume) {
         await _syncService.sync();
         _hasCompletedBootstrap = await _hasStableBaseline();
         return;
@@ -43,7 +40,7 @@ class DefaultFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
       if (missingDetails > 0) {
         await _syncService.sync();
         _hasCompletedBootstrap = await _hasStableBaseline();
-      } else {
+      } else if (!_hasCompletedBootstrap) {
         _hasCompletedBootstrap = true;
         await _syncService.runBackgroundMaintenance();
       }
@@ -55,7 +52,7 @@ class DefaultFavoriteShelfBootstrapper implements FavoriteShelfBootstrapper {
 
   Future<bool> _hasStableBaseline() async {
     final snapshot = await _repository.getSyncSnapshot();
-    if (snapshot == null) {
+    if (snapshot == null || snapshot.needsResume) {
       return false;
     }
     final missingDetails = await _repository.countMissingDetailRecords();

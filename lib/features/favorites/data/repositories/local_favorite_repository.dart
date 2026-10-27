@@ -59,6 +59,9 @@ abstract class LocalFavoriteRepository {
 
   Future<void> markThreadDetailInvalid({required String tid});
 
+  /// Marks a fresh detail attempt pending without discarding cached metadata.
+  Future<void> markThreadDetailPending({required String tid});
+
   Future<List<FavoriteThreadCacheRecord>> markRemovedTids(
     Set<String> activeRemoteTids,
   );
@@ -234,6 +237,10 @@ class SqfliteLocalFavoriteRepository
   @override
   Future<void> markThreadDetailInvalid({required String tid}) =>
       _syncStore.markThreadDetailInvalid(tid: tid);
+
+  @override
+  Future<void> markThreadDetailPending({required String tid}) =>
+      _syncStore.markThreadDetailPending(tid: tid);
 
   @override
   Future<List<FavoriteThreadCacheRecord>> markRemovedTids(

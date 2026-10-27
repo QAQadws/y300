@@ -7,12 +7,11 @@ import 'package:y300/features/favorites/domain/models/favorite_detail_context.da
 import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
 import 'package:y300/features/favorites/domain/services/library_post_ingest_task_runner.dart';
 
-typedef FavoriteDetailFillProgress =
-    void Function({
-      required String subject,
-      required int current,
-      required int total,
-    });
+typedef FavoriteDetailFillProgress = void Function({
+  required String subject,
+  required int current,
+  required int total,
+});
 
 /// Completes cached favorites through the existing loader, ingest handlers and runner.
 class FavoriteDetailFiller {
@@ -77,20 +76,59 @@ class FavoriteDetailFiller {
     required FavoriteDetailFillProgress onProgress,
     bool mergeIngestedComics = true,
     Set<String> forceComicSearchOnCatalogMissTids = const <String>{},
+    Set<String> forceDetailTids = const <String>{},
   }) async {
-    final totalMissingDetails = await _localRepository
-        .countMissingDetailRecords();
     final failedTids = <String>[];
     final failedTidSet = <String>{};
     final errors = <String, String>{};
+    final forcedRecords = <FavoriteThreadCacheRecord>[];
+    final preloadedDetails =
+        <
+          String,
+          DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>
+        >{};
+    for (final tid in forceDetailTids) {
+      try {
+        var record = await _localRepository.getActiveThreadByTid(tid);
+        if (record == null) {
+          final detail = await loadTargetDetailOrNull(tid, context: context);
+          if (detail != null) {
+            await upsertRecentlyFavoritedThreadFromDetail(
+              tid: tid,
+              detail: detail.data,
+            );
+            preloadedDetails[tid] = detail;
+            record = await _localRepository.getActiveThreadByTid(tid);
+          }
+        }
+        if (record == null) {
+          throw StateError('favorite_target_detail_unavailable');
+        }
+        forcedRecords.add(record);
+      } catch (error) {
+        failedTidSet.add(tid);
+        failedTids.add(tid);
+        errors[tid] = '$error';
+      }
+    }
+    final totalMissingDetails =
+        await _localRepository.countMissingDetailRecords() +
+        forcedRecords.where((record) => !record.needsDetail).length +
+        failedTidSet.length;
     var loadedCount = 0;
     var processedCount = 0;
+    var processForcedRecords = forcedRecords.isNotEmpty;
 
     while (true) {
-      final records = await _localRepository.getMissingDetailRecords(
-        limit: _batchLimit,
-        excludedTids: failedTidSet,
-      );
+      // A confirmed recent favorite must be read even when a full-sync fallback
+      // finds an old resolved record. Process it once before the pending batches.
+      final records = processForcedRecords
+          ? forcedRecords
+          : await _localRepository.getMissingDetailRecords(
+              limit: _batchLimit,
+              excludedTids: failedTidSet,
+            );
+      processForcedRecords = false;
       if (records.isEmpty) {
         break;
       }
@@ -110,6 +148,7 @@ class FavoriteDetailFiller {
             mergeIngestedComics: mergeIngestedComics,
             forceComicSearchOnCatalogMiss: forceComicSearchOnCatalogMissTids
                 .contains(record.tid),
+            preloadedDetail: preloadedDetails.remove(record.tid),
           );
           if (loaded) {
             loadedCount++;
@@ -149,6 +188,9 @@ class FavoriteDetailFiller {
     DataReadSuccess<ThreadDetailData, ThreadDetailReadCapabilities>?
     preloadedDetail,
   }) async {
+    // Preserve the last useful metadata, but never let a failed reread keep a
+    // stale resolved/invalid marker that prevents the next bootstrap retry.
+    await _localRepository.markThreadDetailPending(tid: record.tid);
     final result = await _detailContextLoader.load(
       record,
       preloadedDetail: preloadedDetail,
