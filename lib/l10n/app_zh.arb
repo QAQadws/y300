@@ -494,6 +494,17 @@
     "placeholders": {"subject": {"type": "String"}}
   },
   "libraryTaskFavoriteSyncFinishing": "正在完成收藏同步",
+  "libraryTaskFavoriteParseQueued": "收藏解析正在排队",
+  "libraryTaskFavoriteParseRetry": "部分帖子解析失败，可长按帖子选择“解析”重试",
+  "libraryTaskFavoriteDirectoryRetry": "收藏列表仍需核对，可下拉同步重试",
+  "libraryTaskFavoriteQueueSummary": "前台等待 {foreground} · 自动剩余 {automatic} · 失败 {failed}",
+  "@libraryTaskFavoriteQueueSummary": {
+    "placeholders": {
+      "foreground": {"type": "int"},
+      "automatic": {"type": "int"},
+      "failed": {"type": "int"}
+    }
+  },
   "libraryTaskComicSearchWaiting": "漫画搜索正在等待",
   "libraryTaskComicSearchWaitingSubject": "《{subject}》正在等待搜索",
   "@libraryTaskComicSearchWaitingSubject": {

@@ -745,9 +745,8 @@ void main() {
             child: LocalizedTestApp(
               theme: AppTheme.light(),
               builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(1.3)),
                 child: child!,
               ),
               home: UnifiedShelfPage(
@@ -883,6 +882,44 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'failed parsing shows localized retry guidance and counts without an active progress bar',
+    (tester) async {
+      final l10n = AppLocalizationsZh();
+      final progress = ValueNotifier<LibraryShelfTaskProgress?>(
+        const LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.favoriteParseNeedsAttention,
+          active: false,
+          needsAttention: true,
+          foregroundQueued: 0,
+          failedCount: 2,
+        ),
+      );
+      addTearDown(progress.dispose);
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: UnifiedShelfPage(
+            adapter: _FakeShelfAdapter(
+              initialDisplayMode: LibraryDisplayMode.list,
+              taskProgress: progress,
+            ),
+            onOpenWork: (context, workId) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.libraryTaskFavoriteParseRetry), findsOneWidget);
+      expect(
+        find.text(l10n.libraryTaskFavoriteQueueSummary(0, 0, 2)),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('unified-shelf-task-progress-bar')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('dark theme shelf surfaces use shelf palette', (tester) async {
     final theme = AppTheme.dark();

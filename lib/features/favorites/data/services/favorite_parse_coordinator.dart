@@ -23,6 +23,24 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
   Completer<void>? _wake;
   final Set<Future<void>> _executing = {};
   final Set<String> _cancelled = {};
+  int _statusRevision = 0;
+
+  void _publishStatus() {
+    if (executor is! FavoriteParseQueueObserver) return;
+    final observer = executor as FavoriteParseQueueObserver;
+    final revision = ++_statusRevision;
+    unawaited(
+      () async {
+        final status = await repository.readStatus(accountId);
+        if (_valid && revision == _statusRevision) {
+          observer.updateQueueStatus(
+            status,
+            isCurrent: () => _valid && revision == _statusRevision,
+          );
+        }
+      }().catchError((Object _) {}),
+    );
+  }
 
   bool get _valid => !_closed && isOwnerCurrent();
   Future<void> get settled => _draining ?? Future<void>.value();
@@ -112,6 +130,7 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
 
   void _kick() {
     if (!_valid) return;
+    _publishStatus();
     _wakeRequested = true;
     final wake = _wake;
     if (wake != null && !wake.isCompleted) wake.complete();
@@ -141,6 +160,7 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
               })
               .whenComplete(() {
                 _executing.remove(execution);
+                _publishStatus();
                 _wakeRequested = true;
                 final wake = _wake;
                 if (wake != null && !wake.isCompleted) wake.complete();
@@ -199,6 +219,7 @@ class DefaultFavoriteParseCoordinator implements FavoriteParseService {
     final current = tids.where(executor.isUnfavorited).toSet();
     _cancelled.addAll(current);
     await repository.cancel(accountId, current);
+    _publishStatus();
     return current;
   }
 

@@ -491,7 +491,9 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     return ValueListenableBuilder<LibraryShelfTaskProgress?>(
       valueListenable: progressListenable,
       builder: (context, progress, _) {
-        if (progress == null || !progress.active || !progress.visible) {
+        if (progress == null ||
+            (!progress.active && !progress.needsAttention) ||
+            !progress.visible) {
           return const SizedBox.shrink();
         }
         return _ShelfTaskProgressBanner(progress: progress);
@@ -1315,7 +1317,7 @@ class _ShelfTaskProgressBanner extends StatelessWidget {
                       progress,
                     ),
                     key: const Key('unified-shelf-task-progress-message'),
-                    maxLines: 1,
+                    maxLines: progress.needsAttention ? 2 : 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -1330,11 +1332,25 @@ class _ShelfTaskProgressBanner extends StatelessWidget {
                 ],
               ],
             ),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              key: const Key('unified-shelf-task-progress-bar'),
-              value: progress.fraction,
-            ),
+            if (LibraryTaskTextResolver.queueSummary(
+                  AppLocalizations.of(context),
+                  progress,
+                )
+                case final String summary) ...[
+              const SizedBox(height: 4),
+              Text(
+                summary,
+                key: const Key('unified-shelf-task-queue-summary'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (progress.active) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                key: const Key('unified-shelf-task-progress-bar'),
+                value: progress.fraction,
+              ),
+            ],
           ],
         ),
       ),

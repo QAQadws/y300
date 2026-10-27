@@ -23,6 +23,7 @@ import 'package:y300/features/comic/domain/services/comic_thread_discovery_cache
 import 'package:y300/features/favorites/data/services/favorite_content_ingest_registry.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
 import 'package:y300/features/favorites/domain/services/favorite_sync_request_governor.dart';
+import 'package:y300/features/favorites/domain/services/favorite_parse_service.dart';
 import 'package:y300/features/favorites/data/services/favorite_sync_service.dart';
 import 'package:y300/features/favorites/data/services/library_post_ingest_task_runner.dart';
 import 'package:y300/features/favorites/data/repositories/local_favorite_repository.dart';
@@ -43,6 +44,68 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 const _longRunningTagName = '長篇連載';
 
 void main() {
+  for (final removedWhileWaiting in [false, true]) {
+    test(
+      'historical maintenance yields between records and rechecks membership (removed=$removedWhileWaiting)',
+      () async {
+        final entered = Completer<void>(), release = Completer<void>();
+        final events = <String>[];
+        final local = _MemoryLocalFavoriteRepository(
+          seedRecords: [
+            for (final tid in ['100', '200'])
+              _cacheRecord(
+                tid: tid,
+                title: 'Historical comic',
+                contentKind: ThreadContentKind.comic,
+                workId: 'yamibo:$tid',
+                detailLoadedAt: DateTime(2026, 1, 1),
+              ),
+            _cacheRecord(
+              tid: '300',
+              title: 'Foreground',
+              contentKind: ThreadContentKind.unknown,
+            ),
+          ],
+        );
+        final tasks = _ControlledPostTasks((task) async {
+          if (task is ComicAutoRefreshBackfillTask) {
+            events.add('backfill${task.sourceTid}');
+            if (task.sourceTid == '100') {
+              entered.complete();
+              await release.future;
+            }
+          }
+        });
+        final service = _service(
+          remoteRepository: _FakeFavoriteRepository(const {}),
+          localRepository: local,
+          postIngestTaskRunner: tasks,
+          detailContextLoader: _contextLoader(
+            loadThreadDetail: (tid) async {
+              events.add('detail$tid');
+              if (removedWhileWaiting) await local.markRemovedByTids({'200'});
+              return ApiSuccess(_detailForTid(tid));
+            },
+          ),
+        );
+        final maintenance = service.runBackgroundMaintenance();
+        await entered.future;
+        final foreground = service.parseThread(
+          const FavoriteParseTarget(tid: '300'),
+          isCurrent: () async => true,
+        );
+        release.complete();
+        await Future.wait([maintenance, foreground]);
+        expect(
+          events,
+          removedWhileWaiting
+              ? ['backfill100', 'detail300']
+              : ['backfill100', 'detail300', 'backfill200'],
+        );
+      },
+    );
+  }
+
   test(
     'first sync fetches all pages and ingests comic and novel details',
     () async {
@@ -1682,6 +1745,23 @@ void main() {
   });
 }
 
+class _ControlledPostTasks implements LibraryPostIngestTaskRunner {
+  _ControlledPostTasks(this.execute);
+  final Future<void> Function(LibraryPostIngestTask) execute;
+  @override
+  bool canRun(LibraryPostIngestTask task) => true;
+  @override
+  Future<LibraryPostIngestTaskReport> runAll(
+    List<LibraryPostIngestTask> tasks, {
+    FavoriteSyncExecutionContext? executionContext,
+  }) async {
+    for (final task in tasks) {
+      await execute(task);
+    }
+    return LibraryPostIngestTaskReport(completed: tasks);
+  }
+}
+
 NetworkFavoriteSyncService _service({
   required FavoriteThreadDirectoryRepository remoteRepository,
   required LocalFavoriteRepository localRepository,
@@ -2326,11 +2406,7 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   @override
   Future<int> countMissingDetailRecords() async {
     return records.values
-        .where(
-          (record) =>
-              record.isActive &&
-              record.needsDetail,
-        )
+        .where((record) => record.isActive && record.needsDetail)
         .length;
   }
 
@@ -2386,8 +2462,10 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
   }
 
   @override
-  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async =>
-      records[tid];
+  Future<FavoriteThreadCacheRecord?> getActiveThreadByTid(String tid) async {
+    final record = records[tid];
+    return record?.isActive == true ? record : null;
+  }
 
   @override
   Future<List<FavoriteThreadCacheRecord>> getActiveThreadsByWorkId(
@@ -2656,9 +2734,11 @@ class _MemoryLocalFavoriteRepository implements LocalFavoriteRepository {
     final now = DateTime(2026, 1, 1);
     for (final item in items) {
       final old = records[item.tid];
-      final restored = old != null &&
+      final restored =
+          old != null &&
           (old.removedAt != null ||
-              (old.remoteFavoriteId != null && item.remoteFavoriteId != null &&
+              (old.remoteFavoriteId != null &&
+                  item.remoteFavoriteId != null &&
                   old.remoteFavoriteId != item.remoteFavoriteId));
       records[item.tid] = FavoriteThreadCacheRecord(
         tid: item.tid,

@@ -64,6 +64,24 @@ class FavoriteSyncResult {
   final FavoriteThreadDirectoryReadCapabilities? directoryCapabilities;
   final DataReadMetadata? directoryMetadata;
   final bool needsReconciliation;
+
+  /// Keep work already done by the interrupted directory attempt while the
+  /// follow-up supplies the latest baseline and remaining failures.
+  FavoriteSyncResult after(FavoriteSyncResult previous) => FavoriteSyncResult(
+    mode: mode,
+    remoteCount: remoteCount,
+    fetchedPages: previous.fetchedPages + fetchedPages,
+    upsertedCount: previous.upsertedCount + upsertedCount,
+    removedRecords: {
+      for (final record in [...previous.removedRecords, ...removedRecords])
+        record.tid: record,
+    }.values.toList(growable: false),
+    detailLoadedCount: previous.detailLoadedCount + detailLoadedCount,
+    failedDetailTids: failedDetailTids,
+    directoryCapabilities: directoryCapabilities,
+    directoryMetadata: directoryMetadata,
+    needsReconciliation: needsReconciliation,
+  );
 }
 
 class FavoriteThreadCacheUpsert {

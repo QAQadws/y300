@@ -107,13 +107,16 @@ class DefaultLibraryTaskProgressHub implements LibraryTaskProgressHub {
         continue;
       }
       final progress = source.progress.value;
-      if (progress == null || !progress.active) {
+      if (progress == null || (!progress.active && !progress.needsAttention)) {
         continue;
       }
       if (winner == null ||
-          source.priority.index > winner.priority.index ||
-          (source.priority == winner.priority &&
-              source.registrationSequence > winner.registrationSequence)) {
+          (progress.active && !winningProgress!.active) ||
+          (progress.active == winningProgress!.active &&
+              (source.priority.index > winner.priority.index ||
+                  (source.priority == winner.priority &&
+                      source.registrationSequence >
+                          winner.registrationSequence)))) {
         winner = source;
         winningProgress = progress;
       }

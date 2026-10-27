@@ -6,6 +6,45 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/domain/services/library_task_progress_hub.dart';
 
 void main() {
+  test('inactive attention remains available but yields to actual work regardless of source priority', () {
+    final hub = DefaultLibraryTaskProgressHub();
+    final attention = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        code: LibraryShelfTaskProgressCode.favoriteParseNeedsAttention,
+        active: false,
+        needsAttention: true,
+      ),
+    );
+    final active = ValueNotifier<LibraryShelfTaskProgress?>(
+      const LibraryShelfTaskProgress(
+        code: LibraryShelfTaskProgressCode.comicSearchWaiting,
+      ),
+    );
+    final high = hub.registerSource(
+      modules: {LibraryModuleKey.favorite},
+      progress: attention,
+      priority: LibraryTaskProgressPriority.high,
+    );
+    final low = hub.registerSource(
+      modules: {LibraryModuleKey.favorite},
+      progress: active,
+    );
+    expect(
+      hub.progressFor(LibraryModuleKey.favorite).value?.code,
+      LibraryShelfTaskProgressCode.comicSearchWaiting,
+    );
+    active.value = null;
+    expect(
+      hub.progressFor(LibraryModuleKey.favorite).value?.needsAttention,
+      isTrue,
+    );
+    high.dispose();
+    low.dispose();
+    attention.dispose();
+    active.dispose();
+    hub.dispose();
+  });
+
   group('DefaultLibraryTaskProgressHub', () {
     test('forwards single-module progress', () {
       final hub = DefaultLibraryTaskProgressHub();

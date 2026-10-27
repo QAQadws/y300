@@ -49,3 +49,19 @@ abstract interface class FavoriteThreadParseExecutor {
   });
   Future<void> waitForPendingOperations();
 }
+
+class FavoriteParseQueueStatus {
+  const FavoriteParseQueueStatus({
+    this.pendingTids = const {},
+    this.failedTids = const {},
+  });
+  final Set<String> pendingTids, failedTids;
+}
+
+/// Optional observation port; queue execution does not depend on UI delivery.
+abstract interface class FavoriteParseQueueObserver {
+  void updateQueueStatus(
+    FavoriteParseQueueStatus status, {
+    required bool Function() isCurrent,
+  });
+}

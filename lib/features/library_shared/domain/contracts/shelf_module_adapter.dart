@@ -168,6 +168,9 @@ enum LibraryShelfTaskProgressCode {
   favoriteSyncSaving,
   favoriteSyncLoadingDetails,
   favoriteSyncFinishing,
+  favoriteParseQueued,
+  favoriteParseNeedsAttention,
+  favoriteDirectoryNeedsAttention,
   comicSearchWaiting,
 }
 
@@ -182,6 +185,10 @@ class LibraryShelfTaskProgress {
     this.source,
     this.visible = true,
     this.reloadOnCompletion = true,
+    this.needsAttention = false,
+    this.foregroundQueued,
+    this.automaticRemaining = 0,
+    this.failedCount = 0,
   });
 
   final LibraryShelfTaskProgressCode code;
@@ -195,6 +202,9 @@ class LibraryShelfTaskProgress {
   final LibraryMutationSource? source;
   final bool visible;
   final bool reloadOnCompletion;
+  final bool needsAttention;
+  final int? foregroundQueued;
+  final int automaticRemaining, failedCount;
 
   double? get fraction {
     final resolvedTotal = total;

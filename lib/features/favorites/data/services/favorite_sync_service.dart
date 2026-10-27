@@ -3,6 +3,8 @@ import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/favorites/data/services/favorite_execution_queue.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_scheduler.dart';
 import 'package:y300/features/favorites/data/services/favorite_membership_tracker.dart';
+import 'package:y300/features/favorites/data/services/favorite_sync_progress.dart';
+import 'package:y300/features/favorites/data/services/favorite_snapshot_publication.dart';
 import 'package:y300/features/favorites/domain/services/favorite_parse_service.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/favorites/data/services/favorite_detail_context_loader.dart';
@@ -19,61 +21,14 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/storage/domain/download_storage_service.dart';
 import 'package:y300/features/favorites/data/services/default_favorite_sync_request_governor.dart';
 
+export 'favorite_sync_progress.dart'
+    show FavoriteSyncProgress, FavoriteSyncProgressPhase;
+
 typedef _FavoriteDirectoryRead =
     DataReadSuccess<
       FavoriteThreadDirectoryData,
       FavoriteThreadDirectoryReadCapabilities
     >;
-
-enum FavoriteSyncProgressPhase {
-  idle,
-  fetchingList,
-  savingList,
-  loadingDetails,
-  finishing,
-  completed,
-  failed,
-}
-
-class FavoriteSyncProgress {
-  const FavoriteSyncProgress({
-    required this.phase,
-    this.subject,
-    this.current = 0,
-    this.total,
-  });
-
-  final FavoriteSyncProgressPhase phase;
-
-  /// Raw work title used only as a presentation placeholder.
-  final String? subject;
-  final int current;
-  final int? total;
-
-  bool get isActive {
-    return switch (phase) {
-      FavoriteSyncProgressPhase.fetchingList ||
-      FavoriteSyncProgressPhase.savingList ||
-      FavoriteSyncProgressPhase.loadingDetails ||
-      FavoriteSyncProgressPhase.finishing => true,
-      FavoriteSyncProgressPhase.idle ||
-      FavoriteSyncProgressPhase.completed ||
-      FavoriteSyncProgressPhase.failed => false,
-    };
-  }
-
-  double? get fraction {
-    final resolvedTotal = total;
-    if (resolvedTotal == null || resolvedTotal <= 0) {
-      return null;
-    }
-    return (current / resolvedTotal).clamp(0.0, 1.0).toDouble();
-  }
-
-  static const idle = FavoriteSyncProgress(
-    phase: FavoriteSyncProgressPhase.idle,
-  );
-}
 
 abstract class FavoriteSyncService {
   Future<FavoriteSyncResult> sync();
@@ -86,7 +41,10 @@ abstract class FavoriteSyncService {
 }
 
 class NetworkFavoriteSyncService
-    implements FavoriteSyncService, FavoriteThreadParseExecutor {
+    implements
+        FavoriteSyncService,
+        FavoriteThreadParseExecutor,
+        FavoriteParseQueueObserver {
   NetworkFavoriteSyncService({
     required FavoriteThreadDirectoryRepository remoteRepository,
     required LocalFavoriteRepository localRepository,
@@ -130,12 +88,18 @@ class NetworkFavoriteSyncService
   final FavoriteSyncMaintenance _maintenance;
   final FavoriteSnapshotWriter _snapshotWriter;
   final FavoriteSyncRequestGovernor Function() _governorFactory;
-  final ValueNotifier<FavoriteSyncProgress> _progress =
-      ValueNotifier<FavoriteSyncProgress>(FavoriteSyncProgress.idle);
+  final FavoriteSyncProgressTracker _progressState =
+      FavoriteSyncProgressTracker();
+  final FavoriteSnapshotPublication _publications =
+      FavoriteSnapshotPublication();
   Future<FavoriteSyncResult>? _inflightSync;
   final Map<String, Future<FavoriteSyncResult>> _inflightRecentAdds = {};
   Future<void> _operationTail = Future<void>.value();
   Object? _roundOwner;
+  Future<void>? _maintenanceFlight;
+  Object? _maintenanceOwner;
+  int _detailRevision = 0;
+  final Map<String, int> _detailVersions = {};
   final Object? Function()? _readOwner;
   final FavoriteExecutionQueue _execution = FavoriteExecutionQueue();
   final FavoriteMembershipTracker _membership = FavoriteMembershipTracker();
@@ -157,11 +121,30 @@ class NetworkFavoriteSyncService
           );
     },
   );
-  int _pendingSyncOperations = 0;
+  Object? _progressOwner;
   late final FavoriteSyncRequestGovernor _requestGovernor = _governorFactory();
 
   @override
-  ValueListenable<FavoriteSyncProgress> get progress => _progress;
+  ValueListenable<FavoriteSyncProgress> get progress => _progressState.notifier;
+
+  void resetOwnerProgress() {
+    _progressOwner = _readOwner?.call();
+    _detailRevision = 0;
+    _detailVersions.clear();
+    _progressState.reset();
+  }
+
+  void _prepareProgressOwner() {
+    if (_readOwner?.call() != _progressOwner) resetOwnerProgress();
+  }
+
+  @override
+  void updateQueueStatus(
+    FavoriteParseQueueStatus status, {
+    required bool Function() isCurrent,
+  }) {
+    if (isCurrent()) _progressState.queue(status);
+  }
 
   @override
   Future<void> waitForPendingOperations() => _execution.settled;
@@ -180,6 +163,7 @@ class NetworkFavoriteSyncService
       id: remoteFavoriteId,
       onlyIfUnknown: onlyIfUnknown,
     );
+    if (!favorited) _progressState.forgetDetails(tids);
   }
 
   @override
@@ -195,7 +179,14 @@ class NetworkFavoriteSyncService
   }
 
   void _checkOwner(Object? owner) {
-    if (!_ownerIsCurrent(owner)) throw const _FavoriteOwnerRetired();
+    if (!_ownerIsCurrent(owner)) {
+      try {
+        _prepareProgressOwner();
+      } catch (_) {
+        // A disposed Host may no longer expose its current owner.
+      }
+      throw const _FavoriteOwnerRetired();
+    }
   }
 
   @override
@@ -203,8 +194,9 @@ class NetworkFavoriteSyncService
     FavoriteParseTarget target, {
     required Future<bool> Function() isCurrent,
   }) async {
-    _pendingSyncOperations++;
     final owner = _readOwner?.call();
+    _prepareProgressOwner();
+    _progressState.beginForeground(target.tid);
     try {
       final loaded = await _details.request(
         FavoriteDetailWork(
@@ -221,43 +213,55 @@ class NetworkFavoriteSyncService
         ),
       );
       if (!loaded) throw StateError('favorite_parse_detail_failed');
-      await _execution.run(() async {
-        _checkOwner(owner);
-        if (!await isCurrent()) throw StateError('favorite_parse_retired');
-        final snapshot = await _localRepository.getSyncSnapshot();
-        _checkOwner(owner);
-        await _snapshotWriter.write(
-          remoteCount:
-              snapshot?.remoteCount ??
-              await _localRepository.countActiveThreads(),
-        );
-        _checkOwner(owner);
-        if (!await isCurrent()) throw StateError('favorite_parse_retired');
-        _notifyFavoriteShelfChanged(
-          reason: 'favorite_single_parse_completed',
-          detailLoadedCount: 1,
-        );
-      }, priority: FavoriteWorkPriority.foreground);
-      if (_pendingSyncOperations == 1) {
-        _emitProgress(
-          const FavoriteSyncProgress(
-            phase: FavoriteSyncProgressPhase.completed,
-          ),
-        );
-      }
-    } catch (_) {
-      if (_pendingSyncOperations == 1) {
-        _emitProgress(
-          const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
-        );
-      }
-      rethrow;
+      await _publications.request(
+        owner,
+        () => _execution.run(() async {
+          _checkOwner(owner);
+          final snapshot = await _localRepository.getSyncSnapshot();
+          _checkOwner(owner);
+          await _snapshotWriter.write(
+            remoteCount:
+                snapshot?.remoteCount ??
+                await _localRepository.countActiveThreads(),
+          );
+          _checkOwner(owner);
+          _notifyFavoriteShelfChanged(
+            reason: 'favorite_single_parse_completed',
+            detailLoadedCount: 1,
+          );
+        }),
+      );
     } finally {
-      _pendingSyncOperations--;
+      if (_ownerIsCurrent(owner)) _progressState.endForeground(target.tid);
     }
   }
 
   Future<bool> _executeDetail(
+    FavoriteDetailWork work,
+    void Function() onReadStarted,
+  ) async {
+    bool? succeeded;
+    try {
+      succeeded = await _executeDetailInternal(work, onReadStarted);
+      return succeeded;
+    } catch (_) {
+      if (_ownerIsCurrent(work.owner) &&
+          !_membership.isUnfavorited(work.owner, work.target.tid) &&
+          await work.isCurrent()) {
+        succeeded = false;
+      }
+      rethrow;
+    } finally {
+      if (_ownerIsCurrent(work.owner)) {
+        if (succeeded == true) {
+          _detailVersions[work.target.tid] = ++_detailRevision;
+        }
+        _progressState.detailSettled(work.target.tid, succeeded: succeeded);
+      }
+    }
+  }
+
+  Future<bool> _executeDetailInternal(
     FavoriteDetailWork work,
     void Function() onReadStarted,
   ) async {
@@ -312,14 +316,7 @@ class NetworkFavoriteSyncService
       await check();
       if (usable) return true;
     }
-    _emitProgress(
-      FavoriteSyncProgress(
-        phase: FavoriteSyncProgressPhase.loadingDetails,
-        subject: record.title,
-        current: 1,
-        total: 1,
-      ),
-    );
+    _progressState.detail(record.tid, record.title);
     onReadStarted();
     return _detailFiller.fillOneDetail(
       record,
@@ -335,13 +332,38 @@ class NetworkFavoriteSyncService
   }
 
   @override
-  Future<void> runBackgroundMaintenance() => _enqueueOperation(() {
-    return runBackgroundMaintenanceWithContext(
-      context: FavoriteSyncExecutionContext.automaticResume(
-        governor: _requestGovernor,
-      ),
-    );
-  });
+  Future<void> runBackgroundMaintenance() => _runMaintenance(
+    FavoriteSyncExecutionContext.automaticResume(governor: _requestGovernor),
+    _readOwner?.call(),
+  );
+
+  Future<void> _runMaintenance(
+    FavoriteSyncExecutionContext context,
+    Object? owner, {
+    int? detailRevision,
+  }) {
+    final existing = _maintenanceFlight;
+    if (existing != null && _maintenanceOwner == owner) return existing;
+    _maintenanceOwner = owner;
+    final since = detailRevision ?? _detailRevision;
+    late final Future<void> future;
+    future = _maintenance
+        .runBackgroundMaintenance(
+          context: context,
+          shouldContinue: () => _ownerIsCurrent(owner),
+          wasRefreshed: (tid) => (_detailVersions[tid] ?? 0) > since,
+          runStep: (action) => _execution.run(() async {
+            _checkOwner(owner);
+            await action();
+            _checkOwner(owner);
+          }, priority: FavoriteWorkPriority.maintenance),
+        )
+        .whenComplete(() {
+          if (identical(_maintenanceFlight, future)) _maintenanceFlight = null;
+        });
+    _maintenanceFlight = future;
+    return future;
+  }
 
   @override
   Future<FavoriteSyncResult> sync() async {
@@ -363,7 +385,15 @@ class NetworkFavoriteSyncService
               : FavoriteSyncExecutionContext.automaticResume(
                   governor: _requestGovernor,
                 );
-          return _syncInternal(context: context);
+          // Coalesce all changes seen by this round into one follow-up. A
+          // continuously changing or lagging directory stays retryable rather
+          // than causing an unbounded scan loop.
+          var result = await _syncInternal(context: context);
+          if (result.needsReconciliation) {
+            _checkOwner(_roundOwner);
+            result = (await _syncInternal(context: context)).after(result);
+          }
+          return result;
         }).whenComplete(() {
           if (identical(_inflightSync, future)) {
             _inflightSync = null;
@@ -424,20 +454,16 @@ class NetworkFavoriteSyncService
   ) {
     // Rounds remain serialized, but no round holds the execution slot while
     // waiting for detail tasks from the same queue.
-    _pendingSyncOperations++;
     final owner = _readOwner?.call();
+    _prepareProgressOwner();
+    _progressState.beginRound();
     final operation = _operationTail.then((_) async {
       try {
         _checkOwner(owner);
         _roundOwner = owner;
         return await _runSync(body);
-      } on _FavoriteOwnerRetired {
-        if (_pendingSyncOperations == 1) {
-          _emitProgress(FavoriteSyncProgress.idle);
-        }
-        rethrow;
       } finally {
-        _pendingSyncOperations--;
+        if (_ownerIsCurrent(owner)) _progressState.endRound();
       }
     });
     _operationTail = operation.then<void>(
@@ -453,33 +479,24 @@ class NetworkFavoriteSyncService
     try {
       final result = await body();
       _checkOwner(_roundOwner);
-      if (_pendingSyncOperations == 1) {
-        _emitProgress(
-          const FavoriteSyncProgress(
-            phase: FavoriteSyncProgressPhase.completed,
-          ),
-        );
-      }
+      _emitProgress(
+        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.completed),
+      );
       return result;
     } on _FavoriteOwnerRetired {
-      if (_pendingSyncOperations == 1) _emitProgress(FavoriteSyncProgress.idle);
       rethrow;
     } on _FavoriteSyncFailure catch (error) {
       _checkOwner(_roundOwner);
-      if (_pendingSyncOperations == 1) {
-        _emitProgress(
-          const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
-        );
-      }
+      _emitProgress(
+        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
+      );
       await _localRepository.markSyncFailure(error.message);
       throw StateError(error.message);
     } catch (error) {
       _checkOwner(_roundOwner);
-      if (_pendingSyncOperations == 1) {
-        _emitProgress(
-          const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
-        );
-      }
+      _emitProgress(
+        const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.failed),
+      );
       await _localRepository.markSyncFailure('$error');
       rethrow;
     }
@@ -492,11 +509,16 @@ class NetworkFavoriteSyncService
   }) async {
     final owner = _roundOwner;
     _checkOwner(owner);
-    final plan = await _enqueueOperation(() => _readDirectory(context, owner));
+    final plan = await _readDirectory(context, owner);
+    final maintenanceRevision = _detailRevision;
     final searches = {
       ...forceComicSearchOnCatalogMissTids,
       ...plan.newlySeenTids,
     };
+    final failedInRound = <String>{};
+    _progressState.automaticRemaining(
+      await _localRepository.countMissingDetailRecords(),
+    );
     final detailResult = await _detailFiller.fillMissingDetails(
       context: context,
       shouldContinue: () => _ownerIsCurrent(owner),
@@ -513,31 +535,55 @@ class NetworkFavoriteSyncService
       mergeIngestedComics: !plan.firstFullSync,
       forceDetailTids: forceDetailTids,
       forceComicSearchOnCatalogMissTids: searches,
-      execute: (record, preloaded) => _details.request(
-        FavoriteDetailWork(
-          target: FavoriteParseTarget(tid: record.tid),
-          owner: owner,
-          context: context,
-          isCurrent: () async => _ownerIsCurrent(owner),
-          forceRead: forceDetailTids.contains(record.tid),
-          forceSearch: searches.contains(record.tid),
-          mergeComics: !plan.firstFullSync,
-          membershipRevision: _membership.versionFor(owner, record.tid),
-          preloadedDetail: preloaded,
-        ),
-      ),
+      execute: (record, preloaded) async {
+        try {
+          final loaded = await _details.request(
+            FavoriteDetailWork(
+              target: FavoriteParseTarget(tid: record.tid),
+              owner: owner,
+              context: context,
+              isCurrent: () async => _ownerIsCurrent(owner),
+              forceRead: forceDetailTids.contains(record.tid),
+              forceSearch: searches.contains(record.tid),
+              mergeComics: !plan.firstFullSync,
+              membershipRevision: _membership.versionFor(owner, record.tid),
+              preloadedDetail: preloaded,
+            ),
+          );
+          if (!loaded) failedInRound.add(record.tid);
+          return loaded;
+        } catch (_) {
+          failedInRound.add(record.tid);
+          rethrow;
+        } finally {
+          if (_ownerIsCurrent(owner)) {
+            try {
+              _progressState.automaticRemaining(
+                await _localRepository.countMissingDetailRecords() -
+                    failedInRound.length,
+              );
+            } catch (_) {
+              // Progress observation cannot turn a committed detail into a failure.
+            }
+          }
+        }
+      },
     );
+    await _runMaintenance(context, owner, detailRevision: maintenanceRevision);
     var changed = false;
     await _enqueueOperation(() async {
       _checkOwner(owner);
-      if (plan.firstFullSync) {
+      changed =
+          plan.hasConflict || _membership.revision != plan.membershipRevision;
+      if (plan.firstFullSync && !changed) {
         await _maintenance.mergeAllComicDuplicatesAfterFirstSync();
       }
       _checkOwner(owner);
       _emitProgress(
         const FavoriteSyncProgress(phase: FavoriteSyncProgressPhase.finishing),
       );
-      changed = _membership.revision != plan.membershipRevision;
+      changed = changed || _membership.revision != plan.membershipRevision;
+      _progressState.reconciliation(changed);
       if (changed) {
         await _localRepository.markSyncFailure(
           'favorite_directory_membership_changed',
@@ -551,6 +597,7 @@ class NetworkFavoriteSyncService
               ? null
               : _buildPartialFailureMessage(detailResult.errors),
         );
+        _membership.acknowledge(owner, plan.membershipRevision);
         await _snapshotWriter.write(remoteCount: plan.readSet.totalItems);
       }
       _checkOwner(owner);
@@ -587,25 +634,14 @@ class NetworkFavoriteSyncService
         current: 0,
       ),
     );
-    final firstPageResult = await _runFavoriteListRequest(
-      context: context,
-      page: 1,
-    );
-    if (firstPageResult
-        case final DataReadFailure<
-              FavoriteThreadDirectoryData,
-              FavoriteThreadDirectoryReadCapabilities
-            >
-            failure) {
-      throw _FavoriteSyncFailure(failure.diagnosticMessage);
-    }
-
-    final firstRead =
-        firstPageResult
-            as DataReadSuccess<
-              FavoriteThreadDirectoryData,
-              FavoriteThreadDirectoryReadCapabilities
-            >;
+    Future<_FavoriteDirectoryRead> loadPage(int page) =>
+        _execution.run(() async {
+          _checkOwner(owner);
+          final result = await _readDirectoryPage(context, page);
+          _checkOwner(owner);
+          return result;
+        });
+    final firstRead = await loadPage(1);
     final firstPage = firstRead.data;
     _emitProgress(
       FavoriteSyncProgress(
@@ -616,80 +652,110 @@ class NetworkFavoriteSyncService
     );
     final activeBefore = await _localRepository.getActiveTids();
     final snapshot = await _localRepository.getSyncSnapshot();
-    final mode = _resolveSyncMode(
-      firstPage: firstPage,
-      activeBefore: activeBefore,
-      snapshot: snapshot,
-    );
+    final mode = _membership.hasUnacknowledged(owner)
+        ? FavoriteSyncMode.fullDiff
+        : _resolveSyncMode(
+            firstPage: firstPage,
+            activeBefore: activeBefore,
+            snapshot: snapshot,
+          );
 
     final reads = <_FavoriteDirectoryRead>[firstRead];
     if (mode == FavoriteSyncMode.fullDiff) {
-      reads.addAll(await _fetchRemainingPages(firstRead, context: context));
+      reads.addAll(
+        await _fetchRemainingPages(
+          firstRead,
+          context: context,
+          loadPage: loadPage,
+        ),
+      );
     } else {
       reads.addAll(
         await _fetchIncrementalPages(
           firstPage: firstRead,
           activeBefore: activeBefore,
           context: context,
+          loadPage: loadPage,
         ),
       );
     }
     final readSet = _validateReadSet(reads, mode: mode);
     final pages = reads.map((read) => read.data).toList(growable: false);
-
-    var upsertedCount = 0;
-    final remoteTids = <String>{};
-    for (var index = 0; index < pages.length; index++) {
-      final page = pages[index];
-      _emitProgress(
-        FavoriteSyncProgress(
-          phase: FavoriteSyncProgressPhase.savingList,
-          current: index + 1,
-          total: pages.length,
-        ),
-      );
-      remoteTids.addAll(
-        page.items
-            .map((item) => item.tid.trim())
-            .where((tid) => tid.isNotEmpty),
-      );
+    // No page mutates the shelf before the complete read set is validated.
+    // Applying the validated set remains one stable execution unit.
+    return _execution.run(() async {
       _checkOwner(owner);
-      upsertedCount += await _localRepository.upsertRemoteThreads(
-        _cacheUpsertsFor(page)
-            .where(
-              (row) =>
-                  !_membership.changedSince(owner, row.tid, membershipRevision),
-            )
-            .toList(),
+      final remoteIds = <String, String?>{
+        for (final page in pages)
+          for (final row in _cacheUpsertsFor(page))
+            row.tid: row.remoteFavoriteId,
+      };
+      _membership.observeDirectory(
+        owner,
+        membershipRevision,
+        remoteIds,
+        complete: mode == FavoriteSyncMode.fullDiff,
       );
-    }
+      final hasConflict = _membership.conflicts(owner, remoteIds);
+      var upsertedCount = 0;
+      final remoteTids = <String>{};
+      for (var index = 0; index < pages.length; index++) {
+        final page = pages[index];
+        _emitProgress(
+          FavoriteSyncProgress(
+            phase: FavoriteSyncProgressPhase.savingList,
+            current: index + 1,
+            total: pages.length,
+          ),
+        );
+        remoteTids.addAll(
+          page.items
+              .map((item) => item.tid.trim())
+              .where((tid) => tid.isNotEmpty),
+        );
+        _checkOwner(owner);
+        upsertedCount += await _localRepository.upsertRemoteThreads(
+          _cacheUpsertsFor(page)
+              .where(
+                (row) => !_membership.blocksRemote(
+                  owner,
+                  row.tid,
+                  row.remoteFavoriteId,
+                  membershipRevision,
+                ),
+              )
+              .toList(),
+        );
+      }
 
-    _checkOwner(owner);
-    final removedRecords =
-        mode == FavoriteSyncMode.fullDiff &&
-            _membership.revision == membershipRevision
-        ? await _localRepository.markRemovedTids(remoteTids)
-        : const <FavoriteThreadCacheRecord>[];
-    await _removeModuleShelfItems(removedRecords);
+      _checkOwner(owner);
+      final removedRecords =
+          mode == FavoriteSyncMode.fullDiff &&
+              _membership.revision == membershipRevision &&
+              !hasConflict
+          ? await _localRepository.markRemovedTids(remoteTids)
+          : const <FavoriteThreadCacheRecord>[];
+      await _removeModuleShelfItems(removedRecords);
 
-    final firstFullSync =
-        mode == FavoriteSyncMode.fullDiff &&
-        (snapshot == null ||
-            (snapshot.requiresFullSync && snapshot.lastFullSyncedAt == null));
-    _checkOwner(owner);
-    await runBackgroundMaintenanceWithContext(context: context);
-    return _FavoriteDirectoryPlan(
-      mode: mode,
-      firstFullSync: firstFullSync,
-      newlySeenTids: mode == FavoriteSyncMode.incremental
-          ? remoteTids.difference(activeBefore)
-          : const <String>{},
-      readSet: readSet,
-      fetchedPages: pages.length,
-      upsertedCount: upsertedCount,
-      removedRecords: removedRecords,
-      membershipRevision: membershipRevision,
-    );
+      final firstFullSync =
+          mode == FavoriteSyncMode.fullDiff &&
+          (snapshot == null ||
+              (snapshot.requiresFullSync && snapshot.lastFullSyncedAt == null));
+      _checkOwner(owner);
+      return _FavoriteDirectoryPlan(
+        mode: mode,
+        firstFullSync: firstFullSync,
+        newlySeenTids: mode == FavoriteSyncMode.incremental
+            ? remoteTids.difference(activeBefore)
+            : const <String>{},
+        readSet: readSet,
+        fetchedPages: pages.length,
+        upsertedCount: upsertedCount,
+        removedRecords: removedRecords,
+        membershipRevision: membershipRevision,
+        hasConflict: hasConflict,
+      );
+    });
   }
 
   Future<FavoriteSyncResult> _syncRecentlyAddedThreadInternal(
@@ -891,6 +957,7 @@ class NetworkFavoriteSyncService
   Future<List<_FavoriteDirectoryRead>> _fetchRemainingPages(
     _FavoriteDirectoryRead firstPage, {
     required FavoriteSyncExecutionContext context,
+    Future<_FavoriteDirectoryRead> Function(int)? loadPage,
   }) async {
     final pages = <_FavoriteDirectoryRead>[];
     var current = firstPage;
@@ -909,19 +976,9 @@ class NetworkFavoriteSyncService
           total: estimatedTotal,
         ),
       );
-      final result = await _runFavoriteListRequest(
-        context: context,
-        page: nextPageNumber,
-      );
-      if (result
-          case final DataReadFailure<
-                FavoriteThreadDirectoryData,
-                FavoriteThreadDirectoryReadCapabilities
-              >
-              failure) {
-        throw _FavoriteSyncFailure(failure.diagnosticMessage);
-      }
-      current = result as _FavoriteDirectoryRead;
+      current =
+          await (loadPage?.call(nextPageNumber) ??
+              _readDirectoryPage(context, nextPageNumber));
       pages.add(current);
       _emitProgress(
         FavoriteSyncProgress(
@@ -938,6 +995,7 @@ class NetworkFavoriteSyncService
     required _FavoriteDirectoryRead firstPage,
     required Set<String> activeBefore,
     required FavoriteSyncExecutionContext context,
+    Future<_FavoriteDirectoryRead> Function(int)? loadPage,
   }) async {
     final pages = <_FavoriteDirectoryRead>[];
     var current = firstPage;
@@ -950,19 +1008,9 @@ class NetworkFavoriteSyncService
           current: pages.length + 1,
         ),
       );
-      final result = await _runFavoriteListRequest(
-        context: context,
-        page: nextPageNumber,
-      );
-      if (result
-          case final DataReadFailure<
-                FavoriteThreadDirectoryData,
-                FavoriteThreadDirectoryReadCapabilities
-              >
-              failure) {
-        throw _FavoriteSyncFailure(failure.diagnosticMessage);
-      }
-      current = result as _FavoriteDirectoryRead;
+      current =
+          await (loadPage?.call(nextPageNumber) ??
+              _readDirectoryPage(context, nextPageNumber));
       pages.add(current);
     }
     return pages;
@@ -988,6 +1036,7 @@ class NetworkFavoriteSyncService
   Future<void> _removeModuleShelfItems(
     List<FavoriteThreadCacheRecord> records,
   ) async {
+    _progressState.forgetDetails(records.map((record) => record.tid).toSet());
     for (final record in records) {
       final workId = record.workId?.trim();
       if (workId == null || workId.isEmpty) {
@@ -1133,7 +1182,23 @@ class NetworkFavoriteSyncService
   }
 
   void _emitProgress(FavoriteSyncProgress progress) {
-    _progress.value = progress;
+    _progressState.round(progress);
+  }
+
+  Future<_FavoriteDirectoryRead> _readDirectoryPage(
+    FavoriteSyncExecutionContext context,
+    int page,
+  ) async {
+    final result = await _runFavoriteListRequest(context: context, page: page);
+    if (result
+        case final DataReadFailure<
+              FavoriteThreadDirectoryData,
+              FavoriteThreadDirectoryReadCapabilities
+            >
+            failure) {
+      throw _FavoriteSyncFailure(failure.diagnosticMessage);
+    }
+    return result as _FavoriteDirectoryRead;
   }
 
   Future<
@@ -1164,7 +1229,7 @@ class NetworkFavoriteSyncService
 
   Future<void> runBackgroundMaintenanceWithContext({
     required FavoriteSyncExecutionContext context,
-  }) => _maintenance.runBackgroundMaintenance(context: context);
+  }) => _runMaintenance(context, _readOwner?.call());
 
   void _notifyFavoriteShelfChanged({
     required String reason,
@@ -1220,9 +1285,11 @@ class _FavoriteDirectoryPlan {
     required this.upsertedCount,
     required this.removedRecords,
     required this.membershipRevision,
+    required this.hasConflict,
   });
   final FavoriteSyncMode mode;
   final bool firstFullSync;
+  final bool hasConflict;
   final Set<String> newlySeenTids;
   final _FavoriteDirectoryReadSet readSet;
   final int fetchedPages, upsertedCount, membershipRevision;

@@ -211,7 +211,11 @@ class FavoriteSyncStore {
 
         final values = <String, Object?>{
           'tid': tid,
-          'favid': remoteFavoriteId,
+          // A directory response that omits this optional field must not erase
+          // an active relation's command-confirmed identity.
+          'favid':
+              remoteFavoriteId ??
+              (old?['removed_at'] == null ? previousFavoriteId : null),
           'title': FavoriteCacheRowMapper.nonEmpty(
             item.title,
             fallback: '未命名收藏',

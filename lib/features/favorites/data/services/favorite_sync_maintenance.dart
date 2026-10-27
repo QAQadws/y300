@@ -19,9 +19,17 @@ class FavoriteSyncMaintenance {
 
   Future<void> runBackgroundMaintenance({
     required FavoriteSyncExecutionContext context,
+    Future<void> Function(Future<void> Function())? runStep,
+    bool Function()? shouldContinue,
+    bool Function(String)? wasRefreshed,
   }) async {
     try {
-      await _backfillExistingComicAutoRefreshIfNeeded(context: context);
+      await _backfillExistingComicAutoRefreshIfNeeded(
+        context: context,
+        runStep: runStep ?? (action) => action(),
+        shouldContinue: shouldContinue ?? () => true,
+        wasRefreshed: wasRefreshed ?? (_) => false,
+      );
     } catch (_) {
       // 后台维护不改变收藏同步主状态；失败时保留全局 marker 为空，
       // 下一次进入收藏页或手动同步仍可继续尝试。
@@ -38,7 +46,11 @@ class FavoriteSyncMaintenance {
 
   Future<void> _backfillExistingComicAutoRefreshIfNeeded({
     required FavoriteSyncExecutionContext context,
+    required Future<void> Function(Future<void> Function()) runStep,
+    required bool Function() shouldContinue,
+    required bool Function(String) wasRefreshed,
   }) async {
+    if (!shouldContinue()) return;
     if (await _localRepository.hasCompletedComicAutoRefreshBackfill()) {
       return;
     }
@@ -57,6 +69,7 @@ class FavoriteSyncMaintenance {
     var sawAnyCandidate = false;
 
     while (true) {
+      if (!shouldContinue()) return;
       final records = await _localRepository
           .getComicAutoRefreshBackfillCandidates(
             limit: _batchLimit,
@@ -65,33 +78,51 @@ class FavoriteSyncMaintenance {
       if (records.isEmpty) {
         break;
       }
-      sawAnyCandidate = true;
 
       final checkedBefore = checkedTids.length;
       for (final record in records) {
+        if (!shouldContinue()) return;
         checkedTids.add(record.tid);
-        final comicId = record.workId?.trim();
-        if (comicId == null || comicId.isEmpty) {
-          failedTids.add(record.tid);
-          continue;
-        }
-        final report = await _postIngestTaskRunner
-            .runAll(<LibraryPostIngestTask>[
+        if (wasRefreshed(record.tid)) continue;
+        await runStep(() async {
+          if (!shouldContinue()) return;
+          final current = await _localRepository.getActiveThreadByTid(
+            record.tid,
+          );
+          if (!shouldContinue() ||
+              current == null ||
+              current.contentKind != record.contentKind) {
+            return;
+          }
+          // A foreground or automatic detail may have refreshed this comic
+          // while its historical backfill step waited in the queue.
+          if (wasRefreshed(current.tid)) return;
+          sawAnyCandidate = true;
+          final comicId = current.workId?.trim();
+          if (comicId == null || comicId.isEmpty) {
+            failedTids.add(record.tid);
+            return;
+          }
+          final report = await _postIngestTaskRunner.runAll(
+            <LibraryPostIngestTask>[
               ComicAutoRefreshBackfillTask(
                 comicId: comicId,
-                sourceTid: record.tid,
-                favoriteTitle: record.title,
-                sourceTitle: record.title,
-                sourceFid: record.sourceFid,
-                sourceTypeId: record.sourceTypeid,
-                sourceTagName: record.sourceTagName,
+                sourceTid: current.tid,
+                favoriteTitle: current.title,
+                sourceTitle: current.title,
+                sourceFid: current.sourceFid,
+                sourceTypeId: current.sourceTypeid,
+                sourceTagName: current.sourceTagName,
               ),
-            ], executionContext: context);
-        if (report.failures.isNotEmpty) {
-          failedTids.add(record.tid);
-        } else {
-          checkedCount++;
-        }
+            ],
+            executionContext: context,
+          );
+          if (report.failures.isNotEmpty) {
+            failedTids.add(record.tid);
+          } else {
+            checkedCount++;
+          }
+        });
       }
 
       // Defensive break: if a repository implementation returns only already
@@ -105,11 +136,14 @@ class FavoriteSyncMaintenance {
       return;
     }
 
-    await _localRepository.markComicAutoRefreshBackfillCompleted(
-      checkedCount: checkedCount,
-      message: failedTids.isEmpty
-          ? null
-          : '部分历史漫画自动刷新检查失败：${failedTids.join(',')}',
-    );
+    await runStep(() async {
+      if (!shouldContinue()) return;
+      await _localRepository.markComicAutoRefreshBackfillCompleted(
+        checkedCount: checkedCount,
+        message: failedTids.isEmpty
+            ? null
+            : '部分历史漫画自动刷新检查失败：${failedTids.join(',')}',
+      );
+    });
   }
 }

@@ -41,7 +41,7 @@ final favoriteDetailContextLoaderProvider =
     });
 
 final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
-  return NetworkFavoriteSyncService(
+  final service = NetworkFavoriteSyncService(
     remoteRepository: ref.watch(favoriteThreadDirectoryRepositoryProvider),
     localRepository: ref.watch(localFavoriteRepositoryProvider),
     detailContextLoader: ref.watch(favoriteDetailContextLoaderProvider),
@@ -52,6 +52,11 @@ final favoriteSyncServiceProvider = Provider<FavoriteSyncService>((ref) {
     governorFactory: DefaultFavoriteSyncRequestGovernor.new,
     readOwner: () => ref.read(verifiedSessionOwnerProvider),
   );
+  ref.listen(
+    verifiedSessionOwnerProvider,
+    (_, _) => service.resetOwnerProgress(),
+  );
+  return service;
 });
 
 final favoriteLinkServiceProvider = Provider<FavoriteLinkService>((ref) {

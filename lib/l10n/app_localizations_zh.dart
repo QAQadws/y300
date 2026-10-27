@@ -1049,6 +1049,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryTaskFavoriteSyncFinishing => '正在完成收藏同步';
 
   @override
+  String get libraryTaskFavoriteParseQueued => '收藏解析正在排队';
+
+  @override
+  String get libraryTaskFavoriteParseRetry => '部分帖子解析失败，可长按帖子选择“解析”重试';
+
+  @override
+  String get libraryTaskFavoriteDirectoryRetry => '收藏列表仍需核对，可下拉同步重试';
+
+  @override
+  String libraryTaskFavoriteQueueSummary(
+    int foreground,
+    int automatic,
+    int failed,
+  ) {
+    return '前台等待 $foreground · 自动剩余 $automatic · 失败 $failed';
+  }
+
+  @override
   String get libraryTaskComicSearchWaiting => '漫画搜索正在等待';
 
   @override
@@ -6556,6 +6574,24 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get libraryTaskFavoriteSyncFinishing => '正在完成收藏同步';
+
+  @override
+  String get libraryTaskFavoriteParseQueued => '收藏解析正在排隊';
+
+  @override
+  String get libraryTaskFavoriteParseRetry => '部分帖子解析失敗，可長按帖子選擇「解析」重試';
+
+  @override
+  String get libraryTaskFavoriteDirectoryRetry => '收藏列表仍需核對，可下拉同步重試';
+
+  @override
+  String libraryTaskFavoriteQueueSummary(
+    int foreground,
+    int automatic,
+    int failed,
+  ) {
+    return '前臺等待 $foreground · 自動剩餘 $automatic · 失敗 $failed';
+  }
 
   @override
   String get libraryTaskComicSearchWaiting => '漫畫搜尋正在等待';

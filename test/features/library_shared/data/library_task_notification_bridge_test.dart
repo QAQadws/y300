@@ -67,6 +67,35 @@ void main() {
       expect(notification.total, 10);
     });
 
+    test('queue count changes update the notification and attention clears the active notification', () {
+      final l10n = AppLocalizationsZh();
+      for (final waiting in [25, 24]) {
+        favoriteSource.value = LibraryShelfTaskProgress(
+          code: LibraryShelfTaskProgressCode.favoriteParseQueued,
+          source: LibraryMutationSource.favoriteSync,
+          foregroundQueued: waiting,
+          automaticRemaining: 10,
+          failedCount: 2,
+        );
+      }
+      expect(service.shown, hasLength(2));
+      expect(
+        service.shown.last.body,
+        contains(l10n.libraryTaskFavoriteQueueSummary(24, 10, 2)),
+      );
+      favoriteSource.value = const LibraryShelfTaskProgress(
+        code: LibraryShelfTaskProgressCode.favoriteParseNeedsAttention,
+        active: false,
+        needsAttention: true,
+        source: LibraryMutationSource.favoriteSync,
+      );
+      expect(service.shown, hasLength(2));
+      expect(
+        service.cleared,
+        contains(LibraryTaskNotificationKey.favoriteSync),
+      );
+    });
+
     test('favorite sync clearing to null clears favorite notification', () {
       favoriteSource.value = const LibraryShelfTaskProgress(
         code: LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,

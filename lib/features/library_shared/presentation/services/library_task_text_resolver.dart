@@ -20,6 +20,12 @@ abstract final class LibraryTaskTextResolver {
             : l10n.libraryTaskFavoriteSyncLoadingDetailsSubject(subject),
       LibraryShelfTaskProgressCode.favoriteSyncFinishing =>
         l10n.libraryTaskFavoriteSyncFinishing,
+      LibraryShelfTaskProgressCode.favoriteParseQueued =>
+        l10n.libraryTaskFavoriteParseQueued,
+      LibraryShelfTaskProgressCode.favoriteParseNeedsAttention =>
+        l10n.libraryTaskFavoriteParseRetry,
+      LibraryShelfTaskProgressCode.favoriteDirectoryNeedsAttention =>
+        l10n.libraryTaskFavoriteDirectoryRetry,
       LibraryShelfTaskProgressCode.comicSearchWaiting => _comicSearchMessage(
         l10n,
         subject,
@@ -38,6 +44,10 @@ abstract final class LibraryTaskTextResolver {
       LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails ||
       LibraryShelfTaskProgressCode.favoriteSyncFinishing =>
         l10n.libraryTaskFavoriteSyncNotificationTitle,
+      LibraryShelfTaskProgressCode.favoriteParseQueued ||
+      LibraryShelfTaskProgressCode.favoriteParseNeedsAttention ||
+      LibraryShelfTaskProgressCode.favoriteDirectoryNeedsAttention =>
+        l10n.libraryTaskFavoriteSyncNotificationTitle,
       LibraryShelfTaskProgressCode.comicSearchWaiting =>
         l10n.libraryTaskComicSearchNotificationTitle,
       LibraryShelfTaskProgressCode.coverWarmup =>
@@ -45,8 +55,22 @@ abstract final class LibraryTaskTextResolver {
     };
     return LibraryTaskNotificationText(
       title: title,
-      body: message(l10n, progress),
+      body: [message(l10n, progress), ?queueSummary(l10n, progress)].join('\n'),
     );
+  }
+
+  static String? queueSummary(
+    AppLocalizations l10n,
+    LibraryShelfTaskProgress progress,
+  ) {
+    final foreground = progress.foregroundQueued;
+    return foreground == null
+        ? null
+        : l10n.libraryTaskFavoriteQueueSummary(
+            foreground,
+            progress.automaticRemaining,
+            progress.failedCount,
+          );
   }
 
   static String duration(AppLocalizations l10n, Duration value) {

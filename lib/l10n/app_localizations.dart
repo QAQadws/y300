@@ -1778,6 +1778,34 @@ abstract class AppLocalizations {
   /// **'正在完成收藏同步'**
   String get libraryTaskFavoriteSyncFinishing;
 
+  /// No description provided for @libraryTaskFavoriteParseQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏解析正在排队'**
+  String get libraryTaskFavoriteParseQueued;
+
+  /// No description provided for @libraryTaskFavoriteParseRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分帖子解析失败，可长按帖子选择“解析”重试'**
+  String get libraryTaskFavoriteParseRetry;
+
+  /// No description provided for @libraryTaskFavoriteDirectoryRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏列表仍需核对，可下拉同步重试'**
+  String get libraryTaskFavoriteDirectoryRetry;
+
+  /// No description provided for @libraryTaskFavoriteQueueSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'前台等待 {foreground} · 自动剩余 {automatic} · 失败 {failed}'**
+  String libraryTaskFavoriteQueueSummary(
+    int foreground,
+    int automatic,
+    int failed,
+  );
+
   /// No description provided for @libraryTaskComicSearchWaiting.
   ///
   /// In zh, this message translates to:

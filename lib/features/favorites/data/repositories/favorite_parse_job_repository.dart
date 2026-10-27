@@ -104,6 +104,30 @@ class FavoriteParseJobRepository {
     );
   }
 
+  Future<FavoriteParseQueueStatus> readStatus(String accountId) async {
+    final db = await database;
+    final rows = await db.query(
+      AppDatabase.favoriteParseJobsTable,
+      columns: ['tid', 'state'],
+      where:
+          'account_id = ? AND (state IN (?, ?) OR '
+          '(state = ? AND tid IN (SELECT tid FROM ${AppDatabase.favoriteThreadsTable} WHERE removed_at IS NULL)))',
+      whereArgs: [accountId, 'queued', 'running', 'failed'],
+    );
+    return FavoriteParseQueueStatus(
+      pendingTids: Set.unmodifiable(
+        rows
+            .where((row) => row['state'] != 'failed')
+            .map((row) => row['tid'] as String),
+      ),
+      failedTids: Set.unmodifiable(
+        rows
+            .where((row) => row['state'] == 'failed')
+            .map((row) => row['tid'] as String),
+      ),
+    );
+  }
+
   Future<FavoriteParseJob?> claim(String accountId) async {
     final db = await database;
     return db.transaction((txn) async {

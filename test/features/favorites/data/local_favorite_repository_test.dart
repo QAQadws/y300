@@ -28,6 +28,33 @@ void main() {
       await deleteDatabase(dbName);
     });
 
+    test('an omitted favorite id preserves active identity but does not restore a removed identity', () async {
+      await repository.upsertRemoteThreads(const [
+        FavoriteThreadCacheUpsert(
+          tid: '200',
+          title: 'Novel',
+          replyCount: 0,
+          remoteFavoriteId: 'confirmed',
+        ),
+      ]);
+      const omittedId = FavoriteThreadCacheUpsert(
+        tid: '200',
+        title: 'Novel',
+        replyCount: 0,
+      );
+      await repository.upsertRemoteThreads(const [omittedId]);
+      expect(
+        (await repository.getActiveThreadByTid('200'))?.remoteFavoriteId,
+        'confirmed',
+      );
+      await repository.markRemovedByTids({'200'});
+      await repository.upsertRemoteThreads(const [omittedId]);
+      expect(
+        (await repository.getActiveThreadByTid('200'))?.remoteFavoriteId,
+        isNull,
+      );
+    });
+
     test(
       'loads visible system categories and keeps default free from comic and novel',
       () async {

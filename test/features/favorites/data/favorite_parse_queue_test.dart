@@ -140,6 +140,220 @@ void main() {
     expect(await db.query(AppDatabase.worksTable), hasLength(1));
   }
 
+  Future<void> waitForProgress(
+    NetworkFavoriteSyncService parser,
+    bool Function(FavoriteSyncProgress) accepts,
+  ) async {
+    if (accepts(parser.progress.value)) return;
+    final reached = Completer<void>();
+    void changed() {
+      if (!reached.isCompleted && accepts(parser.progress.value)) {
+        reached.complete();
+      }
+    }
+
+    parser.progress.addListener(changed);
+    try {
+      await reached.future.timeout(const Duration(seconds: 5));
+    } finally {
+      parser.progress.removeListener(changed);
+    }
+  }
+
+  for (final failingPage in [null, 2]) {
+    test(
+      'foreground parsing runs between validated directory pages (failure=$failingPage)',
+      () async {
+        await seed();
+        final entered = Completer<void>(),
+            release = Completer<void>(),
+            submitted = Completer<void>();
+        final events = <String>[];
+        final remote = _Directory(
+          tids: const ['100', '200', '300'],
+          pageSize: 1,
+          failPage: failingPage,
+          beforePage: (page) async {
+            events.add('page$page');
+            if (page == 1) {
+              entered.complete();
+              await release.future;
+            }
+          },
+        );
+        final source = _Source(() async {})
+          ..beforeTid = (tid) async {
+            events.add('detail$tid');
+            if (tid == '200') {
+              expect(await local.getActiveThreadByTid('100'), isNull);
+              expect(await local.getActiveThreadByTid('300'), isNull);
+            }
+          };
+        final parser = executor(source, remote: remote);
+        final sync = parser.sync();
+        final result = failingPage == null ? sync : null;
+        final failure = failingPage == null
+            ? null
+            : expectLater(sync, throwsStateError);
+        await entered.future;
+        final service = coordinator(_ObservedExecutor(parser, submitted));
+        await service.requestThreads({'200'});
+        await submitted.future;
+        release.complete();
+        if (result != null) {
+          expect((await result).needsReconciliation, isFalse);
+        } else {
+          await failure;
+          expect(await local.getActiveThreadByTid('100'), isNull);
+          expect((await local.getSyncSnapshot())?.status, 'failed');
+        }
+        await service.settled;
+        expect(events.take(3), ['page1', 'detail200', 'page2']);
+        expect(source.tids.where((tid) => tid == '200'), hasLength(1));
+        expect(
+          (await local.getActiveThreadByTid('200'))?.workId,
+          'novel:55:200',
+        );
+      },
+    );
+  }
+
+  test('multiple confirmed additions coalesce into one successful directory reconciliation', () async {
+    final entered = Completer<void>(), release = Completer<void>();
+    final tids = ['100', '300'];
+    final remote = _Directory(tids: tids);
+    final source = _Source(() async {})
+      ..beforeTid = (tid) async {
+        if (tid == '100' && !entered.isCompleted) {
+          entered.complete();
+          await release.future;
+        }
+      };
+    final parser = executor(source, remote: remote);
+    final service = coordinator(parser);
+    final sync = parser.sync();
+    await entered.future;
+    await service.requestConfirmed(confirmed(), title: 'Novel');
+    await service.requestConfirmed(
+      const ThreadFavoriteReceipt(
+        tid: '400',
+        targetState: FavoriteTargetState.favorited,
+        disposition: FavoriteMutationDisposition.changed,
+        remoteFavoriteId: '89',
+      ),
+      title: 'Novel 400',
+    );
+    tids.addAll(['200', '400']);
+    release.complete();
+    final result = await sync;
+    await service.settled;
+    expect(result.needsReconciliation, isFalse);
+    expect(remote.calls, 2);
+    expect(source.tids.toSet(), {'100', '200', '300', '400'});
+    expect(source.calls, 4);
+    expect((await local.getSyncSnapshot())?.status, 'ok');
+    expect((await local.getSyncSnapshot())?.lastFullSyncedAt, isNotNull);
+    expect((await local.getActiveThreadByTid('200'))?.remoteFavoriteId, '88');
+  });
+
+  test('queue progress includes durable jobs beyond the claim window without an early terminal state', () async {
+    for (var i = 1; i <= 25; i++) {
+      await jobs.enqueue(
+        '123',
+        FavoriteParseTarget(tid: '$i', confirmed: true),
+        isCurrent: () => true,
+      );
+    }
+    final entered = Completer<void>(), release = Completer<void>();
+    final source = _Source(() async {})
+      ..beforeTid = (tid) async {
+        if (!entered.isCompleted) {
+          entered.complete();
+          await release.future;
+        }
+      };
+    final parser = executor(source);
+    final service = coordinator(parser);
+    final running = service.resume();
+    await entered.future;
+    await waitForProgress(
+      parser,
+      (progress) => progress.foregroundQueued == 24,
+    );
+    expect(parser.progress.value.isActive, isTrue);
+    expect(parser.progress.value.subject, isNotEmpty);
+    var finished = false;
+    var earlyTerminal = false;
+    void changed() {
+      if (!parser.progress.value.isActive && source.calls < 25) {
+        earlyTerminal = true;
+      }
+      if (!parser.progress.value.isActive) finished = true;
+    }
+
+    parser.progress.addListener(changed);
+    release.complete();
+    await running;
+    await waitForProgress(parser, (progress) => !progress.isActive);
+    parser.progress.removeListener(changed);
+    expect(finished, isTrue);
+    expect(earlyTerminal, isFalse);
+    expect(source.calls, 25);
+    expect(parser.progress.value.failedCount, 0);
+  });
+
+  test('persisted failures remain visible after recovery and an explicit retry clears them', () async {
+    await seed();
+    await jobs.enqueue(
+      '123',
+      const FavoriteParseTarget(tid: '200'),
+      isCurrent: () => true,
+    );
+    await jobs.finish((await jobs.claim('123'))!, errorCode: 'fixture_failure');
+    final source = _Source(() async {});
+    final parser = executor(source);
+    final service = coordinator(parser);
+    await service.resume();
+    await waitForProgress(parser, (progress) => progress.failedCount == 1);
+    expect(parser.progress.value.phase, FavoriteSyncProgressPhase.failed);
+    expect(source.calls, 0);
+    await service.requestThreads({'200'});
+    await service.settled;
+    await waitForProgress(
+      parser,
+      (progress) => !progress.isActive && progress.failedCount == 0,
+    );
+    expect(parser.progress.value.phase, FavoriteSyncProgressPhase.completed);
+    await expectNovel();
+  });
+
+  test('directory acknowledgement cannot release an unfinished cancellation to an old durable add', () async {
+    await seed();
+    await jobs.enqueue(
+      '123',
+      const FavoriteParseTarget(
+        tid: '200',
+        confirmed: true,
+        remoteFavoriteId: 'old',
+      ),
+      isCurrent: () => true,
+    );
+    final source = _Source(() async {});
+    final parser = executor(source, remote: _Directory(tids: const []));
+    final entered = Completer<void>(), release = Completer<void>();
+    final service = coordinator(
+      _DelayedCancellationExecutor(parser, entered, release),
+    );
+    final removal = service.cancelThreads({'200'});
+    await entered.future;
+    expect((await parser.sync()).needsReconciliation, isFalse);
+    release.complete();
+    expect(await removal, {'200'});
+    await service.resume();
+    expect(source.calls, 0);
+    expect(await local.getActiveThreadByTid('200'), isNull);
+  });
+
   test('startup recovery provider resumes durable jobs for the verified account only', () async {
     await jobs.enqueue(
       '123',
@@ -504,10 +718,8 @@ void main() {
           await gate.future;
         }
       };
-    final parser = executor(
-      source,
-      remote: _Directory(tids: const ['100', '300']),
-    );
+    final remote = _Directory(tids: const ['100', '300']);
+    final parser = executor(source, remote: remote);
     final sync = parser.sync();
     await started.future;
     final service = coordinator(_ObservedExecutor(parser, submitted));
@@ -519,6 +731,7 @@ void main() {
     expect(source.tids, ['100', '200', '300']);
     expect((await local.getActiveThreadByTid('200'))?.workId, 'novel:55:200');
     expect(result.needsReconciliation, isTrue);
+    expect(remote.calls, 2);
     final baseline = await local.getSyncSnapshot();
     expect(baseline?.status, 'failed');
     expect(baseline?.lastFullSyncedAt, isNull);
@@ -709,7 +922,7 @@ void main() {
         remote: _Directory(
           tids: const ['200'],
           beforeRead: () async {
-            started.complete();
+            if (!started.isCompleted) started.complete();
             await gate.future;
           },
         ),
@@ -880,9 +1093,19 @@ class _Source implements ThreadRepository {
 }
 
 class _Directory implements FavoriteThreadDirectoryRepository {
-  _Directory({this.beforeRead, this.tids});
+  _Directory({
+    this.beforeRead,
+    this.tids,
+    this.pageSize = 20,
+    this.beforePage,
+    this.failPage,
+  });
   final Future<void> Function()? beforeRead;
+  final Future<void> Function(int)? beforePage;
   final List<String>? tids;
+  final int pageSize;
+  final int? failPage;
+  final List<int> pages = [];
   int calls = 0;
   @override
   final capabilities = FavoriteThreadDirectorySourceCapabilities(
@@ -903,21 +1126,27 @@ class _Directory implements FavoriteThreadDirectoryRepository {
     CacheLoadPolicy cachePolicy = CacheLoadPolicy.cacheFirst,
   }) async {
     calls++;
+    pages.add(query.page);
     await beforeRead?.call();
-    if (tids != null) {
+    await beforePage?.call(query.page);
+    if (tids != null && query.page != failPage) {
+      final start = (query.page - 1) * pageSize;
       return DataReadSuccess(
         data: FavoriteThreadDirectoryData(
           items: [
-            for (final tid in tids!)
+            for (final tid in tids!.skip(start).take(pageSize))
               FavoriteThreadReference(tid: tid, title: 'Novel', replyCount: 1),
           ],
           pagination: FavoriteThreadPagination(
-            currentPage: 1,
-            pageSize: 20,
+            currentPage: query.page,
+            pageSize: pageSize,
             totalItems: tids!.length,
-            totalPages: 1,
-            hasPrevious: false,
-            hasNext: false,
+            totalPages: ((tids!.length + pageSize - 1) ~/ pageSize).clamp(
+              1,
+              1000,
+            ),
+            hasPrevious: query.page > 1,
+            hasNext: start + pageSize < tids!.length,
           ),
         ),
         capabilities: capabilities.toReadCapabilities(),
@@ -1013,5 +1242,19 @@ class _DelayedEligibility extends FavoriteParseJobRepository {
       await release.future;
     }
     return valid;
+  }
+}
+
+class _DelayedCancellationExecutor extends _ObservedExecutor {
+  _DelayedCancellationExecutor(
+    FavoriteThreadParseExecutor inner,
+    this.entered,
+    this.release,
+  ) : super(inner, Completer<void>());
+  final Completer<void> entered, release;
+  @override
+  Future<void> waitForPendingOperations() {
+    entered.complete();
+    return release.future;
   }
 }

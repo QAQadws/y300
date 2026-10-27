@@ -7,6 +7,44 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 
 void main() {
+  test('queue totals reach the shelf and failures stay visible after active work ends', () {
+    final source = ValueNotifier<FavoriteSyncProgress>(
+      const FavoriteSyncProgress(
+        phase: FavoriteSyncProgressPhase.queued,
+        hasQueueSummary: true,
+        foregroundQueued: 25,
+        automaticRemaining: 10,
+        failedCount: 2,
+      ),
+    );
+    final permission = ValueNotifier<LibraryTaskNotificationPermissionState?>(
+      LibraryTaskNotificationPermissionState.granted,
+    );
+    final progress = FavoriteSyncShelfTaskProgressListenable(
+      source,
+      permission,
+    );
+    addTearDown(source.dispose);
+    addTearDown(permission.dispose);
+    addTearDown(progress.dispose);
+    expect(progress.value?.active, isTrue);
+    expect(progress.value?.foregroundQueued, 25);
+    expect(progress.value?.automaticRemaining, 10);
+    expect(progress.value?.visible, isFalse);
+    source.value = const FavoriteSyncProgress(
+      phase: FavoriteSyncProgressPhase.failed,
+      hasQueueSummary: true,
+      failedCount: 2,
+    );
+    expect(progress.value?.active, isFalse);
+    expect(progress.value?.needsAttention, isTrue);
+    expect(progress.value?.visible, isTrue);
+    expect(
+      progress.value?.code,
+      LibraryShelfTaskProgressCode.favoriteParseNeedsAttention,
+    );
+  });
+
   group('FavoriteSyncShelfTaskProgressListenable', () {
     test(
       'maps active favorite sync progress and keeps banner visible before permission is granted',

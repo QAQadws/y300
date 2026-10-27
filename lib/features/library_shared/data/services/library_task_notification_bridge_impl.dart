@@ -130,7 +130,8 @@ class DefaultLibraryTaskNotificationBridge
   String _signatureOf(LibraryShelfTaskProgress progress) {
     return '${_localeId ?? ''}|${progress.code.name}|${progress.subject ?? ''}'
         '|${progress.estimatedDuration?.inMilliseconds ?? ''}'
-        '|${progress.current}|${progress.total}';
+        '|${progress.current}|${progress.total}'
+        '|${progress.foregroundQueued}|${progress.automaticRemaining}|${progress.failedCount}';
   }
 
   Future<void> _showQuietly(LibraryTaskNotification notification) async {
