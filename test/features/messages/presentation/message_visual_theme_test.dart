@@ -95,7 +95,13 @@ void main() {
             _contrast(palette.accent, palette.background),
             greaterThanOrEqualTo(4.5),
           );
-          final badge = tester.widget<Badge>(find.byType(Badge).first);
+          // Tab attention dots also use Badge; check the unread message card.
+          final unreadBadge = find.descendant(
+            of: find.byType(MessageSurface),
+            matching: find.byType(Badge),
+          );
+          expect(unreadBadge, findsOneWidget);
+          final badge = tester.widget<Badge>(unreadBadge);
           expect(badge.backgroundColor, palette.notificationBadgeBackground);
           expect(badge.textColor, palette.selectionForeground);
           final avatar = tester.widget<ForumCachedAvatar>(
