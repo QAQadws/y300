@@ -13,6 +13,7 @@ import 'forum_html_render_callbacks.dart';
 import 'widgets/forum_html_block_image_frame.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
 import '../services/forum_html_image_anchor_controller.dart';
+import '../services/forum_html_body_presentation.dart';
 
 typedef ForumHtmlImageFactoryBinding = ({
   ForumHtmlImageHost? host,
@@ -33,6 +34,7 @@ Widget _clipMedia(Widget child) => ClipRRect(
 class ForumHtmlImageWidgetFactory extends WidgetFactory {
   ForumHtmlImageWidgetFactory({
     required this.binding,
+    this.bodyPresentationFor,
     this.textAlignFor,
     this.onImageResolved,
     this.onTapImageRequest,
@@ -43,6 +45,7 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
   });
 
   final ValueListenable<ForumHtmlImageFactoryBinding> binding;
+  final ForumHtmlBodyPresentation? Function()? bodyPresentationFor;
   final TextAlign? Function()? textAlignFor;
   final VoidCallback? onBodyBuilt;
   final ValueChanged<Size>? onImageResolved;
@@ -115,9 +118,15 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
         if (image == null) {
           return _fallback(tree, src) ?? const SizedBox.shrink();
         }
+        final presentation = isSticker ? bodyPresentationFor?.call() : null;
         final child = _ForumHtmlImageView(
           host: host,
           image: image,
+          initialInlineSize: presentation?.inlineImageSizeFor(image.identity),
+          rememberInlineSize: presentation == null
+              ? null
+              : (size) =>
+                    presentation.recordInlineImageSize(image.identity, size),
           onImageResolved: onImageResolved,
           onImageLayoutShift: onImageLayoutShift,
           viewportCoordinator: isSticker ? null : binding.viewport,
@@ -259,6 +268,8 @@ class _ForumHtmlImageView extends StatefulWidget {
   const _ForumHtmlImageView({
     required this.host,
     required this.image,
+    this.initialInlineSize,
+    this.rememberInlineSize,
     this.onImageResolved,
     this.onImageLayoutShift,
     this.viewportCoordinator,
@@ -266,6 +277,8 @@ class _ForumHtmlImageView extends StatefulWidget {
 
   final ForumHtmlImageHost host;
   final ForumHtmlDisplayImage image;
+  final Size? initialInlineSize;
+  final ValueChanged<Size>? rememberInlineSize;
   final ValueChanged<Size>? onImageResolved;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final ForumHtmlImageViewportCoordinator? viewportCoordinator;
@@ -276,9 +289,11 @@ class _ForumHtmlImageView extends StatefulWidget {
 
 class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   ForumHtmlImageLayout? _cachedLayout;
+  ForumHtmlImageLayout? _initialInlineLayout;
   Size? _intrinsicSize;
   bool _hasResolvedImageSize = false;
   bool _firstFrameRendered = false;
+  bool _inlineDisplaySettled = false;
   int _bindingRevision = 0;
   int _callbackRevision = 0;
   int _retryToken = 0;
@@ -295,11 +310,24 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       ForumHtmlImageDimensionPriority.background;
 
   ForumHtmlImageLayout get _layout =>
-      _cachedLayout ?? widget.image.initialLayout;
+      _cachedLayout ?? _initialInlineLayout ?? widget.image.initialLayout;
+
+  void _restoreInlineLayout() {
+    if (!widget.image.isSticker || widget.image.htmlSize != null) {
+      _initialInlineLayout = null;
+      return;
+    }
+    final size =
+        widget.image.initialLayout.displaySize ?? widget.initialInlineSize;
+    _initialInlineLayout = size != null && _validSize(size)
+        ? ForumHtmlImageLayout(displaySize: size, aspectRatio: size.aspectRatio)
+        : null;
+  }
 
   @override
   void initState() {
     super.initState();
+    _restoreInlineLayout();
     _viewportHandle = widget.viewportCoordinator?.register();
     _loadDimensions();
   }
@@ -332,6 +360,8 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       _intrinsicSize = null;
       _hasResolvedImageSize = false;
       _firstFrameRendered = false;
+      _inlineDisplaySettled = false;
+      _restoreInlineLayout();
       _dimensionRetryUsed = false;
       _dimensionLookupsPending = 0;
       _dimensionPriority = ForumHtmlImageDimensionPriority.background;
@@ -445,13 +475,15 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     void firstFrameRendered() {
       if (_acceptCallback(revision)) {
         _firstFrameRendered = true;
-        _reportRenderedFrame();
+        _inlineDisplaySettled = true;
+        if (!sticker) _reportRenderedFrame();
       }
     }
 
     void failed() {
       if (_acceptCallback(revision)) {
         _firstFrameRendered = false;
+        _inlineDisplaySettled = true;
         _viewportHandle?.reportImageFailed();
       }
     }
@@ -478,7 +510,15 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       onImageResolved: (size) {
         if (!_acceptCallback(revision)) return;
         widget.onImageResolved?.call(size);
-        if (!_acceptCallback(revision) || sticker) return;
+        if (!_acceptCallback(revision)) return;
+        if (sticker) {
+          if (_validSize(size)) {
+            _intrinsicSize = size;
+            _hasResolvedImageSize = true;
+            widget.rememberInlineSize?.call(size);
+          }
+          return;
+        }
         widget.host.onBlockImageResolved(widget.image, size);
         if (!_acceptCallback(revision)) return;
         _intrinsicSize = _validSize(size) ? size : null;
@@ -486,8 +526,8 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
         _reportRenderedFrame();
         _promoteDecodedSize(size);
       },
-      onFirstFrameRendered: sticker ? null : firstFrameRendered,
-      onImageFailed: sticker ? null : failed,
+      onFirstFrameRendered: firstFrameRendered,
+      onImageFailed: failed,
       waitForCacheWrite: !sticker,
       retryToken: _retryToken,
     );
@@ -644,7 +684,9 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   Future<void> _loadDimensions({
     ForumHtmlImageDimensionPriority? priority,
   }) async {
-    if (widget.image.htmlSize != null || widget.image.cacheKey.trim().isEmpty) {
+    if (widget.image.htmlSize != null ||
+        widget.image.cacheKey.trim().isEmpty ||
+        (widget.image.isSticker && _initialInlineLayout != null)) {
       return;
     }
     final revision = _bindingRevision;
@@ -671,11 +713,17 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
         }
       }
     }
+    // Once a smiley is displayed, keep its natural inline layout. A late cache
+    // hint must not resize it again; decoded sizes still seed the next mount.
     if (!mounted ||
         revision != _bindingRevision ||
         dimensions == null ||
-        _hasResolvedImageSize) {
+        _hasResolvedImageSize ||
+        (image.isSticker && _inlineDisplaySettled)) {
       return;
+    }
+    if (image.isSticker && _validSize(dimensions.size)) {
+      widget.rememberInlineSize?.call(dimensions.size);
     }
     if (_intrinsicSize == dimensions.size &&
         _cachedLayout == dimensions.layout) {
@@ -690,8 +738,9 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     if (_cachedLayout != dimensions.layout) {
       final current = _layout.aspectRatio;
       final next = dimensions.layout.aspectRatio;
-      if (_viewportHandle?.value.keepsImageMounted == true &&
-          _layout.isFallback &&
+      // Dormant images still own a layout frame. Its corrected height can
+      // move visible text even while the pixel provider is not mounted.
+      if (_layout.isFallback &&
           current != null &&
           current.isFinite &&
           current > 0 &&

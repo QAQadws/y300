@@ -84,6 +84,7 @@ class ForumHtmlRenderer extends StatefulWidget {
 }
 
 class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
+  final _inlineLayoutPresentation = ForumHtmlBodyPresentation();
   late final _binding = ValueNotifier<ForumHtmlImageFactoryBinding>((
     host: widget.imageHost,
     viewport: widget.imageViewportCoordinator,
@@ -192,6 +193,9 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
             _buildCustomWidget(element, stylePolicy, document, binding),
         factoryBuilder: () => ForumHtmlImageWidgetFactory(
           binding: binding,
+          bodyPresentationFor: () =>
+              _configuration.value.bodyPresentation ??
+              _inlineLayoutPresentation,
           hasTrailingContentFor: () => _configuration.value.hasTrailingContent,
           textAlignFor: () => _configuration.value.textAlign,
           onBodyBuilt: () => _onReady?.call(),
@@ -332,6 +336,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
 
   @override
   void dispose() {
+    _inlineLayoutPresentation.dispose();
     _binding.dispose();
     _configuration.dispose();
     super.dispose();

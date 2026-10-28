@@ -6,9 +6,35 @@ import 'package:flutter/widgets.dart';
 class ForumHtmlBodyPresentation {
   final collapseExpansion = <String, bool>{};
   final _layouts = <String, ({Object revision, double height})>{};
+  final _inlineImageSizes = <Object, Size>{};
+  static const _maxInlineImageSizes = 128;
   bool _active = true;
 
   bool get isActive => _active;
+
+  /// Natural sizes survive virtualized body remounts, without retaining pixels,
+  /// widgets or cache services. Each owner disposes this bounded layout memory.
+  Size? inlineImageSizeFor(Object identity) {
+    if (!_active) return null;
+    final size = _inlineImageSizes.remove(identity);
+    if (size != null) _inlineImageSizes[identity] = size;
+    return size;
+  }
+
+  void recordInlineImageSize(Object identity, Size size) {
+    if (!_active ||
+        !size.width.isFinite ||
+        !size.height.isFinite ||
+        size.width <= 0 ||
+        size.height <= 0) {
+      return;
+    }
+    _inlineImageSizes.remove(identity);
+    _inlineImageSizes[identity] = size;
+    while (_inlineImageSizes.length > _maxInlineImageSizes) {
+      _inlineImageSizes.remove(_inlineImageSizes.keys.first);
+    }
+  }
 
   Object get expansionRevision => Object.hashAll(
     (collapseExpansion.keys.toList()..sort()).map(
@@ -30,6 +56,7 @@ class ForumHtmlBodyPresentation {
   void dispose() {
     _active = false;
     _layouts.clear();
+    _inlineImageSizes.clear();
     collapseExpansion.clear();
   }
 }

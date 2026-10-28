@@ -8,6 +8,151 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
+  for (final reportedSize in [false, true]) {
+    testWidgets(
+      'a displayed smiley ignores late metadata: size=$reportedSize',
+      (tester) async {
+        final dimensions = _Dimensions(deferred: true);
+        final host = _SmileyHost(dimensions);
+        await tester.pumpWidget(_host(host, html: _smileyHtml));
+        await _frames(tester);
+        host.pixels.value = const Size(96, 64);
+        await _frames(tester);
+        final displayed = tester.widget<_DisplayedSmiley>(
+          find.byType(_DisplayedSmiley),
+        );
+        if (reportedSize) {
+          displayed.onResolved?.call(const Size(96, 64));
+        } else {
+          displayed.onFirstFrame?.call();
+        }
+        dimensions.pending.single.complete((
+          size: const Size(24, 24),
+          layout: const ForumHtmlImageLayout(
+            displaySize: Size(24, 24),
+            aspectRatio: 1,
+          ),
+        ));
+        await _frames(tester);
+        expect(
+          tester.getSize(find.byType(_DisplayedSmiley)),
+          const Size(96, 64),
+        );
+        expect(host.blockSizes, isEmpty);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        host.pixels.dispose();
+      },
+    );
+  }
+
+  for (final decoded in [false, true]) {
+    testWidgets(
+      'a remounted body reuses confirmed smiley dimensions: decoded=$decoded',
+      (tester) async {
+        final dimensions = _Dimensions(deferred: true);
+        final host = _SmileyHost(dimensions);
+        final presentation = ForumHtmlBodyPresentation();
+        addTearDown(presentation.dispose);
+        Widget build({bool shown = true}) => _host(
+          host,
+          html: _smileyHtml,
+          shown: shown,
+          bodyPresentation: presentation,
+        );
+        await tester.pumpWidget(build());
+        await _frames(tester);
+        if (decoded) {
+          host.pixels.value = const Size(96, 64);
+          await _frames(tester);
+          tester
+              .widget<_DisplayedSmiley>(find.byType(_DisplayedSmiley))
+              .onResolved
+              ?.call(const Size(96, 64));
+          dimensions.pending.single.complete(null);
+        } else {
+          dimensions.pending.single.complete((
+            size: const Size(96, 64),
+            layout: const ForumHtmlImageLayout(
+              displaySize: Size(96, 64),
+              aspectRatio: 1.5,
+            ),
+          ));
+        }
+        await _frames(tester);
+        expect(
+          tester.getSize(find.byType(_DisplayedSmiley)),
+          const Size(96, 64),
+        );
+        await tester.pumpWidget(build(shown: false));
+        host.pixels.value = null;
+        await tester.pumpWidget(build());
+        expect(
+          tester.getSize(find.byType(_DisplayedSmiley)),
+          const Size(96, 64),
+        );
+        expect(dimensions.pending, hasLength(1));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        host.pixels.dispose();
+      },
+    );
+  }
+
+  testWidgets('retired smiley callbacks cannot seed a new binding', (
+    tester,
+  ) async {
+    final dimensionsA = _Dimensions(deferred: true);
+    final dimensionsB = _Dimensions(deferred: true);
+    final hostA = _SmileyHost(dimensionsA);
+    final hostB = _SmileyHost(dimensionsB);
+    final presentation = ForumHtmlBodyPresentation();
+    addTearDown(presentation.dispose);
+    Widget build(_SmileyHost host, {bool shown = true}) => _host(
+      host,
+      html: _smileyHtml,
+      shown: shown,
+      bodyPresentation: presentation,
+    );
+    await tester.pumpWidget(build(hostA));
+    await _frames(tester);
+    final retired = tester.widget<_DisplayedSmiley>(
+      find.byType(_DisplayedSmiley),
+    );
+    await tester.pumpWidget(build(hostB));
+    await _frames(tester);
+    await tester.pumpWidget(build(hostA));
+    await _frames(tester);
+    retired.onResolved?.call(const Size(24, 24));
+    retired.onFirstFrame?.call();
+    dimensionsA.pending.first.complete((
+      size: const Size(24, 24),
+      layout: const ForumHtmlImageLayout(
+        displaySize: Size(24, 24),
+        aspectRatio: 1,
+      ),
+    ));
+    dimensionsB.pending.single.complete(null);
+    await _frames(tester);
+    expect(tester.getSize(find.byType(_DisplayedSmiley)), Size.zero);
+    final current = tester.widget<_DisplayedSmiley>(
+      find.byType(_DisplayedSmiley),
+    );
+    hostA.pixels.value = const Size(96, 64);
+    current.onResolved?.call(const Size(96, 64));
+    dimensionsA.pending.last.complete(null);
+    await _frames(tester);
+    await tester.pumpWidget(build(hostA, shown: false));
+    hostA.pixels.value = null;
+    await tester.pumpWidget(build(hostA));
+    expect(tester.getSize(find.byType(_DisplayedSmiley)), const Size(96, 64));
+    expect(dimensionsA.pending, hasLength(2));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    hostA.pixels.dispose();
+    hostB.pixels.dispose();
+  });
+
   for (final (caption, viewportEnabled) in [
     ('', false),
     ('', true),
@@ -97,6 +242,50 @@ void main() {
         closeTo(2, 0.001),
       );
     }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('offscreen cached dimensions still report a layout shift', (
+    tester,
+  ) async {
+    final dimensions = _Dimensions(deferred: true);
+    final host = _ImageHost(dimensions);
+    final viewport = ForumHtmlImageViewportCoordinator();
+    addTearDown(viewport.dispose);
+    final shifts = <ForumHtmlImageLayoutShift>[];
+    await tester.pumpWidget(
+      _host(
+        host,
+        viewport: viewport,
+        imageCount: 8,
+        height: 180,
+        htmlDimensions: false,
+        onImageLayoutShift: shifts.add,
+      ),
+    );
+    await _frames(tester);
+    expect(dimensions.pending, hasLength(8));
+    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    scrollable.position.jumpTo(1200);
+    await _frames(tester);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is _DisplayedImage && widget.url.endsWith('/image-0.jpg'),
+      ),
+      findsNothing,
+    );
+
+    dimensions.pending.first.complete(_wideDimensions);
+    await _frames(tester);
+    expect(shifts, hasLength(1));
+    expect(shifts.single.sourceUrl, endsWith('/image-0.jpg'));
+    expect(shifts.single.oldGlobalRect.bottom, lessThan(0));
+    expect(shifts.single.deltaHeight, closeTo(100 - 200 / 0.7, 0.01));
+    for (final pending in dimensions.pending.skip(1)) {
+      pending.complete(null);
+    }
+    await _frames(tester);
     expect(tester.takeException(), isNull);
   });
 
@@ -976,9 +1165,68 @@ final class _ImageBinding implements ForumHtmlDisplayImage {
   @override
   Object get identity => (sourceUrl, isSticker, htmlSize);
   @override
-  ForumHtmlImageLayout get initialLayout => htmlSize == null
+  ForumHtmlImageLayout get initialLayout => isSticker
+      ? ForumHtmlImageLayout(
+          displaySize: htmlSize,
+          aspectRatio: htmlSize?.aspectRatio,
+        )
+      : htmlSize == null
       ? const ForumHtmlImageLayout(isFallback: true, aspectRatio: 0.7)
       : ForumHtmlImageLayout(aspectRatio: htmlSize!.aspectRatio);
+}
+
+const _smileyHtml =
+    '<p>Text <img src="static/image/smiley/comcom/2.gif"> after</p>';
+
+final class _SmileyHost extends _ImageHost {
+  _SmileyHost(super.dimensions);
+  final pixels = ValueNotifier<Size?>(null);
+
+  @override
+  Widget buildImage({
+    required ForumHtmlDisplayImage image,
+    required BoxFit fit,
+    required Widget placeholder,
+    double? width,
+    double? height,
+    Widget? errorPlaceholder,
+    VoidCallback? onRetry,
+    ValueChanged<Size>? onImageResolved,
+    VoidCallback? onImageFailed,
+    VoidCallback? onFirstFrameRendered,
+    bool showDelayedLoadingIndicator = false,
+    bool waitForCacheWrite = false,
+    int retryToken = 0,
+  }) => _DisplayedSmiley(
+    pixels: pixels,
+    width: width,
+    height: height,
+    onResolved: onImageResolved,
+    onFirstFrame: onFirstFrameRendered,
+  );
+}
+
+final class _DisplayedSmiley extends StatelessWidget {
+  const _DisplayedSmiley({
+    required this.pixels,
+    this.width,
+    this.height,
+    this.onResolved,
+    this.onFirstFrame,
+  });
+  final ValueNotifier<Size?> pixels;
+  final double? width, height;
+  final ValueChanged<Size>? onResolved;
+  final VoidCallback? onFirstFrame;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<Size?>(
+    valueListenable: pixels,
+    builder: (context, size, child) => SizedBox(
+      width: width ?? size?.width ?? 0,
+      height: height ?? size?.height ?? 0,
+    ),
+  );
 }
 
 final class _DisplayedImage extends StatelessWidget {
