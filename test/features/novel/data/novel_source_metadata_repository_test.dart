@@ -193,6 +193,37 @@ void main() {
     expect(titleAfterMissingSource, '一周一次买下同班同学的那些事');
   });
 
+  test('source update failure rolls back existing work changes', () async {
+    const seed = NovelSourceSeed(fid: '55', tid: '521519');
+    await repository.saveFromFavoriteDetail(
+      seed: seed,
+      metadata: _metadata(),
+      favoriteAddedAt: DateTime(2026, 7, 1),
+    );
+    final workBefore = await db.query(AppDatabase.worksTable);
+    final sourceBefore = await db.query(AppDatabase.novelSourceStateTable);
+    final shelfBefore = await db.query(AppDatabase.novelShelfItemsTable);
+    await db.execute('''
+      CREATE TRIGGER fail_novel_source_metadata_update
+      BEFORE UPDATE ON ${AppDatabase.novelSourceStateTable}
+      BEGIN
+        SELECT RAISE(ABORT, 'forced metadata update failure');
+      END
+    ''');
+
+    await expectLater(
+      repository.saveFromFavoriteDetail(
+        seed: seed,
+        metadata: _metadata(subject: '不能提交的新标题'),
+        favoriteAddedAt: DateTime(2026, 7, 15),
+      ),
+      throwsA(anything),
+    );
+    expect(await db.query(AppDatabase.worksTable), workBefore);
+    expect(await db.query(AppDatabase.novelSourceStateTable), sourceBefore);
+    expect(await db.query(AppDatabase.novelShelfItemsTable), shelfBefore);
+  });
+
   test(
     'rolls back work and shelf rows when source-state write fails',
     () async {

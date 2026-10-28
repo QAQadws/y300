@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/models/novel_source_catalog_json_codec.dart';
+import 'package:y300/features/novel/data/repositories/local/novel_source_metadata_writer.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
 import 'package:content_title_core/content_title_core.dart';
@@ -35,10 +36,7 @@ class SqfliteNovelSourceMetadataRepository
       metadata.publisherId,
       'metadata.publisherId',
     );
-    final firstPostPid = _requireText(
-      metadata.firstPostPid,
-      'metadata.firstPostPid',
-    );
+    _requireText(metadata.firstPostPid, 'metadata.firstPostPid');
     final expectedNovelId = 'novel:$fid:$tid';
     if (novelId != expectedNovelId) {
       throw StateError(
@@ -47,62 +45,55 @@ class SqfliteNovelSourceMetadataRepository
     }
 
     final title = _normalizedTitle(metadata.subject, fallback: tid);
-    final catalogJson = _catalogCodec.encode(metadata.catalogEntries);
     final ingestedAt = metadata.ingestedAt.millisecondsSinceEpoch;
     final db = await _dbFuture;
 
     await db.transaction((txn) async {
-      await txn.rawInsert(
+      final workValues = <String, Object?>{
+        'work_id': novelId,
+        'content_type': _contentType,
+        'source_tid': tid,
+        'source_fid': fid,
+        'source_typeid': _trimToNull(seed.typeid),
+        'source_tag_name': _trimToNull(seed.tagName),
+        'title': title,
+        'author': _trimToNull(metadata.publisherName),
+        'cover_image_url': _trimToNull(metadata.coverImageUrl),
+        'updated_at': ingestedAt,
+      };
+      final updated = await txn.rawUpdate(
         '''
-        INSERT INTO ${AppDatabase.worksTable} (
-          work_id,
-          content_type,
-          source_tid,
-          source_fid,
-          source_typeid,
-          source_tag_name,
-          title,
-          author,
-          cover_image_url,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(work_id) DO UPDATE SET
-          content_type = excluded.content_type,
-          source_tid = excluded.source_tid,
-          source_fid = excluded.source_fid,
-          source_typeid = COALESCE(
-            excluded.source_typeid,
-            ${AppDatabase.worksTable}.source_typeid
-          ),
-          source_tag_name = COALESCE(
-            excluded.source_tag_name,
-            ${AppDatabase.worksTable}.source_tag_name
-          ),
+        UPDATE ${AppDatabase.worksTable}
+        SET content_type = ?,
+          source_tid = ?,
+          source_fid = ?,
+          source_typeid = COALESCE(?, source_typeid),
+          source_tag_name = COALESCE(?, source_tag_name),
           title = CASE
-            WHEN ? IS NOT NULL THEN excluded.title
-            ELSE ${AppDatabase.worksTable}.title
+            WHEN ? IS NOT NULL THEN ? ELSE title
           END,
-          author = COALESCE(excluded.author, ${AppDatabase.worksTable}.author),
-          cover_image_url = COALESCE(
-            excluded.cover_image_url,
-            ${AppDatabase.worksTable}.cover_image_url
-          ),
-          updated_at = excluded.updated_at
+          author = COALESCE(?, author),
+          cover_image_url = COALESCE(?, cover_image_url),
+          updated_at = ?
+        WHERE work_id = ?
         ''',
         <Object?>[
-          novelId,
           _contentType,
           tid,
           fid,
-          _trimToNull(seed.typeid),
-          _trimToNull(seed.tagName),
-          title,
-          _trimToNull(metadata.publisherName),
-          _trimToNull(metadata.coverImageUrl),
-          ingestedAt,
+          workValues['source_typeid'],
+          workValues['source_tag_name'],
           _trimToNull(metadata.subject),
+          title,
+          workValues['author'],
+          workValues['cover_image_url'],
+          ingestedAt,
+          novelId,
         ],
       );
+      if (updated == 0) {
+        await txn.insert(AppDatabase.worksTable, workValues);
+      }
 
       final existingShelfRows = await txn.query(
         AppDatabase.novelShelfItemsTable,
@@ -131,49 +122,12 @@ class SqfliteNovelSourceMetadataRepository
         });
       }
 
-      await txn.rawInsert(
-        '''
-        INSERT INTO ${AppDatabase.novelSourceStateTable} (
-          novel_id,
-          publisher_id,
-          publisher_name,
-          first_post_pid,
-          source_intro,
-          source_catalog_json,
-          metadata_source_version,
-          hydration_state,
-          metadata_ingested_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(novel_id) DO UPDATE SET
-          publisher_id = excluded.publisher_id,
-          publisher_name = COALESCE(
-            excluded.publisher_name,
-            ${AppDatabase.novelSourceStateTable}.publisher_name
-          ),
-          first_post_pid = excluded.first_post_pid,
-          source_intro = COALESCE(
-            excluded.source_intro,
-            ${AppDatabase.novelSourceStateTable}.source_intro
-          ),
-          source_catalog_json = CASE
-            WHEN excluded.source_catalog_json <> '[]'
-              THEN excluded.source_catalog_json
-            ELSE ${AppDatabase.novelSourceStateTable}.source_catalog_json
-          END,
-          metadata_source_version = excluded.metadata_source_version,
-          metadata_ingested_at = excluded.metadata_ingested_at
-        ''',
-        <Object?>[
-          novelId,
-          publisherId,
-          _trimToNull(metadata.publisherName),
-          firstPostPid,
-          _trimToNull(metadata.sourceIntro),
-          catalogJson,
-          metadata.sourceApiVersion,
-          NovelChapterHydrationState.metadataOnly.storageValue,
-          ingestedAt,
-        ],
+      await writeNovelSourceMetadata(
+        txn,
+        metadata: metadata,
+        novelId: novelId,
+        publisherId: publisherId,
+        catalogCodec: _catalogCodec,
       );
     });
   }

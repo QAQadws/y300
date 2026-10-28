@@ -9,73 +9,52 @@ class HistoryEntryDao {
 
   final HistoryRowMapper _mapper;
 
-  Future<void> upsertVisit(DatabaseExecutor db, HistoryEntry candidate) async {
+  Future<void> upsertVisit(Transaction db, HistoryEntry candidate) async {
     final row = _mapper.toRow(candidate);
-    await db.rawInsert('''
-      INSERT INTO ${HistoryLocalDb.entriesTable} (
-        target_type,
-        target_id,
-        title,
-        context_label,
-        thumbnail_local_path,
-        thumbnail_remote_url,
-        thumbnail_focus_x,
-        thumbnail_focus_y,
-        source_tid,
-        canonical_url,
-        last_page,
-        forum_name,
-        last_surface,
-        first_visited_at,
-        last_visited_at,
-        visit_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(target_type, target_id) DO UPDATE SET
-        title = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN excluded.title ELSE title END,
-        context_label = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN excluded.context_label ELSE context_label END,
-        thumbnail_local_path = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.thumbnail_local_path, thumbnail_local_path)
-          ELSE thumbnail_local_path END,
-        thumbnail_remote_url = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.thumbnail_remote_url, thumbnail_remote_url)
-          ELSE thumbnail_remote_url END,
-        thumbnail_focus_x = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.thumbnail_focus_x, thumbnail_focus_x)
-          ELSE thumbnail_focus_x END,
-        thumbnail_focus_y = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.thumbnail_focus_y, thumbnail_focus_y)
-          ELSE thumbnail_focus_y END,
-        source_tid = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.source_tid, source_tid)
-          ELSE source_tid END,
-        canonical_url = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.canonical_url, canonical_url)
-          ELSE canonical_url END,
-        last_page = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.last_page, last_page)
-          ELSE last_page END,
-        forum_name = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN COALESCE(excluded.forum_name, forum_name)
-          ELSE forum_name END,
-        last_surface = CASE
-          WHEN excluded.last_visited_at >= last_visited_at
-          THEN excluded.last_surface ELSE last_surface END,
-        first_visited_at = MIN(first_visited_at, excluded.first_visited_at),
-        last_visited_at = MAX(last_visited_at, excluded.last_visited_at),
-        visit_count = visit_count + 1
-      ''', _values(row));
+    // A late visit still increments the count, but cannot replace newer fields.
+    const latestFields = <String, bool>{
+      'title': false,
+      'context_label': false,
+      'thumbnail_local_path': true,
+      'thumbnail_remote_url': true,
+      'thumbnail_focus_x': true,
+      'thumbnail_focus_y': true,
+      'source_tid': true,
+      'canonical_url': true,
+      'last_page': true,
+      'forum_name': true,
+      'last_surface': false,
+    };
+    final assignments = <String>[];
+    final arguments = <Object?>[];
+    for (final field in latestFields.entries) {
+      final column = field.key;
+      final replacement = field.value ? 'COALESCE(?, $column)' : '?';
+      assignments.add(
+        '$column = CASE WHEN ? >= last_visited_at '
+        'THEN $replacement ELSE $column END',
+      );
+      arguments.addAll(<Object?>[row['last_visited_at'], row[column]]);
+    }
+    assignments.addAll(const <String>[
+      'first_visited_at = MIN(first_visited_at, ?)',
+      'last_visited_at = MAX(last_visited_at, ?)',
+      'visit_count = visit_count + 1',
+    ]);
+    arguments.addAll(<Object?>[
+      row['first_visited_at'],
+      row['last_visited_at'],
+      row['target_type'],
+      row['target_id'],
+    ]);
+    final updated = await db.rawUpdate(
+      'UPDATE ${HistoryLocalDb.entriesTable} SET ${assignments.join(', ')} '
+      'WHERE target_type = ? AND target_id = ?',
+      arguments,
+    );
+    if (updated == 0) {
+      await db.insert(HistoryLocalDb.entriesTable, row);
+    }
   }
 
   Future<HistoryQueryPage> query(
@@ -197,27 +176,6 @@ class HistoryEntryDao {
       ''',
       <Object?>[maxEntries],
     );
-  }
-
-  List<Object?> _values(Map<String, Object?> row) {
-    return <Object?>[
-      row['target_type'],
-      row['target_id'],
-      row['title'],
-      row['context_label'],
-      row['thumbnail_local_path'],
-      row['thumbnail_remote_url'],
-      row['thumbnail_focus_x'],
-      row['thumbnail_focus_y'],
-      row['source_tid'],
-      row['canonical_url'],
-      row['last_page'],
-      row['forum_name'],
-      row['last_surface'],
-      row['first_visited_at'],
-      row['last_visited_at'],
-      row['visit_count'],
-    ];
   }
 
   String _escapeLike(String value) {

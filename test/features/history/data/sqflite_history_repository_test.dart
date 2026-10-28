@@ -287,6 +287,51 @@ void main() {
       },
     );
 
+    test('concurrent first visits preserve every visit atomically', () async {
+      await Future.wait([
+        for (var day = 1; day <= 8; day++)
+          repository.recordVisit(
+            _entry(
+              type: HistoryTargetType.thread,
+              id: 'same-target',
+              title: '标题 $day',
+              at: _time(day),
+            ),
+          ),
+      ]);
+      final entry = (await repository.query(const HistoryQuery())).items.single;
+      expect(entry.visitCount, 8);
+      expect(entry.title, '标题 8');
+      expect(entry.firstVisitedAt, _time(1));
+      expect(entry.lastVisitedAt, _time(8));
+    });
+
+    test('failed visit insert neither commits nor emits a change', () async {
+      final changes = <HistoryChange>[];
+      final subscription = repository.watchChanges().listen(changes.add);
+      addTearDown(subscription.cancel);
+      await db.execute('''
+        CREATE TRIGGER fail_history_visit_insert
+        BEFORE INSERT ON ${HistoryLocalDb.entriesTable}
+        BEGIN
+          SELECT RAISE(ABORT, 'forced history insert failure');
+        END
+      ''');
+      await expectLater(
+        repository.recordVisit(
+          _entry(
+            type: HistoryTargetType.thread,
+            id: 'failed-target',
+            title: '不应保存',
+            at: _time(1),
+          ),
+        ),
+        throwsA(anything),
+      );
+      expect(await db.query(HistoryLocalDb.entriesTable), isEmpty);
+      expect(changes, isEmpty);
+    });
+
     test('keeps target types separate for the same stored id', () async {
       for (final type in HistoryTargetType.values) {
         await repository.recordVisit(

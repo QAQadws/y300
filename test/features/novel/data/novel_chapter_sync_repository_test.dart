@@ -141,7 +141,7 @@ void main() {
           whereArgs: const <Object?>['bookmark-1'],
         ),
         hasLength(1),
-        reason: 'DO UPDATE must not cascade-delete the existing bookmark.',
+        reason: 'In-place updates must preserve the existing bookmark.',
       );
       expect(result.insertedCount, 1);
       expect(result.updatedCount, 1);
@@ -155,6 +155,93 @@ void main() {
       expect(sourceState?.chaptersHydratedAt, completedAt);
     },
   );
+
+  test('existing chapter without content receives its missing body', () async {
+    const episodeId = 'novel:55:521519:2';
+    await _insertOfficialEpisode(db, episodeId: episodeId);
+    await db.delete(
+      AppDatabase.novelEpisodeContentTable,
+      where: 'episode_id = ?',
+      whereArgs: const <Object?>[episodeId],
+    );
+    await repository.beginRun(
+      runId: 'run-missing-body',
+      novelId: 'novel:55:521519',
+      mode: NovelChapterSyncMode.initialFull,
+    );
+    await repository.stageEpisodes(
+      runId: 'run-missing-body',
+      episodes: [_draft(pid: '2', title: '补齐正文', orderIndex: 0)],
+    );
+    final result = await repository.promote(
+      runId: 'run-missing-body',
+      request: _request(),
+      checkpoint: NovelChapterSyncCheckpoint(
+        novelId: 'novel:55:521519',
+        publisherId: '406769',
+        lastCompletedAuthorPage: 1,
+        lastSeenPid: '2',
+        completedAt: DateTime(2026, 7, 13),
+      ),
+      fetchedPages: 1,
+    );
+    expect(result.insertedCount, 0);
+    expect(result.updatedCount, 1);
+    expect(
+      (await db.query(AppDatabase.novelEpisodeContentTable)).single['raw_html'],
+      '<p>补齐正文 正文</p>',
+    );
+    expect(await db.query(AppDatabase.workEpisodesTable), hasLength(1));
+  });
+
+  test('content insert failure rolls back earlier chapter updates', () async {
+    await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:2');
+    await repository.beginRun(
+      runId: 'run-content-failure',
+      novelId: 'novel:55:521519',
+      mode: NovelChapterSyncMode.initialFull,
+    );
+    await repository.stageEpisodes(
+      runId: 'run-content-failure',
+      episodes: [
+        _draft(pid: '2', title: '不能提交的更新', orderIndex: 0),
+        _draft(pid: '3', title: '不能提交的插入', orderIndex: 1),
+      ],
+    );
+    final episodesBefore = await db.query(AppDatabase.workEpisodesTable);
+    final contentBefore = await db.query(AppDatabase.novelEpisodeContentTable);
+    final sourceBefore = await db.query(AppDatabase.novelSourceStateTable);
+    await db.execute('''
+      CREATE TRIGGER fail_novel_content_insert
+      BEFORE INSERT ON ${AppDatabase.novelEpisodeContentTable}
+      WHEN NEW.episode_id = 'novel:55:521519:3'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced content insert failure');
+      END
+    ''');
+    await expectLater(
+      repository.promote(
+        runId: 'run-content-failure',
+        request: _request(),
+        checkpoint: NovelChapterSyncCheckpoint(
+          novelId: 'novel:55:521519',
+          publisherId: '406769',
+          lastCompletedAuthorPage: 1,
+          lastSeenPid: '3',
+          completedAt: DateTime(2026, 7, 13),
+        ),
+        fetchedPages: 1,
+      ),
+      throwsA(anything),
+    );
+    expect(await db.query(AppDatabase.workEpisodesTable), episodesBefore);
+    expect(await db.query(AppDatabase.novelEpisodeContentTable), contentBefore);
+    expect(await db.query(AppDatabase.novelSourceStateTable), sourceBefore);
+    expect(
+      await db.query(AppDatabase.novelEpisodeSyncStagingTable),
+      hasLength(2),
+    );
+  });
 
   test('failed promotion rolls back all official episode changes', () async {
     await _insertOfficialEpisode(db, episodeId: 'novel:55:521519:old');

@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:y300/core/persistence/app_database.dart';
 import 'package:y300/features/novel/data/models/novel_source_catalog_json_codec.dart';
+import 'package:y300/features/novel/data/repositories/local/novel_source_metadata_writer.dart';
 import 'package:y300/features/novel/domain/models/novel_chapter_sync_models.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
@@ -38,49 +39,14 @@ class SqfliteNovelSourceStateRepository implements NovelSourceStateRepository {
       'metadata.publisherId',
     );
     final db = await _dbFuture;
-    await db.rawInsert(
-      '''
-      INSERT INTO ${AppDatabase.novelSourceStateTable} (
-        novel_id,
-        publisher_id,
-        publisher_name,
-        first_post_pid,
-        source_intro,
-        source_catalog_json,
-        metadata_source_version,
-        hydration_state,
-        metadata_ingested_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(novel_id) DO UPDATE SET
-        publisher_id = excluded.publisher_id,
-        publisher_name = COALESCE(
-          excluded.publisher_name,
-          ${AppDatabase.novelSourceStateTable}.publisher_name
-        ),
-        first_post_pid = excluded.first_post_pid,
-        source_intro = COALESCE(
-          excluded.source_intro,
-          ${AppDatabase.novelSourceStateTable}.source_intro
-        ),
-        source_catalog_json = CASE
-          WHEN excluded.source_catalog_json <> '[]'
-            THEN excluded.source_catalog_json
-          ELSE ${AppDatabase.novelSourceStateTable}.source_catalog_json
-        END,
-        metadata_source_version = excluded.metadata_source_version,
-        metadata_ingested_at = excluded.metadata_ingested_at
-      ''',
-      <Object?>[
-        novelId,
-        publisherId,
-        _trimToNull(metadata.publisherName),
-        _trimToNull(metadata.firstPostPid),
-        _trimToNull(metadata.sourceIntro),
-        _catalogCodec.encode(metadata.catalogEntries),
-        metadata.sourceApiVersion,
-        NovelChapterHydrationState.metadataOnly.storageValue,
-        metadata.ingestedAt.millisecondsSinceEpoch,
-      ],
+    await db.transaction(
+      (txn) => writeNovelSourceMetadata(
+        txn,
+        metadata: metadata,
+        novelId: novelId,
+        publisherId: publisherId,
+        catalogCodec: _catalogCodec,
+      ),
     );
   }
 

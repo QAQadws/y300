@@ -99,5 +99,31 @@ void main() {
     expect(state?.checkpoint?.lastSeenPid, '41397522');
     expect(state?.checkpoint?.publisherId, '406769');
     expect(state?.checkpoint?.completedAt, completedAt);
+
+    await repository.saveMetadata(
+      NovelSourceMetadata(
+        novelId: 'novel:55:521519',
+        tid: '521519',
+        fid: '55',
+        subject: '更新的标题',
+        publisherName: '  ',
+        publisherId: '406769',
+        firstPostPid: '40213901',
+        catalogEntries: const <NovelSourceCatalogEntry>[],
+        sourceIntro: null,
+        coverImageUrl: null,
+        sourceApiVersion: 4,
+        ingestedAt: completedAt.add(const Duration(days: 1)),
+      ),
+    );
+    state = await repository.getSourceState(novelId: 'novel:55:521519');
+    expect(state?.publisherName, 'INCSKY16');
+    expect(state?.sourceIntro, '来源简介');
+    expect(state?.catalogEntries.single.pid, '40213901');
+    expect(state?.hydrationState, NovelChapterHydrationState.ready);
+    expect(state?.chaptersHydratedAt, completedAt);
+    expect(state?.checkpoint?.lastCompletedAuthorPage, 3);
+    expect(state?.checkpoint?.lastSeenPid, '41397522');
+    expect(state?.checkpoint?.completedAt, completedAt);
   });
 }

@@ -162,66 +162,48 @@ class SqfliteNovelChapterSyncRepository implements NovelChapterSyncRepository {
         } else {
           insertedCount++;
         }
-        // DO UPDATE preserves the parent episode row identity. REPLACE would
+        // Update in place on old SQLite too. REPLACE would
         // perform a delete/insert pair and cascade-delete bookmarks.
-        await txn.rawInsert(
-          '''
-          INSERT INTO ${AppDatabase.workEpisodesTable} (
-            episode_id,
-            work_id,
-            content_type,
-            source_tid,
-            source_pid,
-            source_page,
-            episode_title,
-            order_index,
-            dateline_text
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(episode_id) DO UPDATE SET
-            work_id = excluded.work_id,
-            content_type = excluded.content_type,
-            source_tid = excluded.source_tid,
-            source_pid = excluded.source_pid,
-            source_page = excluded.source_page,
-            episode_title = excluded.episode_title,
-            order_index = excluded.order_index,
-            dateline_text = excluded.dateline_text
-          ''',
-          <Object?>[
-            episodeId,
-            normalizedNovelId,
-            _contentType,
-            row['source_tid'],
-            row['source_pid'],
-            row['author_filtered_page'],
-            row['episode_title'],
-            orderIndex,
-            row['dateline_text'],
-          ],
+        final episodeValues = <String, Object?>{
+          'work_id': normalizedNovelId,
+          'content_type': _contentType,
+          'source_tid': row['source_tid'],
+          'source_pid': row['source_pid'],
+          'source_page': row['author_filtered_page'],
+          'episode_title': row['episode_title'],
+          'order_index': orderIndex,
+          'dateline_text': row['dateline_text'],
+        };
+        final episodeUpdated = await txn.update(
+          AppDatabase.workEpisodesTable,
+          episodeValues,
+          where: 'episode_id = ?',
+          whereArgs: <Object?>[episodeId],
         );
-        await txn.rawInsert(
-          '''
-          INSERT INTO ${AppDatabase.novelEpisodeContentTable} (
-            episode_id,
-            raw_html,
-            plain_text,
-            paragraph_json,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(episode_id) DO UPDATE SET
-            raw_html = excluded.raw_html,
-            plain_text = excluded.plain_text,
-            paragraph_json = excluded.paragraph_json,
-            updated_at = excluded.updated_at
-          ''',
-          <Object?>[
-            episodeId,
-            row['raw_html'],
-            row['plain_text'],
-            row['paragraph_json'],
-            now,
-          ],
+        if (episodeUpdated == 0) {
+          await txn.insert(AppDatabase.workEpisodesTable, <String, Object?>{
+            'episode_id': episodeId,
+            ...episodeValues,
+          });
+        }
+        final contentValues = <String, Object?>{
+          'raw_html': row['raw_html'],
+          'plain_text': row['plain_text'],
+          'paragraph_json': row['paragraph_json'],
+          'updated_at': now,
+        };
+        final contentUpdated = await txn.update(
+          AppDatabase.novelEpisodeContentTable,
+          contentValues,
+          where: 'episode_id = ?',
+          whereArgs: <Object?>[episodeId],
         );
+        if (contentUpdated == 0) {
+          await txn.insert(
+            AppDatabase.novelEpisodeContentTable,
+            <String, Object?>{'episode_id': episodeId, ...contentValues},
+          );
+        }
       }
 
       if (request.mode != NovelChapterSyncMode.incremental) {
