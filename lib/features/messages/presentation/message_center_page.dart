@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/new_private_message_page.dart';
 import 'package:y300/features/messages/presentation/notification_ignore_dialog.dart';
@@ -103,6 +104,18 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
     final l10n = AppLocalizations.of(context);
     final messages = ref.watch(privateMessageFeedProvider(null));
     final notifications = ref.watch(notificationFeedProvider);
+    final attention = ref.watch(
+      messageAttentionStateProvider.select(
+        (state) => (
+          messages:
+              state.owner?.sessionOwner.uid == widget.accountId &&
+              state.privateMessages == ForumMessageAttentionState.present,
+          notifications:
+              state.owner?.sessionOwner.uid == widget.accountId &&
+              state.notifications == ForumMessageAttentionState.present,
+        ),
+      ),
+    );
     return Scaffold(
       backgroundColor: Theme.of(context).y300NativeContent.background,
       appBar: AppBar(
@@ -125,6 +138,11 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
             key: const Key('message-center-tabs'),
             controller: _tabs,
             labels: [l10n.messageMessagesTab, l10n.messageNotificationsTab],
+            // An aggregate-only arrival cannot identify which tab needs a dot.
+            attentionHints: [
+              attention.messages ? l10n.messageAttentionAvailable : null,
+              attention.notifications ? l10n.messageAttentionAvailable : null,
+            ],
           ),
           Expanded(
             child: TabBarView(

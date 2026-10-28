@@ -9,12 +9,18 @@ class NativePrimaryTabBar extends StatelessWidget {
     super.key,
     required this.controller,
     required this.labels,
+    this.attentionHints,
     this.onTap,
-  });
+  }) : assert(attentionHints == null || attentionHints.length == labels.length);
 
   final TabController controller;
   final List<String> labels;
+
+  /// A non-null localized hint adds a decorative dot to that tab's action.
+  final List<String?>? attentionHints;
   final ValueChanged<int>? onTap;
+
+  static const _attentionInset = 12.0;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +38,9 @@ class NativePrimaryTabBar extends StatelessWidget {
         builder: (context, constraints) {
           final labelWidth = math.max(
             1.0,
-            constraints.maxWidth / labels.length - 16,
+            constraints.maxWidth / labels.length -
+                16 -
+                (attentionHints == null ? 0 : _attentionInset * 2),
           );
           var height = 48.0;
           // Let long translations and large text wrap without reducing the
@@ -64,14 +72,45 @@ class NativePrimaryTabBar extends StatelessWidget {
             dividerColor: Colors.transparent,
             overlayColor: WidgetStatePropertyAll(palette.stateLayer),
             tabs: [
-              for (final label in labels)
+              for (var index = 0; index < labels.length; index++)
                 Tab(
                   height: height,
-                  child: Text(label, textAlign: TextAlign.center),
+                  child: _buildLabel(context, index),
                 ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLabel(BuildContext context, int index) {
+    final text = Text(labels[index], textAlign: TextAlign.center);
+    final hints = attentionHints;
+    if (hints == null) return text;
+    final hint = hints[index];
+    return Semantics(
+      hint: hint,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Reserve both sides even after clearing a dot, so labels stay
+          // centered and their wrapping does not change with arrival state.
+          const SizedBox(width: _attentionInset),
+          Flexible(child: text),
+          SizedBox(
+            width: _attentionInset,
+            child: Center(
+              child: ExcludeSemantics(
+                child: Badge(
+                  isLabelVisible: hint != null,
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  smallSize: 7,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
