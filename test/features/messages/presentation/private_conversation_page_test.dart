@@ -52,9 +52,8 @@ void main() {
             brightness: brightness,
           ),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale)),
             child: child!,
           ),
           home: PrivateConversationPage(
@@ -83,7 +82,7 @@ void main() {
       tester.getBottomLeft(find.byKey(ValueKey(messageId))).dy,
       closeTo(tester.getBottomLeft(timeline()).dy, 0.1),
     );
-    expect(find.text(l10n(tester).messageLatest), findsNothing);
+    expect(find.byTooltip(l10n(tester).messageLatest), findsNothing);
   }
 
   Future<void> refreshMessages(
@@ -297,8 +296,7 @@ void main() {
         messageTestPage([
           messageTestItem(
             '1',
-            html:
-                '<p><a href="forum.php?mod=viewthread&amp;tid=42">Thread link</a></p>',
+            html: '<p><a href="forum.php?mod=viewthread&amp;tid=42">Thread link</a></p>',
           ),
         ]),
       );
@@ -344,7 +342,7 @@ void main() {
       await tester.pumpAndSettle();
       final scroll = scrollController(tester);
       expect(scroll.offset - scroll.position.minScrollExtent, greaterThan(80));
-      expect(find.text(l10n(tester).messageLatest), findsOneWidget);
+      expect(find.byTooltip(l10n(tester).messageLatest), findsOneWidget);
       final bounds = tester.getRect(timeline());
       final visible = tester
           .widgetList<ForumHtmlContentView>(find.byType(ForumHtmlContentView))
@@ -370,9 +368,9 @@ void main() {
       await refresh;
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(anchor()).dy, closeTo(before, 0.1));
-      expect(find.text(l10n(tester).messageLatest), findsOneWidget);
+      expect(find.byTooltip(l10n(tester).messageLatest), findsOneWidget);
 
-      await tester.tap(find.text(l10n(tester).messageLatest));
+      await tester.tap(find.byTooltip(l10n(tester).messageLatest));
       await tester.pumpAndSettle();
       expectLatest(tester, '21');
       expect(tester.takeException(), isNull);
@@ -441,10 +439,231 @@ void main() {
       await latest;
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(anchor()).dy, closeTo(before.dy, 0.1));
-      await tester.tap(find.text(l10n(tester).messageLatest));
+      await tester.tap(find.byTooltip(l10n(tester).messageLatest));
       await tester.pumpAndSettle();
       expect(scroll.offset, closeTo(scroll.position.minScrollExtent, 0.1));
       expect(find.byKey(const ValueKey('42')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final destination in [
+    target,
+    const ForumConversationTarget.group('91'),
+  ]) {
+    testWidgets(
+      '${destination.kind.name} applied send refreshes once without remounting content',
+      (tester) async {
+        await pumpPage(tester, destination: destination);
+        repository.reads.single.result.complete(
+          messageTestPage([messageTestItem('1')], anchor: '77'),
+        );
+        await tester.pumpAndSettle();
+        final listElement = tester.element(timeline());
+        final messageElement = tester.element(find.byKey(const ValueKey('1')));
+        final inputElement = tester.element(
+          find.byKey(const Key('message-input')),
+        );
+        final messageBounds = tester.getRect(find.byKey(const ValueKey('1')));
+
+        await enterMessageText(tester, 'sent reply');
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('message-send')));
+        await tester.pump();
+        expect(repository.reads, hasLength(1));
+        repository.sends.single.succeed();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        expect(repository.reads, hasLength(2));
+        expect(repository.reads.last.query.target, destination);
+        expect(repository.reads.last.query.page, 0);
+        expect(messageInputValue(tester), isEmpty);
+        expect(tester.element(timeline()), same(listElement));
+        expect(
+          tester.element(find.byKey(const ValueKey('1'))),
+          same(messageElement),
+        );
+        expect(tester.getRect(find.byKey(const ValueKey('1'))), messageBounds);
+        expect(
+          tester.element(find.byKey(const Key('message-input'))),
+          same(inputElement),
+        );
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.byType(RefreshProgressIndicator), findsNothing);
+
+        repository.reads.last.result.complete(
+          messageTestPage([
+            messageTestItem('1'),
+            messageTestItem('100', sender: '10', html: '<p>sent reply</p>'),
+          ], anchor: '100'),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('sent reply', findRichText: true), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('conversation-bubble-100')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.element(timeline()), same(listElement));
+        expect(
+          tester.element(find.byKey(const ValueKey('1'))),
+          same(messageElement),
+        );
+        expect(
+          tester.element(find.byKey(const Key('message-input'))),
+          same(inputElement),
+        );
+        expect(repository.reads, hasLength(2));
+        expect(repository.sends, hasLength(1));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('send during a refresh queues just one read after that write', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('1')]),
+    );
+    await tester.pumpAndSettle();
+    final controller = container.read(privateMessageFeedProvider(target));
+    final beforeSend = controller.refresh();
+    await tester.pump();
+    await enterMessageText(tester, 'sent while refreshing');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('message-send')));
+    await tester.pump();
+    repository.sends.single.succeed();
+    await tester.pump();
+    expect(repository.reads, hasLength(2));
+    repository.reads[1].result.complete(
+      messageTestPage([messageTestItem('1')]),
+    );
+    await beforeSend;
+    await tester.pump();
+    expect(repository.reads, hasLength(3));
+    expect(find.byKey(const ValueKey('1')), findsOneWidget);
+    repository.reads.last.result.complete(
+      messageTestPage([
+        messageTestItem('1'),
+        messageTestItem(
+          '100',
+          sender: '10',
+          html: '<p>sent while refreshing</p>',
+        ),
+      ]),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('sent while refreshing', findRichText: true),
+      findsOneWidget,
+    );
+    expect(repository.reads, hasLength(3));
+    expect(repository.sends, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed send refresh keeps the timeline and never resends', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('1')]),
+    );
+    await tester.pumpAndSettle();
+    final listElement = tester.element(timeline());
+    final messageElement = tester.element(find.byKey(const ValueKey('1')));
+    await enterMessageText(tester, 'confirmed reply');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('message-send')));
+    await tester.pump();
+    repository.sends.single.succeed();
+    await tester.pump();
+    expect(repository.reads, hasLength(2));
+    repository.reads.last.result.complete(
+      const DataReadFailure(
+        kind: DataReadFailureKind.network,
+        code: 'fixture_read_failure',
+        diagnosticMessage: 'fixture_read_failure',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(messageInputValue(tester), isEmpty);
+    expect(tester.element(timeline()), same(listElement));
+    expect(
+      tester.element(find.byKey(const ValueKey('1'))),
+      same(messageElement),
+    );
+    expect(find.text(l10n(tester).commonRetry), findsOneWidget);
+    expect(repository.reads, hasLength(2));
+    expect(repository.sends, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a confirmed send in background refreshes only on resume', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('1')]),
+    );
+    await tester.pumpAndSettle();
+    await enterMessageText(tester, 'background reply');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('message-send')));
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    repository.sends.single.succeed();
+    await tester.pump();
+    expect(repository.reads, hasLength(1));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(repository.reads, hasLength(2));
+    repository.reads.last.result.complete(
+      messageTestPage([
+        messageTestItem('1'),
+        messageTestItem('100', sender: '10', html: '<p>background reply</p>'),
+      ]),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('background reply', findRichText: true), findsOneWidget);
+    expect(repository.reads, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'reading history during the send refresh retires latest following',
+    (tester) async {
+      await pumpPage(tester);
+      repository.reads.single.result.complete(
+        messageTestPage([
+          for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      await enterMessageText(tester, 'reply');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('message-send')));
+      await tester.pump();
+      repository.sends.single.succeed();
+      await tester.pumpAndSettle();
+      final scroll = scrollController(tester);
+      scroll.jumpTo(350);
+      await tester.pumpAndSettle();
+      final offset = scroll.offset;
+      expect(find.byTooltip(l10n(tester).messageLatest), findsOneWidget);
+      repository.reads.last.result.complete(
+        messageTestPage([
+          for (var id = 1; id <= 20; id++) messageTestItem('$id'),
+          messageTestItem('100', sender: '10'),
+        ], page: 2),
+      );
+      await tester.pumpAndSettle();
+      expect(scroll.offset, closeTo(offset, 0.1));
+      expect(find.byTooltip(l10n(tester).messageLatest), findsOneWidget);
+      expect(repository.reads, hasLength(2));
       expect(tester.takeException(), isNull);
     },
   );
@@ -521,7 +740,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(repository.reads, hasLength(1));
       expect(scroll.offset - scroll.position.minScrollExtent, greaterThan(80));
-      expect(find.text(l10n(tester).messageLatest), findsOneWidget);
+      expect(find.byTooltip(l10n(tester).messageLatest), findsOneWidget);
       expect(messageInputValue(tester), 'reply');
       expect(tester.takeException(), isNull);
     });
@@ -563,7 +782,7 @@ void main() {
         tester.getTopLeft(find.byKey(const ValueKey('200'))).dy,
         closeTo(tester.getTopLeft(timeline()).dy, 0.1),
       );
-      expect(find.text(l10n(tester).messageLatest), findsNothing);
+      expect(find.byTooltip(l10n(tester).messageLatest), findsNothing);
       expect(messageInputValue(tester), isEmpty);
       expect(tester.takeException(), isNull);
     },
@@ -677,6 +896,124 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final short in [true, false]) {
+    testWidgets(
+      '${short ? 'short' : 'long'} history pull loads older messages without refreshing latest',
+      (tester) async {
+        await pumpPage(tester);
+        final count = short ? 41 : 60;
+        repository.reads.single.result.complete(
+          messageTestPage(
+            [for (var id = 41; id <= count; id++) messageTestItem('$id')],
+            page: 3,
+            count: count,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final scroll = scrollController(tester);
+        for (var attempt = 0; attempt < 3; attempt++) {
+          scroll.jumpTo(scroll.position.maxScrollExtent);
+          await tester.pumpAndSettle();
+        }
+        final timelineBefore = tester.element(timeline());
+        final message = find.byKey(const ValueKey('conversation-bubble-41'));
+        final before = tester.getRect(message);
+        await tester.drag(timeline(), const Offset(0, 360));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(repository.reads, hasLength(2));
+        expect(repository.reads.last.query.page, 2);
+        expect(find.byType(RefreshProgressIndicator), findsNothing);
+        expect(tester.element(timeline()), same(timelineBefore));
+        expect(tester.getRect(message), before);
+        repository.reads.last.result.complete(
+          messageTestPage(
+            [for (var id = 21; id <= 40; id++) messageTestItem('$id')],
+            page: 2,
+            count: count,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(repository.reads, hasLength(2));
+        expect(tester.element(timeline()), same(timelineBefore));
+        if (!short) expect(tester.getRect(message), before);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('new history retires a queued demand when its edge moves away', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    repository.reads.single.result.complete(
+      messageTestPage(
+        [for (var id = 41; id <= 60; id++) messageTestItem('$id')],
+        page: 3,
+        count: 60,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final scroll = scrollController(tester);
+    scroll.jumpTo(scroll.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    await tester.drag(timeline(), const Offset(0, 160));
+    await tester.pump();
+    await tester.drag(timeline(), const Offset(0, 160));
+    await tester.pump();
+    expect(repository.reads, hasLength(2));
+    repository.reads.last.result.complete(
+      messageTestPage(
+        [for (var id = 21; id <= 40; id++) messageTestItem('$id')],
+        page: 2,
+        count: 60,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(scroll.position.maxScrollExtent - scroll.offset, greaterThan(160));
+    expect(repository.reads, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('loading the last history page cannot arm refresh mid gesture', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('21')], page: 2, count: 21),
+    );
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(tester.getCenter(timeline()));
+    await gesture.moveBy(const Offset(0, 160));
+    await tester.pump();
+    expect(repository.reads, hasLength(2));
+    expect(repository.reads.last.query.page, 1);
+    repository.reads.last.result.complete(
+      messageTestPage([messageTestItem('20')], count: 21),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('conversation-history-entry')), findsNothing);
+    await gesture.moveBy(const Offset(0, 200));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(2));
+    expect(find.byType(RefreshProgressIndicator), findsNothing);
+    await tester.drag(timeline(), const Offset(0, 360));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(repository.reads, hasLength(3));
+    expect(repository.reads.last.query.page, 0);
+    repository.reads.last.result.complete(
+      messageTestPage([
+        messageTestItem('20'),
+        messageTestItem('21'),
+      ], count: 21),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'short history and layout changes never trigger automatic pagination',

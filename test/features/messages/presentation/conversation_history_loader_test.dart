@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,6 +60,7 @@ void main() {
               height: 240,
               child: ConversationHistoryLoader(
                 controller: controller,
+                scrollController: scroll,
                 child: ListView.builder(
                   key: listKey,
                   controller: scroll,
@@ -177,6 +180,143 @@ void main() {
       expect(controller.hasMore, isTrue);
     },
   );
+
+  testWidgets('history demand waits for a busy refresh after scrolling stops', (
+    tester,
+  ) async {
+    await pumpLoader(tester);
+    final refresh = controller.refresh();
+    await dragNearHistory(tester);
+    expect(repository.reads, hasLength(1));
+    expect(repository.reads.single.query.page, 0);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('80')], page: 4, count: 80),
+    );
+    await refresh;
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(2));
+    expect(repository.reads.last.query.page, 3);
+    repository.reads.last.result.complete(
+      messageTestPage([messageTestItem('60')], page: 3, count: 80),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(2));
+  });
+
+  testWidgets('a new gesture can queue one page behind a busy history read', (
+    tester,
+  ) async {
+    await pumpLoader(tester);
+    await dragNearHistory(tester);
+    expect(repository.reads, hasLength(1));
+    await dragNearHistory(tester);
+    expect(repository.reads, hasLength(1));
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('60')], page: 3, count: 80),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(2));
+    expect(repository.reads.last.query.page, 2);
+    repository.reads.last.result.complete(
+      messageTestPage([messageTestItem('40')], page: 2, count: 80),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(2));
+  });
+
+  for (final movement in ['reverse', 'latest']) {
+    testWidgets('$movement movement cancels a waiting history demand', (
+      tester,
+    ) async {
+      await pumpLoader(tester);
+      final refresh = controller.refresh();
+      await dragNearHistory(tester);
+      if (movement == 'reverse') {
+        await tester.drag(
+          find.byKey(listKey),
+          const Offset(0, -30),
+          touchSlopY: 0,
+        );
+        expect(
+          scroll.position.maxScrollExtent - scroll.offset,
+          lessThanOrEqualTo(160),
+        );
+      } else {
+        scroll.jumpTo(scroll.position.minScrollExtent);
+      }
+      await tester.pumpAndSettle();
+      repository.reads.single.result.complete(
+        messageTestPage([messageTestItem('80')], page: 4, count: 80),
+      );
+      await refresh;
+      await tester.pumpAndSettle();
+      expect(repository.reads, hasLength(1));
+    });
+  }
+
+  testWidgets('a failed refresh retires its waiting history demand', (
+    tester,
+  ) async {
+    await pumpLoader(tester);
+    final refresh = controller.refresh();
+    await dragNearHistory(tester);
+    repository.reads.single.result.complete(
+      const DataReadFailure(
+        kind: DataReadFailureKind.network,
+        code: 'fixture',
+        diagnosticMessage: 'fixture',
+      ),
+    );
+    await refresh;
+    await tester.pumpAndSettle();
+    final retry = controller.refresh();
+    repository.reads.last.result.complete(
+      messageTestPage([messageTestItem('80')], page: 4, count: 80),
+    );
+    await retry;
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(2));
+    expect(repository.reads.last.query.page, 0);
+  });
+
+  testWidgets('backgrounding cancels a waiting history demand', (tester) async {
+    await pumpLoader(tester);
+    final refresh = controller.refresh();
+    await dragNearHistory(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('80')], page: 4, count: 80),
+    );
+    await refresh;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(1));
+  });
+
+  testWidgets('leaving the route cancels a waiting history demand', (
+    tester,
+  ) async {
+    await pumpLoader(tester);
+    final refresh = controller.refresh();
+    await dragNearHistory(tester);
+    final navigator = Navigator.of(tester.element(find.byKey(listKey)));
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('Other route')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    repository.reads.single.result.complete(
+      messageTestPage([messageTestItem('80')], page: 4, count: 80),
+    );
+    await refresh;
+    await tester.pumpAndSettle();
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(repository.reads, hasLength(1));
+  });
 
   testWidgets('a scheduled history request is discarded after disposal', (
     tester,

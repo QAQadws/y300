@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -9,6 +11,7 @@ import 'package:y300/features/messages/presentation/message_feed_providers.dart'
 import 'package:y300/features/messages/presentation/conversation_message_presentation.dart';
 import 'package:y300/features/messages/presentation/widgets/conversation_message_tile.dart';
 import 'package:y300/features/messages/presentation/widgets/conversation_history_loader.dart';
+import 'package:y300/features/messages/presentation/widgets/conversation_latest_button.dart';
 import 'package:y300/features/messages/presentation/widgets/conversation_scroll_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
@@ -73,6 +76,38 @@ class _ConversationBody extends ConsumerStatefulWidget {
 
 class _ConversationBodyState extends ConsumerState<_ConversationBody> {
   final _timeline = GlobalKey<_ConversationTimelineState>();
+  int _sendRefreshGeneration = 0;
+
+  bool get _isVisible {
+    if (!mounted) return false;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    return ModalRoute.isCurrentOf(context) != false &&
+        TickerMode.valuesOf(context).enabled &&
+        (lifecycle == null || lifecycle == AppLifecycleState.resumed);
+  }
+
+  Future<void> _refreshAfterSend(
+    MessageFeedController<ForumPrivateMessagePage> controller,
+  ) async {
+    if (!_isVisible) return;
+    final generation = ++_sendRefreshGeneration;
+    final timeline = _timeline.currentState;
+    timeline?.showLatest();
+    // The editor publishes invalidation before this callback. Join its read
+    // when already started, while making the visible route own its refresh.
+    // refresh() retains the current page and editor throughout the request.
+    await controller.refresh();
+    if (!_isVisible ||
+        generation != _sendRefreshGeneration ||
+        !identical(
+          controller,
+          ref.read(privateMessageFeedProvider(widget.target)),
+        ) ||
+        !identical(timeline, _timeline.currentState)) {
+      return;
+    }
+    timeline?.followLatestAfterRefresh();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +206,8 @@ class _ConversationBodyState extends ConsumerState<_ConversationBody> {
                             widget.target.kind ==
                                 ForumConversationKind.direct ||
                             state.data!.replyMessageId.isNotEmpty,
-                        onApplied: (_) => _timeline.currentState?.showLatest(),
+                        onApplied: (_) =>
+                            unawaited(_refreshAfterSend(controller)),
                       ),
                     ),
                 ],
@@ -226,6 +262,12 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
   }
 
   void showLatest() => _scroll.showLatest();
+
+  void followLatestAfterRefresh() {
+    // A user who scrolled into history while the read was pending keeps that
+    // intent; otherwise align again after the server's new message arrives.
+    if (_scroll.followingLatest.value) _scroll.showLatest();
+  }
 
   @override
   void dispose() {
@@ -284,8 +326,13 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
       children: [
         RefreshIndicator(
           onRefresh: widget.controller.refresh,
+          // The physical top belongs to history until it is exhausted. A pull
+          // there must not start a latest-page refresh that cancels pagination.
+          notificationPredicate: (notification) =>
+              notification.depth == 0 && !widget.controller.hasMore,
           child: ConversationHistoryLoader(
             controller: widget.controller,
+            scrollController: _scroll,
             child: ConversationScrollView(
               key: const Key('private-conversation-list'),
               controller: _scroll,
@@ -318,11 +365,7 @@ class _ConversationTimelineState extends State<_ConversationTimeline> {
             valueListenable: _scroll.followingLatest,
             builder: (context, following, _) => following
                 ? const SizedBox.shrink()
-                : FilledButton.tonalIcon(
-                    onPressed: showLatest,
-                    icon: const Icon(Icons.arrow_downward, size: 18),
-                    label: Text(AppLocalizations.of(context).messageLatest),
-                  ),
+                : ConversationLatestButton(onPressed: showLatest),
           ),
         ),
       ],
