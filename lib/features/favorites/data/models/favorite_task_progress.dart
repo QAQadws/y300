@@ -22,20 +22,14 @@ class FavoriteSyncShelfTaskProgressListenable extends ChangeNotifier
   @override
   LibraryShelfTaskProgress? get value {
     final progress = _source.value;
-    final attention =
-        progress.hasQueueSummary &&
-        progress.phase == FavoriteSyncProgressPhase.failed;
-    if (!progress.isActive && !attention) {
+    // Failed jobs remain retryable in storage; only running work owns shelf space.
+    if (!progress.isActive) {
       return null;
     }
     return LibraryShelfTaskProgress(
       code: switch (progress.phase) {
         FavoriteSyncProgressPhase.queued =>
           LibraryShelfTaskProgressCode.favoriteParseQueued,
-        FavoriteSyncProgressPhase.failed =>
-          progress.needsReconciliation
-              ? LibraryShelfTaskProgressCode.favoriteDirectoryNeedsAttention
-              : LibraryShelfTaskProgressCode.favoriteParseNeedsAttention,
         FavoriteSyncProgressPhase.fetchingList =>
           LibraryShelfTaskProgressCode.favoriteSyncFetching,
         FavoriteSyncProgressPhase.savingList =>
@@ -44,16 +38,17 @@ class FavoriteSyncShelfTaskProgressListenable extends ChangeNotifier
           LibraryShelfTaskProgressCode.favoriteSyncLoadingDetails,
         FavoriteSyncProgressPhase.finishing =>
           LibraryShelfTaskProgressCode.favoriteSyncFinishing,
-        FavoriteSyncProgressPhase.idle || FavoriteSyncProgressPhase.completed =>
-          throw StateError('Inactive favorite sync progress was exposed.'),
+        FavoriteSyncProgressPhase.idle ||
+        FavoriteSyncProgressPhase.completed ||
+        FavoriteSyncProgressPhase.failed => throw StateError(
+          'Inactive favorite sync progress was exposed.',
+        ),
       },
       subject: progress.subject,
       current: progress.current,
       total: progress.total,
       source: LibraryMutationSource.favoriteSync,
-      visible: attention || !_isNotificationPermissionGranted,
-      active: progress.isActive,
-      needsAttention: attention,
+      visible: !_isNotificationPermissionGranted,
       foregroundQueued: progress.hasQueueSummary
           ? progress.foregroundQueued
           : null,

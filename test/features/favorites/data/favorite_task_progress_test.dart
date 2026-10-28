@@ -7,7 +7,7 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/domain/services/library_task_notification_service.dart';
 
 void main() {
-  test('queue totals reach the shelf and failures stay visible after active work ends', () {
+  test('queue totals reach the shelf only while work is active without discarding failures', () {
     final source = ValueNotifier<FavoriteSyncProgress>(
       const FavoriteSyncProgress(
         phase: FavoriteSyncProgressPhase.queued,
@@ -31,18 +31,19 @@ void main() {
     expect(progress.value?.foregroundQueued, 25);
     expect(progress.value?.automaticRemaining, 10);
     expect(progress.value?.visible, isFalse);
-    source.value = const FavoriteSyncProgress(
-      phase: FavoriteSyncProgressPhase.failed,
-      hasQueueSummary: true,
-      failedCount: 2,
-    );
-    expect(progress.value?.active, isFalse);
-    expect(progress.value?.needsAttention, isTrue);
-    expect(progress.value?.visible, isTrue);
-    expect(
-      progress.value?.code,
-      LibraryShelfTaskProgressCode.favoriteParseNeedsAttention,
-    );
+    for (final needsReconciliation in [false, true]) {
+      source.value = FavoriteSyncProgress(
+        phase: FavoriteSyncProgressPhase.failed,
+        hasQueueSummary: true,
+        failedCount: 7,
+        needsReconciliation: needsReconciliation,
+      );
+      for (final state in LibraryTaskNotificationPermissionState.values) {
+        permission.value = state;
+        expect(progress.value, isNull);
+        expect(source.value.failedCount, 7);
+      }
+    }
   });
 
   group('FavoriteSyncShelfTaskProgressListenable', () {

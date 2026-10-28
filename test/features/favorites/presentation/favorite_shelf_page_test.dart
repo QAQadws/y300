@@ -136,7 +136,7 @@ void main() {
   });
 
   testWidgets(
-    'FavoriteShelfPage shows first-sync progress while cache is building',
+    'FavoriteShelfPage shows active progress and removes the banner when failed work stops',
     (tester) async {
       final sync = _FakeFavoriteSyncService(autoComplete: false);
       final authRepository = _FakeAuthRepository(isLoggedIn: true);
@@ -187,6 +187,28 @@ void main() {
       expect(bootstrapper.startCallCount, 1);
       sync.completePendingSync();
       await tester.pumpAndSettle();
+      for (final needsReconciliation in [false, true]) {
+        sync._progress.value = FavoriteSyncProgress(
+          phase: FavoriteSyncProgressPhase.failed,
+          hasQueueSummary: true,
+          failedCount: 7,
+          needsReconciliation: needsReconciliation,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('unified-shelf-task-progress-message')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('unified-shelf-task-queue-summary')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('unified-shelf-task-progress-bar')),
+          findsNothing,
+        );
+        expect(sync.progress.value.failedCount, 7);
+      }
     },
   );
 
