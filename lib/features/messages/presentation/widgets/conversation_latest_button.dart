@@ -10,7 +10,8 @@ class ConversationLatestButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = Theme.of(context).y300NativeContent;
+    final theme = Theme.of(context);
+    final palette = theme.y300NativeContent;
     return IconButton(
       tooltip: AppLocalizations.of(context).messageLatest,
       onPressed: onPressed,
@@ -20,10 +21,10 @@ class ConversationLatestButton extends StatelessWidget {
         backgroundColor: palette.card.withValues(alpha: 0.35),
         foregroundColor: palette.body,
         overlayColor: palette.subtleStateLayer,
-        side: BorderSide(
-          color: palette.muted.withValues(alpha: 0.16),
-          width: 0.75,
-        ),
+        side: BorderSide.none,
+        elevation: 2,
+        shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.16),
+        surfaceTintColor: Colors.transparent,
         shape: const CircleBorder(),
         fixedSize: const Size.square(40),
         minimumSize: const Size.square(40),
