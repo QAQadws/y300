@@ -68,7 +68,7 @@ final class ForumBodyRubyContentCursor {
     }
   }
 
-  static const revision = 2;
+  static const revision = 3;
   ForumBodyStyledFlowCursor? _flow;
   ForumBodyStyledFlowEvent? _root;
   ForumBodyStyledFlowEvent? _last;
@@ -197,6 +197,10 @@ final class ForumBodyRubyContentCursor {
           final node = event.node;
           if (event.phase == ForumBodyFlowPhase.text && node is ForumBodyText) {
             _charge(node.text.length, 1, 0);
+          } else if (event.phase == ForumBodyFlowPhase.open &&
+              node is ForumBodyElement &&
+              node.kind == ForumBodyElementKind.hardBreak) {
+            _charge(1, 1, 0);
           }
         }
         work++;

@@ -192,6 +192,32 @@ void main() {
     },
   );
 
+  test(
+    'hard breaks count as raw text and runs before any layout admission',
+    () {
+      final run = open('<ruby><br><rt>a</rt><br><rt>b</rt></ruby>');
+      final groups = drain(run.cursor);
+      expect(groups.map((group) => text(group.base)), ['\n', '\n']);
+      expect(run.cursor.inputCodeUnits, 4);
+      expect(run.cursor.textRunCount, 4);
+      final bounded = open(
+        '<ruby><br><rt></rt></ruby>',
+        limits: const ForumBodyRubyContentLimits(maxTextRuns: 0),
+      );
+      expect(
+        () => drain(bounded.cursor),
+        throwsA(
+          isA<ForumBodyRubyContentException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyRubyContentFailure.runLimit,
+          ),
+        ),
+      );
+      expect(bounded.cursor.isClosed, isTrue);
+    },
+  );
+
   test('multiple RTs share their base without becoming ordinary body text', () {
     final run = open(
       '<ruby>漢字<rt>かんじ</rt><rt lang="en">characters</rt></ruby>',
