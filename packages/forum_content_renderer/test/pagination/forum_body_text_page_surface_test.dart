@@ -59,6 +59,7 @@ final class _Fixture {
     double gap = 0,
     List<double>? widths,
     List<double>? lefts,
+    List<double>? befores,
   }) {
     final composer = ForumBodyTextPageComposer(
       identity: document.identity,
@@ -74,7 +75,7 @@ final class _Fixture {
           lease: lease(index, width: widths?[index] ?? width),
           paragraphIndex: index,
           left: lefts?[index] ?? 0,
-          spaceBefore: 3,
+          spaceBefore: befores?[index] ?? 3,
           spaceAtPageStart: gap,
         );
         while (!composer.needsParagraph) {
@@ -119,6 +120,59 @@ Future<List<int>> _pagePixels(RenderRepaintBoundary boundary) async {
 }
 
 void main() {
+  testWidgets(
+    'overlapping fragments paint and hit in actual page order without reshaping',
+    (tester) async {
+      final fixture = _Fixture(html: '<p>aa</p><p>bb</p>');
+      final plan = fixture.plan(height: 40, paragraphs: 2, befores: [0, -5]);
+      expect(plan.single.fragments.map((fragment) => fragment.top), [0, 5]);
+      expect(plan.single.usedHeight, 15);
+      final leases = [fixture.lease(0), fixture.lease(1)];
+      final key = GlobalKey();
+      final hits = <(int, int)>[];
+      await tester.pumpWidget(
+        _host(
+          RepaintBoundary(
+            key: key,
+            child: _surface(
+              plan,
+              leases,
+              onTap: (fragment, position) =>
+                  hits.add((fragment.paragraphIndex, position.sourceRune)),
+            ),
+          ),
+        ),
+      );
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      leases[0].layout.fragment(0, 1).paint(canvas, Offset.zero);
+      leases[1].layout.fragment(0, 1).paint(canvas, const Offset(0, 5));
+      final picture = recorder.endRecording();
+      await tester.runAsync(() async {
+        final reference = await picture.toImage(100, 40);
+        try {
+          expect(
+            await _pagePixels(
+              tester.renderObject<RenderRepaintBoundary>(find.byKey(key)),
+            ),
+            (await reference.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            ))!.buffer.asUint8List().toList(),
+          );
+        } finally {
+          reference.dispose();
+          picture.dispose();
+        }
+      });
+      await tester.tapAt(const Offset(1, 7));
+      expect(hits, [(1, 2)]);
+      expect(fixture.cache.layoutBuildCount, 2);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
+
   testWidgets(
     'page paints numeric placements using shared paragraph layouts and current source coordinates',
     (tester) async {

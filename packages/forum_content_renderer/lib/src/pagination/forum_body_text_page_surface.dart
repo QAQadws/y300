@@ -37,7 +37,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     onSourceTap,
   }) {
     if (snapshot.layoutId != layoutId ||
-        snapshot.backendRevision != ForumBodyParagraphLayout.backendRevision) {
+        snapshot.backendRevision != ForumBodyParagraphLayout.backendRevision ||
+        snapshot.composerRevision != ForumBodyTextPageComposer.revision) {
       _fail(ForumBodyTextPageSurfaceFailure.generation);
     }
     final page = snapshot[pageIndex];

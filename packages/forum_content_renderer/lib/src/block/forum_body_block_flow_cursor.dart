@@ -32,7 +32,7 @@ sealed class ForumBodyBlockFlowUnit {
 /// Continuous-flow gap, not a ready-to-apply page margin. Collapsed margins
 /// may be negative and never prove that an earlier page is stable. The page
 /// layer must resolve break trimming/decoration and admission before applying
-/// these values; the ordinary positive-gap composer cannot accept them blindly.
+/// these values; paragraph spacing cannot be inferred from a single gap alone.
 enum ForumBodyBlockSpaceKind { collapsedMargin, paddingTop, paddingBottom }
 
 final class ForumBodyBlockFlowSpace extends ForumBodyBlockFlowUnit {

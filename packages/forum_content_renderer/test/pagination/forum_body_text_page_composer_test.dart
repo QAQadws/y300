@@ -91,6 +91,136 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'signed gaps move the flow cursor without erasing earlier occupied ink',
+    () {
+      final input = _Input('<p style="font-size:30px">a</p><p>b</p><p>c</p>');
+      final composer = input.composer(height: 100);
+      for (var index = 0; index < 3; index++) {
+        composer.append(
+          lease: input.lease(index),
+          paragraphIndex: index,
+          left: 0,
+          spaceBefore: index == 1 ? -25 : 0,
+          spaceAtPageStart: 0,
+        );
+        _consume(composer, maxLines: 1);
+      }
+      composer.finish();
+      expect(
+        composer.snapshot.single.fragments.map((fragment) => fragment.top),
+        [0, 5, 15],
+      );
+      expect(composer.snapshot.single.usedHeight, 30);
+      expect(
+        composer.snapshot.composerRevision,
+        ForumBodyTextPageComposer.revision,
+      );
+      expect(input.cache.layoutBuildCount, 3);
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test('negative gap is bounded by the current page top', () {
+    final input = _Input('<p>a</p><p>b</p><p>c</p>');
+    final composer = input.composer(height: 100);
+    for (var index = 0; index < 3; index++) {
+      composer.append(
+        lease: input.lease(index),
+        paragraphIndex: index,
+        left: 0,
+        spaceBefore: index == 1 ? -1000 : 0,
+        spaceAtPageStart: 0,
+      );
+      _consume(composer);
+    }
+    composer.finish();
+    expect(composer.snapshot.single.fragments.map((fragment) => fragment.top), [
+      0,
+      0,
+      10,
+    ]);
+    expect(composer.snapshot.single.usedHeight, 20);
+  });
+
+  test(
+    'a later negative gap cannot change a sealed page or bypass page-start policy',
+    () {
+      final input = _Input('<p>a<br>b</p><p>c</p>');
+      final composer = input.composer(height: 20);
+      _append(composer, input.lease(0), 0);
+      _consume(composer);
+      final prefix = composer.snapshot;
+      expect(prefix.single.usedHeight, 20);
+      composer.append(
+        lease: input.lease(1),
+        paragraphIndex: 1,
+        left: 0,
+        spaceBefore: -1000,
+        spaceAtPageStart: 3,
+      );
+      _consume(composer);
+      expect(composer.snapshot, same(prefix));
+      composer.finish();
+      expect(composer.snapshot, hasLength(2));
+      expect(composer.snapshot.first, same(prefix.single));
+      expect(prefix, hasLength(1));
+      expect(composer.snapshot.last.fragments.single.top, 3);
+      expect(composer.snapshot.last.usedHeight, 13);
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'overlapping multi-line fragments still fit using actual growing line geometry',
+    () {
+      final input = _Input('<p>a</p><p>b<br>c</p>');
+      final composer = input.composer(height: 25);
+      _append(composer, input.lease(0), 0);
+      _consume(composer);
+      composer.append(
+        lease: input.lease(1),
+        paragraphIndex: 1,
+        left: 0,
+        spaceBefore: -5,
+        spaceAtPageStart: 0,
+      );
+      _consume(composer, maxLines: 1);
+      composer.finish();
+      final page = composer.snapshot.single;
+      expect(
+        page.fragments.map((fragment) => (fragment.top, fragment.height)),
+        [(0, 10), (5, 20)],
+      );
+      expect(page.usedHeight, 25);
+      expect(page.fragments.last.coverageEndUtf16, 3);
+      expect(input.cache.layoutBuildCount, 2);
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'negative page-start placement is rejected while the lease remains caller-owned',
+    () {
+      final input = _Input('<p>a</p>');
+      final composer = input.composer();
+      final lease = input.lease(0);
+      addTearDown(lease.release);
+      expect(
+        () => composer.append(
+          lease: lease,
+          paragraphIndex: 0,
+          left: 0,
+          spaceBefore: -5,
+          spaceAtPageStart: -5,
+        ),
+        throwsArgumentError,
+      );
+      expect(lease.isActive, isTrue);
+      expect(composer.needsParagraph, isTrue);
+    },
+  );
+
+  test(
     'hard-break windows share real layout and preserve one final empty row',
     () {
       final input = _Input('<p>a<br></p>');
