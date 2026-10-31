@@ -36,7 +36,7 @@ final class ForumBodyInlineSpanContent {
   }) : contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  static const revision = 2;
+  static const revision = 3;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -66,6 +66,7 @@ final class ForumBodyInlineSpanContent {
     final segments = <HtmlDisplayTextSegment>[];
     final retainedContexts = <ForumBodyInlineContext>[];
     final runs = <ForumBodyParagraphRun>[];
+    final runIndices = Map<ForumBodyParagraphRun, int>.identity();
     var inputLength = 0;
     for (final context in contexts) {
       if (context.identity != identity ||
@@ -84,19 +85,33 @@ final class ForumBodyInlineSpanContent {
           path,
         );
       }
-      if (runs.length + context.runs.length > maxRuns) {
-        throw ForumBodyParagraphInputException(
-          ForumBodyParagraphInputFailure.runLimit,
-          path,
-        );
+      final remap = <int, int>{};
+      // Source windows share their original run objects. Retain only actual
+      // ownership, without duplicating that table or merging equal styles.
+      for (final part in context.projection.parts) {
+        final run = context.runs[part.runIndex];
+        final int index;
+        if (runIndices.containsKey(run)) {
+          index = runIndices[run]!;
+        } else {
+          if (runs.length >= maxRuns) {
+            throw ForumBodyParagraphInputException(
+              ForumBodyParagraphInputFailure.runLimit,
+              path,
+            );
+          }
+          index = runs.length;
+          runIndices[run] = index;
+          runs.add(run);
+        }
+        remap[part.runIndex] = index;
       }
       segments.add(
-        HtmlDisplayTextSegment(context.projection, runIndexOffset: runs.length),
+        HtmlDisplayTextSegment(context.projection, runIndexMap: remap),
       );
       retainedContexts.add(
         ForumBodyInlineContext._(context, start, inputLength),
       );
-      runs.addAll(context.runs);
     }
     final display = HtmlDisplayTextProjection.concatenate(
       segments,

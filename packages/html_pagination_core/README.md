@@ -36,13 +36,16 @@ Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以�
 
 `HtmlDisplayTextProjection.concatenate` 组合已经独立排版的文字上下文，不重新折叠空白，
 不跨上下文合并字素；通过 `HtmlDisplayTextSegment.runIndexOffset` 显式绑定父级样式表。
+同一原始样式表的多个窗口可改用 `runIndexMap`，逐实际使用的 run 显式映射到父表，
+避免复制原样式表；与非零 offset 互斥，缺失或负数归属明确失败。只映射样式所有权，
+不改变文字、字素、源码点、亲和性或来源顺序；组合结果不保留调用方的可写 Map。
 普通相邻样式 span 仍应一次 build，避免把样式边界误当成独立字素上下文。
 `slice` 仅裁出显示坐标窗口，端点必须是现有完整字素边界，不是 HTML 切片。
 窗口保留原 run 编号，以及两端来源缺口的上下游亲和性，空窗口也遵循此约定。
 组合输入须按真实来源排序，并受输出文字和片段数量预算限制。
 来源映射相等还需核对字素分段与边缘亲和性；只比较相同文字不足以复用来源映射。
 `displaySegmentationHash`/`hasSameDisplaySegmentation` 仅描述文字与独立字素边界，
-不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 4。
+不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 5。
 
 `HtmlInlineTextProjection` 为父排版引擎单独建立 UTF-16 坐标：每个显式原子范围仅在
 `engineText` 中占一个 U+FFFC，原来的 `display` 仍保存子文字、独立字素和真实来源。

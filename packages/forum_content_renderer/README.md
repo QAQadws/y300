@@ -149,9 +149,11 @@ BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步
 有限、有界且基线在框内的 alphabetic baseline 占位，不重复应用父级字体缩放。
 父引擎负责混合 bidi、换行和占位基线；子布局负责在实际占位框处绘制、命中及选区。
 纯输入不持有 native 子租约、DOM、Context 或测量 session，也不自行决定 whitespace
-边缘、可见 coverage、分页、缓存预算和阅读锚点。组合输入 revision 为 2，父布局身份
-还须纳入 projection、原子几何、完整样式和有效字体缩放；App 页面消费及分层/多注音
-几何尚未完成，不能据此宣称复杂正文已通过原生阅读器验收。
+边缘、可见 coverage、分页、缓存预算和阅读锚点。同一原始 run 的显示窗口经显式
+runIndexMap 共享父样式归属，只保留实际使用的 run，按对象身份去重，不合并相同样式
+的不同来源。原始流仍独立核对输入预算；窗口拆分不重复计费，也不提高 maxRuns。
+组合输入 revision 为 3，父布局身份还须纳入 projection、原子几何、完整样式和有效字体
+缩放；分层/多注音几何尚未完成，不能据此宣称完整复杂正文已通过原生阅读器验收。
 
 `ForumBodyInlineParagraphLayout` 持有一个实际父 TextPainter。与普通段落共用唯一的
 原生逻辑行提取实现；`ForumBodyParagraphLine` 明确记录 display 和 engine 的 paint／

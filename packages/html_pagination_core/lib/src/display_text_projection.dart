@@ -38,9 +38,18 @@ final class HtmlDisplayTextPart {
 /// An independently formatted child, with explicit parent style-run ownership.
 /// Ordinary adjacent style spans should still be built as one run sequence.
 final class HtmlDisplayTextSegment {
-  const HtmlDisplayTextSegment(this.projection, {this.runIndexOffset = 0});
+  const HtmlDisplayTextSegment(
+    this.projection, {
+    this.runIndexOffset = 0,
+    this.runIndexMap,
+  });
   final HtmlDisplayTextProjection projection;
   final int runIndexOffset;
+
+  /// Explicit ownership for windows sharing a style table. Every used index
+  /// must map to a nonnegative parent index. Cannot be combined with an offset;
+  /// unused indices are irrelevant and the composition retains no mutable map.
+  final Map<int, int>? runIndexMap;
 }
 
 final class HtmlProjectedSourcePosition {
@@ -65,7 +74,7 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
-  static const revision = 4;
+  static const revision = 5;
 
   /// Whitespace accepted by the explicit single-line projection policy. This
   /// predicate does not classify forum content or change normal HTML spacing.
@@ -149,9 +158,20 @@ final class HtmlDisplayTextProjection {
     int? previousSourceEnd;
     for (final segment in segments) {
       final projection = segment.projection;
-      if (segment.runIndexOffset < 0) {
+      if (segment.runIndexOffset < 0 ||
+          (segment.runIndexMap != null && segment.runIndexOffset != 0)) {
         throw ArgumentError.value(segment.runIndexOffset);
       }
+      int runIndex(int index) {
+        final map = segment.runIndexMap;
+        if (map == null) return index + segment.runIndexOffset;
+        final mapped = map[index];
+        if (mapped == null || mapped < 0) {
+          throw ArgumentError('Missing or invalid projected run ownership');
+        }
+        return mapped;
+      }
+
       final sourceStart = projection._runes.isEmpty
           ? projection._leadingBefore
           : projection._runes.first.start;
@@ -171,7 +191,7 @@ final class HtmlDisplayTextProjection {
       for (final part in projection.parts) {
         parts.add(
           HtmlDisplayTextPart(
-            part.runIndex + segment.runIndexOffset,
+            runIndex(part.runIndex),
             part.text,
             part.utf16Start + length,
           ),
@@ -183,7 +203,7 @@ final class HtmlDisplayTextProjection {
             rune.rune,
             rune.start,
             rune.end,
-            rune.runIndex + segment.runIndexOffset,
+            runIndex(rune.runIndex),
           ),
         );
       }

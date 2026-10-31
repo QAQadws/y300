@@ -391,6 +391,53 @@ void main() {
   });
 
   test(
+    'source windows retain unique run ownership within the original budget',
+    () {
+      final fixture = mixedInlineInput(
+        prefix: 'X<span style="color:green">Y</span>',
+      );
+      final original = fixture.content;
+      final prefix = fixture.contexts.first;
+      final windows = [
+        prefix.displayWindow(startUtf16: 0, endUtf16: 1),
+        prefix.displayWindow(startUtf16: 1, endUtf16: 2),
+        ...fixture.contexts.skip(1),
+      ];
+      ForumBodyInlineSpanContent compose(int maxRuns) =>
+          ForumBodyInlineSpanContent.compose(
+            identity: original.identity,
+            path: original.path,
+            fontRevision: original.fontRevision,
+            styleRevision: original.styleRevision,
+            style: original.style,
+            contexts: windows,
+            atomicRanges: [(startUtf16: 2, endUtf16: 6)],
+            maxRuns: maxRuns,
+          );
+      final split = compose(5);
+      expect(split.runs, hasLength(5));
+      expect(split.runs.toSet(), original.runs.toSet());
+      expect(
+        split.projection.display.hasSameSourceMapping(
+          original.projection.display,
+        ),
+        isTrue,
+      );
+      final spans = split.textSpan.children!.whereType<TextSpan>().toList();
+      expect(spans.map((span) => span.text), ['X', 'Y', 'Y']);
+      expect(spans.map((span) => span.style!.color), [
+        const Color(0xffff0000),
+        const Color(0xff008000),
+        const Color(0xff0000ff),
+      ]);
+      expect(
+        () => compose(4),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+    },
+  );
+
+  test(
     'composition refuses source reordering and enforces all structural budgets',
     () {
       final fixture = mixedInlineInput();

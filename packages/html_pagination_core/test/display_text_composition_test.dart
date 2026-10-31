@@ -12,6 +12,71 @@ HtmlDisplayTextProjection project(String text, int source) =>
 
 void main() {
   test(
+    'explicit run ownership changes no text, source or grapheme coordinate',
+    () {
+      final original = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(text: 'Ae\u0301', sourceRuneStart: 3),
+        HtmlDisplayTextRun(text: '😀Z', sourceRuneStart: 6),
+      ]);
+      final ownership = {0: 4, 1: 2};
+      final combined = HtmlDisplayTextProjection.concatenate([
+        HtmlDisplayTextSegment(
+          original.slice(startUtf16: 0, endUtf16: 1),
+          runIndexMap: {0: 4},
+        ),
+        HtmlDisplayTextSegment(
+          original.slice(startUtf16: 1, endUtf16: 6),
+          runIndexMap: ownership,
+        ),
+      ]);
+      ownership.clear();
+      expect(combined.hasSameSourceMapping(original), isTrue);
+      expect(combined.parts.map((part) => part.runIndex), [4, 4, 2]);
+      final last = combined.slice(startUtf16: 3, endUtf16: 6);
+      expect(last.parts.single.runIndex, 2);
+      expect(last.sourceAtUtf16(0).sourceRune, 6);
+      for (var offset = 0; offset <= original.text.length; offset++) {
+        for (final affinity in HtmlProjectionAffinity.values) {
+          final before = original.sourceAtUtf16(offset, affinity: affinity);
+          final after = combined.sourceAtUtf16(offset, affinity: affinity);
+          expect(
+            (after.sourceRune, after.displayUtf16, after.isExact),
+            (before.sourceRune, before.displayUtf16, before.isExact),
+          );
+        }
+      }
+    },
+  );
+
+  for (final map in <Map<int, int>>[
+    {},
+    {0: -1},
+    {1: 2},
+  ]) {
+    test('used run ownership must be present and nonnegative: $map', () {
+      expect(
+        () => HtmlDisplayTextProjection.concatenate([
+          HtmlDisplayTextSegment(project('A', 0), runIndexMap: map),
+        ]),
+        throwsArgumentError,
+      );
+    });
+  }
+
+  test('explicit ownership cannot also apply a run offset', () {
+    expect(
+      () => HtmlDisplayTextProjection.concatenate([
+        HtmlDisplayTextSegment(
+          project('A', 0),
+          runIndexMap: {0: 2},
+          runIndexOffset: 1,
+        ),
+      ]),
+      throwsArgumentError,
+    );
+  });
+
+  test(
     'independent base and annotation preserve separate grapheme contexts',
     () {
       final combined = HtmlDisplayTextProjection.concatenate([
