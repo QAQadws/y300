@@ -210,7 +210,7 @@ void main() {
           ),
         ),
       );
-      for (final width in [0.0, -1.0, double.nan, double.infinity]) {
+      for (final width in [-1.0, double.nan, double.infinity]) {
         expect(
           () => ForumBodyBlockBox.resolve(
             style: result.styles.byPath['1']!,

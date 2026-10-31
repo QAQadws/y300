@@ -39,7 +39,7 @@ final class ForumBodyBlockBox {
     }
     final fontSize = style.textStyle.fontSize;
     if (!containingWidth.isFinite ||
-        containingWidth <= 0 ||
+        containingWidth < 0 ||
         !rootFontSize.isFinite ||
         rootFontSize <= 0 ||
         fontSize == null ||

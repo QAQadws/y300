@@ -2,6 +2,7 @@
 library;
 
 export 'src/block/forum_body_block_box.dart';
+export 'src/block/forum_body_block_flow_cursor.dart';
 export 'src/document/forum_body_document.dart';
 export 'src/document/forum_body_parser.dart';
 export 'src/flow/forum_body_styled_flow_cursor.dart';
