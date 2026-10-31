@@ -2,6 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_layout_host.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/fonts/domain/repositories/font_library_repository.dart';
@@ -39,6 +44,215 @@ import 'package:y300/features/novel/presentation/services/novel_reader_progress_
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 
 void main() {
+  for (final version in [0, 1, 37]) {
+    testWidgets(
+      'native mounted restore version $version uses the existing read-only committer until a real chrome turn',
+      (tester) async {
+        const args = NovelReaderArgs(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+        );
+        final text = List.filled(20, 'abcdefghijklmnopqrst').join();
+        final content = _content(args.episodeId, text);
+        final semantic =
+            const DiscuzNovelReaderDocumentParser(captureSourceProvenance: true)
+                .parse(
+                  episodeId: args.episodeId,
+                  rawHtml: content.rawHtml,
+                  fallbackParagraphs: const [],
+                );
+        final original = NovelReadingProgress(
+          novelId: args.novelId,
+          episodeId: args.episodeId,
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 10, 4),
+          flowMode: NovelReaderFlowMode.pagedLtr,
+          pageIndex: 8,
+          pageCount: 10,
+          anchorNodeId: semantic.sourceProvenance!.origins.first.nodeId,
+          anchorTextOffset: 73,
+          anchorFormatVersion: version,
+          anchorTextIdentity: version == 0 ? null : 'old text identity',
+          paginationKey: 'old-layout',
+          progressPercent: .4,
+          isProgressPercentValid: true,
+        );
+        final repository = _ControllerNovelRepository(
+          readingProgress: original,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+            fontSize: 10,
+            lineHeight: 1,
+            paragraphSpacing: 0,
+          ),
+        );
+        repository.contentsByEpisodeId[args.episodeId] = content;
+        final committer = DefaultNovelReaderProgressCommitter(
+          repository: repository,
+        );
+        final container = _buildContainer(
+          repository: repository,
+          progressCommitter: committer,
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepReaderAlive(container, args);
+        addTearDown(subscription.close);
+        final provider = novelReaderControllerProvider(args);
+        final loaded = await container.read(provider.future);
+        final controller = container.read(provider.notifier);
+        final owner = NovelReaderNativeOwner();
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(owner.dispose);
+        addTearDown(navigation.dispose);
+        final positions = <NovelReaderPaginationPosition>[];
+        await controller.saveCurrentProgressNow(loaded.progressSnapshot);
+        await _showNativeControllerHost(
+          tester,
+          container,
+          args,
+          owner,
+          navigation,
+          positions,
+        );
+        expect(positions, isEmpty);
+        await tester.pumpAndSettle();
+        expect(positions.single.isReadOnlyCompatibilityRestore, isTrue);
+        await tester.pump(const Duration(milliseconds: 300));
+        await controller.saveCurrentProgressNow(
+          container.read(provider).value!.progressSnapshot,
+        );
+        expect(repository.savedProgressEpisodeIds, isEmpty);
+        expect(repository.readingProgress, same(original));
+        controller.previewPreferences(
+          loaded.preferences.copyWith(fontSize: 20),
+        );
+        await _showNativeControllerHost(
+          tester,
+          container,
+          args,
+          owner,
+          navigation,
+          positions,
+        );
+        await tester.pumpAndSettle();
+        expect(positions.last.isReadOnlyCompatibilityRestore, isTrue);
+        await _showNativeControllerHost(
+          tester,
+          container,
+          args,
+          owner,
+          navigation,
+          positions,
+          active: false,
+        );
+        await tester.pumpAndSettle();
+        expect(navigation.turnNext(), isFalse);
+        await _showNativeControllerHost(
+          tester,
+          container,
+          args,
+          owner,
+          navigation,
+          positions,
+        );
+        await tester.pumpAndSettle();
+        expect(positions.last.isReadOnlyCompatibilityRestore, isTrue);
+        expect(positions.last.hasUserNavigated, isFalse);
+        expect(repository.readingProgress, same(original));
+        expect(navigation.turnNext(), isTrue);
+        expect(repository.savedProgressEpisodeIds, isEmpty);
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 300));
+        final actual = positions.last;
+        expect(actual.hasUserNavigated, isTrue);
+        expect(actual.isReadOnlyCompatibilityRestore, isFalse);
+        expect(repository.savedProgressEpisodeIds, [args.episodeId]);
+        expect(repository.readingProgress!.anchorFormatVersion, 1);
+        expect(
+          repository.readingProgress!.anchorTextIdentity,
+          actual.anchor.textIdentity,
+        );
+        expect(
+          repository.readingProgress!.anchorTextOffset,
+          actual.anchor.textOffset,
+        );
+        expect(repository.readingProgress!.paginationKey, actual.paginationKey);
+        final writes = repository.savedProgressEpisodeIds.length;
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(seconds: 1));
+        expect(repository.savedProgressEpisodeIds, hasLength(writes));
+        expect(owner.activeCacheHandles, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'native first visible page persists through existing committer without waiting for final page count',
+    (tester) async {
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final repository = _ControllerNovelRepository(
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.pagedLtr,
+          fontSize: 10,
+          lineHeight: 1,
+          paragraphSpacing: 0,
+        ),
+      );
+      repository.contentsByEpisodeId[args.episodeId] = _content(
+        args.episodeId,
+        List.filled(20, 'abcdefghijklmnopqrst').join(),
+      );
+      final container = _buildContainer(
+        repository: repository,
+        progressCommitter: DefaultNovelReaderProgressCommitter(
+          repository: repository,
+        ),
+      );
+      addTearDown(container.dispose);
+      final subscription = _keepReaderAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(novelReaderControllerProvider(args).future);
+      final owner = NovelReaderNativeOwner();
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(owner.dispose);
+      addTearDown(navigation.dispose);
+      final positions = <NovelReaderPaginationPosition>[];
+      await _showNativeControllerHost(
+        tester,
+        container,
+        args,
+        owner,
+        navigation,
+        positions,
+      );
+      expect(repository.savedProgressEpisodeIds, isEmpty);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(positions, hasLength(1));
+      expect(positions.single.isPageCountFinal, isFalse);
+      expect(repository.readingProgress!.pageCount, isNull);
+      expect(repository.readingProgress!.isProgressPercentValid, isFalse);
+      expect(repository.readingProgress!.anchorFormatVersion, 1);
+      expect(
+        repository.readingProgress!.anchorTextOffset,
+        positions.single.anchor.textOffset,
+      );
+      expect(navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(positions.last.isPageCountFinal, isTrue);
+      expect(repository.readingProgress!.pageCount, positions.last.pageCount);
+      expect(repository.readingProgress!.pageIndex, positions.last.pageIndex);
+      expect(repository.readingProgress!.isProgressPercentValid, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(owner.activeCacheHandles, 0);
+    },
+  );
+
   group('imported novel fonts', () {
     late _FontRepositoryForNovel fonts;
     late _DelayedFontRuntime runtime;
@@ -2434,6 +2648,71 @@ void main() {
         expectPreservedAnchor(unknown);
       }
     },
+  );
+}
+
+Future<void> _showNativeControllerHost(
+  WidgetTester tester,
+  ProviderContainer container,
+  NovelReaderArgs args,
+  NovelReaderNativeOwner owner,
+  NovelReaderPagedNavigationController navigation,
+  List<NovelReaderPaginationPosition> positions, {
+  bool active = true,
+}) async {
+  final provider = novelReaderControllerProvider(args);
+  final state = container.read(provider).value!;
+  final controller = container.read(provider.notifier);
+  controller.updateReadingVisibility(frontmost: active, resumed: active);
+  await tester.pumpWidget(
+    MediaQuery(
+      data: const MediaQueryData(),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Theme(
+          data: ThemeData(
+            textTheme: const TextTheme(
+              bodyMedium: TextStyle(
+                fontFamily: 'Ahem',
+                letterSpacing: 0,
+                wordSpacing: 0,
+              ),
+            ),
+          ),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 100,
+              height: 40,
+              child: NovelReaderNativeLayoutHost(
+                owner: owner,
+                sourceId: state.currentEpisode.episodeId,
+                rawHtml: state.currentContent.rawHtml,
+                semanticDocument: state.document,
+                preferences: state.renderPreferences,
+                resolvedFont: state.bodyFont,
+                progressSnapshot: state.progressSnapshot,
+                readingAuthorityIdentity: state.readingAuthorityRevision,
+                preparationService: container.read(
+                  novelReaderNativePreparationServiceProvider,
+                ),
+                startsAtBeginning: controller.startsPagedAtBeginning,
+                active: active,
+                navigationController: navigation,
+                onPositionChanged: (position) {
+                  positions.add(position);
+                  controller.onPagedPositionChanged(position);
+                },
+                idleScheduler: () async {},
+                performance: const NovelReaderPaginationPerformancePolicy(
+                  enforceBudgets: false,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }
 
