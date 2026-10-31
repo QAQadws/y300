@@ -8,7 +8,11 @@ import 'novel_reader_display_resolvers.dart';
 /// One native layout input captured from a coherent, loaded font snapshot.
 /// No Context, Theme, provider or native layout survives in this value.
 final class NovelReaderNativeRenderEnvironment {
-  const NovelReaderNativeRenderEnvironment._(this.reader, this.textScaler);
+  const NovelReaderNativeRenderEnvironment._(
+    this.reader,
+    this.textScaler,
+    this.backgroundColor,
+  );
 
   factory NovelReaderNativeRenderEnvironment.capture(
     BuildContext context, {
@@ -53,9 +57,11 @@ final class NovelReaderNativeRenderEnvironment {
       // Unlike the old fwfh compatibility path, native paragraphs use scale()
       // at every effective author/reader font size. Do not flatten to one factor.
       MediaQuery.textScalerOf(context),
+      palette.background,
     );
   }
 
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
+  final Color backgroundColor;
 }
