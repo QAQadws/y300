@@ -75,6 +75,19 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 `ForumBodyParagraphCache.ownsLease` 提供同步 owner 证明，不改变 LRU 或借用数量。
 两种入口复用同一纯输入准入和实际几何实现，不能在可见 paint 中用普通 create 补冷缓存。
 
+`ForumBodyRubyGroupPreparation` 对已经分组的单对基字/注音进行事务式准备：每次
+`advance` 在首次 native 构建后返回，纯缓存工作最多两侧；`tryPrepareCached` 不测量。
+准备完成前不暴露部分组，`takeLayout` 一次性交付全部句柄。空注音只需基字。
+关闭、错误或 owner/generation 失效释放本次部分/完整引用，交付后不再控制接收方布局。
+终态清除缓存、内容、缩放和回调引用，保留的计数只描述本次准备进度。
+
+该准备器借用现有阅读缓存和显式 `ensureOwner` 代次检查，不创建 scheduler、timer 或
+订阅。调用者在工作单元之间使用既有协作调度；外部 pin 阻塞先有界核对整组 footprint，
+返回预算等待，由调用者监听现有 cache 的释放通知并重新准入。两侧自身无法容纳时
+明确失败，不反复等待外部释放；检查中已发生的释放不会再等待相同 revision。
+取消在缓存 miss、native 返回和组装/交付前都核对，未发布分组不泄露句柄。
+该端口尚未接入正式分页，也不代表分层/多注音准备或可见整页预算已完成。
+
 这是行内排版的分组端口，不是完整 ruby HTML consumer。父段落通过下述混合输入显式使用独立的 engine/display/source 投影；分页、复制与完整无障碍接入仍由组合层实现。普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
 
 `ForumBodyRubyContentCursor.openCurrent` 从唯一 styled IR flow 中分组实际 ruby 内容，按 [HTML ruby 分段规则](https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-ruby-element)区分基字、注音与回退。它借用当前 ruby 的流，逐步产生不可变组；同一基字的多个注音分别保留，嵌套 ruby 保持子组结构，空注音、孤立注音和未注音尾部不伪造或丢弃文字。根样式、文档身份和构建时字体/样式版本随组保存，子文字保留自己的来源、样式和字素上下文。
