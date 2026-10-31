@@ -6,6 +6,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 
 import '../controllers/novel_reader_native_paged_controller.dart';
+import '../controllers/novel_reader_chapter_drag_controller.dart';
 import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_native_page_view.dart';
@@ -30,6 +31,10 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.navigationController,
     this.onTurnToAdjacentChapter,
     this.chapterTurnIsInFlight = false,
+    this.previousChapterTitle,
+    this.nextChapterTitle,
+    this.chapterTurnPolicy = const NovelReaderChapterTurnPolicy(),
+    this.onChapterTurnHintChanged,
     this.placeholder = const SizedBox.shrink(),
     this.onPositionChanged,
     this.onScrollActivityChanged,
@@ -44,6 +49,12 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final NovelReaderPagedNavigationController? navigationController;
   final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
   final bool chapterTurnIsInFlight;
+  final String? previousChapterTitle;
+  final String? nextChapterTitle;
+  final NovelReaderChapterTurnPolicy chapterTurnPolicy;
+
+  /// Shell paints localized hints outside the measured body. Null clears it.
+  final ValueChanged<NovelReaderChapterTurnHint?>? onChapterTurnHintChanged;
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<bool>? onScrollActivityChanged;
@@ -65,6 +76,8 @@ class _NovelReaderNativePagedViewportState
   })?
   _displayed;
   int _binding = 0;
+  int _hintRevision = 0;
+  NovelReaderChapterTurnHint? _hint;
 
   @override
   void initState() {
@@ -96,6 +109,21 @@ class _NovelReaderNativePagedViewportState
       _unbind();
       _bind();
     }
+    if (controllerChanged || ownerChanged || !widget.active) {
+      _publishHint(null);
+    }
+  }
+
+  void _publishHint(NovelReaderChapterTurnHint? hint) {
+    if (hint == _hint) return;
+    _hint = hint;
+    final revision = ++_hintRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && revision == _hintRevision) {
+        widget.onChapterTurnHintChanged?.call(_hint);
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _bind() {
@@ -151,6 +179,15 @@ class _NovelReaderNativePagedViewportState
       navigationController: widget.navigationController,
       onTurnToAdjacentChapter: widget.onTurnToAdjacentChapter,
       chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
+      previousChapterTitle: widget.previousChapterTitle,
+      nextChapterTitle: widget.nextChapterTitle,
+      chapterTurnPolicy: widget.chapterTurnPolicy,
+      onChapterTurnHintChanged: (hint) {
+        if (identical(displayed.controller, widget.controller) &&
+            (hint == null || !frozen)) {
+          _publishHint(hint);
+        }
+      },
       placeholder: widget.placeholder,
       onScrollActivityChanged: (scrolling) {
         if (identical(displayed.controller, widget.controller)) {
@@ -192,6 +229,10 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.navigationController,
     required this.onTurnToAdjacentChapter,
     required this.chapterTurnIsInFlight,
+    required this.previousChapterTitle,
+    required this.nextChapterTitle,
+    required this.chapterTurnPolicy,
+    required this.onChapterTurnHintChanged,
     required this.placeholder,
     required this.onPositionChanged,
     required this.onScrollActivityChanged,
@@ -206,6 +247,10 @@ class _NativeLayoutViewport extends StatefulWidget {
   final NovelReaderPagedNavigationController? navigationController;
   final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
   final bool chapterTurnIsInFlight;
+  final String? previousChapterTitle;
+  final String? nextChapterTitle;
+  final NovelReaderChapterTurnPolicy chapterTurnPolicy;
+  final ValueChanged<NovelReaderChapterTurnHint?> onChapterTurnHintChanged;
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition> onPositionChanged;
   final ValueChanged<bool> onScrollActivityChanged;
@@ -234,6 +279,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   bool _chapterTurnRequested = false;
   _NativeTapTurn? _tapTurn;
   int? _tapResetPage;
+  ({int revision, int page, NovelReaderChapterDragController drag})?
+  _chapterDrag;
+  ({int revision, int page, NovelReaderChapterEdge edge})? _chapterRelease;
 
   @override
   void initState() {
@@ -247,11 +295,15 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       (_) {
         if (!mounted) return;
         _reconcileTapTurn();
+        _reconcileChapterDrag();
         setState(() {});
         _afterFrame();
       },
       onDone: () {
-        if (mounted) setState(() {});
+        if (mounted) {
+          _resetChapterDrag();
+          setState(() {});
+        }
       },
     );
     _afterFrame();
@@ -270,6 +322,21 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     }
     if (oldWidget.chapterTurnIsInFlight && !widget.chapterTurnIsInFlight) {
       _chapterTurnRequested = false;
+    }
+    if (widget.frozen != oldWidget.frozen ||
+        widget.reverse != oldWidget.reverse ||
+        widget.chapterTurnIsInFlight != oldWidget.chapterTurnIsInFlight ||
+        widget.previousChapterTitle != oldWidget.previousChapterTitle ||
+        widget.nextChapterTitle != oldWidget.nextChapterTitle ||
+        _policyKey(widget.chapterTurnPolicy) !=
+            _policyKey(oldWidget.chapterTurnPolicy) ||
+        (widget.onTurnToAdjacentChapter == null) !=
+            (oldWidget.onTurnToAdjacentChapter == null) ||
+        !identical(
+          widget.navigationController,
+          oldWidget.navigationController,
+        )) {
+      _resetChapterDrag();
     }
     if (widget.frozen != oldWidget.frozen ||
         widget.reverse != oldWidget.reverse) {
@@ -317,6 +384,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   bool turnNext() => _turnByCommand(1);
 
   bool _turnByCommand(int delta) {
+    _resetChapterDrag();
     _reconcileTapTurn();
     final previous = _tapTurn;
     if (previous != null) {
@@ -376,6 +444,110 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   @override
   void cancelChapterTurn() {
     _chapterTurnRequested = false;
+    _resetChapterDrag();
+  }
+
+  static (double, double, double) _policyKey(
+    NovelReaderChapterTurnPolicy value,
+  ) => (
+    value.minCommitDistance,
+    value.viewportCommitFraction,
+    value.hintRevealFraction,
+  );
+
+  bool get _chapterTurnContextAllowed =>
+      !widget.frozen &&
+      _fits &&
+      !widget.controller.isClosed &&
+      !widget.controller.isSuspended &&
+      widget.controller.snapshot?.isComplete == true &&
+      widget.onTurnToAdjacentChapter != null &&
+      !widget.chapterTurnIsInFlight &&
+      !_chapterTurnRequested;
+
+  void _beginChapterDrag() {
+    _resetChapterDrag();
+    if (!_chapterTurnContextAllowed ||
+        widget.controller.hasPendingNavigation ||
+        !_pages.hasClients) {
+      return;
+    }
+    final actual = _pages.page;
+    if (actual == null ||
+        (actual - actual.round()).abs() > precisionErrorTolerance ||
+        actual.round() != widget.controller.visiblePageIndex) {
+      return;
+    }
+    final page = actual.round();
+    _chapterDrag = (
+      revision: widget.controller.navigationRevision,
+      page: page,
+      drag: NovelReaderChapterDragController(
+        // A known complete chapter also permits dragging from an interior page
+        // to an edge and deliberately continuing past it, as the old reader did.
+        previousChapterTitle: widget.previousChapterTitle,
+        nextChapterTitle: widget.nextChapterTitle,
+        viewportDimension: _width,
+        policy: widget.chapterTurnPolicy,
+      ),
+    );
+  }
+
+  void _resetChapterDrag() {
+    _chapterDrag = null;
+    _chapterRelease = null;
+    widget.onChapterTurnHintChanged(null);
+  }
+
+  void _reconcileChapterDrag() {
+    final intent = _chapterDrag;
+    if (intent != null &&
+        (!_chapterTurnContextAllowed ||
+            intent.revision != widget.controller.navigationRevision ||
+            (widget.controller.hasPendingNavigation
+                ? widget.controller.requestedPageIndex != intent.page
+                : widget.controller.visiblePageIndex != intent.page))) {
+      _resetChapterDrag();
+    }
+    final release = _chapterRelease;
+    if (release != null &&
+        (!_chapterTurnContextAllowed ||
+            release.revision != widget.controller.navigationRevision ||
+            (!widget.controller.hasPendingNavigation &&
+                widget.controller.visiblePageIndex != release.page))) {
+      _resetChapterDrag();
+    }
+  }
+
+  void _commitChapterDrag() {
+    _reconcileChapterDrag();
+    final intent = _chapterDrag;
+    final edge = intent?.drag.edgeToCommit;
+    _resetChapterDrag();
+    if (edge == null) return;
+    _chapterRelease = (
+      revision: intent!.revision,
+      page: intent.page,
+      edge: edge,
+    );
+  }
+
+  void _confirmChapterRelease() {
+    _reconcileChapterDrag();
+    final release = _chapterRelease;
+    if (release == null ||
+        widget.controller.hasPendingNavigation ||
+        _settledCommandPage != release.page) {
+      return;
+    }
+    final boundary = release.edge == NovelReaderChapterEdge.start
+        ? 0
+        : widget.controller.snapshot!.length - 1;
+    _chapterRelease = null;
+    if (release.page != boundary) return;
+    final accepted =
+        widget.onTurnToAdjacentChapter?.call(release.edge) ?? false;
+    if (mounted && accepted) _chapterTurnRequested = true;
   }
 
   void _reconcileTapTurn() {
@@ -435,6 +607,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || frame != _frame || widget.frozen) return;
       _reconcileTapTurn();
+      _reconcileChapterDrag();
       _resetTapPosition();
       if (_scrolling || !_fits) return;
       final controller = widget.controller;
@@ -465,7 +638,10 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         _afterFrame();
         return;
       }
-      if (target == null || target.pageIndex != _page) return;
+      if (target == null || target.pageIndex != _page) {
+        _confirmChapterRelease();
+        return;
+      }
       final leases = _mountedPages[target.view];
       if (leases == null) return;
       final position = controller.confirmVisible(target, leases);
@@ -473,6 +649,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         _tapTurn = null;
         widget.onPositionChanged(position);
       }
+      _confirmChapterRelease();
     });
     // A jump or scroll-end callback may run after this frame's painting. Merely
     // registering another post-frame callback would leave it waiting at idle.
@@ -483,6 +660,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     if (notification.depth != 0 || widget.frozen) return false;
     final controller = widget.controller;
     if (notification is ScrollStartNotification) {
+      if (notification.dragDetails != null) _beginChapterDrag();
       _scrolling = true;
       _activity(true);
       _frame++;
@@ -493,24 +671,40 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         _edgeIntent = false;
         controller.cancelPendingNavigation();
       }
-    } else if (notification is ScrollUpdateNotification &&
-        _userDrag &&
-        _edgeIntent &&
-        (notification.scrollDelta ?? 0) < 0) {
-      controller.cancelPendingNavigation();
-      _edgeIntent = false;
+    } else if (notification is ScrollUpdateNotification && _userDrag) {
+      // Real movement away from an edge discards its accumulated peak. The
+      // same known-complete gesture may still reach another actual boundary.
+      if ((notification.scrollDelta ?? 0) != 0) {
+        _chapterDrag?.drag.resetPull();
+        widget.onChapterTurnHintChanged(null);
+      }
+      if (_userDrag && _edgeIntent && (notification.scrollDelta ?? 0) < 0) {
+        controller.cancelPendingNavigation();
+        _edgeIntent = false;
+      }
     } else if (notification is OverscrollNotification &&
         _userDrag &&
-        !_edgeIntent &&
-        notification.overscroll > 0) {
+        notification.dragDetails != null) {
+      _reconcileChapterDrag();
+      final drag = _chapterDrag?.drag;
+      if (drag != null) {
+        drag.observeOverscroll(notification.overscroll);
+        widget.onChapterTurnHintChanged(drag.hint);
+      }
       final prefix = controller.snapshot;
-      if (prefix != null && !prefix.isComplete && _page == prefix.length - 1) {
+      if (!_edgeIntent &&
+          notification.overscroll > 0 &&
+          prefix != null &&
+          !prefix.isComplete &&
+          _page == prefix.length - 1) {
         _edgeIntent = controller.requestPage(_page + 1);
       }
     } else if (notification is ScrollEndNotification) {
+      final userDrag = _userDrag;
       _scrolling = false;
       _activity(false);
       _userDrag = false;
+      if (userDrag) _commitChapterDrag();
       _afterFrame();
     }
     return false;
@@ -518,7 +712,21 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
 
   void _pageChanged(int page) {
     _page = page;
-    if (_userDrag && !widget.frozen) widget.controller.requestPage(page);
+    if (_userDrag && !widget.frozen) {
+      // Observe an intervening external seek before this gesture issues its
+      // own new revision; otherwise that page request could resurrect old intent.
+      _reconcileChapterDrag();
+      final intent = _chapterDrag;
+      if (widget.controller.requestPage(page) && intent != null) {
+        // Only this physical gesture may advance its intent revision. A seek,
+        // tap, retry or other external navigation still retires the whole pull.
+        _chapterDrag = (
+          revision: widget.controller.navigationRevision,
+          page: page,
+          drag: intent.drag,
+        );
+      }
+    }
     _afterFrame();
   }
 

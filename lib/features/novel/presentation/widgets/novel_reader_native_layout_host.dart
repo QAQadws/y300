@@ -53,6 +53,10 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.navigationController,
     this.onTurnToAdjacentChapter,
     this.chapterTurnIsInFlight = false,
+    this.previousChapterTitle,
+    this.nextChapterTitle,
+    this.chapterTurnPolicy = const NovelReaderChapterTurnPolicy(),
+    this.onChapterTurnHintChanged,
     this.pageSeekRequest,
     this.onPageSeekFinished,
     this.navigationRequest,
@@ -98,6 +102,12 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final NovelReaderPagedNavigationController? navigationController;
   final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
   final bool chapterTurnIsInFlight;
+  final String? previousChapterTitle;
+  final String? nextChapterTitle;
+  final NovelReaderChapterTurnPolicy chapterTurnPolicy;
+
+  /// Localized hint UI belongs to the shell, outside the measured content box.
+  final ValueChanged<NovelReaderChapterTurnHint?>? onChapterTurnHintChanged;
   final NovelReaderPageSeekRequest? pageSeekRequest;
   final void Function(NovelReaderPageSeekRequest, NovelReaderNavigationOutcome)?
   onPageSeekFinished;
@@ -138,6 +148,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   Size? _box;
   int _epoch = 0;
   int _statusRevision = 0;
+  int _chapterHintRevision = 0;
+  NovelReaderChapterTurnHint? _chapterHint;
   int _readyEpoch = -1;
   int _terminalEpoch = -1;
   bool _needsLayout = true;
@@ -318,6 +330,13 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           (!oldWidget.startsAtBeginning && widget.startsAtBeginning);
     }
     _scheduleNavigation();
+    if (_busy ||
+        !widget.active ||
+        oldWidget.previousChapterTitle != widget.previousChapterTitle ||
+        oldWidget.nextChapterTitle != widget.nextChapterTitle ||
+        widget.chapterTurnIsInFlight) {
+      _chapterHintChanged(null);
+    }
   }
 
   void _ownerChanged() {
@@ -383,6 +402,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       identical(request.authority, widget.readingAuthorityIdentity);
 
   void _notifyStatus() {
+    final request = _current;
+    if (request == null || !_live(request)) _chapterHintChanged(null);
     final revision = ++_statusRevision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed || !mounted || revision != _statusRevision) return;
@@ -395,6 +416,27 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         _terminalEpoch = _epoch;
         widget.onContentTerminal?.call();
       }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _chapterHintChanged(NovelReaderChapterTurnHint? hint) {
+    if (hint == _chapterHint) return;
+    _chapterHint = hint;
+    final revision = ++_chapterHintRevision;
+    final owner = widget.owner;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed ||
+          !mounted ||
+          revision != _chapterHintRevision ||
+          !identical(owner, widget.owner)) {
+        return;
+      }
+      final current = _current;
+      if (_chapterHint != null && (current == null || !_live(current))) {
+        _chapterHint = null;
+      }
+      widget.onChapterTurnHintChanged?.call(_chapterHint);
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   }
@@ -496,9 +538,18 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         backgroundColor: request.scope.backgroundColor,
         navigationController: widget.navigationController,
         chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
-        onTurnToAdjacentChapter: (edge) =>
-            _live(request) &&
-            (widget.onTurnToAdjacentChapter?.call(edge) ?? false),
+        previousChapterTitle: widget.previousChapterTitle,
+        nextChapterTitle: widget.nextChapterTitle,
+        chapterTurnPolicy: widget.chapterTurnPolicy,
+        onChapterTurnHintChanged: (hint) {
+          if (identical(request, _current) &&
+              (hint == null || _live(request))) {
+            _chapterHintChanged(hint);
+          }
+        },
+        onTurnToAdjacentChapter: widget.onTurnToAdjacentChapter == null
+            ? null
+            : (edge) => _live(request) && widget.onTurnToAdjacentChapter!(edge),
         placeholder:
             widget.placeholderBuilder?.call(context, _status) ??
             const SizedBox.shrink(),
@@ -810,6 +861,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   }
 
   void _closeAll() {
+    _chapterHintChanged(null);
     _finishNavigation(NovelReaderNavigationOutcome.retired);
     _navigationFrameRevision++;
     final changes = _changes;
@@ -840,6 +892,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
 
   void _stop(_LayoutRequest? request) {
     if (request == null) return;
+    if (identical(request, _current)) _chapterHintChanged(null);
     if (identical(_navigationIntent?.controller, request.controller)) {
       _finishNavigation(NovelReaderNavigationOutcome.retired);
     }

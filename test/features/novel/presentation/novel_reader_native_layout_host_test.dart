@@ -95,6 +95,7 @@ class _Reader {
   final positions = <NovelReaderPaginationPosition>[];
   final statuses = <NovelReaderNativeHostStatus>[];
   final activity = <bool>[];
+  final chapterHints = <NovelReaderChapterTurnHint?>[];
   final seekResults =
       <(NovelReaderPageSeekRequest, NovelReaderPageSeekOutcome)>[];
   final anchorResults =
@@ -127,6 +128,12 @@ Future<void> _show(
   NovelReaderDocument? semantic,
   bool active = true,
   NovelReaderPagedNavigationController? navigation,
+  NovelReaderChapterTurnHandler? onChapter,
+  String? previousTitle,
+  String? nextTitle,
+  bool chapterInFlight = false,
+  NovelReaderChapterTurnPolicy chapterPolicy =
+      const NovelReaderChapterTurnPolicy(),
   NovelReaderPageSeekRequest? seek,
   NovelReaderAnchorNavigationRequest? anchorNavigation,
   bool startsAtBeginning = false,
@@ -166,6 +173,12 @@ Future<void> _show(
                 readingAuthorityIdentity: authority ?? reader.authority,
                 active: active,
                 navigationController: navigation,
+                onTurnToAdjacentChapter: onChapter,
+                previousChapterTitle: previousTitle,
+                nextChapterTitle: nextTitle,
+                chapterTurnIsInFlight: chapterInFlight,
+                chapterTurnPolicy: chapterPolicy,
+                onChapterTurnHintChanged: reader.chapterHints.add,
                 pageSeekRequest: seek,
                 navigationRequest: anchorNavigation,
                 startsAtBeginning: startsAtBeginning,
@@ -221,6 +234,143 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets(
+    'Host forwards live boundary hints and verifies actual end navigation only on accepted release',
+    (tester) async {
+      final reader = _Reader(html: '<p>abcd</p>');
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      final confirmations = <bool>[];
+      final edges = <NovelReaderChapterEdge>[];
+      await _show(
+        tester,
+        reader,
+        navigation: navigation,
+        previousTitle: 'previous',
+        nextTitle: 'next',
+        onChapter: (edge) {
+          edges.add(edge);
+          confirmations.add(navigation.confirmChapterEndNavigation());
+          return true;
+        },
+      );
+      await tester.pumpAndSettle();
+      final initial = reader.positions.length;
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(PageView)),
+      );
+      await gesture.moveBy(const Offset(-80, 0));
+      await tester.pumpAndSettle();
+      expect(reader.chapterHints.last!.isReadyToCommit, isTrue);
+      expect(reader.chapterHints.last!.chapterTitle, 'next');
+      expect(reader.positions, hasLength(initial));
+      expect(edges, isEmpty);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(edges, [NovelReaderChapterEdge.end]);
+      expect(confirmations, [true]);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      expect(reader.chapterHints.last, isNull);
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final interruption in [
+    'hidden',
+    'font',
+    'owner',
+    'authority',
+    'retry',
+    'geometry',
+    'seek',
+    'titles',
+    'inflight',
+    'policy',
+  ]) {
+    testWidgets(
+      'Host $interruption clears a shell hint and retires its chapter release',
+      (tester) async {
+        final reader = _Reader(html: '<p>abcd</p>');
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        final edges = <NovelReaderChapterEdge>[];
+        bool onChapter(NovelReaderChapterEdge edge) {
+          edges.add(edge);
+          return true;
+        }
+
+        await _show(
+          tester,
+          reader,
+          navigation: navigation,
+          nextTitle: 'next',
+          onChapter: onChapter,
+        );
+        await tester.pumpAndSettle();
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(PageView)),
+        );
+        await gesture.moveBy(const Offset(-80, 0));
+        await tester.pumpAndSettle();
+        expect(reader.chapterHints.last!.isReadyToCommit, isTrue);
+        if (interruption == 'owner') {
+          reader.owner.dispose();
+        } else if (interruption == 'font') {
+          reader.fonts.notifyListeners();
+        } else {
+          final status = reader.statuses.last;
+          await _show(
+            tester,
+            reader,
+            navigation: navigation,
+            onChapter: onChapter,
+            active: interruption != 'hidden',
+            width: interruption == 'geometry' ? 60 : 100,
+            authority: interruption == 'authority'
+                ? Object()
+                : reader.authority,
+            retry: interruption == 'retry' ? 1 : 0,
+            nextTitle: interruption == 'titles' ? 'changed' : 'next',
+            chapterInFlight: interruption == 'inflight',
+            chapterPolicy: interruption == 'policy'
+                ? const NovelReaderChapterTurnPolicy(minCommitDistance: 200)
+                : const NovelReaderChapterTurnPolicy(),
+            seek: interruption == 'seek'
+                ? NovelReaderPageSeekRequest(
+                    requestId: 1,
+                    episodeId: reader.episodeId,
+                    paginationKey: status.controller!.paginationKey,
+                    pageIndex: 0,
+                  )
+                : null,
+          );
+        }
+        await tester.pumpAndSettle();
+        expect(reader.chapterHints.last, isNull);
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(edges, isEmpty);
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  testWidgets(
+    'Host cannot hint or switch when the shell has no chapter action',
+    (tester) async {
+      final reader = _Reader(html: '<p>abcd</p>');
+      await _show(tester, reader, nextTitle: 'next');
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(PageView), const Offset(-100, 0));
+      await tester.pumpAndSettle();
+      expect(
+        reader.chapterHints.whereType<NovelReaderChapterTurnHint>(),
+        isEmpty,
+      );
+      await _unmount(tester, reader);
+    },
+  );
+
   for (final replacement in ['entry', 'retry']) {
     testWidgets(
       '$replacement retires a semantic intent still waiting for pure preparation',
