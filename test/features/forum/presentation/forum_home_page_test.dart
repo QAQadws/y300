@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:carousel_slider/carousel_slider.dart';
+
 import 'package:flutter/material.dart';
 import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -290,6 +292,67 @@ void main() {
         expect(tester.getSize(carousel).height, closeTo(width / 3, 0.01));
       },
     );
+
+    testWidgets('carousel suspends its timer while inactive or ticker-muted', (
+      tester,
+    ) async {
+      Widget build({bool isActive = true, bool tickersEnabled = true}) {
+        return ProviderScope(
+          overrides: [
+            imageCacheServiceProvider.overrideWithValue(
+              _FakeImageCacheService(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: Scaffold(
+              body: TickerMode(
+                enabled: tickersEnabled,
+                child: ForumHomeCarousel(
+                  items: const [
+                    ForumHomeCarouselItem(
+                      imageUrl: 'https://bbs.yamibo.com/banner-1.jpg',
+                      targetUrl: 'https://bbs.yamibo.com/thread-1-1-1.html',
+                    ),
+                    ForumHomeCarouselItem(
+                      imageUrl: 'https://bbs.yamibo.com/banner-2.jpg',
+                      targetUrl: 'https://bbs.yamibo.com/thread-2-1-1.html',
+                    ),
+                  ],
+                  imageReferer: 'https://bbs.yamibo.com/',
+                  isActive: isActive,
+                  onOpen: (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(build());
+      await tester.pump();
+      final slider = tester.state<CarouselSliderState>(
+        find.byType(CarouselSlider),
+      );
+      final initialPage = slider.pageController!.page!;
+      expect(slider.timer?.isActive, isTrue);
+
+      await tester.pumpWidget(build(isActive: false));
+      expect(slider.timer, isNull);
+      await tester.pump(const Duration(seconds: 6));
+      expect(slider.pageController!.page, initialPage);
+
+      await tester.pumpWidget(build(tickersEnabled: false));
+      expect(slider.timer, isNull);
+      await tester.pump(const Duration(seconds: 6));
+      expect(slider.pageController!.page, initialPage);
+
+      await tester.pumpWidget(build());
+      expect(slider.timer?.isActive, isTrue);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(slider.pageController!.page, greaterThan(initialPage));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
 
     testWidgets('carousel adopts the first decoded image ratio', (
       tester,

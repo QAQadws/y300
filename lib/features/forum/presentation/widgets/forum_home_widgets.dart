@@ -117,6 +117,7 @@ class _ForumHomeCarouselState extends ConsumerState<ForumHomeCarousel> {
         imageReferer: widget.imageReferer,
         imageRequestResolver: ref.watch(forumImageRequestResolverProvider),
         items: _displayedItems,
+        isActive: widget.isActive,
         onOpen: widget.onOpen,
         palette: palette,
         onPageChanged: _handlePageChanged,
@@ -272,6 +273,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
     required this.imageReferer,
     required this.imageRequestResolver,
     required this.items,
+    required this.isActive,
     required this.onOpen,
     required this.palette,
     required this.onPageChanged,
@@ -284,6 +286,7 @@ class _ForumHomeCarouselBody extends StatelessWidget {
   final String imageReferer;
   final ForumImageRequestResolver imageRequestResolver;
   final List<ForumHomeCarouselItem> items;
+  final bool isActive;
   final ValueChanged<ForumHomeCarouselItem> onOpen;
   final ForumHomeNativePalette palette;
   final int displayGeneration;
@@ -319,7 +322,11 @@ class _ForumHomeCarouselBody extends StatelessWidget {
                 options: CarouselOptions(
                   height: carouselHeight,
                   viewportFraction: 1,
-                  autoPlay: items.length > 1,
+                  // TickerMode alone does not cancel the slider's periodic timer.
+                  autoPlay:
+                      isActive &&
+                      TickerMode.valuesOf(context).enabled &&
+                      items.length > 1,
                   autoPlayInterval: const Duration(seconds: 3),
                   autoPlayAnimationDuration: const Duration(milliseconds: 450),
                   enableInfiniteScroll: items.length > 1,
