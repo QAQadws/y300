@@ -1,0 +1,596 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/painting.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
+
+final _reader = ForumBodyReaderStyle(
+  textStyle: const TextStyle(
+    fontFamily: 'Ahem',
+    fontSize: 20,
+    height: 1,
+    color: Color(0xff000000),
+  ),
+  fontRevision: 'ahem',
+  linkColor: const Color(0xff0000ff),
+);
+
+({
+  ForumBodyInlineSpanContent content,
+  ForumBodyParagraphContent base,
+  ForumBodyParagraphContent annotation,
+  List<ForumBodyParagraphContent> contexts,
+})
+input({
+  String prefix = 'X',
+  String base = 'AB',
+  String annotation = 'xy',
+  String suffix = 'Y',
+  String paragraphStyle = '',
+  String direction = 'ltr',
+  ForumBodyReaderStyle? reader,
+}) {
+  final document = const ForumBodyParser().parse(
+    html:
+        '<p dir="$direction" style="$paragraphStyle"><span style="color:red">$prefix</span>'
+        '<ruby>$base<rp>(</rp><rt>$annotation</rt><rp>)</rp></ruby>'
+        '<span style="color:blue">$suffix</span></p>',
+    sourceId: 'mixed-inline',
+    conversionIdentity: 'none',
+  );
+  final styles = const ForumBodyStyleResolver().resolve(
+    document,
+    reader ?? _reader,
+  );
+  final flow = ForumBodyStyledFlowCursor(
+    document: document,
+    reader: reader ?? _reader,
+  );
+  try {
+    while (flow.moveNext()) {
+      if (flow.current!.node.path == '0/1' &&
+          flow.current!.phase == ForumBodyFlowPhase.open) {
+        break;
+      }
+    }
+    final cursor = ForumBodyRubyContentCursor.openCurrent(flow);
+    try {
+      ForumBodyRubyGroupContent? group;
+      for (var work = 0; work < 100; work++) {
+        final step = cursor.advance(maxEvents: 1);
+        expect(step.workDone, lessThanOrEqualTo(1));
+        if (step.hasOutput) group = cursor.current;
+        if (step.isComplete) break;
+      }
+      final baseContent =
+          (group!.base.single as ForumBodyRubyTextContent).content;
+      final annotationContent =
+          (group.annotations.single.parts.single as ForumBodyRubyTextContent)
+              .content;
+      ForumBodyParagraphContent build(String path) =>
+          const ForumBodyParagraphContentBuilder().build(
+            document: document,
+            styles: styles,
+            path: path,
+            layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+          );
+      final prefixContent = build('0/0');
+      final contexts = [
+        prefixContent,
+        baseContent,
+        annotationContent,
+        build('0/2'),
+      ];
+      final start = prefixContent.projection.text.length;
+      final end =
+          start +
+          baseContent.projection.text.length +
+          annotationContent.projection.text.length;
+      return (
+        content: ForumBodyInlineSpanContent.compose(
+          identity: document.identity,
+          path: '0',
+          fontRevision: styles.fontRevision,
+          styleRevision: styles.resolverRevision,
+          style: styles.byPath['0']!,
+          contexts: contexts,
+          atomicRanges: [(startUtf16: start, endUtf16: end)],
+        ),
+        base: baseContent,
+        annotation: annotationContent,
+        contexts: contexts,
+      );
+    } finally {
+      cursor.close();
+    }
+  } finally {
+    flow.close();
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'real ruby IR composes actual source/styles and native engine placeholders',
+    () {
+      final fixture = input();
+      final content = fixture.content;
+      expect(content.projection.display.text, 'XABxyY');
+      expect(content.projection.engineText, 'X\uFFFCY');
+      expect(content.textSpan.toPlainText(), content.projection.engineText);
+      expect(content.runs, hasLength(4));
+      expect(content.runs.map((run) => run.style.textStyle.fontSize), [
+        20,
+        20,
+        10,
+        20,
+      ]);
+      final children = content.textSpan.children!;
+      expect(children, hasLength(3));
+      expect(
+        (children.first as TextSpan).style!.color,
+        const Color(0xffff0000),
+      );
+      expect(children[1], isA<PlaceholderSpan>());
+      expect((children.last as TextSpan).style!.color, const Color(0xff0000ff));
+      expect(content.projection.sourceAtEngineUtf16(1).sourceRune, 1);
+      expect(content.projection.sourceAtEngineUtf16(2).sourceRune, 7);
+      expect(
+        content.projection
+            .sourceAtEngineUtf16(2, affinity: HtmlProjectionAffinity.upstream)
+            .sourceRune,
+        6,
+      );
+      expect(content.projection.sourceAtEngineUtf16(2).isExact, isFalse);
+      for (
+        var offset = 0;
+        offset < content.projection.engineText.length;
+        offset++
+      ) {
+        expect(
+          content.textSpan.codeUnitAt(offset),
+          content.projection.engineText.codeUnitAt(offset),
+        );
+      }
+      expect(
+        content.textSpan.codeUnitAt(content.projection.engineText.length),
+        isNull,
+      );
+      expect(
+        content.textSpan.getSpanForPosition(const TextPosition(offset: 1)),
+        same(children[1]),
+      );
+      expect(() => content.runs.clear(), throwsUnsupportedError);
+      expect(() => children.clear(), throwsUnsupportedError);
+      fixture.contexts.clear();
+      expect(content.textSpan.toPlainText(), 'X\uFFFCY');
+    },
+  );
+
+  test(
+    'actual child layout drives mixed wrapping and baseline without scaling twice',
+    () {
+      final fixture = input();
+      final content = fixture.content;
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final group = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: fixture.base,
+        annotation: fixture.annotation,
+        textScaler: const _Scaler(),
+      );
+      addTearDown(group.close);
+      final painter =
+          TextPainter(
+              text: content.textSpan,
+              textDirection: content.style.textDirection,
+              textScaler: const _Scaler(),
+            )
+            ..setPlaceholderDimensions([group.placeholderDimensions])
+            ..layout(maxWidth: 90);
+      addTearDown(painter.dispose);
+      final box = painter.inlinePlaceholderBoxes!.single;
+      final lines = painter.computeLineMetrics();
+      expect(lines, hasLength(2));
+      expect(group.size, const Size(60, 55));
+      expect(box.toRect().size, group.size);
+      expect(box.top + group.baseline, closeTo(lines.first.baseline, 1e-6));
+      expect(lines.last.baseline, greaterThan(lines.first.baseline));
+      final boundary = painter.getLineBoundary(const TextPosition(offset: 0));
+      expect(
+        content.projection.displayRangeForEngineRange(
+          startUtf16: boundary.start,
+          endUtf16: boundary.end,
+        ),
+        (startUtf16: 0, endUtf16: 5),
+      );
+      expect(cache.activeLeases, 2);
+      group.close();
+      expect(cache.activeLeases, 0);
+      // The mixed value is pure and survives the geometry owner's retirement.
+      cache.close();
+      expect(content.textSpan.toPlainText(), 'X\uFFFCY');
+      expect(cache.estimatedRetainedBytes, 0);
+    },
+  );
+
+  test(
+    'tight line-height retains the full opaque box in the parent engine',
+    () {
+      final fixture = input(paragraphStyle: 'line-height:0.25');
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final group = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: fixture.base,
+        annotation: fixture.annotation,
+        gap: 2,
+      );
+      addTearDown(group.close);
+      final painter =
+          TextPainter(
+              text: fixture.content.textSpan,
+              textDirection: TextDirection.ltr,
+            )
+            ..setPlaceholderDimensions([group.placeholderDimensions])
+            ..layout(maxWidth: 60);
+      addTearDown(painter.dispose);
+      final box = painter.inlinePlaceholderBoxes!.single;
+      final line = painter.computeLineMetrics().first;
+      expect(box.top, greaterThanOrEqualTo(line.baseline - line.ascent - 1e-6));
+      expect(
+        box.bottom,
+        lessThanOrEqualTo(line.baseline + line.descent + 1e-6),
+      );
+      expect(box.bottom, lessThanOrEqualTo(painter.height));
+    },
+  );
+
+  test(
+    'parent can paint actual base and annotation at the native placeholder',
+    () async {
+      final fixture = input();
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final group = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: fixture.base,
+        annotation: fixture.annotation,
+      );
+      addTearDown(group.close);
+      final painter =
+          TextPainter(
+              text: fixture.content.textSpan,
+              textDirection: TextDirection.ltr,
+            )
+            ..setPlaceholderDimensions([group.placeholderDimensions])
+            ..layout(maxWidth: 100);
+      addTearDown(painter.dispose);
+      final box = painter.inlinePlaceholderBoxes!.single;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      painter.paint(canvas, Offset.zero);
+      group.paint(canvas, box.toRect().topLeft);
+      final picture = recorder.endRecording();
+      try {
+        final image = await picture.toImage(100, painter.height.ceil());
+        try {
+          final bytes = (await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!.buffer.asUint8List();
+          var above = 0;
+          var below = 0;
+          for (var y = box.top.ceil(); y < box.bottom.floor(); y++) {
+            for (var x = box.left.ceil(); x < box.right.floor(); x++) {
+              if (bytes[(y * 100 + x) * 4 + 3] > 0) {
+                if (y < box.top + group.baseOffset.dy) {
+                  above++;
+                } else {
+                  below++;
+                }
+              }
+            }
+          }
+          expect(above, greaterThan(0));
+          expect(below, greaterThan(0));
+        } finally {
+          image.dispose();
+        }
+      } finally {
+        picture.dispose();
+      }
+      final annotationBox = group
+          .selectionBoxes(
+            part: ForumBodyRubyPart.annotation,
+            startUtf16: 0,
+            endUtf16: 1,
+          )
+          .single;
+      final hit = group.sourceAt(
+        Offset(
+          annotationBox.left + .1,
+          (annotationBox.top + annotationBox.bottom) / 2,
+        ),
+      );
+      expect(hit.part, ForumBodyRubyPart.annotation);
+      expect(hit.position.sourceRune, 4);
+    },
+  );
+
+  test(
+    'ordinary hidden spans keep geometry but receive the shared transparent style',
+    () {
+      final fixture = input(
+        prefix: '<b style="visibility:hidden">e\u0301</b>Q',
+      );
+      final spans = fixture.content.textSpan.children!
+          .whereType<TextSpan>()
+          .toList();
+      expect(spans.first.text, 'e\u0301');
+      expect(spans.first.style!.foreground!.color, const Color(0x00000000));
+      expect(spans.first.style!.decoration, TextDecoration.none);
+      expect(spans[1].text, 'Q');
+      expect(spans[1].style!.color, const Color(0xffff0000));
+      expect(fixture.content.projection.engineText, 'e\u0301Q\uFFFCY');
+    },
+  );
+
+  test(
+    'RTL parent uses actual engine positions while child text stays independent',
+    () {
+      final fixture = input(
+        prefix: 'א',
+        base: 'אב',
+        annotation: 'xy',
+        suffix: 'ב',
+        direction: 'rtl',
+      );
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final group = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: fixture.base,
+        annotation: fixture.annotation,
+      );
+      addTearDown(group.close);
+      final painter =
+          TextPainter(
+              text: fixture.content.textSpan,
+              textDirection: fixture.content.style.textDirection,
+            )
+            ..setPlaceholderDimensions([group.placeholderDimensions])
+            ..layout(maxWidth: 100);
+      addTearDown(painter.dispose);
+      expect(fixture.content.style.textDirection, TextDirection.rtl);
+      final box = painter.inlinePlaceholderBoxes!.single;
+      final selected = painter.getBoxesForSelection(
+        const TextSelection(baseOffset: 1, extentOffset: 2),
+      );
+      expect(selected.single.toRect(), box.toRect());
+      expect(
+        fixture.content.projection.displayRangeForEngineRange(
+          startUtf16: 1,
+          endUtf16: 2,
+        ),
+        (startUtf16: 1, endUtf16: 5),
+      );
+    },
+  );
+
+  test('adjacent atoms across styled contexts use one native slot each', () {
+    final fixture = input();
+    final original = fixture.content;
+    final content = ForumBodyInlineSpanContent.compose(
+      identity: original.identity,
+      path: original.path,
+      fontRevision: original.fontRevision,
+      styleRevision: original.styleRevision,
+      style: original.style,
+      contexts: fixture.contexts,
+      atomicRanges: [
+        (startUtf16: 0, endUtf16: 1),
+        (startUtf16: 1, endUtf16: 5),
+        (startUtf16: 5, endUtf16: 6),
+      ],
+    );
+    expect(content.textSpan.toPlainText(), '\uFFFC\uFFFC\uFFFC');
+    expect(content.textSpan.children!.whereType<TextSpan>(), isEmpty);
+    const dimension = PlaceholderDimensions(
+      size: Size(20, 30),
+      alignment: ui.PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      baselineOffset: 20,
+    );
+    final painter =
+        TextPainter(text: content.textSpan, textDirection: TextDirection.ltr)
+          ..setPlaceholderDimensions([dimension, dimension, dimension])
+          ..layout(maxWidth: 40);
+    addTearDown(painter.dispose);
+    expect(painter.inlinePlaceholderBoxes, hasLength(3));
+    expect(painter.computeLineMetrics(), hasLength(2));
+    expect(
+      content.projection.displayRangeForEngineRange(startUtf16: 0, endUtf16: 2),
+      (startUtf16: 0, endUtf16: 5),
+    );
+  });
+
+  test('literal U+FFFC stays ordinary text beside the actual placeholder', () {
+    final fixture = input(prefix: '\uFFFC');
+    final content = fixture.content;
+    expect(content.projection.engineText, '\uFFFC\uFFFCY');
+    expect(
+      content.textSpan.children!.whereType<PlaceholderSpan>(),
+      hasLength(1),
+    );
+    final painter =
+        TextPainter(text: content.textSpan, textDirection: TextDirection.ltr)
+          ..setPlaceholderDimensions([
+            const PlaceholderDimensions(
+              size: Size(40, 30),
+              alignment: ui.PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              baselineOffset: 20,
+            ),
+          ])
+          ..layout(maxWidth: 100);
+    addTearDown(painter.dispose);
+    expect(painter.inlinePlaceholderBoxes, hasLength(1));
+    expect(content.projection.sourceAtEngineUtf16(1).sourceRune, 1);
+  });
+
+  test('composition rejects mixed document, font and style scopes', () {
+    final fixture = input();
+    final content = fixture.content;
+    ForumBodyInlineSpanContent compose({
+      ForumBodyIdentity? identity,
+      String? font,
+      int? style,
+    }) => ForumBodyInlineSpanContent.compose(
+      identity: identity ?? content.identity,
+      path: content.path,
+      fontRevision: font ?? content.fontRevision,
+      styleRevision: style ?? content.styleRevision,
+      style: content.style,
+      contexts: fixture.contexts,
+      atomicRanges: [],
+    );
+    final foreign = const ForumBodyParser().parse(
+      html: '<p>other</p>',
+      sourceId: 'other',
+      conversionIdentity: 'none',
+    );
+    for (final action in <void Function()>[
+      () => compose(identity: foreign.identity),
+      () => compose(font: 'other'),
+      () => compose(style: -1),
+    ]) {
+      expect(
+        action,
+        throwsA(
+          isA<ForumBodyParagraphInputException>().having(
+            (error) => error.failure,
+            'scope failure',
+            ForumBodyParagraphInputFailure.identity,
+          ),
+        ),
+      );
+    }
+  });
+
+  test(
+    'composition refuses source reordering and enforces all structural budgets',
+    () {
+      final fixture = input();
+      final content = fixture.content;
+      ForumBodyInlineSpanContent compose({
+        List<ForumBodyParagraphContent>? contexts,
+        int maxInputCodeUnits = 16384,
+        int maxRuns = 512,
+        int maxContexts = 512,
+        int maxAtoms = 512,
+      }) => ForumBodyInlineSpanContent.compose(
+        identity: content.identity,
+        path: content.path,
+        fontRevision: content.fontRevision,
+        styleRevision: content.styleRevision,
+        style: content.style,
+        contexts: contexts ?? fixture.contexts,
+        atomicRanges: [(startUtf16: 1, endUtf16: 5)],
+        maxInputCodeUnits: maxInputCodeUnits,
+        maxRuns: maxRuns,
+        maxContexts: maxContexts,
+        maxAtoms: maxAtoms,
+      );
+      expect(
+        () => compose(contexts: fixture.contexts.reversed.toList()),
+        throwsArgumentError,
+      );
+      for (final action in <void Function()>[
+        () => compose(maxInputCodeUnits: 5),
+        () => compose(maxRuns: 3),
+        () => compose(maxContexts: 3),
+      ]) {
+        expect(action, throwsA(isA<ForumBodyParagraphInputException>()));
+      }
+      expect(
+        () => compose(maxAtoms: 0),
+        throwsA(isA<HtmlInlineTextLimitException>()),
+      );
+      for (final action in <void Function()>[
+        () => compose(maxInputCodeUnits: -1),
+        () => compose(maxRuns: -1),
+        () => compose(maxContexts: -1),
+        () => compose(maxAtoms: -1),
+      ]) {
+        expect(action, throwsArgumentError);
+      }
+    },
+  );
+
+  test(
+    'native span demands valid pre-scaled alphabetic placeholder geometry',
+    () {
+      final placeholder = input().content.textSpan.children!
+          .whereType<PlaceholderSpan>()
+          .single;
+      final builder = ui.ParagraphBuilder(
+        ui.ParagraphStyle(textDirection: TextDirection.ltr),
+      );
+      expect(() => placeholder.build(builder), throwsStateError);
+      for (final dimensions in const [
+        PlaceholderDimensions(
+          size: Size(40, 30),
+          alignment: ui.PlaceholderAlignment.bottom,
+        ),
+        PlaceholderDimensions(
+          size: Size(40, 30),
+          alignment: ui.PlaceholderAlignment.baseline,
+          baseline: TextBaseline.ideographic,
+          baselineOffset: 20,
+        ),
+        PlaceholderDimensions(
+          size: Size(double.infinity, 30),
+          alignment: ui.PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          baselineOffset: 20,
+        ),
+        PlaceholderDimensions(
+          size: Size(40, 30),
+          alignment: ui.PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          baselineOffset: 40,
+        ),
+      ]) {
+        expect(
+          () => placeholder.build(builder, dimensions: [dimensions]),
+          throwsArgumentError,
+        );
+      }
+      final paragraph = builder.build();
+      paragraph.dispose();
+    },
+  );
+}
+
+final class _Scaler extends TextScaler {
+  const _Scaler();
+  @override
+  double scale(double size) => size <= 10 ? size * 2.5 : size * 1.5;
+  @override
+  double get textScaleFactor => 1.5;
+}

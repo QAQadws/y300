@@ -4,6 +4,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_styled_flow_cursor.dart';
 import '../style/forum_body_length.dart';
+import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
 
 enum ForumBodyParagraphInputFailure {
@@ -65,20 +66,10 @@ final class ForumBodyParagraphContent {
       for (final part in projection.parts)
         TextSpan(
           text: part.text,
-          style: _paintStyle(runs[part.runIndex].style),
+          style: forumBodyPaintTextStyle(runs[part.runIndex].style),
         ),
     ],
   );
-
-  static TextStyle _paintStyle(ForumBodyResolvedStyle style) =>
-      style.visibilityHidden
-      ? style.textStyle.copyWith(
-          foreground: Paint()..color = const Color(0x00000000),
-          background: Paint()..color = const Color(0x00000000),
-          decoration: TextDecoration.none,
-          shadows: const [],
-        )
-      : style.textStyle;
 }
 
 /// Complex containers/resources require their own block/inline layout. They

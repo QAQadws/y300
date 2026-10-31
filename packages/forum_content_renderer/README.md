@@ -68,12 +68,33 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 1，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
 
-这是行内排版的分组端口，不是完整 ruby HTML consumer。父段落的源码/engine placeholder 投影、分页合法边界、复制与完整无障碍接入仍由后续组合层实现；普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
+这是行内排版的分组端口，不是完整 ruby HTML consumer。父段落通过下述混合输入显式使用独立的 engine/display/source 投影；分页、复制与完整无障碍接入仍由组合层实现。普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
 
 `ForumBodyRubyContentCursor.openCurrent` 从唯一 styled IR flow 中分组实际 ruby 内容，按 [HTML ruby 分段规则](https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-ruby-element)区分基字、注音与回退。它借用当前 ruby 的流，逐步产生不可变组；同一基字的多个注音分别保留，嵌套 ruby 保持子组结构，空注音、孤立注音和未注音尾部不伪造或丢弃文字。根样式、文档身份和构建时字体/样式版本随组保存，子文字保留自己的来源、样式和字素上下文。
 
 `openInlineSequence` 只为专门格式处理者提供已打开行内根中的纯文字片段，显式保留折叠边缘空格；它不把 ruby/资源包装节点变成普通段落。括号回退、隐藏子树和注音间空白通过 `takeIgnored` 返回来源记录，这些记录不证明阅读 coverage。样式诊断继续由借用 flow 的 owner 按批次取走。
 
-`advance(maxEvents)` 同时限制实际读取及已缓冲空白的延后消费，返回二者区分的 `eventsRead/workDone`；在嵌套层累计核对文字、run、组、深度和结构条目上限。空注音/回退元数据也计结构预算。关闭、错误或发现 flow 被其他消费者推进后，不发布半组，不关闭调用者的 flow；已交付的纯组不会被后续失败修改。分组 revision 为 1，不进行字体测量、DOM 切片、语义锚点迁移或页面发布。父段落 engine 坐标投影、分层 ruby 几何和正式阅读器接入仍待组合层完成。
+`advance(maxEvents)` 同时限制实际读取及已缓冲空白的延后消费，返回二者区分的 `eventsRead/workDone`；在嵌套层累计核对文字、run、组、深度和结构条目上限。空注音/回退元数据也计结构预算。关闭、错误或发现 flow 被其他消费者推进后，不发布半组，不关闭调用者的 flow；已交付的纯组不会被后续失败修改。分组 revision 为 1，不进行字体测量、DOM 切片、语义锚点迁移或页面发布。分层 ruby 几何和正式阅读器接入仍待组合层完成。
 
 样式解析只把 `rt` 及其后代标为注音角色，基字保留其正文/标题等上下文角色，正文级读者设置不会因此跳过基字。注音默认字号为继承字号的一半，行高为 1，参照 [CSS Ruby 的 UA 样式](https://www.w3.org/TR/css-ruby-1/)；显式作者声明及逐角色读者覆盖仍经过唯一 resolver，`line-height:inherit` 取真实父级值，非法声明保留注音默认值并报告。固有行内排字不重复应用所在块的首行缩进，普通 wrap/fit 的缩进准入没有因此放宽。当前 style 和 paragraph backend revision 均为 5。
+
+## 混合行内排版输入
+
+`ForumBodyInlineSpanContent.compose` 组合已准备的独立纯文字上下文及显式显示原子范围，
+严格核对文档、字体和样式版本、真实来源顺序、文字/run/上下文/原子预算。
+样式 run 通过明确偏移保留原 path 和 visibility；普通相邻样式 span 应先在同一上下文
+收集，不因样式变化打断字素。诊断仍归原来的 styled flow owner，不在组合时重读或复制。
+
+实际基字和注音保存在 `projection.display`，包括各自字素和来源缺口。唯一父引擎输入
+`textSpan` 在原子位置使用无 Widget 的 native `PlaceholderSpan`，其 plain text 与
+`projection.engineText` 一致；不把注音作为正文行文字，不生成虚假的来源位置。
+原子内部精确命中和选区必须来自实际子布局，不能用父占位符近似推断。坐标映射和
+严格 engine 窗口使用 `html_pagination_core` 公开入口，不在 Flutter 包复制算法。
+
+该 span 只供直接 `TextPainter` 使用。调用者按原子顺序设置已经缩放的子几何，必须是
+有限、有界且基线在框内的 alphabetic baseline 占位，不重复应用父级字体缩放。
+父引擎负责混合 bidi、换行和占位基线；子布局负责在实际占位框处绘制、命中及选区。
+纯输入不持有 native 子租约、DOM、Context 或测量 session，也不自行决定 whitespace
+边缘、可见 coverage、分页、缓存预算和阅读锚点。组合输入 revision 为 1，父布局身份
+还须纳入 projection、原子几何、完整样式和有效字体缩放；正式 flow/session/page 接入
+及分层/多注音几何尚未完成，不能据此宣称复杂正文已通过原生阅读器验收。
