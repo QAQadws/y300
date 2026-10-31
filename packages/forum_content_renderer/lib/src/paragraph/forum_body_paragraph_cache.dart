@@ -357,9 +357,13 @@ final class _LayoutEntry {
 final class _LayoutKey {
   _LayoutKey(
     ForumBodyParagraphContent content,
-    this.width,
+    double requestWidth,
     Map<double, double> scales,
-  ) : identity = content.identity,
+  ) : width =
+          content.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
+          ? 0
+          : requestWidth,
+      identity = content.identity,
       path = content.path,
       fontRevision = content.fontRevision,
       styleRevision = content.styleRevision,

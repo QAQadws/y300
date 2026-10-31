@@ -42,6 +42,47 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'intrinsic layouts reuse natural geometry across valid request widths only',
+    () {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final input = content(
+        '<p>abc</p>',
+        layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      );
+      final first = cache.acquire(content: input, width: 20);
+      final second = cache.acquire(content: input, width: 200);
+      final wrapped = cache.acquire(content: content('<p>abc</p>'), width: 60);
+      final fitted = cache.acquire(
+        content: content(
+          '<p>abc</p>',
+          layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+        ),
+        width: 60,
+      );
+      expect(first.layout, same(second.layout));
+      expect(first.layout.width, 60);
+      expect(first.layout.height, wrapped.layout.height);
+      expect(first.layout, isNot(same(wrapped.layout)));
+      expect(first.layout, isNot(same(fitted.layout)));
+      expect(cache.layoutBuildCount, 3);
+      expect(
+        () => cache.acquire(content: input, width: 0),
+        throwsA(isA<ForumBodyParagraphLayoutException>()),
+      );
+      for (final lease in [first, second, wrapped, fitted]) {
+        lease.release();
+      }
+      cache.close();
+      expect(cache.activeLeases, 0);
+      expect(cache.estimatedRetainedBytes, 0);
+    },
+  );
+
+  test(
     'fitted and wrapped layouts never alias even when neither needs to shrink',
     () {
       final cache = ForumBodyParagraphCache(

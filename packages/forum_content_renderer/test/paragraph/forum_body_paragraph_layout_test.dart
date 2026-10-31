@@ -75,6 +75,106 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'intrinsic single line preserves natural glyph metrics beyond the request width',
+    () {
+      final input = content(
+        '<p>abcdefghij</p>',
+        layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      );
+      final layout = ForumBodyParagraphLayout.create(content: input, width: 40);
+      addTearDown(layout.dispose);
+      final reference = TextPainter(
+        text: input.textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: double.infinity);
+      addTearDown(reference.dispose);
+      expect(layout.width, 200);
+      expect(layout.width, reference.width);
+      expect(layout.height, reference.height);
+      expect(layout.lines.single.width, 200);
+      expect(layout.selectionBoxes(9, 10).single.right, 200);
+      expect(
+        layout.sourceAt(Offset(190, layout.lines.single.baseline)).sourceRune,
+        inInclusiveRange(9, 10),
+      );
+    },
+  );
+
+  test(
+    'intrinsic mixed sizes use the nonlinear scaler once and paint the same line',
+    () async {
+      final input = content(
+        '<p>a<span style="font-size:40px">b</span>c</p>',
+        layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      );
+      const scaler = _NonlinearScaler();
+      final layout = ForumBodyParagraphLayout.create(
+        content: input,
+        width: 20,
+        textScaler: scaler,
+      );
+      addTearDown(layout.dispose);
+      final reference = TextPainter(
+        text: input.textSpan,
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+      )..layout(maxWidth: double.infinity);
+      addTearDown(reference.dispose);
+      expect(layout.width, reference.width);
+      expect(layout.height, reference.height);
+      expect(
+        layout.selectionBoxes(0, 3).map((box) => box.toRect()),
+        reference
+            .getBoxesForSelection(
+              const TextSelection(baseOffset: 0, extentOffset: 3),
+            )
+            .map((box) => box.toRect()),
+      );
+      expect(await raster(layout, fragments: true), await raster(layout));
+    },
+  );
+
+  test(
+    'intrinsic preformatted spaces survive but hard lines and oversized widths fail',
+    () {
+      final pre = ForumBodyParagraphLayout.create(
+        content: content(
+          '<p style="white-space:pre">a  b</p>',
+          layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+        ),
+        width: 20,
+      );
+      addTearDown(pre.dispose);
+      expect(pre.width, 80);
+      for (final (html, failure) in [
+        ('<p>a<br>b</p>', ForumBodyParagraphLayoutFailure.singleLine),
+        (
+          '<p style="white-space:pre">a\nb</p>',
+          ForumBodyParagraphLayoutFailure.singleLine,
+        ),
+        ('<p>${'a' * 820}</p>', ForumBodyParagraphLayoutFailure.width),
+      ]) {
+        expect(
+          () => ForumBodyParagraphLayout.create(
+            content: content(
+              html,
+              layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+            ),
+            width: 20,
+          ),
+          throwsA(
+            isA<ForumBodyParagraphLayoutException>().having(
+              (error) => error.failure,
+              'failure',
+              failure,
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test(
     'fitted single line keeps every glyph and scales actual line geometry',
     () {
       const html = '<p>abcdefghijklmnopqrst</p>';

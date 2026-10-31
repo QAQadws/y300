@@ -86,6 +86,8 @@ final class ForumBodyParagraphLayout {
     validateInputs(content: content, width: width, textScaler: textScaler);
     final fitted =
         content.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine;
+    final intrinsic =
+        content.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
     final painter = TextPainter(
       text: content.textSpan,
       textAlign: content.style.textAlign,
@@ -98,9 +100,15 @@ final class ForumBodyParagraphLayout {
       // Shape at the selected font/scaler first. Fitting transforms that same
       // layout, rather than measuring repeatedly at guessed smaller font sizes.
       painter.layout(
-        minWidth: width,
-        maxWidth: fitted ? double.infinity : width,
+        minWidth: intrinsic ? 0 : width,
+        maxWidth: fitted || intrinsic ? double.infinity : width,
       );
+      final layoutWidth = intrinsic ? painter.width : width;
+      if (!layoutWidth.isFinite || layoutWidth < 0 || layoutWidth > 16384) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.width,
+        );
+      }
       final paintScale = fitted && painter.width > width
           ? width / painter.width
           : 1.0;
@@ -110,7 +118,7 @@ final class ForumBodyParagraphLayout {
         );
       }
       final metrics = painter.computeLineMetrics();
-      if (fitted && metrics.length > 1) {
+      if ((fitted || intrinsic) && metrics.length > 1) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.singleLine,
         );
@@ -185,7 +193,7 @@ final class ForumBodyParagraphLayout {
       return ForumBodyParagraphLayout._(
         content,
         painter,
-        width,
+        layoutWidth,
         painter.height * paintScale,
         paintScale,
         lines,
@@ -212,7 +220,7 @@ final class ForumBodyParagraphLayout {
         ForumBodyParagraphLayoutFailure.indent,
       );
     }
-    if (content.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine &&
+    if (content.layoutMode != ForumBodyParagraphLayoutMode.wrap &&
         content.projection.text.runes.any(
           (rune) => _isDisplayLineBreak(rune) || rune == 0x0d || rune == 0x85,
         )) {
@@ -231,7 +239,7 @@ final class ForumBodyParagraphLayout {
         );
       }
       if (style.whiteSpace == ForumBodyWhiteSpace.pre &&
-          content.layoutMode != ForumBodyParagraphLayoutMode.fitSingleLine) {
+          content.layoutMode == ForumBodyParagraphLayoutMode.wrap) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.noWrap,
         );
@@ -247,7 +255,7 @@ final class ForumBodyParagraphLayout {
     return scales;
   }
 
-  static const backendRevision = 3;
+  static const backendRevision = 4;
   static bool _isDisplayLineBreak(int codeUnit) =>
       codeUnit == 0x0a || codeUnit == 0x2028 || codeUnit == 0x2029;
   final ForumBodyIdentity identity;

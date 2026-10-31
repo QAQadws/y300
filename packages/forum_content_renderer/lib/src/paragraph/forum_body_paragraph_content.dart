@@ -13,9 +13,10 @@ enum ForumBodyParagraphInputFailure {
   runLimit,
 }
 
-/// Fitting is applied after the actual per-font-size TextScaler. A single-line
-/// caller must supply a projection without hard breaks; no text is truncated.
-enum ForumBodyParagraphLayoutMode { wrap, fitSingleLine }
+/// Single-line callers supply a projection without hard breaks. Fitting uses
+/// a paint transform after the actual per-size TextScaler; intrinsic layout
+/// reports its natural width without fitting, clipping or changing font size.
+enum ForumBodyParagraphLayoutMode { wrap, fitSingleLine, intrinsicSingleLine }
 
 final class ForumBodyParagraphInputException implements Exception {
   const ForumBodyParagraphInputException(this.failure, this.path);
