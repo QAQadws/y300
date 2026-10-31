@@ -91,6 +91,101 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'margin before padding is trimmed on a break instead of becoming physical blank pages',
+    () {
+      final input = _Input('<p>a</p>');
+      final composer = input.composer(height: 20);
+      _append(composer, input.lease(0), 0);
+      _consume(composer);
+      composer.appendPadding(25, spaceBefore: 100, spaceAtPageStart: 3);
+      expect(composer.advancePadding(), (
+        extentConsumed: 0.0,
+        pagesPublished: 1,
+        isComplete: false,
+      ));
+      final prefix = composer.snapshot;
+      expect(prefix.single.usedHeight, 10);
+      expect(composer.advancePadding(), (
+        extentConsumed: 17.0,
+        pagesPublished: 1,
+        isComplete: false,
+      ));
+      expect(prefix, hasLength(1));
+      expect(composer.advancePadding(), (
+        extentConsumed: 8.0,
+        pagesPublished: 0,
+        isComplete: true,
+      ));
+      composer.finish();
+      expect(composer.snapshot.map((page) => page.usedHeight), [10, 20, 8]);
+      expect(input.cache.layoutBuildCount, 1);
+    },
+  );
+
+  test(
+    'signed margin before padding applies once and preserves earlier fragment height',
+    () {
+      final input = _Input('<p style="font-size:30px">a</p><p>b</p>');
+      final composer = input.composer(height: 100);
+      _append(composer, input.lease(0), 0);
+      _consume(composer);
+      composer.appendPadding(5, spaceBefore: -25);
+      expect(composer.advancePadding().isComplete, isTrue);
+      _append(composer, input.lease(1), 1);
+      _consume(composer);
+      composer.finish();
+      expect(
+        composer.snapshot.single.fragments.map((fragment) => fragment.top),
+        [0, 10],
+      );
+      expect(composer.snapshot.single.usedHeight, 30);
+    },
+  );
+
+  test(
+    'padding margin input is checked before admission and a huge page-start gap fails safely',
+    () {
+      final composer = _Input('').composer(height: 20);
+      for (final (before, atStart) in [
+        (double.nan, 0.0),
+        (0.0, -1.0),
+        (0.0, double.infinity),
+      ]) {
+        expect(
+          () => composer.appendPadding(
+            1,
+            spaceBefore: before,
+            spaceAtPageStart: atStart,
+          ),
+          throwsArgumentError,
+        );
+        expect(composer.needsInput, isTrue);
+      }
+      composer.appendPadding(1, spaceAtPageStart: 20);
+      expect(
+        composer.advancePadding,
+        throwsA(
+          isA<ForumBodyTextPageException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyTextPageFailure.oversizedGroup,
+          ),
+        ),
+      );
+      expect(composer.isClosed, isTrue);
+      expect(composer.snapshot, isEmpty);
+    },
+  );
+
+  test('zero padding does not apply a margin or create a collapse barrier', () {
+    final composer = _Input('').composer();
+    composer.appendPadding(0, spaceBefore: 1000, spaceAtPageStart: 1000);
+    expect(composer.advancePadding().isComplete, isTrue);
+    composer.finish();
+    expect(composer.snapshot, isEmpty);
+  });
+
+  test(
     'padding alone publishes bounded fixed page prefixes with no native resources',
     () {
       final input = _Input('');

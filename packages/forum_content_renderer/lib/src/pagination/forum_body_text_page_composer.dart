@@ -137,7 +137,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 3;
+  static const revision = 4;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -150,7 +150,7 @@ final class ForumBodyTextPageComposer {
   final _draft = <ForumBodyTextPageFragment>[];
   ForumBodyTextPageSnapshot? _snapshot;
   _ActiveParagraph? _active;
-  double? _paddingRemaining;
+  _ActivePadding? _padding;
   int _nextParagraphIndex = 0;
   int _fragmentCount = 0;
   double _usedHeight = 0;
@@ -161,8 +161,8 @@ final class ForumBodyTextPageComposer {
   bool get isComplete => _complete;
   bool get isClosed => _closed;
   bool get needsInput =>
-      !_closed && !_complete && _active == null && _paddingRemaining == null;
-  bool get hasPendingPadding => _paddingRemaining != null;
+      !_closed && !_complete && _active == null && _padding == null;
+  bool get hasPendingPadding => _padding != null;
 
   /// Admission order only; consumed input can extend beyond the stable pages.
   /// This ordinal must not be persisted as a confirmed reading position.
@@ -218,34 +218,60 @@ final class ForumBodyTextPageComposer {
   /// an otherwise empty page and does not imply source/semantic coverage. Each
   /// advance handles at most one page; huge values still obey maxPages. Caller
   /// supplies already resolved padding, not a collapsible margin.
-  void appendPadding(double extent) {
+  void appendPadding(
+    double extent, {
+    double spaceBefore = 0,
+    double spaceAtPageStart = 0,
+  }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
-    if (!extent.isFinite || extent < 0) {
+    if (!extent.isFinite ||
+        extent < 0 ||
+        !spaceBefore.isFinite ||
+        !spaceAtPageStart.isFinite ||
+        spaceAtPageStart < 0) {
       throw ArgumentError.value(extent, 'extent');
     }
-    _paddingRemaining = extent;
+    _padding = _ActivePadding(extent, spaceBefore, spaceAtPageStart);
   }
 
   ({double extentConsumed, int pagesPublished, bool isComplete})
   advancePadding() {
     _ensureOpen();
-    final remaining = _paddingRemaining;
-    if (remaining == null) throw StateError('No padding is pending');
+    final active = _padding;
+    if (active == null) throw StateError('No padding is pending');
     final pagesBefore = _pages.length;
     try {
-      final consumed = math.min(remaining, height - _flowHeight);
+      if (active.remaining == 0) {
+        _padding = null;
+        return (extentConsumed: 0.0, pagesPublished: 0, isComplete: true);
+      }
+      if (!active.started) {
+        final atPageStart = _draft.isEmpty && _usedHeight == 0;
+        final gap = atPageStart ? active.spaceAtPageStart : active.spaceBefore;
+        final top = math.max(0.0, _flowHeight + gap);
+        if (!top.isFinite) _fail(ForumBodyTextPageFailure.invalidGeometry);
+        if (top >= height) {
+          if (atPageStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
+          _seal();
+          return (extentConsumed: 0.0, pagesPublished: 1, isComplete: false);
+        }
+        _flowHeight = top;
+        active.started = true;
+      }
+      final consumed = math.min(active.remaining, height - _flowHeight);
       _flowHeight += consumed;
       _usedHeight = math.max(_usedHeight, _flowHeight);
-      final after = remaining - consumed;
+      final after = active.remaining - consumed;
       // Subtracting a page remainder must not create a subpixel-only new page
       // for values such as 0.1 + 0.2. Padding carries no source text coverage.
-      _paddingRemaining = after <= precisionErrorTolerance ? null : after;
+      active.remaining = after;
+      if (after <= precisionErrorTolerance) _padding = null;
       if (_usedHeight == height) _seal();
       return (
         extentConsumed: consumed,
         pagesPublished: _pages.length - pagesBefore,
-        isComplete: _paddingRemaining == null,
+        isComplete: _padding == null,
       );
     } catch (_) {
       close();
@@ -405,12 +431,20 @@ final class ForumBodyTextPageComposer {
     _closed = true;
     _active?.lease.release();
     _active = null;
-    _paddingRemaining = null;
+    _padding = null;
     _fragmentCount -= _draft.length;
     _draft.clear();
     _usedHeight = 0;
     _flowHeight = 0;
   }
+}
+
+final class _ActivePadding {
+  _ActivePadding(this.remaining, this.spaceBefore, this.spaceAtPageStart);
+  double remaining;
+  final double spaceBefore;
+  final double spaceAtPageStart;
+  bool started = false;
 }
 
 final class _ActiveParagraph {
