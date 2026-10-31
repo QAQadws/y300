@@ -1,10 +1,6 @@
-import 'dart:io' as io;
-
 import 'package:flutter/material.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
-
-typedef HistoryLocalFileExists = bool Function(String path);
 
 class HistoryResolvedThumbnail {
   const HistoryResolvedThumbnail({
@@ -26,16 +22,12 @@ class HistoryThumbnailResolver {
   HistoryResolvedThumbnail resolve(
     HistoryThumbnailSnapshot? snapshot, {
     HistoryTargetType? targetType,
-    HistoryLocalFileExists fileExists = _defaultFileExists,
   }) {
     if (snapshot == null) {
       return const HistoryResolvedThumbnail();
     }
     final localCandidate = snapshot.localPath?.trim();
-    final localPath =
-        localCandidate != null &&
-            localCandidate.isNotEmpty &&
-            fileExists(localCandidate)
+    final localPath = localCandidate != null && localCandidate.isNotEmpty
         ? localCandidate
         : null;
     final remoteUrl = _validRemoteUrl(
@@ -51,8 +43,6 @@ class HistoryThumbnailResolver {
       ),
     );
   }
-
-  static bool _defaultFileExists(String path) => io.File(path).existsSync();
 
   String? _validRemoteUrl(
     String? value, {

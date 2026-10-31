@@ -1,4 +1,7 @@
+import 'dart:io' as io;
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/presentation/widgets/history_thumbnail.dart';
@@ -7,6 +10,35 @@ import '../test_support/history_test_support.dart';
 
 void main() {
   const resolver = HistoryThumbnailResolver();
+
+  testWidgets('a missing local cover keeps the type icon fallback', (
+    tester,
+  ) async {
+    final previousOverrides = io.IOOverrides.current;
+    io.IOOverrides.global = _MissingThumbnailFileOverrides();
+    addTearDown(() => io.IOOverrides.global = previousOverrides);
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: HistoryThumbnail(
+            entry: historyEntry(
+              type: HistoryTargetType.comic,
+              id: '1',
+              title: 'Comic',
+              visitedAt: DateTime.utc(2026, 10, 31),
+              thumbnail: const HistoryThumbnailSnapshot(
+                localPath: 'missing-cover.jpg',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byIcon(Icons.collections_bookmark_outlined), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('uses a journal icon when a blog has no body image', (
     tester,
@@ -32,36 +64,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test(
-    'prefers an existing local cover and keeps remote fallback metadata',
-    () {
-      final resolved = resolver.resolve(
-        const HistoryThumbnailSnapshot(
-          localPath: 'C:/cover.jpg',
-          remoteUrl: 'https://example.com/cover.jpg',
-          focusX: 0,
-          focusY: 1,
-        ),
-        fileExists: (path) => true,
-      );
-
-      expect(resolved.localPath, 'C:/cover.jpg');
-      expect(resolved.remoteUrl, 'https://example.com/cover.jpg');
-      expect(resolved.alignment.x, -1);
-      expect(resolved.alignment.y, 1);
-    },
-  );
-
-  test('falls back to remote when local path is missing', () {
+  test('preserves the local cover candidate and remote fallback metadata', () {
     final resolved = resolver.resolve(
       const HistoryThumbnailSnapshot(
-        localPath: 'C:/missing.jpg',
+        localPath: 'C:/cover.jpg',
         remoteUrl: 'https://example.com/cover.jpg',
+        focusX: 0,
+        focusY: 1,
       ),
-      fileExists: (path) => false,
     );
 
-    expect(resolved.localPath, isNull);
+    expect(resolved.localPath, 'C:/cover.jpg');
+    expect(resolved.remoteUrl, 'https://example.com/cover.jpg');
+    expect(resolved.alignment.x, -1);
+    expect(resolved.alignment.y, 1);
+  });
+
+  test('normalizes local candidates without accessing the filesystem', () {
+    final resolved = io.IOOverrides.runZoned(
+      () => resolver.resolve(
+        const HistoryThumbnailSnapshot(
+          localPath: ' C:/missing.jpg ',
+          remoteUrl: 'https://example.com/cover.jpg',
+        ),
+      ),
+      createFile: (_) =>
+          throw StateError('Thumbnail projection must not do I/O'),
+    );
+
+    expect(resolved.localPath, 'C:/missing.jpg');
     expect(resolved.remoteUrl, 'https://example.com/cover.jpg');
     expect(resolved.hasImage, isTrue);
   });
@@ -69,10 +100,9 @@ void main() {
   test('uses type icon fallback for invalid local and remote sources', () {
     final resolved = resolver.resolve(
       const HistoryThumbnailSnapshot(
-        localPath: 'C:/missing.jpg',
+        localPath: ' ',
         remoteUrl: 'file:///cover.jpg',
       ),
-      fileExists: (path) => false,
     );
 
     expect(resolved.hasImage, isFalse);
@@ -96,4 +126,27 @@ void main() {
     expect(threadThumbnail.hasImage, isFalse);
     expect(comicThumbnail.remoteUrl, snapshot.remoteUrl);
   });
+}
+
+final class _MissingThumbnailFileOverrides extends io.IOOverrides {
+  @override
+  io.File createFile(String path) => _MissingThumbnailFile(path);
+}
+
+class _MissingThumbnailFile extends Fake implements io.File {
+  _MissingThumbnailFile(this.path);
+
+  @override
+  final String path;
+
+  @override
+  Future<int> length() => Future<int>.error(
+    io.PathNotFoundException(path, const io.OSError('missing', 2)),
+  );
+
+  @override
+  Future<bool> exists() async => false;
+
+  @override
+  bool existsSync() => throw StateError('Synchronous thumbnail file check');
 }
