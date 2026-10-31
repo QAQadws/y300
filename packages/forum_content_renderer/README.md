@@ -122,7 +122,7 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 有限、有界且基线在框内的 alphabetic baseline 占位，不重复应用父级字体缩放。
 父引擎负责混合 bidi、换行和占位基线；子布局负责在实际占位框处绘制、命中及选区。
 纯输入不持有 native 子租约、DOM、Context 或测量 session，也不自行决定 whitespace
-边缘、可见 coverage、分页、缓存预算和阅读锚点。组合输入 revision 为 1，父布局身份
+边缘、可见 coverage、分页、缓存预算和阅读锚点。组合输入 revision 为 2，父布局身份
 还须纳入 projection、原子几何、完整样式和有效字体缩放；正式 flow/session/page 接入
 及分层/多注音几何尚未完成，不能据此宣称复杂正文已通过原生阅读器验收。
 
@@ -153,7 +153,7 @@ alphabetic baseline、有效父字体缩放、对齐/方向/模式/宽度。固�
 `includeInline` 与普通 include 共计 footprint、按实际 key 去重且不测量。
 排版期间 owner 退役禁止回填；同 key 重入测量明确失败，不覆盖活跃条目；其他条目的
 重入获取须在 native 返回后再次核对实际 pin。字节是保守准入估算，不能冒充真实 native
-heap/GPU 观测。可见绑定及正式 flow/session/page 消费仍待接入。
+heap/GPU 观测。正式 flow/session/page 消费仍待接入。
 
 ## 有界子行批量排字
 
@@ -210,5 +210,29 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 `ForumBodyRubyGroupLayout.adopt` 可消费普通行、band 子行及二者混合，但必须同 owner、
 同有效作用域且各项 paint 已准备；成功与失败都消费传入句柄，不退休其他别名或兄弟行。
 几何、选区和命中只使用来源局部契约，字体框与极小行高仍参与完整分组尺寸计算。
-页面准备器与可见整页绑定尚待接入，并完成 profile 验收；不能只按 TextPainter 数量
+页面准备器与整页预算装配尚待接入，并完成 profile 验收；不能只按 TextPainter 数量
 计账，或用原语/缓存/分组的验证代替复杂正文阅读器验收。
+
+## 可见混排文字分片
+
+`ForumBodyInlineSpanContent.contexts` 保留实际独立子上下文及其父显示窗口，输入 revision
+为 2。它们是有界纯值，不持有 DOM、Widget 或 native 资源；不得从相同文字、长度或
+新偏好猜回旧子的来源。缓存仍只保存父 native 投影，绑定必须读取当前 lease.content。
+
+`ForumBodyInlineParagraphView.adopt` 接管一个已准备父租约和该合法行窗口内恰好的 ruby
+组。父子必须同一 owner，组内容必须就是当前父输入保留的子上下文，窗口覆盖和实际
+尺寸/基线必须一致。缺失、多余、旧上下文或错配均失败并消费本次句柄，不退休兄弟别名。
+普通文字与子组一起绘制，paint 不获取缓存或录制图片；单个分片不能静默 pin 整个长段。
+
+命中通过实际子 native 几何返回源码点，并显式移到父显示坐标；源间隙保持近似，越出
+窗口的点只钳制到当前分片且不标精确。选择使用父普通文字框及子 base/RT 的真实局部
+选区，不用占位矩形冒充部分文字；保留字素、RTL 和分片边界。close 释放父及可见子租约，
+清除分片、子内容和句柄引用，仅保留数值几何。
+
+`ForumBodyInlineParagraphSurface` 只挂载已准备 view，与普通 ParagraphSurface 共用
+内部 RenderBox 的布局/手势/退出逻辑。回调换绑读取最新回调，位置/视图/交互身份变化
+取消旧手势，关闭 owner 后晚到 paint/tap 无效。基础语义使用当前可见正文、过滤隐藏
+文字；完整 ruby 读屏、跨页选择与复制政策仍由 S8 联验，不能据此宣称无障碍完成。
+
+本绑定当前消费已配对的叶子 ruby；分层/多注音及正式分页准备、flow/session/page
+装配仍待完成。单项/分片像素和来源验证不能代替实际复杂正文页面的 profile 验收。

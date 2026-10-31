@@ -39,7 +39,7 @@ final class ForumBodyRubyGroupLayout {
   ForumBodyRubyGroupLayout._({
     required ForumBodyTextLease base,
     required ForumBodyTextLease? annotation,
-    required HtmlDisplayTextProjection annotationProjection,
+    required ForumBodyParagraphContent annotationContent,
     required this.size,
     required this.baseline,
     required this.baseOffset,
@@ -49,7 +49,7 @@ final class ForumBodyRubyGroupLayout {
        _annotation = annotation,
        hasAnnotation = annotation != null,
        _annotationHitBoundary = annotationHitBoundary,
-       _annotationProjection = annotationProjection;
+       _annotationContent = annotationContent;
 
   factory ForumBodyRubyGroupLayout.create({
     required ForumBodyParagraphCache cache,
@@ -251,7 +251,7 @@ final class ForumBodyRubyGroupLayout {
       return ForumBodyRubyGroupLayout._(
         base: baseLease,
         annotation: annotationLease,
-        annotationProjection: annotation.projection,
+        annotationContent: annotation,
         size: Size(width, height),
         baseline: baseline,
         baseOffset: baseOffset,
@@ -270,7 +270,7 @@ final class ForumBodyRubyGroupLayout {
 
   ForumBodyTextLease? _base;
   ForumBodyTextLease? _annotation;
-  final HtmlDisplayTextProjection _annotationProjection;
+  ForumBodyParagraphContent? _annotationContent;
   final Size size;
   final double baseline;
   final Offset baseOffset;
@@ -279,7 +279,24 @@ final class ForumBodyRubyGroupLayout {
   final double _annotationHitBoundary;
 
   bool get isActive =>
-      _base?.isActive == true && (_annotation?.isActive ?? true);
+      _base?.isActive == true &&
+      _base!.layout.isPaintPrepared &&
+      (_annotation == null ||
+          (_annotation!.isActive && _annotation!.layout.isPaintPrepared));
+
+  /// Proves a prepared group's child handles use the same reading budget as
+  /// its parent, without acquiring aliases or retaining another cache owner.
+  bool isOwnedBy(ForumBodyParagraphCache cache) =>
+      isActive &&
+      cache.ownsLease(_base!) &&
+      (_annotation == null || cache.ownsLease(_annotation!));
+
+  ForumBodyParagraphContent contentFor(ForumBodyRubyPart part) {
+    _ensureActive();
+    return part == ForumBodyRubyPart.base
+        ? _base!.content
+        : _annotationContent!;
+  }
 
   static Rect _textBounds(ForumBodyTextLease lease) {
     final layout = lease.layout;
@@ -312,7 +329,7 @@ final class ForumBodyRubyGroupLayout {
     _ensureActive();
     return part == ForumBodyRubyPart.base
         ? _base!.content.projection
-        : _annotationProjection;
+        : _annotationContent!.projection;
   }
 
   void paint(Canvas canvas, Offset offset) {
@@ -374,6 +391,7 @@ final class ForumBodyRubyGroupLayout {
     final annotation = _annotation;
     _base = null;
     _annotation = null;
+    _annotationContent = null;
     annotation?.release();
     base?.release();
   }

@@ -8,6 +8,15 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
 
+/// Exact independently projected input retained for source-bound child binding.
+/// These are display coordinates, never inferred from equal text or HTML.
+final class ForumBodyInlineContext {
+  const ForumBodyInlineContext._(this.content, this.startUtf16, this.endUtf16);
+  final ForumBodyParagraphContent content;
+  final int startUtf16;
+  final int endUtf16;
+}
+
 /// Pure mixed-inline input: actual child display/source text and a separate
 /// parent TextPainter span. Independent contexts must be collected together
 /// before entering this port; ordinary style spans are not separate contexts.
@@ -22,10 +31,12 @@ final class ForumBodyInlineSpanContent {
     required this.styleRevision,
     required this.style,
     required this.projection,
+    required List<ForumBodyInlineContext> contexts,
     required List<ForumBodyParagraphRun> runs,
-  }) : runs = List.unmodifiable(runs);
+  }) : contexts = List.unmodifiable(contexts),
+       runs = List.unmodifiable(runs);
 
-  static const revision = 1;
+  static const revision = 2;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -53,6 +64,7 @@ final class ForumBodyInlineSpanContent {
       );
     }
     final segments = <HtmlDisplayTextSegment>[];
+    final retainedContexts = <ForumBodyInlineContext>[];
     final runs = <ForumBodyParagraphRun>[];
     var inputLength = 0;
     for (final context in contexts) {
@@ -64,6 +76,7 @@ final class ForumBodyInlineSpanContent {
           context.path,
         );
       }
+      final start = inputLength;
       inputLength += context.projection.text.length;
       if (inputLength > maxInputCodeUnits) {
         throw ForumBodyParagraphInputException(
@@ -80,6 +93,9 @@ final class ForumBodyInlineSpanContent {
       segments.add(
         HtmlDisplayTextSegment(context.projection, runIndexOffset: runs.length),
       );
+      retainedContexts.add(
+        ForumBodyInlineContext._(context, start, inputLength),
+      );
       runs.addAll(context.runs);
     }
     final display = HtmlDisplayTextProjection.concatenate(
@@ -93,6 +109,7 @@ final class ForumBodyInlineSpanContent {
       fontRevision: fontRevision,
       styleRevision: styleRevision,
       style: style,
+      contexts: retainedContexts,
       projection: HtmlInlineTextProjection.build(
         display: display,
         atomicRanges: atomicRanges,
@@ -111,6 +128,7 @@ final class ForumBodyInlineSpanContent {
   final ForumBodyResolvedStyle style;
   final HtmlInlineTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
+  final List<ForumBodyInlineContext> contexts;
 
   /// Direct TextPainter input only. Set its placeholder dimensions in atom
   /// order, using the already-scaled child geometry. RichText/WidgetSpan scale
