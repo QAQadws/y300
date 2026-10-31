@@ -49,6 +49,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.chapterEntryRequest,
     this.conversionAnchor,
     this.onChapterEntryApplied,
+    this.onChapterEntryRetired,
     this.navigationController,
     this.onTurnToAdjacentChapter,
     this.chapterTurnIsInFlight = false,
@@ -91,6 +92,9 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final NovelReaderChapterEntryRequest? chapterEntryRequest;
   final NovelReaderTextAnchor? conversionAnchor;
   final ValueChanged<NovelReaderChapterEntryRequest>? onChapterEntryApplied;
+
+  /// Releases a superseded entry's UI latch without claiming it was reached.
+  final ValueChanged<NovelReaderChapterEntryRequest>? onChapterEntryRetired;
   final NovelReaderPagedNavigationController? navigationController;
   final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
   final bool chapterTurnIsInFlight;
@@ -143,7 +147,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   bool _disposed = false;
   bool _invalidBox = false;
   bool _beginningConsumed = false;
-  (int, String)? _appliedEntry;
+  (int, String, NovelReaderChapterEdge)? _finishedEntry;
   Object? _error;
   ForumBodyTextPageSnapshot? _verifiedPrefix;
   String? _prefixKey;
@@ -234,16 +238,37 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         (!oldWidget.startsAtBeginning && widget.startsAtBeginning)) {
       _beginningConsumed = false;
     }
-    if (ownerChanged || novelChanged || chapterChanged) _appliedEntry = null;
+    if (ownerChanged || novelChanged || chapterChanged) _finishedEntry = null;
     final oldEntry = oldWidget.chapterEntryRequest;
     final entry = widget.chapterEntryRequest;
+    final oldEntryPending =
+        oldEntry != null &&
+        oldEntry.episodeId == oldWidget.semanticDocument.episodeId &&
+        _finishedEntry != _entryKey(oldEntry);
     final entryChanged =
-        (oldEntry?.requestId, oldEntry?.episodeId, oldEntry?.edge) !=
-            (entry?.requestId, entry?.episodeId, entry?.edge) &&
-        (entry != null ||
-            (oldEntry != null &&
-                _appliedEntry != (oldEntry.requestId, oldEntry.episodeId)));
+        _entryKey(oldEntry) != _entryKey(entry) &&
+        (entry?.episodeId == widget.semanticDocument.episodeId ||
+            oldEntryPending);
+    if (entryChanged &&
+        oldEntryPending &&
+        !ownerChanged &&
+        !novelChanged &&
+        !chapterChanged) {
+      _finishChapterEntry(
+        oldEntry,
+        applied: false,
+        callback: oldWidget.onChapterEntryRetired,
+      );
+    }
     final retry = oldWidget.retryRevision != widget.retryRevision;
+    if ((entryChanged || retry) &&
+        !newPage &&
+        !newAnchor &&
+        !ownerChanged &&
+        !novelChanged &&
+        !chapterChanged) {
+      _retireNavigationInput();
+    }
     final hintChanged = oldWidget.conversionAnchor != widget.conversionAnchor;
     final resourcesChanged =
         !identical(oldWidget.sessionLimits, widget.sessionLimits) ||
@@ -285,7 +310,12 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _needsLayout = true;
       _busy = true;
       _force =
-          _force || retry || entryChanged || hintChanged || resourcesChanged;
+          _force ||
+          retry ||
+          entryChanged ||
+          hintChanged ||
+          resourcesChanged ||
+          (!oldWidget.startsAtBeginning && widget.startsAtBeginning);
     }
     _scheduleNavigation();
   }
@@ -554,13 +584,14 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       final activeEntry =
           entry != null &&
               entry.episodeId == prepared.episodeId &&
-              _appliedEntry != (entry.requestId, entry.episodeId)
+              _finishedEntry != _entryKey(entry)
           ? entry
           : null;
       final beginning = config.startsAtBeginning && !_beginningConsumed;
       if (!force &&
-          activeEntry == null &&
-          !beginning &&
+          (activeEntry == null ||
+              _entryKey(activeEntry) == _entryKey(old?.entry)) &&
+          (!beginning || old?.beginning == true) &&
           old != null &&
           !old.controller.isClosed &&
           old.scope.paginationKey == scope.paginationKey &&
@@ -718,9 +749,20 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     if (!_live(request)) return;
     if (request.beginning) _beginningConsumed = true;
     final entry = request.entry;
-    if (entry != null && _appliedEntry != (entry.requestId, entry.episodeId)) {
-      _appliedEntry = (entry.requestId, entry.episodeId);
-      widget.onChapterEntryApplied?.call(entry);
+    if (entry != null && _finishedEntry != _entryKey(entry)) {
+      if (position.appliedChapterEntry == entry.edge) {
+        _finishChapterEntry(
+          entry,
+          applied: true,
+          callback: widget.onChapterEntryApplied,
+        );
+      } else if (position.hasUserNavigated) {
+        _finishChapterEntry(
+          entry,
+          applied: false,
+          callback: widget.onChapterEntryRetired,
+        );
+      }
     }
     if (!_live(request)) return;
     final intent = _navigationIntent;
@@ -803,6 +845,39 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     }
     _rememberPrefix(request);
     request.stop();
+  }
+
+  static (int, String, NovelReaderChapterEdge)? _entryKey(
+    NovelReaderChapterEntryRequest? entry,
+  ) => entry == null ? null : (entry.requestId, entry.episodeId, entry.edge);
+
+  void _finishChapterEntry(
+    NovelReaderChapterEntryRequest entry, {
+    required bool applied,
+    required ValueChanged<NovelReaderChapterEntryRequest>? callback,
+  }) {
+    final key = _entryKey(entry);
+    if (_finishedEntry == key) return;
+    _finishedEntry = key;
+    if (callback == null || _disposed) return;
+    final owner = widget.owner;
+    final episode = widget.semanticDocument.episodeId;
+    final authority = widget.readingAuthorityIdentity;
+    final novelId = widget.progressSnapshot.novelId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _disposed ||
+          owner.isClosed ||
+          !identical(owner, widget.owner) ||
+          !identical(authority, widget.readingAuthorityIdentity) ||
+          novelId != widget.progressSnapshot.novelId ||
+          episode != widget.semanticDocument.episodeId ||
+          (applied && _entryKey(widget.chapterEntryRequest) != key)) {
+        return;
+      }
+      callback(entry);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   static (int, String, String, int)? _pageSeekKey(
@@ -936,6 +1011,22 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     }
   }
 
+  void _retireNavigationInput() {
+    final key = _navigationKey;
+    if (_navigationIntent != null) {
+      _finishNavigation(NovelReaderNavigationOutcome.retired);
+    } else if (key != null && _seenNavigation != key) {
+      // Preparation can still be waiting before any controller accepts this
+      // input. A later entry/retry retires that intent too, without replay.
+      final input = _navigationInput();
+      if (input != null) {
+        _reportNavigation(NovelReaderNavigationOutcome.retired, input.callback);
+      }
+    }
+    _seenNavigation = key;
+    _navigationFrameRevision++;
+  }
+
   void _reportNavigation(
     NovelReaderNavigationOutcome outcome,
     ValueChanged<NovelReaderNavigationOutcome>? callback, {
@@ -944,7 +1035,10 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     if (_disposed || callback == null) return;
     final callbackOwner = owner ?? widget.owner;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_disposed && identical(callbackOwner, widget.owner)) {
+      if (mounted &&
+          !_disposed &&
+          !callbackOwner.isClosed &&
+          identical(callbackOwner, widget.owner)) {
         callback(outcome);
       }
     });

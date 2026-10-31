@@ -12,6 +12,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_document_parser
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
@@ -99,6 +100,10 @@ class _Reader {
   final anchorResults =
       <(NovelReaderAnchorNavigationRequest, NovelReaderNavigationOutcome)>[];
   int ready = 0;
+  final appliedEntries = <NovelReaderChapterEntryRequest>[];
+  final retiredEntries = <NovelReaderChapterEntryRequest>[];
+  VoidCallback? onEntryApplied;
+  ValueChanged<NovelReaderPaginationPosition>? onPosition;
   int terminal = 0;
   NovelReaderPreferences get preferences => NovelReaderPreferences.defaults()
       .copyWith(fontSize: 10, lineHeight: 1, paragraphSpacing: 0);
@@ -125,6 +130,7 @@ Future<void> _show(
   NovelReaderPageSeekRequest? seek,
   NovelReaderAnchorNavigationRequest? anchorNavigation,
   bool startsAtBeginning = false,
+  NovelReaderChapterEntryRequest? entry,
   NovelReaderPaginationPerformancePolicy performance =
       const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) async {
@@ -163,12 +169,21 @@ Future<void> _show(
                 pageSeekRequest: seek,
                 navigationRequest: anchorNavigation,
                 startsAtBeginning: startsAtBeginning,
+                chapterEntryRequest: entry,
+                onChapterEntryApplied: (request) {
+                  reader.appliedEntries.add(request);
+                  reader.onEntryApplied?.call();
+                },
+                onChapterEntryRetired: reader.retiredEntries.add,
                 onNavigationFinished: (request, outcome) =>
                     reader.anchorResults.add((request, outcome)),
                 onPageSeekFinished: (request, outcome) =>
                     reader.seekResults.add((request, outcome)),
                 preparationService: reader.service,
-                onPositionChanged: reader.positions.add,
+                onPositionChanged: (position) {
+                  reader.positions.add(position);
+                  reader.onPosition?.call(position);
+                },
                 onStatusChanged: reader.statuses.add,
                 onContentReady: () => reader.ready++,
                 onContentTerminal: () => reader.terminal++,
@@ -206,6 +221,512 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  for (final replacement in ['entry', 'retry']) {
+    testWidgets(
+      '$replacement retires a semantic intent still waiting for pure preparation',
+      (tester) async {
+        final reader = _Reader();
+        reader.service.gate = Completer<void>();
+        final origin = reader.semantic.sourceProvenance!.origins.first;
+        final navigation = NovelReaderAnchorNavigationRequest(
+          requestId: 1,
+          anchor: NovelReaderTextAnchor(
+            episodeId: reader.episodeId,
+            nodeId: origin.nodeId,
+            textOffset: 125,
+            formatVersion: 1,
+            textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+          ),
+        );
+        final entry = NovelReaderChapterEntryRequest(
+          requestId: 1,
+          episodeId: reader.episodeId,
+          edge: NovelReaderChapterEdge.end,
+        );
+        await _show(tester, reader, anchorNavigation: navigation);
+        await tester.pumpAndSettle();
+        expect(reader.positions, isEmpty);
+        await _show(
+          tester,
+          reader,
+          anchorNavigation: navigation,
+          entry: replacement == 'entry' ? entry : null,
+          retry: replacement == 'retry' ? 1 : 0,
+        );
+        await tester.pumpAndSettle();
+        expect(reader.anchorResults, [
+          (navigation, NovelReaderNavigationOutcome.retired),
+        ]);
+        reader.service.gate!.complete();
+        await tester.pumpAndSettle();
+        expect(reader.positions, hasLength(1));
+        expect(reader.positions.single.anchor.textOffset, isNot(125));
+        expect(reader.anchorResults, hasLength(1));
+        if (replacement == 'entry') {
+          expect(
+            reader.positions.single.appliedChapterEntry,
+            NovelReaderChapterEdge.end,
+          );
+          expect(reader.appliedEntries, [entry]);
+        } else {
+          expect(reader.positions.single.anchor.textOffset, 73);
+          expect(reader.positions.single.hasUserNavigated, isFalse);
+        }
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  for (final change in ['hide', 'reflow']) {
+    testWidgets(
+      'pending end entry survives $change without an early completion',
+      (tester) async {
+        final reader = _Reader();
+        var held = true;
+        final gate = Completer<void>();
+        final scheduler = NovelReaderNativeWorkScheduler(
+          nextFrame: () async {
+            if (held) {
+              await gate.future;
+            } else {
+              await WidgetsBinding.instance.endOfFrame;
+            }
+          },
+        );
+        final entry = NovelReaderChapterEntryRequest(
+          requestId: 1,
+          episodeId: reader.episodeId,
+          edge: NovelReaderChapterEdge.end,
+        );
+        await _show(tester, reader, scheduler: scheduler, entry: entry);
+        await tester.pumpAndSettle();
+        final original = reader.statuses.last.controller;
+        await _show(
+          tester,
+          reader,
+          scheduler: scheduler,
+          entry: entry,
+          active: change != 'hide',
+          preferences: change == 'reflow'
+              ? reader.preferences.copyWith(fontSize: 20)
+              : null,
+        );
+        await tester.pumpAndSettle();
+        if (change == 'hide') {
+          await _show(tester, reader, scheduler: scheduler, entry: entry);
+          await tester.pumpAndSettle();
+          expect(reader.statuses.last.controller, same(original));
+        }
+        expect(reader.positions, isEmpty);
+        expect(reader.appliedEntries, isEmpty);
+        expect(reader.retiredEntries, isEmpty);
+        held = false;
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(reader.appliedEntries, [entry]);
+        expect(reader.retiredEntries, isEmpty);
+        expect(
+          reader.positions.single.appliedChapterEntry,
+          NovelReaderChapterEdge.end,
+        );
+        expect(
+          reader.positions.single.pageIndex,
+          reader.positions.single.pageCount - 1,
+        );
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  testWidgets(
+    'resuming a failed pending end entry does not implicitly retry the source',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>${List.filled(20, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+      );
+      final entry = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.end,
+      );
+      await _show(tester, reader, entry: entry);
+      await tester.pumpAndSettle();
+      final original = reader.statuses.last.controller!;
+      final error = original.error;
+      final snapshot = original.snapshot;
+      await _show(tester, reader, entry: entry, active: false);
+      await tester.pumpAndSettle();
+      await _show(tester, reader, entry: entry);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(original));
+      expect(original.error, same(error));
+      expect(original.snapshot, same(snapshot));
+      expect(reader.positions, isEmpty);
+      expect(reader.appliedEntries, isEmpty);
+      expect(reader.retiredEntries, isEmpty);
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final edge in NovelReaderChapterEdge.values) {
+    testWidgets(
+      '$edge applies once only at its mounted edge and does not replay after removal or reflow',
+      (tester) async {
+        final reader = _Reader();
+        final entry = NovelReaderChapterEntryRequest(
+          requestId: 1,
+          episodeId: reader.episodeId,
+          edge: edge,
+        );
+        await _show(tester, reader, entry: entry);
+        await tester.pumpAndSettle();
+        final position = reader.positions.single;
+        expect(position.appliedChapterEntry, edge);
+        expect(
+          position.pageIndex,
+          edge == NovelReaderChapterEdge.start ? 0 : position.pageCount - 1,
+        );
+        expect(reader.appliedEntries, [entry]);
+        expect(reader.retiredEntries, isEmpty);
+        final controller = reader.statuses.last.controller;
+        await _show(tester, reader);
+        await tester.pumpAndSettle();
+        expect(reader.statuses.last.controller, same(controller));
+        expect(reader.positions, hasLength(1));
+        await _show(
+          tester,
+          reader,
+          entry: entry,
+          preferences: reader.preferences.copyWith(fontSize: 20),
+        );
+        await tester.pumpAndSettle();
+        expect(reader.appliedEntries, [entry]);
+        expect(reader.retiredEntries, isEmpty);
+        expect(reader.positions.last.appliedChapterEntry, isNull);
+        expect(
+          reader.positions.last.anchor.textOffset,
+          position.anchor.textOffset,
+        );
+        await _unmount(tester, reader);
+      },
+    );
+
+    testWidgets(
+      '$edge callback may navigate immediately without reusing entry proof',
+      (tester) async {
+        final reader = _Reader();
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        final commands = <bool>[];
+        reader.onEntryApplied = () => commands.add(
+          edge == NovelReaderChapterEdge.start
+              ? navigation.turnNext()
+              : navigation.turnPrevious(),
+        );
+        final entry = NovelReaderChapterEntryRequest(
+          requestId: 1,
+          episodeId: reader.episodeId,
+          edge: edge,
+        );
+        await _show(tester, reader, entry: entry, navigation: navigation);
+        await tester.pumpAndSettle();
+        expect(commands, [true]);
+        expect(reader.appliedEntries, [entry]);
+        expect(reader.positions, hasLength(2));
+        expect(reader.positions.first.appliedChapterEntry, edge);
+        expect(reader.positions.last.appliedChapterEntry, isNull);
+        expect(reader.positions.last.hasUserNavigated, isTrue);
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  testWidgets(
+    'cancelled search before first paint restores the original pending end entry',
+    (tester) async {
+      final reader = _Reader();
+      final gate = Completer<void>();
+      var held = true;
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      final entry = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.end,
+      );
+      final origin = reader.semantic.sourceProvenance!.origins.first;
+      final navigation = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: NovelReaderTextAnchor(
+          episodeId: reader.episodeId,
+          nodeId: origin.nodeId,
+          textOffset: 125,
+          formatVersion: 1,
+          textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+        ),
+      );
+      await _show(
+        tester,
+        reader,
+        scheduler: scheduler,
+        entry: entry,
+        anchorNavigation: navigation,
+      );
+      await tester.pumpAndSettle();
+      expect(reader.positions, isEmpty);
+      await _show(tester, reader, scheduler: scheduler, entry: entry);
+      await tester.pumpAndSettle();
+      expect(reader.retiredEntries, isEmpty);
+      held = false;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(reader.appliedEntries, [entry]);
+      expect(
+        reader.positions.single.appliedChapterEntry,
+        NovelReaderChapterEdge.end,
+      );
+      expect(
+        reader.positions.single.pageIndex,
+        reader.positions.single.pageCount - 1,
+      );
+      expect(reader.anchorResults, [
+        (navigation, NovelReaderNavigationOutcome.retired),
+      ]);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'an unavailable search before first paint applies only its original bootstrap end entry',
+    (tester) async {
+      final reader = _Reader(html: '<p>a\u0301b</p>');
+      final origin = reader.semantic.sourceProvenance!.origins.first;
+      final entry = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.end,
+      );
+      final navigation = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: NovelReaderTextAnchor(
+          episodeId: reader.episodeId,
+          nodeId: origin.nodeId,
+          textOffset: 1,
+          formatVersion: 1,
+          textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+        ),
+      );
+      await _show(tester, reader, entry: entry, anchorNavigation: navigation);
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, [
+        (navigation, NovelReaderNavigationOutcome.unavailable),
+      ]);
+      expect(reader.appliedEntries, [entry]);
+      expect(reader.retiredEntries, isEmpty);
+      expect(
+        reader.positions.single.appliedChapterEntry,
+        NovelReaderChapterEdge.end,
+      );
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'a newer entry retires an unresolved old entry and late old frames cannot apply it',
+    (tester) async {
+      final reader = _Reader();
+      var held = true;
+      final gate = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      final old = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.end,
+      );
+      final next = NovelReaderChapterEntryRequest(
+        requestId: 2,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.start,
+      );
+      await _show(tester, reader, scheduler: scheduler, entry: old);
+      await tester.pumpAndSettle();
+      await _show(tester, reader, scheduler: scheduler, entry: next);
+      await tester.pumpAndSettle();
+      expect(reader.retiredEntries, [old]);
+      expect(reader.appliedEntries, isEmpty);
+      held = false;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(reader.appliedEntries, [next]);
+      expect(reader.retiredEntries, [old]);
+      expect(
+        reader.positions.single.appliedChapterEntry,
+        NovelReaderChapterEdge.start,
+      );
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'entry identity includes the edge even when serial and chapter are reused',
+    (tester) async {
+      final reader = _Reader();
+      final end = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.end,
+      );
+      final start = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.start,
+      );
+      await _show(tester, reader, entry: end);
+      await tester.pumpAndSettle();
+      await _show(tester, reader, entry: start);
+      await tester.pumpAndSettle();
+      expect(reader.appliedEntries, [end, start]);
+      expect(reader.retiredEntries, isEmpty);
+      expect(reader.positions.last.pageIndex, 0);
+      expect(
+        reader.positions.last.appliedChapterEntry,
+        NovelReaderChapterEdge.start,
+      );
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'entry for another chapter leaves the active controller and its position unchanged',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller;
+      final point = reader.positions.single;
+      await _show(
+        tester,
+        reader,
+        entry: const NovelReaderChapterEntryRequest(
+          requestId: 1,
+          episodeId: 'other',
+          edge: NovelReaderChapterEdge.end,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.positions, [point]);
+      expect(reader.appliedEntries, isEmpty);
+      expect(reader.retiredEntries, isEmpty);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'reading a failed end-entry prefix retires the entry without claiming the final edge',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>${List.filled(20, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+      );
+      final entry = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.end,
+      );
+      await _show(tester, reader, entry: entry);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final error = controller.error;
+      expect(reader.positions, isEmpty);
+      final seek = NovelReaderPageSeekRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        paginationKey: controller.paginationKey,
+        pageIndex: 0,
+      );
+      await _show(tester, reader, entry: entry, seek: seek);
+      await tester.pumpAndSettle();
+      expect(reader.appliedEntries, isEmpty);
+      expect(reader.retiredEntries, [entry]);
+      expect(reader.positions.single.appliedChapterEntry, isNull);
+      expect(reader.positions.single.isPageCountFinal, isFalse);
+      expect(controller.error, same(error));
+      await _show(tester, reader, entry: entry, retry: 1);
+      await tester.pumpAndSettle();
+      expect(reader.retiredEntries, [entry]);
+      expect(reader.appliedEntries, isEmpty);
+      expect(reader.positions.last.pageIndex, 0);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'retiring the owner in a position callback suppresses deferred entry completion',
+    (tester) async {
+      final reader = _Reader();
+      reader.onPosition = (_) => reader.owner.dispose();
+      final entry = NovelReaderChapterEntryRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        edge: NovelReaderChapterEdge.end,
+      );
+      await _show(tester, reader, entry: entry);
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(1));
+      expect(reader.appliedEntries, isEmpty);
+      expect(reader.retiredEntries, isEmpty);
+      expect(reader.owner.activeCacheHandles, 0);
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final edge in NovelReaderChapterEdge.values) {
+    testWidgets(
+      'a semantic request superseding $edge cannot falsely apply that chapter entry',
+      (tester) async {
+        final reader = _Reader();
+        final origin = reader.semantic.sourceProvenance!.origins.first;
+        final navigation = NovelReaderAnchorNavigationRequest(
+          requestId: 1,
+          anchor: NovelReaderTextAnchor(
+            episodeId: reader.episodeId,
+            nodeId: origin.nodeId,
+            textOffset: 125,
+            formatVersion: 1,
+            textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+          ),
+        );
+        final entry = NovelReaderChapterEntryRequest(
+          requestId: 1,
+          episodeId: reader.episodeId,
+          edge: edge,
+        );
+        await _show(tester, reader, entry: entry, anchorNavigation: navigation);
+        await tester.pumpAndSettle();
+        expect(reader.positions.single.anchor.textOffset, 125);
+        expect(reader.appliedEntries, isEmpty);
+        expect(reader.retiredEntries, [entry]);
+        await _unmount(tester, reader);
+      },
+    );
+  }
   testWidgets(
     'a missing anchor completes as unavailable while preserving the healthy mounted position',
     (tester) async {

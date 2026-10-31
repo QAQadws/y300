@@ -110,6 +110,47 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final edge in NovelReaderChapterEdge.values) {
+    test(
+      '$edge provenance requires actual binding and cannot leak to a subsequent turn',
+      () async {
+        final fixture = NativeReaderTestFixture(
+          '<p>abcdefgh</p>',
+          width: 20,
+          height: 10,
+          complete: false,
+        );
+        final controller = _controller(fixture, entry: edge);
+        controller.start();
+        await _until(
+          () => controller.readyTarget != null || controller.error != null,
+        );
+        final delivery = controller.readyTarget!;
+        expect(delivery.chapterEntryEdge, edge);
+        expect(controller.confirmVisible(delivery, []), isNull);
+        final leases = delivery.view.takeLeases();
+        final position = controller.confirmVisible(delivery, leases)!;
+        expect(position.appliedChapterEntry, edge);
+        expect(
+          controller.requestPage(edge == NovelReaderChapterEdge.start ? 1 : 2),
+          isTrue,
+        );
+        await _until(
+          () => controller.readyTarget != null || controller.error != null,
+        );
+        final next = controller.readyTarget!;
+        expect(next.chapterEntryEdge, isNull);
+        final nextLeases = next.view.takeLeases();
+        expect(
+          controller.confirmVisible(next, nextLeases)!.appliedChapterEntry,
+          isNull,
+        );
+        leases.single.release();
+        nextLeases.single.release();
+      },
+    );
+  }
+
   test('chapter confirmation requires live original end leases and explicit visible navigation', () async {
     final fixture = NativeReaderTestFixture(
       '<p>ab</p>',

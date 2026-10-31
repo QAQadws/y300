@@ -142,6 +142,7 @@ final class NovelReaderNativePagedController {
   final String episodeId;
   final _lifetime = NovelReaderPaginationCancellationToken();
   NovelReaderChapterEdge? _entryEdge;
+  NovelReaderChapterEdge? _resolvedEntryEdge;
   NovelReaderNativeTargetWait? _ticket;
   NovelReaderNativePageDelivery? _target;
   NovelReaderNativePageDelivery? _visible;
@@ -193,13 +194,7 @@ final class NovelReaderNativePagedController {
     _phase = NovelReaderNativePagedPhase.loading;
     _requestId++;
     _ticket = _watch!.startTarget();
-    if (_entryEdge == NovelReaderChapterEdge.start) {
-      _requestedPage = 0;
-      _userNavigation = true;
-      _readOnly = false;
-      _restore?.close();
-      _restore = null;
-    }
+    _resolveStartEntry();
     _syncDemand();
     _restartProducer();
   }
@@ -222,6 +217,7 @@ final class NovelReaderNativePagedController {
     _restore?.close();
     _restore = null;
     _entryEdge = null;
+    _resolvedEntryEdge = null;
     _restoredAnchor = null;
     _requestedPage = page;
     _target = null;
@@ -270,6 +266,7 @@ final class NovelReaderNativePagedController {
       anchor: anchor,
     );
     _entryEdge = null;
+    _resolvedEntryEdge = null;
     _restoredAnchor = anchor;
     _requestedPage = null;
     _scannedPages = 0;
@@ -305,6 +302,7 @@ final class NovelReaderNativePagedController {
     _probe = null;
     _restore?.close();
     _restore = null;
+    _resolvedEntryEdge = null;
     if (_visible == null && _error == null) {
       _resetBootstrapRestore();
       _ticket = _watch!.startTarget();
@@ -379,6 +377,13 @@ final class NovelReaderNativePagedController {
     _ticket = null;
     _syncDemand();
     _notify();
+    final entry = delivery.chapterEntryEdge;
+    final entryArrived =
+        delivery.hasUserNavigated &&
+        ((entry == NovelReaderChapterEdge.start && delivery.pageIndex == 0) ||
+            (entry == NovelReaderChapterEdge.end &&
+                _snapshot!.isComplete &&
+                delivery.pageIndex == _snapshot!.length - 1));
     final position = NovelReaderPaginationPosition(
       episodeId: episodeId,
       paginationKey: paginationKey,
@@ -393,7 +398,10 @@ final class NovelReaderNativePagedController {
       hasUserNavigated: delivery.hasUserNavigated,
       isBodyEndVisible: wholePage,
       isWholeBodyVisible: wholePage,
+      appliedChapterEntry: entryArrived ? entry : null,
     );
+    _entryEdge = null;
+    _resolvedEntryEdge = null;
     _lastPosition = position;
     _bootstrapPosition = null;
     _bootstrapConversionAnchor = null;
@@ -410,6 +418,7 @@ final class NovelReaderNativePagedController {
       return false;
     }
     _suspended = true;
+    _resolvedEntryEdge = null;
     _cancelAnchorWork();
     _requestId++;
     _producerEpoch++;
@@ -464,13 +473,7 @@ final class NovelReaderNativePagedController {
     _watch!.setSuspended(false);
     _ticket = _watch!.startTarget();
     _phase = NovelReaderNativePagedPhase.loading;
-    if (_entryEdge == NovelReaderChapterEdge.start) {
-      _requestedPage = 0;
-      _userNavigation = true;
-      _readOnly = false;
-      _restore?.close();
-      _restore = null;
-    }
+    _resolveStartEntry();
     _syncDemand();
     _restartProducer();
     _notify();
@@ -621,6 +624,7 @@ final class NovelReaderNativePagedController {
   }
 
   void _resetBootstrapRestore() {
+    _resolvedEntryEdge = null;
     _userNavigation = false;
     _restore = NovelReaderNativeRestoreCursor(
       identity: _anchors!.identity,
@@ -639,6 +643,7 @@ final class NovelReaderNativePagedController {
 
   void _resolveStartEntry() {
     if (_entryEdge != NovelReaderChapterEdge.start) return;
+    _resolvedEntryEdge = NovelReaderChapterEdge.start;
     _requestedPage = 0;
     _userNavigation = true;
     _readOnly = false;
@@ -682,6 +687,7 @@ final class NovelReaderNativePagedController {
         prefix.isComplete &&
         prefix.isNotEmpty) {
       _requestedPage = prefix.length - 1;
+      _resolvedEntryEdge = NovelReaderChapterEdge.end;
       _entryEdge = null;
       _userNavigation = true;
       _readOnly = false;
@@ -821,6 +827,7 @@ final class NovelReaderNativePagedController {
     }
     if (_entryEdge == NovelReaderChapterEdge.end && prefix.isComplete) {
       _requestedPage = prefix.length - 1;
+      _resolvedEntryEdge = NovelReaderChapterEdge.end;
       _entryEdge = null;
       _userNavigation = true;
       _readOnly = false;
@@ -963,6 +970,7 @@ final class NovelReaderNativePagedController {
       isReadOnlyCompatibilityRestore: _readOnly,
       hasUserNavigated: _userNavigation,
       restoredAnchor: _restoredAnchor,
+      chapterEntryEdge: _resolvedEntryEdge,
     );
     _notify();
   }
@@ -994,6 +1002,7 @@ final class NovelReaderNativePagedController {
 
   void _pause(Object error) {
     if (isClosed) return;
+    _resolvedEntryEdge = null;
     _error = error;
     _prefixNavigation = false;
     _phase = NovelReaderNativePagedPhase.paused;
@@ -1070,6 +1079,7 @@ final class NovelReaderNativePagedController {
     _bootstrapPosition = null;
     _bootstrapConversionAnchor = null;
     _bootstrapEntry = null;
+    _resolvedEntryEdge = null;
     _prefixNavigation = false;
     _restoredAnchor = null;
     _ticket = null;

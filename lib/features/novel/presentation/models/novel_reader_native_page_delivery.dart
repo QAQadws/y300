@@ -1,4 +1,5 @@
 import 'novel_reader_native_page_view.dart';
+import 'novel_reader_chapter_turn.dart';
 
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
@@ -11,11 +12,13 @@ final class NovelReaderNativePageDelivery {
     required this.isReadOnlyCompatibilityRestore,
     required this.hasUserNavigated,
     this.restoredAnchor,
+    this.chapterEntryEdge,
   });
   final int requestId;
   final NovelReaderNativePageView view;
   final bool isReadOnlyCompatibilityRestore;
   final bool hasUserNavigated;
   final NovelReaderTextAnchor? restoredAnchor;
+  final NovelReaderChapterEdge? chapterEntryEdge;
   int get pageIndex => view.pageIndex;
 }

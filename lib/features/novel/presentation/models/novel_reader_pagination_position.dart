@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
 import 'novel_reader_anchor_navigation_request.dart';
+import 'novel_reader_chapter_turn.dart';
 
 @immutable
 class NovelReaderPaginationPosition {
@@ -16,6 +17,7 @@ class NovelReaderPaginationPosition {
     this.hasUserNavigated = false,
     this.isBodyEndVisible = true,
     this.isWholeBodyVisible = true,
+    this.appliedChapterEntry,
   });
 
   final String episodeId;
@@ -28,6 +30,10 @@ class NovelReaderPaginationPosition {
   final bool hasUserNavigated;
   final bool isBodyEndVisible;
   final bool isWholeBodyVisible;
+
+  /// Present only when that entry intent itself reached a mounted page. A
+  /// later seek at the same edge does not apply an older chapter-entry request.
+  final NovelReaderChapterEdge? appliedChapterEntry;
 }
 
 @immutable
