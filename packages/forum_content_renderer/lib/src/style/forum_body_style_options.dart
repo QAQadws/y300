@@ -110,6 +110,7 @@ final class ForumBodyResolvedStyle {
     this.display = ForumBodyDisplay.inline,
     this.visibilityHidden = false,
     this.indentFromReader = true,
+    this.alignmentFromReader = true,
   });
   final TextStyle textStyle;
   final ForumBodyTextRole role;
@@ -129,6 +130,7 @@ final class ForumBodyResolvedStyle {
   final ForumBodyDisplay display;
   final bool visibilityHidden;
   final bool indentFromReader;
+  final bool alignmentFromReader;
 }
 
 /// CSS numeric line-height inherits as a factor; length/percentage computes

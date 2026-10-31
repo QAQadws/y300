@@ -51,6 +51,97 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test('body-only overrides restore author inheritance at semantic roles', () {
+    final result = resolve(
+      '<div style="font-size:30px;line-height:24px;'
+      'text-align:center;letter-spacing:3px;word-spacing:4px;'
+      'font-weight:100;text-indent:2em;color:red">'
+      '<p id="p" style="margin:15px 12px">正文</p>'
+      '<h2 id="h">标题<span id="s">副标题</span></h2>'
+      '<blockquote id="q">引用</blockquote></div>',
+      options: reader(
+        policy: ForumBodyStylePolicy({
+          for (final property in ForumBodyStyleProperty.values)
+            property: ForumBodyStyleScope.forceBody,
+        }),
+      ),
+    );
+    final body = byId(result, 'p');
+    expect(body.textStyle.fontSize, 20);
+    expect(body.textStyle.height, 1.6);
+    expect(body.textStyle.fontWeight, FontWeight.w500);
+    expect(body.textStyle.letterSpacing, 1.5);
+    expect(body.textStyle.wordSpacing, 2);
+    expect(body.textStyle.color, const Color(0xff202020));
+    expect(body.textAlign, TextAlign.justify);
+    expect(body.indent.value, 0);
+    expect(body.margin.top.value, 0);
+    expect(body.margin.bottom.value, 10);
+    expect(body.margin.left.value, 12);
+    for (final id in ['h', 's', 'q']) {
+      final style = byId(result, id);
+      expect(style.textAlign, TextAlign.center, reason: id);
+      expect(style.textStyle.fontSize, id == 'q' ? 30 : 45, reason: id);
+      expect(style.lineHeight.pixels, 24, reason: id);
+      expect(style.textStyle.letterSpacing, 3, reason: id);
+      expect(style.textStyle.wordSpacing, 4, reason: id);
+      expect(style.textStyle.color, const Color(0xffff0000), reason: id);
+      expect(style.indent.value, 60, reason: id);
+    }
+    expect(result.styles.issues, isEmpty);
+  });
+
+  test(
+    'headings keep author ancestor alignment but exclude reader-only justify',
+    () {
+      final authored = resolve(
+        '<div style="text-align:center;font-size:30px">'
+        '<h2 id="h"><span id="s">标题</span></h2></div>',
+      );
+      expect(byId(authored, 'h').textStyle.fontSize, 45);
+      expect(byId(authored, 'h').textAlign, TextAlign.center);
+      expect(byId(authored, 's').textAlign, TextAlign.center);
+      final implicit = resolve('<h2 id="h"><span id="s">标题</span></h2>');
+      expect(byId(implicit, 'h').textAlign, TextAlign.start);
+      expect(byId(implicit, 's').textAlign, TextAlign.start);
+      final explicit = resolve('<h2 id="h" style="text-align:inherit">标题</h2>');
+      expect(byId(explicit, 'h').textAlign, TextAlign.justify);
+    },
+  );
+
+  test(
+    'relative and explicit inherited weights use the parent computed weight',
+    () {
+      final result = resolve(
+        '<p style="font-weight:400">'
+        '<strong id="a" style="font-weight:bolder">A</strong>'
+        '<strong id="b" style="font-weight:inherit">B</strong></p>'
+        '<p style="font-weight:900"><strong id="c">C</strong></p>',
+      );
+      expect(byId(result, 'a').textStyle.fontWeight, FontWeight.w700);
+      expect(byId(result, 'b').textStyle.fontWeight, FontWeight.w400);
+      expect(byId(result, 'c').textStyle.fontWeight, FontWeight.w900);
+    },
+  );
+
+  test(
+    'author issue provenance is retained once when a body setting overrides it',
+    () {
+      final result = resolve(
+        '<p style="word-spacing:20%">body</p>',
+        options: reader(
+          policy: ForumBodyStylePolicy({
+            ForumBodyStyleProperty.wordSpacing: ForumBodyStyleScope.forceBody,
+          }),
+        ),
+      );
+      expect(
+        result.styles.issues.where((issue) => issue.property == 'word-spacing'),
+        hasLength(1),
+      );
+    },
+  );
+
   test(
     'unit parsing keeps percentages/auto deferred and resolves font units',
     () {

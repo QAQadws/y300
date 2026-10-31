@@ -6,11 +6,12 @@ import '../html_rendering/theme/css_author_color_parser.dart';
 import 'forum_body_length.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
+import 'forum_body_style_inheritance.dart';
 
 /// Resolves the immutable IR without reparsing HTML or constructing widgets.
 final class ForumBodyStyleResolver {
   const ForumBodyStyleResolver();
-  static const revision = 1;
+  static const revision = 2;
 
   ForumBodyStyleResult resolve(
     ForumBodyDocument document,
@@ -25,10 +26,21 @@ final class ForumBodyStyleResolver {
       lineHeight: _readerHeight(reader),
     );
     final builder = _StyleBuilder(reader);
+    // Keep only active ancestry snapshots; no second complete style map.
+    // Neutral/default and all-role policies retain the single-pass path.
+    final authorBuilder =
+        reader.policy.values.values.contains(ForumBodyStyleScope.forceBody)
+        ? _StyleBuilder(reader, applyPolicy: false)
+        : null;
+    final inheritance = ForumBodyStyleInheritance(reader.policy);
     final pending =
-        <({Iterator<ForumBodyNode> nodes, ForumBodyResolvedStyle parent})>[
-          (nodes: document.nodes.iterator, parent: root),
-        ];
+        <
+          ({
+            Iterator<ForumBodyNode> nodes,
+            ForumBodyResolvedStyle parent,
+            ForumBodyResolvedStyle author,
+          })
+        >[(nodes: document.nodes.iterator, parent: root, author: root)];
     final styles = <String, ForumBodyResolvedStyle>{};
     while (pending.isNotEmpty) {
       final frame = pending.last;
@@ -37,12 +49,28 @@ final class ForumBodyStyleResolver {
         continue;
       }
       final node = frame.nodes.current;
+      final author = node is ForumBodyElement && authorBuilder != null
+          ? authorBuilder.resolve(node, frame.author)
+          : frame.author;
       final style = node is ForumBodyElement
-          ? builder.resolve(node, frame.parent)
+          ? builder.resolve(
+              node,
+              authorBuilder == null
+                  ? frame.parent
+                  : inheritance.parentFor(
+                      role: author.role,
+                      author: frame.author,
+                      effective: frame.parent,
+                    ),
+            )
           : frame.parent;
       styles[node.path] = style;
       if (node is ForumBodyElement) {
-        pending.add((nodes: node.children.iterator, parent: style));
+        pending.add((
+          nodes: node.children.iterator,
+          parent: style,
+          author: author,
+        ));
       }
     }
     return ForumBodyStyleResult(
@@ -51,9 +79,17 @@ final class ForumBodyStyleResolver {
       resolverRevision: revision,
       root: root,
       byPath: styles,
-      issues: builder.issues,
+      issues: _uniqueIssues([...?authorBuilder?.issues, ...builder.issues]),
     );
   }
+}
+
+List<ForumBodyStyleIssue> _uniqueIssues(List<ForumBodyStyleIssue> values) {
+  final seen = <(String, String, String)>{};
+  return [
+    for (final issue in values)
+      if (seen.add((issue.path, issue.property, issue.value))) issue,
+  ];
 }
 
 ForumBodyLineHeight _readerHeight(ForumBodyReaderStyle reader) {
@@ -64,8 +100,9 @@ ForumBodyLineHeight _readerHeight(ForumBodyReaderStyle reader) {
 }
 
 final class _StyleBuilder {
-  _StyleBuilder(this.reader);
+  _StyleBuilder(this.reader, {this.applyPolicy = true});
   final ForumBodyReaderStyle reader;
+  final bool applyPolicy;
   final issues = <ForumBodyStyleIssue>[];
   final _colors =
       <String, ({Color? color, bool unsupported, bool transparent})>{};
@@ -121,7 +158,7 @@ final class _StyleBuilder {
     final heading = RegExp(r'^h([1-6])$').firstMatch(node.tag);
     if (heading != null) {
       const factors = [2.0, 1.5, 1.25, 1.0, 0.875, 0.75];
-      size = baseSize * factors[int.parse(heading[1]!) - 1];
+      size *= factors[int.parse(heading[1]!) - 1];
     } else if (node.tag == 'small') {
       size *= .85;
     }
@@ -149,14 +186,18 @@ final class _StyleBuilder {
         node.tag == 'b' ||
         node.tag == 'strong' ||
         role == ForumBodyTextRole.heading;
-    var weight = node.tag == 'b' || node.tag == 'strong' || heading != null
+    final parentWeight = style.fontWeight ?? FontWeight.w400;
+    var weight = heading != null
         ? FontWeight.w700
-        : (style.fontWeight ?? FontWeight.w400);
+        : node.tag == 'b' || node.tag == 'strong'
+        ? _weight('bolder', parentWeight)!
+        : parentWeight;
     final rawWeight = value('font-weight');
-    if (rawWeight != null && rawWeight != 'inherit' && rawWeight != 'unset') {
-      weight =
-          _weight(rawWeight, weight) ??
-          _unsupported(node, 'font-weight', rawWeight, weight);
+    if (rawWeight != null) {
+      weight = rawWeight == 'inherit' || rawWeight == 'unset'
+          ? parentWeight
+          : _weight(rawWeight, parentWeight) ??
+                _unsupported(node, 'font-weight', rawWeight, weight);
     }
     if (_force(ForumBodyStyleProperty.fontWeight, role)) {
       final baseWeight = reader.textStyle.fontWeight ?? FontWeight.w400;
@@ -315,14 +356,29 @@ final class _StyleBuilder {
 
     final rawAlign =
         value('text-align') ?? node.attributes['align']?.toLowerCase();
-    var alignment = role == ForumBodyTextRole.heading
-        ? TextAlign.start
-        : parent.textAlign;
+    var alignment = parent.textAlign;
+    var alignmentFromReader = parent.alignmentFromReader;
+    if (heading != null && alignmentFromReader) {
+      alignment = TextAlign.start;
+      alignmentFromReader = false;
+    }
     if (rawAlign != null) {
-      alignment = _alignment(node, rawAlign, alignment);
+      if (rawAlign == 'inherit' || rawAlign == 'unset') {
+        alignment = parent.textAlign;
+        alignmentFromReader = parent.alignmentFromReader;
+      } else {
+        final parsed = _alignment(rawAlign);
+        if (parsed == null) {
+          _issue(node, 'text-align', rawAlign);
+        } else {
+          alignment = parsed;
+          alignmentFromReader = false;
+        }
+      }
     }
     if (_force(ForumBodyStyleProperty.textAlign, role)) {
       alignment = reader.textAlign;
+      alignmentFromReader = true;
     }
     final rawDirection =
         value('direction') ?? node.attributes['dir']?.toLowerCase();
@@ -445,13 +501,14 @@ final class _StyleBuilder {
       linkTarget: linkTarget,
       boxBackground: boxBackground,
       indentFromReader: indentFromReader,
+      alignmentFromReader: alignmentFromReader,
       display: display,
       visibilityHidden: visibilityHidden,
     );
   }
 
   bool _force(ForumBodyStyleProperty property, ForumBodyTextRole role) =>
-      reader.policy.overrides(property, role);
+      applyPolicy && reader.policy.overrides(property, role);
 
   void _issue(ForumBodyElement node, String property, String value) =>
       issues.add(ForumBodyStyleIssue(node.path, property, value));
@@ -604,17 +661,15 @@ final class _StyleBuilder {
         : spacing;
   }
 
-  TextAlign _alignment(ForumBodyElement node, String raw, TextAlign parent) =>
-      switch (raw) {
-        'start' || 'initial' => TextAlign.start,
-        'end' => TextAlign.end,
-        'left' => TextAlign.left,
-        'right' => TextAlign.right,
-        'center' => TextAlign.center,
-        'justify' => TextAlign.justify,
-        'inherit' || 'unset' => parent,
-        _ => _unsupported(node, 'text-align', raw, parent),
-      };
+  TextAlign? _alignment(String raw) => switch (raw) {
+    'start' || 'initial' => TextAlign.start,
+    'end' => TextAlign.end,
+    'left' => TextAlign.left,
+    'right' => TextAlign.right,
+    'center' => TextAlign.center,
+    'justify' => TextAlign.justify,
+    _ => null,
+  };
 
   Color? _color(
     ForumBodyElement node,
@@ -645,11 +700,7 @@ final class _StyleBuilder {
             bottom: ForumBodyLength(reader.paragraphAfter),
           )
         : const ForumBodyInsets();
-    if (property == 'margin' &&
-        _force(ForumBodyStyleProperty.paragraphSpacing, role)) {
-      return defaults;
-    }
-    return const ForumBodyBoxResolver().resolve(
+    final resolved = const ForumBodyBoxResolver().resolve(
       node: node,
       property: property,
       defaults: defaults,
@@ -658,5 +709,15 @@ final class _StyleBuilder {
       rootFontSize: reader.textStyle.fontSize!,
       onUnsupported: (property, value) => _issue(node, property, value),
     );
+    return property == 'margin' &&
+            isParagraph &&
+            _force(ForumBodyStyleProperty.paragraphSpacing, role)
+        ? ForumBodyInsets(
+            top: defaults.top,
+            bottom: defaults.bottom,
+            left: resolved.left,
+            right: resolved.right,
+          )
+        : resolved;
   }
 }
