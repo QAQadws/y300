@@ -26,6 +26,55 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 }
 
 void main() {
+  test('a resolved prefix builds without visiting later paragraph styles', () {
+    final document = const ForumBodyParser().parse(
+      html: '<p>first</p><p>later</p>',
+      sourceId: 'prefix',
+      conversionIdentity: 'none',
+    );
+    final cursor = const ForumBodyStyleResolver().open(
+      document,
+      ForumBodyReaderStyle(
+        textStyle: const TextStyle(fontSize: 20),
+        fontRevision: 'prefix-font',
+        linkColor: const Color(0xff0000ff),
+      ),
+    );
+    addTearDown(cursor.close);
+    final prefix = <String, ForumBodyResolvedStyle>{};
+    for (var index = 0; index < 2; index++) {
+      expect(cursor.moveNext(), isTrue);
+      prefix[cursor.currentNode!.path] = cursor.currentStyle!;
+    }
+    final styles = ForumBodyStyleResult(
+      identity: cursor.identity,
+      fontRevision: cursor.fontRevision,
+      resolverRevision: ForumBodyStyleResolver.revision,
+      root: cursor.root,
+      byPath: prefix,
+      issues: cursor.takePendingIssues(),
+    );
+    final builder = const ForumBodyParagraphContentBuilder();
+    final paragraph = builder.build(
+      document: document,
+      styles: styles,
+      path: '0',
+    );
+    expect(paragraph.projection.text, 'first');
+    expect(cursor.resolvedNodeCount, 2);
+    expect(cursor.isComplete, isFalse);
+    expect(
+      () => builder.build(document: document, styles: styles, path: '1'),
+      throwsA(
+        isA<ForumBodyParagraphInputException>().having(
+          (error) => error.failure,
+          'failure',
+          ForumBodyParagraphInputFailure.identity,
+        ),
+      ),
+    );
+  });
+
   test('inline IR is projected once with style/link/source ownership', () {
     final input = prepare(
       '<p> 甲 <b> 乙</b><br><a href="target">👨‍👩‍👧‍👦e<i>́</i></a></p>',

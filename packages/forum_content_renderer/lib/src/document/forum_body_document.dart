@@ -191,6 +191,50 @@ final class ForumBodyDocument {
   final int parsedNodeCount;
   final int uniqueStyleCount;
 
+  /// Resolves a repaired child-node path without building an index of the whole
+  /// document. Parser output retains increasing source child indices, including
+  /// gaps for removed comments/active content, so each level supports binary
+  /// search. This lets prefix consumers avoid a second full-tree first lookup.
+  ForumBodyNode? nodeAtPath(String path) {
+    if (path.isEmpty) return null;
+    var children = nodes;
+    var prefix = '';
+    final segments = path.split('/');
+    for (var depth = 0; depth < segments.length; depth++) {
+      final segment = segments[depth];
+      final index = int.tryParse(segment);
+      if (index == null || index < 0 || index.toString() != segment) {
+        return null;
+      }
+      prefix = prefix.isEmpty ? segment : '$prefix/$segment';
+      var low = 0;
+      var high = children.length - 1;
+      ForumBodyNode? found;
+      while (low <= high) {
+        final middle = (low + high) >> 1;
+        final candidate = children[middle];
+        final candidateIndex = int.tryParse(
+          candidate.path.substring(candidate.path.lastIndexOf('/') + 1),
+        );
+        if (candidateIndex == null) return null;
+        if (candidateIndex < index) {
+          low = middle + 1;
+        } else if (candidateIndex > index) {
+          high = middle - 1;
+        } else {
+          if (candidate.path != prefix) return null;
+          found = candidate;
+          break;
+        }
+      }
+      if (found == null) return null;
+      if (depth == segments.length - 1) return found;
+      if (found is! ForumBodyElement) return null;
+      children = found.children;
+    }
+    return null;
+  }
+
   /// Built once on demand; repeated paragraph lookup does not rescan the IR.
   late final Map<String, ForumBodyNode> nodesByPath = Map.unmodifiable({
     for (final node in descendants) node.path: node,

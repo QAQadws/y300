@@ -27,6 +27,7 @@ void main() {
         }
         expect(document.sourceText.runes.length, document.sourceMap.runeLength);
         for (final node in document.descendants) {
+          expect(document.nodeAtPath(node.path), same(node));
           expect(
             node.source.runeStart,
             inInclusiveRange(0, document.sourceMap.runeLength),
@@ -43,6 +44,37 @@ void main() {
       },
     );
   }
+
+  test('path lookup follows numeric child indices and removed-node gaps', () {
+    final document = parse(
+      '<!--root gap--><script>active</script>'
+      '<div><!--nested gap--><span>first</span>'
+      '${List.generate(20, (index) => '<b>$index</b>').join()}'
+      '<style>removed</style><i>last</i></div><p>tail</p>',
+    );
+    for (final node in document.descendants) {
+      expect(document.nodeAtPath(node.path), same(node));
+    }
+    for (final path in [
+      '',
+      '0',
+      '1',
+      '2/0',
+      '2/22',
+      '2/1/0/0',
+      '999',
+      '02',
+      '2//1',
+      '/2',
+      '2/',
+      '2/-1',
+      '2/+1',
+      '2/ 1',
+      'x',
+    ]) {
+      expect(document.nodeAtPath(path), isNull, reason: path);
+    }
+  });
 
   test('single parse yields immutable data, never a retained mutable DOM', () {
     final source = _CountingParser();

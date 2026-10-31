@@ -95,14 +95,20 @@ final class ForumBodyParagraphContentBuilder {
         path,
       );
     }
-    final root = path == null ? null : document.nodesByPath[path];
+    final root = path == null ? null : document.nodeAtPath(path);
     if (path != null && root == null) {
       throw ForumBodyParagraphInputException(
         ForumBodyParagraphInputFailure.identity,
         path,
       );
     }
-    final base = path == null ? styles.root : styles.byPath[path]!;
+    final base = path == null ? styles.root : styles.byPath[path];
+    if (base == null) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        path,
+      );
+    }
     final pending = <Iterator<ForumBodyNode>>[
       (root == null ? document.nodes : [root]).iterator,
     ];
