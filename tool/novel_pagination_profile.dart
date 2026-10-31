@@ -7,6 +7,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
@@ -23,10 +24,20 @@ import 'package:y300/features/novel/presentation/services/novel_reader_prepared_
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
+import 'novel_pagination_profile_config.dart';
+
 final _errors = <String>[];
 const _profilePartialNavigation = bool.fromEnvironment(
   'PROFILE_PARTIAL_NAVIGATION',
   defaultValue: true,
+);
+const _profileBaseline = bool.fromEnvironment('PROFILE_BASELINE');
+const _profileAutoExit = bool.fromEnvironment('PROFILE_AUTO_EXIT');
+const _baselineConfig = NovelProfileBaselineConfig(
+  warmupsPerFixture: int.fromEnvironment('PROFILE_WARMUPS', defaultValue: 5),
+  opensPerFixture: int.fromEnvironment('PROFILE_OPENS', defaultValue: 30),
+  turnGroups: int.fromEnvironment('PROFILE_TURN_GROUPS', defaultValue: 3),
+  turnsPerGroup: int.fromEnvironment('PROFILE_TURNS', defaultValue: 200),
 );
 
 /// Read the mounted, currently turnable prefix without production diagnostics.
@@ -200,6 +211,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
         'suitePassed': false,
         'error': 'no_viewport',
       });
+      if (_profileAutoExit) await SystemNavigator.pop();
       return;
     }
     final view = View.of(context);
@@ -224,8 +236,11 @@ class _ProfileReaderState extends State<_ProfileReader> {
       'fontFamily': _preferences.fontFamily,
       'syntheticContent': true,
       'partialNavigationRequested': _profilePartialNavigation,
+      'baselineRequested': _profileBaseline,
+      'baselineCounts': _baselineConfig.toJson(),
     });
     try {
+      if (_profileBaseline) _baselineConfig.validate();
       await _scenario('safe-cold', _safeHtml, clear: true);
       await _scenario('complex-cold', _complexHtml, clear: true);
       final warm = await _scenario(
@@ -297,6 +312,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
       if (_profilePartialNavigation) {
         await _partialNavigationScenario();
       }
+      if (_profileBaseline) await _baselineSeries();
       // Leave known, completed production content for screenshots/manual turns.
       await _scenario('safe-final-visible', _safeHtml);
     } catch (error) {
@@ -308,14 +324,84 @@ class _ProfileReaderState extends State<_ProfileReader> {
       for (final run in _runs) {
         _report(run);
       }
+      final baselineCompleted =
+          !_profileBaseline ||
+          profileBaselineCompleted(
+            config: _baselineConfig,
+            successfulWarmups: _runs
+                .where(
+                  (run) => run.sampleKind == 'warmup' && run.errors.isEmpty,
+                )
+                .length,
+            successfulOpens: _runs
+                .where((run) => run.sampleKind == 'open' && run.errors.isEmpty)
+                .length,
+            completedTurns: [
+              for (final run in _runs.where(
+                (run) => run.sampleKind == 'turnGroup' && run.errors.isEmpty,
+              ))
+                run.turnsCompleted,
+            ],
+          );
       _emit({
         'event': 'suite_done',
         'suitePassed':
             _errors.isEmpty &&
+            baselineCompleted &&
             _results.every((result) => result['passed'] == true),
         'scenarios': _results.length,
         'runtimeErrors': _errors,
+        'baselineCompleted': _profileBaseline ? baselineCompleted : null,
       });
+      if (_profileAutoExit) await SystemNavigator.pop();
+    }
+  }
+
+  Future<void> _baselineSeries() async {
+    for (final fixture in [('safe', _safeHtml), ('complex', _complexHtml)]) {
+      for (var i = 0; i < _baselineConfig.warmupsPerFixture; i++) {
+        await _scenario(
+          '${fixture.$1}-baseline-warmup-$i-cold',
+          fixture.$2,
+          clear: true,
+          sampleKind: 'warmup',
+        );
+      }
+      for (var i = 0; i < _baselineConfig.opensPerFixture; i++) {
+        await _scenario(
+          '${fixture.$1}-baseline-open-$i-cold',
+          fixture.$2,
+          clear: true,
+          sampleKind: 'open',
+        );
+      }
+    }
+    for (var group = 0; group < _baselineConfig.turnGroups; group++) {
+      await _scenario(
+        'complex-baseline-turn-$group',
+        _complexHtml,
+        sampleKind: 'turnGroup',
+        action: (run) async {
+          var forward = true;
+          for (var i = 0; i < _baselineConfig.turnsPerGroup; i++) {
+            final target = nextProfileTurn(
+              currentPage: run.position!.pageIndex,
+              pageCount: run.position!.pageCount,
+              forward: forward,
+            );
+            if (target == null) throw StateError('No profile turn target');
+            forward = target.forward;
+            await _wait(
+              forward ? _navigation.turnNext : _navigation.turnPrevious,
+            );
+            await _wait(() => run.position!.pageIndex == target.page);
+            run.turnsCompleted++;
+          }
+          if (run.turnsCompleted != _baselineConfig.turnsPerGroup) {
+            run.errors.add('baseline_turn_count_mismatch');
+          }
+        },
+      );
     }
   }
 
@@ -326,6 +412,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
     NovelReaderProgressSnapshot? snapshot,
     double fontSize = 18.5,
     bool keepSurface = false,
+    String sampleKind = 'scenario',
   }) {
     if (clear) {
       _clearCaches();
@@ -333,7 +420,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
     final episodeId = name.startsWith('safe-') || name == 'chapter-switch'
         ? 'profile-safe'
         : 'profile-complex';
-    final run = _Run(name, episodeId);
+    final run = _Run(name, episodeId, sampleKind: sampleKind);
     _runs.add(run);
     _document = const DiscuzNovelReaderDocumentParser().parse(
       episodeId: episodeId,
@@ -375,6 +462,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
     double fontSize = 18.5,
     int? maximumAnchorBacktrack,
     bool keepSurface = false,
+    String sampleKind = 'scenario',
     Future<void> Function(_Run)? action,
   }) async {
     final run = _start(
@@ -384,6 +472,7 @@ class _ProfileReaderState extends State<_ProfileReader> {
       snapshot: snapshot,
       fontSize: fontSize,
       keepSurface: keepSurface,
+      sampleKind: sampleKind,
     );
     try {
       await _wait(
@@ -659,6 +748,8 @@ class _ProfileReaderState extends State<_ProfileReader> {
     final result = <String, Object?>{
       'event': 'scenario',
       'name': run.name,
+      'sampleKind': run.sampleKind,
+      'turnsCompleted': run.turnsCompleted,
       'passed':
           run.errors.isEmpty &&
           run.lateCallbacks == 0 &&
@@ -822,8 +913,10 @@ class _Sink implements NovelReaderPaginationDiagnosticsSink {
 }
 
 class _Run {
-  _Run(this.name, this.episodeId);
+  _Run(this.name, this.episodeId, {this.sampleKind = 'scenario'});
   final String name;
+  final String sampleKind;
+  int turnsCompleted = 0;
   final String episodeId;
   final clock = Stopwatch()..start();
   final wallStart = DateTime.now().microsecondsSinceEpoch;
