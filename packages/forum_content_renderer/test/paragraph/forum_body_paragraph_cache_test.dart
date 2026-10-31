@@ -175,7 +175,13 @@ void main() {
       final old = first.layout;
       expect(
         () => cache.acquire(content: content('<p>defgh</p>'), width: 200),
-        throwsA(isA<ForumBodyParagraphBudgetException>()),
+        throwsA(
+          isA<ForumBodyParagraphBudgetException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyParagraphBudgetFailure.pinned,
+          ),
+        ),
       );
       expect(cache.layoutBuildCount, 1);
       expect(old.isDisposed, isFalse);

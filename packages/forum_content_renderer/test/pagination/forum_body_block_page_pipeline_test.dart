@@ -2,8 +2,8 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-// A comparison harness over public ports, not the forthcoming production
-// session: ownership, content retention, demand and anchor adapters live there.
+// Integration expectations consume the real bounded session, not a second
+// implementation of block/margin/padding orchestration in the test harness.
 ({ForumBodyTextPageSnapshot pages, int builds}) _compose(
   String html, {
   double height = 100,
@@ -13,76 +13,42 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
     sourceId: 'block-page-pipeline',
     conversionIdentity: 'none',
   );
-  final flow = ForumBodyBlockFlowCursor(
+  final cache = ForumBodyParagraphCache(
+    maxEntries: 4,
+    maxEstimatedBytes: 1 << 20,
+  );
+  final session = ForumBodyTextPageSession(
     document: document,
     reader: ForumBodyReaderStyle(
       textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 10, height: 1),
       fontRevision: 'ahem',
       linkColor: const Color(0xff0000ff),
     ),
-    width: 200,
-  );
-  final cache = ForumBodyParagraphCache(
-    maxEntries: 4,
-    maxEstimatedBytes: 1 << 20,
-  );
-  final composer = ForumBodyTextPageComposer(
-    identity: document.identity,
+    cache: cache,
+    limits: const ForumBodyTextPageSessionLimits(
+      maxPages: 100,
+      maxFragments: 100,
+      maxParagraphs: 100,
+      maxTextCodeUnits: 10000,
+      maxRuns: 1000,
+      maxIssuedLeases: 20,
+    ),
     layoutId: 'pipeline',
     width: 200,
     height: height,
-    maxPages: 100,
-    maxFragments: 100,
   );
-  var margin = 0.0;
   try {
-    while (!flow.isComplete || !composer.needsInput) {
-      if (composer.hasPendingPadding) {
-        composer.advancePadding();
-        continue;
-      }
-      if (!composer.needsInput) {
-        composer.advance(maxLines: 1);
-        continue;
-      }
-      flow.advance(maxEvents: 1);
-      switch (flow.current) {
-        case ForumBodyBlockFlowSpace unit:
-          if (unit.kind == ForumBodyBlockSpaceKind.collapsedMargin) {
-            margin += unit.extent;
-          } else {
-            composer.appendPadding(unit.extent, spaceBefore: margin);
-            margin = 0;
-          }
-        case ForumBodyBlockFlowParagraph unit:
-          final lease = cache.acquire(
-            content: unit.paragraph.content,
-            width: unit.contentWidth,
-          );
-          try {
-            composer.append(
-              lease: lease,
-              paragraphIndex: unit.paragraph.index,
-              left: unit.contentLeft,
-              spaceBefore: margin,
-              spaceAtPageStart: 0,
-              window: unit.paragraph.window,
-            );
-          } catch (_) {
-            lease.release();
-            rethrow;
-          }
-          margin = 0;
-        case ForumBodyBlockFlowBoundary() || null:
-          break;
-      }
+    var calls = 0;
+    while (!session.isComplete) {
+      if (++calls > 1000) fail('Session did not reach EOF');
+      final step = session.advance(maxEvents: 1, maxLines: 1);
+      expect(step.madeProgress, isTrue);
+      expect(step.waitingForLayoutBudget, isFalse);
     }
-    composer.finish();
     expect(cache.activeLeases, 0);
-    return (pages: composer.snapshot, builds: cache.layoutBuildCount);
+    return (pages: session.snapshot, builds: cache.layoutBuildCount);
   } finally {
-    flow.close();
-    composer.close();
+    session.close();
     cache.close();
   }
 }

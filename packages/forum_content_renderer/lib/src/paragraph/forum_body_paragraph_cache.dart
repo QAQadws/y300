@@ -6,8 +6,15 @@ import '../document/forum_body_document.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
 
+/// Content cannot fit the total budget; pinned pressure may clear when visible
+/// leases release. Callers must not spin/restart a source traversal for either.
+enum ForumBodyParagraphBudgetFailure { content, pinned }
+
 final class ForumBodyParagraphBudgetException implements Exception {
-  const ForumBodyParagraphBudgetException();
+  const ForumBodyParagraphBudgetException(this.failure);
+  final ForumBodyParagraphBudgetFailure failure;
+  @override
+  String toString() => 'ForumBodyParagraphBudgetException(${failure.name})';
 }
 
 /// The session owner supplies both limits. Bytes are an admission estimate,
@@ -49,6 +56,8 @@ final class ForumBodyParagraphCache {
       width: width,
       textScaler: textScaler,
     );
+    // Caller-provided TextScaler runs during validation and native shaping.
+    if (_closed) throw StateError('Paragraph cache is closed');
     final key = _LayoutKey(content, width, scales);
     var entry = _entries.remove(key);
     if (entry != null && entry.layout.isDisposed) {
@@ -70,9 +79,16 @@ final class ForumBodyParagraphCache {
           pinnedBytes += resident.bytes;
         }
       }
+      if (minimumBytes > maxEstimatedBytes) {
+        throw const ForumBodyParagraphBudgetException(
+          ForumBodyParagraphBudgetFailure.content,
+        );
+      }
       if (pinnedEntries >= maxEntries ||
           minimumBytes > maxEstimatedBytes - pinnedBytes) {
-        throw const ForumBodyParagraphBudgetException();
+        throw const ForumBodyParagraphBudgetException(
+          ForumBodyParagraphBudgetFailure.pinned,
+        );
       }
       final layout = ForumBodyParagraphLayout.create(
         content: content,
@@ -80,10 +96,18 @@ final class ForumBodyParagraphCache {
         textScaler: textScaler,
       );
       _builds++;
+      if (_closed) {
+        layout.dispose();
+        throw StateError('Paragraph cache is closed');
+      }
       final bytes = minimumBytes + layout.lines.length * 96;
       if (bytes > maxEstimatedBytes - pinnedBytes) {
         layout.dispose();
-        throw const ForumBodyParagraphBudgetException();
+        throw ForumBodyParagraphBudgetException(
+          bytes > maxEstimatedBytes
+              ? ForumBodyParagraphBudgetFailure.content
+              : ForumBodyParagraphBudgetFailure.pinned,
+        );
       }
       while (_entries.length >= maxEntries ||
           _bytes + bytes > maxEstimatedBytes) {
@@ -96,7 +120,9 @@ final class ForumBodyParagraphCache {
         }
         if (victim == null) {
           layout.dispose();
-          throw const ForumBodyParagraphBudgetException();
+          throw const ForumBodyParagraphBudgetException(
+            ForumBodyParagraphBudgetFailure.pinned,
+          );
         }
         _retire(_entries.remove(victim)!);
       }
