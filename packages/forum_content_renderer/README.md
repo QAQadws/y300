@@ -75,6 +75,14 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 既有 `ForumBodyRubyGroupLayout.adopt` 复用唯一几何实现，继续接管句柄并要求图片已准备；
 批次字形可用于计划阶段，数值测量不能绕过可读交付门槛。几何算法与 revision 均保持 1。
 
+计划阶段通过既有 `ForumBodyRubyGroupPreparation.forMetrics` 准备同一组请求：每次
+advance 仍在首次 native 排字后返回，cache-only 可使用未录图的字形，且两条路径均不
+准备子图片。完成实际几何测量后先释放本组全部 pin，再经代次检查进入 ready；等待
+takeMetrics 时也不常驻子句柄。数值结果不替代可读 layout，取错结果类型不会消费事务。
+同一套外部压力/自身预算检查、owner/取消/重入保护和终态清理继续生效；转移前仍核对
+起始阅读代次，不能因数值已算出而交付退休会话结果。完整格式计划仍须处理父空白、
+结构化子组、band 兼容和实际来源绑定，不能把该局部事务宣称为正式 ruby 会话接入。
+
 `tryCreateCached` 仅借用已准备的两侧，任一缺失不测量并释放本次部分命中；空注音只需
 基字。`adopt` 接管显式传入的现有租约，不查缓存、不调用缩放或再次排字；成功和失败
 都消费这些句柄，不关闭 owner 或外部别名。两侧须由同一阅读缓存持有且活跃，非空注音

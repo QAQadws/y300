@@ -4,6 +4,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_group_layout.dart';
+import 'forum_body_ruby_group_metrics.dart';
 
 enum ForumBodyRubyGroupPreparationState {
   active,
@@ -47,8 +48,10 @@ final class ForumBodyRubyGroupPreparationStep {
 }
 
 /// A format-local transaction for one already grouped ruby pair. Each advance
-/// stops after its first native shape OR picture; cached work and a whole-pair budget probe
-/// are bounded by two parts. No timer, scheduler, DOM or persistent anchor is
+/// stops after its first native shape OR picture; cached work and a whole-pair
+/// budget probe are bounded by two parts. Glyph-only planning uses this same
+/// transaction without pictures and releases its pins before numeric readiness.
+/// No timer, scheduler, DOM or persistent anchor is
 /// owned here. The page/session owner supplies its generation guard and yields
 /// between work units using its existing cooperative scheduler.
 final class ForumBodyRubyGroupPreparation {
@@ -79,6 +82,53 @@ final class ForumBodyRubyGroupPreparation {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+  }) => _open(
+    cache: cache,
+    base: base,
+    annotation: annotation,
+    ensureOwner: ensureOwner,
+    additionalOwnedLeases: additionalOwnedLeases,
+    textScaler: textScaler,
+    gap: gap,
+    maxWidth: maxWidth,
+    preparePaint: true,
+  );
+
+  /// The same transaction for format planning: prepare only glyphs, measure
+  /// actual bounds and release child pins before publishing numeric metrics.
+  /// Cached acquisition does not require or create child pictures in this mode.
+  factory ForumBodyRubyGroupPreparation.forMetrics({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextRequest base,
+    required ForumBodyTextRequest annotation,
+    required void Function() ensureOwner,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
+    TextScaler textScaler = TextScaler.noScaling,
+    double gap = 0,
+    double maxWidth = 16384,
+  }) => _open(
+    cache: cache,
+    base: base,
+    annotation: annotation,
+    ensureOwner: ensureOwner,
+    additionalOwnedLeases: additionalOwnedLeases,
+    textScaler: textScaler,
+    gap: gap,
+    maxWidth: maxWidth,
+    preparePaint: false,
+  );
+
+  static ForumBodyRubyGroupPreparation _open({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextRequest base,
+    required ForumBodyTextRequest annotation,
+    required void Function() ensureOwner,
+    required Iterable<ForumBodyNativeParagraphLease> Function()?
+    additionalOwnedLeases,
+    required TextScaler textScaler,
+    required double gap,
+    required double maxWidth,
+    required bool preparePaint,
   }) {
     ForumBodyRubyGroupLayout.validateInputs(
       base: base.content,
@@ -97,6 +147,7 @@ final class ForumBodyRubyGroupPreparation {
       gap,
       maxWidth,
       annotation.content.projection.text.isEmpty ? 1 : 2,
+      preparePaint,
     );
   }
 
@@ -110,6 +161,7 @@ final class ForumBodyRubyGroupPreparation {
     this.gap,
     this.maxWidth,
     this.expectedPartCount,
+    this._preparePaint,
   ) : _requests = [base, annotation];
 
   ForumBodyParagraphCache? _cache;
@@ -121,8 +173,10 @@ final class ForumBodyRubyGroupPreparation {
   final double gap;
   final double maxWidth;
   final int expectedPartCount;
+  final bool _preparePaint;
   final _leases = <ForumBodyTextLease>[];
   ForumBodyRubyGroupLayout? _group;
+  ForumBodyRubyGroupMetrics? _metrics;
   var _state = ForumBodyRubyGroupPreparationState.active;
   var _preparedParts = 0;
   var _waiting = false;
@@ -159,7 +213,7 @@ final class ForumBodyRubyGroupPreparation {
           rejectedAt = cache.budgetRevision;
           if (_leases.length == _preparedParts) _acquire(cachedOnly: false);
           final lease = _leases[_preparedParts];
-          if (!lease.layout.isPaintPrepared) {
+          if (_preparePaint && !lease.layout.isPaintPrepared) {
             // The glyph build already consumed this cooperative work unit.
             if (cache.layoutBuildCount != buildsBefore) break;
             cache.prepareBandChildPaint(lease as ForumBodyTextBandChildLease);
@@ -215,7 +269,9 @@ final class ForumBodyRubyGroupPreparation {
       if (_leases.length == _preparedParts && !_acquire(cachedOnly: true)) {
         return false;
       }
-      if (!_leases[_preparedParts].layout.isPaintPrepared) return false;
+      if (_preparePaint && !_leases[_preparedParts].layout.isPaintPrepared) {
+        return false;
+      }
       _preparedParts++;
     }
     _finishIfReady();
@@ -267,22 +323,43 @@ final class ForumBodyRubyGroupPreparation {
   void _finishIfReady() {
     if (_preparedParts != expectedPartCount) return;
     _guard();
-    final group = ForumBodyRubyGroupLayout.adopt(
-      cache: _cache!,
-      baseLease: _leases[0],
-      annotation: _requests[1].content,
-      annotationLease: expectedPartCount == 2 ? _leases[1] : null,
-      gap: gap,
-      maxWidth: maxWidth,
-    );
-    _leases.clear();
-    try {
+    if (_preparePaint) {
+      final group = ForumBodyRubyGroupLayout.adopt(
+        cache: _cache!,
+        baseLease: _leases[0],
+        annotation: _requests[1].content,
+        annotationLease: expectedPartCount == 2 ? _leases[1] : null,
+        gap: gap,
+        maxWidth: maxWidth,
+      );
+      _leases.clear();
+      try {
+        _guard();
+      } catch (_) {
+        group.close();
+        rethrow;
+      }
+      _group = group;
+    } else {
+      final metrics = ForumBodyRubyGroupMetrics.measure(
+        cache: _cache!,
+        baseLease: _leases[0],
+        annotation: _requests[1].content,
+        annotationLease: expectedPartCount == 2 ? _leases[1] : null,
+        gap: gap,
+        maxWidth: maxWidth,
+      );
       _guard();
-    } catch (_) {
-      group.close();
-      rethrow;
+      final leases = _leases.toList();
+      _leases.clear();
+      for (final lease in leases) {
+        lease.release();
+      }
+      // A numeric result owns no pins, including while ready. Still guard its
+      // originating generation after release and again at explicit transfer.
+      _guard();
+      _metrics = metrics;
     }
-    _group = group;
     _requests = const [];
     _textScaler = null;
     _state = ForumBodyRubyGroupPreparationState.ready;
@@ -290,6 +367,7 @@ final class ForumBodyRubyGroupPreparation {
 
   ForumBodyRubyGroupLayout takeLayout() {
     if (!isReady) throw StateError('Ruby preparation is not ready');
+    if (!_preparePaint) throw StateError('Ruby preparation contains metrics');
     return _operate(() {
       _guard();
       final group = _group!;
@@ -297,6 +375,19 @@ final class ForumBodyRubyGroupPreparation {
       _state = ForumBodyRubyGroupPreparationState.transferred;
       _dropOwner();
       return group;
+    });
+  }
+
+  ForumBodyRubyGroupMetrics takeMetrics() {
+    if (!isReady) throw StateError('Ruby preparation is not ready');
+    if (_preparePaint) throw StateError('Ruby preparation contains a layout');
+    return _operate(() {
+      _guard();
+      final metrics = _metrics!;
+      _metrics = null;
+      _state = ForumBodyRubyGroupPreparationState.transferred;
+      _dropOwner();
+      return metrics;
     });
   }
 
@@ -338,6 +429,7 @@ final class ForumBodyRubyGroupPreparation {
     _leases.clear();
     _group?.close();
     _group = null;
+    _metrics = null;
     _dropOwner();
   }
 
