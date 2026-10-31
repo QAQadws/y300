@@ -338,6 +338,99 @@ void main() {
     },
   );
 
+  test(
+    'annotation line edges trim without moving surviving source or glyphs',
+    () {
+      final f = _Fixture(
+        '<p>X<ruby>AB<rt> \t<span>a\u0301😀</span> \t</rt></ruby>Y</p>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(prepared.view.content.projection.display.text, 'XABa\u0301😀Y');
+        expect(prepared.view.content.projection.engineText, 'X\uFFFCY');
+        final leases = prepared.nativeLeases.toList();
+        final parent = leases.first as ForumBodyInlineParagraphLease;
+        final base = leases[1] as ForumBodyTextLease;
+        final rt = leases[2] as ForumBodyTextLease;
+        expect(rt.content.projection.text, 'a\u0301😀');
+        expect(rt.content.projection.sourceAtUtf16(0).sourceRune, 5);
+        expect(rt.content.projection.sourceAtUtf16(2).sourceRune, 7);
+        final metrics = ForumBodyRubyGroupMetrics.measure(
+          cache: f.cache,
+          baseLease: base,
+          annotation: rt.content,
+          annotationLease: rt,
+          maxWidth: 200,
+        );
+        // Query an interior grapheme; the trimmed join also has the preceding
+        // base's upstream source and must keep its existing affinity rules.
+        final box = rt.layout.selectionBoxes(2, 4).first.toRect();
+        final hit = prepared.view.sourceAt(
+          parent.layout.atomBoxes.single.toRect().topLeft +
+              metrics.annotationOffset +
+              Offset(box.left + .1, (box.top + box.bottom) / 2),
+        );
+        expect(hit.isExact, isTrue);
+        expect(hit.sourceRune, 7);
+      } finally {
+        prepared.close();
+      }
+      expect(f.session.activeIssuedLeases, 0);
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  for (final (annotation, display) in [
+    (' xy ', 'xy'),
+    ('<span style="white-space:pre-line"> xy </span>', 'xy'),
+    ('&nbsp;xy&nbsp;', '\u00a0xy\u00a0'),
+    ('<span style="white-space:pre"> xy </span>', ' xy '),
+  ]) {
+    test('annotation whitespace follows its own run style: $annotation', () {
+      final f = _Fixture(
+        '<ruby>AB<rt>$annotation</rt></ruby>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        final rt = prepared.nativeLeases.last as ForumBodyTextLease;
+        expect(rt.content.projection.text, display);
+        expect(prepared.view.content.projection.display.text, 'AB$display');
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    });
+  }
+
+  test('whitespace-only collapsed annotation leaves no empty upper line', () {
+    final f = _Fixture('<ruby>AB<rt> \t </rt></ruby>', height: 100);
+    f.finish();
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(prepared.view.content.projection.display.text, 'AB');
+      expect(prepared.nativeLeases, hasLength(2));
+      expect(prepared.view.height, 20);
+      expect(f.cache.pictureBuildCount, 1);
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('annotation trimming never cuts a space joined to a combining mark', () {
+    final f = _Fixture('<ruby>AB<rt> \u0301a</rt></ruby>');
+    expect(f.finish, throwsA(isA<ForumBodyParagraphInputException>()));
+    expect(f.session.snapshot, isEmpty);
+    expect(f.cache.layoutBuildCount, 0);
+    expect(f.cache.activeLeases, 0);
+  });
+
   for (final base in [
     '&nbsp;AB',
     '<span style="white-space:pre"> AB </span>',

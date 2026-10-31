@@ -11,7 +11,7 @@ import 'forum_body_text_band_content.dart';
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
   ForumBodyInlinePlanInput._(this.content, this.groups, this.width);
-  static const revision = 1;
+  static const revision = 2;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -77,14 +77,18 @@ final class ForumBodyInlinePlanInput {
                 parts.single is! ForumBodyRubyTextContent) {
               _unsupported(group.rootPath);
             }
-            annotation = (parts.single as ForumBodyRubyTextContent).content;
+            // An annotation is its own native line. Trim its collapsible line
+            // edges through source-bound windows, never into the base context.
+            annotation = _plainContext(
+              (parts.single as ForumBodyRubyTextContent).content,
+              leading: true,
+              trailing: true,
+            );
           }
           // These edges need base-level whitespace planning across atoms. Do
           // not pin a collapsed space inside a box or discard it silently.
           if (_collapsibleEdge(base, leading: true) ||
-              _collapsibleEdge(base, leading: false) ||
-              _collapsibleEdge(annotation, leading: true) ||
-              _collapsibleEdge(annotation, leading: false)) {
+              _collapsibleEdge(base, leading: false)) {
             _unsupported(group.rootPath);
           }
           final start = offset;
