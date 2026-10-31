@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../flow/forum_body_styled_flow_cursor.dart';
 import '../style/forum_body_length.dart';
 import '../style/forum_body_style_options.dart';
 
@@ -112,97 +113,255 @@ final class ForumBodyParagraphContentBuilder {
     final pending = <Iterator<ForumBodyNode>>[
       (root == null ? document.nodes : [root]).iterator,
     ];
-    final inputs = <HtmlDisplayTextRun>[];
-    final runs = <ForumBodyParagraphRun>[];
-    var inputSize = 0;
-    while (pending.isNotEmpty) {
-      if (!pending.last.moveNext()) {
-        pending.removeLast();
-        continue;
-      }
-      final node = pending.last.current;
-      final style = styles.byPath[node.path];
-      if (style == null) {
-        throw ForumBodyParagraphInputException(
-          ForumBodyParagraphInputFailure.identity,
-          node.path,
-        );
-      }
-      if (style.hidden) continue;
-      if (node is ForumBodyElement &&
-          node.kind != ForumBodyElementKind.hardBreak) {
-        final ordinaryRoot =
-            identical(node, root) &&
-            const {
-              ForumBodyElementKind.paragraph,
-              ForumBodyElementKind.heading,
-              ForumBodyElementKind.container,
-            }.contains(node.kind);
-        final ordinaryInline =
-            const {
-              ForumBodyElementKind.inline,
-              ForumBodyElementKind.unknown,
-            }.contains(node.kind) &&
-            style.display == ForumBodyDisplay.inline &&
-            _inlineBoxIsEmpty(style);
-        if (!ordinaryRoot && !ordinaryInline) {
-          throw ForumBodyParagraphInputException(
-            ForumBodyParagraphInputFailure.structure,
-            node.path,
-          );
-        }
-        pending.add(node.children.iterator);
-        continue;
-      }
-      final text = node is ForumBodyText ? node.text : '\n';
-      inputSize += text.length;
-      if (inputSize > maxInputCodeUnits) {
-        throw ForumBodyParagraphInputException(
-          ForumBodyParagraphInputFailure.inputLimit,
-          node.path,
-        );
-      }
-      if (inputs.length >= maxRuns) {
-        throw ForumBodyParagraphInputException(
-          ForumBodyParagraphInputFailure.runLimit,
-          node.path,
-        );
-      }
-      inputs.add(
-        HtmlDisplayTextRun(
-          text: text,
-          sourceRuneStart: node.source.runeStart,
-          hardBreak: node is ForumBodyElement,
-          whiteSpace: switch (style.whiteSpace) {
-            ForumBodyWhiteSpace.normal => HtmlDisplayWhiteSpace.normal,
-            ForumBodyWhiteSpace.pre => HtmlDisplayWhiteSpace.pre,
-            ForumBodyWhiteSpace.preWrap => HtmlDisplayWhiteSpace.preWrap,
-            ForumBodyWhiteSpace.preLine => HtmlDisplayWhiteSpace.preLine,
-          },
-        ),
-      );
-      runs.add(ForumBodyParagraphRun(node.path, style));
-    }
-    return ForumBodyParagraphContent._(
+    final collector = _ParagraphCollector(
       identity: document.identity,
       path: path,
       fontRevision: styles.fontRevision,
       styleRevision: styles.resolverRevision,
       style: base,
-      projection: HtmlDisplayTextProjection.build(
-        inputs,
-        maxOutputCodeUnits: maxInputCodeUnits,
-      ),
-      runs: runs,
-      issues: styles.issues
-          .where(
-            (issue) =>
-                path == null ||
-                issue.path == path ||
-                issue.path.startsWith('$path/'),
-          )
-          .toList(),
+      limits: this,
     );
+    try {
+      while (pending.isNotEmpty) {
+        if (!pending.last.moveNext()) {
+          pending.removeLast();
+          continue;
+        }
+        final node = pending.last.current;
+        final style = styles.byPath[node.path];
+        if (style == null) {
+          throw ForumBodyParagraphInputException(
+            ForumBodyParagraphInputFailure.identity,
+            node.path,
+          );
+        }
+        if (collector.visit(node, style, isRoot: identical(node, root))) {
+          pending.add((node as ForumBodyElement).children.iterator);
+        }
+      }
+      return collector.finish(styles.issues);
+    } finally {
+      collector.close();
+    }
+  }
+
+  /// Consume the current ordinary subtree without a full style map. The flow is
+  /// borrowed exclusively until the accumulator completes or closes; it remains
+  /// owned by the caller. Diagnostics remain with that flow's consumer.
+  ForumBodyParagraphAccumulator openCurrent(ForumBodyStyledFlowCursor flow) {
+    if (flow.isClosed) throw StateError('Styled flow cursor is closed');
+    final event = flow.current;
+    if (event == null || event.phase == ForumBodyFlowPhase.close) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        event?.node.path,
+      );
+    }
+    final collector = _ParagraphCollector(
+      identity: flow.identity,
+      path: event.node.path,
+      fontRevision: flow.fontRevision,
+      styleRevision: flow.styleRevision,
+      style: event.style,
+      limits: this,
+    );
+    try {
+      collector.visit(event.node, event.style, isRoot: true);
+      return ForumBodyParagraphAccumulator._(flow, collector, event);
+    } catch (_) {
+      collector.close();
+      rethrow;
+    }
+  }
+}
+
+/// A bounded ordinary paragraph consumer. Progress limits count structural
+/// events, including hidden nodes and closing containers. Native shaping occurs
+/// later; finishing a paragraph does not confirm page or semantic coverage.
+final class ForumBodyParagraphAccumulator {
+  ForumBodyParagraphAccumulator._(
+    this._flow,
+    this._collector,
+    ForumBodyStyledFlowEvent event,
+  ) : _last = event,
+      _complete = event.phase == ForumBodyFlowPhase.text;
+
+  ForumBodyStyledFlowCursor? _flow;
+  final _ParagraphCollector _collector;
+  ForumBodyStyledFlowEvent? _last;
+  bool _complete;
+  bool _closed = false;
+  bool get isComplete => _complete;
+  bool get isClosed => _closed;
+
+  int advance({required int maxEvents}) {
+    if (_closed) throw StateError('Paragraph accumulator is closed');
+    if (maxEvents <= 0) throw ArgumentError.value(maxEvents, 'maxEvents');
+    if (_complete) return 0;
+    try {
+      final flow = _flow!;
+      if (flow.isClosed) throw StateError('Styled flow cursor is closed');
+      if (!identical(flow.current, _last)) _invalid();
+      var consumed = 0;
+      while (consumed < maxEvents && !_complete) {
+        if (!flow.moveNext()) _invalid();
+        final event = flow.current!;
+        _last = event;
+        consumed++;
+        final path = _collector.path!;
+        if (event.node.path == path) {
+          if (event.phase != ForumBodyFlowPhase.close) _invalid();
+          _complete = true;
+          _flow = null;
+        } else {
+          if (!event.node.path.startsWith('$path/')) _invalid();
+          if (event.phase != ForumBodyFlowPhase.close) {
+            _collector.visit(event.node, event.style, isRoot: false);
+          }
+        }
+      }
+      return consumed;
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
+
+  Never _invalid() => throw ForumBodyParagraphInputException(
+    ForumBodyParagraphInputFailure.identity,
+    _collector.path,
+  );
+
+  /// Issue ownership stays with the flow caller; only this subtree's issues
+  /// belong in the resulting paragraph. The returned value owns immutable data.
+  ForumBodyParagraphContent finish({
+    Iterable<ForumBodyStyleIssue> issues = const [],
+  }) {
+    if (_closed) throw StateError('Paragraph accumulator is closed');
+    if (!_complete) throw StateError('Paragraph subtree is not complete');
+    try {
+      return _collector.finish(issues);
+    } finally {
+      close();
+    }
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _flow = null;
+    _last = null;
+    _collector.close();
+  }
+}
+
+/// One implementation of structure admission, limits and whitespace projection
+/// for both the eager compatibility port and resumable IR consumption.
+final class _ParagraphCollector {
+  _ParagraphCollector({
+    required this.identity,
+    required this.path,
+    required this.fontRevision,
+    required this.styleRevision,
+    required this.style,
+    required this.limits,
+  });
+  final ForumBodyIdentity identity;
+  final String? path;
+  final String fontRevision;
+  final int styleRevision;
+  final ForumBodyResolvedStyle style;
+  final ForumBodyParagraphContentBuilder limits;
+  final _inputs = <HtmlDisplayTextRun>[];
+  final _runs = <ForumBodyParagraphRun>[];
+  int _inputSize = 0;
+
+  bool visit(
+    ForumBodyNode node,
+    ForumBodyResolvedStyle style, {
+    required bool isRoot,
+  }) {
+    if (style.hidden) return false;
+    if (node is ForumBodyElement &&
+        node.kind != ForumBodyElementKind.hardBreak) {
+      final ordinaryRoot =
+          isRoot &&
+          const {
+            ForumBodyElementKind.paragraph,
+            ForumBodyElementKind.heading,
+            ForumBodyElementKind.container,
+          }.contains(node.kind);
+      final ordinaryInline =
+          const {
+            ForumBodyElementKind.inline,
+            ForumBodyElementKind.unknown,
+          }.contains(node.kind) &&
+          style.display == ForumBodyDisplay.inline &&
+          _inlineBoxIsEmpty(style);
+      if (!ordinaryRoot && !ordinaryInline) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.structure,
+          node.path,
+        );
+      }
+      return true;
+    }
+    final text = node is ForumBodyText ? node.text : '\n';
+    _inputSize += text.length;
+    if (_inputSize > limits.maxInputCodeUnits) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.inputLimit,
+        node.path,
+      );
+    }
+    if (_inputs.length >= limits.maxRuns) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.runLimit,
+        node.path,
+      );
+    }
+    _inputs.add(
+      HtmlDisplayTextRun(
+        text: text,
+        sourceRuneStart: node.source.runeStart,
+        hardBreak: node is ForumBodyElement,
+        whiteSpace: switch (style.whiteSpace) {
+          ForumBodyWhiteSpace.normal => HtmlDisplayWhiteSpace.normal,
+          ForumBodyWhiteSpace.pre => HtmlDisplayWhiteSpace.pre,
+          ForumBodyWhiteSpace.preWrap => HtmlDisplayWhiteSpace.preWrap,
+          ForumBodyWhiteSpace.preLine => HtmlDisplayWhiteSpace.preLine,
+        },
+      ),
+    );
+    _runs.add(ForumBodyParagraphRun(node.path, style));
+    return false;
+  }
+
+  ForumBodyParagraphContent finish(Iterable<ForumBodyStyleIssue> issues) =>
+      ForumBodyParagraphContent._(
+        identity: identity,
+        path: path,
+        fontRevision: fontRevision,
+        styleRevision: styleRevision,
+        style: style,
+        projection: HtmlDisplayTextProjection.build(
+          _inputs,
+          maxOutputCodeUnits: limits.maxInputCodeUnits,
+        ),
+        runs: _runs,
+        issues: issues
+            .where(
+              (issue) =>
+                  path == null ||
+                  issue.path == path ||
+                  issue.path.startsWith('$path/'),
+            )
+            .toList(),
+      );
+
+  void close() {
+    _inputs.clear();
+    _runs.clear();
   }
 
   static bool _inlineBoxIsEmpty(ForumBodyResolvedStyle style) =>
