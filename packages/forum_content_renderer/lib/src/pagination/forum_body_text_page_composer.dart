@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
+import 'forum_body_source_hint.dart';
 
 enum ForumBodyTextPageFailure {
   oversizedGroup,
@@ -33,6 +34,7 @@ final class ForumBodyTextPageFragment {
     required this.endLine,
     required this.coverageStartUtf16,
     required this.coverageEndUtf16,
+    required this.sourceHint,
     required this.left,
     required this.top,
     required this.width,
@@ -46,6 +48,10 @@ final class ForumBodyTextPageFragment {
   final int endLine;
   final int coverageStartUtf16;
   final int coverageEndUtf16;
+
+  /// Inclusive raw source envelope, only a candidate hint. It can contain
+  /// hidden/unmapped gaps. Zero-text rows and padding have no source hint.
+  final ({int runeStart, int runeEnd})? sourceHint;
   final double left;
   final double top;
   final double width;
@@ -137,7 +143,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 4;
+  static const revision = 5;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -350,6 +356,11 @@ final class ForumBodyTextPageComposer {
           endLine: end,
           coverageStartUtf16: view?.coverageStartUtf16 ?? 0,
           coverageEndUtf16: view?.coverageEndUtf16 ?? 0,
+          sourceHint: forumBodySourceHint(
+            active.lease.content.projection,
+            view?.coverageStartUtf16 ?? 0,
+            view?.coverageEndUtf16 ?? 0,
+          ),
           left: active.left,
           top: top,
           width: layout.width,

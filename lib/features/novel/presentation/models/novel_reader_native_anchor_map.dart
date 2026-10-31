@@ -4,6 +4,14 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
 import 'novel_reader_source_anchor_projection.dart';
 
+/// Inclusive raw source boundary candidates for one verified semantic point.
+/// A plateau can cover collapsed whitespace. It is not visible-page coverage.
+final class NovelReaderNativeSourceCandidate {
+  const NovelReaderNativeSourceCandidate(this.runeStart, this.runeEnd);
+  final int runeStart;
+  final int runeEnd;
+}
+
 /// A verified source span, not a claim that its text is actually rendered.
 final class NovelReaderNativeAnchorSegment {
   const NovelReaderNativeAnchorSegment({
@@ -53,6 +61,10 @@ final class NovelReaderNativeAnchorMap {
         throw ArgumentError('Invalid native anchor segments');
       }
       end = segment.sourceEnd;
+      final anchor = segment.projection.baseAnchor;
+      (_byAnchor[(anchor.nodeId, anchor.formatVersion, anchor.textIdentity)] ??=
+              [])
+          .add(segment);
     }
   }
 
@@ -61,6 +73,44 @@ final class NovelReaderNativeAnchorMap {
   final int sourceRuneLength;
   final List<NovelReaderNativeAnchorSegment> segments;
   final List<String> unmappedPaths;
+  final _byAnchor =
+      <(String?, int, String?), List<NovelReaderNativeAnchorSegment>>{};
+
+  /// Inverts only proven origin projections. Binary lookup retains whole
+  /// matching plateaus; equal shared endpoints merge, raw source gaps do not.
+  /// No nearby node/offset fallback is attempted for old or mismatched anchors.
+  Iterable<NovelReaderNativeSourceCandidate> sourceCandidates(
+    NovelReaderTextAnchor anchor,
+  ) sync* {
+    if (!anchor.hasCanonicalTextOffset ||
+        anchor.textOffset < 0 ||
+        anchor.episodeId != episodeId ||
+        anchor.nodeId == null) {
+      return;
+    }
+    final matching =
+        _byAnchor[(anchor.nodeId, anchor.formatVersion, anchor.textIdentity)];
+    if (matching == null) return;
+    NovelReaderNativeSourceCandidate? pending;
+    for (final segment in matching) {
+      final values = segment.projection.semanticOffsetsBySourceRuneBoundary;
+      final first = _semanticBoundary(values, anchor.textOffset, after: false);
+      if (first == values.length || values[first] != anchor.textOffset) {
+        continue;
+      }
+      final last =
+          _semanticBoundary(values, anchor.textOffset, after: true) - 1;
+      final start = segment.sourceStart + first;
+      final end = segment.sourceStart + last;
+      if (pending != null && start <= pending.runeEnd) {
+        pending = NovelReaderNativeSourceCandidate(pending.runeStart, end);
+      } else {
+        if (pending != null) yield pending;
+        pending = NovelReaderNativeSourceCandidate(start, end);
+      }
+    }
+    if (pending != null) yield pending;
+  }
 
   /// Source lookup needs explicit affinity at the shared end/start of two
   /// origins. A gap is never clamped to a nearby semantic node.
@@ -134,4 +184,18 @@ final class NovelReaderNativeAnchorMap {
             isExact: source.isExact,
           );
   }
+}
+
+int _semanticBoundary(List<int> values, int offset, {required bool after}) {
+  var low = 0;
+  var high = values.length;
+  while (low < high) {
+    final middle = (low + high) >> 1;
+    if (values[middle] < offset || (after && values[middle] == offset)) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
 }

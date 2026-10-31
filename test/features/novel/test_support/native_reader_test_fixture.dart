@@ -14,6 +14,7 @@ final class NativeReaderTestFixture {
     double width = 100,
     double height = 100,
     TextScaler textScaler = TextScaler.noScaling,
+    bool complete = true,
   }) {
     final semantic = const DiscuzNovelReaderDocumentParser(
       captureSourceProvenance: true,
@@ -55,16 +56,21 @@ final class NativeReaderTestFixture {
       session.close();
       cache.close();
     });
-    var calls = 0;
-    while (!session.isComplete) {
-      if (++calls > 10000) fail('Fixture source failed to finish');
-      session.advance(maxEvents: 32, maxLines: 8);
-    }
+    if (complete) finishSource();
   }
   late final NovelReaderNativeAnchorMap anchors;
   late final ForumBodyParagraphCache cache;
   late final ForumBodyTextPageSession session;
   final parent = NovelReaderPaginationCancellationToken();
+
+  void finishSource({int? pages}) {
+    var calls = 0;
+    while (!session.isComplete &&
+        (pages == null || session.snapshot.length < pages)) {
+      if (++calls > 10000) fail('Fixture source failed to finish');
+      session.advance(maxEvents: 32, maxLines: 8);
+    }
+  }
 
   ForumBodyParagraphLease pinForeign() {
     final document = const ForumBodyParser().parse(

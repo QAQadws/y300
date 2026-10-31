@@ -1,6 +1,7 @@
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_text_page_composer.dart';
+import 'forum_body_source_hint.dart';
 
 enum ForumBodyTextPageSurfaceFailure { generation, leases, identity, geometry }
 
@@ -61,7 +62,13 @@ ForumBodyTextPage validateForumBodyTextPageBinding({
     if (layout.width != fragment.width ||
         (view?.height ?? layout.height) != fragment.height ||
         (view?.coverageStartUtf16 ?? 0) != fragment.coverageStartUtf16 ||
-        (view?.coverageEndUtf16 ?? 0) != fragment.coverageEndUtf16) {
+        (view?.coverageEndUtf16 ?? 0) != fragment.coverageEndUtf16 ||
+        fragment.sourceHint !=
+            forumBodySourceHint(
+              content.projection,
+              view?.coverageStartUtf16 ?? 0,
+              view?.coverageEndUtf16 ?? 0,
+            )) {
       _fail(ForumBodyTextPageSurfaceFailure.geometry);
     }
   }

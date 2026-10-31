@@ -91,6 +91,72 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'published source hints retain hidden gaps without claiming their visibility',
+    () {
+      final input = _Input('<p>a<span style="display:none">hidden</span>b</p>');
+      final composer = input.composer(height: 10);
+      final lease = input.lease(0);
+      expect(lease.content.projection.text, 'ab');
+      _append(composer, lease, 0);
+      _consume(composer);
+      composer.finish();
+      expect(composer.snapshot.single.fragments.single.sourceHint, (
+        runeStart: 0,
+        runeEnd: 8,
+      ));
+      expect(composer.snapshot.composerRevision, 5);
+    },
+  );
+
+  test(
+    'source hints count raw codepoints instead of display UTF16 or clipped ink',
+    () {
+      final unicode = _Input('<p>A🙂</p>');
+      final full = unicode.composer(height: 100);
+      _append(full, unicode.lease(0), 0);
+      _consume(full);
+      full.finish();
+      final fragment = full.snapshot.single.fragments.single;
+      expect(fragment.coverageEndUtf16, 3);
+      expect(fragment.sourceHint, (runeStart: 0, runeEnd: 2));
+      final narrow = _Input('<p>a</p>');
+      final clipped = narrow.composer(width: 3, height: 10);
+      _append(clipped, narrow.lease(0, width: 3), 0);
+      _consume(clipped);
+      clipped.finish();
+      expect(clipped.snapshot.single.fragments.single.sourceHint, (
+        runeStart: 0,
+        runeEnd: 1,
+      ));
+    },
+  );
+
+  test('a terminal empty native window has no source hint of its own', () {
+    final input = _Input('<p>a<br></p>');
+    final composer = input.composer(height: 10);
+    for (final (index, window) in [
+      ForumBodyParagraphWindow.beforeTerminalEmptyLine,
+      ForumBodyParagraphWindow.terminalEmptyLine,
+    ].indexed) {
+      composer.append(
+        lease: input.lease(0),
+        paragraphIndex: index,
+        left: 0,
+        spaceBefore: 0,
+        spaceAtPageStart: 0,
+        window: window,
+      );
+      _consume(composer);
+    }
+    composer.finish();
+    expect(composer.snapshot[0].fragments.single.sourceHint, (
+      runeStart: 0,
+      runeEnd: 2,
+    ));
+    expect(composer.snapshot[1].fragments.single.sourceHint, isNull);
+  });
+
+  test(
     'margin before padding is trimmed on a break instead of becoming physical blank pages',
     () {
       final input = _Input('<p>a</p>');
