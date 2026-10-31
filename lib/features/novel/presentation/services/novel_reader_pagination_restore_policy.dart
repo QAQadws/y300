@@ -3,18 +3,9 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
 
-final class NovelReaderPaginationRestoreResolution {
-  const NovelReaderPaginationRestoreResolution({
-    required this.pageIndex,
-    required this.isReadOnlyCompatibilityRestore,
-  });
+import '../models/novel_reader_pagination_restore_resolution.dart';
 
-  final int pageIndex;
-
-  /// Selecting a readable page does not establish the unit of an old offset.
-  /// Only an exact canonical anchor or explicit reader navigation can do that.
-  final bool isReadOnlyCompatibilityRestore;
-}
+export '../models/novel_reader_pagination_restore_resolution.dart';
 
 /// Resolves a persisted location without allowing a stale page index to jump
 /// to the end of a newly reflowed chapter.
