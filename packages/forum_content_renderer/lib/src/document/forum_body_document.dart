@@ -103,14 +103,17 @@ final class ForumBodyAuthorStyle {
   final List<ForumBodyDeclaration> declarations;
   final bool isValid;
 
-  String? value(String property) {
+  String? value(String property) => effectiveDeclaration({property})?.value;
+
+  /// Includes competing shorthand/longhand names in one source-order cascade.
+  ForumBodyDeclaration? effectiveDeclaration(Set<String> properties) {
     ForumBodyDeclaration? result;
     for (final declaration in declarations) {
-      if (declaration.property != property) continue;
+      if (!properties.contains(declaration.property)) continue;
       if (result?.important == true && !declaration.important) continue;
       result = declaration;
     }
-    return result?.value;
+    return result;
   }
 }
 

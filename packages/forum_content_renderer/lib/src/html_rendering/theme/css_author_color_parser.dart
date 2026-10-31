@@ -41,6 +41,19 @@ final class CsslibAuthorColorParser implements CssAuthorColorParser {
 
   final CssInlineStyleDeclarationCodec _declarationCodec;
 
+  /// Resolve an extracted declaration without rebuilding a DOM element.
+  /// The native body resolver shares the existing color interpretation.
+  ({Color? color, bool unsupported, bool transparent}) parseValue(
+    String value,
+  ) {
+    final result = _parseLegacyColor(value, 'color');
+    return (
+      color: result.color,
+      unsupported: result.unsupported,
+      transparent: result.transparent,
+    );
+  }
+
   @override
   ForumHtmlAuthorColorStyle parse(html_dom.Element element) {
     final own = parseOwn(element);
