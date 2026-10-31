@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
+import 'novel_reader_native_preparation_cache.dart';
+
 /// One reading owner across layouts/mode switches. Font collection changes
 /// invalidate new cache acquisitions, not the old paragraphs still on screen.
 /// Host releases each handle only after its session and mounted views retire.
@@ -21,6 +23,7 @@ final class NovelReaderNativeOwner extends ChangeNotifier {
 
   final int maxParagraphEntries;
   final int maxParagraphEstimatedBytes;
+  final preparationCache = NovelReaderNativePreparationCache();
   Listenable? _fontChanges;
   _CacheGeneration? _current;
   final _retired = <_CacheGeneration>{};
@@ -38,6 +41,7 @@ final class NovelReaderNativeOwner extends ChangeNotifier {
   /// Entry/byte limits apply per cache generation. At handoff, old pinned and
   /// replacement caches coexist; this total is an estimate, not native memory.
   int get estimatedRetainedBytes =>
+      preparationCache.estimatedRetainedBytes +
       (_current?.cache.estimatedRetainedBytes ?? 0) +
       _retired.fold(
         0,
@@ -106,6 +110,7 @@ final class NovelReaderNativeOwner extends ChangeNotifier {
       handle._retire();
     }
     _handles.clear();
+    preparationCache.dispose();
     _current?.cache.close();
     _current = null;
     for (final entry in _retired) {
