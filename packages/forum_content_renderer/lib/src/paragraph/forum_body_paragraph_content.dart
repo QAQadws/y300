@@ -177,8 +177,8 @@ final class ForumBodyParagraphContentBuilder {
   }
 
   /// Start an inline sequence inside a currently open containing block, or the
-  /// anonymous document context. The caller advances the flow and appends only
-  /// its current inline/text events; no complete style map or copied IR is used.
+  /// anonymous document context. The caller advances the flow and appends its
+  /// ordered inline/text events; no complete style map or copied IR is used.
   ForumBodyParagraphSequence openSequence(
     ForumBodyStyledFlowCursor flow, {
     ForumBodyStyledFlowEvent? block,
@@ -220,19 +220,27 @@ final class ForumBodyParagraphSequence {
   ForumBodyStyledFlowCursor? _flow;
   final _ParagraphCollector _collector;
   ForumBodyStyledFlowEvent? _last;
+  int? _firstIndex;
   bool _closed = false;
   bool get isClosed => _closed;
   bool get hasInput => !_closed && _collector.hasInput;
+  bool get hasDisplayText => !_closed && _collector.projection.text.isNotEmpty;
 
-  void appendCurrent() {
+  void appendCurrent() => _append(_flow?.current);
+
+  /// One deferred hard-break event can be appended after bounded lookahead.
+  /// Token ownership and monotonic event order still apply.
+  void appendEvent(ForumBodyStyledFlowEvent event) => _append(event);
+
+  void _append(ForumBodyStyledFlowEvent? event) {
     if (_closed) throw StateError('Paragraph sequence is closed');
     try {
       final flow = _flow!;
       if (flow.isClosed) throw StateError('Styled flow cursor is closed');
-      final event = flow.current;
       final path = _collector.path;
       if (event == null ||
-          identical(event, _last) ||
+          !flow.owns(event) ||
+          (_last != null && event.index <= _last!.index) ||
           event.phase == ForumBodyFlowPhase.close ||
           (path != null && !event.node.path.startsWith('$path/'))) {
         throw ForumBodyParagraphInputException(
@@ -241,7 +249,36 @@ final class ForumBodyParagraphSequence {
         );
       }
       _collector.visit(event.node, event.style, isRoot: false);
+      _firstIndex ??= event.index;
       _last = event;
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
+
+  /// Consume another same-context raw sequence without normalizing whitespace
+  /// twice. This preserves CRLF/collapse behavior around a discarded terminal
+  /// BR. On failure only the receiver retires; the caller still owns [other].
+  void appendSequence(ForumBodyParagraphSequence other) {
+    if (_closed) throw StateError('Paragraph sequence is closed');
+    try {
+      if (other._closed ||
+          identical(this, other) ||
+          !identical(_flow, other._flow) ||
+          _flow!.isClosed ||
+          (_last != null &&
+              other._firstIndex != null &&
+              other._firstIndex! <= _last!.index)) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.identity,
+          _collector.path,
+        );
+      }
+      _collector.absorb(other._collector);
+      _firstIndex ??= other._firstIndex;
+      _last = other._last ?? _last;
+      other.close();
     } catch (_) {
       close();
       rethrow;
@@ -370,8 +407,44 @@ final class _ParagraphCollector {
   final int emptySourceRune;
   final _inputs = <HtmlDisplayTextRun>[];
   final _runs = <ForumBodyParagraphRun>[];
+  HtmlDisplayTextProjection? _projection;
   int _inputSize = 0;
   bool get hasInput => _inputs.isNotEmpty;
+
+  HtmlDisplayTextProjection get projection =>
+      _projection ??= HtmlDisplayTextProjection.build(
+        _inputs.isEmpty
+            ? [HtmlDisplayTextRun(text: '', sourceRuneStart: emptySourceRune)]
+            : _inputs,
+        maxOutputCodeUnits: limits.maxInputCodeUnits,
+      );
+
+  void absorb(_ParagraphCollector other) {
+    if (identity != other.identity ||
+        path != other.path ||
+        !identical(style, other.style)) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        path,
+      );
+    }
+    if (_inputSize + other._inputSize > limits.maxInputCodeUnits) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.inputLimit,
+        path,
+      );
+    }
+    if (_inputs.length + other._inputs.length > limits.maxRuns) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.runLimit,
+        path,
+      );
+    }
+    _inputSize += other._inputSize;
+    _inputs.addAll(other._inputs);
+    _runs.addAll(other._runs);
+    _projection = null;
+  }
 
   bool visit(
     ForumBodyNode node,
@@ -430,6 +503,7 @@ final class _ParagraphCollector {
         },
       ),
     );
+    _projection = null;
     _runs.add(ForumBodyParagraphRun(node.path, style));
     return false;
   }
@@ -441,12 +515,7 @@ final class _ParagraphCollector {
         fontRevision: fontRevision,
         styleRevision: styleRevision,
         style: style,
-        projection: HtmlDisplayTextProjection.build(
-          _inputs.isEmpty
-              ? [HtmlDisplayTextRun(text: '', sourceRuneStart: emptySourceRune)]
-              : _inputs,
-          maxOutputCodeUnits: limits.maxInputCodeUnits,
-        ),
+        projection: projection,
         runs: _runs,
         issues: issues
             .where(
@@ -461,6 +530,7 @@ final class _ParagraphCollector {
   void close() {
     _inputs.clear();
     _runs.clear();
+    _projection = null;
   }
 
   static bool _inlineBoxIsEmpty(ForumBodyResolvedStyle style) =>

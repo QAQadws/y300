@@ -1,0 +1,279 @@
+import '../document/forum_body_document.dart';
+import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_paragraph_layout.dart';
+import '../style/forum_body_style_options.dart';
+import 'forum_body_styled_flow_cursor.dart';
+
+sealed class ForumBodyTextFlowUnit {
+  const ForumBodyTextFlowUnit._(this.identity);
+  final ForumBodyIdentity identity;
+}
+
+final class ForumBodyTextFlowParagraph extends ForumBodyTextFlowUnit {
+  ForumBodyTextFlowParagraph._(this.index, this.content, this.window)
+    : super._(content.identity);
+  final int index;
+  final ForumBodyParagraphContent content;
+  final ForumBodyParagraphWindow window;
+}
+
+enum ForumBodyTextFlowBoundaryKind { openBlock, closeBlock, endDocument }
+
+/// Block structure remains explicit for the block renderer. A terminal BR
+/// omitted by ordinary HTML whitespace rules is retained here with provenance;
+/// its source range must not be guessed from the displayed paragraph length.
+final class ForumBodyTextFlowBoundary extends ForumBodyTextFlowUnit {
+  const ForumBodyTextFlowBoundary._(
+    super.identity,
+    this.kind,
+    this.event,
+    this.trimmedTerminalBreak,
+  ) : super._();
+  final ForumBodyTextFlowBoundaryKind kind;
+  final ForumBodyStyledFlowEvent? event;
+  final ForumBodyStyledFlowEvent? trimmedTerminalBreak;
+}
+
+/// Bounded text partitioning over one styled IR traversal. It retains the open
+/// block stack and at most a before/after sequence around one deferred BR, plus
+/// the last confirmed break layout input. Each sequence uses the same input/run
+/// limits. Inline resources still require their dedicated layout port and fail
+/// explicitly here. No HTML is sliced and no font is shaped by this cursor.
+final class ForumBodyTextFlowCursor {
+  ForumBodyTextFlowCursor({
+    required ForumBodyDocument document,
+    required ForumBodyReaderStyle reader,
+    this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
+  }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
+  static const revision = 1;
+  final ForumBodyParagraphContentBuilder paragraphBuilder;
+  final ForumBodyStyledFlowCursor _flow;
+  final _blocks = <ForumBodyStyledFlowEvent>[];
+  final _issues = <ForumBodyStyleIssue>[];
+  _Sequence? _before;
+  _Sequence? _after;
+  ForumBodyStyledFlowEvent? _break;
+  List<ForumBodyStyleIssue> _breakIssues = const [];
+  ForumBodyParagraphContent? _lastConfirmed;
+  ForumBodyStyledFlowEvent? _boundary;
+  bool _boundaryPending = false;
+  ForumBodyStyledFlowEvent? _trimmedBreak;
+  ForumBodyTextFlowUnit? _current;
+  int _paragraphIndex = 0;
+  bool _complete = false;
+  bool _closed = false;
+
+  ForumBodyIdentity get identity => _flow.identity;
+  String get fontRevision => _flow.fontRevision;
+  int get styleRevision => _flow.styleRevision;
+  int get resolvedNodeCount => _flow.resolvedNodeCount;
+  ForumBodyTextFlowUnit? get current => _current;
+  bool get isComplete => _complete;
+  bool get isClosed => _closed;
+
+  /// A delivered unit can use zero new events while flushing a known boundary.
+  /// One endDocument unit proves this cursor actually consumed its full input;
+  /// paragraph-local projections alone are not semantic-anchor evidence.
+  ({int eventsRead, bool hasOutput, bool isComplete}) advance({
+    required int maxEvents,
+  }) {
+    if (_closed) throw StateError('Text flow cursor is closed');
+    if (maxEvents <= 0) throw ArgumentError.value(maxEvents, 'maxEvents');
+    _current = null;
+    var read = 0;
+    if (_complete) return _step(read);
+    try {
+      while (true) {
+        if (_boundaryPending) {
+          if (_flushContext()) return _step(read);
+          final event = _boundary;
+          _boundary = null;
+          _boundaryPending = false;
+          final kind = event == null
+              ? ForumBodyTextFlowBoundaryKind.endDocument
+              : event.phase == ForumBodyFlowPhase.open
+              ? ForumBodyTextFlowBoundaryKind.openBlock
+              : ForumBodyTextFlowBoundaryKind.closeBlock;
+          if (kind == ForumBodyTextFlowBoundaryKind.openBlock) {
+            _blocks.add(event!);
+          } else if (kind == ForumBodyTextFlowBoundaryKind.closeBlock) {
+            if (_blocks.isEmpty || !identical(_blocks.last.node, event!.node)) {
+              throw StateError('Unbalanced text flow block');
+            }
+            _blocks.removeLast();
+          } else {
+            if (_blocks.isNotEmpty) {
+              throw StateError('Unclosed text flow block');
+            }
+            _complete = true;
+          }
+          _current = ForumBodyTextFlowBoundary._(
+            identity,
+            kind,
+            event,
+            _trimmedBreak,
+          );
+          _trimmedBreak = null;
+          return _step(read);
+        }
+        if (read >= maxEvents) return _step(read);
+        if (!_flow.moveNext()) {
+          _boundaryPending = true;
+          continue;
+        }
+        read++;
+        final event = _flow.current!;
+        final issues = _flow.takePendingIssues();
+        _issues.addAll(issues);
+        if (event.style.hidden) continue;
+        if (_isBlock(event)) {
+          _boundaryPending = true;
+          _boundary = event;
+          continue;
+        }
+        if (event.phase == ForumBodyFlowPhase.close) continue;
+        if (event.node is ForumBodyElement &&
+            (event.node as ForumBodyElement).kind ==
+                ForumBodyElementKind.hardBreak) {
+          if (_break != null) {
+            final content = _confirmBreak();
+            _before = _after ?? _newSequence();
+            _after = null;
+            _break = event;
+            _breakIssues = issues;
+            _paragraph(
+              content,
+              ForumBodyParagraphWindow.beforeTerminalEmptyLine,
+            );
+            return _step(read);
+          }
+          _before ??= _newSequence();
+          _break = event;
+          _breakIssues = issues;
+        } else {
+          final target = _break == null
+              ? (_before ??= _newSequence())
+              : (_after ??= _newSequence());
+          target.builder.appendEvent(event);
+          target.issues.addAll(issues);
+        }
+      }
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
+
+  bool _flushContext() {
+    if (_break != null) {
+      final preserve =
+          _break!.style.whiteSpace == ForumBodyWhiteSpace.pre ||
+          _blocks.any((block) => (block.node as ForumBodyElement).tag == 'pre');
+      if ((_after?.builder.hasDisplayText ?? false) || preserve) {
+        final content = _confirmBreak();
+        _before = _after;
+        _after = null;
+        _paragraph(content, ForumBodyParagraphWindow.beforeTerminalEmptyLine);
+        return true;
+      }
+      _trimmedBreak = _break;
+      _break = null;
+      _breakIssues = const [];
+      final after = _after;
+      if (after != null) {
+        _before!.builder.appendSequence(after.builder);
+        _before!.issues.addAll(after.issues);
+        _after = null;
+      }
+    }
+    final before = _before;
+    _before = null;
+    if (before != null) {
+      if (before.builder.hasDisplayText) {
+        final content = before.finish();
+        _lastConfirmed = null;
+        _paragraph(content, ForumBodyParagraphWindow.full);
+        return true;
+      }
+      before.builder.close();
+    }
+    final tail = _lastConfirmed;
+    if (tail != null) {
+      _lastConfirmed = null;
+      _paragraph(tail, ForumBodyParagraphWindow.terminalEmptyLine);
+      return true;
+    }
+    return false;
+  }
+
+  ForumBodyParagraphContent _confirmBreak() {
+    final before = _before!;
+    before.builder.appendEvent(_break!);
+    before.issues.addAll(_breakIssues);
+    final content = before.finish();
+    _before = null;
+    _break = null;
+    _breakIssues = const [];
+    _lastConfirmed = content;
+    return content;
+  }
+
+  _Sequence _newSequence() => _Sequence(
+    paragraphBuilder.openSequence(
+      _flow,
+      block: _blocks.isEmpty ? null : _blocks.last,
+    ),
+  );
+
+  void _paragraph(
+    ForumBodyParagraphContent content,
+    ForumBodyParagraphWindow window,
+  ) {
+    _current = ForumBodyTextFlowParagraph._(_paragraphIndex++, content, window);
+  }
+
+  static bool _isBlock(ForumBodyStyledFlowEvent event) =>
+      event.node is ForumBodyElement &&
+      (event.node as ForumBodyElement).kind != ForumBodyElementKind.hardBreak &&
+      const {
+        ForumBodyDisplay.block,
+        ForumBodyDisplay.table,
+        ForumBodyDisplay.tableRow,
+        ForumBodyDisplay.tableCell,
+      }.contains(event.style.display);
+
+  ({int eventsRead, bool hasOutput, bool isComplete}) _step(int read) =>
+      (eventsRead: read, hasOutput: _current != null, isComplete: _complete);
+
+  List<ForumBodyStyleIssue> takePendingIssues() {
+    if (_closed) throw StateError('Text flow cursor is closed');
+    final issues = List<ForumBodyStyleIssue>.unmodifiable(_issues);
+    _issues.clear();
+    return issues;
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _before?.builder.close();
+    _after?.builder.close();
+    _flow.close();
+    _before = null;
+    _after = null;
+    _break = null;
+    _breakIssues = const [];
+    _lastConfirmed = null;
+    _boundary = null;
+    _trimmedBreak = null;
+    _blocks.clear();
+    _issues.clear();
+    _current = null;
+  }
+}
+
+final class _Sequence {
+  _Sequence(this.builder);
+  final ForumBodyParagraphSequence builder;
+  final issues = <ForumBodyStyleIssue>[];
+  ForumBodyParagraphContent finish() => builder.finish(issues: issues);
+}

@@ -16,12 +16,14 @@ final class ForumBodyStyledFlowEvent {
     required this.style,
     required this.depth,
     required Object owner,
+    required this.index,
   }) : _owner = owner;
 
   final ForumBodyFlowPhase phase;
   final ForumBodyNode node;
   final ForumBodyResolvedStyle style;
   final int depth;
+  final int index;
   final Object _owner;
 }
 
@@ -37,6 +39,7 @@ final class ForumBodyStyledFlowCursor {
 
   final ForumBodyStyleCursor _styles;
   final _owner = Object();
+  int _eventIndex = 0;
   final _open = <ForumBodyStyledFlowEvent>[];
   final _pendingIssues = <ForumBodyStyleIssue>[];
   ForumBodyNode? _nextNode;
@@ -93,6 +96,7 @@ final class ForumBodyStyledFlowCursor {
         style: opened.style,
         depth: opened.depth,
         owner: _owner,
+        index: _eventIndex++,
       );
       return true;
     }
@@ -108,6 +112,7 @@ final class ForumBodyStyledFlowCursor {
       style: _nextStyle!,
       depth: _open.length,
       owner: _owner,
+      index: _eventIndex++,
     );
     _nextNode = null;
     _nextStyle = null;

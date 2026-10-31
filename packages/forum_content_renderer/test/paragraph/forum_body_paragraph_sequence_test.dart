@@ -17,6 +17,120 @@ ForumBodyStyledFlowCursor _flow(ForumBodyDocument document) =>
     ForumBodyStyledFlowCursor(document: document, reader: _reader);
 
 void main() {
+  test('raw sequence merge normalizes cross-run CRLF only once', () {
+    final document = _document(
+      '<p style="white-space:pre-wrap">a&#13;<b>&#10;b</b></p>',
+    );
+    final flow = _flow(document);
+    addTearDown(flow.close);
+    flow.moveNext();
+    final block = flow.current!;
+    const builder = ForumBodyParagraphContentBuilder();
+    final head = builder.openSequence(flow, block: block);
+    final tail = builder.openSequence(flow, block: block);
+    flow.moveNext();
+    final deferred = flow.current!;
+    while (flow.moveNext()) {
+      if (flow.current!.phase != ForumBodyFlowPhase.close) tail.appendCurrent();
+    }
+    head.appendEvent(deferred);
+    expect(head.hasDisplayText, isTrue);
+    head.appendSequence(tail);
+    expect(tail.isClosed, isTrue);
+    expect(tail.finish, throwsStateError);
+    final content = head.finish();
+    final eager = builder.build(
+      document: document,
+      styles: const ForumBodyStyleResolver().resolve(document, _reader),
+      path: '0',
+    );
+    expect(content.projection.text, 'a\nb');
+    expect(content.projection.hasSameSourceMapping(eager.projection), isTrue);
+    expect(content.runs.map((run) => run.style.strong), [false, true]);
+  });
+
+  test('sequence merge rejects overlap and leaves the source caller-owned', () {
+    final flow = _flow(_document('<p>a<b>b</b></p>'));
+    addTearDown(flow.close);
+    flow.moveNext();
+    final block = flow.current!;
+    const builder = ForumBodyParagraphContentBuilder();
+    final head = builder.openSequence(flow, block: block);
+    final tail = builder.openSequence(flow, block: block);
+    flow.moveNext();
+    head.appendCurrent();
+    while (flow.moveNext()) {
+      if (flow.current!.phase != ForumBodyFlowPhase.close) tail.appendCurrent();
+    }
+    expect(
+      () => tail.appendSequence(head),
+      throwsA(isA<ForumBodyParagraphInputException>()),
+    );
+    expect(tail.isClosed, isTrue);
+    expect(head.isClosed, isFalse);
+    expect(head.finish().projection.text, 'a');
+  });
+
+  for (final (maxInput, maxRuns, failure) in [
+    (3, 8, ForumBodyParagraphInputFailure.inputLimit),
+    (10, 1, ForumBodyParagraphInputFailure.runLimit),
+  ]) {
+    test('merged raw inputs enforce the receiver $failure budget', () {
+      final flow = _flow(_document('<p>ab<b>cd</b></p>'));
+      addTearDown(flow.close);
+      flow.moveNext();
+      final block = flow.current!;
+      final builder = ForumBodyParagraphContentBuilder(
+        maxInputCodeUnits: maxInput,
+        maxRuns: maxRuns,
+      );
+      final head = builder.openSequence(flow, block: block);
+      final tail = builder.openSequence(flow, block: block);
+      flow.moveNext();
+      head.appendCurrent();
+      while (flow.moveNext()) {
+        if (flow.current!.phase != ForumBodyFlowPhase.close) {
+          tail.appendCurrent();
+        }
+      }
+      expect(
+        () => head.appendSequence(tail),
+        throwsA(
+          isA<ForumBodyParagraphInputException>().having(
+            (error) => error.failure,
+            'failure',
+            failure,
+          ),
+        ),
+      );
+      expect(head.isClosed, isTrue);
+      expect(tail.isClosed, isFalse);
+      expect(tail.finish().projection.text, 'cd');
+    });
+  }
+
+  test('deferred events cannot cross a structural flow owner', () {
+    final document = _document('<p>text</p>');
+    final flow = _flow(document);
+    final other = _flow(document);
+    addTearDown(flow.close);
+    addTearDown(other.close);
+    flow.moveNext();
+    final sequence = const ForumBodyParagraphContentBuilder().openSequence(
+      flow,
+      block: flow.current!,
+    );
+    other.moveNext();
+    other.moveNext();
+    expect(
+      () => sequence.appendEvent(other.current!),
+      throwsA(isA<ForumBodyParagraphInputException>()),
+    );
+    expect(sequence.isClosed, isTrue);
+    expect(flow.isClosed, isFalse);
+    expect(other.isClosed, isFalse);
+  });
+
   test(
     'sequences split at real BR while keeping cross-node style and source inheritance',
     () {
