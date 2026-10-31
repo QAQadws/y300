@@ -1,6 +1,15 @@
 import 'package:characters/characters.dart';
 
-enum HtmlDisplayWhiteSpace { normal, pre, preWrap, preLine }
+enum HtmlDisplayWhiteSpace {
+  normal,
+  pre,
+  preWrap,
+  preLine,
+
+  /// Explicit format-level normalization, including BR, Unicode whitespace
+  /// and nonbreaking spaces. Ordinary HTML text keeps its CSS whitespace rules.
+  singleLine,
+}
 
 enum HtmlProjectionAffinity { upstream, downstream }
 
@@ -48,7 +57,29 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
-  static const revision = 1;
+  static const revision = 2;
+
+  /// Whitespace accepted by the explicit single-line projection policy. This
+  /// predicate does not classify forum content or change normal HTML spacing.
+  static bool isSingleLineWhitespace(int rune) =>
+      const {
+        0x09,
+        0x0a,
+        0x0b,
+        0x0c,
+        0x0d,
+        0x20,
+        0x85,
+        0xa0,
+        0x1680,
+        0x2028,
+        0x2029,
+        0x202f,
+        0x205f,
+        0x3000,
+        0xfeff,
+      }.contains(rune) ||
+      rune >= 0x2000 && rune <= 0x200a;
   HtmlDisplayTextProjection._(
     this.text,
     this.parts,
@@ -218,12 +249,18 @@ final class _ProjectionBuilder {
     );
     final collapse =
         mode == HtmlDisplayWhiteSpace.normal ||
-        mode == HtmlDisplayWhiteSpace.preLine;
-    if (hardBreak ||
-        (mode != HtmlDisplayWhiteSpace.normal && value.rune == 10)) {
+        mode == HtmlDisplayWhiteSpace.preLine ||
+        mode == HtmlDisplayWhiteSpace.singleLine;
+    final singleLine = mode == HtmlDisplayWhiteSpace.singleLine;
+    if (!singleLine &&
+        (hardBreak ||
+            (mode != HtmlDisplayWhiteSpace.normal && value.rune == 10))) {
       pendingSpace = null;
       _emit(value);
-    } else if (collapse && const {9, 10, 12, 32}.contains(value.rune)) {
+    } else if (collapse &&
+        (singleLine
+            ? HtmlDisplayTextProjection.isSingleLineWhitespace(value.rune)
+            : const {9, 10, 12, 32}.contains(value.rune))) {
       if (pendingSpace == null) {
         pendingSpace = _ProjectedRune(32, source, source + 1, runIndex);
       } else {

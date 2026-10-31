@@ -3,6 +3,167 @@ import 'package:test/test.dart';
 
 void main() {
   test(
+    'single-line projection retains the source span across styled whitespace and BR',
+    () {
+      final projection = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(
+          text: ' \u00a0甲\r',
+          sourceRuneStart: 100,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+        HtmlDisplayTextRun(
+          text: '\n\t',
+          sourceRuneStart: 104,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+        HtmlDisplayTextRun(
+          text: '\n',
+          sourceRuneStart: 106,
+          hardBreak: true,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+        HtmlDisplayTextRun(
+          text: '\u0085乙\u00a0',
+          sourceRuneStart: 107,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+      ]);
+      expect(projection.text, '甲 乙');
+      expect(projection.parts.map((part) => (part.runIndex, part.text)), [
+        (0, '甲 '),
+        (3, '乙'),
+      ]);
+      expect(projection.sourceAtUtf16(0).sourceRune, 102);
+      expect(projection.sourceAtUtf16(1).sourceRune, 103);
+      expect(projection.sourceAtUtf16(2).sourceRune, 108);
+      expect(projection.sourceAtUtf16(3).sourceRune, 109);
+    },
+  );
+
+  test(
+    'single-line Unicode folding is opt-in and preserves non-whitespace format controls',
+    () {
+      const spaces = [
+        0x09,
+        0x0a,
+        0x0b,
+        0x0c,
+        0x0d,
+        0x20,
+        0x85,
+        0xa0,
+        0x1680,
+        0x2000,
+        0x2001,
+        0x2002,
+        0x2003,
+        0x2004,
+        0x2005,
+        0x2006,
+        0x2007,
+        0x2008,
+        0x2009,
+        0x200a,
+        0x2028,
+        0x2029,
+        0x202f,
+        0x205f,
+        0x3000,
+        0xfeff,
+      ];
+      for (final rune in spaces) {
+        final projection = HtmlDisplayTextProjection.build([
+          HtmlDisplayTextRun(
+            text: 'a${String.fromCharCode(rune)}b',
+            sourceRuneStart: 7,
+            whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+          ),
+        ]);
+        expect(projection.text, 'a b', reason: 'U+${rune.toRadixString(16)}');
+        expect(projection.sourceAtUtf16(2).sourceRune, 9);
+      }
+      for (final rune in [0x200b, 0x200c, 0x200d, 0x2060]) {
+        final text = 'a${String.fromCharCode(rune)}b';
+        final projection = HtmlDisplayTextProjection.build([
+          HtmlDisplayTextRun(
+            text: text,
+            sourceRuneStart: 0,
+            whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+          ),
+        ]);
+        expect(projection.text, text);
+        expect(HtmlDisplayTextProjection.isSingleLineWhitespace(rune), isFalse);
+      }
+      final ordinary = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(text: '\u00a0\u3000甲\u00a0', sourceRuneStart: 0),
+      ]);
+      expect(ordinary.text, '\u00a0\u3000甲\u00a0');
+    },
+  );
+
+  test(
+    'single-line collapse preserves source gaps and whole Unicode graphemes',
+    () {
+      final projection = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(
+          text: '甲\u00a0',
+          sourceRuneStart: 10,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+        HtmlDisplayTextRun(
+          text: '\n',
+          sourceRuneStart: 20,
+          hardBreak: true,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+        HtmlDisplayTextRun(
+          text: 'e\u0301👩🏽‍💻乙',
+          sourceRuneStart: 30,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+      ]);
+      expect(projection.text, '甲 e\u0301👩🏽‍💻乙');
+      expect(
+        projection
+            .sourceAtUtf16(2, affinity: HtmlProjectionAffinity.upstream)
+            .sourceRune,
+        21,
+      );
+      expect(projection.sourceAtUtf16(2).sourceRune, 30);
+      expect(projection.sourceAtUtf16(2).isExact, isFalse);
+      expect(projection.sourceAtUtf16(3).displayUtf16, 4);
+      expect(projection.sourceAtUtf16(3).isExact, isFalse);
+      expect(projection.sourceAtUtf16(5).displayUtf16, 11);
+      expect(projection.sourceAtUtf16(11).sourceRune, 36);
+    },
+  );
+
+  test(
+    'single-line empty and limited output cannot fabricate a source position',
+    () {
+      final empty = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(
+          text: '\u00a0\n\t',
+          sourceRuneStart: 42,
+          whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+        ),
+      ], maxOutputCodeUnits: 0);
+      expect(empty.text, isEmpty);
+      expect(empty.sourceAtUtf16(0).sourceRune, 42);
+      expect(
+        () => HtmlDisplayTextProjection.build(const [
+          HtmlDisplayTextRun(
+            text: ' 甲\u00a0乙 ',
+            sourceRuneStart: 0,
+            whiteSpace: HtmlDisplayWhiteSpace.singleLine,
+          ),
+        ], maxOutputCodeUnits: 2),
+        throwsA(isA<HtmlDisplayTextLimitException>()),
+      );
+    },
+  );
+
+  test(
     'line windows enumerate only their actual complete display graphemes',
     () {
       final projection = HtmlDisplayTextProjection.build([

@@ -23,6 +23,13 @@ Y300 的本地纯 Dart HTML 切片与分页边界决策核心。通过仓库内 
 源码点、DOM 字素和 UTF-16 是不同单位。作品/章节的持久化语义锚点及转换来源属于
 Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以虚拟组件污染文字位置。
 
+`HtmlDisplayTextProjection` 的普通模式保留 NBSP 和全角空格语义。格式处理者可显式
+选用 `HtmlDisplayWhiteSpace.singleLine`，将 BR、Unicode 空白与不换行空格合为一个
+空格并修剪边缘；原始源码点边界、跨 run 的 CRLF 和折叠范围仍可显式查询。
+来源缺口处继续区分上下游边界；坐标投影不证明边界之间的全部内容已经可见。
+该策略不删除零宽连接符等非空白控制字符，不承担论坛格式识别或语义锚点迁移。
+`isSingleLineWhitespace` 供同一格式处理者判定外围空白，投影 revision 为 2。
+
 ## Fit 与协作端口
 
 `DefaultHtmlComplexFitSearcher` 从邻页容量窗口起步，在合法边界上扩张、二分和选择
