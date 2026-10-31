@@ -16,6 +16,7 @@ final class NativeReaderTestFixture {
     TextScaler textScaler = TextScaler.noScaling,
     bool complete = true,
     String layoutId = 'generation-a',
+    ForumBodyParagraphCache? cacheOwner,
   }) {
     final semantic = const DiscuzNovelReaderDocumentParser(
       captureSourceProvenance: true,
@@ -31,10 +32,12 @@ final class NativeReaderTestFixture {
       semanticDocument: semantic,
       bodyDocument: body,
     );
-    cache = ForumBodyParagraphCache(
-      maxEntries: cacheEntries,
-      maxEstimatedBytes: 1 << 22,
-    );
+    cache =
+        cacheOwner ??
+        ForumBodyParagraphCache(
+          maxEntries: cacheEntries,
+          maxEstimatedBytes: 1 << 22,
+        );
     session = ForumBodyTextPageSession(
       document: body,
       reader: _reader(),
@@ -55,7 +58,7 @@ final class NativeReaderTestFixture {
     addTearDown(() {
       parent.cancel();
       session.close();
-      cache.close();
+      if (cacheOwner == null) cache.close();
     });
     if (complete) finishSource();
   }

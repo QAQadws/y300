@@ -46,6 +46,7 @@ final class NovelReaderNativePageHintSearch {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,
     int startPageIndex = 0,
     int maxBufferedCandidates = 32,
+    bool allowNodeCompatibility = false,
   }) {
     if (maxBufferedCandidates <= 0) {
       throw ArgumentError.value(maxBufferedCandidates, 'maxBufferedCandidates');
@@ -62,7 +63,12 @@ final class NovelReaderNativePageHintSearch {
         snapshot.composerRevision != ForumBodyTextPageComposer.revision) {
       throw StateError('Native page hint identity changed');
     }
-    final ranges = anchors.sourceCandidates(anchor).toList(growable: false);
+    final ranges = anchors
+        .sourceCandidates(
+          anchor,
+          allowNodeCompatibility: allowNodeCompatibility,
+        )
+        .toList(growable: false);
     return NovelReaderNativePageHintSearch._(
       snapshot,
       ranges,

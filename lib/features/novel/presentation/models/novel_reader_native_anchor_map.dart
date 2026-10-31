@@ -76,21 +76,45 @@ final class NovelReaderNativeAnchorMap {
   final _byAnchor =
       <(String?, int, String?), List<NovelReaderNativeAnchorSegment>>{};
 
+  bool hasVerifiedTextIdentity(NovelReaderTextAnchor anchor) =>
+      anchor.hasCanonicalTextOffset &&
+      anchor.nodeId != null &&
+      anchor.episodeId == episodeId &&
+      _byAnchor.containsKey((
+        anchor.nodeId,
+        anchor.formatVersion,
+        anchor.textIdentity,
+      ));
+
   /// Inverts only proven origin projections. Binary lookup retains whole
   /// matching plateaus; equal shared endpoints merge, raw source gaps do not.
-  /// No nearby node/offset fallback is attempted for old or mismatched anchors.
+  /// Default lookup never substitutes an old/mismatched identity. Explicit
+  /// node compatibility returns hints for read-only recovery, never exact proof.
   Iterable<NovelReaderNativeSourceCandidate> sourceCandidates(
-    NovelReaderTextAnchor anchor,
-  ) sync* {
-    if (!anchor.hasCanonicalTextOffset ||
-        anchor.textOffset < 0 ||
-        anchor.episodeId != episodeId ||
-        anchor.nodeId == null) {
+    NovelReaderTextAnchor anchor, {
+    bool allowNodeCompatibility = false,
+  }) sync* {
+    if (anchor.episodeId != episodeId || anchor.nodeId == null) {
       return;
     }
     final matching =
         _byAnchor[(anchor.nodeId, anchor.formatVersion, anchor.textIdentity)];
-    if (matching == null) return;
+    if (matching == null) {
+      // Explicit read-only compatibility search by the recorded node ID only.
+      // A known canonical identity with a pending/bad offset never uses this.
+      if (allowNodeCompatibility) {
+        for (final segment in segments) {
+          if (segment.projection.baseAnchor.nodeId == anchor.nodeId) {
+            yield NovelReaderNativeSourceCandidate(
+              segment.sourceStart,
+              segment.sourceEnd,
+            );
+          }
+        }
+      }
+      return;
+    }
+    if (!anchor.hasCanonicalTextOffset || anchor.textOffset < 0) return;
     NovelReaderNativeSourceCandidate? pending;
     for (final segment in matching) {
       final values = segment.projection.semanticOffsetsBySourceRuneBoundary;

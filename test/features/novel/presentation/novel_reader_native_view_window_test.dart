@@ -43,6 +43,26 @@ NovelReaderNativeViewWindow _window(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'a same-hash view from another actual session cannot be adopted',
+    () async {
+      final first = NativeReaderTestFixture(_html, width: 20, height: 10);
+      final foreign = NativeReaderTestFixture(_html, width: 20, height: 10);
+      final view = await NovelReaderNativePageViewJob(
+        session: foreign.session,
+        anchors: foreign.anchors,
+        pageIndex: 0,
+        parent: foreign.parent,
+        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+      ).run();
+      final window = _window(first);
+      expect(() => window.adoptTarget(view), throwsStateError);
+      expect(view.isReady, isTrue);
+      expect(window.retainedPageCount, 0);
+      view.close();
+    },
+  );
+
   test('target is published before serial neighbors and the window remains bounded', () async {
     final fixture = NativeReaderTestFixture(_html, width: 20, height: 10);
     final window = _window(fixture, center: 1);

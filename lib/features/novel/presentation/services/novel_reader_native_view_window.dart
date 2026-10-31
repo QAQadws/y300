@@ -114,6 +114,28 @@ final class NovelReaderNativeViewWindow {
     return view != null && _usable(view) ? view : null;
   }
 
+  /// Accept a target already prepared and proved by the same actual session.
+  /// Ownership moves only on success; the caller closes a rejected view.
+  void adoptTarget(NovelReaderNativePageView view) {
+    if (_closed || !view.isReady) {
+      throw StateError('Native target view is retired');
+    }
+    final snapshot = _session!.snapshot;
+    if (view.pageIndex != _center ||
+        view.snapshot.identity != snapshot.identity ||
+        view.snapshot.layoutId != snapshot.layoutId ||
+        view.pageIndex >= snapshot.length ||
+        !identical(view.snapshot[view.pageIndex], snapshot[view.pageIndex]) ||
+        _active != null) {
+      throw StateError('Native target view scope changed');
+    }
+    if (identical(_views[_center], view)) return;
+    _remove(_center);
+    if (!_admit(view)) throw const NovelReaderNativeViewWindowBudgetException();
+    _views[_center] = view;
+    _notify();
+  }
+
   void setCenter(int index) {
     if (_closed) throw StateError('Native view window is closed');
     if (index < 0) throw ArgumentError.value(index, 'index');
