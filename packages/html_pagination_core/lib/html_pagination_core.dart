@@ -9,6 +9,7 @@ export 'src/ports.dart'
         HtmlPaginationCancellation,
         HtmlPaginationException;
 export 'src/text_coordinates.dart' show HtmlTextCoordinates;
+export 'src/source_text_map.dart' show HtmlSourceTextMap, HtmlSourceTextRange;
 export 'src/work_slice.dart' show HtmlPaginationWorkSlice;
 export 'src/complex_slice.dart'
     show
