@@ -110,6 +110,45 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final size in [18.5, 17.3, 22.25]) {
+    test('fractional ruby children retain complete coverage: $size', () async {
+      final fixture = NativeReaderTestFixture(
+        '<p style="font-size:${size}px;line-height:1.27">'
+        '<ruby>A<rt>x</rt></ruby></p>',
+      );
+      final controller = _controller(fixture);
+      controller.start();
+      await _until(
+        () => controller.readyTarget != null || controller.error != null,
+      );
+      expect(controller.error, isNull);
+      final delivery = controller.readyTarget!;
+      final fragments = delivery.view.takeFragments();
+      try {
+        final fragment = fragments.single;
+        expect(delivery.view.coverage.points, isNotEmpty);
+        expect(
+          delivery.view.coverage.hasClippedGlyphs,
+          isFalse,
+          reason:
+              'frame=${delivery.view.snapshot.single.fragments.single.height}'
+              '/glyphs=${fragment.glyphBoxes(0, fragment.projection.text.length)
+                  .map((box) => [box.top, box.bottom])}'
+              '/lines=${fragment.lines.map(
+                  (line) => [line.top, line.bottom, line.baseline])}',
+        );
+        final position = controller.confirmPreparedVisible(delivery, fragments)!;
+        expect(position.isWholeBodyVisible, isTrue);
+        expect(position.isBodyEndVisible, isTrue);
+      } finally {
+        for (final fragment in fragments) {
+          fragment.close();
+        }
+      }
+      expect(fixture.cache.activeLeases, 0);
+    });
+  }
+
   test('native rounding of fractional row heights cannot falsely hide a fully painted page', () async {
     final fixture = NativeReaderTestFixture(
       '<p style="font-size:18.5px;line-height:1.27">abc<br>def<br>ghi</p>',

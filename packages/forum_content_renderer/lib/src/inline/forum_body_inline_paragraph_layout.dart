@@ -62,8 +62,10 @@ final class ForumBodyInlineParagraphLayout
     required this.lines,
     required this.atomBoxes,
     required this.dimensions,
-  }) : _painter = painter;
-  static const revision = 1;
+    required Offset paintOffset,
+  }) : _painter = painter,
+       _paintOffset = paintOffset;
+  static const revision = 2;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,
@@ -147,14 +149,34 @@ final class ForumBodyInlineParagraphLayout
           );
         }
       }
+      // Native paragraph height rounds independently of placeholder metrics.
+      // Keep the actual shaped baselines and reserve any outer slot overhang,
+      // translating paint, hit tests, lines and boxes by the same frame origin.
+      var top = 0.0;
+      var bottom = painter.height;
+      for (var i = 0; i < boxes.length; i++) {
+        final box = boxes[i];
+        if (box.top < top) top = box.top;
+        if (box.bottom > bottom) bottom = box.bottom;
+        final childBottom = box.top + snapshot[i].size.height;
+        if (childBottom > bottom) bottom = childBottom;
+      }
+      final paintOffset = Offset(0, -top);
       return ForumBodyInlineParagraphLayout._(
         projection: content.projection,
         painter: painter,
         width: layoutWidth,
-        height: painter.height,
-        lines: lines,
-        atomBoxes: boxes,
+        height: bottom - top,
+        lines: paintOffset == Offset.zero
+            ? lines
+            : List.unmodifiable(lines.map((line) => line.shift(paintOffset))),
+        atomBoxes: paintOffset == Offset.zero
+            ? boxes
+            : List.unmodifiable(
+                boxes.map((box) => _shiftBox(box, paintOffset)),
+              ),
         dimensions: snapshot,
+        paintOffset: paintOffset,
       );
     } catch (_) {
       painter.dispose();
@@ -224,6 +246,7 @@ final class ForumBodyInlineParagraphLayout
   /// belongs to the typed lease, not a reused engine's original input object.
   final HtmlInlineTextProjection projection;
   final TextPainter _painter;
+  final Offset _paintOffset;
   final double width;
   final double height;
   final List<ForumBodyParagraphLine> lines;
@@ -242,7 +265,7 @@ final class ForumBodyInlineParagraphLayout
   /// children at atomBoxes; this method alone is not a readable page delivery.
   void paintParent(Canvas canvas, Offset offset) {
     _ensureOpen();
-    _painter.paint(canvas, offset);
+    _painter.paint(canvas, offset + _paintOffset);
   }
 
   ForumBodyInlineHit hitAt(Offset offset) {
@@ -256,7 +279,7 @@ final class ForumBodyInlineParagraphLayout
         return ForumBodyInlineAtomHit(i, offset - rect.topLeft);
       }
     }
-    final position = _painter.getPositionForOffset(offset);
+    final position = _painter.getPositionForOffset(offset - _paintOffset);
     return ForumBodyInlineTextHit(
       projection.sourceAtEngineUtf16(
         position.offset,
@@ -283,12 +306,14 @@ final class ForumBodyInlineParagraphLayout
     void text(int from, int to) {
       if (from >= to) return;
       boxes.addAll(
-        _painter.getBoxesForSelection(
-          TextSelection(
-            baseOffset: projection.engineAtDisplayUtf16(from).engineUtf16,
-            extentOffset: projection.engineAtDisplayUtf16(to).engineUtf16,
-          ),
-        ),
+        _painter
+            .getBoxesForSelection(
+              TextSelection(
+                baseOffset: projection.engineAtDisplayUtf16(from).engineUtf16,
+                extentOffset: projection.engineAtDisplayUtf16(to).engineUtf16,
+              ),
+            )
+            .map((box) => _shiftBox(box, _paintOffset)),
       );
     }
 
@@ -349,6 +374,16 @@ final class ForumBodyInlineParagraphLayout
     _painter.dispose();
   }
 }
+
+TextBox _shiftBox(TextBox box, Offset offset) => offset == Offset.zero
+    ? box
+    : TextBox.fromLTRBD(
+        box.left + offset.dx,
+        box.top + offset.dy,
+        box.right + offset.dx,
+        box.bottom + offset.dy,
+        box.direction,
+      );
 
 /// A verified line window borrowing one parent engine; never shapes again.
 final class ForumBodyInlineParagraphFragment {

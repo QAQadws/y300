@@ -99,6 +99,82 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'fractional native placeholder overhang preserves all child pixels',
+    () async {
+      final input = mixedInlineInput(
+        prefix: '',
+        base: 'A',
+        annotation: 'x',
+        suffix: '',
+        reader: ForumBodyReaderStyle(
+          textStyle: const TextStyle(
+            fontFamily: 'Ahem',
+            fontSize: 18.5,
+            height: 1.27,
+            color: Color(0xff000000),
+          ),
+          fontRevision: 'fractional-ahem',
+          linkColor: const Color(0xff0000ff),
+        ),
+      );
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final child = group(cache, input);
+      final parent = cache.acquireInline(
+        content: input.content,
+        width: 100,
+        dimensions: [child.placeholderDimensions],
+      );
+      final subject = ForumBodyInlineParagraphView.adopt(
+        cache: cache,
+        parent: parent,
+        startLine: 0,
+        endLine: 1,
+        rubyGroups: {0: child},
+      );
+      try {
+        final expected = await raster((canvas) {
+          canvas.scale(3);
+          child.paint(canvas, Offset.zero);
+        });
+        final actual = await raster((canvas) {
+          canvas.scale(3);
+          subject.paint(canvas, Offset.zero);
+        });
+        expect(
+          actual
+              .asMap()
+              .entries
+              .where((entry) => entry.value != expected[entry.key])
+              .length,
+          0,
+          reason:
+              'frame=${subject.width}x${subject.height}/child=${child.size}'
+              '/box=${parent.layout.atomBoxes.single.toRect()}'
+              '/diffRows=${actual.asMap().entries.where((entry) => entry.value != expected[entry.key]).map((entry) => entry.key ~/ (200 * 4)).toSet()}',
+        );
+        expect(parent.layout.atomBoxes.single.top, 0);
+        expect(subject.height, child.size.height);
+        final boxes = subject.selectionBoxes(
+          0,
+          input.content.projection.display.text.length,
+          clipToView: false,
+        );
+        expect(
+          boxes.every((box) => box.top >= 0 && box.bottom <= subject.height),
+          isTrue,
+        );
+      } finally {
+        subject.close();
+      }
+      expect(cache.activeLeases, 0);
+    },
+  );
+
+  test(
     'mixed view paints complete parent plus band children exactly like native standalone glyphs',
     () async {
       final cache = ForumBodyParagraphCache(
@@ -120,7 +196,10 @@ void main() {
       final offset = const Offset(3.25, 4.5);
       final pixels = await raster((canvas) => actual.paint(canvas, offset));
       final expected = await raster((canvas) {
-        canvas.clipRect(offset & Size(actual.width, actual.height));
+        canvas.clipRect(
+          offset & Size(actual.width, actual.height),
+          doAntiAlias: false,
+        );
         expectedParent.layout.fragment(0, 1).paintParent(canvas, offset);
         expectedChild.paint(
           canvas,

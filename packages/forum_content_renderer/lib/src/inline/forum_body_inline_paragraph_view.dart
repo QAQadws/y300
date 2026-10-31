@@ -162,7 +162,9 @@ final class ForumBodyInlineParagraphView {
     if (_fragment == null) return;
     canvas.save();
     try {
-      canvas.clipRect(offset & Size(width, height));
+      // Child pictures already contain their native edge coverage. A second
+      // antialiased rectangular viewport compounds alpha at fractional edges.
+      canvas.clipRect(offset & Size(width, height), doAntiAlias: false);
       _fragment!.paintParent(canvas, offset);
       for (final entry in _children.entries) {
         entry.value.group.paint(canvas, offset + _origin(entry.key));
