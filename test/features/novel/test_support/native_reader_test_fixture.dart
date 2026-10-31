@@ -15,6 +15,7 @@ final class NativeReaderTestFixture {
     double height = 100,
     TextScaler textScaler = TextScaler.noScaling,
     bool complete = true,
+    String layoutId = 'generation-a',
   }) {
     final semantic = const DiscuzNovelReaderDocumentParser(
       captureSourceProvenance: true,
@@ -46,7 +47,7 @@ final class NativeReaderTestFixture {
         maxRuns: 10000,
         maxIssuedLeases: 128,
       ),
-      layoutId: 'generation-a',
+      layoutId: layoutId,
       width: width,
       height: height,
       textScaler: textScaler,
