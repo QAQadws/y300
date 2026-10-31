@@ -58,6 +58,40 @@ final class ForumBodyRubyGroupLayout {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+  }) => _acquire(
+    cache: cache,
+    base: base,
+    annotation: annotation,
+    textScaler: textScaler,
+    gap: gap,
+    maxWidth: maxWidth,
+    cachedOnly: false,
+  )!;
+
+  /// No native construction on a miss. A partial hit is released immediately;
+  /// the caller prepares missing child inputs outside the visible paint path.
+  static ForumBodyRubyGroupLayout? tryCreateCached({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyParagraphContent base,
+    required ForumBodyParagraphContent annotation,
+    TextScaler textScaler = TextScaler.noScaling,
+    double gap = 0,
+    double maxWidth = 16384,
+  }) => _acquire(
+    cache: cache,
+    base: base,
+    annotation: annotation,
+    textScaler: textScaler,
+    gap: gap,
+    maxWidth: maxWidth,
+    cachedOnly: true,
+  );
+
+  static void validateInputs({
+    required ForumBodyParagraphContent base,
+    required ForumBodyParagraphContent annotation,
+    double gap = 0,
+    double maxWidth = 16384,
   }) {
     if (base.identity != annotation.identity ||
         base.fontRevision != annotation.fontRevision ||
@@ -84,19 +118,99 @@ final class ForumBodyRubyGroupLayout {
         ForumBodyRubyGroupFailure.geometry,
       );
     }
+  }
+
+  static ForumBodyRubyGroupLayout? _acquire({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyParagraphContent base,
+    required ForumBodyParagraphContent annotation,
+    required TextScaler textScaler,
+    required double gap,
+    required double maxWidth,
+    required bool cachedOnly,
+  }) {
+    validateInputs(
+      base: base,
+      annotation: annotation,
+      gap: gap,
+      maxWidth: maxWidth,
+    );
     ForumBodyParagraphLease? baseLease;
     ForumBodyParagraphLease? annotationLease;
     try {
-      baseLease = cache.acquire(
-        content: base,
-        width: maxWidth,
-        textScaler: textScaler,
-      );
+      baseLease = cachedOnly
+          ? cache.tryAcquireCached(
+              content: base,
+              width: maxWidth,
+              textScaler: textScaler,
+            )
+          : cache.acquire(
+              content: base,
+              width: maxWidth,
+              textScaler: textScaler,
+            );
+      if (baseLease == null) return null;
       if (annotation.projection.text.isNotEmpty) {
-        annotationLease = cache.acquire(
-          content: annotation,
-          width: maxWidth,
-          textScaler: textScaler,
+        annotationLease = cachedOnly
+            ? cache.tryAcquireCached(
+                content: annotation,
+                width: maxWidth,
+                textScaler: textScaler,
+              )
+            : cache.acquire(
+                content: annotation,
+                width: maxWidth,
+                textScaler: textScaler,
+              );
+        if (annotationLease == null) {
+          baseLease.release();
+          return null;
+        }
+      }
+      return ForumBodyRubyGroupLayout.adopt(
+        cache: cache,
+        baseLease: baseLease,
+        annotation: annotation,
+        annotationLease: annotationLease,
+        gap: gap,
+        maxWidth: maxWidth,
+      );
+    } catch (_) {
+      annotationLease?.release();
+      baseLease?.release();
+      rethrow;
+    }
+  }
+
+  /// Takes ownership of exactly these handles on success AND failure, never
+  /// their owner or another alias. Preparation can transfer already pinned
+  /// children without lookup, scaling callbacks or another native build.
+  factory ForumBodyRubyGroupLayout.adopt({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyParagraphLease baseLease,
+    required ForumBodyParagraphContent annotation,
+    ForumBodyParagraphLease? annotationLease,
+    double gap = 0,
+    double maxWidth = 16384,
+  }) {
+    try {
+      if (!cache.ownsLease(baseLease) ||
+          (annotationLease != null && !cache.ownsLease(annotationLease))) {
+        throw StateError(
+          'Ruby child lease is not active in this reading owner',
+        );
+      }
+      validateInputs(
+        base: baseLease.content,
+        annotation: annotation,
+        gap: gap,
+        maxWidth: maxWidth,
+      );
+      if (annotation.projection.text.isNotEmpty != (annotationLease != null) ||
+          (annotationLease != null &&
+              !identical(annotationLease.content, annotation))) {
+        throw const ForumBodyRubyGroupException(
+          ForumBodyRubyGroupFailure.content,
         );
       }
       final baseLayout = baseLease.layout;
@@ -144,7 +258,7 @@ final class ForumBodyRubyGroupLayout {
       );
     } catch (_) {
       annotationLease?.release();
-      baseLease?.release();
+      baseLease.release();
       rethrow;
     }
   }

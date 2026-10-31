@@ -68,6 +68,13 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 1，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
 
+`tryCreateCached` 仅借用已准备的两侧，任一缺失不测量并释放本次部分命中；空注音只需
+基字。`adopt` 接管显式传入的现有租约，不查缓存、不调用缩放或再次排字；成功和失败
+都消费这些句柄，不关闭 owner 或外部别名。两侧须由同一阅读缓存持有且活跃，非空注音
+的租约必须绑定调用者指定的当前内容对象，缺失/多余/异主/过期句柄明确失败。
+`ForumBodyParagraphCache.ownsLease` 提供同步 owner 证明，不改变 LRU 或借用数量。
+两种入口复用同一纯输入准入和实际几何实现，不能在可见 paint 中用普通 create 补冷缓存。
+
 这是行内排版的分组端口，不是完整 ruby HTML consumer。父段落通过下述混合输入显式使用独立的 engine/display/source 投影；分页、复制与完整无障碍接入仍由组合层实现。普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
 
 `ForumBodyRubyContentCursor.openCurrent` 从唯一 styled IR flow 中分组实际 ruby 内容，按 [HTML ruby 分段规则](https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-ruby-element)区分基字、注音与回退。它借用当前 ruby 的流，逐步产生不可变组；同一基字的多个注音分别保留，嵌套 ruby 保持子组结构，空注音、孤立注音和未注音尾部不伪造或丢弃文字。根样式、文档身份和构建时字体/样式版本随组保存，子文字保留自己的来源、样式和字素上下文。

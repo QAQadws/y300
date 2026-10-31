@@ -4,45 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-({ForumBodyParagraphContent base, ForumBodyParagraphContent annotation}) pair({
-  String base = 'AB',
-  String annotation = 'xy',
-  double annotationSize = 10,
-  String direction = 'ltr',
-  double baseLineHeight = 1,
-  double annotationLineHeight = 1,
-  String fontRevision = 'ahem',
-  ForumBodyParagraphLayoutMode layoutMode =
-      ForumBodyParagraphLayoutMode.intrinsicSingleLine,
-}) {
-  final document = const ForumBodyParser().parse(
-    html:
-        '<p><span dir="$direction" style="line-height:$baseLineHeight">$base</span><span style="font-size:${annotationSize}px;line-height:$annotationLineHeight">$annotation</span></p>',
-    sourceId: 'ruby-group',
-    conversionIdentity: 'none',
-  );
-  final styles = const ForumBodyStyleResolver().resolve(
-    document,
-    ForumBodyReaderStyle(
-      textStyle: const TextStyle(
-        fontFamily: 'Ahem',
-        fontSize: 20,
-        height: 1,
-        color: Color(0xff000000),
-      ),
-      fontRevision: fontRevision,
-      linkColor: const Color(0xff0000ff),
-    ),
-  );
-  ForumBodyParagraphContent build(String path) =>
-      const ForumBodyParagraphContentBuilder().build(
-        document: document,
-        styles: styles,
-        path: path,
-        layoutMode: layoutMode,
-      );
-  return (base: build('0/0'), annotation: build('0/1'));
-}
+import 'test_support/ruby_pair_fixture.dart';
 
 Future<List<int>> pixels(ui.PictureRecorder recorder, Size size) async {
   final picture = recorder.endRecording();
@@ -73,7 +35,7 @@ void main() {
   test(
     'natural base and annotation share an actual alphabetic baseline box',
     () {
-      final input = pair();
+      final input = rubyPairInput();
       final group = ForumBodyRubyGroupLayout.create(
         cache: cache,
         base: input.base,
@@ -98,7 +60,7 @@ void main() {
   );
 
   test('longer annotation expands the box instead of shrinking glyphs', () {
-    final input = pair(base: 'A', annotation: 'abcdef');
+    final input = rubyPairInput(base: 'A', annotation: 'abcdef');
     final group = ForumBodyRubyGroupLayout.create(
       cache: cache,
       base: input.base,
@@ -137,7 +99,10 @@ void main() {
   test(
     'base and annotation hit their own source coordinates and graphemes',
     () {
-      final input = pair(base: '👨‍👩‍👧‍👦e\u0301', annotation: 'xyz');
+      final input = rubyPairInput(
+        base: '👨‍👩‍👧‍👦e\u0301',
+        annotation: 'xyz',
+      );
       final group = ForumBodyRubyGroupLayout.create(
         cache: cache,
         base: input.base,
@@ -190,7 +155,7 @@ void main() {
   test(
     'per-size nonlinear scaling is applied once, including the parent placeholder',
     () {
-      final input = pair();
+      final input = rubyPairInput();
       final group = ForumBodyRubyGroupLayout.create(
         cache: cache,
         base: input.base,
@@ -234,7 +199,7 @@ void main() {
   test(
     'tight parent lines wrap entire groups and retain both rows inside each line',
     () {
-      final input = pair();
+      final input = rubyPairInput();
       final group = ForumBodyRubyGroupLayout.create(
         cache: cache,
         base: input.base,
@@ -281,7 +246,7 @@ void main() {
   );
 
   test('each side retains its own bidi and grapheme context', () {
-    final input = pair(base: 'אב', annotation: 'xy', direction: 'rtl');
+    final input = rubyPairInput(base: 'אב', annotation: 'xy', direction: 'rtl');
     final group = ForumBodyRubyGroupLayout.create(
       cache: cache,
       base: input.base,
@@ -301,7 +266,7 @@ void main() {
     );
     expect(hit.part, ForumBodyRubyPart.base);
     expect(hit.position.sourceRune, 0);
-    final isolated = pair(base: 'e', annotation: '\u0301');
+    final isolated = rubyPairInput(base: 'e', annotation: '\u0301');
     final accent = ForumBodyRubyGroupLayout.create(
       cache: cache,
       base: isolated.base,
@@ -317,11 +282,13 @@ void main() {
   test(
     'different source/font scopes and nonintrinsic contents fail before acquisition',
     () {
-      final input = pair();
-      final otherSource = pair(base: 'CD');
-      final otherFont = pair(fontRevision: 'replacement');
-      final wrapped = pair(layoutMode: ForumBodyParagraphLayoutMode.wrap);
-      final empty = pair(base: '');
+      final input = rubyPairInput();
+      final otherSource = rubyPairInput(base: 'CD');
+      final otherFont = rubyPairInput(fontRevision: 'replacement');
+      final wrapped = rubyPairInput(
+        layoutMode: ForumBodyParagraphLayoutMode.wrap,
+      );
+      final empty = rubyPairInput(base: '');
       for (final (base, annotation, failure) in [
         (input.base, otherSource.annotation, ForumBodyRubyGroupFailure.scope),
         (input.base, otherFont.annotation, ForumBodyRubyGroupFailure.scope),
@@ -351,7 +318,7 @@ void main() {
   test(
     'mixed-size paint matches the two shared native layouts at their actual offsets',
     () async {
-      final input = pair(
+      final input = rubyPairInput(
         base: 'A<span style="font-size:30px">B</span>',
         annotation: 'xyz',
       );
@@ -383,8 +350,11 @@ void main() {
   test(
     'tight child line heights retain real font boxes without clipping either row',
     () async {
-      final tight = pair(baseLineHeight: .25, annotationLineHeight: .25);
-      final normal = pair();
+      final tight = rubyPairInput(
+        baseLineHeight: .25,
+        annotationLineHeight: .25,
+      );
+      final normal = rubyPairInput();
       final tightGroup = ForumBodyRubyGroupLayout.create(
         cache: cache,
         base: tight.base,
@@ -445,7 +415,7 @@ void main() {
   test(
     'an empty annotation adds neither a native layout nor a blank upper row',
     () {
-      final input = pair(annotation: '');
+      final input = rubyPairInput(annotation: '');
       final group = ForumBodyRubyGroupLayout.create(
         cache: cache,
         base: input.base,
@@ -472,7 +442,7 @@ void main() {
   test(
     'gap and admission-width changes reuse native text but recompose geometry',
     () {
-      final input = pair();
+      final input = rubyPairInput();
       final first = ForumBodyRubyGroupLayout.create(
         cache: cache,
         base: input.base,
@@ -502,7 +472,7 @@ void main() {
   test(
     'overflow, invalid input and a failed second acquisition release only owned leases',
     () {
-      final input = pair();
+      final input = rubyPairInput();
       expect(
         () => ForumBodyRubyGroupLayout.create(
           cache: cache,
@@ -559,7 +529,7 @@ void main() {
   );
 
   test('owner closure retires live groups before any stale native access', () {
-    final input = pair();
+    final input = rubyPairInput();
     final group = ForumBodyRubyGroupLayout.create(
       cache: cache,
       base: input.base,
