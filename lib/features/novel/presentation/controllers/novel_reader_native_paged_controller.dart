@@ -750,18 +750,22 @@ final class NovelReaderNativePagedController {
   ) {
     final snapshot = delivery.view.snapshot;
     if (delivery.view.coverage.hasClippedGlyphs) return false;
+    // Coverage already checked actual visible glyphs against both clips.
+    // Native vertical font extents also include leading and rounding overhang;
+    // those extents are not the painted fragment's viewport rectangle.
     for (final (index, fragment)
         in snapshot[delivery.pageIndex].fragments.indexed) {
+      if (fragment.top < -precisionErrorTolerance ||
+          fragment.top + fragment.height >
+              snapshot.height + precisionErrorTolerance) {
+        return false;
+      }
       for (final line in fragments[index].lines) {
-        final top = fragment.top + line.top;
         if (line.left < -precisionErrorTolerance ||
             line.left + line.width > fragment.width + precisionErrorTolerance ||
             fragment.left + line.left < -precisionErrorTolerance ||
             fragment.left + line.left + line.width >
-                snapshot.width + precisionErrorTolerance ||
-            top < -precisionErrorTolerance ||
-            fragment.top + line.bottom >
-                snapshot.height + precisionErrorTolerance) {
+                snapshot.width + precisionErrorTolerance) {
           return false;
         }
       }

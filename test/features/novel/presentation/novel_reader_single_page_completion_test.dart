@@ -42,6 +42,62 @@ void main() {
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  for (final readOnlyRestore in [false, true]) {
+    testWidgets(
+      'fractional native font leading preserves SQLite reading authority (readOnly=$readOnlyRestore)',
+      (tester) async {
+        final fixture = (await tester.runAsync(_Fixture.create))!;
+        try {
+          if (readOnlyRestore) {
+            await tester.runAsync(fixture.seedUnfinishedPosition);
+          }
+          final before = (await tester.runAsync(
+            () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+          ))!;
+          await tester.pumpWidget(
+            fixture.app(
+              nativePagination: true,
+              preferences: NovelReaderPreferences.defaults().copyWith(
+                flowMode: NovelReaderFlowMode.pagedLtr,
+                fontSize: 18.5,
+                lineHeight: 1.27,
+              ),
+            ),
+          );
+          await _pumpSinglePageReady(tester);
+          expect(
+            (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+            isNot(true),
+          );
+          await tester.pump(const Duration(milliseconds: 250));
+          final state = await fixture.load(tester);
+          expect(
+            state.episodeStates[_chapter]?.isRead == true,
+            !readOnlyRestore,
+          );
+          if (readOnlyRestore) {
+            await tester.pumpWidget(const SizedBox.shrink());
+            await fixture.load(tester);
+            expect(
+              (await tester.runAsync(
+                () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+              ))!,
+              before,
+            );
+          } else {
+            expect(state.progressByEpisode[_chapter]!.anchorFormatVersion, 1);
+            expect(
+              state.progressByEpisode[_chapter]!.anchorTextIdentity,
+              isNotEmpty,
+            );
+          }
+        } finally {
+          await fixture.close(tester);
+        }
+      },
+    );
+  }
+
   testWidgets(
     'native page persists canonical SQLite completion after stability',
     (tester) async {
@@ -483,6 +539,7 @@ final class _Fixture {
     GlobalKey<NavigatorState>? navigation,
     NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
     bool nativePagination = false,
+    NovelReaderPreferences? preferences,
   }) => ProviderScope(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
@@ -491,7 +548,7 @@ final class _Fixture {
       ),
       novelReaderProgressCommitterProvider.overrideWithValue(committer),
       novelReaderPreferencesRepositoryProvider.overrideWithValue(
-        _Preferences(),
+        _Preferences(preferences),
       ),
       novelChapterInteractionsDockPreferencesRepositoryProvider
           .overrideWithValue(_DisabledDock()),
@@ -593,9 +650,13 @@ final class _ReadFailureRepository extends LocalNovelRepository {
 }
 
 final class _Preferences implements NovelReaderPreferencesRepository {
-  var preferences = NovelReaderPreferences.defaults().copyWith(
-    flowMode: NovelReaderFlowMode.pagedLtr,
-  );
+  _Preferences([NovelReaderPreferences? value])
+    : preferences =
+          value ??
+          NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+          );
+  NovelReaderPreferences preferences;
   @override
   Future<NovelReaderPreferences> load() async => preferences;
   @override

@@ -110,6 +110,31 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('native rounding of fractional row heights cannot falsely hide a fully painted page', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p style="font-size:18.5px;line-height:1.27">abc<br>def<br>ghi</p>',
+      width: 100,
+      height: 100,
+    );
+    final controller = _controller(fixture);
+    controller.start();
+    await _until(
+      () => controller.readyTarget != null || controller.error != null,
+    );
+    expect(controller.error, isNull);
+    final delivery = controller.readyTarget!;
+    final fragments = delivery.view.takeFragments();
+    expect(delivery.view.coverage.points, isNotEmpty);
+    expect(delivery.view.coverage.hasClippedGlyphs, isFalse);
+    final position = controller.confirmPreparedVisible(delivery, fragments)!;
+    expect(position.isWholeBodyVisible, isTrue);
+    expect(position.isBodyEndVisible, isTrue);
+    for (final fragment in fragments) {
+      fragment.close();
+    }
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   for (final source in [
     '<p style="line-height:.25">X<ruby>A<rt>x</rt></ruby>Z</p>',
     '<p>a</p><p style="line-height:.25">b</p>',
