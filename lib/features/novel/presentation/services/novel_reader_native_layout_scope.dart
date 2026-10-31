@@ -38,7 +38,7 @@ final class NovelReaderNativeLayoutScope {
     required this.height,
     required this.paginationKey,
   });
-  static const fingerprintRevision = 1;
+  static const fingerprintRevision = 2;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -54,6 +54,7 @@ final class NovelReaderNativeLayoutScope {
     required double height,
     required NovelReaderPaginationCancellationToken cancellation,
     int maxScaledFontSizes = 2048,
+    int fontCollectionGeneration = 0,
   }) async {
     cancellation.throwIfCancelled();
     if (!width.isFinite ||
@@ -67,6 +68,9 @@ final class NovelReaderNativeLayoutScope {
       );
     }
     if (maxScaledFontSizes <= 0) throw ArgumentError.value(maxScaledFontSizes);
+    if (fontCollectionGeneration < 0) {
+      throw ArgumentError.value(fontCollectionGeneration);
+    }
     final original = environment.reader;
     final reader = ForumBodyReaderStyle(
       textStyle: _freezeStyle(original.textStyle),
@@ -115,6 +119,7 @@ final class NovelReaderNativeLayoutScope {
       width,
       height,
       reader.fontRevision,
+      fontCollectionGeneration,
       _styleValue(reader.textStyle),
       _colorValue(reader.linkColor),
       _colorValue(background),

@@ -22,16 +22,22 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     required this.ownerIdentity,
     required this.readingAuthorityIdentity,
     this.reverse = false,
+    this.active = true,
+    this.backgroundColor,
     this.placeholder = const SizedBox.shrink(),
     this.onPositionChanged,
+    this.onScrollActivityChanged,
   });
 
   final NovelReaderNativePagedController controller;
   final Object ownerIdentity;
   final Object readingAuthorityIdentity;
   final bool reverse;
+  final bool active;
+  final Color? backgroundColor;
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
+  final ValueChanged<bool>? onScrollActivityChanged;
 
   @override
   State<NovelReaderNativePagedViewport> createState() =>
@@ -46,6 +52,7 @@ class _NovelReaderNativePagedViewportState
     double width,
     double height,
     int page,
+    Color? background,
   })?
   _displayed;
   int _binding = 0;
@@ -108,6 +115,7 @@ class _NovelReaderNativePagedViewportState
         width: snapshot.width,
         height: snapshot.height,
         page: controller.readyTarget!.pageIndex,
+        background: widget.backgroundColor,
       );
     }
   }
@@ -118,16 +126,23 @@ class _NovelReaderNativePagedViewportState
     if (displayed == null) return widget.placeholder;
     // Capture the box and initial page when offered: source failure/retirement
     // can remove the proposal or snapshot before the next Widget build.
-    final frozen = !identical(displayed.controller, widget.controller);
+    final frozen =
+        !widget.active || !identical(displayed.controller, widget.controller);
     return _NativeLayoutViewport(
       key: ObjectKey(displayed.controller),
       controller: displayed.controller,
       width: displayed.width,
       height: displayed.height,
       initialPage: displayed.page,
+      backgroundColor: displayed.background,
       frozen: frozen,
       reverse: widget.reverse,
       placeholder: widget.placeholder,
+      onScrollActivityChanged: (scrolling) {
+        if (identical(displayed.controller, widget.controller)) {
+          widget.onScrollActivityChanged?.call(widget.active && scrolling);
+        }
+      },
       onPositionChanged: (position) {
         if (identical(displayed.controller, widget.controller) && !frozen) {
           widget.onPositionChanged?.call(position);
@@ -157,19 +172,23 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.width,
     required this.height,
     required this.initialPage,
+    required this.backgroundColor,
     required this.frozen,
     required this.reverse,
     required this.placeholder,
     required this.onPositionChanged,
+    required this.onScrollActivityChanged,
   });
   final NovelReaderNativePagedController controller;
   final double width;
   final double height;
   final int initialPage;
+  final Color? backgroundColor;
   final bool frozen;
   final bool reverse;
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition> onPositionChanged;
+  final ValueChanged<bool> onScrollActivityChanged;
 
   @override
   State<_NativeLayoutViewport> createState() => _NativeLayoutViewportState();
@@ -188,6 +207,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
   bool _userDrag = false;
   bool _edgeIntent = false;
   bool _fits = false;
+  int _activityRevision = 0;
+  ScrollHoldController? _hold;
 
   @override
   void initState() {
@@ -218,6 +239,14 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
       _userDrag = false;
       _scrolling = false;
       _edgeIntent = false;
+      _activity(false);
+      if (_pages.hasClients && widget.frozen) {
+        _hold ??= _pages.position.hold(() => _hold = null);
+      } else if (!widget.frozen) {
+        final hold = _hold;
+        _hold = null;
+        hold?.cancel();
+      }
     }
     if (!widget.frozen) _afterFrame();
   }
@@ -269,6 +298,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
     final controller = widget.controller;
     if (notification is ScrollStartNotification) {
       _scrolling = true;
+      _activity(true);
       _frame++;
       if (notification.dragDetails != null) {
         _userDrag = true;
@@ -291,6 +321,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
       }
     } else if (notification is ScrollEndNotification) {
       _scrolling = false;
+      _activity(false);
       _userDrag = false;
       _afterFrame();
     }
@@ -301,6 +332,16 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
     _page = page;
     if (_userDrag && !widget.frozen) widget.controller.requestPage(page);
     _afterFrame();
+  }
+
+  void _activity(bool scrolling) {
+    final revision = ++_activityRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && revision == _activityRevision) {
+        widget.onScrollActivityChanged(scrolling && !widget.frozen);
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _mounted(
@@ -335,44 +376,48 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
             child: SizedBox(
               width: _width,
               height: _height,
-              child: IgnorePointer(
-                ignoring: widget.frozen || controller.isClosed,
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: _onScroll,
-                  child: PageView.builder(
-                    controller: _pages,
-                    reverse: widget.reverse,
-                    allowImplicitScrolling: false,
-                    physics: widget.frozen || controller.isClosed
-                        ? const NeverScrollableScrollPhysics()
-                        : const AlwaysScrollableScrollPhysics(
-                            parent: ClampingScrollPhysics(),
-                          ),
-                    itemCount: prefix?.length ?? _lastPageCount,
-                    onPageChanged: _pageChanged,
-                    itemBuilder: (context, page) {
-                      final mountedView = _mountedPages.keys
-                          .where((view) => view.pageIndex == page)
-                          .firstOrNull;
-                      final target = controller.readyTarget;
-                      // Cancelling a far-away request may reprepare this page
-                      // after its window metadata was dropped. Keep its actual
-                      // mounted leases until a new exact delivery replaces it.
-                      final view =
-                          (target?.pageIndex == page ? target!.view : null) ??
-                          mountedView ??
-                          controller.viewForPage(page);
-                      if (view == null ||
-                          (!view.isReady && !_mountedPages.containsKey(view))) {
-                        return widget.placeholder;
-                      }
-                      return _NativeMountedPage(
-                        key: ObjectKey(view),
-                        view: view,
-                        onMounted: _mounted,
-                        onUnmounted: _unmounted,
-                      );
-                    },
+              child: ColoredBox(
+                color: widget.backgroundColor ?? const Color(0x00000000),
+                child: IgnorePointer(
+                  ignoring: widget.frozen || controller.isClosed,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: _onScroll,
+                    child: PageView.builder(
+                      controller: _pages,
+                      reverse: widget.reverse,
+                      allowImplicitScrolling: false,
+                      physics: widget.frozen || controller.isClosed
+                          ? const NeverScrollableScrollPhysics()
+                          : const AlwaysScrollableScrollPhysics(
+                              parent: ClampingScrollPhysics(),
+                            ),
+                      itemCount: prefix?.length ?? _lastPageCount,
+                      onPageChanged: _pageChanged,
+                      itemBuilder: (context, page) {
+                        final mountedView = _mountedPages.keys
+                            .where((view) => view.pageIndex == page)
+                            .firstOrNull;
+                        final target = controller.readyTarget;
+                        // Cancelling a far-away request may reprepare this page
+                        // after its window metadata was dropped. Keep its actual
+                        // mounted leases until a new exact delivery replaces it.
+                        final view =
+                            (target?.pageIndex == page ? target!.view : null) ??
+                            mountedView ??
+                            controller.viewForPage(page);
+                        if (view == null ||
+                            (!view.isReady &&
+                                !_mountedPages.containsKey(view))) {
+                          return widget.placeholder;
+                        }
+                        return _NativeMountedPage(
+                          key: ObjectKey(view),
+                          view: view,
+                          onMounted: _mounted,
+                          onUnmounted: _unmounted,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -391,6 +436,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
   @override
   void dispose() {
     _frame++;
+    _activityRevision++;
     final changes = _changes;
     if (changes != null) unawaited(changes.cancel());
     _pages.dispose();

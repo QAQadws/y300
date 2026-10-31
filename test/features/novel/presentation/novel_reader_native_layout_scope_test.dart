@@ -132,7 +132,23 @@ void main() {
         ),
       );
       expect(first.paginationKey, second.paginationKey);
-      expect(first.paginationKey, startsWith('native-1-'));
+      expect(
+        first.paginationKey,
+        startsWith(
+          'native-${NovelReaderNativeLayoutScope.fingerprintRevision}-',
+        ),
+      );
+      final environment = await _environment(tester);
+      final unchangedFonts = await _scope(chapter, environment);
+      final fontChanged = await NovelReaderNativeLayoutScope.prepare(
+        chapter: chapter,
+        environment: environment,
+        width: 200,
+        height: 200,
+        cancellation: NovelReaderPaginationCancellationToken(),
+        fontCollectionGeneration: 1,
+      );
+      expect(fontChanged.paginationKey, isNot(unchangedFonts.paginationKey));
     },
   );
 
