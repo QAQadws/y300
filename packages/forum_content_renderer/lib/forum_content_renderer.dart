@@ -13,6 +13,7 @@ export 'src/inline/forum_body_inline_paragraph_layout.dart';
 export 'src/inline/forum_body_inline_paragraph_view.dart';
 export 'src/inline/forum_body_inline_paragraph_surface.dart';
 export 'src/inline/forum_body_ruby_group_layout.dart';
+export 'src/inline/forum_body_ruby_group_metrics.dart';
 export 'src/inline/forum_body_ruby_group_preparation.dart';
 export 'src/inline/forum_body_text_band_content.dart'
     show ForumBodyTextBandContent;

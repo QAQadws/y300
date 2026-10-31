@@ -1,21 +1,15 @@
-import 'dart:math' as math;
-
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import 'forum_body_ruby_group_contract.dart';
+import 'forum_body_ruby_group_metrics.dart';
+
+export 'forum_body_ruby_group_contract.dart'
+    show ForumBodyRubyGroupFailure, ForumBodyRubyGroupException;
 
 enum ForumBodyRubyPart { base, annotation }
-
-enum ForumBodyRubyGroupFailure { scope, content, geometry, overflow }
-
-final class ForumBodyRubyGroupException implements Exception {
-  const ForumBodyRubyGroupException(this.failure);
-  final ForumBodyRubyGroupFailure failure;
-  @override
-  String toString() => 'ForumBodyRubyGroupException(${failure.name})';
-}
 
 final class ForumBodyRubyHit {
   const ForumBodyRubyHit({required this.part, required this.position});
@@ -34,21 +28,15 @@ final class ForumBodyRubyHit {
 final class ForumBodyRubyGroupLayout {
   /// Parent inline/layout identities include this geometry contract separately
   /// from the underlying paragraph shaping backend revision.
-  static const revision = 1;
+  static const revision = ForumBodyRubyGroupMetrics.revision;
 
   ForumBodyRubyGroupLayout._({
     required ForumBodyTextLease base,
     required ForumBodyTextLease? annotation,
     required ForumBodyParagraphContent annotationContent,
-    required this.size,
-    required this.baseline,
-    required this.baseOffset,
-    required this.annotationOffset,
-    required double annotationHitBoundary,
+    required this.metrics,
   }) : _base = base,
        _annotation = annotation,
-       hasAnnotation = annotation != null,
-       _annotationHitBoundary = annotationHitBoundary,
        _annotationContent = annotationContent;
 
   factory ForumBodyRubyGroupLayout.create({
@@ -92,33 +80,12 @@ final class ForumBodyRubyGroupLayout {
     required ForumBodyParagraphContent annotation,
     double gap = 0,
     double maxWidth = 16384,
-  }) {
-    if (base.identity != annotation.identity ||
-        base.fontRevision != annotation.fontRevision ||
-        base.styleRevision != annotation.styleRevision) {
-      throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.scope);
-    }
-    if (base.layoutMode != ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
-        annotation.layoutMode !=
-            ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
-        base.projection.text.isEmpty) {
-      throw const ForumBodyRubyGroupException(
-        ForumBodyRubyGroupFailure.content,
-      );
-    }
-    // Geometry is already in logical layout pixels. Never rescale the group a
-    // second time after its per-size child layouts have resolved TextScaler.
-    if (!gap.isFinite ||
-        gap < 0 ||
-        gap > 16384 ||
-        !maxWidth.isFinite ||
-        maxWidth <= 0 ||
-        maxWidth > 16384) {
-      throw const ForumBodyRubyGroupException(
-        ForumBodyRubyGroupFailure.geometry,
-      );
-    }
-  }
+  }) => validateForumBodyRubyGroupInputs(
+    base: base,
+    annotation: annotation,
+    gap: gap,
+    maxWidth: maxWidth,
+  );
 
   static ForumBodyRubyGroupLayout? _acquire({
     required ForumBodyParagraphCache cache,
@@ -194,72 +161,25 @@ final class ForumBodyRubyGroupLayout {
     double maxWidth = 16384,
   }) {
     try {
-      if (!cache.ownsLease(baseLease) ||
-          (annotationLease != null && !cache.ownsLease(annotationLease))) {
-        throw StateError(
-          'Ruby child lease is not active in this reading owner',
-        );
-      }
-      validateInputs(
-        base: baseLease.content,
+      final metrics = ForumBodyRubyGroupMetrics.measure(
+        cache: cache,
+        baseLease: baseLease,
         annotation: annotation,
+        annotationLease: annotationLease,
         gap: gap,
         maxWidth: maxWidth,
       );
-      if (annotation.projection.text.isNotEmpty != (annotationLease != null) ||
-          (annotationLease != null &&
-              !identical(annotationLease.content, annotation))) {
-        throw const ForumBodyRubyGroupException(
-          ForumBodyRubyGroupFailure.content,
-        );
-      }
       final baseLayout = baseLease.layout;
       if (!baseLayout.isPaintPrepared ||
           (annotationLease != null &&
               !annotationLease.layout.isPaintPrepared)) {
         throw StateError('Ruby child paint is not prepared');
       }
-      final baseBounds = _textBounds(baseLease);
-      final annotationBounds = annotationLease == null
-          ? Rect.zero
-          : _textBounds(annotationLease);
-      final width = math.max(baseBounds.width, annotationBounds.width);
-      final baseTop = annotationLease == null
-          ? 0.0
-          : annotationBounds.height + gap;
-      final baseOffset = Offset(
-        (width - baseBounds.width) / 2 - baseBounds.left,
-        baseTop - baseBounds.top,
-      );
-      final height = baseTop + baseBounds.height;
-      final baseline = baseOffset.dy + baseLayout.alphabeticBaseline;
-      if (width > maxWidth) {
-        throw const ForumBodyRubyGroupException(
-          ForumBodyRubyGroupFailure.overflow,
-        );
-      }
-      if (!height.isFinite ||
-          height <= 0 ||
-          height > 16384 ||
-          !baseline.isFinite ||
-          baseline < 0 ||
-          baseline > height) {
-        throw const ForumBodyRubyGroupException(
-          ForumBodyRubyGroupFailure.geometry,
-        );
-      }
       return ForumBodyRubyGroupLayout._(
         base: baseLease,
         annotation: annotationLease,
         annotationContent: annotation,
-        size: Size(width, height),
-        baseline: baseline,
-        baseOffset: baseOffset,
-        annotationOffset: Offset(
-          (width - annotationBounds.width) / 2 - annotationBounds.left,
-          -annotationBounds.top,
-        ),
-        annotationHitBoundary: annotationBounds.height + gap / 2,
+        metrics: metrics,
       );
     } catch (_) {
       annotationLease?.release();
@@ -271,12 +191,12 @@ final class ForumBodyRubyGroupLayout {
   ForumBodyTextLease? _base;
   ForumBodyTextLease? _annotation;
   ForumBodyParagraphContent? _annotationContent;
-  final Size size;
-  final double baseline;
-  final Offset baseOffset;
-  final Offset annotationOffset;
-  final bool hasAnnotation;
-  final double _annotationHitBoundary;
+  final ForumBodyRubyGroupMetrics metrics;
+  Size get size => metrics.size;
+  double get baseline => metrics.baseline;
+  Offset get baseOffset => metrics.baseOffset;
+  Offset get annotationOffset => metrics.annotationOffset;
+  bool get hasAnnotation => metrics.hasAnnotation;
 
   bool get isActive =>
       _base?.isActive == true &&
@@ -305,31 +225,11 @@ final class ForumBodyRubyGroupLayout {
         : _annotationContent!;
   }
 
-  static Rect _textBounds(ForumBodyTextLease lease) {
-    final layout = lease.layout;
-    var bounds = Rect.fromLTWH(0, 0, layout.width, layout.height);
-    // Author line-height can be smaller than the actual font boxes, including
-    // fallback emoji and nested larger runs. Reserve their real extent without
-    // reshaping the font or changing the paragraph's source coordinates.
-    for (final box in layout.selectionBoxes(
-      0,
-      lease.content.projection.text.length,
-    )) {
-      bounds = bounds.expandToInclude(box.toRect());
-    }
-    return bounds;
-  }
-
   /// Already scaled geometry for a direct TextPainter placeholder. A Widget
   /// host must not apply an additional inline-widget scale to this native box.
   PlaceholderDimensions get placeholderDimensions {
     _ensureActive();
-    return PlaceholderDimensions(
-      size: size,
-      alignment: PlaceholderAlignment.baseline,
-      baseline: TextBaseline.alphabetic,
-      baselineOffset: baseline,
-    );
+    return metrics.placeholderDimensions;
   }
 
   HtmlDisplayTextProjection projectionFor(ForumBodyRubyPart part) {
@@ -352,7 +252,7 @@ final class ForumBodyRubyGroupLayout {
     }
     final annotation = _annotation;
     final useAnnotation =
-        annotation != null && offset.dy < _annotationHitBoundary;
+        annotation != null && offset.dy < metrics.annotationHitBoundary;
     return ForumBodyRubyHit(
       part: useAnnotation
           ? ForumBodyRubyPart.annotation

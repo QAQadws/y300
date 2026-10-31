@@ -68,6 +68,13 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 1，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
 
+`ForumBodyRubyGroupMetrics.measure` 从当前同 owner 的字形租约借用上述真实数值几何，
+不排字、不准备图片、不消费或释放调用方句柄，失败也保持借用规则。它同样核对实际
+注音上下文对象和完整输入范围；相同文字的旧上下文不能替代当前内容。返回值仅含尺寸、
+基线、偏移和分侧命中分界，不保留内容/native/owner，也不证明绘制或可见 coverage。
+既有 `ForumBodyRubyGroupLayout.adopt` 复用唯一几何实现，继续接管句柄并要求图片已准备；
+批次字形可用于计划阶段，数值测量不能绕过可读交付门槛。几何算法与 revision 均保持 1。
+
 `tryCreateCached` 仅借用已准备的两侧，任一缺失不测量并释放本次部分命中；空注音只需
 基字。`adopt` 接管显式传入的现有租约，不查缓存、不调用缩放或再次排字；成功和失败
 都消费这些句柄，不关闭 owner 或外部别名。两侧须由同一阅读缓存持有且活跃，非空注音
