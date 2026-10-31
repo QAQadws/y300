@@ -57,7 +57,7 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
-  static const revision = 2;
+  static const revision = 3;
 
   /// Whitespace accepted by the explicit single-line projection policy. This
   /// predicate does not classify forum content or change normal HTML spacing.
@@ -92,9 +92,13 @@ final class HtmlDisplayTextProjection {
   factory HtmlDisplayTextProjection.build(
     List<HtmlDisplayTextRun> runs, {
     int maxOutputCodeUnits = 16384,
+    bool preserveCollapsibleEdges = false,
   }) {
     if (maxOutputCodeUnits < 0) throw ArgumentError.value(maxOutputCodeUnits);
-    final builder = _ProjectionBuilder(maxOutputCodeUnits);
+    final builder = _ProjectionBuilder(
+      maxOutputCodeUnits,
+      preserveCollapsibleEdges,
+    );
     var previousEnd = 0;
     for (var i = 0; i < runs.length; i++) {
       final run = runs[i];
@@ -219,8 +223,9 @@ final class _ProjectedRune {
 }
 
 final class _ProjectionBuilder {
-  _ProjectionBuilder(this.limit);
+  _ProjectionBuilder(this.limit, this.preserveCollapsibleEdges);
   final int limit;
+  final bool preserveCollapsibleEdges;
   final output = <_ProjectedRune>[];
   final utf16Starts = <int>[0];
   _ProjectedRune? pendingSpace;
@@ -270,7 +275,10 @@ final class _ProjectionBuilder {
       return;
     } else {
       final space = pendingSpace;
-      if (space != null && output.isNotEmpty && output.last.rune != 10) {
+      if (space != null &&
+          (output.isEmpty
+              ? preserveCollapsibleEdges
+              : output.last.rune != 10)) {
         _emit(space);
       }
       pendingSpace = null;
@@ -287,6 +295,15 @@ final class _ProjectionBuilder {
   }
 
   HtmlDisplayTextProjection finish(int emptySource) {
+    // An inline fragment does not own the surrounding formatting context.
+    // Preserve one collapsed edge space for its parent to place or trim, while
+    // actual hard-line edges retain the ordinary whitespace rules.
+    final space = pendingSpace;
+    if (preserveCollapsibleEdges &&
+        space != null &&
+        (output.isEmpty || output.last.rune != 10)) {
+      _emit(space);
+    }
     final parts = <HtmlDisplayTextPart>[];
     final text = StringBuffer();
     var i = 0;

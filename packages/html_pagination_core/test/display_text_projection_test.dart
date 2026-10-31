@@ -3,6 +3,110 @@ import 'package:test/test.dart';
 
 void main() {
   test(
+    'inline fragments retain collapsed edge spaces with their source spans',
+    () {
+      const runs = [
+        HtmlDisplayTextRun(text: ' \t前 ', sourceRuneStart: 10),
+        HtmlDisplayTextRun(text: ' \r', sourceRuneStart: 14),
+        HtmlDisplayTextRun(text: '\n', sourceRuneStart: 16),
+      ];
+      final fragment = HtmlDisplayTextProjection.build(
+        runs,
+        preserveCollapsibleEdges: true,
+      );
+      expect(fragment.text, ' 前 ');
+      expect(HtmlDisplayTextProjection.build(runs).text, '前');
+      expect(fragment.sourceAtUtf16(0).sourceRune, 10);
+      expect(fragment.sourceAtUtf16(1).sourceRune, 12);
+      expect(fragment.sourceAtUtf16(2).sourceRune, 13);
+      expect(fragment.sourceAtUtf16(3).sourceRune, 17);
+      expect(fragment.parts.map((part) => part.runIndex), [0]);
+    },
+  );
+
+  test(
+    'whitespace-only fragments preserve one space and the complete collapsed range',
+    () {
+      final fragment = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(text: ' \t\r', sourceRuneStart: 20),
+        HtmlDisplayTextRun(text: '\n ', sourceRuneStart: 23),
+      ], preserveCollapsibleEdges: true);
+      expect(fragment.text, ' ');
+      expect(fragment.sourceAtUtf16(0).sourceRune, 20);
+      expect(fragment.sourceAtUtf16(1).sourceRune, 25);
+      expect(fragment.graphemeRanges(startUtf16: 0, endUtf16: 1), hasLength(1));
+    },
+  );
+
+  test(
+    'fragment edges do not preserve collapsible spaces around real line breaks',
+    () {
+      final fragment = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(text: '  a  ', sourceRuneStart: 0),
+        HtmlDisplayTextRun(text: '\n', sourceRuneStart: 5, hardBreak: true),
+        HtmlDisplayTextRun(text: '  b ', sourceRuneStart: 6),
+        HtmlDisplayTextRun(
+          text: '\n  ',
+          sourceRuneStart: 10,
+          whiteSpace: HtmlDisplayWhiteSpace.preLine,
+        ),
+      ], preserveCollapsibleEdges: true);
+      expect(fragment.text, ' a\nb\n');
+      expect(fragment.sourceAtUtf16(fragment.text.length).sourceRune, 11);
+    },
+  );
+
+  test(
+    'edge preservation keeps preformatted and Unicode noncollapsible spaces literal',
+    () {
+      for (final mode in [
+        HtmlDisplayWhiteSpace.pre,
+        HtmlDisplayWhiteSpace.preWrap,
+      ]) {
+        final fragment = HtmlDisplayTextProjection.build([
+          HtmlDisplayTextRun(
+            text: ' \t\u00a0\u3000 ',
+            sourceRuneStart: 30,
+            whiteSpace: mode,
+          ),
+        ], preserveCollapsibleEdges: true);
+        expect(fragment.text, ' \t\u00a0\u3000 ');
+      }
+      final normal = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(text: '\u00a0\u3000', sourceRuneStart: 0),
+      ], preserveCollapsibleEdges: true);
+      expect(normal.text, '\u00a0\u3000');
+    },
+  );
+
+  test(
+    'preserved edges count toward output budgets and keep source gaps explicit',
+    () {
+      expect(
+        () => HtmlDisplayTextProjection.build(
+          const [HtmlDisplayTextRun(text: ' a ', sourceRuneStart: 0)],
+          maxOutputCodeUnits: 2,
+          preserveCollapsibleEdges: true,
+        ),
+        throwsA(isA<HtmlDisplayTextLimitException>()),
+      );
+      final fragment = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(text: ' a', sourceRuneStart: 5),
+        HtmlDisplayTextRun(text: ' b ', sourceRuneStart: 50),
+      ], preserveCollapsibleEdges: true);
+      final before = fragment.sourceAtUtf16(
+        2,
+        affinity: HtmlProjectionAffinity.upstream,
+      );
+      final after = fragment.sourceAtUtf16(2);
+      expect(before.sourceRune, 7);
+      expect(after.sourceRune, 50);
+      expect(before.isExact, isFalse);
+      expect(after.isExact, isFalse);
+    },
+  );
+
+  test(
     'single-line projection retains the source span across styled whitespace and BR',
     () {
       final projection = HtmlDisplayTextProjection.build(const [
