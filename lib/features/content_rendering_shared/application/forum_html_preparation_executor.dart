@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:collection';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -8,6 +6,7 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import '../domain/models/forum_html_reader_preferences.dart';
 import '../presentation/contracts/forum_html_render_preparer.dart';
 import 'forum_html_render_preparer.dart';
+import 'forum_preparation_scheduler.dart';
 
 final class ForumHtmlPreparationRequest {
   const ForumHtmlPreparationRequest({
@@ -127,151 +126,92 @@ Future<ForumHtmlPreparedRenderDocument> _runPreparationWorker(
   ForumHtmlBackgroundPreparationInput input,
 ) => Isolate.run(input.prepare, debugName: 'forum-body-preparation');
 
-/// Bounds admitted work; completed documents belong only to mounted consumers.
+/// HTML preparation facade over shared data-only admission.
 class ForumHtmlPreparationExecutor extends ChangeNotifier {
   ForumHtmlPreparationExecutor({
-    this.codeUnitThreshold = 32 * 1024,
-    this.maxConcurrent = 1,
-    this.maxQueued = 16,
-    this.maxQueuedCodeUnits = 512 * 1024,
+    int codeUnitThreshold = 32 * 1024,
+    int maxConcurrent = 1,
+    int maxQueued = 16,
+    int maxQueuedCodeUnits = 512 * 1024,
     ForumHtmlPreparationWorker worker = _runPreparationWorker,
-  }) : assert(codeUnitThreshold >= 0),
-       assert(maxConcurrent > 0),
-       assert(maxQueued >= 0),
-       assert(maxQueuedCodeUnits >= 0),
-       _worker = worker;
+  }) : this._(
+         codeUnitThreshold,
+         ForumPreparationScheduler(
+           maxConcurrent: maxConcurrent,
+           maxQueued: maxQueued,
+           maxQueuedCodeUnits: maxQueuedCodeUnits,
+         ),
+         true,
+         worker,
+       );
 
-  // Application runtime scope. Leases retire inputs on unmount/owner changes;
-  // this executor never retains a completed cache or a queue of rejected jobs.
-  static final shared = ForumHtmlPreparationExecutor();
+  ForumHtmlPreparationExecutor.withScheduler({
+    required ForumPreparationScheduler scheduler,
+    int codeUnitThreshold = 32 * 1024,
+    ForumHtmlPreparationWorker worker = _runPreparationWorker,
+  }) : this._(codeUnitThreshold, scheduler, false, worker);
 
+  ForumHtmlPreparationExecutor._(
+    this.codeUnitThreshold,
+    this._scheduler,
+    this._ownsScheduler,
+    this._worker,
+  ) : assert(codeUnitThreshold >= 0) {
+    _scope = _scheduler.createScope();
+    _scheduler.addListener(_capacityChanged);
+  }
+
+  static final shared = ForumHtmlPreparationExecutor.withScheduler(
+    scheduler: ForumPreparationScheduler.shared,
+  );
   final int codeUnitThreshold;
-  final int maxConcurrent;
-  final int maxQueued;
-  final int maxQueuedCodeUnits;
+  final ForumPreparationScheduler _scheduler;
+  final bool _ownsScheduler;
   final ForumHtmlPreparationWorker _worker;
-  final _entries = <Object, _PreparationEntry>{};
-  final _queue = Queue<_PreparationEntry>();
-  int _active = 0;
-  int _queuedCodeUnits = 0;
+  late final ForumPreparationScope _scope;
   bool _closed = false;
-  bool _notificationScheduled = false;
-
-  int get activeCount => _active;
-  int get queuedCount => _queue.length;
-  int get queuedCodeUnits => _queuedCodeUnits;
+  int get maxConcurrent => _scheduler.maxConcurrent;
+  int get maxQueued => _scheduler.maxQueued;
+  int get maxQueuedCodeUnits => _scheduler.maxQueuedCodeUnits;
+  int get activeCount => _scheduler.activeCount;
+  int get queuedCount => _scheduler.queuedCount;
+  int get queuedCodeUnits => _scheduler.queuedCodeUnits;
 
   bool usesBackground(ForumHtmlPreparationRequest request) =>
       request.html.length >= codeUnitThreshold &&
       request.backgroundInput != null;
 
-  /// Null applies backpressure. The mounted caller retains its own input and
-  /// listens for capacity, without synchronously preparing it or adding a job.
   ForumHtmlPreparationLease? tryAcquire(ForumHtmlPreparationRequest request) {
     if (_closed) throw StateError('Preparation executor is closed');
-    final identity = request.identity;
-    final existing = _entries[identity];
-    if (existing != null) {
-      existing.consumers++;
-      return ForumHtmlPreparationLease._(this, existing);
-    }
     final input = request.backgroundInput;
     if (input == null) throw ArgumentError('Unsupported background preparer');
-    final canStart = _active < maxConcurrent;
-    if (!canStart &&
-        (_queue.length >= maxQueued ||
-            _queuedCodeUnits + input.html.length > maxQueuedCodeUnits)) {
-      return null;
-    }
-    final entry = _PreparationEntry(identity, input);
-    _entries[identity] = entry;
-    if (canStart) {
-      _start(entry);
-    } else {
-      _queue.add(entry);
-      _queuedCodeUnits += input.html.length;
-    }
-    return ForumHtmlPreparationLease._(this, entry);
-  }
-
-  void _start(_PreparationEntry entry) {
-    entry.started = true;
-    _active++;
-    Future<ForumHtmlPreparedRenderDocument>.sync(() => _worker(entry.input))
-        .then(
-          (document) => entry.completer.complete(document),
-          onError: (Object error, StackTrace stack) =>
-              entry.completer.completeError(error, stack),
-        )
-        .whenComplete(() {
-          _active--;
-          if (identical(_entries[entry.identity], entry)) {
-            _entries.remove(entry.identity);
-          }
-          while (!_closed && _active < maxConcurrent && _queue.isNotEmpty) {
-            final next = _queue.removeFirst();
-            _queuedCodeUnits -= next.input.html.length;
-            _start(next);
-          }
-          _capacityChanged();
-        });
-  }
-
-  void _release(_PreparationEntry entry) {
-    entry.consumers--;
-    if (entry.consumers != 0 || entry.started) return;
-    if (_queue.remove(entry)) {
-      _queuedCodeUnits -= entry.input.html.length;
-      _entries.remove(entry.identity);
-      entry.completer.complete(null);
-      _capacityChanged();
-    }
+    final worker = _worker;
+    final lease = _scope.tryAcquire<ForumHtmlPreparedRenderDocument>(
+      identity: (request.identity, worker),
+      codeUnits: input.html.length,
+      work: () => worker(input),
+    );
+    return lease == null ? null : ForumHtmlPreparationLease._(lease);
   }
 
   void _capacityChanged() {
-    if (_closed || _notificationScheduled) return;
-    _notificationScheduled = true;
-    scheduleMicrotask(() {
-      _notificationScheduled = false;
-      if (!_closed) notifyListeners();
-    });
+    if (!_closed) notifyListeners();
   }
 
   @override
   void dispose() {
+    if (_closed) return;
     _closed = true;
-    for (final entry in _queue) {
-      _entries.remove(entry.identity);
-      entry.completer.complete(null);
-    }
-    _queue.clear();
-    _queuedCodeUnits = 0;
-    // Already-running isolates remain counted until their real completion.
+    _scheduler.removeListener(_capacityChanged);
+    _scope.close();
+    if (_ownsScheduler) _scheduler.dispose();
     super.dispose();
   }
 }
 
 final class ForumHtmlPreparationLease {
-  ForumHtmlPreparationLease._(this._executor, this._entry);
-  final ForumHtmlPreparationExecutor _executor;
-  final _PreparationEntry _entry;
-  bool _released = false;
-
-  Future<ForumHtmlPreparedRenderDocument?> get future =>
-      _entry.completer.future;
-
-  void release() {
-    if (_released) return;
-    _released = true;
-    _executor._release(_entry);
-  }
-}
-
-final class _PreparationEntry {
-  _PreparationEntry(this.identity, this.input);
-  final Object identity;
-  final ForumHtmlBackgroundPreparationInput input;
-  final completer = Completer<ForumHtmlPreparedRenderDocument?>();
-  int consumers = 1;
-  bool started = false;
+  ForumHtmlPreparationLease._(this._lease);
+  final ForumPreparationLease<ForumHtmlPreparedRenderDocument> _lease;
+  Future<ForumHtmlPreparedRenderDocument?> get future => _lease.future;
+  void release() => _lease.release();
 }

@@ -11,6 +11,41 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   group('ForumHtmlPreparationExecutor', () {
+    test('shared admission survives one facade closing', () async {
+      final scheduler = ForumPreparationScheduler();
+      addTearDown(scheduler.dispose);
+      final result = Completer<ForumHtmlPreparedRenderDocument>();
+      var starts = 0;
+      Future<ForumHtmlPreparedRenderDocument> worker(
+        ForumHtmlBackgroundPreparationInput input,
+      ) {
+        starts++;
+        return result.future;
+      }
+
+      final first = ForumHtmlPreparationExecutor.withScheduler(
+        scheduler: scheduler,
+        worker: worker,
+      );
+      final second = ForumHtmlPreparationExecutor.withScheduler(
+        scheduler: scheduler,
+        worker: worker,
+      );
+      addTearDown(second.dispose);
+      final request = _request('shared');
+      final a = first.tryAcquire(request)!;
+      final b = second.tryAcquire(request)!;
+      expect(a.future, same(b.future));
+      first.dispose();
+      a.release();
+      expect(scheduler.activeCount, 1);
+      final expected = request.prepareSynchronously();
+      result.complete(expected);
+      expect(await b.future, same(expected));
+      expect(starts, 1);
+      b.release();
+    });
+
     test(
       'prepared size budget skips planning consistently in the real worker',
       () async {
@@ -178,36 +213,29 @@ void main() {
       },
     );
 
-    test(
-      'same request shares running work and releasing one consumer preserves the other',
-      () async {
-        final worker = _ControlledWorker();
-        final executor = _executor(worker);
-        final request = _request('<p>shared</p>');
-        final first = executor.tryAcquire(request)!;
-        final second = executor.tryAcquire(request)!;
-        expect(worker.jobs, hasLength(1));
-        expect(second.future, same(first.future));
-        expect(executor.activeCount, 1);
-        first.release();
-        first.release();
-        expect(executor.activeCount, 1);
-        worker.complete(0);
-        expect((await second.future)!.preparedHtml, contains('shared'));
-        second.release();
-        await _drain();
-        expect(executor.activeCount, 0);
-        final third = executor.tryAcquire(request)!;
-        expect(
-          worker.jobs,
-          hasLength(2),
-          reason: 'There is no completed cache.',
-        );
-        worker.complete(1);
-        await third.future;
-        third.release();
-      },
-    );
+    test('same request shares running work and releasing one consumer preserves the other', () async {
+      final worker = _ControlledWorker();
+      final executor = _executor(worker);
+      final request = _request('<p>shared</p>');
+      final first = executor.tryAcquire(request)!;
+      final second = executor.tryAcquire(request)!;
+      expect(worker.jobs, hasLength(1));
+      expect(second.future, same(first.future));
+      expect(executor.activeCount, 1);
+      first.release();
+      first.release();
+      expect(executor.activeCount, 1);
+      worker.complete(0);
+      expect((await second.future)!.preparedHtml, contains('shared'));
+      second.release();
+      await _drain();
+      expect(executor.activeCount, 0);
+      final third = executor.tryAcquire(request)!;
+      expect(worker.jobs, hasLength(2), reason: 'There is no completed cache.');
+      worker.complete(1);
+      await third.future;
+      third.release();
+    });
 
     test('parallel workers and queued entry count remain bounded', () async {
       final worker = _ControlledWorker();
