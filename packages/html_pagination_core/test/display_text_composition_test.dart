@@ -12,6 +12,134 @@ HtmlDisplayTextProjection project(String text, int source) =>
 
 void main() {
   test(
+    'explicit source order preserves moved contexts and complete envelopes',
+    () {
+      final segments = [
+        HtmlDisplayTextSegment(project('AB', 0)),
+        HtmlDisplayTextSegment(project('xy', 3)),
+        HtmlDisplayTextSegment(project(' ', 2)),
+      ];
+      expect(
+        () => HtmlDisplayTextProjection.concatenate(segments),
+        throwsArgumentError,
+      );
+      final order = [0, 2, 1];
+      final moved = HtmlDisplayTextProjection.concatenate(
+        segments,
+        sourceOrder: order,
+      );
+      order.clear();
+      expect(moved.text, 'ABxy ');
+      expect(moved.sourceAtUtf16(2).sourceRune, 3);
+      expect(moved.sourceAtUtf16(2).isExact, isFalse);
+      expect(
+        moved
+            .sourceAtUtf16(4, affinity: HtmlProjectionAffinity.upstream)
+            .sourceRune,
+        5,
+      );
+      expect(moved.sourceAtUtf16(4).sourceRune, 2);
+      expect(moved.sourceEnvelope(startUtf16: 0, endUtf16: 5), (
+        runeStart: 0,
+        runeEnd: 5,
+      ));
+      expect(moved.sourceEnvelope(startUtf16: 2, endUtf16: 4), (
+        runeStart: 3,
+        runeEnd: 5,
+      ));
+      final slice = moved.slice(startUtf16: 2, endUtf16: 5);
+      expect(slice.sourceEnvelope(startUtf16: 0, endUtf16: 3), (
+        runeStart: 2,
+        runeEnd: 5,
+      ));
+      expect(
+        () => HtmlDisplayTextProjection.concatenate(
+          [HtmlDisplayTextSegment(moved)],
+          sourceOrder: [0],
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
+
+  for (final order in <List<int>>[
+    [],
+    [0],
+    [0, 0],
+    [-1, 1],
+    [0, 2],
+  ]) {
+    test('source order is a complete bijection: $order', () {
+      expect(
+        () => HtmlDisplayTextProjection.concatenate([
+          HtmlDisplayTextSegment(project('A', 0)),
+          HtmlDisplayTextSegment(project('B', 1)),
+        ], sourceOrder: order),
+        throwsArgumentError,
+      );
+    });
+  }
+
+  test(
+    'source permutation cannot admit overlapping or repeated source ranges',
+    () {
+      for (final second in [project('A', 0), project('B', 1)]) {
+        expect(
+          () => HtmlDisplayTextProjection.concatenate(
+            [
+              HtmlDisplayTextSegment(second),
+              HtmlDisplayTextSegment(project('AB', 0)),
+            ],
+            sourceOrder: [1, 0],
+          ),
+          throwsArgumentError,
+        );
+      }
+    },
+  );
+
+  test('moved Unicode contexts keep local source and grapheme ownership', () {
+    final early = project('e\u0301😀', 0);
+    final late = project('👨‍👩‍👧‍👦Z', 10);
+    final moved = HtmlDisplayTextProjection.concatenate(
+      [HtmlDisplayTextSegment(late), HtmlDisplayTextSegment(early)],
+      sourceOrder: [1, 0],
+    );
+    for (final (part, start) in [(late, 0), (early, late.text.length)]) {
+      for (var offset = 0; offset <= part.text.length; offset++) {
+        for (final affinity in HtmlProjectionAffinity.values) {
+          final local = part.sourceAtUtf16(offset, affinity: affinity);
+          if ((local.displayUtf16 == 0 &&
+                  affinity == HtmlProjectionAffinity.upstream) ||
+              (local.displayUtf16 == part.text.length &&
+                  affinity == HtmlProjectionAffinity.downstream)) {
+            continue;
+          }
+          final parent = moved.sourceAtUtf16(
+            start + offset,
+            affinity: affinity,
+          );
+          expect(parent.sourceRune, local.sourceRune);
+          expect(parent.displayUtf16, start + local.displayUtf16);
+        }
+      }
+    }
+    expect(moved.sourceEnvelope(startUtf16: 0, endUtf16: moved.text.length), (
+      runeStart: 0,
+      runeEnd: 18,
+    ));
+    expect(moved.sourceEnvelope(startUtf16: 1, endUtf16: 1), isNull);
+    expect(
+      () => moved.sourceEnvelope(startUtf16: 1, endUtf16: 2),
+      throwsArgumentError,
+    );
+    expect(
+      () => moved.sourceEnvelope(startUtf16: -1, endUtf16: 2),
+      throwsRangeError,
+    );
+  });
+
+  test(
     'explicit run ownership changes no text, source or grapheme coordinate',
     () {
       final original = HtmlDisplayTextProjection.build(const [

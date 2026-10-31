@@ -149,7 +149,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 7;
+  static const revision = 8;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -389,6 +389,28 @@ final class ForumBodyTextPageComposer {
         if (!continuation && _fragmentCount >= maxFragments) {
           _fail(ForumBodyTextPageFailure.fragmentLimit);
         }
+        // Only inspect newly consumed display text. Reordered source windows
+        // need actual range envelopes; rescanning a growing fragment for every
+        // appended row would make continuation composition quadratic.
+        final addedHint = forumBodySourceHint(
+          layout.projection,
+          layout.lines.isEmpty
+              ? 0
+              : layout.lines[active.nextLine].coverageStartUtf16,
+          view?.coverageEndUtf16 ?? 0,
+        );
+        final previousHint = continuation ? _draft.last.sourceHint : null;
+        final sourceHint = previousHint == null
+            ? addedHint
+            : addedHint == null
+            ? previousHint
+            : (
+                runeStart: math.min(
+                  previousHint.runeStart,
+                  addedHint.runeStart,
+                ),
+                runeEnd: math.max(previousHint.runeEnd, addedHint.runeEnd),
+              );
         final fragment = ForumBodyTextPageFragment._(
           paragraphIndex: active.index,
           path: layout.path,
@@ -398,11 +420,7 @@ final class ForumBodyTextPageComposer {
           endLine: end,
           coverageStartUtf16: view?.coverageStartUtf16 ?? 0,
           coverageEndUtf16: view?.coverageEndUtf16 ?? 0,
-          sourceHint: forumBodySourceHint(
-            layout.projection,
-            view?.coverageStartUtf16 ?? 0,
-            view?.coverageEndUtf16 ?? 0,
-          ),
+          sourceHint: sourceHint,
           left: active.left,
           top: top,
           width: layout.width,

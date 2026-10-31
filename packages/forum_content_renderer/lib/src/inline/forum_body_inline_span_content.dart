@@ -36,7 +36,7 @@ final class ForumBodyInlineSpanContent {
   }) : contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  static const revision = 3;
+  static const revision = 4;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -46,6 +46,9 @@ final class ForumBodyInlineSpanContent {
     required ForumBodyResolvedStyle style,
     required List<ForumBodyParagraphContent> contexts,
     required List<({int startUtf16, int endUtf16})> atomicRanges,
+    // Complete original-source ordering of the display contexts, when their
+    // visual placement differs. The pure projection validates every range.
+    List<int>? sourceOrder,
     int maxInputCodeUnits = 16384,
     int maxRuns = 512,
     int maxContexts = 512,
@@ -115,6 +118,7 @@ final class ForumBodyInlineSpanContent {
     }
     final display = HtmlDisplayTextProjection.concatenate(
       segments,
+      sourceOrder: sourceOrder,
       maxOutputCodeUnits: maxInputCodeUnits,
       maxSegments: maxContexts,
     );

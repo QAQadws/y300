@@ -74,7 +74,7 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
-  static const revision = 5;
+  static const revision = 6;
 
   /// Whitespace accepted by the explicit single-line projection policy. This
   /// predicate does not classify forum content or change normal HTML spacing.
@@ -106,8 +106,10 @@ final class HtmlDisplayTextProjection {
     this._emptySource, {
     int? leadingBeforeSource,
     int? trailingAfterSource,
+    bool sourceIsOrdered = true,
   }) : _leadingBeforeSource = leadingBeforeSource,
-       _trailingAfterSource = trailingAfterSource;
+       _trailingAfterSource = trailingAfterSource,
+       _sourceIsOrdered = sourceIsOrdered;
 
   factory HtmlDisplayTextProjection.build(
     List<HtmlDisplayTextRun> runs, {
@@ -138,8 +140,13 @@ final class HtmlDisplayTextProjection {
   /// Concatenates already projected, independent formatting contexts without
   /// normalizing whitespace or joining graphemes across their boundaries.
   /// Run offsets address the caller's combined style table, not DOM positions.
+  /// [sourceOrder], when present, is a complete permutation of segment indices
+  /// in original source order. Every child must itself remain source-ordered;
+  /// all actual source ranges and empty fences are checked for overlap/reversal.
+  /// Output always follows the supplied display order, with original sources.
   factory HtmlDisplayTextProjection.concatenate(
     List<HtmlDisplayTextSegment> segments, {
+    List<int>? sourceOrder,
     int maxOutputCodeUnits = 16384,
     int maxSegments = 512,
   }) {
@@ -149,13 +156,22 @@ final class HtmlDisplayTextProjection {
     if (segments.length > maxSegments) {
       throw const HtmlDisplayTextLimitException();
     }
+    var totalLength = 0;
+    for (final segment in segments) {
+      totalLength += segment.projection.text.length;
+      if (totalLength > maxOutputCodeUnits) {
+        throw const HtmlDisplayTextLimitException();
+      }
+    }
+    _validateSourceOrder(segments, sourceOrder);
     final text = StringBuffer();
     final parts = <HtmlDisplayTextPart>[];
     final runes = <_ProjectedRune>[];
     final utf16Starts = <int>[0];
     final boundaries = <int>[0];
     var length = 0;
-    int? previousSourceEnd;
+    var sourceIsOrdered = true;
+    int? previousRuneEnd;
     for (final segment in segments) {
       final projection = segment.projection;
       if (segment.runIndexOffset < 0 ||
@@ -172,21 +188,6 @@ final class HtmlDisplayTextProjection {
         return mapped;
       }
 
-      final sourceStart = projection._runes.isEmpty
-          ? projection._leadingBefore
-          : projection._runes.first.start;
-      final sourceEnd = projection._runes.isEmpty
-          ? projection._trailingAfter
-          : projection._runes.last.end;
-      if (previousSourceEnd != null && sourceStart < previousSourceEnd) {
-        throw ArgumentError(
-          'Projected segments overlap or reverse source order',
-        );
-      }
-      previousSourceEnd = sourceEnd;
-      if (length + projection.text.length > maxOutputCodeUnits) {
-        throw const HtmlDisplayTextLimitException();
-      }
       text.write(projection.text);
       for (final part in projection.parts) {
         parts.add(
@@ -198,6 +199,10 @@ final class HtmlDisplayTextProjection {
         );
       }
       for (final rune in projection._runes) {
+        if (previousRuneEnd != null && rune.start < previousRuneEnd) {
+          sourceIsOrdered = false;
+        }
+        previousRuneEnd = rune.end;
         runes.add(
           _ProjectedRune(
             rune.rune,
@@ -228,6 +233,7 @@ final class HtmlDisplayTextProjection {
       trailingAfterSource: segments.isEmpty
           ? 0
           : segments.last.projection._trailingAfter,
+      sourceIsOrdered: sourceIsOrdered,
     );
   }
 
@@ -239,6 +245,7 @@ final class HtmlDisplayTextProjection {
   final int _emptySource;
   final int? _leadingBeforeSource;
   final int? _trailingAfterSource;
+  final bool _sourceIsOrdered;
   int get _leadingBefore =>
       _leadingBeforeSource ??
       (_runes.isEmpty ? _emptySource : _runes.first.start);
@@ -319,7 +326,37 @@ final class HtmlDisplayTextProjection {
         affinity: HtmlProjectionAffinity.upstream,
       ).sourceRune,
       trailingAfterSource: sourceAtUtf16(endUtf16).sourceRune,
+      sourceIsOrdered: _sourceIsOrdered,
     );
+  }
+
+  /// Envelope of actual source ranges in a complete display window. Interior
+  /// gaps and reordered contexts may lie inside; this is only a search hint,
+  /// never proof of visible text, source adjacency or a semantic anchor.
+  ({int runeStart, int runeEnd})? sourceEnvelope({
+    required int startUtf16,
+    required int endUtf16,
+  }) {
+    RangeError.checkValidRange(startUtf16, endUtf16, text.length);
+    if (startUtf16 == endUtf16) return null;
+    if (sourceAtUtf16(startUtf16).displayUtf16 != startUtf16 ||
+        sourceAtUtf16(endUtf16).displayUtf16 != endUtf16) {
+      throw ArgumentError(
+        'Source envelope requires complete display graphemes',
+      );
+    }
+    final first = _lowerBound(_utf16Starts, startUtf16);
+    final last = _lowerBound(_utf16Starts, endUtf16);
+    var start = _runes[first].start;
+    var end = _runes[last - 1].end;
+    if (!_sourceIsOrdered) {
+      for (var i = first; i < last; i++) {
+        final rune = _runes[i];
+        if (rune.start < start) start = rune.start;
+        if (rune.end > end) end = rune.end;
+      }
+    }
+    return (runeStart: start, runeEnd: end);
   }
 
   /// Process-local hash for caches retaining this source projection. Never a
@@ -399,6 +436,41 @@ final class HtmlDisplayTextProjection {
       displayUtf16: display,
       isExact: isBoundary && before == after,
     );
+  }
+}
+
+// The explicit permutation describes SOURCE order; output remains in the
+// supplied display order. Validate every actual range, including each child's
+// interior, so a reordered child cannot hide an overlap behind its endpoints.
+void _validateSourceOrder(
+  List<HtmlDisplayTextSegment> segments,
+  List<int>? sourceOrder,
+) {
+  if (sourceOrder != null && sourceOrder.length != segments.length) {
+    throw ArgumentError('Source order must include every display segment');
+  }
+  final seen = List<bool>.filled(segments.length, false);
+  int? previousEnd;
+  for (var i = 0; i < segments.length; i++) {
+    final index = sourceOrder?[i] ?? i;
+    RangeError.checkValidIndex(index, segments, 'sourceOrder');
+    if (seen[index]) throw ArgumentError('Source order repeats a segment');
+    seen[index] = true;
+    final projection = segments[index].projection;
+    if (projection._runes.isEmpty) {
+      if ((previousEnd != null && projection._leadingBefore < previousEnd) ||
+          projection._trailingAfter < projection._leadingBefore) {
+        throw ArgumentError('Empty segment reverses source order');
+      }
+      previousEnd = projection._trailingAfter;
+    }
+    for (final rune in projection._runes) {
+      if ((previousEnd != null && rune.start < previousEnd) ||
+          rune.end <= rune.start) {
+        throw ArgumentError('Projected ranges overlap or reverse source order');
+      }
+      previousEnd = rune.end;
+    }
   }
 }
 

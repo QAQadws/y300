@@ -152,7 +152,9 @@ BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步
 边缘、可见 coverage、分页、缓存预算和阅读锚点。同一原始 run 的显示窗口经显式
 runIndexMap 共享父样式归属，只保留实际使用的 run，按对象身份去重，不合并相同样式
 的不同来源。原始流仍独立核对输入预算；窗口拆分不重复计费，也不提高 maxRuns。
-组合输入 revision 为 3，父布局身份还须纳入 projection、原子几何、完整样式和有效字体
+显示上下文重排必须显式传入完整的 sourceOrder，由纯坐标包核对实际来源范围；默认仍
+要求来源顺序。它不放宽原子绑定或子来源身份。组合输入 revision 为 4，父布局身份还
+须纳入 projection、原子几何、完整样式和有效字体
 缩放；分层/多注音几何尚未完成，不能据此宣称完整复杂正文已通过原生阅读器验收。
 
 `ForumBodyInlineParagraphLayout` 持有一个实际父 TextPainter。与普通段落共用唯一的
@@ -273,7 +275,9 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 释放父租约，组合器不接管子组。真实显示 coverage 与原始 sourceHint 来自父 display
 投影，不能把 U+FFFC 引擎范围用作显示或小说语义 offset；hint 仍不证明实际可见覆盖。
 
-快照只追加数值元数据并标记 `ForumBodyTextPageFragmentKind`，composer revision 为 7。
+sourceHint 是实际显示窗口全部来源范围的包络，不能只取重排后首尾坐标，也不能代替
+实际可见覆盖。行追加只合并新消费窗口的包络，避免重复扫描已经消费的草稿前缀。
+快照只追加数值元数据并标记 `ForumBodyTextPageFragmentKind`，composer revision 为 8。
 排字、子租约或回调不进入已发布页；超高不可拆组明确失败，已封页前缀不受晚失败影响。
 只接受普通租约的旧页面绑定明确拒绝 inline 分片，不能用同尺寸的普通字形或父占位框
 冒充完整交付。本组合能力不启用旧 renderer 兜底或自动切换阅读模式。

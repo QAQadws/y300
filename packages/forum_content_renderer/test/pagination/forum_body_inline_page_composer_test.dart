@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../inline/test_support/mixed_inline_fixture.dart';
 
@@ -47,6 +48,82 @@ void appendInline(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final height in [30.0, 100.0]) {
+    test(
+      'moved source windows keep actual page envelopes at height $height',
+      () {
+        final input = mixedInlineInput(base: 'AB ', suffix: '');
+        final base = input.base.displayWindow(startUtf16: 0, endUtf16: 2);
+        final space = input.base.displayWindow(startUtf16: 2, endUtf16: 3);
+        final content = ForumBodyInlineSpanContent.compose(
+          identity: input.content.identity,
+          path: input.content.path,
+          fontRevision: input.content.fontRevision,
+          styleRevision: input.content.styleRevision,
+          style: input.content.style,
+          contexts: [
+            input.contexts.first,
+            base,
+            input.annotation,
+            space,
+            input.contexts.last,
+          ],
+          sourceOrder: [0, 1, 3, 2, 4],
+          atomicRanges: [(startUtf16: 1, endUtf16: 5)],
+        );
+        final cache = ForumBodyParagraphCache(
+          maxEntries: 4,
+          maxEstimatedBytes: 1 << 20,
+        );
+        addTearDown(cache.close);
+        final child = ForumBodyRubyGroupLayout.create(
+          cache: cache,
+          base: base,
+          annotation: input.annotation,
+        );
+        addTearDown(child.close);
+        final target = composer(content.identity, width: 40, height: height);
+        appendInline(
+          target,
+          cache.acquireInline(
+            content: content,
+            width: 40,
+            dimensions: [child.placeholderDimensions],
+          ),
+        );
+        consume(target);
+        target.finish();
+        expect(content.projection.display.text, 'XABxy ');
+        // The last displayed space belongs before RT in source. Its endpoint
+        // alone would lose the annotation and its hidden RP source gap.
+        expect(
+          content.projection.display
+              .sourceAtUtf16(6, affinity: HtmlProjectionAffinity.upstream)
+              .sourceRune,
+          4,
+        );
+        if (height == 30) {
+          expect(target.snapshot, hasLength(2));
+          expect(target.snapshot.first.fragments.single.sourceHint, (
+            runeStart: 0,
+            runeEnd: 1,
+          ));
+          expect(target.snapshot.last.fragments.single.sourceHint, (
+            runeStart: 1,
+            runeEnd: 7,
+          ));
+        } else {
+          expect(target.snapshot, hasLength(1));
+          final fragment = target.snapshot.single.fragments.single;
+          expect((fragment.startLine, fragment.endLine), (0, 2));
+          expect(fragment.sourceHint, (runeStart: 0, runeEnd: 7));
+        }
+        child.close();
+        expect(cache.activeLeases, 0);
+      },
+    );
+  }
+
   test(
     'existing composer paginates mixed lines using display coverage and raw source hints',
     () {
@@ -91,7 +168,7 @@ void main() {
       expect(prefix.single.fragments.single, same(first));
       expect(lease.isActive, isFalse);
       expect(child.isActive, isTrue);
-      expect(target.snapshot.composerRevision, 7);
+      expect(target.snapshot.composerRevision, 8);
     },
   );
 
