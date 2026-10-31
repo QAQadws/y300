@@ -78,7 +78,7 @@ final class _Fixture {
           spaceBefore: befores?[index] ?? 3,
           spaceAtPageStart: gap,
         );
-        while (!composer.needsParagraph) {
+        while (!composer.needsInput) {
           composer.advance(maxLines: 2);
         }
       }
@@ -120,6 +120,40 @@ Future<List<int>> _pagePixels(RenderRepaintBoundary boundary) async {
 }
 
 void main() {
+  testWidgets(
+    'a padding-only page paints without a paragraph lease or synthetic text',
+    (tester) async {
+      final fixture = _Fixture(html: '');
+      final composer = ForumBodyTextPageComposer(
+        identity: fixture.document.identity,
+        layoutId: 'blank-padding',
+        width: 100,
+        height: 20,
+        maxPages: 2,
+        maxFragments: 1,
+      );
+      addTearDown(composer.close);
+      composer.appendPadding(20);
+      composer.advancePadding();
+      composer.finish();
+      var taps = 0;
+      await tester.pumpWidget(
+        _host(_surface(composer.snapshot, [], onTap: (_, _) => taps++)),
+      );
+      expect(
+        tester.getSize(find.byType(ForumBodyTextPageSurface)),
+        const Size(100, 20),
+      );
+      expect(find.byType(ForumBodyParagraphSurface), findsNothing);
+      await tester.tapAt(const Offset(1, 5));
+      expect(taps, 0);
+      expect(fixture.cache.layoutBuildCount, 0);
+      expect(fixture.cache.activeLeases, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets(
     'overlapping fragments paint and hit in actual page order without reshaping',
     (tester) async {

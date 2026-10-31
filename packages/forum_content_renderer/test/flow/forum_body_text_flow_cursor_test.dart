@@ -76,7 +76,7 @@ void main() {
           spaceAtPageStart: 0,
           window: unit.window,
         );
-        while (!composer.needsParagraph && composer.snapshot.isEmpty) {
+        while (!composer.needsInput && composer.snapshot.isEmpty) {
           composer.advance(maxLines: 2);
         }
       }

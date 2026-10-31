@@ -1,6 +1,8 @@
 import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show precisionErrorTolerance;
+
 import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
@@ -135,7 +137,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 2;
+  static const revision = 3;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -148,6 +150,7 @@ final class ForumBodyTextPageComposer {
   final _draft = <ForumBodyTextPageFragment>[];
   ForumBodyTextPageSnapshot? _snapshot;
   _ActiveParagraph? _active;
+  double? _paddingRemaining;
   int _nextParagraphIndex = 0;
   int _fragmentCount = 0;
   double _usedHeight = 0;
@@ -157,7 +160,9 @@ final class ForumBodyTextPageComposer {
 
   bool get isComplete => _complete;
   bool get isClosed => _closed;
-  bool get needsParagraph => !_closed && !_complete && _active == null;
+  bool get needsInput =>
+      !_closed && !_complete && _active == null && _paddingRemaining == null;
+  bool get hasPendingPadding => _paddingRemaining != null;
 
   /// Admission order only; consumed input can extend beyond the stable pages.
   /// This ordinal must not be persisted as a confirmed reading position.
@@ -185,7 +190,7 @@ final class ForumBodyTextPageComposer {
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
   }) {
     _ensureOpen();
-    if (_active != null) throw StateError('A paragraph is still pending');
+    if (!needsInput) throw StateError('Composition input is still pending');
     final layout = lease.layout;
     if (paragraphIndex != _nextParagraphIndex ||
         lease.content.identity != identity ||
@@ -207,6 +212,45 @@ final class ForumBodyTextPageComposer {
       range.startLine,
       range.endLine,
     );
+  }
+
+  /// Admit physical padding independently of paragraph spacing. It can occupy
+  /// an otherwise empty page and does not imply source/semantic coverage. Each
+  /// advance handles at most one page; huge values still obey maxPages. Caller
+  /// supplies already resolved padding, not a collapsible margin.
+  void appendPadding(double extent) {
+    _ensureOpen();
+    if (!needsInput) throw StateError('Composition input is still pending');
+    if (!extent.isFinite || extent < 0) {
+      throw ArgumentError.value(extent, 'extent');
+    }
+    _paddingRemaining = extent;
+  }
+
+  ({double extentConsumed, int pagesPublished, bool isComplete})
+  advancePadding() {
+    _ensureOpen();
+    final remaining = _paddingRemaining;
+    if (remaining == null) throw StateError('No padding is pending');
+    final pagesBefore = _pages.length;
+    try {
+      final consumed = math.min(remaining, height - _flowHeight);
+      _flowHeight += consumed;
+      _usedHeight = math.max(_usedHeight, _flowHeight);
+      final after = remaining - consumed;
+      // Subtracting a page remainder must not create a subpixel-only new page
+      // for values such as 0.1 + 0.2. Padding carries no source text coverage.
+      _paddingRemaining = after <= precisionErrorTolerance ? null : after;
+      if (_usedHeight == height) _seal();
+      return (
+        extentConsumed: consumed,
+        pagesPublished: _pages.length - pagesBefore,
+        isComplete: _paddingRemaining == null,
+      );
+    } catch (_) {
+      close();
+      rethrow;
+    }
   }
 
   /// Budget counts inspected physical rows, including rows inside a protected
@@ -243,8 +287,9 @@ final class ForumBodyTextPageComposer {
         final firstLine = continuation
             ? _draft.last.startLine
             : active.nextLine;
+        final atPageStart = _draft.isEmpty && _usedHeight == 0;
         final gap = active.nextLine == active.firstLine
-            ? (_draft.isEmpty ? active.spaceAtPageStart : active.spaceBefore)
+            ? (atPageStart ? active.spaceAtPageStart : active.spaceBefore)
             : 0.0;
         final top = continuation
             ? _draft.last.top
@@ -261,7 +306,9 @@ final class ForumBodyTextPageComposer {
           _fail(ForumBodyTextPageFailure.invalidGeometry);
         }
         if (bottom > height) {
-          if (_draft.isEmpty) _fail(ForumBodyTextPageFailure.oversizedGroup);
+          if (_draft.isEmpty && _usedHeight == 0) {
+            _fail(ForumBodyTextPageFailure.oversizedGroup);
+          }
           _seal();
           return _result(inspected, pagesBefore, false);
         }
@@ -326,9 +373,9 @@ final class ForumBodyTextPageComposer {
   /// not independently prove that the caller consumed all original IR nodes.
   void finish() {
     _ensureOpen();
-    if (_active != null) throw StateError('A paragraph is still pending');
+    if (!needsInput) throw StateError('Composition input is still pending');
     try {
-      if (_draft.isNotEmpty) _seal();
+      if (_draft.isNotEmpty || _usedHeight > 0) _seal();
       _complete = true;
       _snapshot = null;
     } catch (_) {
@@ -358,6 +405,7 @@ final class ForumBodyTextPageComposer {
     _closed = true;
     _active?.lease.release();
     _active = null;
+    _paddingRemaining = null;
     _fragmentCount -= _draft.length;
     _draft.clear();
     _usedHeight = 0;

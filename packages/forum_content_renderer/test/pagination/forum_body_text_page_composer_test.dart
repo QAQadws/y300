@@ -73,7 +73,7 @@ void _append(
 
 void _consume(ForumBodyTextPageComposer composer, {int maxLines = 2}) {
   var calls = 0;
-  while (!composer.needsParagraph) {
+  while (!composer.needsInput) {
     if (++calls > 100) fail('Composition did not make bounded progress');
     final step = composer.advance(maxLines: maxLines);
     expect(step.linesInspected, lessThanOrEqualTo(maxLines));
@@ -89,6 +89,244 @@ void _consume(ForumBodyTextPageComposer composer, {int maxLines = 2}) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'padding alone publishes bounded fixed page prefixes with no native resources',
+    () {
+      final input = _Input('');
+      final composer = input.composer(height: 20, maxFragments: 1);
+      composer.appendPadding(45);
+      expect(composer.hasPendingPadding, isTrue);
+      expect(composer.needsInput, isFalse);
+      expect(composer.advancePadding(), (
+        extentConsumed: 20.0,
+        pagesPublished: 1,
+        isComplete: false,
+      ));
+      final prefix = composer.snapshot;
+      expect(prefix, hasLength(1));
+      expect(composer.advancePadding(), (
+        extentConsumed: 20.0,
+        pagesPublished: 1,
+        isComplete: false,
+      ));
+      expect(prefix, hasLength(1));
+      expect(composer.advancePadding(), (
+        extentConsumed: 5.0,
+        pagesPublished: 0,
+        isComplete: true,
+      ));
+      expect(composer.needsInput, isTrue);
+      expect(composer.snapshot, hasLength(2));
+      composer.finish();
+      expect(composer.snapshot.map((page) => page.usedHeight), [20, 20, 5]);
+      expect(composer.snapshot.every((page) => page.fragments.isEmpty), isTrue);
+      expect(composer.nextParagraphIndex, 0);
+      expect(composer.retainedFragmentCount, 0);
+      expect(input.cache.layoutBuildCount, 0);
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'padding separates a physical page start from the first text fragment',
+    () {
+      final input = _Input('<p>a</p>');
+      final composer = input.composer(height: 30);
+      composer.appendPadding(5);
+      composer.advancePadding();
+      composer.append(
+        lease: input.lease(0),
+        paragraphIndex: 0,
+        left: 0,
+        spaceBefore: 3,
+        spaceAtPageStart: 99,
+      );
+      _consume(composer);
+      composer.appendPadding(7);
+      composer.advancePadding();
+      composer.finish();
+      expect(composer.snapshot.single.fragments.single.top, 8);
+      expect(composer.snapshot.single.usedHeight, 25);
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'a text group following partial padding resumes on a new page with its real start policy',
+    () {
+      final input = _Input('<p>a</p>');
+      final composer = input.composer(height: 20);
+      composer.appendPadding(15);
+      composer.advancePadding();
+      final lease = input.lease(0);
+      composer.append(
+        lease: lease,
+        paragraphIndex: 0,
+        left: 0,
+        spaceBefore: 0,
+        spaceAtPageStart: 2,
+      );
+      expect(composer.advance(maxLines: 1), (
+        linesInspected: 1,
+        pagesPublished: 1,
+        paragraphCompleted: false,
+      ));
+      expect(composer.snapshot.single.fragments, isEmpty);
+      expect(composer.snapshot.single.usedHeight, 15);
+      expect(lease.isActive, isTrue);
+      expect(composer.advance(maxLines: 1), (
+        linesInspected: 0,
+        pagesPublished: 0,
+        paragraphCompleted: true,
+      ));
+      composer.finish();
+      expect(composer.snapshot.last.fragments.single.top, 2);
+      expect(composer.snapshot.last.usedHeight, 12);
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test('trailing padding can span pages after text and survives finish', () {
+    final input = _Input('<p>a</p>');
+    final composer = input.composer(height: 20);
+    _append(composer, input.lease(0), 0);
+    _consume(composer);
+    composer.appendPadding(25);
+    expect(composer.advancePadding(), (
+      extentConsumed: 10.0,
+      pagesPublished: 1,
+      isComplete: false,
+    ));
+    expect(composer.advancePadding(), (
+      extentConsumed: 15.0,
+      pagesPublished: 0,
+      isComplete: true,
+    ));
+    composer.finish();
+    expect(composer.snapshot.map((page) => page.usedHeight), [20, 15]);
+    expect(composer.snapshot.first.fragments, hasLength(1));
+    expect(composer.snapshot.last.fragments, isEmpty);
+    expect(input.cache.layoutBuildCount, 1);
+  });
+
+  test(
+    'padding continues from signed flow position without erasing occupied extent',
+    () {
+      final input = _Input('<p style="font-size:30px">a</p><p>b</p><p>c</p>');
+      final composer = input.composer(height: 100);
+      _append(composer, input.lease(0), 0);
+      _consume(composer);
+      composer.append(
+        lease: input.lease(1),
+        paragraphIndex: 1,
+        left: 0,
+        spaceBefore: -30,
+        spaceAtPageStart: 0,
+      );
+      _consume(composer);
+      composer.appendPadding(5);
+      composer.advancePadding();
+      _append(composer, input.lease(2), 2);
+      _consume(composer);
+      composer.finish();
+      expect(
+        composer.snapshot.single.fragments.map((fragment) => fragment.top),
+        [0, 0, 15],
+      );
+      expect(composer.snapshot.single.usedHeight, 30);
+    },
+  );
+
+  test(
+    'zero padding completes without a phantom page and invalid padding keeps admission open',
+    () {
+      final composer = _Input('').composer();
+      for (final extent in [-1.0, double.nan, double.infinity]) {
+        expect(() => composer.appendPadding(extent), throwsArgumentError);
+        expect(composer.needsInput, isTrue);
+      }
+      composer.appendPadding(0);
+      expect(composer.advancePadding(), (
+        extentConsumed: 0.0,
+        pagesPublished: 0,
+        isComplete: true,
+      ));
+      composer.finish();
+      expect(composer.snapshot, isEmpty);
+    },
+  );
+
+  test(
+    'fractional page remainders do not create an extra padding-only page',
+    () {
+      final composer = _Input('').composer(height: .3);
+      composer.appendPadding(.1);
+      composer.advancePadding();
+      composer.appendPadding(.2);
+      expect(composer.advancePadding().isComplete, isTrue);
+      composer.finish();
+      expect(composer.snapshot, hasLength(1));
+      expect(composer.snapshot.single.usedHeight, .3);
+    },
+  );
+
+  test(
+    'padding obeys page metadata limits and preserves the published prefix on failure',
+    () {
+      final composer = _Input('').composer(height: 20, maxPages: 1);
+      composer.appendPadding(50);
+      composer.advancePadding();
+      final prefix = composer.snapshot;
+      expect(
+        () => composer.advancePadding(),
+        throwsA(
+          isA<ForumBodyTextPageException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyTextPageFailure.pageLimit,
+          ),
+        ),
+      );
+      expect(composer.snapshot, same(prefix));
+      expect(prefix.single.usedHeight, 20);
+      expect(composer.isClosed, isTrue);
+      expect(composer.hasPendingPadding, isFalse);
+    },
+  );
+
+  test(
+    'pending padding rejects conflicting work without taking a paragraph lease',
+    () {
+      final input = _Input('<p>a</p>');
+      final composer = input.composer();
+      final lease = input.lease(0);
+      composer.appendPadding(5);
+      expect(() => _append(composer, lease, 0), throwsStateError);
+      expect(() => composer.appendPadding(1), throwsStateError);
+      expect(() => composer.advance(maxLines: 1), throwsStateError);
+      expect(composer.finish, throwsStateError);
+      expect(lease.isActive, isTrue);
+      composer.advancePadding();
+      _append(composer, lease, 0);
+      expect(composer.advancePadding, throwsStateError);
+      _consume(composer);
+      composer.finish();
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test('close retires only unpublished padding and pending metadata', () {
+    final composer = _Input('').composer();
+    composer.appendPadding(25);
+    composer.advancePadding();
+    final prefix = composer.snapshot;
+    composer.close();
+    expect(composer.hasPendingPadding, isFalse);
+    expect(composer.snapshot, same(prefix));
+    expect(composer.advancePadding, throwsStateError);
+    expect(composer.finish, throwsStateError);
+  });
 
   test(
     'signed gaps move the flow cursor without erasing earlier occupied ink',
@@ -216,7 +454,7 @@ void main() {
         throwsArgumentError,
       );
       expect(lease.isActive, isTrue);
-      expect(composer.needsParagraph, isTrue);
+      expect(composer.needsInput, isTrue);
     },
   );
 
@@ -290,7 +528,7 @@ void main() {
           throwsA(isA<ForumBodyParagraphLayoutException>()),
         );
         expect(lease.isActive, isTrue);
-        expect(composer.needsParagraph, isTrue);
+        expect(composer.needsInput, isTrue);
       }
     },
   );
@@ -513,7 +751,7 @@ void main() {
         expect(prefix.length, rows ~/ 2);
         expect(composer.retainedFragmentCount, prefix.length);
         expect(input.cache.activeLeases, 0);
-        expect(composer.needsParagraph, isFalse);
+        expect(composer.needsInput, isFalse);
       }
     },
   );
