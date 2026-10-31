@@ -310,6 +310,16 @@ final class ForumBodyInlineParagraphLayout
     return ForumBodyInlineSelection._(boxes, selectedAtoms);
   }
 
+  ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) {
+    _ensureOpen();
+    return forumBodyParagraphLineWindow(
+      lines: lines,
+      displayText: projection.display.text,
+      engineText: projection.engineText,
+      window: window,
+    );
+  }
+
   ForumBodyInlineParagraphFragment fragment(int startLine, int endLine) {
     _ensureOpen();
     RangeError.checkValueInInterval(

@@ -169,11 +169,13 @@ final class ForumBodyInlineParagraphView {
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
     }
-    if (_fragment == null || content.projection.display.text.isEmpty) {
-      final empty = content.projection.display.sourceAtUtf16(0);
+    if (_fragment == null || coverageStartUtf16 == coverageEndUtf16) {
+      final empty = content.projection.display.sourceAtUtf16(
+        coverageStartUtf16,
+      );
       return HtmlProjectedSourcePosition(
         sourceRune: empty.sourceRune,
-        displayUtf16: 0,
+        displayUtf16: empty.displayUtf16,
         isExact: false,
       );
     }

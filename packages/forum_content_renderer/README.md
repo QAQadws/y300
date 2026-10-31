@@ -271,10 +271,16 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 释放父租约，组合器不接管子组。真实显示 coverage 与原始 sourceHint 来自父 display
 投影，不能把 U+FFFC 引擎范围用作显示或小说语义 offset；hint 仍不证明实际可见覆盖。
 
-快照只追加数值元数据并标记 `ForumBodyTextPageFragmentKind`，composer revision 为 6。
+快照只追加数值元数据并标记 `ForumBodyTextPageFragmentKind`，composer revision 为 7。
 排字、子租约或回调不进入已发布页；超高不可拆组明确失败，已封页前缀不受晚失败影响。
 只接受普通租约的旧页面绑定明确拒绝 inline 分片，不能用同尺寸的普通字形或父占位框
 冒充完整交付。本组合能力不启用旧 renderer 兜底或自动切换阅读模式。
+
+普通和混排行窗口共用实际 native 行校验；`appendInline` 同样接受 full、BR 前内容和
+末尾空行窗口。非完整窗口要求 engine/display 两套坐标都确认真实末尾分隔与零覆盖行，
+注音内部换行或软换行不能伪造父空行。分页保留引擎给出的实际空行高度，不猜默认字号。
+typed 空行交付只准备父句柄，不保留隐藏原子；选区为空，点击只给近似来源，不能把
+空覆盖当作实际字形或阅读完成证明。无效窗口不接管输入租约，可由调用方纠正后重试。
 
 `ForumBodyPreparedTextFragment` 是当前挂载的交付句柄，分别持有普通段落租约/行窗口
 或完整的混排 view，不进入数值快照。普通句柄构造失败只释放传入别名；close 只退休

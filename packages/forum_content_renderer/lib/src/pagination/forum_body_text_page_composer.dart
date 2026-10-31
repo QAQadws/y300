@@ -149,7 +149,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 6;
+  static const revision = 7;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -218,13 +218,14 @@ final class ForumBodyTextPageComposer {
     required double left,
     required double spaceBefore,
     required double spaceAtPageStart,
+    ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
   }) => _append(
     input: _CompositionParagraph.inline(lease),
     paragraphIndex: paragraphIndex,
     left: left,
     spaceBefore: spaceBefore,
     spaceAtPageStart: spaceAtPageStart,
-    window: ForumBodyParagraphWindow.full,
+    window: window,
   );
 
   void _append({
@@ -535,7 +536,7 @@ final class _CompositionParagraph {
   }
 
   ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) =>
-      _text?.lineWindow(window) ?? (startLine: 0, endLine: lines.length);
+      _text?.lineWindow(window) ?? _inline!.lineWindow(window);
   ({double height, int coverageStartUtf16, int coverageEndUtf16}) fragment(
     int start,
     int end,

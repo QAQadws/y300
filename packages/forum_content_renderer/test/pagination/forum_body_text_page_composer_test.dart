@@ -104,7 +104,7 @@ void main() {
         runeStart: 0,
         runeEnd: 8,
       ));
-      expect(composer.snapshot.composerRevision, 6);
+      expect(composer.snapshot.composerRevision, 7);
     },
   );
 

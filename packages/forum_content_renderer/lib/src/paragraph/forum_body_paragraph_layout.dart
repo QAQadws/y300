@@ -118,7 +118,8 @@ final class ForumBodyParagraphLayout
     }
     if (content.layoutMode != ForumBodyParagraphLayoutMode.wrap &&
         content.projection.text.runes.any(
-          (rune) => _isDisplayLineBreak(rune) || rune == 0x0d || rune == 0x85,
+          (rune) =>
+              forumBodyIsDisplayLineBreak(rune) || rune == 0x0d || rune == 0x85,
         )) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.singleLine,
@@ -152,8 +153,6 @@ final class ForumBodyParagraphLayout
   }
 
   static const backendRevision = 5;
-  static bool _isDisplayLineBreak(int codeUnit) =>
-      codeUnit == 0x0a || codeUnit == 0x2028 || codeUnit == 0x2029;
   final ForumBodyIdentity identity;
   final String? path;
   @override
@@ -265,23 +264,12 @@ final class ForumBodyParagraphLayout
   /// row. Its source coverage is empty; the preceding row owns the separator.
   ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) {
     _ensureOpen();
-    if (window == ForumBodyParagraphWindow.full) {
-      return (startLine: 0, endLine: lines.length);
-    }
-    final length = projection.text.length;
-    if (lines.length < 2 ||
-        length == 0 ||
-        !_isDisplayLineBreak(projection.text.codeUnitAt(length - 1)) ||
-        lines.last.width != 0 ||
-        lines.last.coverageStartUtf16 != length ||
-        lines.last.coverageEndUtf16 != length) {
-      throw const ForumBodyParagraphLayoutException(
-        ForumBodyParagraphLayoutFailure.coverage,
-      );
-    }
-    return window == ForumBodyParagraphWindow.beforeTerminalEmptyLine
-        ? (startLine: 0, endLine: lines.length - 1)
-        : (startLine: lines.length - 1, endLine: lines.length);
+    return forumBodyParagraphLineWindow(
+      lines: lines,
+      displayText: projection.text,
+      engineText: projection.text,
+      window: window,
+    );
   }
 
   @override

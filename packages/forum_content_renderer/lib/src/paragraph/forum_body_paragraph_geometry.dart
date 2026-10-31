@@ -70,6 +70,41 @@ final class ForumBodyParagraphLine {
 bool forumBodyIsDisplayLineBreak(int codeUnit) =>
     codeUnit == 0x0a || codeUnit == 0x2028 || codeUnit == 0x2029;
 
+/// Restricted windows over actual native rows, never a source/HTML slice. Both
+/// coordinate axes must prove the terminal empty hard-break row; annotation
+/// text hidden behind an atom cannot manufacture a parent terminal separator.
+({int startLine, int endLine}) forumBodyParagraphLineWindow({
+  required List<ForumBodyParagraphLine> lines,
+  required String displayText,
+  required String engineText,
+  required ForumBodyParagraphWindow window,
+}) {
+  if (window == ForumBodyParagraphWindow.full) {
+    return (startLine: 0, endLine: lines.length);
+  }
+  if (lines.length < 2 ||
+      displayText.isEmpty ||
+      engineText.isEmpty ||
+      !forumBodyIsDisplayLineBreak(
+        displayText.codeUnitAt(displayText.length - 1),
+      ) ||
+      !forumBodyIsDisplayLineBreak(
+        engineText.codeUnitAt(engineText.length - 1),
+      ) ||
+      lines.last.width != 0 ||
+      lines.last.coverageStartUtf16 != displayText.length ||
+      lines.last.coverageEndUtf16 != displayText.length ||
+      lines.last.engineCoverageStartUtf16 != engineText.length ||
+      lines.last.engineCoverageEndUtf16 != engineText.length) {
+    throw const ForumBodyParagraphLayoutException(
+      ForumBodyParagraphLayoutFailure.coverage,
+    );
+  }
+  return window == ForumBodyParagraphWindow.beforeTerminalEmptyLine
+      ? (startLine: 0, endLine: lines.length - 1)
+      : (startLine: lines.length - 1, endLine: lines.length);
+}
+
 /// Shared native line extraction. Coordinates come from actual logical engine
 /// boundaries, never a visual midpoint, character-count fit or HTML candidate.
 List<ForumBodyParagraphLine> forumBodyParagraphLines({
