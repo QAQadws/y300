@@ -2,6 +2,7 @@ import '../controllers/novel_reader_native_paged_controller.dart';
 
 enum NovelReaderNativeHostPhase {
   preparing,
+  inactive,
   reading,
   paused,
   empty,

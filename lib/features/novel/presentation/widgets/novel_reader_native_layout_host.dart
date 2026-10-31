@@ -52,6 +52,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.onContentReady,
     this.onContentTerminal,
     this.onScrollActivityChanged,
+    this.active = true,
     this.placeholderBuilder,
     this.retryRevision = 0,
     this.scheduler = const NovelReaderNativeWorkScheduler(),
@@ -86,6 +87,10 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final VoidCallback? onContentReady;
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
+
+  /// Shell supplies frontmost && resumed && unobstructed reading authority.
+  /// Hidden content keeps its mounted paint but owns no active pagination work.
+  final bool active;
   final Widget Function(BuildContext, NovelReaderNativeHostStatus)?
   placeholderBuilder;
 
@@ -127,6 +132,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   void initState() {
     super.initState();
     if (!widget.owner.isClosed) widget.owner.addListener(_ownerChanged);
+    _notifyStatus();
   }
 
   @override
@@ -148,6 +154,19 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       if (!widget.owner.isClosed) widget.owner.addListener(_ownerChanged);
     }
     if (novelChanged && !ownerChanged) _closeAll();
+    if (oldWidget.active != widget.active) {
+      _pending?.cancel();
+      _epoch++;
+      _needsLayout = true;
+      if (!widget.active) _current?.controller.suspend();
+      _notifyStatus();
+      final epoch = _epoch;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && epoch == _epoch) {
+          widget.onScrollActivityChanged?.call(false);
+        }
+      });
+    }
     final chapterChanged =
         oldWidget.semanticDocument.episodeId !=
         widget.semanticDocument.episodeId;
@@ -234,6 +253,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     final error = _error ?? (live ? request.controller.error : null);
     final phase = widget.owner.isClosed
         ? NovelReaderNativeHostPhase.closed
+        : !widget.active
+        ? NovelReaderNativeHostPhase.inactive
         : _busy
         ? NovelReaderNativeHostPhase.preparing
         : _empty ||
@@ -263,7 +284,9 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
 
   bool _live(_LayoutRequest request) =>
       !_disposed &&
+      widget.active &&
       !_busy &&
+      !request.controller.isSuspended &&
       identical(request, _current) &&
       request.epoch == _epoch &&
       identical(request.owner, widget.owner) &&
@@ -319,7 +342,11 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             const SizedBox.shrink();
       }
       _invalidBox = false;
-      if (_needsLayout || _box != box) {
+      if (!widget.active) {
+        _pending?.cancel();
+        _busy = false;
+        _needsLayout = true;
+      } else if (_needsLayout || _box != box) {
         _box = box;
         _needsLayout = false;
         _busy = true;
@@ -404,6 +431,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         epoch == _epoch &&
         !token.isCancelled &&
         identical(config.owner, widget.owner) &&
+        widget.active &&
         !config.owner.isClosed;
     try {
       if (captureError != null) throw captureError;
@@ -476,6 +504,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         old.epoch = epoch;
         old.reverse =
             config.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
+        old.controller.resume();
         setState(() {
           _busy = false;
           _empty = false;

@@ -127,7 +127,9 @@ class _NovelReaderNativePagedViewportState
     // Capture the box and initial page when offered: source failure/retirement
     // can remove the proposal or snapshot before the next Widget build.
     final frozen =
-        !widget.active || !identical(displayed.controller, widget.controller);
+        !widget.active ||
+        widget.controller.isSuspended ||
+        !identical(displayed.controller, widget.controller);
     return _NativeLayoutViewport(
       key: ObjectKey(displayed.controller),
       controller: displayed.controller,

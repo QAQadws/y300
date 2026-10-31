@@ -15,6 +15,64 @@ import '../test_support/native_reader_test_fixture.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('suspension retires the target and owns no timer until visible', () {
+    fakeAsync((clock) {
+      final failures = <String?>[];
+      final watch = NovelReaderNativePaginationWatchdog(
+        parent: NovelReaderPaginationCancellationToken(),
+        elapsed: () => clock.elapsed,
+        onExpired: (error, _) => failures.add(error.code),
+      );
+      final old = watch.startTarget();
+      clock.elapse(const Duration(seconds: 4));
+      watch.setSuspended(true);
+      expect(watch.markReadable(old), isFalse);
+      expect(clock.nonPeriodicTimerCount, 0);
+      expect(() => watch.startTarget(), throwsStateError);
+      watch.setDeferring(false);
+      clock.elapse(const Duration(hours: 1));
+      expect(failures, isEmpty);
+      watch.setSuspended(false);
+      watch.startTarget();
+      clock.elapse(const Duration(seconds: 4));
+      expect(failures, isEmpty);
+      clock.elapse(const Duration(seconds: 1));
+      expect(failures, ['targetPageWaitExceeded']);
+      expect(clock.nonPeriodicTimerCount, 0);
+    });
+  });
+
+  test('repeated suspension preserves the remaining active background stall allowance', () {
+    fakeAsync((clock) {
+      final failures = <String?>[];
+      final watch = NovelReaderNativePaginationWatchdog(
+        parent: NovelReaderPaginationCancellationToken(),
+        elapsed: () => clock.elapsed,
+        onExpired: (error, _) => failures.add(error.code),
+      );
+      watch.publication(pageCount: 10, isComplete: false);
+      watch.markReadable(watch.startTarget());
+      clock.elapse(const Duration(milliseconds: 1000));
+      watch.setSuspended(true);
+      expect(clock.nonPeriodicTimerCount, 0);
+      clock.elapse(const Duration(hours: 1));
+      watch.setDeferring(true);
+      watch.setDeferring(false);
+      watch.setSuspended(false);
+      watch.markReadable(watch.startTarget());
+      clock.elapse(const Duration(milliseconds: 600));
+      watch.setSuspended(true);
+      clock.elapse(const Duration(hours: 1));
+      watch.setSuspended(false);
+      watch.markReadable(watch.startTarget());
+      clock.elapse(const Duration(milliseconds: 399));
+      expect(failures, isEmpty);
+      clock.elapse(const Duration(milliseconds: 1));
+      expect(failures, ['backgroundPaginationIdle']);
+      expect(clock.nonPeriodicTimerCount, 0);
+    });
+  });
+
   test('reading another existing page cannot reset the outstanding background stall allowance', () {
     fakeAsync((clock) {
       final failures = <String?>[];

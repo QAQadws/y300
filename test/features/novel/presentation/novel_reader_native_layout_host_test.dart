@@ -113,6 +113,9 @@ Future<void> _show(
   ForumBodyTextPageSessionLimits? limits,
   String? rawHtml,
   NovelReaderDocument? semantic,
+  bool active = true,
+  NovelReaderPaginationPerformancePolicy performance =
+      const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) async {
   await tester.pumpWidget(
     MediaQuery(
@@ -144,6 +147,7 @@ Future<void> _show(
                 resolvedFont: ResolvedFont.system,
                 progressSnapshot: snapshot ?? reader.snapshot,
                 readingAuthorityIdentity: authority ?? reader.authority,
+                active: active,
                 preparationService: reader.service,
                 onPositionChanged: reader.positions.add,
                 onStatusChanged: reader.statuses.add,
@@ -163,9 +167,7 @@ Future<void> _show(
                       maxIssuedLeases: 512,
                     ),
                 idleScheduler: _idle,
-                performance: const NovelReaderPaginationPerformancePolicy(
-                  enforceBudgets: false,
-                ),
+                performance: performance,
                 placeholderBuilder: (context, status) =>
                     SizedBox(key: ValueKey(status.phase)),
               ),
@@ -185,6 +187,263 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets(
+    'hiding during a drag returns to the actual confirmed page without navigation',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final before = reader.positions.last;
+      final controller = reader.statuses.last.controller;
+      final drag = await tester.startGesture(
+        tester.getCenter(find.byType(PageView)),
+      );
+      await drag.moveBy(const Offset(-30, 0));
+      await tester.pump(const Duration(milliseconds: 10));
+      await _show(tester, reader, active: false);
+      await drag.up();
+      await tester.pumpAndSettle();
+      expect(reader.positions.last, same(before));
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.positions.last.anchor.textOffset, before.anchor.textOffset);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(reader.activity.last, isFalse);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'owner retirement while hidden closes resources without passive writes on return',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final count = reader.positions.length;
+      await _show(tester, reader, active: false);
+      await tester.pumpAndSettle();
+      reader.owner.dispose();
+      await tester.pumpAndSettle();
+      expect(reader.owner.activeCacheHandles, 0);
+      expect(find.byType(ForumBodyTextPageSurface), findsNothing);
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.closed);
+      expect(reader.positions, hasLength(count));
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets('inactive initial Host waits for visibility before preparing', (
+    tester,
+  ) async {
+    final reader = _Reader();
+    await _show(tester, reader, active: false);
+    await tester.pump(const Duration(seconds: 10));
+    expect(reader.service.calls, 0);
+    expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.inactive);
+    expect(reader.positions, isEmpty);
+    expect(reader.owner.activeCacheHandles, 0);
+    await _show(tester, reader);
+    await tester.pumpAndSettle();
+    expect(reader.positions, hasLength(1));
+    await _unmount(tester, reader);
+  });
+
+  testWidgets(
+    'visibility resumes the same source and canonical point without reshaping',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      controller.requestPage(3);
+      await tester.pumpAndSettle();
+      final actual = reader.positions.last;
+      final prefix = controller.snapshot;
+      final surface = tester.renderObject(
+        find.byType(ForumBodyTextPageSurface),
+      );
+      final handle = reader.owner.acquireCache();
+      final builds = handle.cache.layoutBuildCount;
+      await _show(tester, reader, active: false);
+      await tester.pumpAndSettle();
+      expect(controller.isSuspended, isTrue);
+      expect(controller.isClosed, isFalse);
+      expect(controller.requestPage(8), isFalse);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.inactive);
+      expect(reader.statuses.last.controller, isNull);
+      expect(
+        tester.renderObject(find.byType(ForumBodyTextPageSurface)),
+        same(surface),
+      );
+      await tester.pump(const Duration(seconds: 10));
+      expect(reader.positions.last, same(actual));
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.snapshot, same(prefix));
+      expect(reader.positions.last.anchor.textOffset, actual.anchor.textOffset);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(handle.cache.layoutBuildCount, builds);
+      expect(reader.service.calls, 1);
+      handle.release();
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets('hiding retires a gated pending seek and its target deadline', (
+    tester,
+  ) async {
+    final reader = _Reader();
+    var held = false;
+    final released = Completer<void>();
+    final scheduler = NovelReaderNativeWorkScheduler(
+      nextFrame: () async {
+        if (held) {
+          await released.future;
+        } else {
+          await WidgetsBinding.instance.endOfFrame;
+        }
+      },
+    );
+    const performance = NovelReaderPaginationPerformancePolicy();
+    await _show(tester, reader, scheduler: scheduler, performance: performance);
+    await tester.pumpAndSettle();
+    final controller = reader.statuses.last.controller!;
+    final before = reader.positions.last;
+    held = true;
+    expect(controller.requestPage(8), isTrue);
+    await tester.pump();
+    await _show(
+      tester,
+      reader,
+      active: false,
+      scheduler: scheduler,
+      performance: performance,
+    );
+    await tester.pump(const Duration(seconds: 20));
+    expect(controller.error, isNull);
+    expect(controller.readyTarget, isNull);
+    expect(reader.positions.last, same(before));
+    held = false;
+    released.complete();
+    await tester.pumpAndSettle();
+    expect(reader.positions.last, same(before));
+    await _show(tester, reader, scheduler: scheduler, performance: performance);
+    await tester.pumpAndSettle();
+    expect(reader.statuses.last.controller, same(controller));
+    expect(reader.positions.last.pageIndex, before.pageIndex);
+    expect(reader.positions.last.hasUserNavigated, isFalse);
+    await _unmount(tester, reader);
+  });
+
+  testWidgets('late source preparation while hidden cannot mount or publish', (
+    tester,
+  ) async {
+    final reader = _Reader();
+    reader.service.gate = Completer<void>();
+    await _show(tester, reader);
+    await tester.pumpAndSettle();
+    expect(reader.service.calls, 1);
+    await _show(tester, reader, active: false);
+    reader.service.gate!.complete();
+    await tester.pumpAndSettle();
+    expect(reader.positions, isEmpty);
+    expect(find.byType(ForumBodyTextPageSurface), findsNothing);
+    expect(reader.owner.activeCacheHandles, 0);
+    await _show(tester, reader);
+    await tester.pumpAndSettle();
+    expect(reader.positions, hasLength(1));
+    expect(reader.service.calls, 1);
+    await _unmount(tester, reader);
+  });
+
+  testWidgets(
+    'hidden font changes defer new layout and retire old paint after resume',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final point = reader.positions.last;
+      final handle = reader.owner.acquireCache();
+      final cache = handle.cache;
+      handle.release();
+      await _show(tester, reader, active: false);
+      await tester.pumpAndSettle();
+      reader.fonts.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(cache.isClosed, isFalse);
+      expect(reader.positions.last, same(point));
+      expect(reader.owner.activeCacheHandles, 1);
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, isNot(same(controller)));
+      expect(reader.positions.last.paginationKey, isNot(point.paginationKey));
+      expect(reader.positions.last.anchor.textOffset, point.anchor.textOffset);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(cache.isClosed, isTrue);
+      expect(reader.service.calls, 1);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'future-format restore remains readonly after hiding and resuming',
+    (tester) async {
+      final reader = _Reader();
+      final future = reader.snapshot.copyWith(anchorFormatVersion: 37);
+      await _show(tester, reader, snapshot: future);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller;
+      await _show(tester, reader, snapshot: future, active: false);
+      await tester.pumpAndSettle();
+      await _show(tester, reader, snapshot: future);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      reader.statuses.last.controller!.requestPage(1);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.isReadOnlyCompatibilityRestore, isFalse);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'resuming a failed source preserves its error and readable prefix until explicit retry',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>${List.filled(20, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+      );
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final error = controller.error;
+      final prefix = controller.snapshot;
+      final point = reader.positions.last;
+      await _show(tester, reader, active: false);
+      await tester.pumpAndSettle();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.error, same(error));
+      expect(controller.snapshot, same(prefix));
+      expect(reader.positions.last, same(point));
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.paused);
+      expect(controller.requestPage(1), isTrue);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, 1);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      expect(controller.error, same(error));
+      await _unmount(tester, reader);
+    },
+  );
+
   testWidgets(
     'real Host reuses prepared source/cache and reports EOF only as metrics',
     (tester) async {

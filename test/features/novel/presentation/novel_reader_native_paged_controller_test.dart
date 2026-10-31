@@ -110,6 +110,140 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('suspended source keeps its cursor and fixed prefix while late idle completion cannot publish', () async {
+    final fixture = NativeReaderTestFixture(
+      List.filled(20, '<p>abcdefgh</p>').join(),
+      width: 20,
+      height: 10,
+      complete: false,
+    );
+    final idle = Completer<void>();
+    var idleCalls = 0;
+    final controller = NovelReaderNativePagedController(
+      session: fixture.session,
+      anchors: fixture.anchors,
+      position: _position(_anchor(fixture, 0)),
+      paginationKey: 'geometry',
+      parent: fixture.parent,
+      scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+      idleScheduler: () {
+        idleCalls++;
+        return idle.future;
+      },
+      windowLimits: const NovelReaderNativeViewWindowLimits(radius: 0),
+    );
+    addTearDown(controller.close);
+    controller.start();
+    await _until(() => controller.readyTarget != null);
+    final delivery = controller.readyTarget!;
+    final leases = delivery.view.takeLeases();
+    final original = controller.confirmVisible(delivery, leases)!;
+    await _until(() => idleCalls > 0);
+    final prefix = controller.snapshot!;
+    expect(prefix.isComplete, isFalse);
+    final nodes = fixture.session.resolvedNodeCount;
+    expect(controller.suspend(), isTrue);
+    expect(controller.suspend(), isFalse);
+    expect(fixture.session.reservedViewLeases, 0);
+    idle.complete();
+    for (var step = 0; step < 50; step++) {
+      await Future<void>.value();
+    }
+    expect(fixture.session.snapshot.length, prefix.length);
+    expect(fixture.session.resolvedNodeCount, nodes);
+    expect(leases.every((lease) => lease.isActive), isTrue);
+    expect(controller.resume(), isTrue);
+    expect(controller.resume(), isFalse);
+    await _until(
+      () => controller.readyTarget != null || controller.error != null,
+    );
+    expect(controller.error, isNull);
+    expect(controller.snapshot![0], same(prefix[0]));
+    final next = controller.readyTarget!;
+    final nextLeases = next.view.takeLeases();
+    final resumed = controller.confirmVisible(next, nextLeases)!;
+    expect(resumed.anchor.textOffset, original.anchor.textOffset);
+    expect(resumed.hasUserNavigated, isFalse);
+    await _until(
+      () => controller.snapshot!.isComplete || controller.error != null,
+    );
+    expect(controller.error, isNull);
+    expect(controller.snapshot![0], same(prefix[0]));
+    expect(fixture.session.resolvedNodeCount, greaterThan(nodes));
+    controller.close();
+    expect(fixture.session.isClosed, isFalse);
+    for (final lease in [...leases, ...nextLeases]) {
+      lease.release();
+    }
+  });
+
+  test('a seek before first paint is retired by suspension and original restore stays passive', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>abcdefgh</p>',
+      width: 20,
+      height: 10,
+    );
+    final gate = Completer<void>();
+    var held = true;
+    final controller = _controller(
+      fixture,
+      scheduler: NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) await gate.future;
+        },
+      ),
+    );
+    controller.start();
+    expect(controller.requestPage(3), isTrue);
+    expect(controller.suspend(), isTrue);
+    expect(controller.requestPage(2), isFalse);
+    held = false;
+    gate.complete();
+    await Future<void>.value();
+    expect(controller.readyTarget, isNull);
+    controller.resume();
+    await _until(
+      () => controller.readyTarget != null || controller.error != null,
+    );
+    expect(controller.error, isNull);
+    final delivery = controller.readyTarget!;
+    final leases = delivery.view.takeLeases();
+    final position = controller.confirmVisible(delivery, leases)!;
+    expect(position.pageIndex, 0);
+    expect(position.anchor.textOffset, 0);
+    expect(position.hasUserNavigated, isFalse);
+    leases.single.release();
+  });
+
+  test('initial suspension cancels real target timers and closed requests cannot resume', () {
+    fakeAsync((clock) {
+      final fixture = NativeReaderTestFixture('<p>abc</p>', complete: false);
+      final frame = Completer<void>();
+      final controller = _controller(
+        fixture,
+        scheduler: NovelReaderNativeWorkScheduler(
+          nextFrame: () => frame.future,
+        ),
+        performance: const NovelReaderPaginationPerformancePolicy(),
+      );
+      controller.start();
+      clock.elapse(const Duration(seconds: 4));
+      expect(controller.suspend(), isTrue);
+      expect(clock.nonPeriodicTimerCount, 0);
+      clock.elapse(const Duration(hours: 1));
+      expect(controller.error, isNull);
+      expect(controller.readyTarget, isNull);
+      expect(controller.snapshot!.length, 0);
+      controller.close();
+      expect(controller.resume(), isFalse);
+      frame.complete();
+      clock.flushMicrotasks();
+      expect(clock.nonPeriodicTimerCount, 0);
+      expect(fixture.session.isClosed, isFalse);
+      expect(fixture.parent.isCancelled, isFalse);
+    });
+  });
+
   test('a verified retry accepts matching partial prefixes and borrows the old native cache', () async {
     const html = '<p>abcdefgh</p>';
     final old = NativeReaderTestFixture(html, width: 20, height: 10);

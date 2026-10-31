@@ -62,6 +62,7 @@ final class NovelReaderNativePaginationWatchdog {
   bool _complete = false;
   bool _readable = false;
   bool _deferring = false;
+  bool _suspended = false;
   bool _closed = false;
   bool _expired = false;
   Duration _remaining;
@@ -74,6 +75,7 @@ final class NovelReaderNativePaginationWatchdog {
 
   NovelReaderNativeTargetWait startTarget() {
     _guard();
+    if (_suspended) throw StateError('Native pagination is suspended');
     _targetTimer?.cancel();
     _pauseBackground();
     final ticket = NovelReaderNativeTargetWait._();
@@ -134,8 +136,23 @@ final class NovelReaderNativePaginationWatchdog {
     _syncBackground();
   }
 
+  /// Hidden surfaces retire their arrival intent and stop counting wall time.
+  /// Keep the remaining active stall allowance across repeated hide/resume.
+  void setSuspended(bool value) {
+    _guard();
+    if (_suspended == value) return;
+    _suspended = value;
+    if (value) {
+      _targetTimer?.cancel();
+      _targetTimer = null;
+      _target = null;
+    }
+    _syncBackground();
+  }
+
   void _syncBackground() {
     if (!policy.enforceBudgets ||
+        _suspended ||
         !_readable ||
         _target != null ||
         _complete ||
