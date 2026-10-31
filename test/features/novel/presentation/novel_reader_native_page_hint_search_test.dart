@@ -85,6 +85,39 @@ void main() {
     },
   );
 
+  test(
+    'consecutive orphan RT restores only on its actual visible page',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p>a</p><p><ruby><rt>xy</rt><rt>zw</rt></ruby></p>',
+        width: 10,
+        height: 15,
+      );
+      final target = _anchor(fixture, 3, node: 'node-1');
+      final builds = fixture.cache.layoutBuildCount;
+      final hints = _collect(_search(fixture, target));
+      expect(hints.map((hint) => hint.pageIndex), [2]);
+      expect(fixture.cache.layoutBuildCount, builds);
+      for (final page in [1, 2]) {
+        final view = await NovelReaderNativePageViewJob(
+          session: fixture.session,
+          anchors: fixture.anchors,
+          pageIndex: page,
+          parent: fixture.parent,
+          scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+        ).run();
+        try {
+          expect(view.coverage.locate(target) != null, page == 2);
+          expect(view.coverage.hasClippedGlyphs, isFalse);
+        } finally {
+          view.close();
+        }
+        expect(fixture.session.activeIssuedLeases, 0);
+        expect(fixture.cache.activeLeases, 0);
+      }
+    },
+  );
+
   test('moved base space keeps RT hints and page-local exact proof', () async {
     final fixture = NativeReaderTestFixture(
       '<p>X<ruby>AB <rt>xy</rt></ruby>Y</p>',

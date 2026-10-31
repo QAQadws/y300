@@ -214,28 +214,67 @@ void main() {
     expect(f.cache.activeLeases, 0);
   });
 
-  test('dense orphan RT shares its font strut and bounds annotation bands', () {
+  for (final singleRoot in [false, true]) {
+    test(
+      'dense orphan RT shares its font strut and bounds annotation bands (singleRoot=$singleRoot)',
+      () {
+        final f = _Fixture(
+          singleRoot
+              ? '<p><ruby>${List.generate(60, (index) => '<rt>r$index</rt>').join()}</ruby></p>'
+              : '<p>${List.generate(60, (index) => '<ruby><rt>r$index</rt></ruby>').join()}</p>',
+          width: 600,
+          height: 100,
+          entries: 4,
+        );
+        f.finish();
+        expect(f.session.snapshot, hasLength(1));
+        expect(f.cache.layoutBuildCount, 3);
+        expect(f.cache.pictureBuildCount, 0);
+        final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(prepared.view.atomIndices, hasLength(60));
+          expect(prepared.nativeLeases, hasLength(121));
+          expect(f.cache.entryCount, lessThanOrEqualTo(4));
+          expect(f.cache.pictureBuildCount, 60);
+        } finally {
+          prepared.close();
+        }
+        expect(f.cache.activeLeases, 0);
+        expect(f.session.activeIssuedLeases, 0);
+      },
+    );
+  }
+
+  test('consecutive orphan columns wrap with actual per-page RT sources', () {
     final f = _Fixture(
-      '<p>${List.generate(60, (index) => '<ruby><rt>r$index</rt></ruby>').join()}</p>',
-      width: 600,
-      height: 100,
-      entries: 4,
+      '<ruby><rt>xy</rt><rt>zw</rt></ruby>',
+      width: 20,
+      height: 30,
     );
     f.finish();
-    expect(f.session.snapshot, hasLength(1));
-    expect(f.cache.layoutBuildCount, 3);
-    expect(f.cache.pictureBuildCount, 0);
-    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-    try {
-      expect(prepared.view.atomIndices, hasLength(60));
-      expect(prepared.nativeLeases, hasLength(121));
-      expect(f.cache.entryCount, lessThanOrEqualTo(4));
-      expect(f.cache.pictureBuildCount, 60);
-    } finally {
-      prepared.close();
+    expect(f.session.snapshot, hasLength(2));
+    for (var page = 0; page < 2; page++) {
+      final fragment =
+          f.prepare(page).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.view.atomIndices, [page]);
+        expect(f.session.snapshot[page].fragments.single.sourceHint, (
+          runeStart: page * 2,
+          runeEnd: page * 2 + 2,
+        ));
+        final glyph = fragment.glyphBoxes(page * 2 + 1, page * 2 + 2).single;
+        final hit = fragment.view.sourceAt(
+          Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+        );
+        expect(hit.sourceRune, page * 2 + 1);
+        expect(hit.isExact, isTrue);
+        expect(fragment.nativeLeases, hasLength(3));
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
     }
-    expect(f.cache.activeLeases, 0);
-    expect(f.session.activeIssuedLeases, 0);
   });
 
   test(

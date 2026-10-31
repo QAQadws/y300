@@ -8,8 +8,9 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_ruby_content.dart';
 
 /// Resumable ruby grammar over the sole styled IR flow. No font is shaped and
-/// no HTML is sliced. Nested ruby stays structured, repeated RTs share their
-/// actual base, and RP/annotation whitespace retain explicit source records.
+/// no HTML is sliced. Nested ruby stays structured, repeated RTs retain their
+/// actual base, orphan RTs form separate empty-base columns, and RP/annotation
+/// whitespace retain explicit source records.
 ///
 /// Borrows the cursor exclusively until complete/close. Style diagnostics stay
 /// with the flow's owner, which can drain them between bounded advances.
@@ -68,7 +69,7 @@ final class ForumBodyRubyContentCursor {
     }
   }
 
-  static const revision = 3;
+  static const revision = 4;
   ForumBodyStyledFlowCursor? _flow;
   ForumBodyStyledFlowEvent? _root;
   ForumBodyStyledFlowEvent? _last;
@@ -275,6 +276,14 @@ final class ForumBodyRubyContentCursor {
               : ForumBodyRubyIgnoredReason.hidden,
         );
       } else {
+        if (_base!.parts.isEmpty && _annotations.isNotEmpty) {
+          // Consecutive orphan annotations each pair with an anonymous base.
+          // Replay this open event after publishing so work and group limits,
+          // source ownership and cancellation use the existing cursor path.
+          _deferred = event;
+          _publish();
+          return true;
+        }
         _base!.flush();
         _annotation = _parts(event);
       }

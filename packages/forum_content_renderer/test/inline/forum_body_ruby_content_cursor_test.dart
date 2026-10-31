@@ -192,6 +192,73 @@ void main() {
     },
   );
 
+  test('consecutive orphan RTs keep separate empty-base columns', () {
+    final run = open('<ruby><rt>x</rt><rt>y</rt>A<rt>a</rt></ruby>');
+    final groups = drain(run.cursor);
+    expect(groups.map((group) => text(group.base)), ['', '', 'A']);
+    expect(groups.map((group) => text(group.annotations.single.parts)), [
+      'x',
+      'y',
+      'a',
+    ]);
+    expect(groups.map((group) => group.index), [0, 1, 2]);
+    expect(
+      groups.map(
+        (group) => texts(
+          group.annotations.single.parts,
+        ).single.projection.sourceAtUtf16(0).sourceRune,
+      ),
+      [0, 1, 3],
+    );
+    expect(run.cursor.groupCount, 3);
+    expect(run.cursor.inputCodeUnits, 4);
+    expect(run.cursor.textRunCount, 4);
+  });
+
+  test('orphan column boundaries retain ignored fallback and hidden gaps', () {
+    final run = open(
+      '<ruby><rt>x</rt> <rp>(</rp><span hidden>hidden</span> <rt>y</rt></ruby>',
+    );
+    final groups = drain(run.cursor);
+    expect(groups, hasLength(2));
+    expect(groups.every((group) => group.base.isEmpty), isTrue);
+    final annotation = texts(groups.last.annotations.single.parts).single;
+    expect(annotation.projection.text, 'y');
+    expect(annotation.projection.sourceAtUtf16(0).sourceRune, 10);
+    expect(
+      run.cursor.takeIgnored().map((item) => item.reason),
+      containsAll([
+        ForumBodyRubyIgnoredReason.fallback,
+        ForumBodyRubyIgnoredReason.hidden,
+        ForumBodyRubyIgnoredReason.annotationWhitespace,
+      ]),
+    );
+  });
+
+  test(
+    'foreign advancement retires deferred orphan input without changing output',
+    () {
+      final run = open('<ruby><rt>x</rt><rt>y</rt></ruby>');
+      ForumBodyRubyGroupContent? first;
+      for (var i = 0; i < 20 && first == null; i++) {
+        final step = run.cursor.advance(maxEvents: 1);
+        expect(step.workDone, lessThanOrEqualTo(1));
+        if (step.hasOutput) first = run.cursor.current;
+      }
+      expect(first, isNotNull);
+      expect(text(first!.annotations.single.parts), 'x');
+      expect(run.flow.current!.phase, ForumBodyFlowPhase.open);
+      run.flow.moveNext();
+      expect(
+        () => run.cursor.advance(maxEvents: 1),
+        throwsA(isA<ForumBodyRubyContentException>()),
+      );
+      expect(run.cursor.isClosed, isTrue);
+      expect(run.flow.isClosed, isFalse);
+      expect(text(first.annotations.single.parts), 'x');
+    },
+  );
+
   test(
     'hard breaks count as raw text and runs before any layout admission',
     () {
@@ -413,6 +480,11 @@ void main() {
       const ForumBodyRubyContentLimits(maxGroups: 1),
       ForumBodyRubyContentFailure.groupLimit,
       '<ruby>A<rt>a</rt>B<rt>b</rt></ruby>',
+    ),
+    (
+      const ForumBodyRubyContentLimits(maxGroups: 1),
+      ForumBodyRubyContentFailure.groupLimit,
+      '<ruby><rt>a</rt><rt>b</rt></ruby>',
     ),
     (
       const ForumBodyRubyContentLimits(maxGroups: 1),
