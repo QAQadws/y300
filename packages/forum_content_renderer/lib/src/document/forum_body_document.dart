@@ -191,6 +191,11 @@ final class ForumBodyDocument {
   final int parsedNodeCount;
   final int uniqueStyleCount;
 
+  /// Built once on demand; repeated paragraph lookup does not rescan the IR.
+  late final Map<String, ForumBodyNode> nodesByPath = Map.unmodifiable({
+    for (final node in descendants) node.path: node,
+  });
+
   Iterable<ForumBodyNode> get descendants sync* {
     final stack = <Iterator<ForumBodyNode>>[nodes.iterator];
     while (stack.isNotEmpty) {

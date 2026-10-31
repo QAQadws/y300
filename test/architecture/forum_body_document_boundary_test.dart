@@ -6,14 +6,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'dart_dependency_directives.dart';
 
 void main() {
-  test('native styles cannot depend on the legacy widget renderer or Host', () {
+  test('native style/paragraph graph excludes legacy UI and Host', () {
     const root = 'packages/forum_content_renderer/lib/';
-    final pending = Directory('${root}src/style')
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.dart'))
-        .map((file) => normalizeDartSourcePath(file.path))
-        .toList();
+    final pending = [
+      for (final module in ['style', 'paragraph'])
+        ...Directory('${root}src/$module')
+            .listSync()
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'))
+            .map((file) => normalizeDartSourcePath(file.path)),
+    ];
     final visited = <String>{};
     final violations = <String>[];
     while (pending.isNotEmpty) {
