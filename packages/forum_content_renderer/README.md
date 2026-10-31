@@ -59,3 +59,11 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 原生文字流为 `editStatus`（`.pstatus`）选择该模式。默认使用读者字号的 0.88、斜体、读者颜色的 0.62 alpha 和下方 8 逻辑像素 padding；显式作者声明及对应角色的读者覆盖策略仍经过同一个样式解析器。文字和行内样式保留来源，内部 BR 与 Unicode 空白通过显式 singleLine 投影归一化。仅当其后直接同级节点出现 BR 时，才一起移除周边结构空白；不跨父容器删除换行，无 BR 的预格式化空白仍保留。该过程按原事件预算消费，不重写 IR 或 DOM 坐标。
 
 编辑提示目前接入文字及普通行内内容；其中的嵌套块或资源仍明确失败，不能以容器准入为由静默展开或丢弃。style、text-flow 和 block-flow revision 分别为 4、2、2，Host 须将其纳入布局身份。
+
+## 原生 ruby 分组几何
+
+`ForumBodyRubyGroupLayout` 接收已分组、同文档/字体/样式版本的基字与注音 `intrinsicSingleLine` 内容，从阅读 owner 的 `ForumBodyParagraphCache` 借用两个实际布局。基字提供字母基线，注音居中置于上方，组宽为二者固有宽度的较大值；不缩小长注音，不把 rt 排入基字行。两侧保持独立的字素、双向文字、来源投影和非线性缩放输入，绘制、分侧选区框和命中共用同一组偏移。
+
+`placeholderDimensions` 是已经缩放的直接 TextPainter 行内几何；父排版不得再次进行 inline Widget 自动缩放。gap 使用已解析的逻辑像素；改变 gap 或有效最大宽度可重组几何而复用原生字形。空注音不建立额外布局或保留空白上行。组宽超过显式最大值、无效几何、不同来源/字体或非固有单行内容均明确失败；失败与 `close` 仅释放本组 lease，owner 关闭使活跃组立即失效，不能晚访问已销毁的 native 布局。
+
+这是行内排版的分组端口，不是完整 ruby HTML consumer。ruby 语法分组、父段落的源码/engine placeholder 投影、分页合法边界、复制与完整无障碍接入仍由后续组合层实现；普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
