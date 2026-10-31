@@ -27,14 +27,17 @@ final class ForumBodyTextPagePreparationStep {
     this.fragmentsPrepared,
     this.layoutsBuilt,
     this.isReady,
-    this.waitingForLayoutBudget,
-  );
+    this.waitingForLayoutBudget, {
+    this.fragmentsInspected = 0,
+  });
   final int fragmentsPrepared;
   final int layoutsBuilt;
   final bool isReady;
   final bool waitingForLayoutBudget;
+  final int fragmentsInspected;
   // A discarded build under budget pressure is cost, not retained progress.
-  bool get madeProgress => fragmentsPrepared > 0 || isReady;
+  bool get madeProgress =>
+      fragmentsPrepared > 0 || fragmentsInspected > 0 || isReady;
 }
 
 // Internal construction keeps reservation/owner callbacks in the session; only
@@ -91,6 +94,10 @@ final class ForumBodyTextPagePreparation {
   ForumBodyTextPagePreparationState _state =
       ForumBodyTextPagePreparationState.active;
   bool _waiting = false;
+  ForumBodyParagraphBudgetProbe? _budgetProbe;
+  int _probeIndex = 0;
+  int _rejectedAtRevision = 0;
+  bool _pageBudgetChecked = false;
 
   ForumBodyTextPagePreparationState get state => _state;
   bool get isReady => _state == ForumBodyTextPagePreparationState.ready;
@@ -109,6 +116,7 @@ final class ForumBodyTextPagePreparation {
     final cache = _cache!;
     final before = _leases.length;
     final buildsBefore = cache.layoutBuildCount;
+    var inspected = 0;
     _waiting = false;
     ForumBodyTextPagePreparationStep result() =>
         ForumBodyTextPagePreparationStep(
@@ -116,10 +124,16 @@ final class ForumBodyTextPagePreparation {
           cache.layoutBuildCount - buildsBefore,
           isReady,
           _waiting,
+          fragmentsInspected: inspected,
         );
     try {
+      if (_budgetProbe != null) {
+        inspected = _inspectBudget(maxFragments);
+        return result();
+      }
       while (_leases.length < expectedFragmentCount &&
           _leases.length - before < maxFragments) {
+        _rejectedAtRevision = cache.budgetRevision;
         _acquire(cachedOnly: false);
         if (cache.layoutBuildCount != buildsBefore) break;
       }
@@ -136,6 +150,16 @@ final class ForumBodyTextPagePreparation {
       }
       if (error.failure == ForumBodyParagraphBudgetFailure.pinned) {
         if (externalPressure) {
+          if (!_pageBudgetChecked) {
+            _budgetProbe = cache.createBudgetProbe();
+            try {
+              inspected = _inspectBudget(maxFragments);
+            } catch (_) {
+              _abort();
+              rethrow;
+            }
+            return result();
+          }
           _waiting = true;
           return result();
         }
@@ -149,6 +173,40 @@ final class ForumBodyTextPagePreparation {
     } catch (_) {
       _abort();
       rethrow;
+    }
+  }
+
+  int _inspectBudget(int maxFragments) {
+    var inspected = 0;
+    final probe = _budgetProbe!;
+    try {
+      while (_probeIndex < expectedFragmentCount && inspected < maxFragments) {
+        final fragment = snapshot[pageIndex].fragments[_probeIndex];
+        probe.include(
+          content: _contents[_probeIndex],
+          width: fragment.width,
+          minimumLineCount: fragment.endLine,
+          textScaler: _textScaler!,
+        );
+        _guard();
+        _probeIndex++;
+        inspected++;
+      }
+      if (_probeIndex == expectedFragmentCount) {
+        _pageBudgetChecked = true;
+        probe.close();
+        _budgetProbe = null;
+        // A release during bounded inspection must cause a fresh admission,
+        // not a wait for an event that has already happened.
+        _waiting = _cache!.budgetRevision == _rejectedAtRevision;
+      }
+      return inspected;
+    } on ForumBodyParagraphBudgetException {
+      // The whole lower bound exceeds capacity even after every foreign pin
+      // releases. Preserve visible/source owners and roll back just this view.
+      throw const ForumBodyTextPagePreparationException(
+        ForumBodyTextPagePreparationFailure.intrinsicBudget,
+      );
     }
   }
 
@@ -262,6 +320,8 @@ final class ForumBodyTextPagePreparation {
   }
 
   void _dropOwner() {
+    _budgetProbe?.close();
+    _budgetProbe = null;
     _cache = null;
     _contents = const [];
     _textScaler = null;

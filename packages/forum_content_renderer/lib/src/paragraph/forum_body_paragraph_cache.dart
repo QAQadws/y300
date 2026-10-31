@@ -112,10 +112,7 @@ final class ForumBodyParagraphCache {
       _hits++;
     } else {
       if (!allowBuild) return null;
-      final minimumBytes =
-          4096 +
-          content.projection.text.length * 96 +
-          content.runs.length * 256;
+      final minimumBytes = _minimumEstimatedBytes(content);
       var pinnedBytes = 0;
       var pinnedEntries = 0;
       for (final resident in _entries.values) {
@@ -214,6 +211,13 @@ final class ForumBodyParagraphCache {
     );
   }
 
+  /// Internal transactional-view admission. It only proves lower-bound
+  /// impossibility; a successful probe does not reserve or guarantee capacity.
+  ForumBodyParagraphBudgetProbe createBudgetProbe() {
+    if (_closed) throw StateError('Paragraph cache is closed');
+    return ForumBodyParagraphBudgetProbe._(this);
+  }
+
   void _release(_LayoutEntry entry) {
     if (entry.retired) return;
     entry.leases--;
@@ -255,6 +259,67 @@ final class ForumBodyParagraphCache {
     if (events != null) unawaited(events.close());
   }
 }
+
+/// Incremental footprint of a view, deduplicated by the actual native key.
+/// No shaping, lease, LRU/hit mutation or native object is retained. Close drops
+/// both the cache owner and temporary pure keys; callers bound inspected inputs.
+final class ForumBodyParagraphBudgetProbe {
+  ForumBodyParagraphBudgetProbe._(this._cache);
+  ForumBodyParagraphCache? _cache;
+  final _bytesByKey = <_LayoutKey, int>{};
+  int _bytes = 0;
+
+  void include({
+    required ForumBodyParagraphContent content,
+    required double width,
+    required int minimumLineCount,
+    required TextScaler textScaler,
+  }) {
+    final cache = _cache;
+    if (cache == null || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    if (minimumLineCount < 0) throw ArgumentError.value(minimumLineCount);
+    final scales = ForumBodyParagraphLayout.validateInputs(
+      content: content,
+      width: width,
+      textScaler: textScaler,
+    );
+    // TextScaler is caller code and may re-enter owner/cursor retirement.
+    if (!identical(_cache, cache) || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    final key = _LayoutKey(content, width, scales);
+    var bytes = _minimumEstimatedBytes(content) + minimumLineCount * 96;
+    final resident = cache._entries[key];
+    if (resident != null &&
+        !resident.layout.isDisposed &&
+        resident.bytes > bytes) {
+      bytes = resident.bytes;
+    }
+    final previous = _bytesByKey[key];
+    if (previous == null || bytes > previous) {
+      _bytesByKey[key] = bytes;
+      _bytes += bytes - (previous ?? 0);
+    }
+    if (_bytesByKey.length > cache.maxEntries ||
+        _bytes > cache.maxEstimatedBytes) {
+      throw ForumBodyParagraphBudgetException(
+        ForumBodyParagraphBudgetFailure.content,
+        requiredEstimatedBytes: _bytes,
+      );
+    }
+  }
+
+  void close() {
+    _cache = null;
+    _bytesByKey.clear();
+    _bytes = 0;
+  }
+}
+
+int _minimumEstimatedBytes(ForumBodyParagraphContent content) =>
+    4096 + content.projection.text.length * 96 + content.runs.length * 256;
 
 final class ForumBodyParagraphLease {
   ForumBodyParagraphLease._(this._owner, this._entry, this.content);

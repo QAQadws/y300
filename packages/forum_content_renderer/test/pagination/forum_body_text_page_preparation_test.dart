@@ -103,6 +103,139 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'an active continuation cannot hide an intrinsically oversized page behind a pin wait',
+    () {
+      final fixture = _Fixture(
+        html:
+            '<p style="margin:0">a</p><p style="margin:0">bbbbbbbbbbbbbbbbbbbb</p>',
+        entries: 1,
+        height: 20,
+        firstPageOnly: true,
+      );
+      expect(fixture.session.snapshot.single.fragments, hasLength(2));
+      expect(fixture.cache.activeLeases, 1);
+      final builds = fixture.cache.layoutBuildCount;
+      final preparation = fixture.session.openPagePreparation(0);
+      expect(
+        () => preparation.advance(maxFragments: 2),
+        throwsA(
+          isA<ForumBodyTextPagePreparationException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyTextPagePreparationFailure.intrinsicBudget,
+          ),
+        ),
+      );
+      expect(fixture.cache.layoutBuildCount, builds);
+      expect(fixture.cache.activeLeases, 1);
+      expect(fixture.session.snapshot.length, 1);
+      expect(fixture.session.reservedViewLeases, 0);
+    },
+  );
+
+  test(
+    'whole-view capacity inspection pauses by fragment budget without entering a release wait',
+    () {
+      final fixture = _Fixture(
+        html:
+            '<p style="margin:0">a</p><p style="margin:0">bbbbbbbbbbbbbbbbbbbb</p>',
+        entries: 1,
+        height: 20,
+        firstPageOnly: true,
+      );
+      final preparation = fixture.session.openPagePreparation(0);
+      final builds = fixture.cache.layoutBuildCount;
+      final first = preparation.advance(maxFragments: 1);
+      expect(first.fragmentsInspected, 1);
+      expect(first.fragmentsPrepared, 0);
+      expect(first.waitingForLayoutBudget, isFalse);
+      expect(first.madeProgress, isTrue);
+      expect(
+        () => preparation.advance(maxFragments: 1),
+        throwsA(isA<ForumBodyTextPagePreparationException>()),
+      );
+      expect(fixture.cache.layoutBuildCount, builds);
+      expect(fixture.cache.activeLeases, 1);
+      expect(fixture.session.reservedViewLeases, 0);
+    },
+  );
+
+  test('a pinned continuation cannot hide the full-page byte lower bound', () {
+    final fixture = _Fixture(
+      html:
+          '<p style="margin:0">a</p><p style="margin:0">bbbbbbbbbbbbbbbbbbbb</p>',
+      entries: 8,
+      bytes: 8000,
+      height: 20,
+      firstPageOnly: true,
+    );
+    final preparation = fixture.session.openPagePreparation(0);
+    final builds = fixture.cache.layoutBuildCount;
+    expect(
+      () => preparation.advance(maxFragments: 8),
+      throwsA(isA<ForumBodyTextPagePreparationException>()),
+    );
+    expect(fixture.cache.layoutBuildCount, builds);
+    expect(fixture.cache.activeLeases, 1);
+    expect(fixture.session.reservedViewLeases, 0);
+  });
+
+  test(
+    'whole-view probes count repeated BR windows as one actual native input',
+    () {
+      final fixture = _Fixture(html: '<span>a<br><br></span>', entries: 1);
+      fixture.cache.clearUnpinned();
+      final external = fixture.cache.acquire(content: _external(), width: 100);
+      final builds = fixture.cache.layoutBuildCount;
+      final preparation = fixture.session.openPagePreparation(0);
+      final first = preparation.advance(maxFragments: 1);
+      expect(first.fragmentsInspected, 1);
+      expect(first.waitingForLayoutBudget, isFalse);
+      final second = preparation.advance(maxFragments: 1);
+      expect(second.fragmentsInspected, 1);
+      expect(second.waitingForLayoutBudget, isTrue);
+      expect(fixture.cache.layoutBuildCount, builds);
+      external.release();
+      _finish(preparation, maxFragments: 1);
+      final leases = preparation.takeLeases();
+      expect(leases, hasLength(2));
+      expect(leases.first.layout, same(leases.last.layout));
+      for (final lease in leases) {
+        lease.release();
+      }
+    },
+  );
+
+  test(
+    'release during metadata inspection requests fresh admission rather than a lost-event wait',
+    () {
+      var armed = false;
+      var calls = 0;
+      late ForumBodyParagraphLease external;
+      final fixture = _Fixture(
+        html: '<p style="margin:0">a</p><p style="margin:0">b</p>',
+        entries: 2,
+        textScaler: _CallbackScaler((size) {
+          if (armed && ++calls == 2) external.release();
+          return size;
+        }),
+      );
+      fixture.cache.clearUnpinned();
+      external = fixture.cache.acquire(content: _external(), width: 100);
+      final preparation = fixture.session.openPagePreparation(0);
+      preparation.advance(maxFragments: 2);
+      armed = true;
+      final inspected = preparation.advance(maxFragments: 2);
+      expect(inspected.fragmentsInspected, 2);
+      expect(external.isActive, isFalse);
+      expect(inspected.waitingForLayoutBudget, isFalse);
+      expect(preparation.advance(maxFragments: 2).isReady, isTrue);
+      preparation.close();
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
+
+  test(
     'external aliases of prepared native entries do not hide an intrinsic capacity failure',
     () {
       final fixture = _Fixture(
@@ -137,6 +270,50 @@ void main() {
     },
   );
 
+  for (final retireCache in [false, true]) {
+    test(
+      'retirement during whole-view inspection releases partial work: cache=$retireCache',
+      () {
+        var armed = false;
+        var calls = 0;
+        late final _Fixture fixture;
+        fixture = _Fixture(
+          html: '<p style="margin:0">a</p><p style="margin:0">b</p>',
+          entries: 2,
+          textScaler: _CallbackScaler((size) {
+            if (armed && ++calls == 2) {
+              if (retireCache) {
+                fixture.cache.close();
+              } else {
+                fixture.session.close();
+              }
+            }
+            return size;
+          }),
+        );
+        fixture.cache.clearUnpinned();
+        final external = fixture.cache.acquire(
+          content: _external(),
+          width: 100,
+        );
+        final preparation = fixture.session.openPagePreparation(0);
+        preparation.advance(maxFragments: 2);
+        armed = true;
+        expect(
+          () => preparation.advance(maxFragments: 2),
+          retireCache
+              ? _sessionFailure(ForumBodyTextPageSessionFailure.ownerRetired)
+              : throwsStateError,
+        );
+        expect(preparation.state, ForumBodyTextPagePreparationState.closed);
+        expect(fixture.session.reservedViewLeases, 0);
+        expect(fixture.cache.activeLeases, retireCache ? 0 : 1);
+        external.release();
+        expect(fixture.cache.activeLeases, 0);
+      },
+    );
+  }
+
   test(
     'owned native bytes can prove a page too large even with other pinned entries',
     () {
@@ -161,7 +338,7 @@ void main() {
   );
 
   test(
-    'a discarded native build during external byte pressure is not retained preparation progress',
+    'a discarded native build is not a prepared fragment while metadata inspection is bounded progress',
     () {
       final fixture = _Fixture(
         html: '<p style="margin:0">abcdef</p>',
@@ -174,7 +351,8 @@ void main() {
       expect(step.layoutsBuilt, 1);
       expect(step.fragmentsPrepared, 0);
       expect(step.waitingForLayoutBudget, isTrue);
-      expect(step.madeProgress, isFalse);
+      expect(step.fragmentsInspected, 1);
+      expect(step.madeProgress, isTrue);
       external.release();
       expect(preparation.advance(maxFragments: 1).isReady, isTrue);
       preparation.close();
@@ -431,7 +609,12 @@ void main() {
       final before = fixture.cache.layoutBuildCount;
       final waiting = preparation.advance(maxFragments: 20);
       expect(waiting.waitingForLayoutBudget, isTrue);
-      expect(waiting.madeProgress, isFalse);
+      expect(waiting.fragmentsInspected, 2);
+      expect(waiting.madeProgress, isTrue);
+      final unchanged = preparation.advance(maxFragments: 20);
+      expect(unchanged.waitingForLayoutBudget, isTrue);
+      expect(unchanged.fragmentsInspected, 0);
+      expect(unchanged.madeProgress, isFalse);
       expect(preparation.preparedFragmentCount, 1);
       expect(fixture.cache.layoutBuildCount, before);
       external.release();
