@@ -19,6 +19,12 @@ export 'src/display_text_projection.dart'
         HtmlProjectedSourcePosition,
         HtmlDisplayTextLimitException,
         HtmlDisplayTextProjection;
+export 'src/inline_text_projection.dart'
+    show
+        HtmlInlineTextAtom,
+        HtmlInlineTextPosition,
+        HtmlInlineTextLimitException,
+        HtmlInlineTextProjection;
 export 'src/source_text_map.dart' show HtmlSourceTextMap, HtmlSourceTextRange;
 export 'src/work_slice.dart' show HtmlPaginationWorkSlice;
 export 'src/complex_slice.dart'

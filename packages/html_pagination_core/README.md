@@ -44,6 +44,16 @@ Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以�
 `displaySegmentationHash`/`hasSameDisplaySegmentation` 仅描述文字与独立字素边界，
 不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 4。
 
+`HtmlInlineTextProjection` 为父排版引擎单独建立 UTF-16 坐标：每个显式原子范围仅在
+`engineText` 中占一个 U+FFFC，原来的 `display` 仍保存子文字、独立字素和真实来源。
+原子范围必须非空、有序、不重叠且位于完整显示字素边界，受原子数、显示文字和引擎
+文字三个预算限制；普通正文中的 U+FFFC 仍是有真实来源的文字，不自动当作原子。
+`engineAtDisplayUtf16` / `displayAtEngineUtf16` 保留上下游亲和性，原子内部或普通
+字素内部的位置返回边界近似，不能冒充精确子命中。子布局必须提供其实际命中结果。
+`sourceAtEngineUtf16` 继续保留来源缺口；`displayRangeForEngineRange` 严格核对整字素
+和原子边界，但其结果不是可见 coverage。原子几何、绘制、分页与生命周期仍归 renderer。
+映射 revision 为 1；缓存还需核对完整样式、几何和 owner，映射相等不替代这些条件。
+
 ## Fit 与协作端口
 
 `DefaultHtmlComplexFitSearcher` 从邻页容量窗口起步，在合法边界上扩张、二分和选择
