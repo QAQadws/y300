@@ -37,11 +37,15 @@ Future<List<int>> raster(
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   if (fragments) {
+    var start = 0;
     for (var i = 0; i < layout.lines.length; i++) {
-      final fragment = layout.fragment(i, i + 1);
+      if (!layout.lines[i].canBreakAfter) continue;
+      final fragment = layout.fragment(start, i + 1);
       expect(identical(fragment.layout, layout), isTrue);
       fragment.paint(canvas, Offset(0, fragment.top));
+      start = i + 1;
     }
+    expect(start, layout.lines.length);
   } else {
     layout.paint(canvas, Offset.zero);
   }
@@ -65,6 +69,118 @@ Future<List<int>> raster(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'display coverage includes hard breaks, blank lines and trailing newline',
+    () {
+      final layout = ForumBodyParagraphLayout.create(
+        content: content('<p>a<br><br>b<br></p>'),
+        width: 200,
+      );
+      addTearDown(layout.dispose);
+      expect(layout.projection.text, 'a\n\nb\n');
+      expect(layout.lines.map((line) => (line.startUtf16, line.endUtf16)), [
+        (0, 1),
+        (2, 2),
+        (3, 4),
+        (5, 5),
+      ]);
+      expect(
+        layout.lines.map(
+          (line) => (line.coverageStartUtf16, line.coverageEndUtf16),
+        ),
+        [(0, 2), (2, 3), (3, 5), (5, 5)],
+      );
+      final firstPage = layout.fragment(0, 2);
+      final secondPage = layout.fragment(2, 4);
+      expect(firstPage.coverageStartUtf16, 0);
+      expect(firstPage.coverageEndUtf16, secondPage.coverageStartUtf16);
+      expect(secondPage.coverageEndUtf16, layout.projection.text.length);
+    },
+  );
+
+  test(
+    'line coverage partitions Unicode display text without proving source gaps',
+    () {
+      for (final html in [
+        '<p>中文日文かな 👨‍👩‍👧‍👦 é abc def</p>',
+        '<p dir="rtl">אבג 123 abc דהו</p>',
+        '<p dir="rtl">אבג<br><br></p>',
+        '<p style="white-space:pre-wrap"> \n 甲 é\n</p>',
+        '<p>甲\u2028乙\u2029</p>',
+        '<p>\u2028\u2028</p>',
+        '<p><br><br></p>',
+        '<p></p>',
+        '<p>a<span hidden>secret</span>b<br></p>',
+      ]) {
+        final input = content(html);
+        for (final width in [60.0, 120.0, 500.0]) {
+          late final ForumBodyParagraphLayout layout;
+          expect(
+            () => layout = ForumBodyParagraphLayout.create(
+              content: input,
+              width: width,
+            ),
+            returnsNormally,
+            reason: 'Input $html at width $width',
+          );
+          try {
+            final text = input.projection.text;
+            final covered = StringBuffer();
+            var previous = 0;
+            for (var index = 0; index < layout.lines.length; index++) {
+              final line = layout.lines[index];
+              expect(line.coverageStartUtf16, previous);
+              expect(
+                line.coverageEndUtf16,
+                greaterThanOrEqualTo(line.endUtf16),
+              );
+              expect(
+                line.canBreakAfter,
+                input.projection
+                        .sourceAtUtf16(line.coverageEndUtf16)
+                        .displayUtf16 ==
+                    line.coverageEndUtf16,
+              );
+              if (line.canBreakBefore && line.canBreakAfter) {
+                final fragment = layout.fragment(index, index + 1);
+                expect(fragment.coverageStartUtf16, line.coverageStartUtf16);
+                expect(fragment.coverageEndUtf16, line.coverageEndUtf16);
+              } else {
+                expect(
+                  () => layout.fragment(index, index + 1),
+                  throwsA(isA<ForumBodyParagraphLayoutException>()),
+                );
+              }
+              covered.write(
+                text.substring(line.coverageStartUtf16, line.coverageEndUtf16),
+              );
+              previous = line.coverageEndUtf16;
+            }
+            expect(previous, text.length);
+            expect(covered.toString(), text);
+          } finally {
+            layout.dispose();
+          }
+        }
+      }
+      final gap = content('<p>a<span hidden>secret</span>b</p>');
+      expect(gap.projection.sourceAtUtf16(1).isExact, isFalse);
+    },
+  );
+
+  test(
+    'narrow fallback cluster lines stay together in painted fragments',
+    () async {
+      final layout = ForumBodyParagraphLayout.create(
+        content: content('<p>中文日文かな 👨‍👩‍👧‍👦 é abc def</p>'),
+        width: 60,
+      );
+      addTearDown(layout.dispose);
+      expect(layout.lines.any((line) => !line.canBreakAfter), isTrue);
+      expect(await raster(layout, fragments: true), await raster(layout));
+    },
+  );
 
   test(
     'one actual layout serves metrics, repeated paint, hit-test and boxes',
