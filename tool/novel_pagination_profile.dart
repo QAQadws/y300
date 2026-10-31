@@ -25,6 +25,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged
 import 'package:y300/l10n/app_localizations.dart';
 
 import 'novel_pagination_profile_config.dart';
+import 'novel_pagination_profile_fixtures.dart';
 
 final _errors = <String>[];
 const _profilePartialNavigation = bool.fromEnvironment(
@@ -990,9 +991,5 @@ class _PageRequest {
   };
 }
 
-final _safeHtml = List<String>.filled(
-  40,
-  '<p>合成分页正文 mixed 123，只有公开生成文本，重复段落用于观察普通文字布局与换行。</p>',
-).join();
-final _complexHtml =
-    '<p><font face="serif">${List<String>.filled(120, '合成长复杂正文 mixed 123，A👨‍👩‍👧‍👦e\u0301🇨🇳中<ruby>注音<rt>zhuyin</rt></ruby>，连续边界与完整内容。').join()}</font></p>';
+final _safeHtml = novelProfileSafeHtml;
+final _complexHtml = novelProfileComplexHtml;

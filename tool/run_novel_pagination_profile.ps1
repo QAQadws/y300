@@ -3,6 +3,9 @@
 param(
     [string]$Device,
     [switch]$Baseline,
+    [switch]$MainPage,
+    [ValidateSet('native', 'legacy', 'both')]
+    [string]$Backend = 'both',
     [switch]$PrepareOnly
 )
 
@@ -103,7 +106,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 '@
-    $target = ([Uri]::new((Join-Path $repoRoot 'tool/novel_pagination_profile.dart'))).AbsoluteUri.Replace("'", '%27')
+    $entry = if ($MainPage) { 'tool/novel_main_page_profile.dart' } else { 'tool/novel_pagination_profile.dart' }
+    $target = ([Uri]::new((Join-Path $repoRoot $entry))).AbsoluteUri.Replace("'", '%27')
     Write-Utf8 (Join-Path $profileRoot 'lib/main.dart') "import '$target' as benchmark;`n`nvoid main() => benchmark.main();`n"
     Write-Utf8 (Join-Path $profileRoot 'pubspec.lock') (Read-Utf8 (Join-Path $repoRoot 'pubspec.lock'))
 
@@ -130,6 +134,7 @@ flutter:
             "--dart-define=PROFILE_REVISION=$revision", "--dart-define=PROFILE_DEVICE=$Device",
             '--dart-define=PROFILE_AUTO_EXIT=true')
         if ($Baseline) { $runArguments += '--dart-define=PROFILE_BASELINE=true' }
+        if ($MainPage) { $runArguments += "--dart-define=PROFILE_BACKEND=$Backend" }
         $script:profileSuiteResult = $null
         & flutter @runArguments 2>&1 | ForEach-Object {
             $line = $_.ToString()
