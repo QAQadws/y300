@@ -186,6 +186,7 @@ final class _LayoutKey {
       styleRevision = content.styleRevision,
       backendRevision = ForumBodyParagraphLayout.backendRevision,
       projectionRevision = HtmlDisplayTextProjection.revision,
+      projection = content.projection,
       span = content.textSpan,
       align = content.style.textAlign,
       direction = content.style.textDirection,
@@ -198,6 +199,7 @@ final class _LayoutKey {
   final int styleRevision;
   final int backendRevision;
   final int projectionRevision;
+  final HtmlDisplayTextProjection projection;
   final TextSpan span;
   final TextAlign align;
   final TextDirection direction;
@@ -213,6 +215,7 @@ final class _LayoutKey {
       styleRevision == other.styleRevision &&
       backendRevision == other.backendRevision &&
       projectionRevision == other.projectionRevision &&
+      projection.hasSameSourceMapping(other.projection) &&
       span == other.span &&
       align == other.align &&
       direction == other.direction &&
@@ -226,6 +229,7 @@ final class _LayoutKey {
     styleRevision,
     backendRevision,
     projectionRevision,
+    projection.sourceMappingHash,
     span,
     align,
     direction,

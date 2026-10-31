@@ -3,6 +3,74 @@ import 'package:test/test.dart';
 
 void main() {
   test(
+    'source mapping equality ignores run partition but preserves coordinates',
+    () {
+      final whole = HtmlDisplayTextProjection.build([
+        const HtmlDisplayTextRun(text: 'é👩🏽‍💻a', sourceRuneStart: 8),
+      ]);
+      final split = HtmlDisplayTextProjection.build([
+        const HtmlDisplayTextRun(text: 'e', sourceRuneStart: 8),
+        const HtmlDisplayTextRun(text: '́👩🏽‍💻a', sourceRuneStart: 9),
+      ]);
+      expect(whole.sourceMappingHash, split.sourceMappingHash);
+      expect(whole.hasSameSourceMapping(split), isTrue);
+      expect(whole.hasSameSourceMapping(whole), isTrue);
+      final shifted = HtmlDisplayTextProjection.build([
+        const HtmlDisplayTextRun(text: 'é👩🏽‍💻a', sourceRuneStart: 9),
+      ]);
+      expect(whole.text, shifted.text);
+      expect(whole.hasSameSourceMapping(shifted), isFalse);
+      for (var offset = 0; offset <= whole.text.length; offset++) {
+        for (final affinity in HtmlProjectionAffinity.values) {
+          final a = whole.sourceAtUtf16(offset, affinity: affinity);
+          final b = split.sourceAtUtf16(offset, affinity: affinity);
+          expect(
+            (a.sourceRune, a.displayUtf16, a.isExact),
+            (b.sourceRune, b.displayUtf16, b.isExact),
+          );
+        }
+      }
+    },
+  );
+
+  test(
+    'source mapping equality retains collapsed ranges, gaps and empty bases',
+    () {
+      HtmlDisplayTextProjection projection(List<HtmlDisplayTextRun> runs) =>
+          HtmlDisplayTextProjection.build(runs);
+      final contiguous = projection([
+        const HtmlDisplayTextRun(text: 'ab', sourceRuneStart: 0),
+      ]);
+      final gap = projection([
+        const HtmlDisplayTextRun(text: 'a', sourceRuneStart: 0),
+        const HtmlDisplayTextRun(text: 'b', sourceRuneStart: 5),
+      ]);
+      expect(contiguous.text, gap.text);
+      expect(contiguous.hasSameSourceMapping(gap), isFalse);
+      final oneSpace = projection([
+        const HtmlDisplayTextRun(text: 'a b', sourceRuneStart: 0),
+      ]);
+      final twoSpaces = projection([
+        const HtmlDisplayTextRun(text: 'a  b', sourceRuneStart: 0),
+      ]);
+      expect(oneSpace.text, twoSpaces.text);
+      expect(oneSpace.hasSameSourceMapping(twoSpaces), isFalse);
+      final empty = projection([]);
+      final basedEmpty = projection([
+        const HtmlDisplayTextRun(text: '', sourceRuneStart: 5),
+      ]);
+      expect(empty.text, basedEmpty.text);
+      expect(empty.hasSameSourceMapping(basedEmpty), isFalse);
+      expect(
+        basedEmpty.hasSameSourceMapping(
+          projection([const HtmlDisplayTextRun(text: '', sourceRuneStart: 5)]),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'normal collapses across runs while retaining the first style owner',
     () {
       final projection = HtmlDisplayTextProjection.build(const [

@@ -87,6 +87,35 @@ final class HtmlDisplayTextProjection {
   final List<int> _graphemeBoundaries;
   final int _emptySource;
 
+  /// Process-local hash for caches retaining this source projection. Never a
+  /// persisted identity: callers must also use [hasSameSourceMapping] to handle
+  /// hash collisions. Style/run ownership is deliberately independent.
+  late final int sourceMappingHash = Object.hash(
+    text,
+    _runes.isEmpty ? _emptySource : null,
+    Object.hashAll(_runes.map((rune) => Object.hash(rune.start, rune.end))),
+  );
+
+  /// Equal visible text can originate at different source coordinates or gaps.
+  /// A match guarantees equal sourceAtUtf16 results, even if the input runs
+  /// partition styling differently. This is not evidence for a semantic anchor
+  /// or equality of the original HTML.
+  bool hasSameSourceMapping(HtmlDisplayTextProjection other) {
+    if (identical(this, other)) return true;
+    if (sourceMappingHash != other.sourceMappingHash ||
+        text != other.text ||
+        _runes.length != other._runes.length) {
+      return false;
+    }
+    if (_runes.isEmpty) return _emptySource == other._emptySource;
+    for (var index = 0; index < _runes.length; index++) {
+      final first = _runes[index];
+      final second = other._runes[index];
+      if (first.start != second.start || first.end != second.end) return false;
+    }
+    return true;
+  }
+
   HtmlProjectedSourcePosition sourceAtUtf16(
     int offset, {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,

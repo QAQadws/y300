@@ -37,6 +37,63 @@ ForumBodyParagraphContent content(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('equal paint text does not reuse a different source projection', () {
+    final document = const ForumBodyParser().parse(
+      html: '<p><span>a</span><span>a</span></p>',
+      sourceId: 'projection-cache',
+      conversionIdentity: 'none',
+    );
+    final styles = const ForumBodyStyleResolver().resolve(
+      document,
+      ForumBodyReaderStyle(
+        textStyle: const TextStyle(fontSize: 20),
+        fontRevision: 'loaded',
+        linkColor: const Color(0xff0000ff),
+      ),
+    );
+    ForumBodyParagraphContent hide(String path) {
+      final original = styles.byPath[path]!;
+      return const ForumBodyParagraphContentBuilder().build(
+        document: document,
+        path: '0',
+        styles: ForumBodyStyleResult(
+          identity: styles.identity,
+          fontRevision: styles.fontRevision,
+          root: styles.root,
+          resolverRevision: styles.resolverRevision,
+          issues: styles.issues,
+          byPath: {
+            ...styles.byPath,
+            path: ForumBodyResolvedStyle(
+              textStyle: original.textStyle,
+              role: original.role,
+              textAlign: original.textAlign,
+              textDirection: original.textDirection,
+              hidden: true,
+            ),
+          },
+        ),
+      );
+    }
+
+    final firstContent = hide('0/0');
+    final secondContent = hide('0/1');
+    expect(firstContent.textSpan, secondContent.textSpan);
+    expect(firstContent.projection.sourceAtUtf16(0).sourceRune, 1);
+    expect(secondContent.projection.sourceAtUtf16(0).sourceRune, 0);
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 2,
+      maxEstimatedBytes: 1 << 20,
+    );
+    addTearDown(cache.close);
+    final first = cache.acquire(content: firstContent, width: 200);
+    final second = cache.acquire(content: secondContent, width: 200);
+    expect(second.layout.projection.sourceAtUtf16(0).sourceRune, 0);
+    expect(identical(first.layout, second.layout), isFalse);
+    first.release();
+    second.release();
+  });
+
   test(
     'value-equal requests share native layout with separate view leases',
     () {
