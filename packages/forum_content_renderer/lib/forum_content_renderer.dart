@@ -11,6 +11,8 @@ export 'src/inline/forum_body_inline_span_content.dart';
 export 'src/inline/forum_body_inline_paragraph_layout.dart';
 export 'src/inline/forum_body_ruby_group_layout.dart';
 export 'src/inline/forum_body_ruby_group_preparation.dart';
+export 'src/inline/forum_body_text_band_content.dart' show ForumBodyTextBandContent;
+export 'src/inline/forum_body_text_band_layout.dart';
 export 'src/inline/forum_body_ruby_content.dart';
 export 'src/inline/forum_body_ruby_content_cursor.dart';
 export 'src/pagination/forum_body_text_page_composer.dart';

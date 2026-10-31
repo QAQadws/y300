@@ -147,3 +147,37 @@ alphabetic baseline、有效父字体缩放、对齐/方向/模式/宽度。固�
 排版期间 owner 退役禁止回填；同 key 重入测量明确失败，不覆盖活跃条目；其他条目的
 重入获取须在 native 返回后再次核对实际 pin。字节是保守准入估算，不能冒充真实 native
 heap/GPU 观测。子几何的协作准备、可见绑定及正式 flow/session/page 消费仍待接入。
+
+## 有界子行批量排字
+
+`ForumBodyTextBandContent` 将有序、同文档/字体/样式版本的独立 intrinsic 文本组成有界
+批次，默认最多 64 个子项、16384 个显示 UTF-16 单位与 512 个 run。根方向、对齐和
+locale 必须兼容；空子文字不占 native slot。复杂容器、阴影、描边及扩展 ink 的滤镜
+需要其他排版/绘制端口，不能在本端口中裁剪后宣称支持。
+
+`ForumBodyTextBandLayout` 用一个实际 TextPainter 产生各子项的宽高、字母基线、字体
+选区及命中。批次根不继承首项的可选字体、字重或 paint；每个子上下文保持自己的完整
+样式和逐字号 TextScaler。引擎坐标由纯包 `HtmlTextBandProjection` 提供，虚拟换行和
+透明隔离行不进入源码点、子显示坐标、复制、语义或阅读锚点。
+
+换行使用不参与用户缩放的零字号与微小正行高覆盖，避免引擎默认字体下限污染极小行高；
+隔离行已经是逻辑像素，不再缩放。子高度按原生 ascent/descent 的像素舍入重建，并把
+舍入差计入基线；不使用被至少一像素钳制的 LineMetrics.height 代替零高独立段落。
+实际字体范围参与隔离检查，空间不足返回 requiredGutter，由调用者在新的有界工作单元
+重试，绝不在一次 create 中循环排字。命中仅定位已知子行；极小行需要时使用实际 native
+caret 几何，歧义保持近似，不从相同文字推断来源。
+
+可见帧不能逐子项重绘整个批次。`recordPaint` 在准备阶段录制单项隔离的 ui.Picture，
+返回带成本的 `ForumBodyTextBandPaint` 票据；缓存装配者核对全局预算后 `adoptPaint`，
+拒绝则 close 票据。每个 slot 最多一个待交付票据，交付和失败都消费指定句柄。
+`preparePaint` 仅供独立 owner 的便利调用；正式阅读器须先经共享 cache 准入。
+view.paint 只复用已提交快照，未准备时明确失败，不在 paint 中测量、录制或补缓存。
+
+绘图所有权由单个 band 的内部服务管理，没有第二套 LRU/预算。可查询待提交/已准备图片数
+及 approximatePictureBytes；该值不含全部字体、图片引用或 GPU 内存，不能据此宣称内存
+验收通过。owner 退役同时关闭字体资源、待提交票据和已提交图片，view 单独退休不关闭
+兄弟 view；Picture 创建回调中的退休也禁止迟到提交。批次输入/排字 revision 均为 1。
+
+本原语尚未接入正式 native cache、分组 lease 和页面准备器。后续必须把批次与绘图快照
+全部纳入现有 owner 的预算/释放/取消合同，再完成可见整页绑定与 profile 验收；不能只按
+TextPainter 数量计账，或用该原语的单项验证代替复杂正文阅读器验收。
