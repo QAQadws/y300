@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart';
@@ -16,6 +17,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_chapter_tur
 import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_work_scheduler.dart';
@@ -24,6 +26,8 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_layout_host.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+
+import '../test_support/native_reader_activity_signal.dart';
 
 Future<void> _idle() async {}
 
@@ -127,6 +131,7 @@ Future<void> _show(
   String? rawHtml,
   NovelReaderDocument? semantic,
   bool active = true,
+  ValueListenable<bool>? activitySignal,
   NovelReaderPagedNavigationController? navigation,
   NovelReaderChapterTurnHandler? onChapter,
   String? previousTitle,
@@ -172,6 +177,7 @@ Future<void> _show(
                 progressSnapshot: snapshot ?? reader.snapshot,
                 readingAuthorityIdentity: authority ?? reader.authority,
                 active: active,
+                activity: activitySignal,
                 navigationController: navigation,
                 onTurnToAdjacentChapter: onChapter,
                 previousChapterTitle: previousTitle,
@@ -234,6 +240,363 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets(
+    'duplicate activity notifications cannot extend a target deadline or implicitly retry its failure',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      var held = false;
+      final release = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await release.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      const performance = NovelReaderPaginationPerformancePolicy(
+        targetPageWait: Duration(seconds: 5),
+        backgroundIdle: Duration(seconds: 20),
+      );
+      await _show(
+        tester,
+        reader,
+        activitySignal: signal,
+        scheduler: scheduler,
+        performance: performance,
+      );
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      held = true;
+      expect(controller.requestPage(8), isTrue);
+      final revision = controller.navigationRevision;
+      await tester.pump(const Duration(seconds: 3));
+      signal.repeat();
+      expect(controller.navigationRevision, revision);
+      await tester.pump(const Duration(seconds: 3));
+      expect(
+        controller.error,
+        isA<NovelReaderPaginationException>().having(
+          (error) => error.code,
+          'code',
+          'targetPageWaitExceeded',
+        ),
+      );
+      final error = controller.error;
+      signal.value = false;
+      signal.value = true;
+      held = false;
+      release.complete();
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.error, same(error));
+      expect(reader.service.calls, 1);
+      await _unmount(tester, reader);
+    },
+  );
+  testWidgets(
+    'activity signal gates initial preparation and is borrowed until unmount',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(false);
+      addTearDown(signal.dispose);
+      await _show(tester, reader, activitySignal: signal);
+      await tester.pumpAndSettle();
+      expect(reader.service.calls, 0);
+      expect(reader.owner.activeCacheHandles, 0);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.inactive);
+      signal.value = true;
+      expect(reader.service.calls, 0);
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(1));
+      expect(signal.isObserved, isTrue);
+      await _unmount(tester, reader);
+      expect(signal.isObserved, isFalse);
+    },
+  );
+
+  testWidgets(
+    'activity off/on without an inactive frame retires a pending target before resuming its Scope',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      var held = false;
+      final release = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await release.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      await _show(tester, reader, activitySignal: signal, scheduler: scheduler);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final before = reader.positions.last;
+      held = true;
+      expect(controller.requestPage(8), isTrue);
+      signal.value = false;
+      expect(controller.isSuspended, isTrue);
+      expect(controller.hasPendingNavigation, isFalse);
+      expect(controller.readyTarget, isNull);
+      signal.value = true;
+      expect(controller.isSuspended, isTrue);
+      expect(reader.positions.last, same(before));
+      held = false;
+      release.complete();
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.isSuspended, isFalse);
+      expect(reader.positions.last.pageIndex, before.pageIndex);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(reader.service.calls, 1);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'synchronous activity loss cancels deadlines before a one-hour first inactive frame',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      var held = false;
+      final release = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await release.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      const performance = NovelReaderPaginationPerformancePolicy();
+      await _show(
+        tester,
+        reader,
+        activitySignal: signal,
+        scheduler: scheduler,
+        performance: performance,
+      );
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final reports = reader.positions.length;
+      held = true;
+      expect(controller.requestPage(8), isTrue);
+      signal.value = false;
+      expect(controller.isSuspended, isTrue);
+      await tester.pump(const Duration(hours: 1));
+      expect(controller.error, isNull);
+      expect(reader.positions, hasLength(reports));
+      held = false;
+      release.complete();
+      await tester.pumpAndSettle();
+      expect(controller.readyTarget, isNull);
+      signal.value = true;
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.error, isNull);
+      expect(
+        reader.positions.every((position) => !position.hasUserNavigated),
+        isTrue,
+      );
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'a created layout hidden before its first viewport cannot start source work',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      await _show(tester, reader, activitySignal: signal);
+      expect(reader.owner.activeCacheHandles, 1);
+      expect(find.byType(ForumBodyTextPageSurface), findsNothing);
+      signal.value = false;
+      await tester.pump(const Duration(hours: 1));
+      final cache = reader.owner.acquireCache();
+      expect(cache.cache.layoutBuildCount, 0);
+      cache.release();
+      expect(reader.positions, isEmpty);
+      expect(reader.ready, 0);
+      signal.value = true;
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(1));
+      expect(reader.service.calls, 1);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'activity resume validates hidden font and geometry changes before any old controller can run',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      await _show(tester, reader, activitySignal: signal);
+      await tester.pumpAndSettle();
+      final old = reader.statuses.last.controller!;
+      final before = reader.positions.last;
+      signal.value = false;
+      reader.fonts.notifyListeners();
+      signal.value = true;
+      expect(old.isSuspended || old.isClosed, isTrue);
+      expect(reader.positions.last, same(before));
+      await _show(
+        tester,
+        reader,
+        activitySignal: signal,
+        width: 60,
+        preferences: reader.preferences.copyWith(fontSize: 20),
+      );
+      await tester.pumpAndSettle();
+      final next = reader.statuses.last.controller!;
+      expect(next, isNot(same(old)));
+      expect(next.snapshot!.width, 60);
+      expect(reader.positions.last.anchor.textOffset, before.anchor.textOffset);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'activity retirement consumes navigation still waiting for pure preparation',
+    (tester) async {
+      final reader = _Reader();
+      reader.service.gate = Completer<void>();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      final origin = reader.semantic.sourceProvenance!.origins.first;
+      final navigation = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: NovelReaderTextAnchor(
+          episodeId: reader.episodeId,
+          nodeId: origin.nodeId,
+          textOffset: 125,
+          formatVersion: 1,
+          textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+        ),
+      );
+      await _show(
+        tester,
+        reader,
+        activitySignal: signal,
+        anchorNavigation: navigation,
+      );
+      await tester.pumpAndSettle();
+      signal.value = false;
+      signal.value = true;
+      reader.service.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, [
+        (navigation, NovelReaderNavigationOutcome.retired),
+      ]);
+      expect(reader.positions.single.hasUserNavigated, isFalse);
+      expect(reader.positions.single.anchor.textOffset, 73);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'new navigation submitted while inactive remains an explicit new input on return',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      await _show(tester, reader, activitySignal: signal);
+      await tester.pumpAndSettle();
+      signal.value = false;
+      final origin = reader.semantic.sourceProvenance!.origins.first;
+      final navigation = NovelReaderAnchorNavigationRequest(
+        requestId: 2,
+        anchor: NovelReaderTextAnchor(
+          episodeId: reader.episodeId,
+          nodeId: origin.nodeId,
+          textOffset: 125,
+          formatVersion: 1,
+          textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+        ),
+      );
+      await _show(
+        tester,
+        reader,
+        activitySignal: signal,
+        anchorNavigation: navigation,
+      );
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, isEmpty);
+      signal.value = true;
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, [
+        (navigation, NovelReaderNavigationOutcome.arrived),
+      ]);
+      expect(reader.positions.last.anchor.textOffset, 125);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'replacing activity listenable detaches the old signal without restarting an unchanged Scope',
+    (tester) async {
+      final reader = _Reader();
+      final old = NativeReaderActivitySignal(true);
+      final next = NativeReaderActivitySignal(true);
+      addTearDown(old.dispose);
+      addTearDown(next.dispose);
+      await _show(tester, reader, activitySignal: old);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      await _show(tester, reader, activitySignal: next);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(old.isObserved, isFalse);
+      expect(next.isObserved, isTrue);
+      old.value = false;
+      expect(controller.isSuspended, isFalse);
+      next.value = false;
+      expect(controller.isSuspended, isTrue);
+      await _unmount(tester, reader);
+      expect(next.isObserved, isFalse);
+      next.value = true;
+    },
+  );
+
+  testWidgets('widget activity and synchronous signal must both allow work', (
+    tester,
+  ) async {
+    final reader = _Reader();
+    final signal = NativeReaderActivitySignal(true);
+    addTearDown(signal.dispose);
+    await _show(tester, reader, active: false, activitySignal: signal);
+    signal.value = false;
+    signal.value = true;
+    await tester.pumpAndSettle();
+    expect(reader.service.calls, 0);
+    await _show(tester, reader, activitySignal: signal);
+    await tester.pumpAndSettle();
+    final controller = reader.statuses.last.controller!;
+    signal.value = false;
+    await _show(tester, reader, active: false, activitySignal: signal);
+    signal.value = true;
+    expect(controller.isSuspended, isTrue);
+    await tester.pumpAndSettle();
+    expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.inactive);
+    await _show(tester, reader, activitySignal: signal);
+    await tester.pumpAndSettle();
+    expect(reader.statuses.last.controller, same(controller));
+    expect(reader.service.calls, 1);
+    await _unmount(tester, reader);
+  });
+
   testWidgets(
     'Host forwards live boundary hints and verifies actual end navigation only on accepted release',
     (tester) async {

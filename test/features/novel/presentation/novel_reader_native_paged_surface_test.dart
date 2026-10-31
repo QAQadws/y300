@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart';
@@ -28,6 +29,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../test_support/native_reader_activity_signal.dart';
 
 const _episode = NovelEpisodeItem(
   episodeId: 'episode',
@@ -139,6 +141,7 @@ Future<void> _show(
   Object? authority,
   Locale locale = const Locale('zh'),
   NovelReaderPagedNavigationController? navigation,
+  ValueListenable<bool>? activitySignal,
 }) => tester.pumpWidget(
   LocalizedTestApp(
     locale: locale,
@@ -170,6 +173,7 @@ Future<void> _show(
             preparationService: reader.service,
             chromeInsets: insets,
             active: active,
+            activity: activitySignal,
             navigationController: navigation ?? reader.navigation,
             previousChapterTitle: 'previous',
             nextChapterTitle: 'next',
@@ -210,6 +214,116 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets(
+    'shell activity suspends before a frame and rejects stale semantics through a frameless pause/resume',
+    (tester) async {
+      final reader = _Reader();
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      await _show(tester, reader, activitySignal: signal);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final semantics = tester.widget<Semantics>(
+        find.byKey(const Key('novel-reader-native-paged-semantics')),
+      );
+      final position = reader.positions.last;
+      expect(reader.navigation.turnNext(), isTrue);
+      signal.value = false;
+      expect(controller.isSuspended, isTrue);
+      semantics.properties.onIncrease!();
+      expect(reader.navigation.turnNext(), isFalse);
+      signal.value = true;
+      expect(controller.isSuspended, isTrue);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.positions.last.pageIndex, position.pageIndex);
+      expect(reader.positions.every((p) => !p.hasUserNavigated), isTrue);
+      await _unmount(tester, reader);
+      expect(signal.isObserved, isFalse);
+    },
+  );
+
+  testWidgets(
+    'activity loss and return retire a ready chapter pull before its release frame',
+    (tester) async {
+      final reader = _Reader(html: '<p>abcd</p>');
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      await _show(tester, reader, activitySignal: signal);
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(PageView)),
+      );
+      await gesture.moveBy(const Offset(-80, 0));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-chapter-turn-hint-text')),
+        findsOneWidget,
+      );
+      signal.value = false;
+      signal.value = true;
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(reader.edges, isEmpty);
+      expect(reader.positions.every((p) => !p.hasUserNavigated), isTrue);
+      expect(
+        find.byKey(const Key('novel-reader-chapter-turn-hint-text')),
+        findsNothing,
+      );
+      await tester.drag(find.byType(PageView), const Offset(-100, 0));
+      await tester.pumpAndSettle();
+      expect(reader.edges, [NovelReaderChapterEdge.end]);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'stale recovery callbacks cannot retry a source or change mode while activity is off',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>${List.filled(100, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+      );
+      final signal = NativeReaderActivitySignal(true);
+      addTearDown(signal.dispose);
+      await _show(
+        tester,
+        reader,
+        width: 200,
+        height: 180,
+        activitySignal: signal,
+      );
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final error = controller.error;
+      expect(error, isNotNull);
+      final retry = tester
+          .widget<IconButton>(
+            find.byKey(const Key('novel-reader-pagination-retry')),
+          )
+          .onPressed!;
+      final scroll = tester
+          .widget<IconButton>(
+            find.byKey(const Key('novel-reader-pagination-fallback')),
+          )
+          .onPressed!;
+      signal.value = false;
+      retry();
+      scroll();
+      expect(reader.scrollChoices, 0);
+      signal.value = true;
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.error, same(error));
+      expect(reader.service.calls, 1);
+      await tester.tap(
+        find.byKey(const Key('novel-reader-pagination-fallback')),
+      );
+      expect(reader.scrollChoices, 1);
+      await _unmount(tester, reader);
+    },
+  );
+
   for (final replacement in ['owner', 'dispose']) {
     testWidgets(
       'stale semantics after $replacement cannot follow a shared port into another reader',

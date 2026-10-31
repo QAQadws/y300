@@ -109,6 +109,7 @@ class _NovelReaderNativePagedViewportState
       _unbind();
       _bind();
     }
+    _startIfActive();
     if (controllerChanged || ownerChanged || !widget.active) {
       _publishHint(null);
     }
@@ -135,10 +136,15 @@ class _NovelReaderNativePagedViewportState
     }
 
     _changes = controller.changes.listen((_) => changed(), onDone: changed);
-    if (controller.phase == NovelReaderNativePagedPhase.created) {
-      controller.start();
-    }
+    _startIfActive();
     _selectDisplay();
+  }
+
+  void _startIfActive() {
+    if (widget.active &&
+        widget.controller.phase == NovelReaderNativePagedPhase.created) {
+      widget.controller.start();
+    }
   }
 
   void _selectDisplay() {

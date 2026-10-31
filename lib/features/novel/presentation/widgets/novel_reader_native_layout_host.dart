@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
@@ -67,6 +68,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.onContentTerminal,
     this.onScrollActivityChanged,
     this.active = true,
+    this.activity,
     this.placeholderBuilder,
     this.retryRevision = 0,
     this.scheduler = const NovelReaderNativeWorkScheduler(),
@@ -126,6 +128,10 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   /// Shell supplies frontmost && resumed && unobstructed reading authority.
   /// Hidden content keeps its mounted paint but owns no active pagination work.
   final bool active;
+
+  /// Borrowed synchronous lifecycle gate. Work stops on false even when Flutter
+  /// cannot build an inactive frame; true schedules normal Scope revalidation.
+  final ValueListenable<bool>? activity;
   final Widget Function(BuildContext, NovelReaderNativeHostStatus)?
   placeholderBuilder;
 
@@ -168,10 +174,15 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   Object? _seenNavigation;
   bool _selectAnchorNavigation = false;
   int _navigationFrameRevision = 0;
+  late bool _lastActive;
+
+  bool get _active => widget.active && (widget.activity?.value ?? true);
 
   @override
   void initState() {
     super.initState();
+    _lastActive = _active;
+    widget.activity?.addListener(_activityChanged);
     _selectAnchorNavigation = widget.navigationRequest != null;
     if (!widget.owner.isClosed) widget.owner.addListener(_ownerChanged);
     _notifyStatus();
@@ -188,6 +199,10 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   @override
   void didUpdateWidget(covariant NovelReaderNativeLayoutHost oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.activity, widget.activity)) {
+      oldWidget.activity?.removeListener(_activityChanged);
+      widget.activity?.addListener(_activityChanged);
+    }
     final pageChanged =
         _pageSeekKey(oldWidget.pageSeekRequest) !=
         _pageSeekKey(widget.pageSeekRequest);
@@ -225,22 +240,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       if (!widget.owner.isClosed) widget.owner.addListener(_ownerChanged);
     }
     if (novelChanged && !ownerChanged) _closeAll();
-    if (oldWidget.active != widget.active) {
-      _pending?.cancel();
-      _epoch++;
-      _needsLayout = true;
-      if (!widget.active) _current?.controller.suspend();
-      if (!widget.active) {
-        _finishNavigation(NovelReaderNavigationOutcome.retired);
-      }
-      _notifyStatus();
-      final epoch = _epoch;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && epoch == _epoch) {
-          widget.onScrollActivityChanged?.call(false);
-        }
-      });
-    }
+    _applyActivity();
     final chapterChanged =
         oldWidget.semanticDocument.episodeId !=
         widget.semanticDocument.episodeId;
@@ -331,7 +331,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     }
     _scheduleNavigation();
     if (_busy ||
-        !widget.active ||
+        !_active ||
         oldWidget.previousChapterTitle != widget.previousChapterTitle ||
         oldWidget.nextChapterTitle != widget.nextChapterTitle ||
         widget.chapterTurnIsInFlight) {
@@ -351,6 +351,34 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     });
   }
 
+  void _activityChanged() {
+    if (_disposed || !mounted) return;
+    if (_applyActivity()) setState(() {});
+  }
+
+  bool _applyActivity() {
+    final active = _active;
+    if (active == _lastActive) return false;
+    _lastActive = active;
+    _pending?.cancel();
+    _epoch++;
+    _needsLayout = true;
+    _busy = active;
+    if (!active) {
+      _current?.controller.suspend();
+      _retireNavigationInput();
+      _chapterHintChanged(null);
+    }
+    _notifyStatus();
+    final epoch = _epoch;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_disposed && epoch == _epoch) {
+        widget.onScrollActivityChanged?.call(false);
+      }
+    });
+    return true;
+  }
+
   NovelReaderNativeHostStatus get _status {
     final request = _current;
     final live = request != null && _live(request);
@@ -361,7 +389,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     final error = _error ?? (live ? request.controller.error : null);
     final phase = widget.owner.isClosed
         ? NovelReaderNativeHostPhase.closed
-        : !widget.active
+        : !_active
         ? NovelReaderNativeHostPhase.inactive
         : _busy
         ? NovelReaderNativeHostPhase.preparing
@@ -392,7 +420,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
 
   bool _live(_LayoutRequest request) =>
       !_disposed &&
-      widget.active &&
+      _active &&
       !_busy &&
       !request.controller.isSuspended &&
       identical(request, _current) &&
@@ -473,7 +501,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             const SizedBox.shrink();
       }
       _invalidBox = false;
-      if (!widget.active) {
+      if (!_active) {
         _pending?.cancel();
         _busy = false;
         _needsLayout = true;
@@ -578,7 +606,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         epoch == _epoch &&
         !token.isCancelled &&
         identical(config.owner, widget.owner) &&
-        widget.active &&
+        _active &&
         !config.owner.isClosed;
     try {
       if (captureError != null) throw captureError;
@@ -990,7 +1018,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   void _scheduleNavigation() {
     final key = _navigationKey;
     if (_disposed ||
-        !widget.active ||
+        !_active ||
         _busy ||
         key == null ||
         _seenNavigation == key) {
@@ -1001,7 +1029,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           _disposed ||
-          !widget.active ||
+          !_active ||
           _busy ||
           frame != _navigationFrameRevision ||
           epoch != _epoch ||
@@ -1070,7 +1098,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _finishNavigation(NovelReaderNavigationOutcome.retired);
     } else if (key != null && _seenNavigation != key) {
       // Preparation can still be waiting before any controller accepts this
-      // input. A later entry/retry retires that intent too, without replay.
+      // input. Activity loss, entry/retry retire that intent without replay too.
       final input = _navigationInput();
       if (input != null) {
         _reportNavigation(NovelReaderNavigationOutcome.retired, input.callback);
@@ -1103,6 +1131,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     _disposed = true;
     _epoch++;
     _statusRevision++;
+    widget.activity?.removeListener(_activityChanged);
     widget.owner.removeListener(_ownerChanged);
     _closeAll();
     super.dispose();

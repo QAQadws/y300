@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -45,6 +46,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
     this.converter = const IdentityTextConverter(),
     this.chromeInsets = const ReaderChromeInsets.zero(),
     this.active = true,
+    this.activity,
     this.startsAtBeginning = false,
     this.conversionAnchor,
     this.navigationController,
@@ -81,6 +83,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
   final TextConverter converter;
   final ReaderChromeInsets chromeInsets;
   final bool active;
+  final ValueListenable<bool>? activity;
   final bool startsAtBeginning;
   final NovelReaderTextAnchor? conversionAnchor;
   final NovelReaderPagedNavigationController? navigationController;
@@ -126,9 +129,28 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
   NovelReaderPagedNavigationController get _navigation =>
       widget.navigationController ?? _localNavigation;
 
+  bool get _active => widget.active && (widget.activity?.value ?? true);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.activity?.addListener(_activityChanged);
+  }
+
+  void _activityChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (!_active) _hint = null;
+    });
+  }
+
   @override
   void didUpdateWidget(covariant NovelReaderNativePagedSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.activity, widget.activity)) {
+      oldWidget.activity?.removeListener(_activityChanged);
+      widget.activity?.addListener(_activityChanged);
+    }
     if (!identical(oldWidget.owner, widget.owner) ||
         oldWidget.episode.episodeId != widget.episode.episodeId ||
         oldWidget.rawHtml != widget.rawHtml ||
@@ -143,7 +165,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
       _invalidWindow = false;
       _windowRevision++;
     }
-    if (!widget.active) _hint = null;
+    if (!_active) _hint = null;
   }
 
   void _reportInvalidWindow() {
@@ -211,20 +233,28 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
         _status?.isPageCountFinal ?? _position?.isPageCountFinal ?? false;
     final total = isFinal ? l10n.novelPages(count) : l10n.novelPageCountPending;
     final canNavigate =
-        widget.active &&
+        _active &&
         _status?.hasVisiblePage == true &&
         _status?.controller != null &&
         _status?.isRetainingPreviousLayout == false;
     final owner = widget.owner;
     final authority = widget.readingAuthorityIdentity;
+    final episode = widget.episode.episodeId;
+    final document = widget.semanticDocument;
+    final rawHtml = widget.rawHtml;
     final controller = _status?.controller;
+    bool currentContent() =>
+        mounted &&
+        _active &&
+        identical(owner, widget.owner) &&
+        identical(authority, widget.readingAuthorityIdentity) &&
+        episode == widget.episode.episodeId &&
+        identical(document, widget.semanticDocument) &&
+        rawHtml == widget.rawHtml;
     void turnFromSemantics(bool forward) {
       // A late accessibility action must not follow a shared command port into
       // a new owner/layout or a different actually confirmed page.
-      if (!mounted ||
-          !widget.active ||
-          !identical(owner, widget.owner) ||
-          !identical(authority, widget.readingAuthorityIdentity) ||
+      if (!currentContent() ||
           !identical(position, _position) ||
           !identical(controller, _status?.controller) ||
           _status?.isRetainingPreviousLayout != false) {
@@ -234,6 +264,22 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
         _navigation.turnNext();
       } else {
         _navigation.turnPrevious();
+      }
+    }
+
+    final error = _status?.error;
+    final retry = _retry;
+    void recover(bool retryLayout) {
+      if (!currentContent() ||
+          error == null ||
+          !identical(error, _status?.error) ||
+          retry != _retry) {
+        return;
+      }
+      if (retryLayout) {
+        setState(() => _retry++);
+      } else {
+        widget.onChooseScrollMode?.call();
       }
     }
 
@@ -317,6 +363,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                           preparationService: widget.preparationService,
                           converter: widget.converter,
                           active: widget.active,
+                          activity: widget.activity,
                           startsAtBeginning: widget.startsAtBeginning,
                           conversionAnchor: widget.conversionAnchor,
                           navigationController: _navigation,
@@ -378,9 +425,11 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                           isFinal: isFinal,
                           showIndicator:
                               widget.preferences.showProgressIndicator,
-                          active: widget.active,
-                          onRetry: () => setState(() => _retry++),
-                          onChooseScrollMode: widget.onChooseScrollMode,
+                          active: _active,
+                          onRetry: () => recover(true),
+                          onChooseScrollMode: widget.onChooseScrollMode == null
+                              ? null
+                              : () => recover(false),
                         ),
                       ),
                     ],
@@ -396,6 +445,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
 
   @override
   void dispose() {
+    widget.activity?.removeListener(_activityChanged);
     _localNavigation.dispose();
     super.dispose();
   }

@@ -138,6 +138,31 @@ Future<void> _startTapMotion(WidgetTester tester, int from) async {
 }
 
 void main() {
+  testWidgets(
+    'inactive viewport defers a created source until it becomes active',
+    (tester) async {
+      final fixture = _fixture();
+      final controller = _controller(fixture, futureAnchor: true);
+      final owner = Object();
+      final authority = Object();
+      final positions = <NovelReaderPaginationPosition>[];
+      await tester.pumpWidget(
+        _reader(controller, owner, authority, positions, active: false),
+      );
+      await tester.pump(const Duration(hours: 1));
+      expect(controller.phase, NovelReaderNativePagedPhase.created);
+      expect(fixture.session.snapshot.length, 0);
+      expect(fixture.cache.layoutBuildCount, 0);
+      expect(positions, isEmpty);
+      await tester.pumpWidget(_reader(controller, owner, authority, positions));
+      await tester.pumpAndSettle();
+      expect(positions.single.hasUserNavigated, isFalse);
+      expect(positions.single.isReadOnlyCompatibilityRestore, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.close();
+      expect(fixture.session.activeIssuedLeases, 0);
+    },
+  );
   for (final reverse in [false, true]) {
     testWidgets(
       'chrome turns use actual arrival and logical order in reverse=$reverse',
