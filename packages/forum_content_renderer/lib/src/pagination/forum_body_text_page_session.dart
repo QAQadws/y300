@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/painting.dart';
 
 import '../block/forum_body_block_flow_cursor.dart';
@@ -167,6 +169,7 @@ final class ForumBodyTextPageSession {
   final _issued = <ForumBodyParagraphLease>{};
   final _preparations = <ForumBodyTextPagePreparation>{};
   int _reservedLeases = 0;
+  StreamController<void>? _retirementEvents;
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
@@ -188,6 +191,15 @@ final class ForumBodyTextPageSession {
   int get activeIssuedLeases => _issued.where((lease) => lease.isActive).length;
   int get pendingPreparationCount => _preparations.length;
   int get reservedViewLeases => _reservedLeases;
+  int get layoutBudgetRevision => _cache.budgetRevision;
+  Stream<int> get layoutBudgetChanges => _cache.budgetChanges;
+  bool get isLayoutOwnerRetired => _cache.isClosed;
+
+  /// Explicit retirement only. A failed source still owns usable published
+  /// views; closing the generation ends their preparation and async waits.
+  Stream<void> get retirement => isClosed
+      ? const Stream<void>.empty()
+      : (_retirementEvents ??= StreamController<void>.broadcast()).stream;
   int get droppedStyleIssueCount => _droppedIssues;
 
   /// Each call handles at most one paragraph/padding input and publishes at
@@ -463,6 +475,11 @@ final class ForumBodyTextPageSession {
     _margin = 0;
     _waiting = false;
     _issues.clear();
+    final events = _retirementEvents;
+    if (events != null) {
+      events.add(null);
+      unawaited(events.close());
+    }
   }
 }
 

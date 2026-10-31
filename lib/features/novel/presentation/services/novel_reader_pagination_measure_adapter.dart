@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+
+export 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 
 class NovelReaderPaginationMeasureRequest {
   const NovelReaderPaginationMeasureRequest({
@@ -804,17 +807,4 @@ final class _MeasureCacheKey {
     endOffset,
     html,
   );
-}
-
-class NovelReaderPaginationException implements Exception {
-  const NovelReaderPaginationException({
-    required this.code,
-    required this.message,
-  });
-
-  final String code;
-  final String message;
-
-  @override
-  String toString() => 'NovelReaderPaginationException($code): $message';
 }

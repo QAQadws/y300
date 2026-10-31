@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:html_pagination_core/html_pagination_core.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 
 /// Cooperative cancellation for derived pagination work.
 ///
