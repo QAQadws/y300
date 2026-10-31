@@ -19,6 +19,7 @@ import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/domain/models/novel_reading_progress.dart';
 import 'package:y300/features/novel/domain/models/novel_source_models.dart';
+import 'package:y300/features/novel/domain/models/novel_thread_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_chapter_interactions_dock_preferences_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
@@ -42,60 +43,64 @@ void main() {
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  for (final readOnlyRestore in [false, true]) {
-    testWidgets(
-      'fractional native font leading preserves SQLite reading authority (readOnly=$readOnlyRestore)',
-      (tester) async {
-        final fixture = (await tester.runAsync(_Fixture.create))!;
-        try {
-          if (readOnlyRestore) {
-            await tester.runAsync(fixture.seedUnfinishedPosition);
-          }
-          final before = (await tester.runAsync(
-            () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+  for (final rubyBody in [false, true]) {
+    for (final readOnlyRestore in [false, true]) {
+      testWidgets(
+        'fractional native font leading preserves SQLite reading authority (ruby=$rubyBody, readOnly=$readOnlyRestore)',
+        (tester) async {
+          final fixture = (await tester.runAsync(
+            () => _Fixture.create(rubyBody: rubyBody),
           ))!;
-          await tester.pumpWidget(
-            fixture.app(
-              nativePagination: true,
-              preferences: NovelReaderPreferences.defaults().copyWith(
-                flowMode: NovelReaderFlowMode.pagedLtr,
-                fontSize: 18.5,
-                lineHeight: 1.27,
+          try {
+            if (readOnlyRestore) {
+              await tester.runAsync(fixture.seedUnfinishedPosition);
+            }
+            final before = (await tester.runAsync(
+              () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+            ))!;
+            await tester.pumpWidget(
+              fixture.app(
+                nativePagination: true,
+                preferences: NovelReaderPreferences.defaults().copyWith(
+                  flowMode: NovelReaderFlowMode.pagedLtr,
+                  fontSize: 18.5,
+                  lineHeight: 1.27,
+                ),
               ),
-            ),
-          );
-          await _pumpSinglePageReady(tester);
-          expect(
-            (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
-            isNot(true),
-          );
-          await tester.pump(const Duration(milliseconds: 250));
-          final state = await fixture.load(tester);
-          expect(
-            state.episodeStates[_chapter]?.isRead == true,
-            !readOnlyRestore,
-          );
-          if (readOnlyRestore) {
-            await tester.pumpWidget(const SizedBox.shrink());
-            await fixture.load(tester);
-            expect(
-              (await tester.runAsync(
-                () => fixture.db.query(AppDatabase.novelReadingProgressTable),
-              ))!,
-              before,
             );
-          } else {
-            expect(state.progressByEpisode[_chapter]!.anchorFormatVersion, 1);
+            await _pumpSinglePageReady(tester);
             expect(
-              state.progressByEpisode[_chapter]!.anchorTextIdentity,
-              isNotEmpty,
+              (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+              isNot(true),
             );
+            await tester.pump(const Duration(milliseconds: 250));
+            final state = await fixture.load(tester);
+            expect(
+              state.episodeStates[_chapter]?.isRead == true,
+              !readOnlyRestore,
+            );
+            if (readOnlyRestore) {
+              await tester.pumpWidget(const SizedBox.shrink());
+              await fixture.load(tester);
+              expect(
+                (await tester.runAsync(
+                  () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+                ))!,
+                before,
+              );
+            } else {
+              expect(state.progressByEpisode[_chapter]!.anchorFormatVersion, 1);
+              expect(
+                state.progressByEpisode[_chapter]!.anchorTextIdentity,
+                isNotEmpty,
+              );
+            }
+          } finally {
+            await fixture.close(tester);
           }
-        } finally {
-          await fixture.close(tester);
-        }
-      },
-    );
+        },
+      );
+    }
   }
 
   testWidgets(
@@ -520,12 +525,32 @@ final class _Fixture {
   final _ReadFailureRepository repository;
   final DefaultNovelReaderProgressCommitter committer;
 
-  static Future<_Fixture> create() async {
+  static Future<_Fixture> create({bool rubyBody = false}) async {
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
     await seedNovelRepository(
       db,
       seed: const NovelSourceSeed(fid: '49', tid: '100'),
       coverImageUrl: null,
+      episodes: rubyBody
+          ? [
+              const NovelEpisodeDraft(
+                episodeId: _chapter,
+                novelId: _work,
+                sourceTid: '100',
+                sourcePid: '5001',
+                sourcePage: 1,
+                episodeTitle: '第1章 开始',
+                orderIndex: 0,
+                datelineText: '2026-05-03',
+                rawHtml: '<p><ruby>A <rt>x</rt></ruby></p>',
+                plainText: 'A x',
+                paragraphs: ['A x'],
+              ),
+              ...novelRepositorySeedEpisodes(
+                const NovelSourceSeed(fid: '49', tid: '100'),
+              ).skip(1),
+            ]
+          : null,
     );
     final repository = _ReadFailureRepository(Future.value(db));
     return _Fixture(

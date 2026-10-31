@@ -1,5 +1,6 @@
 import '../flow/forum_body_inline_flow_content.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../style/forum_body_style_options.dart';
@@ -11,7 +12,7 @@ import 'forum_body_text_band_content.dart';
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
   ForumBodyInlinePlanInput._(this.content, this.groups, this.width);
-  static const revision = 3;
+  static const revision = 4;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -21,6 +22,7 @@ final class ForumBodyInlinePlanInput {
       _unsupported(input.path);
     }
     final contexts = <ForumBodyParagraphContent>[];
+    final sourceOrder = <int>[];
     final pairs =
         <
           ({
@@ -31,30 +33,51 @@ final class ForumBodyInlinePlanInput {
     final atoms = <({int startUtf16, int endUtf16})>[];
     var offset = 0;
     var previousCollapsibleSpace = false;
-    void append(ForumBodyParagraphContent context) {
+    var atLineStart = true;
+    int? lastPlain;
+    int append(ForumBodyParagraphContent context) {
+      final index = contexts.length;
       contexts.add(context);
       offset += context.projection.text.length;
+      return index;
     }
 
-    void appendPlain(
-      ForumBodyParagraphContent context, {
-      bool trailing = false,
-    }) {
+    void trimTrailingPlain() {
+      final index = lastPlain;
+      if (index == null) return;
+      final old = contexts[index];
+      final trimmed = _plainContext(old, leading: false, trailing: true);
+      contexts[index] = trimmed;
+      offset -= old.projection.text.length - trimmed.projection.text.length;
+      previousCollapsibleSpace = false;
+    }
+
+    int appendPlain(ForumBodyParagraphContent context) {
+      if (previousCollapsibleSpace &&
+          context.projection.text.isNotEmpty &&
+          forumBodyIsDisplayLineBreak(context.projection.text.codeUnitAt(0))) {
+        trimTrailingPlain();
+      }
       final plain = _plainContext(
         context,
-        leading: offset == 0 || previousCollapsibleSpace,
-        trailing: trailing,
+        leading: atLineStart || previousCollapsibleSpace,
+        trailing: false,
       );
-      append(plain);
+      final index = append(plain);
       if (plain.projection.text.isNotEmpty) {
+        lastPlain = index;
         previousCollapsibleSpace = _collapsibleEdge(plain, leading: false);
+        atLineStart = forumBodyIsDisplayLineBreak(
+          plain.projection.text.codeUnitAt(plain.projection.text.length - 1),
+        );
       }
+      return index;
     }
 
-    for (final (index, part) in input.parts.indexed) {
+    for (final part in input.parts) {
       switch (part) {
         case ForumBodyInlineFlowText():
-          appendPlain(part.content, trailing: index == input.parts.length - 1);
+          sourceOrder.add(appendPlain(part.content));
         case ForumBodyInlineFlowRuby():
           final group = part.group;
           if (group.identity != input.identity ||
@@ -73,7 +96,7 @@ final class ForumBodyInlinePlanInput {
           var base = (group.base.single as ForumBodyRubyTextContent).content;
           final ForumBodyParagraphContent annotation;
           if (group.annotations.isEmpty) {
-            appendPlain(base, trailing: index == input.parts.length - 1);
+            sourceOrder.add(appendPlain(base));
             continue;
           } else {
             final parts = group.annotations.single.parts;
@@ -89,26 +112,44 @@ final class ForumBodyInlinePlanInput {
               trailing: true,
             );
           }
-          // A trailing space precedes RT in source order. It cannot be moved
-          // behind the atom by concatenating source windows. Whitespace-only
-          // annotated bases also need their own explicit preservation policy.
-          if (_collapsibleEdge(base, leading: false)) {
+          // Implicit whitespace-only bases need structural ruby pairing. Do
+          // not mistake source indentation for an explicit annotated RB space.
+          if (base.projection.text == ' ' &&
+              _collapsibleEdge(base, leading: false)) {
             _unsupported(group.rootPath);
           }
           if (_collapsibleEdge(base, leading: true)) {
             // Keep the space outside the opaque box so the actual parent can
             // trim it at a line break. Both windows retain original ownership.
-            appendPlain(_window(base, 0, 1));
+            sourceOrder.add(appendPlain(_window(base, 0, 1)));
             base = _window(base, 1, base.projection.text.length);
           }
+          ForumBodyParagraphContent? trailing;
+          if (_collapsibleEdge(base, leading: false)) {
+            final end = base.projection.text.length;
+            trailing = _window(base, end - 1, end);
+            base = _window(base, 0, end - 1);
+          }
           final start = offset;
-          append(base);
-          append(annotation);
+          final baseIndex = append(base);
+          final annotationIndex = append(annotation);
           atoms.add((startUtf16: start, endUtf16: offset));
           pairs.add((base: base, annotation: annotation));
           previousCollapsibleSpace = false;
+          atLineStart = false;
+          lastPlain = null;
+          sourceOrder.add(baseIndex);
+          if (trailing != null) {
+            // Display after the atom, but validate before RT in source order.
+            // Neither coordinate nor identity is inferred from text lengths.
+            sourceOrder.add(appendPlain(trailing));
+          }
+          sourceOrder.add(annotationIndex);
       }
     }
+    // Empty trailing source contexts must not keep a previous collapsed space
+    // alive. Only a final ordinary context is eligible; atomic children are not.
+    trimTrailingPlain();
     final content = ForumBodyInlineSpanContent.compose(
       identity: input.identity,
       path: input.path,
@@ -117,6 +158,7 @@ final class ForumBodyInlinePlanInput {
       style: input.style,
       contexts: contexts,
       atomicRanges: atoms,
+      sourceOrder: sourceOrder,
     );
     final requests = _requests([
       for (final pair in pairs) ...[

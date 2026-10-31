@@ -431,6 +431,150 @@ void main() {
     expect(f.cache.activeLeases, 0);
   });
 
+  for (final (baseText, suffix, display, engine) in [
+    ('AB ', '', 'ABxy', '\uFFFC'),
+    ('AB ', 'Y', 'ABxy Y', '\uFFFC Y'),
+    ('AB ', ' Y', 'ABxy Y', '\uFFFC Y'),
+    (' AB ', ' Y', 'ABxy Y', '\uFFFC Y'),
+    ('AB ', '<span> </span>', 'ABxy', '\uFFFC'),
+    (
+      'AB ',
+      '<span style="white-space:pre-wrap"> Y</span>',
+      'ABxy  Y',
+      '\uFFFC  Y',
+    ),
+    ('AB ', '&nbsp;Y', 'ABxy \u00a0Y', '\uFFFC \u00a0Y'),
+  ]) {
+    test(
+      'base trailing space uses source-bound parent text: $baseText/$suffix',
+      () {
+        final f = _Fixture(
+          '<p><ruby>$baseText<rt>xy</rt></ruby>$suffix</p>',
+          width: 200,
+          height: 100,
+        );
+        f.finish();
+        final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(prepared.view.content.projection.display.text, display);
+          expect(prepared.view.content.projection.engineText, engine);
+          final base = prepared.nativeLeases.elementAt(1) as ForumBodyTextLease;
+          expect(base.content.projection.text, 'AB');
+          expect(base.layout.width, 40);
+          expect(
+            base.content.projection.sourceAtUtf16(1).sourceRune,
+            baseText.indexOf('B'),
+          );
+          if (suffix.isEmpty && baseText == 'AB ') {
+            expect(f.session.snapshot.single.fragments.single.sourceHint, (
+              runeStart: 0,
+              runeEnd: 5,
+            ));
+          }
+        } finally {
+          prepared.close();
+        }
+        expect(f.cache.activeLeases, 0);
+        expect(f.session.activeIssuedLeases, 0);
+      },
+    );
+  }
+
+  test('extracted trailing space allows an actual native break after ruby', () {
+    final f = _Fixture('<p><ruby>AB <rt>xy</rt></ruby>Y</p>', height: 100);
+    f.finish();
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      final parent =
+          prepared.nativeLeases.first as ForumBodyInlineParagraphLease;
+      expect(parent.layout.lines, hasLength(2));
+      expect(parent.layout.lines.last.left, 0);
+      expect(parent.layout.atomBoxes.single.right, 40);
+      final leases = prepared.nativeLeases.toList();
+      final base = leases[1] as ForumBodyTextLease;
+      final rt = leases[2] as ForumBodyTextLease;
+      final metrics = ForumBodyRubyGroupMetrics.measure(
+        cache: f.cache,
+        baseLease: base,
+        annotation: rt.content,
+        annotationLease: rt,
+        maxWidth: 60,
+      );
+      final box = rt.layout.selectionBoxes(1, 2).single.toRect();
+      final hit = prepared.view.sourceAt(
+        parent.layout.atomBoxes.single.toRect().topLeft +
+            metrics.annotationOffset +
+            Offset(box.left + .1, (box.top + box.bottom) / 2),
+      );
+      expect(hit.isExact, isTrue);
+      expect(hit.sourceRune, 4);
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'base trailing and next leading edges collapse between native atoms',
+    () {
+      final f = _Fixture(
+        '<p><ruby>AB <rt>xy</rt> CD<rt>z</rt></ruby></p>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(prepared.view.content.projection.display.text, 'ABxy CDz');
+        expect(prepared.view.content.projection.engineText, '\uFFFC \uFFFC');
+        expect(prepared.view.atomIndices, [0, 1]);
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('real BR trims an extracted trailing space before the separator', () {
+    final f = _Fixture(
+      '<p><ruby>AB <rt>xy</rt></ruby><br>Y</p>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    final fragments = f.prepare(0);
+    try {
+      final mixed = fragments
+          .whereType<ForumBodyPreparedInlineFragment>()
+          .first;
+      expect(mixed.view.content.projection.display.text, 'ABxy\n');
+      expect(mixed.view.content.projection.engineText, '\uFFFC\n');
+    } finally {
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('preserved literal newline resets the base-level leading edge', () {
+    final f = _Fixture(
+      '<p><span style="white-space:pre-wrap">X\n</span>'
+      '<ruby> AB <rt>xy</rt></ruby>Y</p>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(prepared.view.content.projection.display.text, 'X\nABxy Y');
+      expect(prepared.view.content.projection.engineText, 'X\n\uFFFC Y');
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
   for (final (prefix, display, source) in [
     ('', 'ABxy', 1),
     ('X', 'X ABxy', 2),
@@ -626,7 +770,6 @@ void main() {
   }
 
   for (final html in [
-    '<ruby>A <rt>a</rt></ruby>',
     '<ruby> <rt>a</rt></ruby>',
     '<ruby>A<rt>a</rt><rt>b</rt></ruby>',
     '<ruby><rt>orphan</rt></ruby>',

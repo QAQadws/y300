@@ -49,6 +49,35 @@ NovelReaderNativePageHintSearch _search(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('moved base space keeps RT hints and page-local exact proof', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>X<ruby>AB <rt>xy</rt></ruby>Y</p>',
+      width: 20,
+      height: 15,
+    );
+    final target = _anchor(fixture, 5);
+    final builds = fixture.cache.layoutBuildCount;
+    final hints = _collect(_search(fixture, target));
+    expect(hints.map((hint) => hint.pageIndex), [1]);
+    expect(fixture.cache.layoutBuildCount, builds);
+    for (final page in [1, 2]) {
+      final view = await NovelReaderNativePageViewJob(
+        session: fixture.session,
+        anchors: fixture.anchors,
+        pageIndex: page,
+        parent: fixture.parent,
+        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+      ).run();
+      try {
+        expect(view.coverage.locate(target) != null, page == 1);
+      } finally {
+        view.close();
+      }
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(fixture.cache.activeLeases, 0);
+    }
+  });
+
   test(
     'reverse lookup binds node identity and retains normalization plateaus',
     () {
