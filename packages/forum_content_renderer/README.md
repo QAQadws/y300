@@ -261,5 +261,16 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 既有 `ForumBodyTextPageSurface.prepared` 挂载通过完整校验的普通/混排页。旧普通入口
 保留并转到同一实现；普通 key 使用原始 lease、混排 key 使用原始 view，重建交付包装
 不会销毁正在显示的同一组句柄。挂载后由具体 Surface 释放引用；构造失败/未挂载 Widget
-仍归调用方清理。下一步须将 typed 分片和全部子绘图预算纳入既有准备事务/会话，再接
-正式 flow；真实挂载、点击和退出验证不代表复杂正文 profile 或整个 S6 已验收。
+仍归调用方清理。真实挂载、点击和退出验证不代表复杂正文 profile 或整个 S6 已验收。
+
+既有 `ForumBodyTextPagePreparation` 现以完整 typed 分片持有准备进度，并通过
+`takeFragments` 完成同一预留事务的一次性交付；普通 `takeLeases` 复用它并只接受普通
+分片，不悄悄丢弃混排子项。缓存 miss 后和 transfer 回调后仍核对 owner/代次，关闭或
+失败释放全部本次引用，不发布迟到结果。全部完成后继续联验完整页面绑定。
+
+`ForumBodyTextPageSession` 的 issued 账本持有完整分片，按仍活跃的 native 句柄计数；
+失效复合分片在移出账本前关闭剩余引用。`preparePageFragments` 为同一事务的 warm-only
+便利入口，冷缓存仍通过既有 openPagePreparation/advance 协作准备。普通接口继续兼容，
+并发预留、部分释放和上限共用同一套账本。当前保留输入和正式 flow 仍为普通段落；
+混排输入/父子准备、有界整页预算探测及实际子句柄预留尚待接入，不能因交付类型统一
+而宣称正式 ruby 会话已完成。

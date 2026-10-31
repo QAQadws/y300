@@ -10,6 +10,7 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_preparation.dart';
+import 'forum_body_prepared_text_fragment.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -166,7 +167,7 @@ final class ForumBodyTextPageSession {
   final TextScaler _textScaler;
   final ForumBodyTextPageSessionLimits limits;
   final _RetainedParagraphs _content;
-  final _issued = <ForumBodyParagraphLease>{};
+  final _issued = <ForumBodyPreparedTextFragment>{};
   final _preparations = <ForumBodyTextPagePreparation>{};
   int _reservedLeases = 0;
   StreamController<void>? _retirementEvents;
@@ -188,7 +189,10 @@ final class ForumBodyTextPageSession {
   int get retainedParagraphCount => _content.items.length;
   int get retainedTextCodeUnits => _content.textCodeUnits;
   int get retainedRuns => _content.runs;
-  int get activeIssuedLeases => _issued.where((lease) => lease.isActive).length;
+  int get activeIssuedLeases => _issued
+      .expand((fragment) => fragment.nativeLeases)
+      .where((lease) => lease.isActive)
+      .length;
   int get pendingPreparationCount => _preparations.length;
   int get reservedViewLeases => _reservedLeases;
   int get layoutBudgetRevision => _cache.budgetRevision;
@@ -353,6 +357,22 @@ final class ForumBodyTextPageSession {
     }
   }
 
+  /// Warm-only typed delivery through the same reserved preparation. A miss
+  /// releases this request; cold work belongs to openPagePreparation/advance.
+  List<ForumBodyPreparedTextFragment> preparePageFragments(int pageIndex) {
+    final preparation = openPagePreparation(pageIndex);
+    try {
+      if (!preparation.tryPrepareCached()) {
+        throw const ForumBodyTextPageSessionException(
+          ForumBodyTextPageSessionFailure.pageNotPrepared,
+        );
+      }
+      return preparation.takeFragments();
+    } finally {
+      preparation.close();
+    }
+  }
+
   /// Reserve the whole visible fragment budget before acquiring any lease.
   /// Concurrent/partial preparations count, including empty-page requests.
   ForumBodyTextPagePreparation openPagePreparation(int pageIndex) {
@@ -364,9 +384,15 @@ final class ForumBodyTextPageSession {
         ForumBodyTextPageSessionFailure.preparationLimit,
       );
     }
-    _issued.removeWhere((lease) => !lease.isActive);
+    // A compound fragment can lose one child while retaining another handle.
+    // Retire the whole failed delivery before dropping it from the ledger.
+    for (final fragment
+        in _issued.where((fragment) => !fragment.isActive).toList()) {
+      fragment.close();
+      _issued.remove(fragment);
+    }
     if (page.fragments.length >
-        limits.maxIssuedLeases - _issued.length - _reservedLeases) {
+        limits.maxIssuedLeases - activeIssuedLeases - _reservedLeases) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.leaseLimit,
       );
@@ -397,14 +423,14 @@ final class ForumBodyTextPageSession {
 
   void _transferPreparation(
     ForumBodyTextPagePreparation preparation,
-    List<ForumBodyParagraphLease> leases,
+    List<ForumBodyPreparedTextFragment> fragments,
   ) {
     _ensureUsable();
     if (!_preparations.contains(preparation)) {
       throw StateError('Unregistered page preparation');
     }
     _retirePreparation(preparation);
-    _issued.addAll(leases);
+    _issued.addAll(fragments);
   }
 
   void _recordPublished() {
@@ -466,8 +492,8 @@ final class ForumBodyTextPageSession {
     }
     _preparations.clear();
     _reservedLeases = 0;
-    for (final lease in _issued) {
-      lease.release();
+    for (final fragment in _issued) {
+      fragment.close();
     }
     _issued.clear();
     _content.retain(0);

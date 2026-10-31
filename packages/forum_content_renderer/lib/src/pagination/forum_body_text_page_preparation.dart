@@ -4,6 +4,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
+import 'forum_body_prepared_text_fragment.dart';
 
 enum ForumBodyTextPagePreparationState {
   active,
@@ -51,7 +52,7 @@ ForumBodyTextPagePreparation createForumBodyTextPagePreparation({
   required void Function() ensureOwner,
   required void Function(
     ForumBodyTextPagePreparation,
-    List<ForumBodyParagraphLease>,
+    List<ForumBodyPreparedTextFragment>,
   )
   onTransfer,
   required void Function(ForumBodyTextPagePreparation) onRetire,
@@ -87,10 +88,13 @@ final class ForumBodyTextPagePreparation {
   List<ForumBodyParagraphContent> _contents;
   TextScaler? _textScaler;
   void Function()? _ensureOwner;
-  void Function(ForumBodyTextPagePreparation, List<ForumBodyParagraphLease>)?
+  void Function(
+    ForumBodyTextPagePreparation,
+    List<ForumBodyPreparedTextFragment>,
+  )?
   _onTransfer;
   void Function(ForumBodyTextPagePreparation)? _onRetire;
-  final _leases = <ForumBodyParagraphLease>[];
+  final _fragments = <ForumBodyPreparedTextFragment>[];
   ForumBodyTextPagePreparationState _state =
       ForumBodyTextPagePreparationState.active;
   bool _waiting = false;
@@ -102,7 +106,7 @@ final class ForumBodyTextPagePreparation {
   ForumBodyTextPagePreparationState get state => _state;
   bool get isReady => _state == ForumBodyTextPagePreparationState.ready;
   bool get waitingForLayoutBudget => _waiting;
-  int get preparedFragmentCount => _leases.length;
+  int get preparedFragmentCount => _fragments.length;
   int get expectedFragmentCount => snapshot[pageIndex].fragments.length;
 
   ForumBodyTextPagePreparationStep advance({required int maxFragments}) {
@@ -114,13 +118,13 @@ final class ForumBodyTextPagePreparation {
       throw ArgumentError.value(maxFragments, 'maxFragments');
     }
     final cache = _cache!;
-    final before = _leases.length;
+    final before = _fragments.length;
     final buildsBefore = cache.layoutBuildCount;
     var inspected = 0;
     _waiting = false;
     ForumBodyTextPagePreparationStep result() =>
         ForumBodyTextPagePreparationStep(
-          _leases.length - before,
+          _fragments.length - before,
           cache.layoutBuildCount - buildsBefore,
           isReady,
           _waiting,
@@ -131,8 +135,8 @@ final class ForumBodyTextPagePreparation {
         inspected = _inspectBudget(maxFragments);
         return result();
       }
-      while (_leases.length < expectedFragmentCount &&
-          _leases.length - before < maxFragments) {
+      while (_fragments.length < expectedFragmentCount &&
+          _fragments.length - before < maxFragments) {
         _rejectedAtRevision = cache.budgetRevision;
         _acquire(cachedOnly: false);
         if (cache.layoutBuildCount != buildsBefore) break;
@@ -143,7 +147,10 @@ final class ForumBodyTextPagePreparation {
       var externalPressure = false;
       try {
         _guard();
-        externalPressure = cache.isBlockedByExternalPins(error, _leases);
+        externalPressure = cache.isBlockedByExternalPins(
+          error,
+          _fragments.expand((fragment) => fragment.nativeLeases),
+        );
       } catch (_) {
         _abort();
         rethrow;
@@ -217,7 +224,7 @@ final class ForumBodyTextPagePreparation {
     if (isReady) return true;
     _waiting = false;
     try {
-      while (_leases.length < expectedFragmentCount) {
+      while (_fragments.length < expectedFragmentCount) {
         if (!_acquire(cachedOnly: true)) return false;
       }
       _finishIfReady();
@@ -229,7 +236,7 @@ final class ForumBodyTextPagePreparation {
   }
 
   bool _acquire({required bool cachedOnly}) {
-    final index = _leases.length;
+    final index = _fragments.length;
     final fragment = snapshot[pageIndex].fragments[index];
     final cache = _cache!;
     final lease = cachedOnly
@@ -243,25 +250,37 @@ final class ForumBodyTextPagePreparation {
             width: fragment.width,
             textScaler: _textScaler!,
           );
-    if (lease == null) return false;
     try {
       _guard();
     } catch (_) {
-      lease.release();
+      lease?.release();
       rethrow;
     }
-    _leases.add(lease);
+    if (lease == null) return false;
+    try {
+      _fragments.add(
+        ForumBodyPreparedTextFragment.paragraph(
+          lease: lease,
+          startLine: fragment.startLine,
+          endLine: fragment.endLine,
+        ),
+      );
+    } on RangeError {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
     return true;
   }
 
   void _finishIfReady() {
-    if (_leases.length != expectedFragmentCount) return;
+    if (_fragments.length != expectedFragmentCount) return;
     _guard();
-    validateForumBodyTextPageBinding(
+    validateForumBodyPreparedTextPageBinding(
       snapshot: snapshot,
       pageIndex: pageIndex,
       layoutId: snapshot.layoutId,
-      leases: _leases,
+      fragments: _fragments,
     );
     _state = ForumBodyTextPagePreparationState.ready;
     _waiting = false;
@@ -270,16 +289,36 @@ final class ForumBodyTextPagePreparation {
   List<ForumBodyParagraphLease> takeLeases() {
     _guard();
     if (!isReady) throw StateError('Page preparation is not ready');
+    if (_fragments.any(
+      (fragment) => fragment is! ForumBodyPreparedParagraphFragment,
+    )) {
+      throw StateError('Mixed page delivery requires prepared fragments');
+    }
+    return List.unmodifiable(
+      takeFragments().map(
+        (fragment) => (fragment as ForumBodyPreparedParagraphFragment).lease,
+      ),
+    );
+  }
+
+  /// Transfers complete typed fragments through the same reservation and owner
+  /// transaction as the ordinary convenience API. No partial handles escape.
+  List<ForumBodyPreparedTextFragment> takeFragments() {
+    _guard();
+    if (!isReady) throw StateError('Page preparation is not ready');
     try {
-      validateForumBodyTextPageBinding(
+      validateForumBodyPreparedTextPageBinding(
         snapshot: snapshot,
         pageIndex: pageIndex,
         layoutId: snapshot.layoutId,
-        leases: _leases,
+        fragments: _fragments,
       );
-      final result = List<ForumBodyParagraphLease>.unmodifiable(_leases);
+      final result = List<ForumBodyPreparedTextFragment>.unmodifiable(
+        _fragments,
+      );
       _onTransfer!(this, result);
-      _leases.clear();
+      _guard();
+      _fragments.clear();
       _state = ForumBodyTextPagePreparationState.transferred;
       _dropOwner();
       return result;
@@ -297,6 +336,9 @@ final class ForumBodyTextPagePreparation {
     if (_state != ForumBodyTextPagePreparationState.active && !isReady) {
       throw StateError('Page preparation is retired');
     }
+    if (_cache!.isClosed || _fragments.any((fragment) => !fragment.isActive)) {
+      throw StateError('Page preparation owner or fragment is retired');
+    }
   }
 
   void _abort() {
@@ -310,10 +352,10 @@ final class ForumBodyTextPagePreparation {
   void _retire(ForumBodyTextPagePreparationState state) {
     if (_state != ForumBodyTextPagePreparationState.active && !isReady) return;
     _state = state;
-    for (final lease in _leases) {
-      lease.release();
+    for (final fragment in _fragments) {
+      fragment.close();
     }
-    _leases.clear();
+    _fragments.clear();
     final retire = _onRetire;
     _dropOwner();
     retire?.call(this);
