@@ -65,6 +65,30 @@ const _cacheNeutralDisplayFiles = {
 };
 
 void main() {
+  test(
+    'document dependencies use public coordinate and digest entries only',
+    () {
+      const source = '${_packageLib}src/document/forum_body_parser.dart';
+      expect(
+        _violationTargets(source, '''
+import 'package:crypto/crypto.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
+'''),
+        isEmpty,
+      );
+      expect(
+        _violationTargets(source, '''
+import 'package:html_pagination_core/src/dom_text_index.dart';
+import 'package:crypto/src/sha256.dart';
+'''),
+        {
+          'package:html_pagination_core/src/dom_text_index.dart',
+          'package:crypto/src/sha256.dart',
+        },
+      );
+    },
+  );
+
   test('package exposes one public API and retires helper copies', () {
     expect(
       Directory(_packageLib)
@@ -377,6 +401,8 @@ bool _isForbidden(String source, String target) {
         target.startsWith('package:flutter_widget_from_html_core/') ||
         target.startsWith('package:html/') ||
         target.startsWith('package:csslib/') ||
+        target == 'package:crypto/crypto.dart' ||
+        target == 'package:html_pagination_core/html_pagination_core.dart' ||
         target.startsWith('package:material_color_utilities/') ||
         target ==
             'package:yamibo_forum_client/yamibo_forum_client_contracts.dart');

@@ -1,6 +1,9 @@
 /// Shared HTML rendering contracts, policies and widgets.
 library;
 
+export 'src/document/forum_body_document.dart';
+export 'src/document/forum_body_parser.dart';
+
 export 'src/helpers/discuz_font_size_policy.dart' show DiscuzFontSizePolicy;
 export 'src/helpers/forum_collapse_chrome.dart' show ForumCollapseChrome;
 export 'src/helpers/rich_text_color_contrast.dart'
