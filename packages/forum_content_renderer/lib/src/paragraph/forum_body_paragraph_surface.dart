@@ -18,15 +18,24 @@ final class ForumBodyParagraphSurface extends LeafRenderObjectWidget {
     this.startLine = 0,
     this.endLine,
     this.onSourceTap,
+    this.interactionIdentity,
   });
   final ForumBodyParagraphLease lease;
   final int startLine;
   final int? endLine;
   final void Function(HtmlProjectedSourcePosition position)? onSourceTap;
 
+  /// Host/layout placement changes retire a gesture even when shaping is shared.
+  final Object? interactionIdentity;
+
   @override
-  RenderBox createRenderObject(BuildContext context) =>
-      _ParagraphSurfaceBox(lease, startLine, endLine, onSourceTap);
+  RenderBox createRenderObject(BuildContext context) => _ParagraphSurfaceBox(
+    lease,
+    startLine,
+    endLine,
+    onSourceTap,
+    interactionIdentity,
+  );
 
   @override
   void updateRenderObject(
@@ -38,6 +47,7 @@ final class ForumBodyParagraphSurface extends LeafRenderObjectWidget {
       startLine,
       endLine,
       onSourceTap,
+      interactionIdentity,
     );
   }
 }
@@ -48,6 +58,7 @@ final class _ParagraphSurfaceBox extends RenderBox {
     this._startLine,
     this._endLine,
     this._onTap,
+    this._interactionIdentity,
   ) {
     try {
       _view = _makeView(_lease, _startLine, _endLine);
@@ -61,6 +72,7 @@ final class _ParagraphSurfaceBox extends RenderBox {
   int _startLine;
   int? _endLine;
   void Function(HtmlProjectedSourcePosition)? _onTap;
+  Object? _interactionIdentity;
   ForumBodyParagraphFragment? _view;
   late TapGestureRecognizer _tap;
 
@@ -88,14 +100,17 @@ final class _ParagraphSurfaceBox extends RenderBox {
     int start,
     int? end,
     void Function(HtmlProjectedSourcePosition)? onTap,
+    Object? interactionIdentity,
   ) {
     _onTap = onTap;
-    if (identical(_lease, lease) && _startLine == start && _endLine == end) {
+    final geometryChanged =
+        !identical(_lease, lease) || _startLine != start || _endLine != end;
+    if (!geometryChanged && _interactionIdentity == interactionIdentity) {
       return;
     }
-    ForumBodyParagraphFragment? nextView;
+    var nextView = _view;
     try {
-      nextView = _makeView(lease, start, end);
+      if (geometryChanged) nextView = _makeView(lease, start, end);
     } catch (_) {
       if (!identical(_lease, lease)) lease.release();
       rethrow;
@@ -106,10 +121,13 @@ final class _ParagraphSurfaceBox extends RenderBox {
     _lease = lease;
     _startLine = start;
     _endLine = end;
+    _interactionIdentity = interactionIdentity;
     _view = nextView;
-    markNeedsLayout();
-    markNeedsPaint();
-    markNeedsSemanticsUpdate();
+    if (geometryChanged) {
+      markNeedsLayout();
+      markNeedsPaint();
+      markNeedsSemanticsUpdate();
+    }
   }
 
   Size get _contentSize => !_lease.isActive
