@@ -171,9 +171,9 @@ final class NovelReaderNativeSourceRun {
             return prefix;
           }
           await _demandLease!.afterPublication(published);
-          // Callback work and idle waiting do not give a fresh shared frame
-          // budget. Start a new frame before performing more source work.
-          await _yieldFrame();
+          // Fast metadata consumers can share this frame's remaining slice.
+          // Keep the original clock/step count: callback work and real idle or
+          // view-frame waits never manufacture a fresh source work budget.
         }
         if (_steps >= limits.maxStepsPerFrame ||
             _clock.elapsed >= limits.frameBudget) {
@@ -199,12 +199,6 @@ final class NovelReaderNativeSourceRun {
             code: 'paginationNoProgress',
             message: 'Native pagination made no bounded progress.',
           );
-        } else if (step.paragraphsAdmitted > 0 &&
-            step.pagesPublished == 0 &&
-            !step.isComplete) {
-          // Admission may shape once; never admit another paragraph this frame.
-          // Publication is serviced first when this step has sealed a page.
-          await _yieldFrame();
         }
       }
     } catch (_) {

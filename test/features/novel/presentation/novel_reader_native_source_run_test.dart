@@ -37,6 +37,81 @@ void main() {
     return value;
   }
 
+  test('cheap foreground publications reuse the bounded frame slice instead of waiting per page', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>abcdefghijklmnopqrst</p>',
+      width: 20,
+      height: 10,
+      complete: false,
+    );
+    var frames = 0;
+    final publications = <(int, int)>[];
+    final run = NovelReaderNativeSourceRun(
+      session: fixture.session,
+      demand: demand(),
+      parent: fixture.parent,
+      // A generous test-only clock makes the deterministic work-count bound
+      // observable; production retains its existing 3ms recovery/work policy.
+      limits: const NovelReaderNativeSourceRunLimits(
+        frameBudget: Duration(seconds: 1),
+        maxStepsPerFrame: 64,
+      ),
+      scheduler: NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          frames++;
+        },
+      ),
+      onPublication: (prefix, _) {
+        publications.add((prefix.length, frames));
+      },
+    );
+    addTearDown(run.close);
+    final result = await run.run();
+    expect(result.length, 10);
+    expect(frames, 1);
+    expect(publications.map((entry) => entry.$1), [
+      ...List.generate(10, (index) => index + 1),
+      10,
+    ]);
+    expect(publications.every((entry) => entry.$2 == 1), isTrue);
+    expect(fixture.cache.layoutBuildCount, 1);
+  });
+
+  test('source step limits still force frames even with fast publication callbacks', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>abcdefghijklmnopqrst</p>',
+      width: 20,
+      height: 10,
+      complete: false,
+    );
+    var frames = 0;
+    final workDemand = NovelReaderPaginationDemand(lookAhead: 0);
+    addTearDown(workDemand.dispose);
+    final publications = <int>[];
+    final run = NovelReaderNativeSourceRun(
+      session: fixture.session,
+      demand: workDemand,
+      parent: fixture.parent,
+      limits: const NovelReaderNativeSourceRunLimits(
+        frameBudget: Duration(seconds: 1),
+        maxStepsPerFrame: 1,
+      ),
+      scheduler: NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          frames++;
+        },
+      ),
+      onPublication: (_, _) {
+        publications.add(frames);
+      },
+    );
+    addTearDown(run.close);
+    await run.run();
+    expect(frames, greaterThanOrEqualTo(11));
+    expect(publications.toSet().length, publications.length);
+    expect(fixture.cache.layoutBuildCount, 1);
+  });
+
   test('source starts after a frame and emits fixed stable prefixes through actual EOF', () async {
     final fixture = NativeReaderTestFixture(
       '<p>abcdef</p>',
