@@ -42,3 +42,6 @@ class NovelReaderPageSeekRequest {
   final String paginationKey;
   final int pageIndex;
 }
+
+/// A command result, never a reading position or permission to persist one.
+enum NovelReaderPageSeekOutcome { arrived, unavailable, retired }

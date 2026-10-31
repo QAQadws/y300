@@ -171,6 +171,10 @@ final class NovelReaderNativePagedController {
   Object? get error => _error;
   ForumBodyTextPageSnapshot? get snapshot => _snapshot;
   int? get requestedPageIndex => _requestedPage;
+
+  /// Intent identity only; actual mounted coverage still owns confirmation.
+  int get navigationRevision => _requestId;
+  bool get hasPendingNavigation => _ticket != null;
   int? get visiblePageIndex => _visible?.pageIndex;
   NovelReaderNativePageDelivery? get readyTarget => _target;
   Stream<void> get changes => isClosed

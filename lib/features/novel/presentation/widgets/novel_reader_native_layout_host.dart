@@ -51,6 +51,8 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.navigationController,
     this.onTurnToAdjacentChapter,
     this.chapterTurnIsInFlight = false,
+    this.pageSeekRequest,
+    this.onPageSeekFinished,
     this.onPositionChanged,
     this.onStatusChanged,
     this.onContentReady,
@@ -89,6 +91,9 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final NovelReaderPagedNavigationController? navigationController;
   final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
   final bool chapterTurnIsInFlight;
+  final NovelReaderPageSeekRequest? pageSeekRequest;
+  final void Function(NovelReaderPageSeekRequest, NovelReaderPageSeekOutcome)?
+  onPageSeekFinished;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<NovelReaderNativeHostStatus>? onStatusChanged;
   final VoidCallback? onContentReady;
@@ -134,6 +139,9 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   ForumBodyTextPageSnapshot? _verifiedPrefix;
   String? _prefixKey;
   NovelReaderNativeOwner? _prefixOwner;
+  _PageSeekIntent? _pageSeekIntent;
+  (int, String, String, int)? _seenPageSeek;
+  int _seekFrameRevision = 0;
 
   @override
   void initState() {
@@ -145,6 +153,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _finishPageSeek(NovelReaderPageSeekOutcome.retired);
     _needsLayout = true;
     _busy = true;
   }
@@ -152,6 +161,17 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   @override
   void didUpdateWidget(covariant NovelReaderNativeLayoutHost oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_pageSeekKey(oldWidget.pageSeekRequest) !=
+        _pageSeekKey(widget.pageSeekRequest)) {
+      final retiring = _pageSeekIntent;
+      _finishPageSeek(NovelReaderPageSeekOutcome.retired);
+      _seenPageSeek = null;
+      if (widget.pageSeekRequest != null ||
+          (retiring != null &&
+              retiring.controller.navigationRevision == retiring.revision)) {
+        _current?.controller.cancelPendingNavigation();
+      }
+    }
     final ownerChanged = !identical(oldWidget.owner, widget.owner);
     final novelChanged =
         oldWidget.progressSnapshot.novelId != widget.progressSnapshot.novelId;
@@ -166,6 +186,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _epoch++;
       _needsLayout = true;
       if (!widget.active) _current?.controller.suspend();
+      if (!widget.active) _finishPageSeek(NovelReaderPageSeekOutcome.retired);
       _notifyStatus();
       final epoch = _epoch;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -236,6 +257,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _force =
           _force || retry || entryChanged || hintChanged || resourcesChanged;
     }
+    _schedulePageSeek();
   }
 
   void _ownerChanged() {
@@ -354,6 +376,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         _busy = false;
         _needsLayout = true;
       } else if (_needsLayout || _box != box) {
+        _finishPageSeek(NovelReaderPageSeekOutcome.retired);
         _box = box;
         _needsLayout = false;
         _busy = true;
@@ -395,6 +418,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           );
         });
       }
+      _schedulePageSeek();
       final request = _current;
       if (request == null ||
           _empty ||
@@ -481,6 +505,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           if (mounted && epoch == _epoch) _closeRetired();
         });
         _notifyStatus();
+        _schedulePageSeek();
         return;
       }
       handle = config.owner.acquireCache();
@@ -524,6 +549,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         _pending = null;
         token.cancel();
         _notifyStatus();
+        _schedulePageSeek();
         return;
       }
       var position = config.progressSnapshot;
@@ -611,6 +637,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _pending = null;
       _changes = controller.changes.listen((_) {
         if (!_disposed && identical(_current, request)) {
+          _reconcilePageSeek();
           _rememberPrefix(request);
           setState(() {});
           _notifyStatus();
@@ -627,6 +654,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         _error = null;
       });
       _notifyStatus();
+      _schedulePageSeek();
     } catch (error) {
       if (current()) {
         _stop(_current);
@@ -665,6 +693,16 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       widget.onChapterEntryApplied?.call(entry);
     }
     if (!_live(request)) return;
+    final seek = _pageSeekIntent;
+    if (seek != null &&
+        identical(seek.controller, request.controller) &&
+        seek.revision == request.controller.navigationRevision &&
+        position.hasUserNavigated &&
+        position.paginationKey == seek.request.paginationKey &&
+        position.episodeId == seek.request.episodeId &&
+        position.pageIndex == seek.request.pageIndex) {
+      _finishPageSeek(NovelReaderPageSeekOutcome.arrived);
+    }
     widget.onPositionChanged?.call(position);
     _notifyStatus();
   }
@@ -699,6 +737,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   }
 
   void _closeAll() {
+    _finishPageSeek(NovelReaderPageSeekOutcome.retired);
+    _seekFrameRevision++;
     final changes = _changes;
     _changes = null;
     if (changes != null) unawaited(changes.cancel());
@@ -727,8 +767,122 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
 
   void _stop(_LayoutRequest? request) {
     if (request == null) return;
+    if (identical(_pageSeekIntent?.controller, request.controller)) {
+      _finishPageSeek(NovelReaderPageSeekOutcome.retired);
+    }
     _rememberPrefix(request);
     request.stop();
+  }
+
+  static (int, String, String, int)? _pageSeekKey(
+    NovelReaderPageSeekRequest? request,
+  ) => request == null
+      ? null
+      : (
+          request.requestId,
+          request.episodeId,
+          request.paginationKey,
+          request.pageIndex,
+        );
+
+  void _schedulePageSeek() {
+    final seek = widget.pageSeekRequest;
+    if (_disposed ||
+        !widget.active ||
+        _busy ||
+        seek == null ||
+        _seenPageSeek == _pageSeekKey(seek)) {
+      return;
+    }
+    final frame = ++_seekFrameRevision;
+    final epoch = _epoch;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _disposed ||
+          !widget.active ||
+          _busy ||
+          frame != _seekFrameRevision ||
+          epoch != _epoch ||
+          _pageSeekKey(widget.pageSeekRequest) != _pageSeekKey(seek)) {
+        return;
+      }
+      final request = _current;
+      if (request?.controller.phase == NovelReaderNativePagedPhase.created) {
+        _schedulePageSeek();
+        return;
+      }
+      _seenPageSeek = _pageSeekKey(seek);
+      final controller = request?.controller;
+      final available =
+          request != null &&
+          _live(request) &&
+          controller != null &&
+          !controller.isClosed &&
+          controller.episodeId == seek.episodeId &&
+          controller.paginationKey == seek.paginationKey &&
+          seek.pageIndex >= 0 &&
+          seek.pageIndex < (controller.snapshot?.length ?? 0);
+      if (!available || !controller.requestPage(seek.pageIndex)) {
+        _reportPageSeek(
+          seek,
+          NovelReaderPageSeekOutcome.unavailable,
+          widget.onPageSeekFinished,
+        );
+        return;
+      }
+      _pageSeekIntent = _PageSeekIntent(
+        seek,
+        controller,
+        controller.navigationRevision,
+        widget.onPageSeekFinished,
+        widget.owner,
+      );
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _reconcilePageSeek() {
+    final intent = _pageSeekIntent;
+    if (intent == null) return;
+    if (!identical(_current?.controller, intent.controller) ||
+        intent.controller.isClosed ||
+        intent.controller.isSuspended ||
+        intent.controller.navigationRevision != intent.revision) {
+      _finishPageSeek(NovelReaderPageSeekOutcome.retired);
+    } else if (!intent.controller.hasPendingNavigation &&
+        intent.controller.readyTarget == null) {
+      _finishPageSeek(NovelReaderPageSeekOutcome.unavailable);
+    }
+  }
+
+  void _finishPageSeek(NovelReaderPageSeekOutcome outcome) {
+    final intent = _pageSeekIntent;
+    _pageSeekIntent = null;
+    if (intent != null) {
+      _reportPageSeek(
+        intent.request,
+        outcome,
+        intent.callback,
+        owner: intent.owner,
+      );
+    }
+  }
+
+  void _reportPageSeek(
+    NovelReaderPageSeekRequest seek,
+    NovelReaderPageSeekOutcome outcome,
+    void Function(NovelReaderPageSeekRequest, NovelReaderPageSeekOutcome)?
+    callback, {
+    NovelReaderNativeOwner? owner,
+  }) {
+    if (_disposed || callback == null) return;
+    final callbackOwner = owner ?? widget.owner;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_disposed && identical(callbackOwner, widget.owner)) {
+        callback(seek, outcome);
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   @override
@@ -740,6 +894,22 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     _closeAll();
     super.dispose();
   }
+}
+
+final class _PageSeekIntent {
+  const _PageSeekIntent(
+    this.request,
+    this.controller,
+    this.revision,
+    this.callback,
+    this.owner,
+  );
+  final NovelReaderPageSeekRequest request;
+  final NovelReaderNativePagedController controller;
+  final int revision;
+  final NovelReaderNativeOwner owner;
+  final void Function(NovelReaderPageSeekRequest, NovelReaderPageSeekOutcome)?
+  callback;
 }
 
 class _LayoutRequest {

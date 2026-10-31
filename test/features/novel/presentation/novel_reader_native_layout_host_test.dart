@@ -92,6 +92,8 @@ class _Reader {
   final positions = <NovelReaderPaginationPosition>[];
   final statuses = <NovelReaderNativeHostStatus>[];
   final activity = <bool>[];
+  final seekResults =
+      <(NovelReaderPageSeekRequest, NovelReaderPageSeekOutcome)>[];
   int ready = 0;
   int terminal = 0;
   NovelReaderPreferences get preferences => NovelReaderPreferences.defaults()
@@ -116,6 +118,7 @@ Future<void> _show(
   NovelReaderDocument? semantic,
   bool active = true,
   NovelReaderPagedNavigationController? navigation,
+  NovelReaderPageSeekRequest? seek,
   NovelReaderPaginationPerformancePolicy performance =
       const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) async {
@@ -151,6 +154,9 @@ Future<void> _show(
                 readingAuthorityIdentity: authority ?? reader.authority,
                 active: active,
                 navigationController: navigation,
+                pageSeekRequest: seek,
+                onPageSeekFinished: (request, outcome) =>
+                    reader.seekResults.add((request, outcome)),
                 preparationService: reader.service,
                 onPositionChanged: reader.positions.add,
                 onStatusChanged: reader.statuses.add,
@@ -190,6 +196,340 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets(
+    'a paused source still accepts a seek within its verified readable prefix',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>${List.filled(20, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+      );
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final error = controller.error;
+      final seek = NovelReaderPageSeekRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        paginationKey: reader.positions.last.paginationKey,
+        pageIndex: 7,
+      );
+      await _show(tester, reader, seek: seek);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, 7);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      expect(reader.seekResults, [(seek, NovelReaderPageSeekOutcome.arrived)]);
+      expect(controller.error, same(error));
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.paused);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'removing an already completed seek cannot cancel newer navigation',
+    (tester) async {
+      final reader = _Reader();
+      var held = false;
+      final gate = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      await _show(tester, reader, scheduler: scheduler);
+      await tester.pumpAndSettle();
+      final seek = NovelReaderPageSeekRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        paginationKey: reader.positions.last.paginationKey,
+        pageIndex: 7,
+      );
+      await _show(tester, reader, scheduler: scheduler, seek: seek);
+      await tester.pumpAndSettle();
+      expect(reader.seekResults, [(seek, NovelReaderPageSeekOutcome.arrived)]);
+      held = true;
+      reader.statuses.last.controller!.requestPage(3);
+      await _show(tester, reader, scheduler: scheduler);
+      held = false;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, 3);
+      expect(reader.seekResults, hasLength(1));
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'owner replacement suppresses obsolete seek callbacks and late preparation',
+    (tester) async {
+      final old = _Reader();
+      var held = false;
+      final gate = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      await _show(tester, old, scheduler: scheduler);
+      await tester.pumpAndSettle();
+      held = true;
+      final seek = NovelReaderPageSeekRequest(
+        requestId: 1,
+        episodeId: old.episodeId,
+        paginationKey: old.positions.last.paginationKey,
+        pageIndex: 7,
+      );
+      await _show(tester, old, scheduler: scheduler, seek: seek);
+      await tester.pumpAndSettle();
+      final next = _Reader(episodeId: 'next');
+      await _show(tester, next);
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(old.seekResults, isEmpty);
+      expect(next.seekResults, isEmpty);
+      expect(old.positions, hasLength(1));
+      expect(next.positions, hasLength(1));
+      expect(old.owner.activeCacheHandles, 0);
+      await _unmount(tester, next);
+    },
+  );
+
+  testWidgets(
+    'declarative page seek reuses the active layout and completes only after actual arrival',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final count = reader.positions.length;
+      final request = NovelReaderPageSeekRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        paginationKey: reader.positions.last.paginationKey,
+        pageIndex: 7,
+      );
+      await _show(tester, reader, seek: request);
+      expect(reader.positions, hasLength(count));
+      expect(reader.seekResults, isEmpty);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, 7);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      expect(reader.seekResults, [
+        (request, NovelReaderPageSeekOutcome.arrived),
+      ]);
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.service.calls, 1);
+      await _show(
+        tester,
+        reader,
+        seek: NovelReaderPageSeekRequest(
+          requestId: 1,
+          episodeId: request.episodeId,
+          paginationKey: request.paginationKey,
+          pageIndex: 7,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(count + 1));
+      expect(reader.seekResults, hasLength(1));
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'stale or out-of-range seeks report unavailable once without changing the visible position',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final before = reader.positions.last;
+      final requests = [
+        NovelReaderPageSeekRequest(
+          requestId: 1,
+          episodeId: 'other',
+          paginationKey: before.paginationKey,
+          pageIndex: 1,
+        ),
+        NovelReaderPageSeekRequest(
+          requestId: 2,
+          episodeId: reader.episodeId,
+          paginationKey: 'old-key',
+          pageIndex: 1,
+        ),
+        NovelReaderPageSeekRequest(
+          requestId: 3,
+          episodeId: reader.episodeId,
+          paginationKey: before.paginationKey,
+          pageIndex: -1,
+        ),
+        NovelReaderPageSeekRequest(
+          requestId: 4,
+          episodeId: reader.episodeId,
+          paginationKey: before.paginationKey,
+          pageIndex: 10,
+        ),
+      ];
+      for (final request in requests) {
+        await _show(tester, reader, seek: request);
+        await tester.pumpAndSettle();
+        await _show(tester, reader, seek: request);
+        await tester.pumpAndSettle();
+      }
+      expect(reader.positions, [before]);
+      expect(reader.seekResults, [
+        for (final request in requests)
+          (request, NovelReaderPageSeekOutcome.unavailable),
+      ]);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final replacement in ['seek', 'remove', 'hide', 'other-navigation']) {
+    testWidgets(
+      '$replacement retires a pending page seek and rejects its late completion',
+      (tester) async {
+        final reader = _Reader();
+        var held = false;
+        final gate = Completer<void>();
+        final scheduler = NovelReaderNativeWorkScheduler(
+          nextFrame: () async {
+            if (held) {
+              await gate.future;
+            } else {
+              await WidgetsBinding.instance.endOfFrame;
+            }
+          },
+        );
+        await _show(tester, reader, scheduler: scheduler);
+        await tester.pumpAndSettle();
+        final before = reader.positions.last;
+        final first = NovelReaderPageSeekRequest(
+          requestId: 1,
+          episodeId: reader.episodeId,
+          paginationKey: before.paginationKey,
+          pageIndex: 7,
+        );
+        final second = NovelReaderPageSeekRequest(
+          requestId: 2,
+          episodeId: reader.episodeId,
+          paginationKey: before.paginationKey,
+          pageIndex: 6,
+        );
+        held = true;
+        await _show(tester, reader, scheduler: scheduler, seek: first);
+        await tester.pumpAndSettle();
+        expect(reader.seekResults, isEmpty);
+        switch (replacement) {
+          case 'seek':
+            await _show(tester, reader, scheduler: scheduler, seek: second);
+          case 'remove':
+            await _show(tester, reader, scheduler: scheduler);
+          case 'hide':
+            await _show(
+              tester,
+              reader,
+              scheduler: scheduler,
+              seek: first,
+              active: false,
+            );
+          case 'other-navigation':
+            reader.statuses.last.controller!.requestPage(5);
+        }
+        await tester.pumpAndSettle();
+        expect(reader.seekResults, [
+          (first, NovelReaderPageSeekOutcome.retired),
+        ]);
+        expect(reader.positions, [before]);
+        held = false;
+        gate.complete();
+        await tester.pumpAndSettle();
+        if (replacement == 'seek') {
+          expect(reader.positions.last.pageIndex, 6);
+          expect(reader.seekResults.last, (
+            second,
+            NovelReaderPageSeekOutcome.arrived,
+          ));
+        } else if (replacement == 'other-navigation') {
+          expect(reader.positions.last.pageIndex, 5);
+          expect(reader.seekResults, hasLength(1));
+        } else {
+          expect(reader.positions, [before]);
+          expect(reader.seekResults, hasLength(1));
+        }
+        if (replacement == 'hide') {
+          await _show(tester, reader, scheduler: scheduler, seek: first);
+          await tester.pumpAndSettle();
+          expect(reader.positions.last.pageIndex, before.pageIndex);
+          expect(reader.positions.last.hasUserNavigated, isFalse);
+          expect(reader.seekResults, hasLength(1));
+        }
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  testWidgets(
+    'seek deadline releases the UI intent while preserving the readable page and mode',
+    (tester) async {
+      final reader = _Reader();
+      var held = false;
+      final gate = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      const policy = NovelReaderPaginationPerformancePolicy(
+        targetPageWait: Duration(seconds: 1),
+      );
+      await _show(tester, reader, scheduler: scheduler, performance: policy);
+      await tester.pumpAndSettle();
+      final before = reader.positions.last;
+      final seek = NovelReaderPageSeekRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        paginationKey: before.paginationKey,
+        pageIndex: 7,
+      );
+      held = true;
+      await _show(
+        tester,
+        reader,
+        scheduler: scheduler,
+        performance: policy,
+        seek: seek,
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(reader.seekResults, [
+        (seek, NovelReaderPageSeekOutcome.unavailable),
+      ]);
+      expect(reader.positions, [before]);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.paused);
+      expect(find.byType(ForumBodyTextPageSurface), findsOneWidget);
+      held = false;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(reader.positions, [before]);
+      expect(reader.seekResults, hasLength(1));
+      expect(reader.preferences.flowMode, NovelReaderFlowMode.pagedLtr);
+      await _unmount(tester, reader);
+    },
+  );
+
   testWidgets(
     'Host binds existing chrome commands and rejects them during hidden activity',
     (tester) async {
