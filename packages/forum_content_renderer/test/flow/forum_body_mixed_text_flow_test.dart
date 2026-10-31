@@ -391,7 +391,7 @@ void main() {
   });
 
   test(
-    'unmeasured session fails explicitly but reports bounded replay progress',
+    'unresolved format whitespace fails before shaping and reports bounded replay progress',
     () {
       final cache = ForumBodyParagraphCache(
         maxEntries: 8,

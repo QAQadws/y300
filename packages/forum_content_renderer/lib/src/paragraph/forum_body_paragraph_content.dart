@@ -59,6 +59,23 @@ final class ForumBodyParagraphContent {
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyStyleIssue> issues;
 
+  /// An explicit window of this display projection, retaining original source
+  /// affinity and run ownership. This never slices HTML or semantic offsets.
+  ForumBodyParagraphContent displayWindow({
+    required int startUtf16,
+    required int endUtf16,
+  }) => ForumBodyParagraphContent._(
+    identity: identity,
+    path: path,
+    fontRevision: fontRevision,
+    styleRevision: styleRevision,
+    style: style,
+    layoutMode: layoutMode,
+    projection: projection.slice(startUtf16: startUtf16, endUtf16: endUtf16),
+    runs: runs,
+    issues: issues,
+  );
+
   /// No recognizers are retained; interaction uses the same layout coordinates.
   late final TextSpan textSpan = TextSpan(
     style: style.textStyle,

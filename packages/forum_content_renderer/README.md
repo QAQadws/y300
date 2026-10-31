@@ -108,7 +108,7 @@ takeMetrics 时也不常驻子句柄。数值结果不替代可读 layout，取�
 返回预算等待，由调用者监听现有 cache 的释放通知并重新准入。两侧自身无法容纳时
 明确失败，不反复等待外部释放；检查中已发生的释放不会再等待相同 revision。
 取消在缓存 miss、native 返回和组装/交付前都核对，未发布分组不泄露句柄。
-该端口尚未接入正式分页，也不代表分层/多注音准备或可见整页预算已完成。
+该端口已供 Session 父计划与可见页准备共同消费；分层/多注音及完整阅读器仍待完成。
 
 这是行内排版的分组端口，不是完整 ruby 页面 consumer。父段落通过下述混合输入显式使用独立的 engine/display/source 投影；分页、复制与完整无障碍接入仍由组合层实现。普通 paragraph 排字端口继续拒绝 ruby；正式文字流将其保留为独立的未测量格式，不分流旧 renderer。
 
@@ -128,7 +128,7 @@ ruby 组属于同一个父格式上下文；嵌套、多注音、孤立注音和
 上下文，多个独立 ruby 根不能绕过限制；关闭和失败清理借用状态，已交付值保持不变。
 TextFlow、BlockFlow 的 `workDone` 包含零新事件的延后消费，maxEvents 同时限制工作量；
 BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步传递 flowWorkDone，
-这种进展不会误判成停滞；未测量混排仍明确失败，待协作格式计划器接入后才进入 composer。
+这种进展不会误判成停滞；Session 经下述格式计划器消费未测量结构，再进入同一 composer。
 
 样式解析只把 `rt` 及其后代标为注音角色，基字保留其正文/标题等上下文角色，正文级读者设置不会因此跳过基字。注音默认字号为继承字号的一半，行高为 1，参照 [CSS Ruby 的 UA 样式](https://www.w3.org/TR/css-ruby-1/)；显式作者声明及逐角色读者覆盖仍经过唯一 resolver，`line-height:inherit` 取真实父级值，非法声明保留注音默认值并报告。固有行内排字不重复应用所在块的首行缩进，普通 wrap/fit 的缩进准入没有因此放宽。当前 style 和 paragraph backend revision 均为 5。
 
@@ -150,8 +150,8 @@ BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步
 父引擎负责混合 bidi、换行和占位基线；子布局负责在实际占位框处绘制、命中及选区。
 纯输入不持有 native 子租约、DOM、Context 或测量 session，也不自行决定 whitespace
 边缘、可见 coverage、分页、缓存预算和阅读锚点。组合输入 revision 为 2，父布局身份
-还须纳入 projection、原子几何、完整样式和有效字体缩放；正式 flow/session/page 接入
-及分层/多注音几何尚未完成，不能据此宣称复杂正文已通过原生阅读器验收。
+还须纳入 projection、原子几何、完整样式和有效字体缩放；App 页面消费及分层/多注音
+几何尚未完成，不能据此宣称复杂正文已通过原生阅读器验收。
 
 `ForumBodyInlineParagraphLayout` 持有一个实际父 TextPainter。与普通段落共用唯一的
 原生逻辑行提取实现；`ForumBodyParagraphLine` 明确记录 display 和 engine 的 paint／
@@ -165,7 +165,7 @@ coverage 范围，前者保留真实子文字，后者用于引擎边界。物�
 分片借用同一引擎，按合法行框裁剪并保持两套 coverage；`paintParent` 只绘制父文字，
 consumer 仍须准备、核对并绘制实际子布局，不能据此单独发布可读页。父布局只拥有自己
 的 native 对象，dispose 使其全部借用分片失效，不关闭子 owner。混排布局 revision 为 1；
-正式分页消费仍待接入，不引入整段常驻子租约。
+正式 Session 使用同一父布局分页，不引入整段常驻子租约。
 
 普通与混排原生对象统一归 `ForumBodyParagraphCache` 的一套条数/估算字节预算、LRU、
 pin、预算释放通知与 owner 关闭生命周期。`acquireInline` 返回 typed lease；
@@ -180,7 +180,7 @@ alphabetic baseline、有效父字体缩放、对齐/方向/模式/宽度。固�
 `includeInline` 与普通 include 共计 footprint、按实际 key 去重且不测量。
 排版期间 owner 退役禁止回填；同 key 重入测量明确失败，不覆盖活跃条目；其他条目的
 重入获取须在 native 返回后再次核对实际 pin。字节是保守准入估算，不能冒充真实 native
-heap/GPU 观测。正式 flow/session/page 消费仍待接入。
+heap/GPU 观测。App 页面 typed 消费仍待接入。
 
 ## 有界子行批量排字
 
@@ -261,8 +261,8 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 取消旧手势，关闭 owner 后晚到 paint/tap 无效。基础语义使用当前可见正文、过滤隐藏
 文字；完整 ruby 读屏、跨页选择与复制政策仍由 S8 联验，不能据此宣称无障碍完成。
 
-本绑定当前消费已配对的叶子 ruby；分层/多注音及正式分页准备、flow/session/page
-装配仍待完成。单项/分片像素和来源验证不能代替实际复杂正文页面的 profile 验收。
+本绑定当前消费已配对的叶子 ruby；分层/多注音及 App 页面装配仍待完成。单项/分片
+像素和来源验证不能代替实际复杂正文页面的 profile 验收。
 
 ## 普通与混排共享分页
 
@@ -304,8 +304,8 @@ typed 空行交付只准备父句柄，不保留隐藏原子；选区为空，�
 `ForumBodyTextPageSession` 的 issued 账本持有完整分片，按仍活跃的 native 句柄计数；
 失效复合分片在移出账本前关闭剩余引用。`preparePageFragments` 为同一事务的 warm-only
 便利入口，冷缓存仍通过既有 openPagePreparation/advance 协作准备。普通接口继续兼容，
-并发预留、部分释放和上限共用同一套账本。当前 Session 保留输入仍为普通段落；
-不能因交付类型统一而宣称正式 ruby 会话已完成。
+并发预留、部分释放和上限共用同一套账本。Session 保留输入已统一为 PageContent，
+同时容纳普通与实测混排计划；不能因核心会话接入而宣称完整 ruby 阅读器已完成。
 
 `ForumBodyTextPageContent` 显式区分普通输入和已测量的混排计划；后者保留父 span、
 已缩放占位尺寸及逐原子的 base/RT 请求。请求必须对应当前父输入中的实际子上下文和
@@ -331,7 +331,20 @@ typed 空行交付只准备父句柄，不保留隐藏原子；选区为空，�
 文字选区或精确来源。固有模式只用有效请求宽度通过 native 准入，实际零宽 frame 不变。
 缩放变化导致父或子真实几何不匹配时拒绝本次准备，保留只读数值前缀，允许新请求重试。
 
-正式 TextFlow/BlockFlow 已生产未测量混排结构；Session 还需据此生成上述混排计划、
-有界按字形测量占位几何，并迁移 App 消费者后才能启用真实 ruby 会话。分层/多注音、
-行边空白、长段及复杂正文 profile 仍未验收；不能通过提前录制整段全部子图片、扩张预算
-或切回旧 renderer 绕过这些要求。
+正式 TextFlow/BlockFlow 的未测量结构由 Session 的唯一 pending 格式计划消费：纯输入
+服务组装当前上下文/原子与请求，原生准备服务复用 pair.forMetrics，再以独立工作单元
+准备实际父租约。纯计划进入既有保留输入预算，父租约进入既有 composer，传递实际
+Flow 行窗口；没有第二个阅读会话、cache 或 scheduler。每次 Session.advance 最多一次
+native 排字，warm 格式工作最多 32 单元；formatUnitsPrepared/layoutsBuilt 计入实际进展。
+
+原生批次依来源顺序和方向/对齐/locale、64 子项/16k 文字/512 run 上限装配；不兼容
+ink 使用同 owner 的普通固有字形请求。隔离失败只更新未发布请求并让步，下一工作单元
+按真实 gutter 提示重试一次；再次失败转同一引擎的逐子项请求。不会在同一次 advance
+连续 shape，也不增加现有 cache 预算。发布前的请求改绑不改变已发布计划或来源身份。
+
+普通首尾折叠边缘经 ParagraphContent.displayWindow 使用真实显示/来源投影裁剪；字素
+边界、样式和 affinity 保留，不切 HTML。无注音尾部作为父普通文字换行，空 RT 不占
+额外 native 行。当前正式计划接入单对文本基字/注音；原子内未解决的折叠边缘、分层、
+多注音、孤立注音及拟合混排仍明确失败，不压平或丢弃文字。预格式化和 NBSP 不误删。
+这些格式与长段、完整 App typed 消费和复杂正文 profile 仍须完成，不能扩张预算或切回
+旧 renderer 绕过。Session.inlinePlanRevision 为 1，Host 指纹须纳入它及混排/批次/投影版本。

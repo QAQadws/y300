@@ -5,6 +5,8 @@ import 'package:flutter/painting.dart';
 import '../block/forum_body_block_flow_cursor.dart';
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
+import '../inline/forum_body_inline_plan_input.dart';
+import '../inline/forum_body_inline_plan_preparation.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
@@ -73,6 +75,8 @@ final class ForumBodyTextPageSessionStep {
   const ForumBodyTextPageSessionStep({
     required this.eventsRead,
     int? flowWorkDone,
+    this.formatUnitsPrepared = 0,
+    this.layoutsBuilt = 0,
     required this.unitsRead,
     required this.linesInspected,
     required this.paragraphsAdmitted,
@@ -84,6 +88,8 @@ final class ForumBodyTextPageSessionStep {
   }) : flowWorkDone = flowWorkDone ?? eventsRead;
   final int eventsRead;
   final int flowWorkDone;
+  final int formatUnitsPrepared;
+  final int layoutsBuilt;
   final int unitsRead;
   final int linesInspected;
   final int paragraphsAdmitted;
@@ -94,6 +100,8 @@ final class ForumBodyTextPageSessionStep {
   final bool isComplete;
   bool get madeProgress =>
       flowWorkDone > 0 ||
+      formatUnitsPrepared > 0 ||
+      layoutsBuilt > 0 ||
       eventsRead > 0 ||
       unitsRead > 0 ||
       linesInspected > 0 ||
@@ -104,7 +112,7 @@ final class ForumBodyTextPageSessionStep {
       isComplete;
 }
 
-/// One ordinary-text layout generation. It owns traversal, retained content,
+/// One sequential text layout generation. It owns traversal, retained content,
 /// composition and issued view leases, but borrows the reading-owner native
 /// cache. Keep an old session alive while a replacement is prepared. Close the
 /// retired session after swapping views; owner retirement closes the cache too.
@@ -113,6 +121,7 @@ final class ForumBodyTextPageSessionStep {
 /// Explicit close retires views and content. No Context, timer, mode preference,
 /// demand scheduler or persisted semantic anchor is owned by this layer.
 final class ForumBodyTextPageSession {
+  static const inlinePlanRevision = ForumBodyInlinePlanInput.revision;
   factory ForumBodyTextPageSession({
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
@@ -178,6 +187,8 @@ final class ForumBodyTextPageSession {
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
+  ForumBodyBlockFlowInline? _pendingInline;
+  ForumBodyInlinePlanPreparation? _inlinePreparation;
   double _margin = 0;
   int _publishedPageCount = 0;
   int _publishedParagraphCount = 0;
@@ -228,6 +239,8 @@ final class ForumBodyTextPageSession {
     var work = 0;
     var units = 0;
     var admitted = 0;
+    var formatUnits = 0;
+    final buildsBefore = _cache.layoutBuildCount;
     final before = snapshot.length;
     _waiting = false;
     ForumBodyTextPageSessionStep result({
@@ -239,6 +252,8 @@ final class ForumBodyTextPageSession {
       return ForumBodyTextPageSessionStep(
         eventsRead: events,
         flowWorkDone: work,
+        formatUnitsPrepared: formatUnits,
+        layoutsBuilt: _cache.layoutBuildCount - buildsBefore,
         unitsRead: units,
         linesInspected: lines,
         paragraphsAdmitted: admitted,
@@ -254,7 +269,10 @@ final class ForumBodyTextPageSession {
       while (true) {
         final pending = _pendingParagraph;
         if (pending != null) {
-          _content.check(pending.paragraph.content);
+          final input = ForumBodyTextPageContent.paragraph(
+            pending.paragraph.content,
+          );
+          _content.check(input);
           final lease = _cache.acquire(
             content: pending.paragraph.content,
             width: pending.contentWidth,
@@ -273,8 +291,36 @@ final class ForumBodyTextPageSession {
             lease.release();
             rethrow;
           }
-          _content.add(pending.paragraph.content);
+          _content.add(input);
           _pendingParagraph = null;
+          _margin = 0;
+          admitted = 1;
+        }
+        final mixed = _pendingInline;
+        if (mixed != null) {
+          final prepare = _inlinePreparation ??= _openInlinePlan(mixed);
+          final step = prepare.advance();
+          formatUnits += step.partsPrepared;
+          _waiting = step.waitingForLayoutBudget;
+          if (!step.isReady) return result();
+          final ready = prepare.take();
+          prepare.close();
+          _inlinePreparation = null;
+          try {
+            _composer.appendInline(
+              lease: ready.lease,
+              paragraphIndex: mixed.paragraph.index,
+              left: mixed.contentLeft,
+              spaceBefore: _margin,
+              spaceAtPageStart: 0,
+              window: mixed.paragraph.window,
+            );
+          } catch (_) {
+            ready.lease.release();
+            rethrow;
+          }
+          _content.add(ready.content);
+          _pendingInline = null;
           _margin = 0;
           admitted = 1;
         }
@@ -314,12 +360,10 @@ final class ForumBodyTextPageSession {
             }
             _pendingParagraph = unit;
           case ForumBodyBlockFlowInline():
-            // Unmeasured formats cannot enter the ordinary shaping port. The
-            // cooperative format planner must first produce a mixed page plan.
-            throw ForumBodyParagraphInputException(
-              ForumBodyParagraphInputFailure.structure,
-              unit.paragraph.content.path,
-            );
+            if (unit.paragraph.index != _content.items.length) {
+              throw StateError('Unordered inline input');
+            }
+            _pendingInline = unit;
           case ForumBodyBlockFlowBoundary():
             if (unit.boundary.kind ==
                 ForumBodyTextFlowBoundaryKind.endDocument) {
@@ -420,9 +464,7 @@ final class ForumBodyTextPageSession {
     final available =
         limits.maxIssuedLeases - activeIssuedLeases - _reservedLeases;
     for (final fragment in page.fragments) {
-      final input = ForumBodyTextPageContent.paragraph(
-        _content.items[fragment.paragraphIndex],
-      );
+      final input = _content.items[fragment.paragraphIndex];
       requested += input.nativeHandleCountFor(fragment);
       if (requested > available) {
         throw const ForumBodyTextPageSessionException(
@@ -501,12 +543,41 @@ final class ForumBodyTextPageSession {
     if (isClosed) throw StateError('Page session is closed');
   }
 
+  void _ensureActivePlan() {
+    _ensureUsable();
+    if (_state != ForumBodyTextPageSessionState.active) {
+      throw StateError('Inline plan generation is retired');
+    }
+  }
+
+  ForumBodyInlinePlanPreparation _openInlinePlan(
+    ForumBodyBlockFlowInline mixed,
+  ) {
+    final input = ForumBodyInlinePlanInput(
+      mixed.paragraph.content,
+      mixed.contentWidth,
+    );
+    _content.checkCounts(
+      input.content.projection.display.text.length,
+      input.content.runs.length,
+    );
+    return ForumBodyInlinePlanPreparation(
+      input: input,
+      cache: _cache,
+      textScaler: _textScaler,
+      ensureOwner: _ensureActivePlan,
+    );
+  }
+
   void _fail() {
     if (isClosed) return;
     _recordPublished();
     _flow.close();
     _composer.close();
     _pendingParagraph = null;
+    _inlinePreparation?.close();
+    _inlinePreparation = null;
+    _pendingInline = null;
     _margin = 0;
     _waiting = false;
     _content.retain(_publishedParagraphCount);
@@ -529,6 +600,9 @@ final class ForumBodyTextPageSession {
     _issued.clear();
     _content.retain(0);
     _pendingParagraph = null;
+    _inlinePreparation?.close();
+    _inlinePreparation = null;
+    _pendingInline = null;
     _margin = 0;
     _waiting = false;
     _issues.clear();
@@ -543,39 +617,40 @@ final class ForumBodyTextPageSession {
 final class _RetainedParagraphs {
   _RetainedParagraphs(this.limits);
   final ForumBodyTextPageSessionLimits limits;
-  final items = <ForumBodyParagraphContent>[];
+  final items = <ForumBodyTextPageContent>[];
   int textCodeUnits = 0;
   int runs = 0;
-  void check(ForumBodyParagraphContent content) {
+  void check(ForumBodyTextPageContent content) =>
+      checkCounts(content.textCodeUnits, content.runCount);
+  void checkCounts(int text, int runCount) {
     if (items.length >= limits.maxParagraphs) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.paragraphLimit,
       );
     }
-    if (content.projection.text.length >
-        limits.maxTextCodeUnits - textCodeUnits) {
+    if (text > limits.maxTextCodeUnits - textCodeUnits) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.textLimit,
       );
     }
-    if (content.runs.length > limits.maxRuns - runs) {
+    if (runCount > limits.maxRuns - runs) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.runLimit,
       );
     }
   }
 
-  void add(ForumBodyParagraphContent content) {
+  void add(ForumBodyTextPageContent content) {
     items.add(content);
-    textCodeUnits += content.projection.text.length;
-    runs += content.runs.length;
+    textCodeUnits += content.textCodeUnits;
+    runs += content.runCount;
   }
 
   void retain(int count) {
     while (items.length > count) {
       final removed = items.removeLast();
-      textCodeUnits -= removed.projection.text.length;
-      runs -= removed.runs.length;
+      textCodeUnits -= removed.textCodeUnits;
+      runs -= removed.runCount;
     }
   }
 }

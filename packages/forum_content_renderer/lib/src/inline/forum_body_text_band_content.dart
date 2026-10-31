@@ -43,9 +43,7 @@ final class ForumBodyTextBandContent {
           context.path,
         );
       }
-      if (context.layoutMode !=
-              ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
-          context.projection.text.isEmpty ||
+      if (!supportsContext(context) ||
           context.style.textDirection != first.style.textDirection ||
           context.style.textAlign != first.style.textAlign ||
           context.style.textStyle.locale != first.style.textStyle.locale) {
@@ -53,21 +51,6 @@ final class ForumBodyTextBandContent {
           ForumBodyParagraphInputFailure.structure,
           context.path,
         );
-      }
-      // Out-of-font paint effects need separate isolation/ink bounds. Ordinary
-      // fill/decorations remain supported; never clip an admitted shadow/stroke.
-      for (final style in [
-        context.style,
-        ...context.runs.map((run) => run.style),
-      ]) {
-        if ((style.textStyle.shadows?.isNotEmpty ?? false) ||
-            _needsInkBounds(style.textStyle.foreground) ||
-            _needsInkBounds(style.textStyle.background)) {
-          throw ForumBodyParagraphInputException(
-            ForumBodyParagraphInputFailure.structure,
-            context.path,
-          );
-        }
       }
       runs += context.runs.length;
       if (runs > maxRuns) {
@@ -88,6 +71,18 @@ final class ForumBodyTextBandContent {
   }
   final List<ForumBodyParagraphContent> contexts;
   final HtmlTextBandProjection projection;
+
+  /// Pure eligibility only. Scope, source order, root compatibility and total
+  /// budgets still belong to construction. Native isolation is checked later.
+  static bool supportsContext(ForumBodyParagraphContent context) =>
+      context.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine &&
+      context.projection.text.isNotEmpty &&
+      [context.style, ...context.runs.map((run) => run.style)].every(
+        (style) =>
+            !(style.textStyle.shadows?.isNotEmpty ?? false) &&
+            !_needsInkBounds(style.textStyle.foreground) &&
+            !_needsInkBounds(style.textStyle.background),
+      );
 }
 
 bool _needsInkBounds(Paint? paint) =>
