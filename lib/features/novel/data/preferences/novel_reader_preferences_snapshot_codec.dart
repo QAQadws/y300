@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 
 final class NovelReaderPreferencesSnapshotCodec {
   const NovelReaderPreferencesSnapshotCodec();
@@ -14,9 +15,11 @@ final class NovelReaderPreferencesSnapshotCodec {
   static const double minimumLineHeight = 1.2;
   static const double maximumLineHeight = 2.4;
 
-  String encode(NovelReaderPreferences preferences) {
+  String encode(NovelReaderPreferences preferences, {String? previousSource}) {
+    final previous = _editableSnapshot(previousSource);
     final normalized = normalize(preferences);
-    return jsonEncode(<String, Object>{
+    return jsonEncode(<String, Object?>{
+      ...?previous,
       'schemaVersion': schemaVersion,
       'fontSize': normalized.fontSize,
       'lineHeight': normalized.lineHeight,
@@ -26,6 +29,22 @@ final class NovelReaderPreferencesSnapshotCodec {
       'conversionMode': normalized.conversionMode.storageValue,
       'safeAreaEnabled': normalized.safeAreaEnabled,
     });
+  }
+
+  Map<String, dynamic>? _editableSnapshot(String? source) {
+    if (source == null || source.trim().isEmpty) return null;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(source);
+    } on FormatException {
+      // A malformed snapshot is recoverable by an explicit settings save.
+      return null;
+    }
+    if (decoded is! Map<String, dynamic> ||
+        decoded['schemaVersion'] != schemaVersion) {
+      throw const NovelReaderPreferencesUnsupportedSnapshot();
+    }
+    return decoded;
   }
 
   NovelReaderPreferences decode(String? source) {

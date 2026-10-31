@@ -8,6 +8,7 @@ import 'package:y300/features/novel/data/preferences/novel_reader_preferences_le
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_snapshot_codec.dart';
 import 'package:y300/features/novel/data/preferences/shared_preferences_novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,131 @@ void main() {
     expect(loaded.flowMode, NovelReaderFlowMode.pagedLtr);
     expect(loaded.themePreset, NovelReaderThemePreset.followApp);
     expect(legacySource.callCount, 1);
+  });
+
+  test(
+    'future snapshot stays byte-exact across load and rejected save',
+    () async {
+      const source =
+          '{ "schemaVersion": 99, "fontSize": 24, '
+          '"advanced": {"columns": 2}, "future": null }';
+      final storage = await SharedPreferences.getInstance();
+      await storage.setString(
+        PreferenceKeys.novelReaderSnapshotV1.name,
+        source,
+      );
+      await storage.setInt(PreferenceKeys.novelReaderMigrationVersion.name, 99);
+
+      expect(await repository.load(), NovelReaderPreferences.defaults());
+      expect(legacySource.callCount, 0);
+      await expectLater(
+        repository.save(
+          NovelReaderPreferences.defaults().copyWith(fontSize: 22),
+        ),
+        throwsA(isA<NovelReaderPreferencesUnsupportedSnapshot>()),
+      );
+      expect(
+        storage.getString(PreferenceKeys.novelReaderSnapshotV1.name),
+        source,
+      );
+      expect(
+        storage.getInt(PreferenceKeys.novelReaderMigrationVersion.name),
+        99,
+      );
+    },
+  );
+
+  test(
+    'save rechecks storage even without load or after another upgrade',
+    () async {
+      final storage = await SharedPreferences.getInstance();
+      for (final loadFirst in [false, true]) {
+        await storage.remove(PreferenceKeys.novelReaderSnapshotV1.name);
+        if (loadFirst) await repository.load();
+        const source = '{"schemaVersion":2,"opaque":{"policy":"future"}}';
+        await storage.setString(
+          PreferenceKeys.novelReaderSnapshotV1.name,
+          source,
+        );
+        await expectLater(
+          repository.save(NovelReaderPreferences.defaults()),
+          throwsA(isA<NovelReaderPreferencesUnsupportedSnapshot>()),
+        );
+        expect(
+          storage.getString(PreferenceKeys.novelReaderSnapshotV1.name),
+          source,
+        );
+      }
+    },
+  );
+
+  test(
+    'known schema preserves extension data when supported fields change',
+    () async {
+      final storage = await SharedPreferences.getInstance();
+      final source = jsonEncode({
+        'schemaVersion': 1,
+        'fontSize': 21,
+        'flowMode': 'pagedRtl',
+        'extension': {
+          'scope': ['work', null],
+          'enabled': false,
+        },
+        'futureNullable': null,
+      });
+      await storage.setString(
+        PreferenceKeys.novelReaderSnapshotV1.name,
+        source,
+      );
+      final loaded = await repository.load();
+      await repository.save(loaded.copyWith(fontSize: 23));
+      final updated = jsonDecode(
+        storage.getString(PreferenceKeys.novelReaderSnapshotV1.name)!,
+      ) as Map<String, dynamic>;
+      expect(updated['extension'], (jsonDecode(source) as Map)['extension']);
+      expect(updated.containsKey('futureNullable'), isTrue);
+      expect(updated['futureNullable'], isNull);
+      expect(updated['fontSize'], 23);
+      expect(updated['flowMode'], 'pagedRtl');
+      expect(legacySource.callCount, 0);
+    },
+  );
+
+  test(
+    'explicit save repairs malformed JSON without reviving legacy settings',
+    () async {
+      final storage = await SharedPreferences.getInstance();
+      await storage.setString(
+        PreferenceKeys.novelReaderSnapshotV1.name,
+        '{broken',
+      );
+      final loaded = await repository.load();
+      await repository.save(loaded.copyWith(fontSize: 22));
+      expect((await repository.load()).fontSize, 22);
+      expect(legacySource.callCount, 0);
+    },
+  );
+
+  test('codec rejects unsupported shapes without exposing stored values', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+    for (final source in [
+      '[]',
+      'null',
+      '{"schemaVersion":"future","opaque":"secret"}',
+      '{"schemaVersion":0}',
+    ]) {
+      expect(
+        () => codec.encode(
+          NovelReaderPreferences.defaults(),
+          previousSource: source,
+        ),
+        throwsA(isA<NovelReaderPreferencesUnsupportedSnapshot>()),
+      );
+    }
+    expect(
+      const NovelReaderPreferencesUnsupportedSnapshot().toString(),
+      isNot(contains('secret')),
+    );
   });
 
   test('first load migrates only supported valid SQLite fields', () async {

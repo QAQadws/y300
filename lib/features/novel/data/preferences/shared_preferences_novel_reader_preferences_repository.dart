@@ -60,9 +60,15 @@ final class SharedPreferencesNovelReaderPreferencesRepository
   }
 
   Future<void> _write(NovelReaderPreferences preferences) async {
+    // Recheck at the write boundary, including saves before load and snapshots
+    // upgraded since this repository last loaded. Never cache a writable flag.
+    final previous = await _preferencesStore.read(
+      PreferenceKeys.novelReaderSnapshotV1,
+    );
+    final encoded = _codec.encode(preferences, previousSource: previous);
     await _preferencesStore.write(
       PreferenceKeys.novelReaderSnapshotV1,
-      _codec.encode(preferences),
+      encoded,
     );
     await _preferencesStore.write(
       PreferenceKeys.novelReaderMigrationVersion,
