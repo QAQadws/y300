@@ -20,7 +20,9 @@ export 'src/inline/forum_body_ruby_content.dart';
 export 'src/inline/forum_body_ruby_content_cursor.dart';
 export 'src/pagination/forum_body_text_page_composer.dart';
 export 'src/pagination/forum_body_text_page_binding.dart'
-    show validateForumBodyTextPageBinding;
+    show
+        validateForumBodyTextPageBinding,
+        validateForumBodyPreparedTextPageBinding;
 export 'src/pagination/forum_body_text_page_session.dart';
 export 'src/pagination/forum_body_text_page_preparation.dart'
     show
@@ -30,6 +32,7 @@ export 'src/pagination/forum_body_text_page_preparation.dart'
         ForumBodyTextPagePreparationFailure,
         ForumBodyTextPagePreparationException;
 export 'src/pagination/forum_body_text_page_surface.dart';
+export 'src/pagination/forum_body_prepared_text_fragment.dart';
 export 'src/paragraph/forum_body_paragraph_content.dart';
 export 'src/paragraph/forum_body_paragraph_layout.dart';
 export 'src/paragraph/forum_body_paragraph_cache.dart';

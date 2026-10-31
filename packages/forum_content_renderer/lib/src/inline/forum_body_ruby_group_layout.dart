@@ -291,6 +291,13 @@ final class ForumBodyRubyGroupLayout {
       cache.ownsLease(_base!) &&
       (_annotation == null || cache.ownsLease(_annotation!));
 
+  /// Borrowed handles for aggregate page admission. Does not acquire aliases;
+  /// only close/adoption transfers their lifetime, including retired owners.
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
+    ?_base,
+    ?_annotation,
+  ];
+
   ForumBodyParagraphContent contentFor(ForumBodyRubyPart part) {
     _ensureActive();
     return part == ForumBodyRubyPart.base

@@ -693,6 +693,13 @@ sealed class ForumBodyNativeParagraphLease {
   bool _released = false;
   bool get isActive => !_released && !_entry.retired;
 
+  /// Owner proof for aggregate prepared views without exposing the cache or
+  /// acquiring another handle. Closed owners and retired aliases never match.
+  bool hasSameActiveOwner(ForumBodyNativeParagraphLease other) =>
+      identical(_owner, other._owner) &&
+      _owner.ownsLease(this) &&
+      _owner.ownsLease(other);
+
   void release() {
     if (_released) return;
     _released = true;

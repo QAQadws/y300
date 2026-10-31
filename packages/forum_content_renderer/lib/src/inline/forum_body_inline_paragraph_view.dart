@@ -126,6 +126,10 @@ final class ForumBodyInlineParagraphView {
   }
 
   Iterable<int> get atomIndices => _children.keys;
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
+    ?_parent,
+    for (final binding in _children.values) ...binding.group.nativeLeases,
+  ];
 
   void paint(Canvas canvas, Offset offset) {
     _ensureActive();

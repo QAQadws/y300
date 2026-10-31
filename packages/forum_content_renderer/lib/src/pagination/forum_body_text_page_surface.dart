@@ -3,6 +3,8 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_surface.dart';
+import '../inline/forum_body_inline_paragraph_surface.dart';
+import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
 
@@ -30,11 +32,46 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     )?
     onSourceTap,
   }) {
-    final page = validateForumBodyTextPageBinding(
+    validateForumBodyTextPageBinding(
       snapshot: snapshot,
       pageIndex: pageIndex,
       layoutId: layoutId,
       leases: leases,
+    );
+    return ForumBodyTextPageSurface.prepared(
+      key: key,
+      snapshot: snapshot,
+      pageIndex: pageIndex,
+      layoutId: layoutId,
+      fragments: [
+        for (final (index, fragment) in snapshot[pageIndex].fragments.indexed)
+          ForumBodyPreparedTextFragment.paragraph(
+            lease: leases[index],
+            startLine: fragment.startLine,
+            endLine: fragment.endLine,
+          ),
+      ],
+      onSourceTap: onSourceTap,
+    );
+  }
+
+  /// Complete typed ordinary/inline delivery. Validation borrows its inputs;
+  /// construction failure or an unmounted widget stays caller-owned, just as
+  /// with the ordinary entry. Mounted surfaces take the supplied handles.
+  factory ForumBodyTextPageSurface.prepared({
+    Key? key,
+    required ForumBodyTextPageSnapshot snapshot,
+    required int pageIndex,
+    required String layoutId,
+    required List<ForumBodyPreparedTextFragment> fragments,
+    void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
+    onSourceTap,
+  }) {
+    final page = validateForumBodyPreparedTextPageBinding(
+      snapshot: snapshot,
+      pageIndex: pageIndex,
+      layoutId: layoutId,
+      fragments: fragments,
     );
     return ForumBodyTextPageSurface._(
       key,
@@ -42,7 +79,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       layoutId,
       snapshot.width,
       snapshot.height,
-      List.unmodifiable(leases),
+      List.unmodifiable(fragments),
       onSourceTap,
     );
   }
@@ -53,19 +90,58 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._layoutId,
     this._width,
     this._height,
-    this._leases,
+    this._bindings,
     this._onSourceTap,
   ) : super(key: key);
   final ForumBodyTextPage _page;
   final String _layoutId;
   final double _width;
   final double _height;
-  final List<ForumBodyParagraphLease> _leases;
+  final List<ForumBodyPreparedTextFragment> _bindings;
   final void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
   _onSourceTap;
 
   static Never _fail(ForumBodyTextPageSurfaceFailure failure) =>
       throw ForumBodyTextPageSurfaceException(failure);
+
+  static Object _bindingKey(ForumBodyPreparedTextFragment binding) =>
+      switch (binding) {
+        ForumBodyPreparedParagraphFragment() => binding.lease,
+        ForumBodyPreparedInlineFragment() => binding.view,
+      };
+
+  Widget _fragmentSurface(
+    ForumBodyTextPageFragment fragment,
+    ForumBodyPreparedTextFragment binding,
+  ) {
+    final interaction = (
+      _layoutId,
+      _page.index,
+      fragment.paragraphIndex,
+      fragment.startLine,
+      fragment.endLine,
+      fragment.left,
+      fragment.top,
+    );
+    final tap = _onSourceTap == null
+        ? null
+        : (HtmlProjectedSourcePosition position) =>
+              _onSourceTap(fragment, position);
+    return switch (binding) {
+      ForumBodyPreparedParagraphFragment() => ForumBodyParagraphSurface(
+        lease: binding.lease,
+        startLine: binding.startLine,
+        endLine: binding.endLine,
+        interactionIdentity: interaction,
+        onSourceTap: tap,
+      ),
+      ForumBodyPreparedInlineFragment() => ForumBodyInlineParagraphSurface(
+        view: binding.view,
+        interactionIdentity: interaction,
+        onSourceTap: tap,
+      ),
+    };
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -82,28 +158,12 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
           children: [
             for (final (index, fragment) in _page.fragments.indexed)
               Positioned(
-                key: ObjectKey(_leases[index]),
+                key: ObjectKey(_bindingKey(_bindings[index])),
                 left: fragment.left,
                 top: fragment.top,
                 width: fragment.width,
                 height: fragment.height,
-                child: ForumBodyParagraphSurface(
-                  lease: _leases[index],
-                  startLine: fragment.startLine,
-                  endLine: fragment.endLine,
-                  interactionIdentity: (
-                    _layoutId,
-                    _page.index,
-                    fragment.paragraphIndex,
-                    fragment.startLine,
-                    fragment.endLine,
-                    fragment.left,
-                    fragment.top,
-                  ),
-                  onSourceTap: _onSourceTap == null
-                      ? null
-                      : (position) => _onSourceTap(fragment, position),
-                ),
+                child: _fragmentSurface(fragment, _bindings[index]),
               ),
           ],
         ),

@@ -247,5 +247,19 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 快照只追加数值元数据并标记 `ForumBodyTextPageFragmentKind`，composer revision 为 6。
 排字、子租约或回调不进入已发布页；超高不可拆组明确失败，已封页前缀不受晚失败影响。
 只接受普通租约的旧页面绑定明确拒绝 inline 分片，不能用同尺寸的普通字形或父占位框
-冒充完整交付。下一步仍须将来源绑定的可见 view 和全部子绘图预算纳入既有页面准备/
-会话，再连接正式 flow；本组合能力不启用旧 renderer 兜底或自动切换阅读模式。
+冒充完整交付。本组合能力不启用旧 renderer 兜底或自动切换阅读模式。
+
+`ForumBodyPreparedTextFragment` 是当前挂载的交付句柄，分别持有普通段落租约/行窗口
+或完整的混排 view，不进入数值快照。普通句柄构造失败只释放传入别名；close 只退休
+本次交付引用。nativeLeases 借用现有句柄供同 owner 的整页预算及生命周期计数，不创建
+别名或转移所有权；应按仍活跃的句柄计数，不能只统计父分片数量。
+
+`validateForumBodyPreparedTextPageBinding` 联验类型、代次、当前来源/样式、行窗口、
+真实数值几何和 sourceHint；全部父子句柄须活跃、同阅读 owner 且不重复使用同一别名。
+校验只借用输入，失败不消费调用方的已准备分片。
+
+既有 `ForumBodyTextPageSurface.prepared` 挂载通过完整校验的普通/混排页。旧普通入口
+保留并转到同一实现；普通 key 使用原始 lease、混排 key 使用原始 view，重建交付包装
+不会销毁正在显示的同一组句柄。挂载后由具体 Surface 释放引用；构造失败/未挂载 Widget
+仍归调用方清理。下一步须将 typed 分片和全部子绘图预算纳入既有准备事务/会话，再接
+正式 flow；真实挂载、点击和退出验证不代表复杂正文 profile 或整个 S6 已验收。
