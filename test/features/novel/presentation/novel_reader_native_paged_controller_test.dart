@@ -110,6 +110,68 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('chapter confirmation requires live original end leases and explicit visible navigation', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>ab</p>',
+      width: 100,
+      height: 10,
+    );
+    final controller = _controller(
+      fixture,
+      position: _position(_anchor(fixture, 0).copyWith(formatVersion: 37)),
+    );
+    controller.start();
+    await _until(() => controller.readyTarget != null);
+    final delivery = controller.readyTarget!;
+    final leases = delivery.view.takeLeases();
+    final original = controller.confirmVisible(delivery, leases)!;
+    expect(original.isReadOnlyCompatibilityRestore, isTrue);
+    expect(controller.confirmChapterEndNavigation(delivery.view, []), isNull);
+    expect(controller.suspend(), isTrue);
+    expect(
+      controller.confirmChapterEndNavigation(delivery.view, leases),
+      isNull,
+    );
+    controller.resume();
+    await _until(() => controller.readyTarget != null);
+    final resumed = controller.readyTarget!;
+    final resumedLeases = resumed.view.takeLeases();
+    controller.confirmVisible(resumed, resumedLeases);
+    expect(
+      controller.confirmChapterEndNavigation(delivery.view, leases),
+      isNull,
+    );
+    final confirmation = controller.confirmChapterEndNavigation(
+      resumed.view,
+      resumedLeases,
+    )!;
+    expect(confirmation.hasUserNavigated, isTrue);
+    expect(confirmation.isReadOnlyCompatibilityRestore, isFalse);
+    expect(confirmation.isBodyEndVisible, isTrue);
+    resumedLeases.single.release();
+    expect(
+      controller.confirmChapterEndNavigation(resumed.view, resumedLeases),
+      isNull,
+    );
+    leases.single.release();
+  });
+
+  test('clipped glyphs cannot provide chapter-end confirmation', () async {
+    final fixture = NativeReaderTestFixture('<p>a</p>', width: 1, height: 10);
+    final controller = _controller(fixture);
+    controller.start();
+    await _until(() => controller.readyTarget != null);
+    final delivery = controller.readyTarget!;
+    final leases = delivery.view.takeLeases();
+    final initial = controller.confirmVisible(delivery, leases)!;
+    expect(initial.isBodyEndVisible, isFalse);
+    expect(
+      controller.confirmChapterEndNavigation(delivery.view, leases),
+      isNull,
+    );
+    leases.single.release();
+  });
+
   test('suspended source keeps its cursor and fixed prefix while late idle completion cannot publish', () async {
     final fixture = NativeReaderTestFixture(
       List.filled(20, '<p>abcdefgh</p>').join(),

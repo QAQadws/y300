@@ -10,6 +10,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart'
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
@@ -114,6 +115,7 @@ Future<void> _show(
   String? rawHtml,
   NovelReaderDocument? semantic,
   bool active = true,
+  NovelReaderPagedNavigationController? navigation,
   NovelReaderPaginationPerformancePolicy performance =
       const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) async {
@@ -148,6 +150,7 @@ Future<void> _show(
                 progressSnapshot: snapshot ?? reader.snapshot,
                 readingAuthorityIdentity: authority ?? reader.authority,
                 active: active,
+                navigationController: navigation,
                 preparationService: reader.service,
                 onPositionChanged: reader.positions.add,
                 onStatusChanged: reader.statuses.add,
@@ -187,6 +190,35 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets(
+    'Host binds existing chrome commands and rejects them during hidden activity',
+    (tester) async {
+      final reader = _Reader();
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      await _show(tester, reader, navigation: navigation);
+      await tester.pumpAndSettle();
+      final page = reader.positions.last.pageIndex;
+      expect(navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, page + 1);
+      await _show(tester, reader, active: false, navigation: navigation);
+      await tester.pumpAndSettle();
+      final count = reader.positions.length;
+      expect(navigation.turnNext(), isFalse);
+      expect(navigation.confirmChapterEndNavigation(), isFalse);
+      await _show(tester, reader, navigation: navigation);
+      await tester.pumpAndSettle();
+      expect(reader.positions.length, count + 1);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(navigation.turnPrevious(), isTrue);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, page);
+      await _unmount(tester, reader);
+      expect(navigation.turnNext(), isFalse);
+    },
+  );
+
   testWidgets(
     'hiding during a drag returns to the actual confirmed page without navigation',
     (tester) async {

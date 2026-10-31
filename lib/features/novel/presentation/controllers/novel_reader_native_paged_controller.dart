@@ -435,6 +435,45 @@ final class NovelReaderNativePagedController {
     }
   }
 
+  /// Only the mounted viewport calls this after an accepted forward chapter
+  /// command. EOF metadata alone cannot grant navigation/completion authority.
+  NovelReaderPaginationPosition? confirmChapterEndNavigation(
+    NovelReaderNativePageView view,
+    List<ForumBodyParagraphLease> leases,
+  ) {
+    if (isClosed ||
+        _suspended ||
+        _ticket != null ||
+        !identical(_visible?.view, view) ||
+        _snapshot?.isComplete != true ||
+        view.pageIndex != _snapshot!.length - 1 ||
+        view.coverage.points.isEmpty) {
+      return null;
+    }
+    try {
+      validateForumBodyTextPageBinding(
+        snapshot: view.snapshot,
+        pageIndex: view.pageIndex,
+        layoutId: _snapshot!.layoutId,
+        leases: leases,
+      );
+    } on ForumBodyTextPageSurfaceException {
+      return null;
+    }
+    final delivery = NovelReaderNativePageDelivery(
+      requestId: _requestId + 1,
+      view: view,
+      isReadOnlyCompatibilityRestore: false,
+      hasUserNavigated: true,
+      restoredAnchor: _lastPosition?.anchor,
+    );
+    if (!_wholePageVisible(delivery, leases)) return null;
+    _requestId++;
+    _target = delivery;
+    _prefixNavigation = _error != null;
+    return confirmVisible(delivery, leases);
+  }
+
   void _startPublishedNavigation(int page) {
     final old = _window!;
     final limits = old.limits;

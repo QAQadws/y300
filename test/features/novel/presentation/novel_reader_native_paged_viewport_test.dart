@@ -6,6 +6,8 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_work_scheduler.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
@@ -74,6 +76,9 @@ Widget _reader(
   List<NovelReaderPaginationPosition> reports, {
   double width = 100,
   bool reverse = false,
+  NovelReaderPagedNavigationController? navigation,
+  bool Function(NovelReaderChapterEdge)? onChapter,
+  bool chapterInFlight = false,
 }) => Directionality(
   textDirection: TextDirection.ltr,
   child: Align(
@@ -86,6 +91,9 @@ Widget _reader(
         ownerIdentity: owner,
         readingAuthorityIdentity: authority,
         reverse: reverse,
+        navigationController: navigation,
+        onTurnToAdjacentChapter: onChapter,
+        chapterTurnIsInFlight: chapterInFlight,
         placeholder: const SizedBox(key: Key('native-waiting')),
         onPositionChanged: reports.add,
       ),
@@ -115,6 +123,173 @@ final class _FrameGate {
 }
 
 void main() {
+  for (final reverse in [false, true]) {
+    testWidgets(
+      'chrome turns use actual arrival and logical order in reverse=$reverse',
+      (tester) async {
+        final fixture = _fixture();
+        final controller = _controller(fixture, offset: 45);
+        final reports = <NovelReaderPaginationPosition>[];
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        expect(navigation.turnNext(), isFalse);
+        await tester.pumpWidget(
+          _reader(
+            controller,
+            Object(),
+            Object(),
+            reports,
+            reverse: reverse,
+            navigation: navigation,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(reports.last.pageIndex, 2);
+        expect(navigation.turnNext(), isTrue);
+        expect(navigation.turnNext(), isFalse);
+        expect(reports, hasLength(1));
+        await tester.pumpAndSettle();
+        expect(reports.last.pageIndex, 3);
+        expect(reports.last.hasUserNavigated, isTrue);
+        expect(navigation.turnPrevious(), isTrue);
+        await tester.pumpAndSettle();
+        expect(reports.last.pageIndex, 2);
+        expect(fixture.cache.layoutBuildCount, 1);
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(navigation.turnNext(), isFalse);
+        controller.close();
+        expect(fixture.session.activeIssuedLeases, 0);
+      },
+    );
+  }
+
+  testWidgets(
+    'rejected chapter commands cannot turn a readonly restore into navigation',
+    (tester) async {
+      final fixture = _fixture(html: '<p>abcd</p>');
+      final controller = _controller(fixture, futureAnchor: true);
+      final reports = <NovelReaderPaginationPosition>[];
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      final edges = <NovelReaderChapterEdge>[];
+      final confirmations = <bool>[];
+      var accept = false;
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          Object(),
+          Object(),
+          reports,
+          navigation: navigation,
+          onChapter: (edge) {
+            edges.add(edge);
+            if (accept && edge == NovelReaderChapterEdge.end) {
+              confirmations.add(navigation.confirmChapterEndNavigation());
+            }
+            return accept;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reports.single.isReadOnlyCompatibilityRestore, isTrue);
+      expect(navigation.turnNext(), isFalse);
+      expect(reports, hasLength(1));
+      accept = true;
+      expect(navigation.turnNext(), isTrue);
+      expect(confirmations, [true]);
+      expect(reports.last.hasUserNavigated, isTrue);
+      expect(reports.last.isReadOnlyCompatibilityRestore, isFalse);
+      expect(reports.last.isBodyEndVisible, isTrue);
+      expect(navigation.turnNext(), isFalse);
+      expect(edges, [NovelReaderChapterEdge.end, NovelReaderChapterEdge.end]);
+      navigation.cancelChapterTurn();
+      expect(navigation.turnPrevious(), isTrue);
+      expect(edges.last, NovelReaderChapterEdge.start);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(fixture.session.activeIssuedLeases, 0);
+    },
+  );
+
+  testWidgets(
+    'cropping a mounted final page rejects chrome commands and end confirmation',
+    (tester) async {
+      final fixture = _fixture(html: '<p>abcd</p>');
+      final controller = _controller(fixture, futureAnchor: true);
+      final owner = Object();
+      final authority = Object();
+      final reports = <NovelReaderPaginationPosition>[];
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      var chapters = 0;
+      bool onChapter(NovelReaderChapterEdge _) {
+        chapters++;
+        return true;
+      }
+
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          owner,
+          authority,
+          reports,
+          navigation: navigation,
+          onChapter: onChapter,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          owner,
+          authority,
+          reports,
+          width: 50,
+          navigation: navigation,
+          onChapter: onChapter,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(navigation.turnNext(), isFalse);
+      expect(navigation.confirmChapterEndNavigation(), isFalse);
+      expect(chapters, 0);
+      expect(reports, hasLength(1));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'a drag cannot accept a chrome turn or confirm chapter end before settling',
+    (tester) async {
+      final fixture = _fixture();
+      final controller = _controller(fixture, offset: 45);
+      final reports = <NovelReaderPaginationPosition>[];
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          Object(),
+          Object(),
+          reports,
+          navigation: navigation,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(PageView)),
+      );
+      await gesture.moveBy(const Offset(-30, 0));
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(navigation.turnNext(), isFalse);
+      expect(navigation.turnPrevious(), isFalse);
+      expect(navigation.confirmChapterEndNavigation(), isFalse);
+      expect(reports, hasLength(1));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets(
     'canonical restore and external seek confirm settled mounted pages once',
     (tester) async {

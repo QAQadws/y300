@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../controllers/novel_reader_native_paged_controller.dart';
+import '../controllers/novel_reader_paged_navigation_controller.dart';
+import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_pagination_position.dart';
 
@@ -24,6 +26,9 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.reverse = false,
     this.active = true,
     this.backgroundColor,
+    this.navigationController,
+    this.onTurnToAdjacentChapter,
+    this.chapterTurnIsInFlight = false,
     this.placeholder = const SizedBox.shrink(),
     this.onPositionChanged,
     this.onScrollActivityChanged,
@@ -35,6 +40,9 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final bool reverse;
   final bool active;
   final Color? backgroundColor;
+  final NovelReaderPagedNavigationController? navigationController;
+  final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
+  final bool chapterTurnIsInFlight;
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<bool>? onScrollActivityChanged;
@@ -139,6 +147,9 @@ class _NovelReaderNativePagedViewportState
       backgroundColor: displayed.background,
       frozen: frozen,
       reverse: widget.reverse,
+      navigationController: widget.navigationController,
+      onTurnToAdjacentChapter: widget.onTurnToAdjacentChapter,
+      chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
       placeholder: widget.placeholder,
       onScrollActivityChanged: (scrolling) {
         if (identical(displayed.controller, widget.controller)) {
@@ -177,6 +188,9 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.backgroundColor,
     required this.frozen,
     required this.reverse,
+    required this.navigationController,
+    required this.onTurnToAdjacentChapter,
+    required this.chapterTurnIsInFlight,
     required this.placeholder,
     required this.onPositionChanged,
     required this.onScrollActivityChanged,
@@ -188,6 +202,9 @@ class _NativeLayoutViewport extends StatefulWidget {
   final Color? backgroundColor;
   final bool frozen;
   final bool reverse;
+  final NovelReaderPagedNavigationController? navigationController;
+  final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
+  final bool chapterTurnIsInFlight;
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition> onPositionChanged;
   final ValueChanged<bool> onScrollActivityChanged;
@@ -196,7 +213,8 @@ class _NativeLayoutViewport extends StatefulWidget {
   State<_NativeLayoutViewport> createState() => _NativeLayoutViewportState();
 }
 
-class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
+class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
+    implements NovelReaderPagedNavigationTarget {
   late final PageController _pages;
   late final double _width;
   late final double _height;
@@ -211,6 +229,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
   bool _fits = false;
   int _activityRevision = 0;
   ScrollHoldController? _hold;
+  NovelReaderPagedNavigationBinding? _navigationBinding;
+  bool _chapterTurnRequested = false;
 
   @override
   void initState() {
@@ -219,6 +239,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
     _height = widget.height;
     _page = widget.initialPage;
     _pages = PageController(initialPage: _page, keepPage: false);
+    _navigationBinding = widget.navigationController?.bind(this);
     _changes = widget.controller.changes.listen(
       (_) {
         if (!mounted) return;
@@ -235,6 +256,16 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
   @override
   void didUpdateWidget(covariant _NativeLayoutViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(
+      oldWidget.navigationController,
+      widget.navigationController,
+    )) {
+      _navigationBinding?.dispose();
+      _navigationBinding = widget.navigationController?.bind(this);
+    }
+    if (oldWidget.chapterTurnIsInFlight && !widget.chapterTurnIsInFlight) {
+      _chapterTurnRequested = false;
+    }
     if (widget.frozen != oldWidget.frozen ||
         widget.reverse != oldWidget.reverse) {
       _frame++;
@@ -251,6 +282,83 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
       }
     }
     if (!widget.frozen) _afterFrame();
+  }
+
+  int? get _settledCommandPage {
+    if (!mounted ||
+        widget.frozen ||
+        widget.controller.isClosed ||
+        widget.controller.isSuspended ||
+        !_fits ||
+        _scrolling ||
+        !_pages.hasClients ||
+        _pages.position.isScrollingNotifier.value) {
+      return null;
+    }
+    final page = _pages.page;
+    if (page == null ||
+        (page - page.round()).abs() > precisionErrorTolerance ||
+        page.round() != widget.controller.visiblePageIndex) {
+      return null;
+    }
+    return page.round();
+  }
+
+  @override
+  bool turnPrevious() => _turnByCommand(-1);
+
+  @override
+  bool turnNext() => _turnByCommand(1);
+
+  bool _turnByCommand(int delta) {
+    final page = _settledCommandPage;
+    if (page == null || widget.chapterTurnIsInFlight || _chapterTurnRequested) {
+      return false;
+    }
+    final controller = widget.controller;
+    if (delta < 0) controller.cancelPendingNavigation();
+    final pending = controller.requestedPageIndex;
+    if (delta > 0 && pending != null && pending != page) return false;
+    final prefix = controller.snapshot!;
+    final target = page + delta;
+    if (target >= 0 && (target < prefix.length || !prefix.isComplete)) {
+      return controller.requestPage(target);
+    }
+    if (!prefix.isComplete) return false;
+    final accepted =
+        widget.onTurnToAdjacentChapter?.call(
+          delta < 0 ? NovelReaderChapterEdge.start : NovelReaderChapterEdge.end,
+        ) ??
+        false;
+    if (mounted && accepted) _chapterTurnRequested = true;
+    return accepted;
+  }
+
+  @override
+  bool confirmChapterEndNavigation() {
+    final page = _settledCommandPage;
+    final prefix = widget.controller.snapshot;
+    if (page == null ||
+        prefix?.isComplete != true ||
+        page != prefix!.length - 1) {
+      return false;
+    }
+    for (final entry in _mountedPages.entries) {
+      if (entry.key.pageIndex != page) continue;
+      final position = widget.controller.confirmChapterEndNavigation(
+        entry.key,
+        entry.value,
+      );
+      if (position == null) continue;
+      widget.onPositionChanged(position);
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  void cancelChapterTurn() {
+    _chapterTurnRequested = false;
   }
 
   void _afterFrame() {
@@ -439,6 +547,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
   void dispose() {
     _frame++;
     _activityRevision++;
+    _navigationBinding?.dispose();
     final changes = _changes;
     if (changes != null) unawaited(changes.cancel());
     _pages.dispose();

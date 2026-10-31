@@ -11,6 +11,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/ide
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 
 import '../controllers/novel_reader_native_paged_controller.dart';
+import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_native_host_status.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
@@ -47,6 +48,9 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.chapterEntryRequest,
     this.conversionAnchor,
     this.onChapterEntryApplied,
+    this.navigationController,
+    this.onTurnToAdjacentChapter,
+    this.chapterTurnIsInFlight = false,
     this.onPositionChanged,
     this.onStatusChanged,
     this.onContentReady,
@@ -82,6 +86,9 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final NovelReaderChapterEntryRequest? chapterEntryRequest;
   final NovelReaderTextAnchor? conversionAnchor;
   final ValueChanged<NovelReaderChapterEntryRequest>? onChapterEntryApplied;
+  final NovelReaderPagedNavigationController? navigationController;
+  final bool Function(NovelReaderChapterEdge)? onTurnToAdjacentChapter;
+  final bool chapterTurnIsInFlight;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<NovelReaderNativeHostStatus>? onStatusChanged;
   final VoidCallback? onContentReady;
@@ -403,6 +410,11 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         active: _live(request),
         reverse: request.reverse,
         backgroundColor: request.scope.backgroundColor,
+        navigationController: widget.navigationController,
+        chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
+        onTurnToAdjacentChapter: (edge) =>
+            _live(request) &&
+            (widget.onTurnToAdjacentChapter?.call(edge) ?? false),
         placeholder:
             widget.placeholderBuilder?.call(context, _status) ??
             const SizedBox.shrink(),
