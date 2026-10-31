@@ -92,6 +92,9 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
   String? _reportedDecodeFailureIdentity;
   String? _evictedFailureIdentity;
   int _retryEpoch = 0;
+  int _localFailureGeneration = 0;
+  String? _missingLocalPath;
+  String? _checkingLocalFailureIdentity;
 
   /// 本帧解码目标（宽度优先策略结果），供网络分支与 contain 文件分支复用。
   /// 本帧显示框尺寸与 DPR，供 cover 感知降采样解析复用。
@@ -118,6 +121,9 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
   }
 
   void _resetLoadState() {
+    _localFailureGeneration++;
+    _missingLocalPath = null;
+    _checkingLocalFailureIdentity = null;
     _remoteResolved = false;
     _remoteResolveScheduled = false;
     _reportedFirstFrameIdentity = null;
@@ -203,49 +209,51 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
     }
 
     final local = widget.localPath?.trim();
-    if (local != null && local.isNotEmpty) {
+    if (local != null && local.isNotEmpty && local != _missingLocalPath) {
       final file = io.File(local);
-      if (file.existsSync()) {
-        // cover 用 cover 感知降采样修复横长竖短图模糊；其它 fit 走宽度优先策略。
-        final displayProvider = resolveDownscaledFileImageProvider(
-          localPath: file.path,
-          fit: widget.fit,
-          displaySize: _displaySize,
-          devicePixelRatio: _devicePixelRatio,
-          downscalePolicy: widget.downscalePolicy,
-        );
-        return Image(
-          image: displayProvider,
-          fit: widget.fit,
-          width: widget.width,
-          height: widget.height,
-          alignment: widget.alignment,
-          gaplessPlayback: true,
-          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            final isResolved = frame != null || wasSynchronouslyLoaded;
-            if (isResolved) {
-              _reportFirstFrameRendered(
-                'file:${file.path}',
-                LibraryImageFrameSource.localFile,
-              );
-            }
-            return _buildFirstFrameTransition(
-              context: context,
-              child: child,
-              isResolved: isResolved,
-              wasSynchronouslyLoaded: wasSynchronouslyLoaded,
-              identity: 'file:${file.path}',
+      // cover 用 cover 感知降采样修复横长竖短图模糊；其它 fit 走宽度优先策略。
+      final displayProvider = resolveDownscaledFileImageProvider(
+        localPath: file.path,
+        fit: widget.fit,
+        displaySize: _displaySize,
+        devicePixelRatio: _devicePixelRatio,
+        downscalePolicy: widget.downscalePolicy,
+      );
+      return Image(
+        image: displayProvider,
+        fit: widget.fit,
+        width: widget.width,
+        height: widget.height,
+        alignment: widget.alignment,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          final isResolved = frame != null || wasSynchronouslyLoaded;
+          if (isResolved) {
+            _reportFirstFrameRendered(
+              'file:${file.path}',
+              LibraryImageFrameSource.localFile,
             );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            final identity = 'file:${file.path}';
-            _evictFailedProvider(displayProvider, identity);
+          }
+          return _buildFirstFrameTransition(
+            context: context,
+            child: child,
+            isResolved: isResolved,
+            wasSynchronouslyLoaded: wasSynchronouslyLoaded,
+            identity: 'file:${file.path}',
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          final identity = 'file:${file.path}';
+          _evictFailedProvider(displayProvider, identity);
+          if (error is io.FileSystemException) {
+            _checkMissingLocalFile(file, identity, error, stackTrace);
+          } else {
             _reportLocalDecodeFailure(identity, error, stackTrace);
             _markImageFailed(identity);
-            return _errorPlaceholder;
-          },
-        );
-      }
+          }
+          return _errorPlaceholder;
+        },
+      );
     }
 
     final remote = _normalizeRemoteUrl(widget.imageUrl);
@@ -256,6 +264,49 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
       return _buildRemoteImageShell(remote);
     }
     return widget.placeholder;
+  }
+
+  void _checkMissingLocalFile(
+    io.File file,
+    String identity,
+    Object error,
+    StackTrace? stackTrace,
+  ) {
+    if (_checkingLocalFailureIdentity == identity) return;
+    _checkingLocalFailureIdentity = identity;
+    unawaited(
+      _resolveMissingLocalFile(
+        file,
+        identity,
+        error,
+        stackTrace,
+        _localFailureGeneration,
+      ),
+    );
+  }
+
+  Future<void> _resolveMissingLocalFile(
+    io.File file,
+    String identity,
+    Object error,
+    StackTrace? stackTrace,
+    int generation,
+  ) async {
+    // Let FileImage serve memory hits immediately and do normal reads async.
+    // Only a filesystem failure needs a separate existence check for fallback.
+    var exists = true;
+    try {
+      exists = await file.exists();
+    } on io.FileSystemException {
+      // Preserve the original decode failure if existence cannot be confirmed.
+    }
+    if (!mounted || generation != _localFailureGeneration) return;
+    if (!exists) {
+      setState(() => _missingLocalPath = file.path);
+    } else {
+      _reportLocalDecodeFailure(identity, error, stackTrace);
+      _markImageFailed(identity);
+    }
   }
 
   Widget _buildRemoteImageShell(String remote) {

@@ -1,16 +1,125 @@
 import 'dart:async';
+import 'dart:io' as io;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
+import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/features/image_loading/data/app_image_cache_manager.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 
 void main() {
+  testWidgets(
+    'a cached local frame renders immediately without checking disk',
+    (tester) async {
+      final image = (await tester.runAsync(
+        () => createTestImage(width: 3, height: 5, cache: false),
+      ))!;
+      addTearDown(image.dispose);
+      final probes = <String, List<Completer<bool>>>{};
+      final previousOverrides = io.IOOverrides.current;
+      io.IOOverrides.global = _FileProbeOverrides(probes);
+      addTearDown(() => io.IOOverrides.global = previousOverrides);
+      final provider = resolveDownscaledFileImageProvider(
+        localPath: 'cached.jpg',
+        fit: BoxFit.contain,
+        displaySize: const Size(3, 5),
+        devicePixelRatio: 1,
+      );
+      final key = await provider.obtainKey(ImageConfiguration.empty);
+      PaintingBinding.instance.imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(
+          SynchronousFuture(ImageInfo(image: image.clone())),
+        ),
+      );
+      addTearDown(() => PaintingBinding.instance.imageCache.evict(key));
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: LocalizedTestApp(
+            home: MediaQuery(
+              data: MediaQueryData(devicePixelRatio: 1),
+              child: LibraryCachedImage(
+                localPath: 'cached.jpg',
+                fit: BoxFit.contain,
+                width: 3,
+                height: 5,
+                placeholder: SizedBox(key: Key('placeholder')),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(RawImage), findsOneWidget);
+      expect(find.byKey(const Key('placeholder')), findsNothing);
+      expect(probes, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'local probes are async, shared across rebuilds and source-scoped',
+    (tester) async {
+      final image = (await tester.runAsync(
+        () => createTestImage(width: 3, height: 5, cache: false),
+      ))!;
+      addTearDown(image.dispose);
+      final remoteProvider = _CountingImageProvider(image);
+      final probes = <String, List<Completer<bool>>>{};
+      final previousOverrides = io.IOOverrides.current;
+      io.IOOverrides.global = _FileProbeOverrides(probes);
+      addTearDown(() => io.IOOverrides.global = previousOverrides);
+
+      Widget build(String path, {int retry = 0}) => ProviderScope(
+        child: LocalizedTestApp(
+          home: LibraryCachedImage(
+            localPath: path,
+            imageUrl: 'https://bbs.yamibo.com/fallback.jpg',
+            remoteImageProviderOverride: remoteProvider,
+            fit: BoxFit.cover,
+            retryToken: retry,
+            placeholder: const SizedBox(key: Key('probing')),
+            errorPlaceholder: const SizedBox(key: Key('remote-fallback')),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(build('a.jpg'));
+      await tester.pump();
+      await tester.pumpWidget(build('a.jpg'));
+      expect(probes['a.jpg'], hasLength(1));
+
+      await tester.pumpWidget(build('b.jpg'));
+      await tester.pump();
+      await tester.pumpWidget(build('a.jpg'));
+      await tester.pump();
+      probes['a.jpg']!.first.complete(false);
+      probes['b.jpg']!.single.complete(false);
+      await tester.pump();
+      expect(remoteProvider.loadCount, 0);
+
+      probes['a.jpg']!.last.complete(false);
+      await tester.pump();
+      await tester.pump();
+      expect(remoteProvider.loadCount, 1);
+      await tester.pumpWidget(build('a.jpg'));
+      expect(probes['a.jpg'], hasLength(2));
+
+      await tester.pumpWidget(build('a.jpg', retry: 1));
+      await tester.pump();
+      expect(probes['a.jpg'], hasLength(3));
+      await tester.pumpWidget(const SizedBox.shrink());
+      probes['a.jpg']!.last.complete(true);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('network image waits for the shared cache manager', (
     tester,
   ) async {
@@ -377,6 +486,39 @@ void main() {
 
     expect(provider.loadCount, settledCount);
   });
+}
+
+final class _FileProbeOverrides extends io.IOOverrides {
+  _FileProbeOverrides(this.probes);
+
+  final Map<String, List<Completer<bool>>> probes;
+
+  @override
+  io.File createFile(String path) => _ProbeFile(path, probes);
+}
+
+class _ProbeFile extends Fake implements io.File {
+  _ProbeFile(this.path, this.probes);
+
+  @override
+  final String path;
+  final Map<String, List<Completer<bool>>> probes;
+
+  @override
+  Future<bool> exists() {
+    final probe = Completer<bool>();
+    probes.putIfAbsent(path, () => []).add(probe);
+    return probe.future;
+  }
+
+  @override
+  bool existsSync() =>
+      throw StateError('Synchronous file I/O on the UI isolate');
+
+  @override
+  Future<int> length() => Future<int>.error(
+    io.PathNotFoundException(path, const io.OSError('missing', 2)),
+  );
 }
 
 class _SynchronousImageProvider
