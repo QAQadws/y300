@@ -141,6 +141,64 @@ Future<void> _startTapMotion(WidgetTester tester, int from) async {
 void main() {
   for (final reverse in [false, true]) {
     testWidgets(
+      'a ready neighbor begins motion without an extra post-frame delay (reverse=$reverse)',
+      (tester) async {
+        final fixture = _fixture();
+        final controller = _controller(fixture);
+        final reports = <NovelReaderPaginationPosition>[];
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        await tester.pumpWidget(
+          _reader(
+            controller,
+            Object(),
+            Object(),
+            reports,
+            reverse: reverse,
+            navigation: navigation,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.viewForPage(1)!.isReady, isTrue);
+        expect(navigation.turnNext(), isTrue);
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(_physicalPage(tester), greaterThan(0));
+        expect(_physicalPage(tester), lessThan(1));
+        expect(controller.visiblePageIndex, 0);
+        expect(reports.map((report) => report.pageIndex), [0]);
+        for (
+          var frame = 0;
+          frame < 30 && reports.last.pageIndex != 1;
+          frame++
+        ) {
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(tester.takeException(), isNull);
+        }
+        expect(reports.map((report) => report.pageIndex), [0, 1]);
+        // Return before the former origin's Element has a cleanup frame. It
+        // must be reused without trying to transfer its handles a second time.
+        expect(controller.viewForPage(0), isNotNull);
+        expect(controller.viewForPage(0)!.isReady, isFalse);
+        expect(navigation.turnPrevious(), isTrue);
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(_physicalPage(tester), lessThan(1));
+        expect(_physicalPage(tester), greaterThan(0));
+        expect(controller.visiblePageIndex, 1);
+        expect(reports.map((report) => report.pageIndex), [0, 1]);
+        await tester.pumpAndSettle();
+        expect(reports.map((report) => report.pageIndex), [0, 1, 0]);
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.close();
+        expect(fixture.cache.activeLeases, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final reverse in [false, true]) {
+    testWidgets(
       'dense mixed turns retire far mounted pages before admitting the next target (reverse=$reverse)',
       (tester) async {
         final paragraph =

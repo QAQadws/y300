@@ -413,6 +413,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     if (target >= 0 && (target < prefix.length || !prefix.isComplete)) {
       if (!controller.requestPage(target)) return false;
       _tapTurn = _NativeTapTurn(page, target, controller.navigationRevision);
+      _startReadyTapTurn();
       return true;
     }
     if (!prefix.isComplete) return false;
@@ -608,6 +609,24 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     if (mounted && identical(_tapTurn, turn)) _afterFrame();
   }
 
+  bool _startReadyTapTurn() {
+    _reconcileTapTurn();
+    final turn = _tapTurn;
+    final target = widget.controller.readyTarget;
+    if (turn == null ||
+        turn.started ||
+        target?.requestId != turn.revision ||
+        target?.pageIndex != turn.to ||
+        _settledCommandPage != turn.from) {
+      return false;
+    }
+    // A fully prepared neighbor can mount during the first animation frame.
+    // Starting here never confirms a position; arrival still needs the actual
+    // mounted fragments and the existing stable post-frame validation below.
+    unawaited(_animateTap(turn));
+    return true;
+  }
+
   void _afterFrame() {
     final frame = ++_frame;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -631,14 +650,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       final target = controller.readyTarget;
       final destination = target?.pageIndex ?? controller.visiblePageIndex;
       if (destination != null && destination != _page) {
-        final turn = _tapTurn;
-        if (turn != null &&
-            turn.revision == target?.requestId &&
-            turn.to == destination &&
-            !turn.started) {
-          unawaited(_animateTap(turn));
-          return;
-        }
+        if (_startReadyTapTurn()) return;
         // Restore/search/seek have no tap motion intent.
         _pages.jumpToPage(destination);
         _afterFrame();
@@ -815,10 +827,13 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                         return _NativeMountedPage(
                           key: ObjectKey(view),
                           view: view,
-                          // Cancellation may be observed on the same frame the
-                          // animation reaches its old destination. Keep exactly
-                          // the confirmed origin mounted until actual arrival.
-                          keepAlive: page == controller.visiblePageIndex,
+                          // Retain the confirmed origin through cancellation
+                          // and this one pending tap destination. Rapid return
+                          // reuses its live Element instead of retiring and
+                          // re-transferring the same view's handles.
+                          keepAlive:
+                              page == controller.visiblePageIndex ||
+                              page == _tapTurn?.to,
                           onMounted: _mounted,
                           onUnmounted: _unmounted,
                         );
