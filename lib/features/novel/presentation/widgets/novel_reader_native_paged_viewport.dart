@@ -320,7 +320,6 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final prefix = controller.snapshot;
-    final paused = controller.phase == NovelReaderNativePagedPhase.paused;
     // Old generations keep the original dimensions even under new constraints.
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -344,7 +343,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport> {
                     controller: _pages,
                     reverse: widget.reverse,
                     allowImplicitScrolling: false,
-                    physics: widget.frozen || paused || controller.isClosed
+                    physics: widget.frozen || controller.isClosed
                         ? const NeverScrollableScrollPhysics()
                         : const AlwaysScrollableScrollPhysics(
                             parent: ClampingScrollPhysics(),

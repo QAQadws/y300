@@ -51,6 +51,8 @@ NovelReaderNativePagedController _controller(
   NovelReaderTextAnchor? conversionAnchor,
   NovelReaderChapterEdge? entry,
   NovelReaderNativeWorkScheduler? scheduler,
+  NovelReaderPaginationPerformancePolicy performance =
+      const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) {
   final value = NovelReaderNativePagedController(
     session: fixture.session,
@@ -62,14 +64,47 @@ NovelReaderNativePagedController _controller(
     conversionAnchor: conversionAnchor,
     scheduler:
         scheduler ?? NovelReaderNativeWorkScheduler(nextFrame: () async {}),
-    performance: const NovelReaderPaginationPerformancePolicy(
-      enforceBudgets: false,
-    ),
+    performance: performance,
     idleScheduler: () async {},
     windowLimits: const NovelReaderNativeViewWindowLimits(radius: 0),
   );
   addTearDown(value.close);
   return value;
+}
+
+Future<
+  ({
+    NativeReaderTestFixture fixture,
+    NovelReaderNativePagedController controller,
+    List<ForumBodyParagraphLease> leases,
+  })
+>
+_failedReadable({
+  NovelReaderNativeWorkScheduler? scheduler,
+  NovelReaderPaginationPerformancePolicy performance =
+      const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
+}) async {
+  final fixture = NativeReaderTestFixture(
+    '<p>abcdefgh</p><p>ij</p><blockquote>unsupported</blockquote>',
+    width: 20,
+    height: 10,
+    complete: false,
+  );
+  final controller = _controller(
+    fixture,
+    entry: NovelReaderChapterEdge.start,
+    scheduler: scheduler,
+    performance: performance,
+  );
+  controller.start();
+  await _until(
+    () => controller.readyTarget != null || controller.error != null,
+  );
+  final delivery = controller.readyTarget!;
+  final leases = delivery.view.takeLeases();
+  controller.confirmVisible(delivery, leases);
+  await _until(() => controller.error != null);
+  return (fixture: fixture, controller: controller, leases: leases);
 }
 
 void main() {
@@ -401,6 +436,109 @@ void main() {
     },
   );
 
+  test('paused reader navigates only the accepted sealed prefix without resuming source', () async {
+    final (fixture: fixture, controller: controller, leases: oldLeases) =
+        await _failedReadable();
+    final prefix = controller.snapshot!;
+    final sourceError = controller.error;
+    final builds = fixture.cache.layoutBuildCount;
+    expect(prefix.length, greaterThan(1));
+    expect(controller.requestPage(prefix.length), isFalse);
+    expect(controller.requestPage(-1), isFalse);
+    expect(controller.requestPage(1), isTrue);
+    expect(controller.visiblePageIndex, 0);
+    await _until(() => controller.readyTarget != null);
+    final delivery = controller.readyTarget!;
+    final leases = delivery.view.takeLeases();
+    final position = controller.confirmVisible(delivery, leases)!;
+    expect(position.pageIndex, 1);
+    expect(position.hasUserNavigated, isTrue);
+    expect(position.isReadOnlyCompatibilityRestore, isFalse);
+    expect(position.isPageCountFinal, isFalse);
+    expect(controller.phase, NovelReaderNativePagedPhase.paused);
+    expect(controller.error, same(sourceError));
+    expect(controller.snapshot, same(prefix));
+    expect(fixture.cache.layoutBuildCount, builds);
+    expect(oldLeases.single.isActive, isTrue);
+    leases.single.release();
+    oldLeases.single.release();
+  });
+
+  test('paused pending navigation retires on cancellation and rejects the late target', () async {
+    var held = false;
+    final frame = Completer<void>();
+    final (
+      fixture: fixture,
+      controller: controller,
+      leases: oldLeases,
+    ) = await _failedReadable(
+      scheduler: NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) await frame.future;
+        },
+      ),
+    );
+    held = true;
+    expect(controller.requestPage(1), isTrue);
+    expect(controller.cancelPendingNavigation(), isTrue);
+    expect(controller.visiblePageIndex, 0);
+    expect(controller.requestPage(2), isTrue);
+    held = false;
+    frame.complete();
+    await _until(() => controller.readyTarget != null);
+    final target = controller.readyTarget!;
+    expect(target.pageIndex, 2);
+    final leases = target.view.takeLeases();
+    expect(controller.confirmVisible(target, leases)!.pageIndex, 2);
+    expect(controller.phase, NovelReaderNativePagedPhase.paused);
+    leases.single.release();
+    oldLeases.single.release();
+    controller.close();
+    expect(fixture.session.reservedViewLeases, 0);
+  });
+
+  test('paused prefix preparation keeps a bounded target deadline and cleans reservations', () async {
+    var held = false;
+    final frame = Completer<void>();
+    final (
+      fixture: fixture,
+      controller: controller,
+      leases: oldLeases,
+    ) = await _failedReadable(
+      scheduler: NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) await frame.future;
+        },
+      ),
+      performance: const NovelReaderPaginationPerformancePolicy(
+        targetPageWait: Duration(milliseconds: 100),
+      ),
+    );
+    final error = controller.error;
+    final prefix = controller.snapshot;
+    held = true;
+    final expired = controller.changes.firstWhere(
+      (_) => !identical(controller.error, error),
+    );
+    expect(controller.requestPage(1), isTrue);
+    await expired;
+    expect(
+      controller.error,
+      isA<NovelReaderPaginationException>().having(
+        (error) => error.code,
+        'code',
+        'targetPageWaitExceeded',
+      ),
+    );
+    expect(controller.snapshot, same(prefix));
+    expect(controller.visiblePageIndex, 0);
+    expect(oldLeases.single.isActive, isTrue);
+    expect(fixture.session.reservedViewLeases, 0);
+    held = false;
+    frame.complete();
+    oldLeases.single.release();
+  });
+
   test('chapter-end entry waits for EOF and does not turn chapters when target is absent', () async {
     final fixture = NativeReaderTestFixture(
       '<p>abcdefgh</p>',
@@ -467,6 +605,7 @@ void main() {
       );
       expect(controller.readyTarget, isNull);
       expect(controller.snapshot!.length, 0);
+      expect(controller.requestPage(0), isFalse);
       expect(oldLeases.every((lease) => lease.isActive), isTrue);
       for (final lease in oldLeases) {
         lease.release();

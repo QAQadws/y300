@@ -362,7 +362,7 @@ void main() {
   });
 
   testWidgets(
-    'late source failure retains the readable native page without another report',
+    'late source failure retains reading until real navigation within its accepted prefix',
     (tester) async {
       final idle = Completer<void>();
       final fixture = _fixture(
@@ -380,6 +380,24 @@ void main() {
       expect(find.byType(ForumBodyTextPageSurface), findsOneWidget);
       expect(reports, hasLength(1));
       expect(controller.visiblePageIndex, 0);
+      final prefix = controller.snapshot;
+      final error = controller.error;
+      final builds = fixture.cache.layoutBuildCount;
+      await tester.drag(find.byType(PageView), const Offset(-80, 0));
+      await tester.pumpAndSettle();
+      expect(reports, hasLength(2));
+      expect(reports.last.pageIndex, 1);
+      expect(reports.last.hasUserNavigated, isTrue);
+      expect(reports.last.isReadOnlyCompatibilityRestore, isFalse);
+      expect(controller.phase, NovelReaderNativePagedPhase.paused);
+      expect(controller.error, same(error));
+      expect(controller.snapshot, same(prefix));
+      await tester.drag(find.byType(PageView), const Offset(80, 0));
+      await tester.pumpAndSettle();
+      expect(reports, hasLength(3));
+      expect(reports.last.pageIndex, 0);
+      expect(fixture.cache.layoutBuildCount, builds);
+      expect(controller.requestPage(prefix!.length), isFalse);
       await tester.pumpWidget(const SizedBox.shrink());
       expect(fixture.session.activeIssuedLeases, 0);
       expect(tester.takeException(), isNull);

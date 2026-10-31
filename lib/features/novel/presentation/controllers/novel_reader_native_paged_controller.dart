@@ -146,6 +146,7 @@ final class NovelReaderNativePagedController {
   int _scannedPages = 0;
   bool _userNavigation = false;
   bool _readOnly = true;
+  bool _prefixNavigation = false;
   Object? _error;
   NovelReaderNativePagedPhase _phase = NovelReaderNativePagedPhase.created;
   StreamController<void>? _changes;
@@ -189,8 +190,8 @@ final class NovelReaderNativePagedController {
   bool requestPage(int page) {
     if (isClosed ||
         _phase == NovelReaderNativePagedPhase.created ||
-        _phase == NovelReaderNativePagedPhase.paused ||
         page < 0 ||
+        (_error != null && page >= _snapshot!.length) ||
         (_snapshot!.isComplete && page >= _snapshot!.length)) {
       return false;
     }
@@ -205,6 +206,11 @@ final class NovelReaderNativePagedController {
     _target = null;
     _userNavigation = true;
     _readOnly = false;
+    if (_error != null) {
+      _startPublishedNavigation(page);
+      _notify();
+      return true;
+    }
     _ticket = _watch!.startTarget();
     _window!.setCenter(page);
     _offerTarget();
@@ -217,7 +223,10 @@ final class NovelReaderNativePagedController {
   /// Opposite gesture/drag cancels automatic arrival without confirming a new
   /// position. Keep the last actual visible page and retire the old ticket.
   bool cancelPendingNavigation() {
-    if (isClosed || _ticket == null || _visible == null || _error != null) {
+    if (isClosed ||
+        _ticket == null ||
+        _visible == null ||
+        (_error != null && !_prefixNavigation)) {
       return false;
     }
     _requestId++;
@@ -228,6 +237,13 @@ final class NovelReaderNativePagedController {
     _userNavigation = false;
     _readOnly = _visible!.isReadOnlyCompatibilityRestore;
     _ticket = null;
+    if (_error != null) {
+      _prefixNavigation = false;
+      _watch!.close();
+      _window!.close();
+      _notify();
+      return true;
+    }
     _watch!.markReadable(_watch!.startTarget());
     _window!.setCenter(_requestedPage!);
     _syncDemand();
@@ -243,7 +259,7 @@ final class NovelReaderNativePagedController {
     List<ForumBodyParagraphLease> leases,
   ) {
     if (isClosed ||
-        _error != null ||
+        (_error != null && !_prefixNavigation) ||
         !identical(_target, delivery) ||
         delivery.requestId != _requestId ||
         delivery.view.state != NovelReaderNativePageViewState.transferred ||
@@ -271,7 +287,10 @@ final class NovelReaderNativePagedController {
     final wholePage = actual != null && _wholePageVisible(delivery, leases);
     _visible = delivery;
     _target = null;
-    _phase = NovelReaderNativePagedPhase.ready;
+    _phase = _error == null
+        ? NovelReaderNativePagedPhase.ready
+        : NovelReaderNativePagedPhase.paused;
+    _prefixNavigation = false;
     if (_ticket != null) _watch!.markReadable(_ticket!);
     _ticket = null;
     _syncDemand();
@@ -298,7 +317,77 @@ final class NovelReaderNativePagedController {
     if (identical(_visible?.view, view)) _visible = null;
     if (identical(_target?.view, view)) {
       _target = null;
-      if (!isClosed && _error == null) _restartProducer();
+      if (!isClosed) {
+        if (_error == null) {
+          _restartProducer();
+        } else if (_prefixNavigation) {
+          unawaited(
+            _preparePublishedTarget(_window!, _requestId, afterFrame: true),
+          );
+        }
+      }
+    }
+  }
+
+  void _startPublishedNavigation(int page) {
+    final old = _window!;
+    final limits = old.limits;
+    final policy = _watch!.policy;
+    old.close();
+    final subscription = _windowChanges;
+    if (subscription != null) unawaited(subscription.cancel());
+    _windowChanges = null;
+    _watch!.close();
+    _prefixNavigation = true;
+    try {
+      _watch = NovelReaderNativePaginationWatchdog(
+        parent: _lifetime,
+        policy: policy,
+        onExpired: (error, _) => _pause(error),
+      );
+      // This lane is deliberately finite: it cannot advance source or wait for
+      // new pages. Keep a target deadline but never restart a background timer.
+      // Completion here belongs to this closed workload, not the body snapshot.
+      _watch!.publication(pageCount: _snapshot!.length, isComplete: true);
+      _ticket = _watch!.startTarget();
+      final window = NovelReaderNativeViewWindow(
+        session: _session!,
+        anchors: _anchors!,
+        parent: _lifetime,
+        scheduler: _scheduler!,
+        centerPageIndex: page,
+        limits: NovelReaderNativeViewWindowLimits(
+          radius: 0,
+          maxRetainedFragments: limits.maxRetainedFragments,
+          maxRetainedCoveragePoints: limits.maxRetainedCoveragePoints,
+        ),
+        jobLimits: old.jobLimits,
+      );
+      _window = window;
+      _windowChanges = window.changes.listen((_) => _offerTarget());
+      unawaited(_preparePublishedTarget(window, _requestId));
+    } catch (error) {
+      _pause(error);
+    }
+  }
+
+  Future<void> _preparePublishedTarget(
+    NovelReaderNativeViewWindow window,
+    int requestId, {
+    bool afterFrame = false,
+  }) async {
+    bool current() =>
+        !isClosed &&
+        _prefixNavigation &&
+        requestId == _requestId &&
+        identical(_window, window);
+    try {
+      if (afterFrame) await _scheduler!.nextFrame(_lifetime);
+      if (!current()) return;
+      await window.prepareAvailable();
+      if (current()) _offerTarget();
+    } catch (error) {
+      if (current()) _pause(error);
     }
   }
 
@@ -515,7 +604,7 @@ final class NovelReaderNativePagedController {
 
   void _offerTarget() {
     if (isClosed ||
-        _error != null ||
+        (_error != null && !_prefixNavigation) ||
         _ticket == null ||
         _requestedPage == null) {
       return;
@@ -559,8 +648,9 @@ final class NovelReaderNativePagedController {
   }
 
   void _pause(Object error) {
-    if (isClosed || _error != null) return;
+    if (isClosed) return;
     _error = error;
+    _prefixNavigation = false;
     _phase = NovelReaderNativePagedPhase.paused;
     _producerEpoch++;
     _source?.close();
@@ -628,6 +718,7 @@ final class NovelReaderNativePagedController {
     _snapshot = null;
     _target = null;
     _visible = null;
+    _prefixNavigation = false;
     _restoredAnchor = null;
     _ticket = null;
     _error = null;
