@@ -1,10 +1,14 @@
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../inline/forum_body_ruby_content.dart';
+import '../inline/forum_body_ruby_content_cursor.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_styled_flow_cursor.dart';
+import 'forum_body_inline_flow_content.dart';
+import 'forum_body_text_flow_sequence.dart';
 
 sealed class ForumBodyTextFlowUnit {
   const ForumBodyTextFlowUnit._(this.identity);
@@ -16,6 +20,16 @@ final class ForumBodyTextFlowParagraph extends ForumBodyTextFlowUnit {
     : super._(content.identity);
   final int index;
   final ForumBodyParagraphContent content;
+  final ForumBodyParagraphWindow window;
+}
+
+/// Unmeasured mixed formatting input, never an ordinary paragraph with its
+/// annotation flattened into text. Its parent layout is prepared separately.
+final class ForumBodyTextFlowInline extends ForumBodyTextFlowUnit {
+  ForumBodyTextFlowInline._(this.index, this.content, this.window)
+    : super._(content.identity);
+  final int index;
+  final ForumBodyInlineFlowContent content;
   final ForumBodyParagraphWindow window;
 }
 
@@ -39,8 +53,9 @@ final class ForumBodyTextFlowBoundary extends ForumBodyTextFlowUnit {
 /// Bounded text partitioning over one styled IR traversal. It retains the open
 /// block stack and at most a before/after sequence around one deferred BR, plus
 /// the last confirmed break layout input. Each sequence uses the same input/run
-/// limits. Inline resources still require their dedicated layout port and fail
-/// explicitly here. No HTML is sliced and no font is shaped by this cursor.
+/// limits. Ruby exclusively borrows that same flow and remains an unmeasured
+/// mixed context. Inline resources still require their dedicated layout port
+/// and fail explicitly here. No HTML is sliced and no font is shaped here.
 /// Edit notices use a single-line source projection and their own following-BR
 /// normalization; ordinary text keeps its original whitespace policy.
 final class ForumBodyTextFlowCursor {
@@ -48,17 +63,21 @@ final class ForumBodyTextFlowCursor {
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
+    this.rubyLimits = const ForumBodyRubyContentLimits(),
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 2;
+  static const revision = 3;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
+  final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
   final _blocks = <ForumBodyStyledFlowEvent>[];
   final _issues = <ForumBodyStyleIssue>[];
-  _Sequence? _before;
-  _Sequence? _after;
+  ForumBodyTextFlowSequence? _before;
+  ForumBodyTextFlowSequence? _after;
+  ForumBodyRubyContentCursor? _ruby;
+  ForumBodyTextFlowSequence? _rubyTarget;
   ForumBodyStyledFlowEvent? _break;
   List<ForumBodyStyleIssue> _breakIssues = const [];
-  ForumBodyParagraphContent? _lastConfirmed;
+  ForumBodyTextFlowSequenceContent? _lastConfirmed;
   ForumBodyStyledFlowEvent? _boundary;
   bool _boundaryPending = false;
   ForumBodyStyledFlowEvent? _trimmedBreak;
@@ -85,18 +104,19 @@ final class ForumBodyTextFlowCursor {
   /// A delivered unit can use zero new events while flushing a known boundary.
   /// One endDocument unit proves this cursor actually consumed its full input;
   /// paragraph-local projections alone are not semantic-anchor evidence.
-  ({int eventsRead, bool hasOutput, bool isComplete}) advance({
+  ({int eventsRead, int workDone, bool hasOutput, bool isComplete}) advance({
     required int maxEvents,
   }) {
     if (_closed) throw StateError('Text flow cursor is closed');
     if (maxEvents <= 0) throw ArgumentError.value(maxEvents, 'maxEvents');
     _current = null;
     var read = 0;
-    if (_complete) return _step(read);
+    var work = 0;
+    if (_complete) return _step(read, work);
     try {
       while (true) {
         if (_boundaryPending) {
-          if (_flushContext()) return _step(read);
+          if (_flushContext()) return _step(read, work);
           final event = _boundary;
           _boundary = null;
           _boundaryPending = false;
@@ -130,14 +150,46 @@ final class ForumBodyTextFlowCursor {
             _trimmedBreak,
           );
           _trimmedBreak = null;
-          return _step(read);
+          return _step(read, work);
         }
-        if (read >= maxEvents) return _step(read);
+        if (work >= maxEvents) return _step(read, work);
+        final ruby = _ruby;
+        if (ruby != null) {
+          final target = _rubyTarget!;
+          final before = (
+            ruby.inputCodeUnits,
+            ruby.textRunCount,
+            ruby.groupCount,
+            ruby.structureItemCount,
+          );
+          final step = ruby.advance(maxEvents: maxEvents - work);
+          read += step.eventsRead;
+          work += step.workDone;
+          final issues = _flow.takePendingIssues();
+          _issues.addAll(issues);
+          target.issues.addAll(issues);
+          target.charge(
+            ruby.inputCodeUnits - before.$1,
+            ruby.textRunCount - before.$2,
+            ruby.groupCount - before.$3,
+            ruby.structureItemCount - before.$4,
+          );
+          if (step.hasOutput) target.addRuby(ruby.current!);
+          target.addIgnored(ruby.takeIgnored());
+          if (step.isComplete) {
+            target.endRuby();
+            ruby.close();
+            _ruby = null;
+            _rubyTarget = null;
+          }
+          continue;
+        }
         if (!_flow.moveNext()) {
           _boundaryPending = true;
           continue;
         }
         read++;
+        work++;
         final event = _flow.current!;
         final issues = _flow.takePendingIssues();
         _issues.addAll(issues);
@@ -160,7 +212,7 @@ final class ForumBodyTextFlowCursor {
                 ForumBodyElementKind.hardBreak) {
           if (_insideEditStatus) {
             final target = _before ??= _newSequence();
-            target.builder.appendEvent(event);
+            target.appendEvent(event);
             target.issues.addAll(issues);
             continue;
           }
@@ -174,7 +226,7 @@ final class ForumBodyTextFlowCursor {
               content,
               ForumBodyParagraphWindow.beforeTerminalEmptyLine,
             );
-            return _step(read);
+            return _step(read, work);
           }
           _before ??= _newSequence();
           _break = event;
@@ -183,8 +235,20 @@ final class ForumBodyTextFlowCursor {
           final target = _break == null
               ? (_before ??= _newSequence())
               : (_after ??= _newSequence());
-          target.builder.appendEvent(event);
           target.issues.addAll(issues);
+          if (event.node is ForumBodyElement &&
+              (event.node as ForumBodyElement).kind ==
+                  ForumBodyElementKind.ruby) {
+            target.startRuby();
+            _rubyTarget = target;
+            _ruby = ForumBodyRubyContentCursor.openCurrent(
+              _flow,
+              paragraphBuilder: paragraphBuilder,
+              limits: rubyLimits,
+            );
+          } else {
+            target.appendEvent(event);
+          }
         }
       }
     } catch (_) {
@@ -214,7 +278,7 @@ final class ForumBodyTextFlowCursor {
       if (node is ForumBodyElement &&
           node.kind == ForumBodyElementKind.hardBreak) {
         _followingEditStatusHasBreak = true;
-        _before?.builder.close();
+        _before?.close();
         _before = null;
         return true;
       }
@@ -229,7 +293,7 @@ final class ForumBodyTextFlowCursor {
       final preserve =
           _break!.style.whiteSpace == ForumBodyWhiteSpace.pre ||
           _blocks.any((block) => (block.node as ForumBodyElement).tag == 'pre');
-      if ((_after?.builder.hasDisplayText ?? false) || preserve) {
+      if ((_after?.hasDisplayText ?? false) || preserve) {
         final content = _confirmBreak();
         _before = _after;
         _after = null;
@@ -241,21 +305,20 @@ final class ForumBodyTextFlowCursor {
       _breakIssues = const [];
       final after = _after;
       if (after != null) {
-        _before!.builder.appendSequence(after.builder);
-        _before!.issues.addAll(after.issues);
+        _before!.appendSequence(after);
         _after = null;
       }
     }
     final before = _before;
     _before = null;
     if (before != null) {
-      if (before.builder.hasDisplayText) {
+      if (before.hasDisplayText) {
         final content = before.finish();
         _lastConfirmed = null;
         _paragraph(content, ForumBodyParagraphWindow.full);
         return true;
       }
-      before.builder.close();
+      before.close();
     }
     final tail = _lastConfirmed;
     if (tail != null) {
@@ -266,9 +329,9 @@ final class ForumBodyTextFlowCursor {
     return false;
   }
 
-  ForumBodyParagraphContent _confirmBreak() {
+  ForumBodyTextFlowSequenceContent _confirmBreak() {
     final before = _before!;
-    before.builder.appendEvent(_break!);
+    before.appendEvent(_break!);
     before.issues.addAll(_breakIssues);
     final content = before.finish();
     _before = null;
@@ -278,21 +341,33 @@ final class ForumBodyTextFlowCursor {
     return content;
   }
 
-  _Sequence _newSequence() => _Sequence(
-    paragraphBuilder.openSequence(
-      _flow,
-      block: _blocks.isEmpty ? null : _blocks.last,
-      layoutMode: _insideEditStatus
-          ? ForumBodyParagraphLayoutMode.fitSingleLine
-          : ForumBodyParagraphLayoutMode.wrap,
-    ),
+  ForumBodyTextFlowSequence _newSequence() => ForumBodyTextFlowSequence(
+    flow: _flow,
+    block: _blocks.isEmpty ? null : _blocks.last,
+    builder: paragraphBuilder,
+    rubyLimits: rubyLimits,
+    layoutMode: _insideEditStatus
+        ? ForumBodyParagraphLayoutMode.fitSingleLine
+        : ForumBodyParagraphLayoutMode.wrap,
   );
 
   void _paragraph(
-    ForumBodyParagraphContent content,
+    ForumBodyTextFlowSequenceContent content,
     ForumBodyParagraphWindow window,
   ) {
-    _current = ForumBodyTextFlowParagraph._(_paragraphIndex++, content, window);
+    final index = _paragraphIndex++;
+    _current = switch (content) {
+      ForumBodyPlainSequenceContent() => ForumBodyTextFlowParagraph._(
+        index,
+        content.content,
+        window,
+      ),
+      ForumBodyInlineSequenceContent() => ForumBodyTextFlowInline._(
+        index,
+        content.content,
+        window,
+      ),
+    };
   }
 
   static bool _isBlock(ForumBodyStyledFlowEvent event) =>
@@ -305,8 +380,15 @@ final class ForumBodyTextFlowCursor {
         ForumBodyDisplay.tableCell,
       }.contains(event.style.display);
 
-  ({int eventsRead, bool hasOutput, bool isComplete}) _step(int read) =>
-      (eventsRead: read, hasOutput: _current != null, isComplete: _complete);
+  ({int eventsRead, int workDone, bool hasOutput, bool isComplete}) _step(
+    int read,
+    int work,
+  ) => (
+    eventsRead: read,
+    workDone: work,
+    hasOutput: _current != null,
+    isComplete: _complete,
+  );
 
   List<ForumBodyStyleIssue> takePendingIssues() {
     if (_closed) throw StateError('Text flow cursor is closed');
@@ -318,8 +400,11 @@ final class ForumBodyTextFlowCursor {
   void close() {
     if (_closed) return;
     _closed = true;
-    _before?.builder.close();
-    _after?.builder.close();
+    _ruby?.close();
+    _ruby = null;
+    _rubyTarget = null;
+    _before?.close();
+    _after?.close();
     _flow.close();
     _before = null;
     _after = null;
@@ -333,11 +418,4 @@ final class ForumBodyTextFlowCursor {
     _issues.clear();
     _current = null;
   }
-}
-
-final class _Sequence {
-  _Sequence(this.builder);
-  final ForumBodyParagraphSequence builder;
-  final issues = <ForumBodyStyleIssue>[];
-  ForumBodyParagraphContent finish() => builder.finish(issues: issues);
 }

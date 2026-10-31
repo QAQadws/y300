@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 
 import '../document/forum_body_document.dart';
+import '../inline/forum_body_ruby_content.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../flow/forum_body_styled_flow_cursor.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -61,6 +62,17 @@ final class ForumBodyBlockFlowParagraph extends ForumBodyBlockFlowUnit {
   final double contentWidth;
 }
 
+final class ForumBodyBlockFlowInline extends ForumBodyBlockFlowUnit {
+  ForumBodyBlockFlowInline._(
+    this.paragraph,
+    this.contentLeft,
+    this.contentWidth,
+  ) : super._(paragraph.identity);
+  final ForumBodyTextFlowInline paragraph;
+  final double contentLeft;
+  final double contentWidth;
+}
+
 /// Structural controls carry resolved horizontal geometry, not a final border
 /// rectangle. Adjoining child margins can still move a parent's first content;
 /// painting a container background requires the later block fragment layer.
@@ -77,7 +89,8 @@ final class ForumBodyBlockFlowBoundary extends ForumBodyBlockFlowUnit {
 /// real line content or nonzero padding separates groups. Only active frames,
 /// one margin strut and at most three pending units are retained. No measuring,
 /// native resource, HTML slice, persistent anchor or page publication is owned.
-/// Edit notices use the text cursor's fitted format. Other semantic containers
+/// Edit notices use the text cursor's fitted format. Mixed inline inputs retain
+/// the same block geometry without entering the ordinary shaping port. Other semantic containers
 /// and resources require their own format handlers and fail
 /// explicitly instead of being treated as empty/transparent ordinary blocks.
 final class ForumBodyBlockFlowCursor {
@@ -88,10 +101,12 @@ final class ForumBodyBlockFlowCursor {
     this.edgeMargins = ForumBodyBlockEdgeMargins.trim,
     ForumBodyParagraphContentBuilder paragraphBuilder =
         const ForumBodyParagraphContentBuilder(),
+    ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
   }) : _flow = ForumBodyTextFlowCursor(
          document: document,
          reader: reader,
          paragraphBuilder: paragraphBuilder,
+         rubyLimits: rubyLimits,
        ),
        _rootFontSize = reader.textStyle.fontSize!,
        _rootDirection = reader.textDirection {
@@ -100,7 +115,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 2;
+  static const revision = 3;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -124,14 +139,15 @@ final class ForumBodyBlockFlowCursor {
   bool get isComplete => _complete;
   bool get isClosed => _closed;
 
-  ({int eventsRead, bool hasOutput, bool isComplete}) advance({
+  ({int eventsRead, int workDone, bool hasOutput, bool isComplete}) advance({
     required int maxEvents,
   }) {
     if (_closed) throw StateError('Block flow cursor is closed');
     if (maxEvents <= 0) throw ArgumentError.value(maxEvents, 'maxEvents');
     _current = null;
-    if (_complete) return _step(0);
+    if (_complete) return _step(0, 0);
     var read = 0;
+    var work = 0;
     try {
       while (true) {
         if (_pending.isNotEmpty) {
@@ -141,11 +157,12 @@ final class ForumBodyBlockFlowCursor {
               unit.boundary.kind == ForumBodyTextFlowBoundaryKind.endDocument) {
             _complete = true;
           }
-          return _step(read);
+          return _step(read, work);
         }
-        if (read >= maxEvents) return _step(read);
-        final step = _flow.advance(maxEvents: maxEvents - read);
+        if (work >= maxEvents) return _step(read, work);
+        final step = _flow.advance(maxEvents: maxEvents - work);
         read += step.eventsRead;
+        work += step.workDone;
         _issues.addAll(_flow.takePendingIssues());
         final unit = _flow.current;
         if (unit == null) continue;
@@ -155,6 +172,16 @@ final class ForumBodyBlockFlowCursor {
             _hasFlowContent = true;
             _pending.add(
               ForumBodyBlockFlowParagraph._(
+                unit,
+                _frames.isEmpty ? 0 : _frames.last.contentLeft,
+                _frames.isEmpty ? width : _frames.last.box.contentWidth,
+              ),
+            );
+          case ForumBodyTextFlowInline():
+            _flushMargins();
+            _hasFlowContent = true;
+            _pending.add(
+              ForumBodyBlockFlowInline._(
                 unit,
                 _frames.isEmpty ? 0 : _frames.last.contentLeft,
                 _frames.isEmpty ? width : _frames.last.box.contentWidth,
@@ -318,8 +345,15 @@ final class ForumBodyBlockFlowCursor {
     _pending.add(ForumBodyBlockFlowSpace._(identity, kind, extent, path));
   }
 
-  ({int eventsRead, bool hasOutput, bool isComplete}) _step(int read) =>
-      (eventsRead: read, hasOutput: _current != null, isComplete: _complete);
+  ({int eventsRead, int workDone, bool hasOutput, bool isComplete}) _step(
+    int read,
+    int work,
+  ) => (
+    eventsRead: read,
+    workDone: work,
+    hasOutput: _current != null,
+    isComplete: _complete,
+  );
 
   List<ForumBodyStyleIssue> takePendingIssues() {
     if (_closed) throw StateError('Block flow cursor is closed');

@@ -72,6 +72,7 @@ final class ForumBodyTextPageSessionLimits {
 final class ForumBodyTextPageSessionStep {
   const ForumBodyTextPageSessionStep({
     required this.eventsRead,
+    int? flowWorkDone,
     required this.unitsRead,
     required this.linesInspected,
     required this.paragraphsAdmitted,
@@ -80,8 +81,9 @@ final class ForumBodyTextPageSessionStep {
     required this.inputCompleted,
     required this.waitingForLayoutBudget,
     required this.isComplete,
-  });
+  }) : flowWorkDone = flowWorkDone ?? eventsRead;
   final int eventsRead;
+  final int flowWorkDone;
   final int unitsRead;
   final int linesInspected;
   final int paragraphsAdmitted;
@@ -91,6 +93,7 @@ final class ForumBodyTextPageSessionStep {
   final bool waitingForLayoutBudget;
   final bool isComplete;
   bool get madeProgress =>
+      flowWorkDone > 0 ||
       eventsRead > 0 ||
       unitsRead > 0 ||
       linesInspected > 0 ||
@@ -222,6 +225,7 @@ final class ForumBodyTextPageSession {
       throw ArgumentError('Invalid session work budget');
     }
     var events = 0;
+    var work = 0;
     var units = 0;
     var admitted = 0;
     final before = snapshot.length;
@@ -234,6 +238,7 @@ final class ForumBodyTextPageSession {
       _recordPublished();
       return ForumBodyTextPageSessionStep(
         eventsRead: events,
+        flowWorkDone: work,
         unitsRead: units,
         linesInspected: lines,
         paragraphsAdmitted: admitted,
@@ -287,9 +292,10 @@ final class ForumBodyTextPageSession {
             completed: step.paragraphCompleted,
           );
         }
-        if (events >= maxEvents) return result();
-        final step = _flow.advance(maxEvents: maxEvents - events);
+        if (work >= maxEvents) return result();
+        final step = _flow.advance(maxEvents: maxEvents - work);
         events += step.eventsRead;
+        work += step.workDone;
         _collectIssues();
         final unit = _flow.current;
         if (unit == null) continue;
@@ -307,6 +313,13 @@ final class ForumBodyTextPageSession {
               throw StateError('Unordered paragraph input');
             }
             _pendingParagraph = unit;
+          case ForumBodyBlockFlowInline():
+            // Unmeasured formats cannot enter the ordinary shaping port. The
+            // cooperative format planner must first produce a mixed page plan.
+            throw ForumBodyParagraphInputException(
+              ForumBodyParagraphInputFailure.structure,
+              unit.paragraph.content.path,
+            );
           case ForumBodyBlockFlowBoundary():
             if (unit.boundary.kind ==
                 ForumBodyTextFlowBoundaryKind.endDocument) {

@@ -139,6 +139,7 @@ void main() {
             '${unit.kind.name}:${unit.extent}:${unit.path}',
           ForumBodyBlockFlowParagraph() =>
             'text:${unit.paragraph.content.projection.text}',
+          ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
           ForumBodyBlockFlowBoundary() =>
             '${unit.boundary.kind.name}:${unit.boundary.event?.node.path}',
         },
@@ -251,6 +252,7 @@ void main() {
                 '${unit.kind}:${unit.extent}:${unit.path}',
               ForumBodyBlockFlowParagraph() =>
                 '${unit.paragraph.index}:${unit.paragraph.content.projection.text}:${unit.paragraph.window}:${unit.contentLeft}:${unit.contentWidth}',
+              ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
               ForumBodyBlockFlowBoundary() =>
                 '${unit.boundary.kind}:${unit.boundary.event?.node.path}:${unit.contentLeft}',
             },
@@ -308,6 +310,7 @@ void main() {
       expect(cursor.takePendingIssues(), isEmpty);
       expect(cursor.advance(maxEvents: 1), (
         eventsRead: 0,
+        workDone: 0,
         hasOutput: false,
         isComplete: true,
       ));

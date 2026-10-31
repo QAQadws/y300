@@ -32,7 +32,8 @@ List<ForumBodyTextFlowUnit> _drain(
     if (++calls > 10000) fail('Text flow did not reach EOF');
     final step = cursor.advance(maxEvents: budget);
     expect(step.eventsRead, lessThanOrEqualTo(budget));
-    expect(step.eventsRead > 0 || step.hasOutput, isTrue);
+    expect(step.workDone, lessThanOrEqualTo(budget));
+    expect(step.workDone > 0 || step.hasOutput, isTrue);
     if (step.hasOutput) units.add(cursor.current!);
   }
   return units;
@@ -146,6 +147,7 @@ void main() {
       );
       expect(cursor.advance(maxEvents: 1), (
         eventsRead: 0,
+        workDone: 0,
         hasOutput: false,
         isComplete: true,
       ));
@@ -167,6 +169,7 @@ void main() {
           (unit) => switch (unit) {
             ForumBodyTextFlowParagraph() =>
               'text:${unit.content.projection.text}',
+            ForumBodyTextFlowInline() => 'inline:${unit.index}',
             ForumBodyTextFlowBoundary() =>
               '${unit.kind.name}:${unit.event?.node.path}',
           },

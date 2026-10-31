@@ -294,6 +294,10 @@ final class ForumBodyParagraphSequence {
   bool get hasInput => !_closed && _collector.hasInput;
   bool get hasDisplayText => !_closed && _collector.projection.text.isNotEmpty;
 
+  /// Raw admitted input, including whitespace that its projection may omit.
+  int get inputCodeUnits => _closed ? 0 : _collector._inputSize;
+  int get runCount => _collector._inputs.length;
+
   void appendCurrent() => _append(_flow?.current);
 
   /// One deferred hard-break event can be appended after bounded lookahead.
@@ -353,13 +357,17 @@ final class ForumBodyParagraphSequence {
     }
   }
 
+  /// A containing format may be discovered after this ordinary prefix starts.
+  /// Preserve its raw collapsible edges when handing it to that parent; this
+  /// changes projection policy only, never the original source or style runs.
   ForumBodyParagraphContent finish({
     Iterable<ForumBodyStyleIssue> issues = const [],
+    bool? preserveCollapsibleEdges,
   }) {
     if (_closed) throw StateError('Paragraph sequence is closed');
     try {
       if (_flow!.isClosed) throw StateError('Styled flow cursor is closed');
-      return _collector.finish(issues);
+      return _collector.finish(issues, preserveEdges: preserveCollapsibleEdges);
     } finally {
       close();
     }
@@ -486,12 +494,15 @@ final class _ParagraphCollector {
   bool get hasInput => _inputs.isNotEmpty;
 
   HtmlDisplayTextProjection get projection =>
-      _projection ??= HtmlDisplayTextProjection.build(
+      _projection ??= _buildProjection(preserveCollapsibleEdges);
+
+  HtmlDisplayTextProjection _buildProjection(bool preserveEdges) =>
+      HtmlDisplayTextProjection.build(
         _inputs.isEmpty
             ? [HtmlDisplayTextRun(text: '', sourceRuneStart: emptySourceRune)]
             : _inputs,
         maxOutputCodeUnits: limits.maxInputCodeUnits,
-        preserveCollapsibleEdges: preserveCollapsibleEdges,
+        preserveCollapsibleEdges: preserveEdges,
       );
 
   void absorb(_ParagraphCollector other) {
@@ -589,25 +600,30 @@ final class _ParagraphCollector {
     return false;
   }
 
-  ForumBodyParagraphContent finish(Iterable<ForumBodyStyleIssue> issues) =>
-      ForumBodyParagraphContent._(
-        identity: identity,
-        path: path,
-        fontRevision: fontRevision,
-        styleRevision: styleRevision,
-        style: style,
-        layoutMode: layoutMode,
-        projection: projection,
-        runs: _runs,
-        issues: issues
-            .where(
-              (issue) =>
-                  path == null ||
-                  issue.path == path ||
-                  issue.path.startsWith('$path/'),
-            )
-            .toList(),
-      );
+  ForumBodyParagraphContent finish(
+    Iterable<ForumBodyStyleIssue> issues, {
+    bool? preserveEdges,
+  }) => ForumBodyParagraphContent._(
+    identity: identity,
+    path: path,
+    fontRevision: fontRevision,
+    styleRevision: styleRevision,
+    style: style,
+    layoutMode: layoutMode,
+    projection:
+        preserveEdges == null || preserveEdges == preserveCollapsibleEdges
+        ? projection
+        : _buildProjection(preserveEdges),
+    runs: _runs,
+    issues: issues
+        .where(
+          (issue) =>
+              path == null ||
+              issue.path == path ||
+              issue.path.startsWith('$path/'),
+        )
+        .toList(),
+  );
 
   void close() {
     _inputs.clear();

@@ -58,7 +58,7 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 原生文字流为 `editStatus`（`.pstatus`）选择该模式。默认使用读者字号的 0.88、斜体、读者颜色的 0.62 alpha 和下方 8 逻辑像素 padding；显式作者声明及对应角色的读者覆盖策略仍经过同一个样式解析器。文字和行内样式保留来源，内部 BR 与 Unicode 空白通过显式 singleLine 投影归一化。仅当其后直接同级节点出现 BR 时，才一起移除周边结构空白；不跨父容器删除换行，无 BR 的预格式化空白仍保留。该过程按原事件预算消费，不重写 IR 或 DOM 坐标。
 
-编辑提示目前接入文字及普通行内内容；其中的嵌套块或资源仍明确失败，不能以容器准入为由静默展开或丢弃。style、text-flow 和 block-flow revision 分别为 5、2、2，Host 须将其纳入布局身份。
+编辑提示目前接入文字及普通行内内容；其中的嵌套块或资源仍明确失败，不能以容器准入为由静默展开或丢弃。style、text-flow 和 block-flow revision 分别为 5、3、3，Host 须将其纳入布局身份。
 
 ## 原生 ruby 分组几何
 
@@ -95,13 +95,25 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 取消在缓存 miss、native 返回和组装/交付前都核对，未发布分组不泄露句柄。
 该端口尚未接入正式分页，也不代表分层/多注音准备或可见整页预算已完成。
 
-这是行内排版的分组端口，不是完整 ruby HTML consumer。父段落通过下述混合输入显式使用独立的 engine/display/source 投影；分页、复制与完整无障碍接入仍由组合层实现。普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
+这是行内排版的分组端口，不是完整 ruby 页面 consumer。父段落通过下述混合输入显式使用独立的 engine/display/source 投影；分页、复制与完整无障碍接入仍由组合层实现。普通 paragraph 排字端口继续拒绝 ruby；正式文字流将其保留为独立的未测量格式，不分流旧 renderer。
 
 `ForumBodyRubyContentCursor.openCurrent` 从唯一 styled IR flow 中分组实际 ruby 内容，按 [HTML ruby 分段规则](https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-ruby-element)区分基字、注音与回退。它借用当前 ruby 的流，逐步产生不可变组；同一基字的多个注音分别保留，嵌套 ruby 保持子组结构，空注音、孤立注音和未注音尾部不伪造或丢弃文字。根样式、文档身份和构建时字体/样式版本随组保存，子文字保留自己的来源、样式和字素上下文。
 
 `openInlineSequence` 只为专门格式处理者提供已打开行内根中的纯文字片段，显式保留折叠边缘空格；它不把 ruby/资源包装节点变成普通段落。括号回退、隐藏子树和注音间空白通过 `takeIgnored` 返回来源记录，这些记录不证明阅读 coverage。样式诊断继续由借用 flow 的 owner 按批次取走。
 
 `advance(maxEvents)` 同时限制实际读取及已缓冲空白的延后消费，返回二者区分的 `eventsRead/workDone`；在嵌套层累计核对文字、run、组、深度和结构条目上限。BR 同普通段落一样计一个原始字符和 run，不能在多个组间绕过总输入限制；空注音/回退元数据也计结构预算。隐藏同级节点不终止注音阶段，不把其相邻空白误分成新基字。关闭、错误或发现 flow 被其他消费者推进后，不发布半组，不关闭调用者的 flow；已交付的纯组不会被后续失败修改。分组 revision 为 3，不进行字体测量、DOM 切片、语义锚点迁移或页面发布。分层 ruby 几何和正式阅读器接入仍待组合层完成。
+
+正式 `ForumBodyTextFlowCursor` 在同一次 styled 遍历中独占借用上述分组器，返回
+`ForumBodyTextFlowInline` 与不可变 `ForumBodyInlineFlowContent`。前后普通文字和所有
+ruby 组属于同一个父格式上下文；嵌套、多注音、孤立注音和忽略来源保持结构，不拆段
+或压平 RT。普通片段完成时可保留原始折叠边缘，交由父格式计划器处理行边空白；这个
+中间值尚无拼接显示投影、占位尺寸或 native 句柄，不能直接当作可读页面。
+
+普通与混排共用段落索引、延后 BR、终止空行和块边界。文字/run/组/结构预算覆盖整个
+上下文，多个独立 ruby 根不能绕过限制；关闭和失败清理借用状态，已交付值保持不变。
+TextFlow、BlockFlow 的 `workDone` 包含零新事件的延后消费，maxEvents 同时限制工作量；
+BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步传递 flowWorkDone，
+这种进展不会误判成停滞；未测量混排仍明确失败，待协作格式计划器接入后才进入 composer。
 
 样式解析只把 `rt` 及其后代标为注音角色，基字保留其正文/标题等上下文角色，正文级读者设置不会因此跳过基字。注音默认字号为继承字号的一半，行高为 1，参照 [CSS Ruby 的 UA 样式](https://www.w3.org/TR/css-ruby-1/)；显式作者声明及逐角色读者覆盖仍经过唯一 resolver，`line-height:inherit` 取真实父级值，非法声明保留注音默认值并报告。固有行内排字不重复应用所在块的首行缩进，普通 wrap/fit 的缩进准入没有因此放宽。当前 style 和 paragraph backend revision 均为 5。
 
@@ -271,7 +283,7 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 `ForumBodyTextPageSession` 的 issued 账本持有完整分片，按仍活跃的 native 句柄计数；
 失效复合分片在移出账本前关闭剩余引用。`preparePageFragments` 为同一事务的 warm-only
 便利入口，冷缓存仍通过既有 openPagePreparation/advance 协作准备。普通接口继续兼容，
-并发预留、部分释放和上限共用同一套账本。当前保留输入和正式 flow 仍为普通段落；
+并发预留、部分释放和上限共用同一套账本。当前 Session 保留输入仍为普通段落；
 不能因交付类型统一而宣称正式 ruby 会话已完成。
 
 `ForumBodyTextPageContent` 显式区分普通输入和已测量的混排计划；后者保留父 span、
@@ -298,7 +310,7 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 文字选区或精确来源。固有模式只用有效请求宽度通过 native 准入，实际零宽 frame 不变。
 缩放变化导致父或子真实几何不匹配时拒绝本次准备，保留只读数值前缀，允许新请求重试。
 
-正式 TextFlow/BlockFlow/Session 的输入生产目前仍是普通段落；还需生成上述混排计划、
+正式 TextFlow/BlockFlow 已生产未测量混排结构；Session 还需据此生成上述混排计划、
 有界按字形测量占位几何，并迁移 App 消费者后才能启用真实 ruby 会话。分层/多注音、
 行边空白、长段及复杂正文 profile 仍未验收；不能通过提前录制整段全部子图片、扩张预算
 或切回旧 renderer 绕过这些要求。
