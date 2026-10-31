@@ -45,6 +45,10 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
+import '../controllers/novel_reader_paged_navigation_controller.dart';
+
+export '../controllers/novel_reader_paged_navigation_controller.dart';
+
 typedef NovelReaderPaginationCoordinatorBuilder =
     NovelReaderPaginationCoordinator Function({
       required BuildContext context,
@@ -55,44 +59,6 @@ typedef NovelReaderPaginationCoordinatorBuilder =
       required String? imageCacheOwnerId,
       required String? imageReferer,
     });
-
-/// Command-only bridge from the reader chrome to the currently mounted paged
-/// document. Page/progress state continues to flow out through
-/// [NovelReaderHtmlPagedSurface.onPositionChanged].
-final class NovelReaderPagedNavigationController {
-  _NovelReaderPagedPageViewState? _state;
-  bool _isDisposed = false;
-
-  bool turnPrevious() => _state?._turnPageByTap(-1) ?? false;
-
-  bool turnNext() => _state?._turnPageByTap(1) ?? false;
-
-  /// The owner calls this after accepting a forward chapter turn, before it
-  /// retires the current reading session. Rejected turns cannot grant proof.
-  bool confirmChapterEndNavigation() =>
-      _state?._confirmChapterEndNavigation() ?? false;
-
-  /// Releases a previously accepted turn if the owner cancels before arming
-  /// the destination chapter entry. Reading position and proof are unchanged.
-  void cancelChapterTurn() => _state?._cancelChapterTurn();
-
-  void _attach(_NovelReaderPagedPageViewState state) {
-    if (!_isDisposed) {
-      _state = state;
-    }
-  }
-
-  void _detach(_NovelReaderPagedPageViewState state) {
-    if (identical(_state, state)) {
-      _state = null;
-    }
-  }
-
-  void dispose() {
-    _isDisposed = true;
-    _state = null;
-  }
-}
 
 class NovelReaderHtmlPagedSurface extends StatefulWidget {
   const NovelReaderHtmlPagedSurface({
@@ -1745,7 +1711,9 @@ class _NovelReaderPagedPageView extends StatefulWidget {
       _NovelReaderPagedPageViewState();
 }
 
-class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
+class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView>
+    implements NovelReaderPagedNavigationTarget {
+  NovelReaderPagedNavigationBinding? _navigationBinding;
   late final PageController _pageController;
   int _currentPage = 0;
   bool _reportedInitialPage = false;
@@ -1770,7 +1738,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       initialPage: widget.initialPage,
       keepPage: false,
     );
-    widget.navigationController?._attach(this);
+    _navigationBinding = widget.navigationController?.bind(this);
     _scheduleInitialPosition();
   }
 
@@ -1820,8 +1788,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       oldWidget.navigationController,
       widget.navigationController,
     )) {
-      oldWidget.navigationController?._detach(this);
-      widget.navigationController?._attach(this);
+      _navigationBinding?.dispose();
+      _navigationBinding = widget.navigationController?.bind(this);
     }
     _schedulePendingForwardPage();
     // A turn that ends without replacing this chapter (it failed, or it landed
@@ -1926,7 +1894,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
 
   @override
   void dispose() {
-    widget.navigationController?._detach(this);
+    _navigationBinding?.dispose();
     _chapterTurnHint.dispose();
     _pageController.dispose();
     super.dispose();
@@ -2052,6 +2020,12 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     );
   }
 
+  @override
+  bool turnPrevious() => _turnPageByTap(-1);
+
+  @override
+  bool turnNext() => _turnPageByTap(1);
+
   bool _turnPageByTap(int delta) {
     assert(delta == -1 || delta == 1);
     if (mounted && delta < 0) {
@@ -2094,7 +2068,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     return accepted;
   }
 
-  bool _confirmChapterEndNavigation() {
+  @override
+  bool confirmChapterEndNavigation() {
     if (!mounted ||
         !widget.isPageCountFinal ||
         widget.plan.pageCount <= 0 ||
@@ -2112,7 +2087,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     return true;
   }
 
-  void _cancelChapterTurn() {
+  @override
+  void cancelChapterTurn() {
     if (!mounted) return;
     _chapterTurnRequested = false;
     _resetChapterTurnTracking();
