@@ -1,3 +1,5 @@
+import 'package:html_pagination_core/html_pagination_core.dart';
+
 import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
@@ -39,13 +41,15 @@ final class ForumBodyTextFlowBoundary extends ForumBodyTextFlowUnit {
 /// the last confirmed break layout input. Each sequence uses the same input/run
 /// limits. Inline resources still require their dedicated layout port and fail
 /// explicitly here. No HTML is sliced and no font is shaped by this cursor.
+/// Edit notices use a single-line source projection and their own following-BR
+/// normalization; ordinary text keeps its original whitespace policy.
 final class ForumBodyTextFlowCursor {
   ForumBodyTextFlowCursor({
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyStyledFlowCursor _flow;
   final _blocks = <ForumBodyStyledFlowEvent>[];
@@ -62,6 +66,13 @@ final class ForumBodyTextFlowCursor {
   int _paragraphIndex = 0;
   bool _complete = false;
   bool _closed = false;
+  String? _followingEditStatusParent;
+  bool _followingEditStatusHasBreak = false;
+
+  bool get _insideEditStatus =>
+      _blocks.isNotEmpty &&
+      (_blocks.last.node as ForumBodyElement).kind ==
+          ForumBodyElementKind.editStatus;
 
   ForumBodyIdentity get identity => _flow.identity;
   String get fontRevision => _flow.fontRevision;
@@ -101,6 +112,11 @@ final class ForumBodyTextFlowCursor {
               throw StateError('Unbalanced text flow block');
             }
             _blocks.removeLast();
+            if ((event.node as ForumBodyElement).kind ==
+                ForumBodyElementKind.editStatus) {
+              _followingEditStatusParent = _parentPath(event.node.path);
+              _followingEditStatusHasBreak = false;
+            }
           } else {
             if (_blocks.isNotEmpty) {
               throw StateError('Unclosed text flow block');
@@ -125,8 +141,15 @@ final class ForumBodyTextFlowCursor {
         final event = _flow.current!;
         final issues = _flow.takePendingIssues();
         _issues.addAll(issues);
+        if (_skipFollowingEditStatus(event)) continue;
         if (event.style.hidden) continue;
         if (_isBlock(event)) {
+          if (_insideEditStatus && event.phase != ForumBodyFlowPhase.close) {
+            throw ForumBodyParagraphInputException(
+              ForumBodyParagraphInputFailure.structure,
+              event.node.path,
+            );
+          }
           _boundaryPending = true;
           _boundary = event;
           continue;
@@ -135,6 +158,12 @@ final class ForumBodyTextFlowCursor {
         if (event.node is ForumBodyElement &&
             (event.node as ForumBodyElement).kind ==
                 ForumBodyElementKind.hardBreak) {
+          if (_insideEditStatus) {
+            final target = _before ??= _newSequence();
+            target.builder.appendEvent(event);
+            target.issues.addAll(issues);
+            continue;
+          }
           if (_break != null) {
             final content = _confirmBreak();
             _before = _after ?? _newSequence();
@@ -162,6 +191,37 @@ final class ForumBodyTextFlowCursor {
       close();
       rethrow;
     }
+  }
+
+  static String _parentPath(String path) {
+    final separator = path.lastIndexOf('/');
+    return separator < 0 ? '' : path.substring(0, separator);
+  }
+
+  bool _skipFollowingEditStatus(ForumBodyStyledFlowEvent event) {
+    final parent = _followingEditStatusParent;
+    if (parent == null) return false;
+    final node = event.node;
+    if (_parentPath(node.path) == parent) {
+      if (node is ForumBodyText &&
+          node.text.runes.every(
+            HtmlDisplayTextProjection.isSingleLineWhitespace,
+          )) {
+        // Until the first BR, keep raw whitespace in the normal sequence.
+        // Preformatted text must survive if no structural break follows.
+        return _followingEditStatusHasBreak;
+      }
+      if (node is ForumBodyElement &&
+          node.kind == ForumBodyElementKind.hardBreak) {
+        _followingEditStatusHasBreak = true;
+        _before?.builder.close();
+        _before = null;
+        return true;
+      }
+    }
+    _followingEditStatusParent = null;
+    _followingEditStatusHasBreak = false;
+    return false;
   }
 
   bool _flushContext() {
@@ -222,6 +282,9 @@ final class ForumBodyTextFlowCursor {
     paragraphBuilder.openSequence(
       _flow,
       block: _blocks.isEmpty ? null : _blocks.last,
+      layoutMode: _insideEditStatus
+          ? ForumBodyParagraphLayoutMode.fitSingleLine
+          : ForumBodyParagraphLayoutMode.wrap,
     ),
   );
 
@@ -265,6 +328,7 @@ final class ForumBodyTextFlowCursor {
     _lastConfirmed = null;
     _boundary = null;
     _trimmedBreak = null;
+    _followingEditStatusParent = null;
     _blocks.clear();
     _issues.clear();
     _current = null;

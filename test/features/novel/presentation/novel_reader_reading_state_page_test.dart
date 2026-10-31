@@ -92,6 +92,29 @@ void main() {
     },
   );
 
+  testWidgets('native main reader accepts a fitted edit notice before the body', (
+    tester,
+  ) async {
+    final repository = _ReadingRepository(
+      '<i class="pstatus"> Edited&nbsp;by <span>Reader</span><br> at 2026 </i><br><br>$_nativeLongBody',
+    );
+    await tester.pumpWidget(_app(repository, nativePagination: true));
+    await _pumpNativeReady(tester);
+    final controller = _nativeController(tester);
+    expect(controller.visiblePageIndex, 0);
+    expect(controller.error, isNull);
+    expect(controller.snapshot!.length, greaterThan(2));
+    expect(find.byType(NovelReaderHtmlPagedSurface), findsNothing);
+    expect(
+      find.byKey(const Key('novel-reader-pagination-fallback')),
+      findsNothing,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(repository.progress[_chapter]!.anchorFormatVersion, 1);
+    expect(repository.completed, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('native completion waits for the actual menu slide out', (
     tester,
   ) async {

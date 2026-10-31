@@ -7,7 +7,7 @@ import 'forum_body_length.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 3;
+const forumBodyStyleRevision = 4;
 ForumBodyLineHeight forumBodyReaderHeight(ForumBodyReaderStyle reader) {
   final height = reader.textStyle.height;
   return height == null || height == kTextHeightNone
@@ -93,6 +93,8 @@ final class ForumBodyStyleBuilder {
       size *= factors[int.parse(heading[1]!) - 1];
     } else if (node.tag == 'small') {
       size *= .85;
+    } else if (node.kind == ForumBodyElementKind.editStatus) {
+      size = baseSize * .88;
     }
     String? value(String property) =>
         declarations.value(property)?.toLowerCase();
@@ -135,7 +137,10 @@ final class ForumBodyStyleBuilder {
       final baseWeight = reader.textStyle.fontWeight ?? FontWeight.w400;
       weight = strong && baseWeight.value < 700 ? FontWeight.w700 : baseWeight;
     }
-    var italic = node.tag == 'i' || node.tag == 'em'
+    var italic =
+        node.kind == ForumBodyElementKind.editStatus ||
+            node.tag == 'i' ||
+            node.tag == 'em'
         ? FontStyle.italic
         : style.fontStyle;
     final rawItalic = value('font-style');
@@ -202,6 +207,11 @@ final class ForumBodyStyleBuilder {
         ? node.attributes['href']
         : parent.linkTarget;
     var foreground = node.tag == 'a' ? reader.linkColor : style.color;
+    if (node.kind == ForumBodyElementKind.editStatus) {
+      foreground = (reader.textStyle.color ?? foreground)?.withValues(
+        alpha: .62,
+      );
+    }
     final rawForeground =
         value('color') ??
         (node.tag == 'font' ? node.attributes['color'] : null);
@@ -638,6 +648,8 @@ final class ForumBodyStyleBuilder {
             top: ForumBodyLength(reader.paragraphBefore),
             bottom: ForumBodyLength(reader.paragraphAfter),
           )
+        : property == 'padding' && node.kind == ForumBodyElementKind.editStatus
+        ? const ForumBodyInsets(bottom: ForumBodyLength(8))
         : const ForumBodyInsets();
     final resolved = const ForumBodyBoxResolver().resolve(
       node: node,

@@ -77,7 +77,8 @@ final class ForumBodyBlockFlowBoundary extends ForumBodyBlockFlowUnit {
 /// real line content or nonzero padding separates groups. Only active frames,
 /// one margin strut and at most three pending units are retained. No measuring,
 /// native resource, HTML slice, persistent anchor or page publication is owned.
-/// Semantic containers/resources require their own format handlers and fail
+/// Edit notices use the text cursor's fitted format. Other semantic containers
+/// and resources require their own format handlers and fail
 /// explicitly instead of being treated as empty/transparent ordinary blocks.
 final class ForumBodyBlockFlowCursor {
   ForumBodyBlockFlowCursor({
@@ -99,7 +100,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 1;
+  static const revision = 2;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -178,6 +179,7 @@ final class ForumBodyBlockFlowCursor {
           ForumBodyElementKind.container,
           ForumBodyElementKind.paragraph,
           ForumBodyElementKind.heading,
+          ForumBodyElementKind.editStatus,
           ForumBodyElementKind.inline,
           ForumBodyElementKind.unknown,
         }.contains(node.kind)) {

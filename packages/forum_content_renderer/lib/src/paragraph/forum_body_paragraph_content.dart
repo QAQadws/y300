@@ -31,7 +31,7 @@ final class ForumBodyParagraphRun {
   final ForumBodyResolvedStyle style;
 }
 
-/// One ordinary paragraph's display text and styles, without DOM or Host state.
+/// One text paragraph's display text and styles, without DOM or Host state.
 /// The source projection is not a persisted novel semantic coordinate.
 final class ForumBodyParagraphContent {
   ForumBodyParagraphContent._({
@@ -127,6 +127,9 @@ final class ForumBodyParagraphContentBuilder {
       styleRevision: styles.resolverRevision,
       style: base,
       layoutMode: layoutMode,
+      singleLineWhitespace:
+          root is ForumBodyElement &&
+          root.kind == ForumBodyElementKind.editStatus,
       limits: this,
       emptySourceRune: root?.source.runeStart ?? 0,
     );
@@ -176,6 +179,10 @@ final class ForumBodyParagraphContentBuilder {
       styleRevision: flow.styleRevision,
       style: event.style,
       layoutMode: layoutMode,
+      singleLineWhitespace:
+          event.node is ForumBodyElement &&
+          (event.node as ForumBodyElement).kind ==
+              ForumBodyElementKind.editStatus,
       limits: this,
       emptySourceRune: event.node.source.runeStart,
     );
@@ -216,6 +223,10 @@ final class ForumBodyParagraphContentBuilder {
         styleRevision: flow.styleRevision,
         style: block?.style ?? flow.rootStyle,
         layoutMode: layoutMode,
+        singleLineWhitespace:
+            block?.node is ForumBodyElement &&
+            (block!.node as ForumBodyElement).kind ==
+                ForumBodyElementKind.editStatus,
         limits: this,
         emptySourceRune:
             block?.node.source.runeStart ??
@@ -410,6 +421,7 @@ final class _ParagraphCollector {
     required this.styleRevision,
     required this.style,
     required this.layoutMode,
+    required this.singleLineWhitespace,
     required this.limits,
     required this.emptySourceRune,
   });
@@ -419,6 +431,7 @@ final class _ParagraphCollector {
   final int styleRevision;
   final ForumBodyResolvedStyle style;
   final ForumBodyParagraphLayoutMode layoutMode;
+  final bool singleLineWhitespace;
   final ForumBodyParagraphContentBuilder limits;
   final int emptySourceRune;
   final _inputs = <HtmlDisplayTextRun>[];
@@ -439,6 +452,7 @@ final class _ParagraphCollector {
     if (identity != other.identity ||
         path != other.path ||
         layoutMode != other.layoutMode ||
+        singleLineWhitespace != other.singleLineWhitespace ||
         !identical(style, other.style)) {
       throw ForumBodyParagraphInputException(
         ForumBodyParagraphInputFailure.identity,
@@ -477,6 +491,7 @@ final class _ParagraphCollector {
             ForumBodyElementKind.paragraph,
             ForumBodyElementKind.heading,
             ForumBodyElementKind.container,
+            ForumBodyElementKind.editStatus,
           }.contains(node.kind);
       final ordinaryInline =
           const {
@@ -512,12 +527,14 @@ final class _ParagraphCollector {
         text: text,
         sourceRuneStart: node.source.runeStart,
         hardBreak: node is ForumBodyElement,
-        whiteSpace: switch (style.whiteSpace) {
-          ForumBodyWhiteSpace.normal => HtmlDisplayWhiteSpace.normal,
-          ForumBodyWhiteSpace.pre => HtmlDisplayWhiteSpace.pre,
-          ForumBodyWhiteSpace.preWrap => HtmlDisplayWhiteSpace.preWrap,
-          ForumBodyWhiteSpace.preLine => HtmlDisplayWhiteSpace.preLine,
-        },
+        whiteSpace: singleLineWhitespace
+            ? HtmlDisplayWhiteSpace.singleLine
+            : switch (style.whiteSpace) {
+                ForumBodyWhiteSpace.normal => HtmlDisplayWhiteSpace.normal,
+                ForumBodyWhiteSpace.pre => HtmlDisplayWhiteSpace.pre,
+                ForumBodyWhiteSpace.preWrap => HtmlDisplayWhiteSpace.preWrap,
+                ForumBodyWhiteSpace.preLine => HtmlDisplayWhiteSpace.preLine,
+              },
       ),
     );
     _projection = null;
