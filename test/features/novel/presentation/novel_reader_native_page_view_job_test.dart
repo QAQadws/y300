@@ -69,6 +69,54 @@ Matcher get _cancelled => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('the existing first frame lets former view handles retire before reservation', () async {
+    final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 1);
+    final preparation = fixture.session.openPagePreparation(0);
+    while (!preparation.isReady) {
+      preparation.advance(maxFragments: 1);
+    }
+    final former = preparation.takeFragments().single;
+    final frames = _Frames();
+    final job = _job(fixture, frames);
+    expect(fixture.session.pendingPreparationCount, 0);
+    expect(fixture.session.reservedViewLeases, 0);
+    final running = job.run();
+    expect(frames.calls, 1);
+    expect(fixture.session.pendingPreparationCount, 0);
+    expect(former.isActive, isTrue);
+    former.close();
+    await frames.until(
+      () => job.state == NovelReaderNativeViewJobState.complete,
+    );
+    (await running).close();
+    expect(fixture.session.activeIssuedLeases, 0);
+  });
+
+  test('cancellation before the first frame never reserves or releases another view', () async {
+    final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 1);
+    final preparation = fixture.session.openPagePreparation(0);
+    while (!preparation.isReady) {
+      preparation.advance(maxFragments: 1);
+    }
+    final former = preparation.takeFragments().single;
+    final frames = _Frames();
+    final job = _job(fixture, frames);
+    final running = job.run();
+    final cancelled = expectLater(running, _cancelled);
+    fixture.parent.cancel();
+    await cancelled;
+    expect(fixture.session.pendingPreparationCount, 0);
+    expect(fixture.session.reservedViewLeases, 0);
+    expect(former.isActive, isTrue);
+    frames.pending.removeFirst().completeError(
+      StateError('late initial frame'),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(former.isActive, isTrue);
+    former.close();
+    expect(fixture.session.activeIssuedLeases, 0);
+  });
+
   testWidgets(
     'mixed jobs transfer all native children once and mounted surfaces own their lifetime',
     (tester) async {

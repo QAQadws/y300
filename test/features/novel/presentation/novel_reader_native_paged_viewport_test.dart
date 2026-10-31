@@ -75,6 +75,7 @@ Widget _reader(
   Object authority,
   List<NovelReaderPaginationPosition> reports, {
   double width = 100,
+  double height = 20,
   bool reverse = false,
   NovelReaderPagedNavigationController? navigation,
   bool Function(NovelReaderChapterEdge)? onChapter,
@@ -86,7 +87,7 @@ Widget _reader(
     alignment: Alignment.topLeft,
     child: SizedBox(
       width: width,
-      height: 20,
+      height: height,
       child: NovelReaderNativePagedViewport(
         controller: controller,
         ownerIdentity: owner,
@@ -138,6 +139,75 @@ Future<void> _startTapMotion(WidgetTester tester, int from) async {
 }
 
 void main() {
+  for (final reverse in [false, true]) {
+    testWidgets(
+      'dense mixed turns retire far mounted pages before admitting the next target (reverse=$reverse)',
+      (tester) async {
+        final paragraph =
+            '<p>${List.filled(100, '<ruby>A<rt>a</rt></ruby>').join()}</p>';
+        final fixture = NativeReaderTestFixture(
+          List.filled(5, paragraph).join(),
+          width: 100,
+          height: 150,
+          maxIssuedLeases: 512,
+          complete: false,
+        );
+        final controller = _controller(fixture);
+        final reports = <NovelReaderPaginationPosition>[];
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        await tester.pumpWidget(
+          _reader(
+            controller,
+            Object(),
+            Object(),
+            reports,
+            height: 150,
+            reverse: reverse,
+            navigation: navigation,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.error, isNull);
+        expect(reports.last.pageIndex, 0);
+        expect(fixture.session.snapshot, hasLength(5));
+        // One dense page owns 201 handles; two fit and a third must not be pinned.
+        expect(fixture.session.activeIssuedLeases, 402);
+        for (final target in [1, 2, 3, 4, 3, 2, 1, 0]) {
+          expect(
+            target > reports.last.pageIndex
+                ? navigation.turnNext()
+                : navigation.turnPrevious(),
+            isTrue,
+          );
+          for (
+            var frame = 0;
+            frame < 100 && reports.last.pageIndex != target;
+            frame++
+          ) {
+            await tester.pump(const Duration(milliseconds: 20));
+            expect(controller.error, isNull);
+            expect(fixture.session.activeIssuedLeases, lessThanOrEqualTo(512));
+            expect(
+              fixture.session.activeIssuedLeases +
+                  fixture.session.reservedViewLeases,
+              lessThanOrEqualTo(512),
+            );
+          }
+          expect(reports.last.pageIndex, target);
+          // Immediately request the next page before another cleanup frame: the
+          // former origin may still have an Element while it loses keepAlive.
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.close();
+        expect(fixture.session.activeIssuedLeases, 0);
+        expect(fixture.session.reservedViewLeases, 0);
+        expect(fixture.cache.activeLeases, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final reverse in [false, true]) {
     testWidgets(
       'mixed native pages mount, navigate and preserve read-only restoration in reverse=$reverse',

@@ -74,12 +74,17 @@ final class NovelReaderNativePageViewJob {
         NovelReaderNativeCoverageFailure.identity,
       );
     }
-    final preparation = session.openPagePreparation(pageIndex);
+    if (session.isClosed || session.isLayoutOwnerRetired) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.ownerRetired,
+      );
+    }
+    RangeError.checkValidIndex(pageIndex, session.snapshot, 'pageIndex');
     final job = NovelReaderNativePageViewJob._(
       session,
       anchors,
       parent,
-      preparation,
+      pageIndex,
       scheduler,
       limits,
       waitForLayoutBudget,
@@ -92,7 +97,7 @@ final class NovelReaderNativePageViewJob {
     this._session,
     this._anchors,
     this._parent,
-    this._preparation,
+    this._pageIndex,
     this._scheduler,
     this.limits,
     this._waitForLayoutBudget,
@@ -100,6 +105,7 @@ final class NovelReaderNativePageViewJob {
   ForumBodyTextPageSession? _session;
   NovelReaderNativeAnchorMap? _anchors;
   NovelReaderPaginationCancellationToken? _parent;
+  final int _pageIndex;
   ForumBodyTextPagePreparation? _preparation;
   NovelReaderNativeWorkScheduler? _scheduler;
   final NovelReaderNativeViewJobLimits limits;
@@ -176,7 +182,12 @@ final class NovelReaderNativePageViewJob {
   Future<NovelReaderNativePageView> _drive() async {
     try {
       await _yieldFrame();
-      final preparation = _preparation!;
+      // The previous origin loses keepAlive when arrival is confirmed. Let
+      // that frame unmount it before reserving aliases for another dense page.
+      // This is the task's existing initial yield, not an extra wait/retry.
+      final preparation = _session!.openPagePreparation(_pageIndex);
+      _preparation = preparation;
+      _guard();
       while (!preparation.isReady) {
         await _beforeStep();
         final step = preparation.advance(

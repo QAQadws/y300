@@ -150,51 +150,49 @@ void main() {
     expect(fixture.session.reservedViewLeases, 0);
   });
 
-  test(
-    'promoting a neighbor preserves its preparation and enables target waiting',
-    () async {
-      final fixture = NativeReaderTestFixture(
-        '<p>ab</p><p>cd</p>',
-        cacheEntries: 1,
-        width: 20,
-        height: 10,
-      );
-      final neighborFrame = Completer<void>();
-      final neighborStarted = Completer<void>();
-      var frames = 0;
-      final window = _window(
-        fixture,
-        scheduler: NovelReaderNativeWorkScheduler(
-          nextFrame: () {
-            if (++frames == 2) {
-              neighborStarted.complete();
-              return neighborFrame.future;
-            }
-            return Future.value();
-          },
-        ),
-      );
-      var completed = false;
-      final run = window.prepareAvailable().then((_) => completed = true);
-      await neighborStarted.future;
-      final preparationCount = fixture.session.pendingPreparationCount;
-      expect(preparationCount, 1);
-      window.setCenter(1);
-      expect(fixture.session.pendingPreparationCount, preparationCount);
-      final foreign = fixture.pinForeign();
-      neighborFrame.complete();
-      await _flush();
-      expect(completed, isFalse);
-      expect(window.viewForPage(1), isNull);
-      final waitingFrames = frames;
-      await _flush();
-      expect(frames, waitingFrames);
-      foreign.release();
-      await run;
-      expect(window.viewForPage(1)!.isReady, isTrue);
-      expect(fixture.session.pendingPreparationCount, 0);
-    },
-  );
+  test('promoting a neighbor before its first frame reserves later and enables target waiting', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>ab</p><p>cd</p>',
+      cacheEntries: 1,
+      width: 20,
+      height: 10,
+    );
+    final neighborFrame = Completer<void>();
+    final neighborStarted = Completer<void>();
+    var frames = 0;
+    final window = _window(
+      fixture,
+      scheduler: NovelReaderNativeWorkScheduler(
+        nextFrame: () {
+          if (++frames == 2) {
+            neighborStarted.complete();
+            return neighborFrame.future;
+          }
+          return Future.value();
+        },
+      ),
+    );
+    var completed = false;
+    final run = window.prepareAvailable().then((_) => completed = true);
+    await neighborStarted.future;
+    final preparationCount = fixture.session.pendingPreparationCount;
+    expect(preparationCount, 0);
+    window.setCenter(1);
+    expect(fixture.session.pendingPreparationCount, preparationCount);
+    final foreign = fixture.pinForeign();
+    neighborFrame.complete();
+    await _flush();
+    expect(completed, isFalse);
+    expect(fixture.session.pendingPreparationCount, 1);
+    expect(window.viewForPage(1), isNull);
+    final waitingFrames = frames;
+    await _flush();
+    expect(frames, waitingFrames);
+    foreign.release();
+    await run;
+    expect(window.viewForPage(1)!.isReady, isTrue);
+    expect(fixture.session.pendingPreparationCount, 0);
+  });
 
   test(
     'new center cancels an old frame task and cannot publish its obsolete page',

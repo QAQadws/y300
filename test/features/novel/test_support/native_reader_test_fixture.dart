@@ -11,6 +11,7 @@ final class NativeReaderTestFixture {
   NativeReaderTestFixture(
     String html, {
     int cacheEntries = 32,
+    int maxIssuedLeases = 128,
     double width = 100,
     double height = 100,
     TextScaler textScaler = TextScaler.noScaling,
@@ -42,13 +43,13 @@ final class NativeReaderTestFixture {
       document: body,
       reader: _reader(),
       cache: cache,
-      limits: const ForumBodyTextPageSessionLimits(
+      limits: ForumBodyTextPageSessionLimits(
         maxPages: 100,
         maxFragments: 1000,
         maxParagraphs: 1000,
         maxTextCodeUnits: 20000,
         maxRuns: 10000,
-        maxIssuedLeases: 128,
+        maxIssuedLeases: maxIssuedLeases,
       ),
       layoutId: layoutId,
       width: width,
