@@ -76,10 +76,17 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 两种入口复用同一纯输入准入和实际几何实现，不能在可见 paint 中用普通 create 补冷缓存。
 
 `ForumBodyRubyGroupPreparation` 对已经分组的单对基字/注音进行事务式准备：每次
-`advance` 在首次 native 构建后返回，纯缓存工作最多两侧；`tryPrepareCached` 不测量。
+`advance` 在首次 native 排字或单项图片录制后返回，纯缓存工作最多两侧；
+`tryPrepareCached` 不测量、不录制图片，已有字形但无绘图时保留部分租约并返回未就绪。
 准备完成前不暴露部分组，`takeLayout` 一次性交付全部句柄。空注音只需基字。
 关闭、错误或 owner/generation 失效释放本次部分/完整引用，交付后不再控制接收方布局。
 终态清除缓存、内容、缩放和回调引用，保留的计数只描述本次准备进度。
+
+默认入口保持普通段落行为；`fromRequests` 通过不可变 `ForumBodyTextRequest` 描述
+普通行或 band 子项，复用同一准备状态机和整组 footprint probe。requests 不保有原生
+句柄，band 请求仍按完整批次去重/计账。字形和绘图分别占用工作单元，不在刚排完批次
+的同次 advance 录制图片；`layoutsBuilt/picturesBuilt` 分开记录实际工作，字形已构建但
+尚无可交付侧时仍算进展。只有两侧绘图都已准备才进行组装和一次性交付。
 
 该准备器借用现有阅读缓存和显式 `ensureOwner` 代次检查，不创建 scheduler、timer 或
 订阅。调用者在工作单元之间使用既有协作调度；外部 pin 阻塞先有界核对整组 footprint，
@@ -146,7 +153,7 @@ alphabetic baseline、有效父字体缩放、对齐/方向/模式/宽度。固�
 `includeInline` 与普通 include 共计 footprint、按实际 key 去重且不测量。
 排版期间 owner 退役禁止回填；同 key 重入测量明确失败，不覆盖活跃条目；其他条目的
 重入获取须在 native 返回后再次核对实际 pin。字节是保守准入估算，不能冒充真实 native
-heap/GPU 观测。子几何的协作准备、可见绑定及正式 flow/session/page 消费仍待接入。
+heap/GPU 观测。可见绑定及正式 flow/session/page 消费仍待接入。
 
 ## 有界子行批量排字
 

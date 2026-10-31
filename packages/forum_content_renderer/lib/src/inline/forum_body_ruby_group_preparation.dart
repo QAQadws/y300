@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_group_layout.dart';
 
 enum ForumBodyRubyGroupPreparationState {
@@ -29,17 +30,24 @@ final class ForumBodyRubyGroupPreparationStep {
     required this.partsInspected,
     required this.isReady,
     required this.waitingForLayoutBudget,
+    this.picturesBuilt = 0,
   });
   final int partsPrepared;
   final int layoutsBuilt;
+  final int picturesBuilt;
   final int partsInspected;
   final bool isReady;
   final bool waitingForLayoutBudget;
-  bool get madeProgress => partsPrepared > 0 || partsInspected > 0 || isReady;
+  bool get madeProgress =>
+      partsPrepared > 0 ||
+      partsInspected > 0 ||
+      layoutsBuilt > 0 ||
+      picturesBuilt > 0 ||
+      isReady;
 }
 
 /// A format-local transaction for one already grouped ruby pair. Each advance
-/// stops after its first native build; cached work and a whole-pair budget probe
+/// stops after its first native shape OR picture; cached work and a whole-pair budget probe
 /// are bounded by two parts. No timer, scheduler, DOM or persistent anchor is
 /// owned here. The page/session owner supplies its generation guard and yields
 /// between work units using its existing cooperative scheduler.
@@ -52,10 +60,28 @@ final class ForumBodyRubyGroupPreparation {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+  }) => ForumBodyRubyGroupPreparation.fromRequests(
+    cache: cache,
+    base: ForumBodyTextRequest.paragraph(base),
+    annotation: ForumBodyTextRequest.paragraph(annotation),
+    ensureOwner: ensureOwner,
+    textScaler: textScaler,
+    gap: gap,
+    maxWidth: maxWidth,
+  );
+
+  factory ForumBodyRubyGroupPreparation.fromRequests({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextRequest base,
+    required ForumBodyTextRequest annotation,
+    required void Function() ensureOwner,
+    TextScaler textScaler = TextScaler.noScaling,
+    double gap = 0,
+    double maxWidth = 16384,
   }) {
     ForumBodyRubyGroupLayout.validateInputs(
-      base: base,
-      annotation: annotation,
+      base: base.content,
+      annotation: annotation.content,
       gap: gap,
       maxWidth: maxWidth,
     );
@@ -68,29 +94,29 @@ final class ForumBodyRubyGroupPreparation {
       textScaler,
       gap,
       maxWidth,
-      annotation.projection.text.isEmpty ? 1 : 2,
+      annotation.content.projection.text.isEmpty ? 1 : 2,
     );
   }
 
   ForumBodyRubyGroupPreparation._(
     this._cache,
-    ForumBodyParagraphContent base,
-    ForumBodyParagraphContent annotation,
+    ForumBodyTextRequest base,
+    ForumBodyTextRequest annotation,
     this._ensureOwner,
     this._textScaler,
     this.gap,
     this.maxWidth,
     this.expectedPartCount,
-  ) : _contents = [base, annotation];
+  ) : _requests = [base, annotation];
 
   ForumBodyParagraphCache? _cache;
-  List<ForumBodyParagraphContent> _contents;
+  List<ForumBodyTextRequest> _requests;
   void Function()? _ensureOwner;
   TextScaler? _textScaler;
   final double gap;
   final double maxWidth;
   final int expectedPartCount;
-  final _leases = <ForumBodyParagraphLease>[];
+  final _leases = <ForumBodyTextLease>[];
   ForumBodyRubyGroupLayout? _group;
   var _state = ForumBodyRubyGroupPreparationState.active;
   var _preparedParts = 0;
@@ -112,14 +138,26 @@ final class ForumBodyRubyGroupPreparation {
       final cache = _cache!;
       final partsBefore = _preparedParts;
       final buildsBefore = cache.layoutBuildCount;
+      final picturesBefore = cache.pictureBuildCount;
       var inspected = 0;
       var rejectedAt = cache.budgetRevision;
       _waiting = false;
       try {
         while (_preparedParts < expectedPartCount) {
           rejectedAt = cache.budgetRevision;
-          _acquire(cachedOnly: false);
-          if (cache.layoutBuildCount != buildsBefore) break;
+          if (_leases.length == _preparedParts) _acquire(cachedOnly: false);
+          final lease = _leases[_preparedParts];
+          if (!lease.layout.isPaintPrepared) {
+            // The glyph build already consumed this cooperative work unit.
+            if (cache.layoutBuildCount != buildsBefore) break;
+            cache.prepareBandChildPaint(lease as ForumBodyTextBandChildLease);
+            _guard();
+          }
+          _preparedParts++;
+          if (cache.layoutBuildCount != buildsBefore ||
+              cache.pictureBuildCount != picturesBefore) {
+            break;
+          }
         }
         _finishIfReady();
       } on ForumBodyParagraphBudgetException catch (error) {
@@ -136,6 +174,7 @@ final class ForumBodyRubyGroupPreparation {
       return ForumBodyRubyGroupPreparationStep(
         partsPrepared: _preparedParts - partsBefore,
         layoutsBuilt: cache.layoutBuildCount - buildsBefore,
+        picturesBuilt: cache.pictureBuildCount - picturesBefore,
         partsInspected: inspected,
         isReady: isReady,
         waitingForLayoutBudget: _waiting,
@@ -150,26 +189,25 @@ final class ForumBodyRubyGroupPreparation {
     if (isReady) return true;
     _waiting = false;
     while (_preparedParts < expectedPartCount) {
-      if (!_acquire(cachedOnly: true)) return false;
+      if (_leases.length == _preparedParts && !_acquire(cachedOnly: true)) {
+        return false;
+      }
+      if (!_leases[_preparedParts].layout.isPaintPrepared) return false;
+      _preparedParts++;
     }
     _finishIfReady();
     return true;
   });
 
   bool _acquire({required bool cachedOnly}) {
-    final content = _contents[_preparedParts];
+    final request = _requests[_preparedParts];
     final cache = _cache!;
-    final lease = cachedOnly
-        ? cache.tryAcquireCached(
-            content: content,
-            width: maxWidth,
-            textScaler: _textScaler!,
-          )
-        : cache.acquire(
-            content: content,
-            width: maxWidth,
-            textScaler: _textScaler!,
-          );
+    final lease = request.acquire(
+      cache,
+      width: maxWidth,
+      textScaler: _textScaler!,
+      cachedOnly: cachedOnly,
+    );
     try {
       _guard();
     } catch (_) {
@@ -178,7 +216,6 @@ final class ForumBodyRubyGroupPreparation {
     }
     if (lease == null) return false;
     _leases.add(lease);
-    _preparedParts++;
     return true;
   }
 
@@ -186,10 +223,9 @@ final class ForumBodyRubyGroupPreparation {
     final probe = _cache!.createBudgetProbe();
     try {
       for (var i = 0; i < expectedPartCount; i++) {
-        probe.include(
-          content: _contents[i],
+        _requests[i].includeBudget(
+          probe,
           width: maxWidth,
-          minimumLineCount: 1,
           textScaler: _textScaler!,
         );
         _guard();
@@ -211,7 +247,7 @@ final class ForumBodyRubyGroupPreparation {
     final group = ForumBodyRubyGroupLayout.adopt(
       cache: _cache!,
       baseLease: _leases[0],
-      annotation: _contents[1],
+      annotation: _requests[1].content,
       annotationLease: expectedPartCount == 2 ? _leases[1] : null,
       gap: gap,
       maxWidth: maxWidth,
@@ -224,7 +260,7 @@ final class ForumBodyRubyGroupPreparation {
       rethrow;
     }
     _group = group;
-    _contents = const [];
+    _requests = const [];
     _textScaler = null;
     _state = ForumBodyRubyGroupPreparationState.ready;
   }
@@ -264,7 +300,7 @@ final class ForumBodyRubyGroupPreparation {
       throw StateError('Ruby preparation owner is retired');
     }
     for (final lease in _leases) {
-      if (!_cache!.ownsLease(lease)) {
+      if (!_cache!.ownsLease(lease) || lease.layout.isDisposed) {
         throw StateError('Ruby preparation child is retired');
       }
     }
@@ -284,7 +320,7 @@ final class ForumBodyRubyGroupPreparation {
 
   void _dropOwner() {
     _cache = null;
-    _contents = const [];
+    _requests = const [];
     _textScaler = null;
     _ensureOwner = null;
     _waiting = false;

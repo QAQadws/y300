@@ -32,6 +32,7 @@ export 'src/paragraph/forum_body_paragraph_content.dart';
 export 'src/paragraph/forum_body_paragraph_layout.dart';
 export 'src/paragraph/forum_body_paragraph_cache.dart';
 export 'src/paragraph/forum_body_text_layout.dart';
+export 'src/paragraph/forum_body_text_request.dart';
 export 'src/paragraph/forum_body_paragraph_surface.dart';
 export 'src/style/forum_body_length.dart';
 export 'src/style/forum_body_box_style.dart';
