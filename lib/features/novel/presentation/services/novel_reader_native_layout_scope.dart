@@ -167,6 +167,10 @@ final class NovelReaderNativeLayoutScope {
     cache: cache,
     layoutId: layoutId,
     limits: limits,
+    // A mixed run retains text parts, annotation containers and groups in
+    // addition to its glyph runs. Budget these pure values separately; native
+    // cache and issued-handle admission remain under their existing limits.
+    rubyLimits: const ForumBodyRubyContentLimits(maxStructureItems: 2048),
   );
 }
 

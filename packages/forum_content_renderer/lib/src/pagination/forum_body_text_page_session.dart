@@ -7,6 +7,7 @@ import '../document/forum_body_document.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../inline/forum_body_inline_plan_input.dart';
 import '../inline/forum_body_inline_plan_preparation.dart';
+import '../inline/forum_body_ruby_content.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
@@ -133,6 +134,7 @@ final class ForumBodyTextPageSession {
     TextScaler textScaler = TextScaler.noScaling,
     ForumBodyParagraphContentBuilder paragraphBuilder =
         const ForumBodyParagraphContentBuilder(),
+    ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
   }) {
     limits._validate();
     if (cache.isClosed) {
@@ -155,6 +157,7 @@ final class ForumBodyTextPageSession {
           reader: reader,
           width: width,
           paragraphBuilder: paragraphBuilder,
+          rubyLimits: rubyLimits,
         ),
         composer,
         cache,

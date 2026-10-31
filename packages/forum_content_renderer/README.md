@@ -312,6 +312,11 @@ typed 空行交付只准备父句柄，不保留隐藏原子；选区为空，�
 并发预留、部分释放和上限共用同一套账本。Session 保留输入已统一为 PageContent，
 同时容纳普通与实测混排计划；不能因核心会话接入而宣称完整 ruby 阅读器已完成。
 
+Session 的 rubyLimits 原样传给既有 BlockFlow/TextFlow 与 ruby grammar，默认仍使用
+512 个结构项。Host 可明确设置有界的纯结构额度；正文间隔、文本子项、注音容器和组
+分别计数，不能把结构项等同于 glyph run 或 native 句柄。小说 Host 的结构额度为 2048，
+既有文字/run/group、缓存与 issued 句柄上限仍分别约束原本的资源。
+
 `ForumBodyTextPageContent` 显式区分普通输入和已测量的混排计划；后者保留父 span、
 已缩放占位尺寸及逐原子的 base/RT 请求。请求必须对应当前父输入中的实际子上下文和
 完整显示窗口，完整 band 的全部上下文也须位于该有界输入内，不能把未计入保留限制的

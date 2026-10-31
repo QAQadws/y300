@@ -41,6 +41,7 @@ final class _Fixture {
     ForumBodyTextPageSessionLimits? limits,
     TextScaler textScaler = TextScaler.noScaling,
     String id = 'generation-1',
+    ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
   }) {
     final session = ForumBodyTextPageSession(
       document: document,
@@ -55,6 +56,7 @@ final class _Fixture {
       width: width,
       height: height,
       textScaler: textScaler,
+      rubyLimits: rubyLimits,
     );
     addTearDown(session.close);
     return session;
@@ -86,6 +88,47 @@ Matcher _failure(ForumBodyTextPageSessionFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final items in [15, 16]) {
+    test(
+      'session forwards the exact bounded mixed structure budget ($items)',
+      () {
+        final fixture = _Fixture(
+          '<p>${List.filled(3, 'x<ruby>A<rt>a</rt></ruby>').join()}z</p>',
+        );
+        final session = fixture.session(
+          height: 100,
+          rubyLimits: ForumBodyRubyContentLimits(maxStructureItems: items),
+        );
+        if (items == 15) {
+          expect(
+            () => _advance(session),
+            throwsA(
+              isA<ForumBodyRubyContentException>().having(
+                (error) => error.failure,
+                'failure',
+                ForumBodyRubyContentFailure.structureLimit,
+              ),
+            ),
+          );
+          expect(session.state, ForumBodyTextPageSessionState.failed);
+          expect(session.snapshot, isEmpty);
+          expect(fixture.cache.activeLeases, 0);
+        } else {
+          _advance(session);
+          expect(session.snapshot, hasLength(1));
+          final preparation = session.openPagePreparation(0);
+          while (!preparation.isReady) {
+            preparation.advance(maxFragments: 8);
+          }
+          final fragments = preparation.takeFragments();
+          expect(fragments.single, isA<ForumBodyPreparedInlineFragment>());
+          fragments.single.close();
+          expect(fixture.cache.activeLeases, 0);
+        }
+      },
+    );
+  }
 
   test(
     'retiring a session during native input resolution cannot revive it as failed',

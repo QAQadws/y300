@@ -3,10 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../tool/novel_main_page_profile_data.dart';
 import '../../tool/novel_main_page_profile_observation.dart';
+import '../../tool/novel_pagination_profile_fixtures.dart';
 
 void main() {
   test(
@@ -61,95 +63,139 @@ void main() {
     },
   );
 
-  for (final native in [false, true]) {
-    testWidgets('observes real ${native ? 'native' : 'legacy'} page and exit', (
-      tester,
-    ) async {
-      SharedPreferences.setMockInitialValues({});
-      final data = NovelMainPageProfileData();
-      final source = data.add(
-        List.filled(
-          12,
-          '<p>Synthetic paragraph for a real visible page. 正文分页。</p>',
-        ).join(),
-      );
-      final args = NovelReaderArgs(
-        novelId: source.novelId,
-        episodeId: source.episodeId,
-      );
-      final navigator = GlobalKey<NavigatorState>();
-      final key = GlobalKey();
-      await tester.pumpWidget(
-        data.scope(
-          MaterialApp(
-            navigatorKey: navigator,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: const Scaffold(),
+  for (final scenario in [
+    (native: false, mixed: false),
+    (native: true, mixed: false),
+    (native: true, mixed: true),
+  ]) {
+    final native = scenario.native;
+    testWidgets(
+      'observes real ${native ? 'native' : 'legacy'} page and exit (mixed=${scenario.mixed})',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final data = NovelMainPageProfileData();
+        final source = data.add(
+          scenario.mixed
+              ? novelProfileComplexHtml
+              : List.filled(
+                  12,
+                  '<p>Synthetic paragraph for a real visible page. 正文分页。</p>',
+                ).join(),
+        );
+        final args = NovelReaderArgs(
+          novelId: source.novelId,
+          episodeId: source.episodeId,
+        );
+        final navigator = GlobalKey<NavigatorState>();
+        final key = GlobalKey();
+        await tester.pumpWidget(
+          data.scope(
+            MaterialApp(
+              navigatorKey: navigator,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const Scaffold(),
+            ),
           ),
-        ),
-      );
-      unawaitedPush() => navigator.currentState!.push<void>(
-        MaterialPageRoute(
-          builder: (_) => NovelReaderPage(
-            key: key,
-            novelId: source.novelId,
-            initialEpisodeId: source.episodeId,
-            nativePagination: native,
-            nativeIdleScheduler: () async {},
+        );
+        unawaitedPush() => navigator.currentState!.push<void>(
+          MaterialPageRoute(
+            builder: (_) => NovelReaderPage(
+              key: key,
+              novelId: source.novelId,
+              initialEpisodeId: source.episodeId,
+              nativePagination: native,
+              nativeIdleScheduler: () async {},
+            ),
           ),
-        ),
-      );
-      // The returned route future completes only after popping it.
-      final popped = unawaitedPush();
-      Future<ProfileReaderObservation> wait(
-        bool Function(ProfileReaderObservation) accepts,
-      ) async {
-        for (var i = 0; i < 200; i++) {
-          await tester.pump(const Duration(milliseconds: 20));
-          if (key.currentContext case final context?) {
-            final observation = observeProfileReader(context, args);
-            expect(observation.failed, isFalse);
-            if (accepts(observation)) return observation;
+        );
+        // The returned route future completes only after popping it.
+        final popped = unawaitedPush();
+        Future<ProfileReaderObservation> wait(
+          bool Function(ProfileReaderObservation) accepts,
+        ) async {
+          for (var i = 0; i < 200; i++) {
+            await tester.pump(const Duration(milliseconds: 20));
+            if (scenario.mixed) {
+              // The production large-chapter executor uses Isolate.run, whose
+              // result needs real event-loop time outside FakeAsync frames.
+              await tester.runAsync(
+                () => Future<void>.delayed(const Duration(milliseconds: 1)),
+              );
+            }
+            if (key.currentContext case final context?) {
+              final observation = observeProfileReader(context, args);
+              expect(
+                observation.failed,
+                isFalse,
+                reason: find
+                    .byType(NovelReaderNativePagedViewport)
+                    .evaluate()
+                    .map(
+                      (element) =>
+                          (element.widget as NovelReaderNativePagedViewport)
+                              .controller
+                              .error,
+                    )
+                    .join(', '),
+              );
+              if (accepts(observation)) return observation;
+            }
           }
+          final observation = observeProfileReader(key.currentContext!, args);
+          final controllers = find
+              .byType(NovelReaderNativePagedViewport)
+              .evaluate()
+              .map(
+                (element) => (element.widget as NovelReaderNativePagedViewport)
+                    .controller,
+              );
+          throw StateError(
+            'Profile never observed the mounted page: '
+            'ready=${observation.ready} complete=${observation.complete} '
+            'page=${observation.page} count=${observation.count} '
+            'business=${observation.businessConfirmed} '
+            '${controllers.map((controller) => '${controller.phase}/${controller.error}/target:${controller.readyTarget != null}').join(', ')}',
+          );
         }
-        throw StateError('Profile never observed the mounted page');
-      }
 
-      var observation = await wait((value) => value.ready && value.complete);
-      expect(observation.count, greaterThan(1));
-      expect(observation.businessConfirmed, isTrue);
-      final originalKey = observation.paginationKey;
-      observation.businessController!.previewPreferences(
-        profileReaderPreferences.copyWith(fontSize: 22),
-      );
-      observation = await wait(
-        (value) =>
-            value.ready && value.complete && value.paginationKey != originalKey,
-      );
-      // Read-only reflow may keep the old business key. The tool observes the
-      // new mounted layout without asking the reader to confirm a new anchor.
-      expect(observation.paginationKey, isNot(originalKey));
-      observation.overlay!.onRightTap!();
-      observation = await wait(
-        (value) => value.ready && value.businessConfirmed && value.page == 1,
-      );
-      final owner = observation.nativeOwner;
-      final legacyReleased = observation.legacyCachesReleased;
-      navigator.currentState!.pop();
-      await tester.pumpAndSettle();
-      await popped;
-      expect(key.currentContext, isNull);
-      if (native) {
-        expect(owner!.isClosed, isTrue);
-        expect(owner.activeCacheHandles, 0);
-        expect(owner.estimatedRetainedBytes, 0);
-      } else {
-        expect(legacyReleased!(), isTrue);
-      }
-      data.release(source.episodeId);
-      expect(data.retainedChapters, 0);
-      await tester.pumpWidget(const SizedBox.shrink());
-    });
+        var observation = await wait((value) => value.ready && value.complete);
+        expect(observation.count, greaterThan(1));
+        expect(observation.businessConfirmed, isTrue);
+        final originalKey = observation.paginationKey;
+        observation.businessController!.previewPreferences(
+          profileReaderPreferences.copyWith(fontSize: 22),
+        );
+        observation = await wait(
+          (value) =>
+              value.ready &&
+              value.complete &&
+              value.paginationKey != originalKey,
+        );
+        // Read-only reflow may keep the old business key. The tool observes the
+        // new mounted layout without asking the reader to confirm a new anchor.
+        expect(observation.paginationKey, isNot(originalKey));
+        observation.overlay!.onRightTap!();
+        observation = await wait(
+          (value) => value.ready && value.businessConfirmed && value.page == 1,
+        );
+        final owner = observation.nativeOwner;
+        final legacyReleased = observation.legacyCachesReleased;
+        navigator.currentState!.pop();
+        await tester.pumpAndSettle();
+        await popped;
+        expect(key.currentContext, isNull);
+        if (native) {
+          expect(owner!.isClosed, isTrue);
+          expect(owner.activeCacheHandles, 0);
+          expect(owner.estimatedRetainedBytes, 0);
+        } else {
+          expect(legacyReleased!(), isTrue);
+        }
+        data.release(source.episodeId);
+        expect(data.retainedChapters, 0);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
   }
 }
