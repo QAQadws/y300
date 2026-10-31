@@ -87,7 +87,9 @@ void main() {
   );
 
   test('neutral policies retain unique declaration diagnostics', () {
-    final input = document('<p style="width:10px;width:10px">body</p>');
+    final input = document(
+      '<p style="width:calc(50%);width:calc(50%)">body</p>',
+    );
     final options = ForumBodyReaderStyle(
       textStyle: const TextStyle(fontSize: 20),
       fontRevision: 'system',

@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 
 import 'forum_body_length.dart';
+import 'forum_body_box_style.dart';
 import '../document/forum_body_document.dart';
 
 enum ForumBodyStyleScope { asDefault, forceBody, forceAll }
@@ -100,6 +101,7 @@ final class ForumBodyResolvedStyle {
     this.indent = ForumBodyLength.zero,
     this.margin = const ForumBodyInsets(),
     this.padding = const ForumBodyInsets(),
+    this.box = const ForumBodyBoxStyle(),
     this.lineHeight = const ForumBodyLineHeight.natural(),
     this.hidden = false,
     this.strong = false,
@@ -120,6 +122,7 @@ final class ForumBodyResolvedStyle {
   final ForumBodyLength indent;
   final ForumBodyInsets margin;
   final ForumBodyInsets padding;
+  final ForumBodyBoxStyle box;
   final ForumBodyLineHeight lineHeight;
   final bool hidden;
   final bool strong;

@@ -1,9 +1,100 @@
 import '../document/forum_body_document.dart';
 import 'forum_body_length.dart';
+import 'forum_body_box_style.dart';
 
 /// Non-inherited box values have their own shorthand/longhand cascade.
 final class ForumBodyBoxResolver {
   const ForumBodyBoxResolver();
+
+  ForumBodyBoxStyle resolveBoxStyle({
+    required ForumBodyElement node,
+    required ForumBodyBoxStyle parent,
+    required double fontSize,
+    required double rootFontSize,
+    required void Function(String property, String value) onUnsupported,
+  }) {
+    var width = const ForumBodyBoxStyle().width;
+    var minimum = ForumBodyLength.zero;
+    ForumBodyLength? maximum;
+    var sizing = ForumBodyBoxSizing.contentBox;
+    final important = <String>{};
+    for (final declaration in node.style.declarations) {
+      final name = declaration.property;
+      if (!const {
+        'width',
+        'min-width',
+        'max-width',
+        'box-sizing',
+      }.contains(name)) {
+        continue;
+      }
+      final raw = declaration.value.trim().toLowerCase();
+      if (name == 'box-sizing') {
+        final candidate = switch (raw) {
+          'inherit' => parent.sizing,
+          'initial' ||
+          'unset' ||
+          'content-box' => ForumBodyBoxSizing.contentBox,
+          'border-box' => ForumBodyBoxSizing.borderBox,
+          _ => null,
+        };
+        if (candidate == null) {
+          onUnsupported(name, declaration.value);
+        } else if (!important.contains(name) || declaration.important) {
+          sizing = candidate;
+          if (declaration.important) important.add(name);
+        }
+        continue;
+      }
+      ForumBodyLength? candidate;
+      final initial = name == 'min-width' ? ForumBodyLength.zero : null;
+      if (raw == 'inherit') {
+        candidate = switch (name) {
+          'width' => parent.width,
+          'min-width' => parent.minWidth,
+          _ => parent.maxWidth,
+        };
+      } else if (raw == 'initial' ||
+          raw == 'unset' ||
+          (raw == 'auto' && name != 'max-width') ||
+          (raw == 'none' && name == 'max-width')) {
+        candidate = initial;
+      } else {
+        final parsed = ForumBodyLength.tryParse(raw);
+        if (parsed == null ||
+            parsed.unit == ForumBodyLengthUnit.auto ||
+            parsed.value < 0) {
+          onUnsupported(name, declaration.value);
+          continue;
+        }
+        candidate = parsed.computed(
+          fontSize: fontSize,
+          rootFontSize: rootFontSize,
+        );
+        if (!candidate.value.isFinite) {
+          onUnsupported(name, declaration.value);
+          continue;
+        }
+      }
+      if (!important.contains(name) || declaration.important) {
+        switch (name) {
+          case 'width':
+            width = candidate;
+          case 'min-width':
+            minimum = candidate!;
+          case 'max-width':
+            maximum = candidate;
+        }
+        if (declaration.important) important.add(name);
+      }
+    }
+    return ForumBodyBoxStyle(
+      width: width,
+      minWidth: minimum,
+      maxWidth: maximum,
+      sizing: sizing,
+    );
+  }
 
   ForumBodyInsets resolve({
     required ForumBodyElement node,

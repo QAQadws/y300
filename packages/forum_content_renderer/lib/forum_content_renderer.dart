@@ -1,6 +1,7 @@
 /// Shared HTML rendering contracts, policies and widgets.
 library;
 
+export 'src/block/forum_body_block_box.dart';
 export 'src/document/forum_body_document.dart';
 export 'src/document/forum_body_parser.dart';
 export 'src/flow/forum_body_styled_flow_cursor.dart';
@@ -12,6 +13,7 @@ export 'src/paragraph/forum_body_paragraph_layout.dart';
 export 'src/paragraph/forum_body_paragraph_cache.dart';
 export 'src/paragraph/forum_body_paragraph_surface.dart';
 export 'src/style/forum_body_length.dart';
+export 'src/style/forum_body_box_style.dart';
 export 'src/style/forum_body_style_options.dart';
 export 'src/style/forum_body_style_resolver.dart';
 export 'src/style/forum_body_style_cursor.dart';

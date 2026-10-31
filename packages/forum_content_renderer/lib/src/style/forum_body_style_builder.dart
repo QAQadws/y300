@@ -7,7 +7,7 @@ import 'forum_body_length.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 2;
+const forumBodyStyleRevision = 3;
 ForumBodyLineHeight forumBodyReaderHeight(ForumBodyReaderStyle reader) {
   final height = reader.textStyle.height;
   return height == null || height == kTextHeightNone
@@ -54,6 +54,10 @@ final class ForumBodyStyleBuilder {
     'text-indent',
     'display',
     'visibility',
+    'width',
+    'min-width',
+    'max-width',
+    'box-sizing',
     'margin',
     'margin-top',
     'margin-right',
@@ -413,6 +417,13 @@ final class ForumBodyStyleBuilder {
       indent: indent,
       margin: _insets(node, 'margin', size, role, parent.margin),
       padding: _insets(node, 'padding', size, role, parent.padding),
+      box: const ForumBodyBoxResolver().resolveBoxStyle(
+        node: node,
+        parent: parent.box,
+        fontSize: size,
+        rootFontSize: reader.textStyle.fontSize!,
+        onUnsupported: (property, value) => _issue(node, property, value),
+      ),
       lineHeight: height,
       hidden:
           parent.hidden ||

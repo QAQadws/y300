@@ -56,6 +56,7 @@ final class ForumBodyStyleInheritance {
           ? author.margin
           : effective.margin,
       padding: effective.padding,
+      box: effective.box,
       lineHeight: restore(ForumBodyStyleProperty.lineHeight)
           ? author.lineHeight
           : effective.lineHeight,

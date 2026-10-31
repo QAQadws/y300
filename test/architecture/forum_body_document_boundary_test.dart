@@ -9,7 +9,13 @@ void main() {
   test('native layout graph excludes legacy UI and Host', () {
     const root = 'packages/forum_content_renderer/lib/';
     final pending = [
-      for (final module in ['style', 'flow', 'paragraph', 'pagination'])
+      for (final module in [
+        'style',
+        'flow',
+        'block',
+        'paragraph',
+        'pagination',
+      ])
         ...Directory('${root}src/$module')
             .listSync()
             .whereType<File>()

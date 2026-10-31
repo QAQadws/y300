@@ -51,6 +51,72 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test('box widths cascade valid declarations and inherit only explicitly', () {
+    final result = resolve(
+      '<div style="font-size:10px;width:8em;min-width:20%;max-width:20rem;'
+      'box-sizing:border-box">'
+      '<p id="plain">text</p>'
+      '<p id="inherited" style="font-size:30px;width:inherit;min-width:inherit;'
+      'max-width:inherit;box-sizing:inherit">text</p>'
+      '<p id="cascade" style="width:50%;width:-1px!important;width:40px!important;'
+      'width:70px;max-width:30px;max-width:calc(20%);min-width:auto;'
+      'box-sizing:bad">text</p>'
+      '<p id="reset" style="width:10px;width:unset;min-width:20px;min-width:initial;'
+      'max-width:20px;max-width:none;box-sizing:initial">text</p></div>',
+    );
+    final plain = byId(result, 'plain').box;
+    expect(plain.width, isNull);
+    expect(plain.minWidth, ForumBodyLength.zero);
+    expect(plain.maxWidth, isNull);
+    expect(plain.sizing, ForumBodyBoxSizing.contentBox);
+    final inherited = byId(result, 'inherited').box;
+    expect(inherited.width, const ForumBodyLength(80));
+    expect(
+      inherited.minWidth,
+      const ForumBodyLength(20, ForumBodyLengthUnit.percent),
+    );
+    expect(inherited.maxWidth, const ForumBodyLength(400));
+    expect(inherited.sizing, ForumBodyBoxSizing.borderBox);
+    final cascade = byId(result, 'cascade').box;
+    expect(cascade.width, const ForumBodyLength(40));
+    expect(cascade.maxWidth, const ForumBodyLength(30));
+    expect(cascade.minWidth, ForumBodyLength.zero);
+    expect(cascade.sizing, ForumBodyBoxSizing.contentBox);
+    final reset = byId(result, 'reset').box;
+    expect(reset.width, isNull);
+    expect(reset.minWidth, ForumBodyLength.zero);
+    expect(reset.maxWidth, isNull);
+    expect(reset.sizing, ForumBodyBoxSizing.contentBox);
+    expect(
+      result.styles.issues.map((issue) => (issue.property, issue.value)),
+      containsAll([
+        ('width', '-1px'),
+        ('max-width', 'calc(20%)'),
+        ('box-sizing', 'bad'),
+      ]),
+    );
+  });
+
+  test(
+    'body-only policy handoff retains computed box values for explicit inherit',
+    () {
+      final result = resolve(
+        '<div style="width:100px;min-width:40px;max-width:140px;box-sizing:border-box">'
+        '<h2 id="h" style="width:inherit;min-width:inherit;max-width:inherit;box-sizing:inherit">title</h2></div>',
+        options: reader(
+          policy: ForumBodyStylePolicy({
+            ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceBody,
+          }),
+        ),
+      );
+      final box = byId(result, 'h').box;
+      expect(box.width, const ForumBodyLength(100));
+      expect(box.minWidth, const ForumBodyLength(40));
+      expect(box.maxWidth, const ForumBodyLength(140));
+      expect(box.sizing, ForumBodyBoxSizing.borderBox);
+    },
+  );
+
   test('body-only overrides restore author inheritance at semantic roles', () {
     final result = resolve(
       '<div style="font-size:30px;line-height:24px;'
