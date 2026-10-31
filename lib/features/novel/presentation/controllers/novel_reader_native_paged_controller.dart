@@ -136,6 +136,7 @@ final class NovelReaderNativePagedController {
   NovelReaderNativePrefixVerifier? _verifier;
   NovelReaderNativeSourceRun? _source;
   NovelReaderNativePageViewJob? _probe;
+  NovelReaderPaginationCancellationToken? _anchorWork;
   ForumBodyTextPageSnapshot? _snapshot;
   final String paginationKey;
   final String episodeId;
@@ -151,6 +152,7 @@ final class NovelReaderNativePagedController {
   NovelReaderTextAnchor? _restoredAnchor;
   int? _requestedPage;
   int _requestId = 0;
+  int? _unavailableAnchorRevision;
   int _producerEpoch = 0;
   int _scannedPages = 0;
   bool _userNavigation = false;
@@ -175,6 +177,7 @@ final class NovelReaderNativePagedController {
   /// Intent identity only; actual mounted coverage still owns confirmation.
   int get navigationRevision => _requestId;
   bool get hasPendingNavigation => _ticket != null;
+  int? get unavailableAnchorRevision => _unavailableAnchorRevision;
   int? get visiblePageIndex => _visible?.pageIndex;
   NovelReaderNativePageDelivery? get readyTarget => _target;
   Stream<void> get changes => isClosed
@@ -211,6 +214,8 @@ final class NovelReaderNativePagedController {
         (_snapshot!.isComplete && page >= _snapshot!.length)) {
       return false;
     }
+    _cancelAnchorWork();
+    _unavailableAnchorRevision = null;
     _requestId++;
     _probe?.close();
     _probe = null;
@@ -236,23 +241,84 @@ final class NovelReaderNativePagedController {
     return true;
   }
 
+  /// Explicit bookmark/search navigation uses observed coverage, never saved
+  /// percentages or page guesses. Source and immutable prefix remain shared.
+  bool requestAnchor(NovelReaderTextAnchor anchor) {
+    if (isClosed ||
+        _suspended ||
+        _phase == NovelReaderNativePagedPhase.created ||
+        _phase == NovelReaderNativePagedPhase.empty) {
+      return false;
+    }
+    if (anchor.episodeId != episodeId ||
+        _anchors!
+            .sourceCandidates(anchor, allowNodeCompatibility: true)
+            .isEmpty) {
+      cancelPendingNavigation();
+      return false;
+    }
+    _cancelAnchorWork();
+    _unavailableAnchorRevision = null;
+    _requestId++;
+    _probe?.close();
+    _probe = null;
+    _restore?.close();
+    _restore = NovelReaderNativeRestoreCursor.forNavigation(
+      identity: _anchors!.identity,
+      layoutId: _snapshot!.layoutId,
+      paginationKey: paginationKey,
+      anchor: anchor,
+    );
+    _entryEdge = null;
+    _restoredAnchor = anchor;
+    _requestedPage = null;
+    _scannedPages = 0;
+    _target = null;
+    _userNavigation = true;
+    _readOnly = false;
+    if (_error != null) {
+      _startPublishedNavigation(_visible?.pageIndex ?? 0, resolveAnchor: true);
+    } else {
+      _ticket = _watch!.startTarget();
+      _syncDemand();
+      _restartProducer();
+    }
+    _notify();
+    return true;
+  }
+
   /// Opposite gesture/drag cancels automatic arrival without confirming a new
   /// position. Keep the last actual visible page and retire the old ticket.
   bool cancelPendingNavigation() {
     if (isClosed ||
         _suspended ||
         _ticket == null ||
-        _visible == null ||
+        (_visible == null && _restore?.isExplicitNavigation != true) ||
         (_error != null && !_prefixNavigation)) {
       return false;
     }
+    _cancelAnchorWork();
+    _unavailableAnchorRevision = null;
     _requestId++;
     _target = null;
     _probe?.close();
     _probe = null;
-    _requestedPage = _visible!.pageIndex;
+    _restore?.close();
+    _restore = null;
+    if (_visible == null && _error == null) {
+      _resetBootstrapRestore();
+      _ticket = _watch!.startTarget();
+      _resolveStartEntry();
+      _syncDemand();
+      _restartProducer();
+      _notify();
+      return true;
+    }
+    _requestedPage = _lastPosition?.pageIndex;
     _userNavigation = false;
-    _readOnly = _visible!.isReadOnlyCompatibilityRestore;
+    _readOnly = _lastPosition?.isReadOnlyCompatibilityRestore ?? true;
+    _restoredAnchor = _lastPosition?.anchor;
+    _entryEdge = null;
     _ticket = null;
     if (_error != null) {
       _prefixNavigation = false;
@@ -344,6 +410,7 @@ final class NovelReaderNativePagedController {
       return false;
     }
     _suspended = true;
+    _cancelAnchorWork();
     _requestId++;
     _producerEpoch++;
     _source?.close();
@@ -366,19 +433,7 @@ final class NovelReaderNativePagedController {
       _entryEdge = null;
     } else {
       // A seek issued before first paint must not revive when the route returns.
-      _restore = NovelReaderNativeRestoreCursor(
-        identity: _anchors!.identity,
-        layoutId: _session!.snapshot.layoutId,
-        episodeId: episodeId,
-        paginationKey: paginationKey,
-        position: _bootstrapPosition!,
-        conversionAnchor: _bootstrapConversionAnchor,
-      );
-      _requestedPage = null;
-      _readOnly = true;
-      _restoredAnchor = null;
-      _entryEdge = _bootstrapEntry;
-      _scannedPages = 0;
+      _resetBootstrapRestore();
     }
     _notify();
     return true;
@@ -478,7 +533,7 @@ final class NovelReaderNativePagedController {
     return confirmVisible(delivery, leases);
   }
 
-  void _startPublishedNavigation(int page) {
+  void _startPublishedNavigation(int page, {bool resolveAnchor = false}) {
     final old = _window!;
     final limits = old.limits;
     final policy = _watch!.policy;
@@ -514,10 +569,132 @@ final class NovelReaderNativePagedController {
       );
       _window = window;
       _windowChanges = window.changes.listen((_) => _offerTarget());
-      unawaited(_preparePublishedTarget(window, _requestId));
+      if (resolveAnchor) {
+        unawaited(
+          _preparePublishedAnchor(window, _requestId, ++_producerEpoch),
+        );
+      } else {
+        unawaited(_preparePublishedTarget(window, _requestId));
+      }
     } catch (error) {
       _pause(error);
     }
+  }
+
+  Future<void> _preparePublishedAnchor(
+    NovelReaderNativeViewWindow window,
+    int requestId,
+    int epoch,
+  ) async {
+    final token = _anchorWork = NovelReaderPaginationCancellationToken();
+    final remove = _lifetime.onCancel(token.cancel);
+    bool current() =>
+        !isClosed &&
+        !_suspended &&
+        _prefixNavigation &&
+        requestId == _requestId &&
+        identical(window, _window);
+    try {
+      await _resolveInitial(epoch, _snapshot!, token);
+      _guard(epoch, token);
+      if (!current()) return;
+      if (_requestedPage == null) {
+        await _anchorUnavailable(epoch, _snapshot!, token);
+        return;
+      }
+      window.setCenter(_requestedPage!);
+      await window.prepareAvailable();
+      _guard(epoch, token);
+      if (current()) _offerTarget();
+    } catch (error) {
+      if (current()) _pause(error);
+    } finally {
+      remove();
+      token.cancel();
+      if (identical(_anchorWork, token)) _anchorWork = null;
+    }
+  }
+
+  void _cancelAnchorWork() {
+    _anchorWork?.cancel();
+    _anchorWork = null;
+  }
+
+  void _resetBootstrapRestore() {
+    _userNavigation = false;
+    _restore = NovelReaderNativeRestoreCursor(
+      identity: _anchors!.identity,
+      layoutId: _snapshot!.layoutId,
+      episodeId: episodeId,
+      paginationKey: paginationKey,
+      position: _bootstrapPosition!,
+      conversionAnchor: _bootstrapConversionAnchor,
+    );
+    _requestedPage = null;
+    _readOnly = true;
+    _restoredAnchor = null;
+    _entryEdge = _bootstrapEntry;
+    _scannedPages = 0;
+  }
+
+  void _resolveStartEntry() {
+    if (_entryEdge != NovelReaderChapterEdge.start) return;
+    _requestedPage = 0;
+    _userNavigation = true;
+    _readOnly = false;
+    _restore?.close();
+    _restore = null;
+  }
+
+  /// An unavailable target is a command result, not a failed source. Retain
+  /// actual visible authority; before first paint return to bootstrap input.
+  Future<bool> _anchorUnavailable(
+    int epoch,
+    ForumBodyTextPageSnapshot prefix,
+    NovelReaderPaginationCancellationToken token,
+  ) async {
+    _unavailableAnchorRevision = _requestId;
+    final ticket = _ticket;
+    if (ticket != null) _watch!.cancelTarget(ticket);
+    _ticket = null;
+    _target = null;
+    _restore?.close();
+    _restore = null;
+    _userNavigation = false;
+    final position = _lastPosition;
+    if (position != null || _error != null) {
+      _requestedPage = position?.pageIndex;
+      _restoredAnchor = position?.anchor;
+      _readOnly = position?.isReadOnlyCompatibilityRestore ?? true;
+      if (_error != null) {
+        _prefixNavigation = false;
+        _window!.close();
+        _watch!.close();
+      }
+      _syncDemand();
+      _notify();
+      return false;
+    }
+    _resetBootstrapRestore();
+    _ticket = _watch!.startTarget();
+    _resolveStartEntry();
+    if (_entryEdge == NovelReaderChapterEdge.end &&
+        prefix.isComplete &&
+        prefix.isNotEmpty) {
+      _requestedPage = prefix.length - 1;
+      _entryEdge = null;
+      _userNavigation = true;
+      _readOnly = false;
+      _restore?.close();
+      _restore = null;
+    }
+    if (_requestedPage == null && _entryEdge != NovelReaderChapterEdge.end) {
+      await _resolveInitial(epoch, prefix, token);
+      _guard(epoch, token);
+    }
+    _syncDemand();
+    _notify();
+    return true;
   }
 
   Future<void> _preparePublishedTarget(
@@ -631,6 +808,11 @@ final class NovelReaderNativePagedController {
       isComplete: prefix.isComplete,
     );
     if (prefix.isComplete && prefix.isEmpty) {
+      if (_restore?.isExplicitNavigation == true) {
+        _unavailableAnchorRevision = _requestId;
+        _restore?.close();
+        _restore = null;
+      }
       _phase = NovelReaderNativePagedPhase.empty;
       _ticket = null;
       _watch!.close();
@@ -648,6 +830,13 @@ final class NovelReaderNativePagedController {
     if (_requestedPage == null && _entryEdge != NovelReaderChapterEdge.end) {
       await _resolveInitial(epoch, prefix, token);
       _guard(epoch, token);
+      if (_requestedPage == null &&
+          prefix.isComplete &&
+          _restore?.isExplicitNavigation == true) {
+        final fallback = await _anchorUnavailable(epoch, prefix, token);
+        _guard(epoch, token);
+        if (!fallback) return;
+      }
     }
     final requested = _requestedPage;
     if (requested != null) {
@@ -699,6 +888,7 @@ final class NovelReaderNativePagedController {
               scheduler: _scheduler!,
             );
             _probe = job;
+            final removeJobCancel = token.onCancel(job.close);
             NovelReaderNativePageView? view;
             try {
               view = await job.run();
@@ -718,7 +908,7 @@ final class NovelReaderNativePagedController {
               if (result != null) {
                 _requestedPage = result.pageIndex;
                 _readOnly = result.isReadOnlyCompatibilityRestore;
-                _restoredAnchor = target;
+                _restoredAnchor = restore.resolvedNavigationAnchor ?? target;
                 if (result.pageIndex == view.pageIndex) {
                   _window!.setCenter(result.pageIndex);
                   _window!.adoptTarget(view);
@@ -727,6 +917,7 @@ final class NovelReaderNativePagedController {
                 break;
               }
             } finally {
+              removeJobCancel();
               view?.close();
               job.close();
               if (identical(_probe, job)) _probe = null;
@@ -747,7 +938,7 @@ final class NovelReaderNativePagedController {
       if (result != null) {
         _requestedPage = result.pageIndex;
         _readOnly = result.isReadOnlyCompatibilityRestore;
-        _restoredAnchor = target;
+        _restoredAnchor = restore.resolvedNavigationAnchor ?? target;
       }
     }
   }
@@ -790,7 +981,10 @@ final class NovelReaderNativePagedController {
   void _guard(int epoch, NovelReaderPaginationCancellationToken token) {
     token.throwIfCancelled();
     _lifetime.throwIfCancelled();
-    if (isClosed || _suspended || epoch != _producerEpoch || _error != null) {
+    if (isClosed ||
+        _suspended ||
+        epoch != _producerEpoch ||
+        (_error != null && !_prefixNavigation)) {
       throw const NovelReaderPaginationException(
         code: 'paginationCancelled',
         message: 'Native reader request retired.',
@@ -804,6 +998,7 @@ final class NovelReaderNativePagedController {
     _prefixNavigation = false;
     _phase = NovelReaderNativePagedPhase.paused;
     _producerEpoch++;
+    _cancelAnchorWork();
     _source?.close();
     _source = null;
     _probe?.close();
@@ -838,6 +1033,7 @@ final class NovelReaderNativePagedController {
     if (isClosed) return;
     _phase = NovelReaderNativePagedPhase.closed;
     _producerEpoch++;
+    _cancelAnchorWork();
     _removeParent?.call();
     _removeParent = null;
     _lifetime.cancel();
@@ -870,6 +1066,7 @@ final class NovelReaderNativePagedController {
     _target = null;
     _visible = null;
     _lastPosition = null;
+    _unavailableAnchorRevision = null;
     _bootstrapPosition = null;
     _bootstrapConversionAnchor = null;
     _bootstrapEntry = null;

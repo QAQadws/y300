@@ -20,6 +20,7 @@ final class NovelReaderNativeRestoreCursor {
     NovelReaderTextAnchor? conversionAnchor,
     this.maxCoveragePoints = 8192,
   }) : isConversionRestore = conversionAnchor != null,
+       isExplicitNavigation = false,
        _hasKnownPercentBasis = const {
          NovelProgressPercentBasis.legacyReaderLayout,
          NovelProgressPercentBasis.bodyGeometryV1,
@@ -42,6 +43,29 @@ final class NovelReaderNativeRestoreCursor {
     }
   }
 
+  /// Explicit search/bookmark navigation has no percentage/page-key fallback.
+  /// Only observed text coverage, or a recorded-node compatibility point, can
+  /// resolve it. The caller must still confirm the real mounted navigation.
+  NovelReaderNativeRestoreCursor.forNavigation({
+    required this.identity,
+    required this.layoutId,
+    required this.paginationKey,
+    required NovelReaderTextAnchor anchor,
+    this.maxCoveragePoints = 8192,
+  }) : episodeId = anchor.episodeId,
+       isConversionRestore = false,
+       isExplicitNavigation = true,
+       _hasKnownPercentBasis = true,
+       _savedAnchor = anchor {
+    if (layoutId.isEmpty ||
+        paginationKey.isEmpty ||
+        maxCoveragePoints < 0 ||
+        anchor.episodeId.isEmpty ||
+        anchor.nodeId?.trim().isNotEmpty != true) {
+      throw ArgumentError('Invalid native anchor navigation scope');
+    }
+  }
+
   final ForumBodyIdentity identity;
   final String layoutId;
   final String episodeId;
@@ -49,6 +73,7 @@ final class NovelReaderNativeRestoreCursor {
   /// Stable geometry/cache fingerprint, distinct from request-only layoutId.
   final String paginationKey;
   final bool isConversionRestore;
+  final bool isExplicitNavigation;
   final bool _hasKnownPercentBasis;
   final int maxCoveragePoints;
   NovelReaderProgressSnapshot? _position;
@@ -58,6 +83,8 @@ final class NovelReaderNativeRestoreCursor {
   int? _exactPage;
   int? _convertedPage;
   int? _nodePage;
+  NovelReaderTextAnchor? _nodeAnchor;
+  NovelReaderTextAnchor? _resolvedNavigationAnchor;
   bool _hasMatchingTextIdentity = false;
   bool _closed = false;
   int _pageCountSeen = 0;
@@ -65,11 +92,14 @@ final class NovelReaderNativeRestoreCursor {
 
   NovelReaderTextAnchor? get targetAnchor => _conversionAnchor ?? _savedAnchor;
   bool get isResolved => _resolution != null;
+  NovelReaderTextAnchor? get resolvedNavigationAnchor =>
+      _resolvedNavigationAnchor;
 
   /// A resolved target must never keep old percent-driven foreground demand.
   bool get requiresCompletePageCount =>
       !_closed &&
       !isResolved &&
+      !isExplicitNavigation &&
       !isConversionRestore &&
       _position!.episodeId == episodeId &&
       _hasUsablePercent &&
@@ -89,7 +119,10 @@ final class NovelReaderNativeRestoreCursor {
     if (coverage.points.length > maxCoveragePoints) {
       throw StateError('Native restore coverage budget exceeded');
     }
-    if (isResolved || _position!.episodeId != episodeId) return;
+    if (isResolved ||
+        (_position != null && _position!.episodeId != episodeId)) {
+      return;
+    }
     final saved = _savedAnchor;
     final converted = _conversionAnchor;
     if (converted != null &&
@@ -98,7 +131,11 @@ final class NovelReaderNativeRestoreCursor {
       _convertedPage ??= coverage.pageIndex;
     }
     if (saved == null) return;
-    if (coverage.locate(saved) != null) _exactPage ??= coverage.pageIndex;
+    final exact = coverage.locate(saved);
+    if (exact != null) {
+      _exactPage ??= coverage.pageIndex;
+      if (isExplicitNavigation) _resolvedNavigationAnchor ??= exact.anchor;
+    }
     for (final point in coverage.points) {
       final anchor = point.anchor;
       if (anchor.episodeId != episodeId || anchor.nodeId != saved.nodeId) {
@@ -106,6 +143,7 @@ final class NovelReaderNativeRestoreCursor {
       }
       if (_nodePage == null || coverage.pageIndex < _nodePage!) {
         _nodePage = coverage.pageIndex;
+        _nodeAnchor = anchor;
       }
       if (saved.hasCanonicalTextOffset &&
           anchor.formatVersion == saved.formatVersion &&
@@ -121,6 +159,14 @@ final class NovelReaderNativeRestoreCursor {
     _checkPrefix(snapshot);
     if (isResolved) return _resolution;
     if (snapshot.isEmpty) return null;
+    if (isExplicitNavigation) {
+      if (_exactPage != null) return _latch(_exactPage!, exact: true);
+      if (_nodePage != null && !_hasMatchingTextIdentity) {
+        _resolvedNavigationAnchor = _nodeAnchor;
+        return _latch(_nodePage!);
+      }
+      return null;
+    }
     final position = _position!;
     if (position.episodeId != episodeId) return _latch(0);
     if (_conversionAnchor != null) {
@@ -181,7 +227,8 @@ final class NovelReaderNativeRestoreCursor {
     _resolution = NovelReaderPaginationRestoreResolution(
       pageIndex: page,
       isReadOnlyCompatibilityRestore:
-          !exact || isConversionRestore || !_hasKnownPercentBasis,
+          !isExplicitNavigation &&
+          (!exact || isConversionRestore || !_hasKnownPercentBasis),
     );
     // The result and request scope are all that is needed after selection.
     _position = null;
@@ -214,5 +261,7 @@ final class NovelReaderNativeRestoreCursor {
     _exactPage = null;
     _convertedPage = null;
     _nodePage = null;
+    _nodeAnchor = null;
+    _resolvedNavigationAnchor = null;
   }
 }

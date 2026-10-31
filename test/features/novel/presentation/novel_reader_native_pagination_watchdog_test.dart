@@ -15,6 +15,50 @@ import '../test_support/native_reader_test_fixture.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('cancelling an unreadable target creates no background timer and cannot retire a newer ticket', () {
+    fakeAsync((clock) {
+      final failures = <String?>[];
+      final watch = NovelReaderNativePaginationWatchdog(
+        parent: NovelReaderPaginationCancellationToken(),
+        elapsed: () => clock.elapsed,
+        onExpired: (error, _) => failures.add(error.code),
+      );
+      final old = watch.startTarget();
+      clock.elapse(const Duration(seconds: 4));
+      expect(watch.cancelTarget(old), isTrue);
+      expect(clock.nonPeriodicTimerCount, 0);
+      clock.elapse(const Duration(minutes: 10));
+      expect(failures, isEmpty);
+      watch.startTarget();
+      expect(watch.cancelTarget(old), isFalse);
+      clock.elapse(const Duration(seconds: 5));
+      expect(failures, ['targetPageWaitExceeded']);
+      expect(clock.nonPeriodicTimerCount, 0);
+    });
+  });
+
+  test('cancelling a seek preserves the actual readable source active stall allowance', () {
+    fakeAsync((clock) {
+      final failures = <String?>[];
+      final watch = NovelReaderNativePaginationWatchdog(
+        parent: NovelReaderPaginationCancellationToken(),
+        elapsed: () => clock.elapsed,
+        onExpired: (error, _) => failures.add(error.code),
+      );
+      watch.publication(pageCount: 10, isComplete: false);
+      watch.markReadable(watch.startTarget());
+      clock.elapse(const Duration(milliseconds: 1500));
+      final seek = watch.startTarget();
+      clock.elapse(const Duration(seconds: 4));
+      expect(watch.cancelTarget(seek), isTrue);
+      clock.elapse(const Duration(milliseconds: 499));
+      expect(failures, isEmpty);
+      clock.elapse(const Duration(milliseconds: 1));
+      expect(failures, ['backgroundPaginationIdle']);
+      expect(clock.nonPeriodicTimerCount, 0);
+    });
+  });
+
   test('suspension retires the target and owns no timer until visible', () {
     fakeAsync((clock) {
       final failures = <String?>[];

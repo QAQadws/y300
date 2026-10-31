@@ -111,6 +111,17 @@ final class NovelReaderNativePaginationWatchdog {
     return true;
   }
 
+  /// Retire a failed/cancelled intent without claiming a newly readable page.
+  /// Previous actual readability and its remaining stall budget stay intact.
+  bool cancelTarget(NovelReaderNativeTargetWait ticket) {
+    if (_closed || !identical(_target, ticket)) return false;
+    _targetTimer?.cancel();
+    _targetTimer = null;
+    _target = null;
+    _syncBackground();
+    return true;
+  }
+
   void publication({required int pageCount, required bool isComplete}) {
     _guard();
     if (pageCount < _pageCount ||
