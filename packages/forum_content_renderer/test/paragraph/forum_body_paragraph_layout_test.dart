@@ -78,6 +78,34 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'empty native font baseline does not fabricate text rows or pixels',
+    () async {
+      final input = content('<p></p>');
+      final layout = ForumBodyParagraphLayout.create(
+        content: input,
+        width: 100,
+      );
+      addTearDown(layout.dispose);
+      final native = TextPainter(
+        text: input.textSpan,
+        textDirection: input.style.textDirection,
+      )..layout(minWidth: 100, maxWidth: 100);
+      addTearDown(native.dispose);
+      expect(layout.lines, isEmpty);
+      expect(layout.height, native.height);
+      expect(
+        layout.alphabeticBaseline,
+        native.computeDistanceToActualBaseline(TextBaseline.alphabetic),
+      );
+      expect(layout.alphabeticBaseline, greaterThan(0));
+      expect(layout.selectionBoxes(0, 0), isEmpty);
+      expect(layout.sourceAt(const Offset(1, 1)).isExact, isFalse);
+      final pixels = await raster(layout);
+      expect(pixels.every((value) => value == 0), isTrue);
+    },
+  );
+
+  test(
     'a terminal empty native row cannot paint the previous tight-line glyph',
     () async {
       final layout = ForumBodyParagraphLayout.create(

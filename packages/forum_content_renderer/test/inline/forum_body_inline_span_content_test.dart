@@ -10,6 +10,124 @@ import 'test_support/mixed_inline_fixture.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('font strut admission cannot publish a standalone source-free page', () {
+    final input = mixedInlineInput().content;
+    final strut = ForumBodyParagraphContent.anonymousInline(
+      identity: input.identity,
+      fontRevision: input.fontRevision,
+      styleRevision: input.styleRevision,
+      style: input.style,
+    );
+    expect(
+      () => ForumBodyTextPageContent.paragraph(strut),
+      throwsArgumentError,
+    );
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 4,
+      maxEstimatedBytes: 1 << 20,
+    );
+    final lease = cache.acquire(content: strut, width: 100);
+    final composer = ForumBodyTextPageComposer(
+      identity: input.identity,
+      layoutId: 'strut-admission',
+      width: 100,
+      height: 100,
+      maxPages: 10,
+      maxFragments: 10,
+    );
+    try {
+      expect(
+        () => composer.append(
+          lease: lease,
+          paragraphIndex: 0,
+          left: 0,
+          spaceBefore: 0,
+          spaceAtPageStart: 0,
+        ),
+        throwsArgumentError,
+      );
+      expect(lease.isActive, isTrue);
+      expect(composer.needsInput, isTrue);
+      composer.finish();
+      expect(composer.snapshot, isEmpty);
+      expect(lease.layout.sourceAt(const Offset(1, 1)).isExact, isFalse);
+    } finally {
+      composer.close();
+      lease.release();
+      cache.close();
+    }
+    expect(cache.activeLeases, 0);
+  });
+
+  test(
+    'source-free struts cannot replace text or enter display projections',
+    () {
+      final fixture = mixedInlineInput();
+      final original = fixture.content;
+      ForumBodyParagraphContent strut({String? fontRevision}) =>
+          ForumBodyParagraphContent.anonymousInline(
+            identity: original.identity,
+            fontRevision: fontRevision ?? original.fontRevision,
+            styleRevision: original.styleRevision,
+            style: original.style,
+          );
+      final base = strut();
+      expect(base.isSourceFree, isTrue);
+      expect(base.path, isNull);
+      expect(base.projection.text, isEmpty);
+      expect(base.runs, isEmpty);
+      expect(
+        base.displayWindow(startUtf16: 0, endUtf16: 0).isSourceFree,
+        isTrue,
+      );
+      expect(
+        () => ForumBodyInlineSpanContent.compose(
+          identity: original.identity,
+          path: original.path,
+          fontRevision: original.fontRevision,
+          styleRevision: original.styleRevision,
+          style: original.style,
+          contexts: [base, ...fixture.contexts],
+          atomicRanges: [(startUtf16: 1, endUtf16: 5)],
+        ),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+      expect(
+        () => original.resolveAtomicContexts(0, [base, fixture.annotation]),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+
+      final orphan = ForumBodyInlineSpanContent.compose(
+        identity: original.identity,
+        path: original.path,
+        fontRevision: original.fontRevision,
+        styleRevision: original.styleRevision,
+        style: original.style,
+        contexts: [fixture.annotation],
+        atomicRanges: [(startUtf16: 0, endUtf16: 2)],
+      );
+      final windows = orphan.resolveAtomicContexts(0, [
+        base,
+        fixture.annotation,
+      ]);
+      expect(windows.map((window) => (window.startUtf16, window.endUtf16)), [
+        (0, 0),
+        (0, 2),
+      ]);
+      expect(
+        () => orphan.resolveAtomicContexts(0, [base]),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+      expect(
+        () => orphan.resolveAtomicContexts(0, [
+          strut(fontRevision: 'foreign'),
+          fixture.annotation,
+        ]),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+    },
+  );
+
   test(
     'real ruby IR composes actual source/styles and native engine placeholders',
     () {

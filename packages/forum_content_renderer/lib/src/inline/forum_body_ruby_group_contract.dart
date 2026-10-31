@@ -25,7 +25,7 @@ void validateForumBodyRubyGroupInputs({
   if (base.layoutMode != ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
       annotation.layoutMode !=
           ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
-      base.projection.text.isEmpty) {
+      (base.projection.text.isEmpty && annotation.projection.text.isEmpty)) {
     throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.content);
   }
   // Child geometry is already scaled into logical pixels. The parent must not

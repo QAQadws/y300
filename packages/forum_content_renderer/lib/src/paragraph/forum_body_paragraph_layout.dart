@@ -169,7 +169,12 @@ final class ForumBodyParagraphLayout
   @override
   double get alphabeticBaseline {
     _ensureOpen();
-    return lines.first.baseline;
+    // An empty native paragraph has a real font baseline but no text rows.
+    // Preserve that strut without introducing a synthetic row or glyph.
+    return lines.isEmpty
+        ? _painter.computeDistanceToActualBaseline(TextBaseline.alphabetic) *
+              _paintScale
+        : lines.first.baseline;
   }
 
   @override
@@ -203,12 +208,19 @@ final class ForumBodyParagraphLayout
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
     final position = _painter.getPositionForOffset(offset / _paintScale);
-    return projection.sourceAtUtf16(
+    final source = projection.sourceAtUtf16(
       position.offset,
       affinity: position.affinity == TextAffinity.upstream
           ? HtmlProjectionAffinity.upstream
           : HtmlProjectionAffinity.downstream,
     );
+    return projection.text.isEmpty
+        ? HtmlProjectedSourcePosition(
+            sourceRune: source.sourceRune,
+            displayUtf16: source.displayUtf16,
+            isExact: false,
+          )
+        : source;
   }
 
   @override

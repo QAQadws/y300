@@ -33,6 +33,40 @@ void main() {
   });
 
   test(
+    'empty base borrows native font metrics and never becomes a text hit',
+    () {
+      final input = rubyPairInput(base: '');
+      final group = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: input.base,
+        annotation: input.annotation,
+      );
+      try {
+        expect(group.size, const Size(20, 30));
+        expect(group.baseline, greaterThan(20));
+        expect(
+          group.selectionBoxes(
+            part: ForumBodyRubyPart.base,
+            startUtf16: 0,
+            endUtf16: 0,
+          ),
+          isEmpty,
+        );
+        final hit = group.sourceAt(const Offset(11, 5));
+        expect(hit.part, ForumBodyRubyPart.annotation);
+        expect(hit.position.sourceRune, 1);
+        expect(hit.position.isExact, isTrue);
+        final blank = group.sourceAt(const Offset(1, 29));
+        expect(blank.part, ForumBodyRubyPart.annotation);
+        expect(blank.position.isExact, isFalse);
+      } finally {
+        group.close();
+      }
+      expect(cache.activeLeases, 0);
+    },
+  );
+
+  test(
     'natural base and annotation share an actual alphabetic baseline box',
     () {
       final input = rubyPairInput();
@@ -288,7 +322,7 @@ void main() {
       final wrapped = rubyPairInput(
         layoutMode: ForumBodyParagraphLayoutMode.wrap,
       );
-      final empty = rubyPairInput(base: '');
+      final empty = rubyPairInput(base: '', annotation: '');
       for (final (base, annotation, failure) in [
         (input.base, otherSource.annotation, ForumBodyRubyGroupFailure.scope),
         (input.base, otherFont.annotation, ForumBodyRubyGroupFailure.scope),

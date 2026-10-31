@@ -97,6 +97,148 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'orphan RT uses a real empty font strut without invented display text',
+    () {
+      final f = _Fixture('<ruby><rt>xy</rt></ruby>', width: 200, height: 100);
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(prepared.view.content.projection.display.text, 'xy');
+        expect(prepared.view.content.projection.engineText, '\uFFFC');
+        final leases = prepared.nativeLeases.toList();
+        expect(leases, hasLength(3));
+        final base = leases[1] as ForumBodyTextLease;
+        expect(base.content.projection.text, isEmpty);
+        expect(base.layout.width, 0);
+        expect(base.layout.height, 20);
+        expect(base.layout.alphabeticBaseline, greaterThan(0));
+        expect(base.layout.selectionBoxes(0, 0), isEmpty);
+        expect(prepared.glyphBoxes(0, 2).single.top, 0);
+        expect(prepared.glyphBoxes(0, 2).single.bottom, 10);
+        expect(prepared.view.height, 30);
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+    },
+  );
+
+  test(
+    'empty base space is approximate while actual RT hits keep their source',
+    () {
+      final f = _Fixture(
+        '<p>X<ruby><rt>xy</rt></ruby>Y</p>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        final leases = prepared.nativeLeases.toList();
+        final parent = leases[0] as ForumBodyInlineParagraphLease;
+        final base = leases[1] as ForumBodyTextLease;
+        final rt = leases[2] as ForumBodyTextLease;
+        final metrics = ForumBodyRubyGroupMetrics.measure(
+          cache: f.cache,
+          baseLease: base,
+          annotation: rt.content,
+          annotationLease: rt,
+          maxWidth: 200,
+        );
+        final origin = parent.layout.atomBoxes.single.toRect().topLeft;
+        final glyph = rt.layout.selectionBoxes(1, 2).single.toRect();
+        final hit = prepared.view.sourceAt(
+          origin +
+              metrics.annotationOffset +
+              Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+        );
+        expect(hit.isExact, isTrue);
+        expect(hit.sourceRune, 2);
+        final blank = prepared.view.sourceAt(
+          origin + Offset(.1, metrics.size.height - .1),
+        );
+        expect(blank.isExact, isFalse);
+        expect(blank.sourceRune, inInclusiveRange(1, 3));
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('anonymous font metrics never pollute later actual source envelopes', () {
+    final f = _Fixture(
+      '<p><span style="display:none">hidden</span><ruby><rt>xy</rt></ruby></p>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    expect(f.session.snapshot.single.fragments.single.sourceHint, (
+      runeStart: 6,
+      runeEnd: 8,
+    ));
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(prepared.projection.text, 'xy');
+      expect(prepared.projection.sourceAtUtf16(0).sourceRune, 6);
+      final hit = prepared.view.sourceAt(Offset(.1, prepared.view.height - .1));
+      expect(hit.isExact, isFalse);
+      expect(hit.sourceRune, inInclusiveRange(6, 8));
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('anonymous base and RT retain independent nonlinear font scaling', () {
+    final f = _Fixture(
+      '<ruby><rt>xy</rt></ruby>',
+      width: 200,
+      height: 100,
+      textScaler: _Scaler((size) => size >= 20 ? size * 2 : size),
+    );
+    f.finish();
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      final leases = prepared.nativeLeases.toList();
+      final base = leases[1] as ForumBodyTextLease;
+      final rt = leases[2] as ForumBodyTextLease;
+      expect(base.layout.height, 40);
+      expect(rt.layout.height, 10);
+      expect(prepared.view.height, 50);
+      expect(prepared.projection.text, 'xy');
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('dense orphan RT shares its font strut and bounds annotation bands', () {
+    final f = _Fixture(
+      '<p>${List.generate(60, (index) => '<ruby><rt>r$index</rt></ruby>').join()}</p>',
+      width: 600,
+      height: 100,
+      entries: 4,
+    );
+    f.finish();
+    expect(f.session.snapshot, hasLength(1));
+    expect(f.cache.layoutBuildCount, 3);
+    expect(f.cache.pictureBuildCount, 0);
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(prepared.view.atomIndices, hasLength(60));
+      expect(prepared.nativeLeases, hasLength(121));
+      expect(f.cache.entryCount, lessThanOrEqualTo(4));
+      expect(f.cache.pictureBuildCount, 60);
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+    expect(f.session.activeIssuedLeases, 0);
+  });
+
+  test(
     'actual Session produces mixed pages and complete visible source-bound views',
     () {
       final f = _Fixture('<p>X<ruby>AB<rt>xy</rt></ruby>Y</p>');
@@ -772,7 +914,7 @@ void main() {
   for (final html in [
     '<ruby> <rt>a</rt></ruby>',
     '<ruby>A<rt>a</rt><rt>b</rt></ruby>',
-    '<ruby><rt>orphan</rt></ruby>',
+    '<ruby><rt> </rt></ruby>',
     '<ruby>A<ruby>B<rt>b</rt></ruby><rt>a</rt></ruby>',
   ]) {
     test('pending complex format never flattens or loses source: $html', () {

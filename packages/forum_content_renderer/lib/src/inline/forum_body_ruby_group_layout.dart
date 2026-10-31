@@ -251,15 +251,24 @@ final class ForumBodyRubyGroupLayout {
       throw ArgumentError.value(offset);
     }
     final annotation = _annotation;
+    final emptyBase = _base!.content.projection.text.isEmpty;
     final useAnnotation =
-        annotation != null && offset.dy < metrics.annotationHitBoundary;
+        annotation != null &&
+        (emptyBase || offset.dy < metrics.annotationHitBoundary);
+    final position = useAnnotation
+        ? annotation.layout.sourceAt(offset - annotationOffset)
+        : _base!.layout.sourceAt(offset - baseOffset);
     return ForumBodyRubyHit(
       part: useAnnotation
           ? ForumBodyRubyPart.annotation
           : ForumBodyRubyPart.base,
-      position: useAnnotation
-          ? annotation.layout.sourceAt(offset - annotationOffset)
-          : _base!.layout.sourceAt(offset - baseOffset),
+      position: emptyBase && offset.dy >= metrics.annotationHitBoundary
+          ? HtmlProjectedSourcePosition(
+              sourceRune: position.sourceRune,
+              displayUtf16: position.displayUtf16,
+              isExact: false,
+            )
+          : position,
     );
   }
 

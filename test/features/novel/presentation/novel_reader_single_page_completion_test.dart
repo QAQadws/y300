@@ -38,18 +38,20 @@ const _work = 'novel:49:100';
 const _chapter = '$_work:5001';
 const _next = '$_work:5003';
 
+enum _BodySample { paragraphs, rubyPair, orphanRuby }
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  for (final rubyBody in [false, true]) {
+  for (final body in _BodySample.values) {
     for (final readOnlyRestore in [false, true]) {
       testWidgets(
-        'fractional native font leading preserves SQLite reading authority (ruby=$rubyBody, readOnly=$readOnlyRestore)',
+        'fractional native font leading preserves SQLite reading authority (body=$body, readOnly=$readOnlyRestore)',
         (tester) async {
           final fixture = (await tester.runAsync(
-            () => _Fixture.create(rubyBody: rubyBody),
+            () => _Fixture.create(body: body),
           ))!;
           try {
             if (readOnlyRestore) {
@@ -525,15 +527,17 @@ final class _Fixture {
   final _ReadFailureRepository repository;
   final DefaultNovelReaderProgressCommitter committer;
 
-  static Future<_Fixture> create({bool rubyBody = false}) async {
+  static Future<_Fixture> create({
+    _BodySample body = _BodySample.paragraphs,
+  }) async {
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
     await seedNovelRepository(
       db,
       seed: const NovelSourceSeed(fid: '49', tid: '100'),
       coverImageUrl: null,
-      episodes: rubyBody
+      episodes: body != _BodySample.paragraphs
           ? [
-              const NovelEpisodeDraft(
+              NovelEpisodeDraft(
                 episodeId: _chapter,
                 novelId: _work,
                 sourceTid: '100',
@@ -542,9 +546,11 @@ final class _Fixture {
                 episodeTitle: '第1章 开始',
                 orderIndex: 0,
                 datelineText: '2026-05-03',
-                rawHtml: '<p><ruby>A <rt>x</rt></ruby></p>',
-                plainText: 'A x',
-                paragraphs: ['A x'],
+                rawHtml: body == _BodySample.rubyPair
+                    ? '<p><ruby>A <rt>x</rt></ruby></p>'
+                    : '<p><ruby><rt>x</rt></ruby></p>',
+                plainText: body == _BodySample.rubyPair ? 'A x' : 'x',
+                paragraphs: [body == _BodySample.rubyPair ? 'A x' : 'x'],
               ),
               ...novelRepositorySeedEpisodes(
                 const NovelSourceSeed(fid: '49', tid: '100'),

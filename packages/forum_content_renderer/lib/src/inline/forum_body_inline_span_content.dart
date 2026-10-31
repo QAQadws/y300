@@ -36,7 +36,7 @@ final class ForumBodyInlineSpanContent {
   }) : contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  static const revision = 4;
+  static const revision = 5;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -72,6 +72,12 @@ final class ForumBodyInlineSpanContent {
     final runIndices = Map<ForumBodyParagraphRun, int>.identity();
     var inputLength = 0;
     for (final context in contexts) {
+      if (context.isSourceFree) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.structure,
+          context.path,
+        );
+      }
       if (context.identity != identity ||
           context.fontRevision != fontRevision ||
           context.styleRevision != styleRevision) {
@@ -161,8 +167,9 @@ final class ForumBodyInlineSpanContent {
     return result;
   }
 
-  /// Resolve actual independent children covering one engine atom. Empty
-  /// non-painted children are omitted. Equal text is never a context identity.
+  /// Resolve actual independent children covering one engine atom. Explicit
+  /// source-free font struts occupy no display range; they cannot provide glyph
+  /// or source coverage. Equal text is never a textual context identity.
   List<ForumBodyInlineContext> resolveAtomicContexts(
     int index,
     List<ForumBodyParagraphContent> children,
@@ -172,6 +179,19 @@ final class ForumBodyInlineSpanContent {
     final result = <ForumBodyInlineContext>[];
     var cursor = atom.displayStartUtf16;
     for (final child in children) {
+      if (child.isSourceFree) {
+        if (child.identity != identity ||
+            child.fontRevision != fontRevision ||
+            child.styleRevision != styleRevision ||
+            child.projection.text.isNotEmpty) {
+          throw ForumBodyParagraphInputException(
+            ForumBodyParagraphInputFailure.identity,
+            child.path,
+          );
+        }
+        result.add(ForumBodyInlineContext._(child, cursor, cursor));
+        continue;
+      }
       final context = _contextIndex[child];
       if (context == null) {
         throw ForumBodyParagraphInputException(
@@ -179,7 +199,7 @@ final class ForumBodyInlineSpanContent {
           child.path,
         );
       }
-      if (context.startUtf16 != cursor || context.endUtf16 <= cursor) {
+      if (context.startUtf16 != cursor || context.endUtf16 < cursor) {
         throw ForumBodyParagraphInputException(
           ForumBodyParagraphInputFailure.structure,
           child.path,

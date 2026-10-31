@@ -524,7 +524,11 @@ final class _CompositionParagraph {
       fontRevision = current.content.fontRevision,
       styleRevision = current.content.styleRevision,
       projection = current.content.projection,
-      kind = ForumBodyTextPageFragmentKind.paragraph;
+      kind = ForumBodyTextPageFragmentKind.paragraph {
+    if (current.content.isSourceFree) {
+      throw ArgumentError('Anonymous font struts are not document paragraphs');
+    }
+  }
   _CompositionParagraph.inline(ForumBodyInlineParagraphLease current)
     : lease = current,
       _text = null,

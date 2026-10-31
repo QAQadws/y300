@@ -46,8 +46,30 @@ final class ForumBodyParagraphContent {
     required this.projection,
     required List<ForumBodyParagraphRun> runs,
     required List<ForumBodyStyleIssue> issues,
+    this.isSourceFree = false,
   }) : runs = List.unmodifiable(runs),
        issues = List.unmodifiable(issues);
+
+  /// A format-generated empty font strut, not a DOM/text context. Its empty
+  /// projection's zero never claims source rune zero and must not enter the
+  /// parent's display segments. Identical struts can share the existing cache.
+  factory ForumBodyParagraphContent.anonymousInline({
+    required ForumBodyIdentity identity,
+    required String fontRevision,
+    required int styleRevision,
+    required ForumBodyResolvedStyle style,
+  }) => ForumBodyParagraphContent._(
+    identity: identity,
+    path: null,
+    fontRevision: fontRevision,
+    styleRevision: styleRevision,
+    style: style,
+    layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+    projection: HtmlDisplayTextProjection.build(const []),
+    runs: const [],
+    issues: const [],
+    isSourceFree: true,
+  );
 
   final ForumBodyIdentity identity;
   final String? path;
@@ -58,6 +80,7 @@ final class ForumBodyParagraphContent {
   final HtmlDisplayTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyStyleIssue> issues;
+  final bool isSourceFree;
 
   /// An explicit window of this display projection, retaining original source
   /// affinity and run ownership. This never slices HTML or semantic offsets.
@@ -74,6 +97,7 @@ final class ForumBodyParagraphContent {
     projection: projection.slice(startUtf16: startUtf16, endUtf16: endUtf16),
     runs: runs,
     issues: issues,
+    isSourceFree: isSourceFree,
   );
 
   /// No recognizers are retained; interaction uses the same layout coordinates.

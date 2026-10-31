@@ -19,7 +19,7 @@ final class ForumBodyRubyGroupMetrics {
     required this.annotationHitBoundary,
   });
 
-  static const revision = 1;
+  static const revision = 2;
 
   /// Borrows current same-owner glyph leases. Does not shape, prepare pictures,
   /// transfer ownership or release the caller's handles, including on failure.

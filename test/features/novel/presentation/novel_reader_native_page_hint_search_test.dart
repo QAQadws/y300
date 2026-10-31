@@ -49,6 +49,42 @@ NovelReaderNativePageHintSearch _search(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'orphan annotation restores its real source beyond the font strut',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p>aa</p><p><ruby><rt>xy</rt></ruby></p>',
+        width: 20,
+        height: 15,
+      );
+      final target = _anchor(fixture, 1, node: 'node-1');
+      final builds = fixture.cache.layoutBuildCount;
+      final hints = _collect(_search(fixture, target));
+      expect(hints.map((hint) => hint.pageIndex), [1]);
+      expect(fixture.cache.layoutBuildCount, builds);
+      final view = await NovelReaderNativePageViewJob(
+        session: fixture.session,
+        anchors: fixture.anchors,
+        pageIndex: 1,
+        parent: fixture.parent,
+        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+      ).run();
+      try {
+        expect(view.coverage.locate(target), isNotNull);
+        expect(view.coverage.points, isNotEmpty);
+        expect(
+          view.coverage.points.every((point) => point.sourceRune >= 2),
+          isTrue,
+        );
+        expect(view.coverage.hasClippedGlyphs, isFalse);
+      } finally {
+        view.close();
+      }
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
+
   test('moved base space keeps RT hints and page-local exact proof', () async {
     final fixture = NativeReaderTestFixture(
       '<p>X<ruby>AB <rt>xy</rt></ruby>Y</p>',

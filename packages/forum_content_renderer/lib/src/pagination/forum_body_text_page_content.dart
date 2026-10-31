@@ -54,7 +54,11 @@ sealed class ForumBodyTextPageContent {
 }
 
 final class ForumBodyParagraphPageContent extends ForumBodyTextPageContent {
-  const ForumBodyParagraphPageContent(this.content) : super._();
+  ForumBodyParagraphPageContent(this.content) : super._() {
+    if (content.isSourceFree) {
+      throw ArgumentError('Anonymous font struts are not document paragraphs');
+    }
+  }
   final ForumBodyParagraphContent content;
   @override
   ForumBodyIdentity get identity => content.identity;

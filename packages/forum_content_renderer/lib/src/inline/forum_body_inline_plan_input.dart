@@ -12,7 +12,7 @@ import 'forum_body_text_band_content.dart';
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
   ForumBodyInlinePlanInput._(this.content, this.groups, this.width);
-  static const revision = 4;
+  static const revision = 5;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -88,14 +88,18 @@ final class ForumBodyInlinePlanInput {
               group.rootPath,
             );
           }
-          if (group.base.length != 1 ||
-              group.base.single is! ForumBodyRubyTextContent ||
+          if (group.base.length > 1 ||
+              (group.base.isNotEmpty &&
+                  group.base.single is! ForumBodyRubyTextContent) ||
               group.annotations.length > 1) {
             _unsupported(group.rootPath);
           }
-          var base = (group.base.single as ForumBodyRubyTextContent).content;
+          var base = group.base.isEmpty
+              ? null
+              : (group.base.single as ForumBodyRubyTextContent).content;
           final ForumBodyParagraphContent annotation;
           if (group.annotations.isEmpty) {
+            if (base == null) _unsupported(group.rootPath);
             sourceOrder.add(appendPlain(base));
             continue;
           } else {
@@ -111,6 +115,16 @@ final class ForumBodyInlinePlanInput {
               leading: true,
               trailing: true,
             );
+          }
+          base ??= ForumBodyParagraphContent.anonymousInline(
+            identity: group.identity,
+            fontRevision: group.fontRevision,
+            styleRevision: group.styleRevision,
+            style: group.style,
+          );
+          if (base.projection.text.isEmpty &&
+              annotation.projection.text.isEmpty) {
+            _unsupported(group.rootPath);
           }
           // Implicit whitespace-only bases need structural ruby pairing. Do
           // not mistake source indentation for an explicit annotated RB space.
@@ -131,14 +145,14 @@ final class ForumBodyInlinePlanInput {
             base = _window(base, 0, end - 1);
           }
           final start = offset;
-          final baseIndex = append(base);
+          final baseIndex = base.isSourceFree ? null : append(base);
           final annotationIndex = append(annotation);
           atoms.add((startUtf16: start, endUtf16: offset));
           pairs.add((base: base, annotation: annotation));
           previousCollapsibleSpace = false;
           atLineStart = false;
           lastPlain = null;
-          sourceOrder.add(baseIndex);
+          if (baseIndex != null) sourceOrder.add(baseIndex);
           if (trailing != null) {
             // Display after the atom, but validate before RT in source order.
             // Neither coordinate nor identity is inferred from text lengths.
@@ -282,6 +296,12 @@ Map<ForumBodyParagraphContent, ForumBodyTextRequest> _requests(
   }
 
   for (final context in contexts) {
+    if (context.isSourceFree) {
+      // Empty font struts use a shared ordinary cached layout. They carry no
+      // displayed source and must not split the surrounding annotation bands.
+      result[context] = ForumBodyTextRequest.paragraph(context);
+      continue;
+    }
     if (!ForumBodyTextBandContent.supportsContext(context)) {
       flush();
       result[context] = ForumBodyTextRequest.paragraph(context);
