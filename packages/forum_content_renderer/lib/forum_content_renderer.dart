@@ -10,6 +10,7 @@ export 'src/paragraph/forum_body_paragraph_surface.dart';
 export 'src/style/forum_body_length.dart';
 export 'src/style/forum_body_style_options.dart';
 export 'src/style/forum_body_style_resolver.dart';
+export 'src/style/forum_body_style_cursor.dart';
 
 export 'src/helpers/discuz_font_size_policy.dart' show DiscuzFontSizePolicy;
 export 'src/helpers/forum_collapse_chrome.dart' show ForumCollapseChrome;
