@@ -236,6 +236,57 @@ final class ForumBodyParagraphContentBuilder {
       ),
     );
   }
+
+  /// Text-only fragment inside an already admitted inline formatting root.
+  /// The format consumer handles the root itself and partitions its children;
+  /// this port does not admit ruby/resources into an ordinary paragraph.
+  ForumBodyParagraphSequence openInlineSequence(
+    ForumBodyStyledFlowCursor flow, {
+    required ForumBodyStyledFlowEvent root,
+    ForumBodyParagraphLayoutMode layoutMode =
+        ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+  }) {
+    if (flow.isClosed) throw StateError('Styled flow cursor is closed');
+    final node = root.node;
+    if (!flow.owns(root) ||
+        !flow.isOpenElement(root) ||
+        root.phase != ForumBodyFlowPhase.open ||
+        node is! ForumBodyElement) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        node.path,
+      );
+    }
+    if (!const {
+          ForumBodyElementKind.inline,
+          ForumBodyElementKind.unknown,
+          ForumBodyElementKind.ruby,
+          ForumBodyElementKind.rubyText,
+        }.contains(node.kind) ||
+        root.style.hidden ||
+        root.style.display != ForumBodyDisplay.inline ||
+        !_ParagraphCollector._inlineBoxIsEmpty(root.style)) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.structure,
+        node.path,
+      );
+    }
+    return ForumBodyParagraphSequence._(
+      flow,
+      _ParagraphCollector(
+        identity: flow.identity,
+        path: node.path,
+        fontRevision: flow.fontRevision,
+        styleRevision: flow.styleRevision,
+        style: root.style,
+        layoutMode: layoutMode,
+        singleLineWhitespace: false,
+        preserveCollapsibleEdges: true,
+        limits: this,
+        emptySourceRune: node.source.runeStart,
+      ),
+    );
+  }
 }
 
 /// Inline sequence assembly owned by one structural flow. It does not advance
@@ -425,6 +476,7 @@ final class _ParagraphCollector {
     required this.singleLineWhitespace,
     required this.limits,
     required this.emptySourceRune,
+    this.preserveCollapsibleEdges = false,
   });
   final ForumBodyIdentity identity;
   final String? path;
@@ -435,6 +487,7 @@ final class _ParagraphCollector {
   final bool singleLineWhitespace;
   final ForumBodyParagraphContentBuilder limits;
   final int emptySourceRune;
+  final bool preserveCollapsibleEdges;
   final _inputs = <HtmlDisplayTextRun>[];
   final _runs = <ForumBodyParagraphRun>[];
   HtmlDisplayTextProjection? _projection;
@@ -447,6 +500,7 @@ final class _ParagraphCollector {
             ? [HtmlDisplayTextRun(text: '', sourceRuneStart: emptySourceRune)]
             : _inputs,
         maxOutputCodeUnits: limits.maxInputCodeUnits,
+        preserveCollapsibleEdges: preserveCollapsibleEdges,
       );
 
   void absorb(_ParagraphCollector other) {
@@ -454,6 +508,7 @@ final class _ParagraphCollector {
         path != other.path ||
         layoutMode != other.layoutMode ||
         singleLineWhitespace != other.singleLineWhitespace ||
+        preserveCollapsibleEdges != other.preserveCollapsibleEdges ||
         !identical(style, other.style)) {
       throw ForumBodyParagraphInputException(
         ForumBodyParagraphInputFailure.identity,

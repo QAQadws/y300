@@ -17,6 +17,123 @@ ForumBodyStyledFlowCursor _flow(ForumBodyDocument document) =>
     ForumBodyStyledFlowCursor(document: document, reader: _reader);
 
 void main() {
+  test(
+    'explicit inline fragments preserve root style, source and collapsible edges',
+    () {
+      final flow = _flow(
+        _document('<ruby>A<rt style="font-size:10px"> x <b>y</b> </rt></ruby>'),
+      );
+      addTearDown(flow.close);
+      while (flow.moveNext()) {
+        if (flow.current!.node is ForumBodyElement &&
+            (flow.current!.node as ForumBodyElement).kind ==
+                ForumBodyElementKind.rubyText) {
+          break;
+        }
+      }
+      final root = flow.current!;
+      const builder = ForumBodyParagraphContentBuilder();
+      final sequence = builder.openInlineSequence(flow, root: root);
+      while (flow.moveNext()) {
+        final event = flow.current!;
+        if (event.node.path == root.node.path &&
+            event.phase == ForumBodyFlowPhase.close) {
+          break;
+        }
+        if (event.phase != ForumBodyFlowPhase.close) sequence.appendCurrent();
+      }
+      final content = sequence.finish();
+      expect(content.projection.text, ' x y ');
+      expect(content.style.textStyle.fontSize, 10);
+      expect(
+        content.layoutMode,
+        ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      );
+      expect(content.projection.sourceAtUtf16(0).sourceRune, 1);
+      expect(content.runs.any((run) => run.style.strong), isTrue);
+      expect(flow.isClosed, isFalse);
+      expect(
+        () => builder.openInlineSequence(flow, root: root),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+    },
+  );
+
+  test(
+    'inline fragment roots reject foreign ownership, resources and unhandled box geometry',
+    () {
+      const builder = ForumBodyParagraphContentBuilder();
+      final first = _flow(_document('<span>x</span>'))..moveNext();
+      final other = _flow(_document('<span>x</span>'))..moveNext();
+      addTearDown(first.close);
+      addTearDown(other.close);
+      expect(
+        () => builder.openInlineSequence(first, root: other.current!),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+      for (final html in [
+        '<img src="x">',
+        '<span style="padding:2px">x</span>',
+        '<span style="display:block">x</span>',
+      ]) {
+        final flow = _flow(_document(html))..moveNext();
+        addTearDown(flow.close);
+        expect(
+          () => builder.openInlineSequence(flow, root: flow.current!),
+          throwsA(
+            isA<ForumBodyParagraphInputException>().having(
+              (error) => error.failure,
+              'failure',
+              ForumBodyParagraphInputFailure.structure,
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test(
+    'explicit fragment limits do not relax ordinary ruby structural admission',
+    () {
+      final document = _document('<ruby>A<rt>a</rt></ruby>');
+      final flow = _flow(document)..moveNext();
+      addTearDown(flow.close);
+      const builder = ForumBodyParagraphContentBuilder();
+      expect(
+        () => builder.build(
+          document: document,
+          styles: const ForumBodyStyleResolver().resolve(document, _reader),
+        ),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+      final sequence = builder.openInlineSequence(flow, root: flow.current!);
+      flow.moveNext();
+      sequence.appendCurrent();
+      flow.moveNext(); // Actual RT must be handled by its format consumer.
+      expect(
+        sequence.appendCurrent,
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+      expect(sequence.isClosed, isTrue);
+      final limited = _flow(_document('<span>long</span>'))..moveNext();
+      addTearDown(limited.close);
+      final value = const ForumBodyParagraphContentBuilder(
+        maxInputCodeUnits: 2,
+      ).openInlineSequence(limited, root: limited.current!);
+      limited.moveNext();
+      expect(
+        value.appendCurrent,
+        throwsA(
+          isA<ForumBodyParagraphInputException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyParagraphInputFailure.inputLimit,
+          ),
+        ),
+      );
+    },
+  );
+
   test('raw sequence merge normalizes cross-run CRLF only once', () {
     final document = _document(
       '<p style="white-space:pre-wrap">a&#13;<b>&#10;b</b></p>',

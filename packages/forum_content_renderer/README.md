@@ -68,4 +68,10 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 1，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
 
-这是行内排版的分组端口，不是完整 ruby HTML consumer。ruby 语法分组、父段落的源码/engine placeholder 投影、分页合法边界、复制与完整无障碍接入仍由后续组合层实现；普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
+这是行内排版的分组端口，不是完整 ruby HTML consumer。父段落的源码/engine placeholder 投影、分页合法边界、复制与完整无障碍接入仍由后续组合层实现；普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。
+
+`ForumBodyRubyContentCursor.openCurrent` 从唯一 styled IR flow 中分组实际 ruby 内容，按 [HTML ruby 分段规则](https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-ruby-element)区分基字、注音与回退。它借用当前 ruby 的流，逐步产生不可变组；同一基字的多个注音分别保留，嵌套 ruby 保持子组结构，空注音、孤立注音和未注音尾部不伪造或丢弃文字。根样式、文档身份和构建时字体/样式版本随组保存，子文字保留自己的来源、样式和字素上下文。
+
+`openInlineSequence` 只为专门格式处理者提供已打开行内根中的纯文字片段，显式保留折叠边缘空格；它不把 ruby/资源包装节点变成普通段落。括号回退、隐藏子树和注音间空白通过 `takeIgnored` 返回来源记录，这些记录不证明阅读 coverage。样式诊断继续由借用 flow 的 owner 按批次取走。
+
+`advance(maxEvents)` 同时限制实际读取及已缓冲空白的延后消费，返回二者区分的 `eventsRead/workDone`；在嵌套层累计核对文字、run、组、深度和结构条目上限。空注音/回退元数据也计结构预算。关闭、错误或发现 flow 被其他消费者推进后，不发布半组，不关闭调用者的 flow；已交付的纯组不会被后续失败修改。分组 revision 为 1，不进行字体测量、DOM 切片、语义锚点迁移或页面发布。父段落 engine 坐标投影、分层 ruby 几何和正式阅读器接入仍待组合层完成。
