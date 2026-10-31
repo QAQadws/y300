@@ -282,6 +282,12 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _retireNavigationInput();
     }
     final hintChanged = oldWidget.conversionAnchor != widget.conversionAnchor;
+    // The page drops its bootstrap hint after the first real position report.
+    // A fulfilled intent is no longer a layout input; withdrawing it must not
+    // invalidate the live paint or the position lease it just established.
+    final beginningChanged =
+        oldWidget.startsAtBeginning != widget.startsAtBeginning &&
+        (!_beginningConsumed || widget.startsAtBeginning);
     final resourcesChanged =
         !identical(oldWidget.sessionLimits, widget.sessionLimits) ||
         !identical(oldWidget.performance, widget.performance) ||
@@ -318,7 +324,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         !identical(oldWidget.stylePolicy, widget.stylePolicy) ||
         hintChanged ||
         resourcesChanged ||
-        oldWidget.startsAtBeginning != widget.startsAtBeginning) {
+        beginningChanged) {
       _needsLayout = true;
       _busy = true;
       _force =

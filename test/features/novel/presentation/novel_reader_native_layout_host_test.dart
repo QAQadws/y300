@@ -241,6 +241,35 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 
 void main() {
   testWidgets(
+    'withdrawing a consumed beginning does not revalidate live paint',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader, startsAtBeginning: true);
+      await tester.pumpAndSettle();
+      expect(reader.positions.single.pageIndex, 0);
+      final controller = reader.statuses.last.controller;
+      final count = reader.positions.length;
+      final ready = reader.ready;
+      reader.statuses.clear();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(
+        reader.statuses.every(
+          (status) =>
+              status.phase == NovelReaderNativeHostPhase.reading &&
+              !status.isRetainingPreviousLayout,
+        ),
+        isTrue,
+      );
+      expect(controller!.isSuspended, isFalse);
+      expect(controller.isClosed, isFalse);
+      expect(reader.positions, hasLength(count));
+      expect(reader.ready, ready);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
     'duplicate activity notifications cannot extend a target deadline or implicitly retry its failure',
     (tester) async {
       final reader = _Reader();
