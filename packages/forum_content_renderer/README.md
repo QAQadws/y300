@@ -98,3 +98,17 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 边缘、可见 coverage、分页、缓存预算和阅读锚点。组合输入 revision 为 1，父布局身份
 还须纳入 projection、原子几何、完整样式和有效字体缩放；正式 flow/session/page 接入
 及分层/多注音几何尚未完成，不能据此宣称复杂正文已通过原生阅读器验收。
+
+`ForumBodyInlineParagraphLayout` 持有一个实际父 TextPainter。与普通段落共用唯一的
+原生逻辑行提取实现；`ForumBodyParagraphLine` 明确记录 display 和 engine 的 paint／
+coverage 范围，前者保留真实子文字，后者用于引擎边界。物理 fallback 行允许记录未
+对齐字素的偏移，但不能在非法边界建立分片；硬换行和末尾空行继续保留完整 coverage。
+父布局支持 wrap 和固有单行，不隐式缩小 ruby；超宽原子及不支持的缩进/混合方向明确
+失败。准入只核对父引擎实际使用的 `parentRuns`，子文字的方向、字号缩放归独立布局。
+
+父原生命中先检查实际占位框，返回原子索引和子局部点；其余命中才投影普通文字来源。
+选区分别返回普通字形框和实际子 display 窗口，不把矩形占位框冒充注音/基字选区。
+分片借用同一引擎，按合法行框裁剪并保持两套 coverage；`paintParent` 只绘制父文字，
+consumer 仍须准备、核对并绘制实际子布局，不能据此单独发布可读页。父布局只拥有自己
+的 native 对象，dispose 使其全部借用分片失效，不关闭子 owner。混排布局 revision 为 1；
+该原语仍待 owner 缓存与正式分页消费，不引入第二套预算或整段常驻子租约。

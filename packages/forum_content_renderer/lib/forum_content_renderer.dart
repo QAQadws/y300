@@ -8,6 +8,7 @@ export 'src/document/forum_body_parser.dart';
 export 'src/flow/forum_body_styled_flow_cursor.dart';
 export 'src/flow/forum_body_text_flow_cursor.dart';
 export 'src/inline/forum_body_inline_span_content.dart';
+export 'src/inline/forum_body_inline_paragraph_layout.dart';
 export 'src/inline/forum_body_ruby_group_layout.dart';
 export 'src/inline/forum_body_ruby_content.dart';
 export 'src/inline/forum_body_ruby_content_cursor.dart';

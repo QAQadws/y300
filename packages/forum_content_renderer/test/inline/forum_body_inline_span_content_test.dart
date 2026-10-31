@@ -5,109 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
-final _reader = ForumBodyReaderStyle(
-  textStyle: const TextStyle(
-    fontFamily: 'Ahem',
-    fontSize: 20,
-    height: 1,
-    color: Color(0xff000000),
-  ),
-  fontRevision: 'ahem',
-  linkColor: const Color(0xff0000ff),
-);
-
-({
-  ForumBodyInlineSpanContent content,
-  ForumBodyParagraphContent base,
-  ForumBodyParagraphContent annotation,
-  List<ForumBodyParagraphContent> contexts,
-})
-input({
-  String prefix = 'X',
-  String base = 'AB',
-  String annotation = 'xy',
-  String suffix = 'Y',
-  String paragraphStyle = '',
-  String direction = 'ltr',
-  ForumBodyReaderStyle? reader,
-}) {
-  final document = const ForumBodyParser().parse(
-    html:
-        '<p dir="$direction" style="$paragraphStyle"><span style="color:red">$prefix</span>'
-        '<ruby>$base<rp>(</rp><rt>$annotation</rt><rp>)</rp></ruby>'
-        '<span style="color:blue">$suffix</span></p>',
-    sourceId: 'mixed-inline',
-    conversionIdentity: 'none',
-  );
-  final styles = const ForumBodyStyleResolver().resolve(
-    document,
-    reader ?? _reader,
-  );
-  final flow = ForumBodyStyledFlowCursor(
-    document: document,
-    reader: reader ?? _reader,
-  );
-  try {
-    while (flow.moveNext()) {
-      if (flow.current!.node.path == '0/1' &&
-          flow.current!.phase == ForumBodyFlowPhase.open) {
-        break;
-      }
-    }
-    final cursor = ForumBodyRubyContentCursor.openCurrent(flow);
-    try {
-      ForumBodyRubyGroupContent? group;
-      for (var work = 0; work < 100; work++) {
-        final step = cursor.advance(maxEvents: 1);
-        expect(step.workDone, lessThanOrEqualTo(1));
-        if (step.hasOutput) group = cursor.current;
-        if (step.isComplete) break;
-      }
-      final baseContent =
-          (group!.base.single as ForumBodyRubyTextContent).content;
-      final annotationContent =
-          (group.annotations.single.parts.single as ForumBodyRubyTextContent)
-              .content;
-      ForumBodyParagraphContent build(String path) =>
-          const ForumBodyParagraphContentBuilder().build(
-            document: document,
-            styles: styles,
-            path: path,
-            layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
-          );
-      final prefixContent = build('0/0');
-      final contexts = [
-        prefixContent,
-        baseContent,
-        annotationContent,
-        build('0/2'),
-      ];
-      final start = prefixContent.projection.text.length;
-      final end =
-          start +
-          baseContent.projection.text.length +
-          annotationContent.projection.text.length;
-      return (
-        content: ForumBodyInlineSpanContent.compose(
-          identity: document.identity,
-          path: '0',
-          fontRevision: styles.fontRevision,
-          styleRevision: styles.resolverRevision,
-          style: styles.byPath['0']!,
-          contexts: contexts,
-          atomicRanges: [(startUtf16: start, endUtf16: end)],
-        ),
-        base: baseContent,
-        annotation: annotationContent,
-        contexts: contexts,
-      );
-    } finally {
-      cursor.close();
-    }
-  } finally {
-    flow.close();
-  }
-}
+import 'test_support/mixed_inline_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -115,7 +13,7 @@ void main() {
   test(
     'real ruby IR composes actual source/styles and native engine placeholders',
     () {
-      final fixture = input();
+      final fixture = mixedInlineInput();
       final content = fixture.content;
       expect(content.projection.display.text, 'XABxyY');
       expect(content.projection.engineText, 'X\uFFFCY');
@@ -172,7 +70,7 @@ void main() {
   test(
     'actual child layout drives mixed wrapping and baseline without scaling twice',
     () {
-      final fixture = input();
+      final fixture = mixedInlineInput();
       final content = fixture.content;
       final cache = ForumBodyParagraphCache(
         maxEntries: 4,
@@ -223,7 +121,7 @@ void main() {
   test(
     'tight line-height retains the full opaque box in the parent engine',
     () {
-      final fixture = input(paragraphStyle: 'line-height:0.25');
+      final fixture = mixedInlineInput(paragraphStyle: 'line-height:0.25');
       final cache = ForumBodyParagraphCache(
         maxEntries: 4,
         maxEstimatedBytes: 1 << 20,
@@ -258,7 +156,7 @@ void main() {
   test(
     'parent can paint actual base and annotation at the native placeholder',
     () async {
-      final fixture = input();
+      final fixture = mixedInlineInput();
       final cache = ForumBodyParagraphCache(
         maxEntries: 4,
         maxEstimatedBytes: 1 << 20,
@@ -332,7 +230,7 @@ void main() {
   test(
     'ordinary hidden spans keep geometry but receive the shared transparent style',
     () {
-      final fixture = input(
+      final fixture = mixedInlineInput(
         prefix: '<b style="visibility:hidden">e\u0301</b>Q',
       );
       final spans = fixture.content.textSpan.children!
@@ -350,7 +248,7 @@ void main() {
   test(
     'RTL parent uses actual engine positions while child text stays independent',
     () {
-      final fixture = input(
+      final fixture = mixedInlineInput(
         prefix: 'א',
         base: 'אב',
         annotation: 'xy',
@@ -393,7 +291,7 @@ void main() {
   );
 
   test('adjacent atoms across styled contexts use one native slot each', () {
-    final fixture = input();
+    final fixture = mixedInlineInput();
     final original = fixture.content;
     final content = ForumBodyInlineSpanContent.compose(
       identity: original.identity,
@@ -430,7 +328,7 @@ void main() {
   });
 
   test('literal U+FFFC stays ordinary text beside the actual placeholder', () {
-    final fixture = input(prefix: '\uFFFC');
+    final fixture = mixedInlineInput(prefix: '\uFFFC');
     final content = fixture.content;
     expect(content.projection.engineText, '\uFFFC\uFFFCY');
     expect(
@@ -454,7 +352,7 @@ void main() {
   });
 
   test('composition rejects mixed document, font and style scopes', () {
-    final fixture = input();
+    final fixture = mixedInlineInput();
     final content = fixture.content;
     ForumBodyInlineSpanContent compose({
       ForumBodyIdentity? identity,
@@ -495,7 +393,7 @@ void main() {
   test(
     'composition refuses source reordering and enforces all structural budgets',
     () {
-      final fixture = input();
+      final fixture = mixedInlineInput();
       final content = fixture.content;
       ForumBodyInlineSpanContent compose({
         List<ForumBodyParagraphContent>? contexts,
@@ -545,7 +443,7 @@ void main() {
   test(
     'native span demands valid pre-scaled alphabetic placeholder geometry',
     () {
-      final placeholder = input().content.textSpan.children!
+      final placeholder = mixedInlineInput().content.textSpan.children!
           .whereType<PlaceholderSpan>()
           .single;
       final builder = ui.ParagraphBuilder(

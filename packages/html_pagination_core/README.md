@@ -53,6 +53,9 @@ Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以�
 `sourceAtEngineUtf16` 继续保留来源缺口；`displayRangeForEngineRange` 严格核对整字素
 和原子边界，但其结果不是可见 coverage。原子几何、绘制、分页与生命周期仍归 renderer。
 映射 revision 为 1；缓存还需核对完整样式、几何和 owner，映射相等不替代这些条件。
+`displayOffsetAtEngineUtf16` 只做原始 UTF-16 变换，供真实物理行记录坐标：fallback
+字素可能跨行，原始偏移必须保留，同时用 `displayAtEngineUtf16.isExact` 禁止在其间
+分页。该原始值不是合法光标、语义锚点、显示窗口或 HTML 切片边界。
 
 ## Fit 与协作端口
 

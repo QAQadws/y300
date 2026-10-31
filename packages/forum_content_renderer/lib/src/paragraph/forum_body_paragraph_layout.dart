@@ -4,63 +4,14 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../document/forum_body_document.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_content.dart';
+import 'forum_body_paragraph_geometry.dart';
 
-enum ForumBodyParagraphLayoutFailure {
-  width,
-  scale,
-  indent,
-  direction,
-  noWrap,
-  singleLine,
-  coverage,
-}
-
-/// Logical hard-break flow can display the pre-break rows and the final empty
-/// row separately, without shaping again or inventing a blank-line height.
-enum ForumBodyParagraphWindow {
-  full,
-  beforeTerminalEmptyLine,
-  terminalEmptyLine,
-}
-
-final class ForumBodyParagraphLayoutException implements Exception {
-  const ForumBodyParagraphLayoutException(this.failure);
-  final ForumBodyParagraphLayoutFailure failure;
-  @override
-  String toString() => 'ForumBodyParagraphLayoutException(${failure.name})';
-}
-
-/// Actual engine line geometry. Paint/hit ranges exclude terminating hard
-/// breaks. Display coverage includes those breaks and partitions the projected
-/// paragraph; it does not prove App semantic or persisted-anchor coverage.
-/// A fallback grapheme can span physical rows: only boundaries marked legal
-/// may start/end a fragment, so such rows stay together during pagination.
-final class ForumBodyParagraphLine {
-  const ForumBodyParagraphLine({
-    required this.top,
-    required this.bottom,
-    required this.baseline,
-    required this.left,
-    required this.width,
-    required this.startUtf16,
-    required this.endUtf16,
-    required this.coverageStartUtf16,
-    required this.coverageEndUtf16,
-    required this.canBreakBefore,
-    required this.canBreakAfter,
-  });
-  final double top;
-  final double bottom;
-  final double baseline;
-  final double left;
-  final double width;
-  final int startUtf16;
-  final int endUtf16;
-  final int coverageStartUtf16;
-  final int coverageEndUtf16;
-  final bool canBreakBefore;
-  final bool canBreakAfter;
-}
+export 'forum_body_paragraph_geometry.dart'
+    show
+        ForumBodyParagraphLayoutFailure,
+        ForumBodyParagraphLayoutException,
+        ForumBodyParagraphWindow,
+        ForumBodyParagraphLine;
 
 /// Owns one TextPainter layout, shared by geometry, paint, hit-test and boxes.
 /// No caller can mutate the painter. The owner must dispose it after all views
@@ -123,73 +74,11 @@ final class ForumBodyParagraphLayout {
           ForumBodyParagraphLayoutFailure.singleLine,
         );
       }
-      final text = content.projection.text;
-      final lines = <ForumBodyParagraphLine>[];
-      var start = 0;
-      for (final metric in metrics) {
-        // Follow logical line boundaries. A visual midpoint can hit the same
-        // fallback grapheme on two physical lines and repeat the earlier range.
-        var range = painter.getLineBoundary(TextPosition(offset: start));
-        if (range.start < 0 ||
-            range.end < range.start ||
-            range.end > text.length) {
-          throw const ForumBodyParagraphLayoutException(
-            ForumBodyParagraphLayoutFailure.coverage,
-          );
-        }
-        // At the empty line after a terminal hard break, the engine may return
-        // the previous line (including that break) for position == text.length.
-        // Normalize this explicit empty-line case and any included separator;
-        // do not infer arbitrary line boundaries from character counts.
-        if (metric.lineNumber == metrics.length - 1 &&
-            metric.width == 0 &&
-            start == text.length &&
-            text.isNotEmpty &&
-            _isDisplayLineBreak(text.codeUnitAt(text.length - 1))) {
-          range = TextRange.collapsed(text.length);
-        } else if (metric.hardBreak &&
-            range.end > range.start &&
-            _isDisplayLineBreak(text.codeUnitAt(range.end - 1))) {
-          range = TextRange(start: range.start, end: range.end - 1);
-        }
-        var end = range.end;
-        if (metric.hardBreak &&
-            end < text.length &&
-            _isDisplayLineBreak(text.codeUnitAt(end))) {
-          end++;
-        }
-        if (range.start != start ||
-            range.end < start ||
-            range.end > end ||
-            end > text.length) {
-          throw const ForumBodyParagraphLayoutException(
-            ForumBodyParagraphLayoutFailure.coverage,
-          );
-        }
-        lines.add(
-          ForumBodyParagraphLine(
-            top: (metric.baseline - metric.ascent) * paintScale,
-            bottom: (metric.baseline + metric.descent) * paintScale,
-            baseline: metric.baseline * paintScale,
-            left: metric.left * paintScale,
-            width: metric.width * paintScale,
-            startUtf16: range.start,
-            endUtf16: range.end,
-            coverageStartUtf16: start,
-            coverageEndUtf16: end,
-            canBreakBefore:
-                content.projection.sourceAtUtf16(start).displayUtf16 == start,
-            canBreakAfter:
-                content.projection.sourceAtUtf16(end).displayUtf16 == end,
-          ),
-        );
-        start = end;
-      }
-      if (start != text.length) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.coverage,
-        );
-      }
+      final lines = forumBodyParagraphLines(
+        painter: painter,
+        display: content.projection,
+        paintScale: paintScale,
+      );
       return ForumBodyParagraphLayout._(
         content,
         painter,

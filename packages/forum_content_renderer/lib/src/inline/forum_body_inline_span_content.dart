@@ -115,10 +115,26 @@ final class ForumBodyInlineSpanContent {
   /// Direct TextPainter input only. Set its placeholder dimensions in atom
   /// order, using the already-scaled child geometry. RichText/WidgetSpan scale
   /// extraction is intentionally outside this native span contract.
-  late final TextSpan textSpan = _buildTextSpan();
+  late final TextSpan textSpan = _parentInput.span;
 
-  TextSpan _buildTextSpan() {
+  /// Only runs actually shaped by the parent. Atomic children retain their
+  /// own direction and per-size scaling; those inputs must not be validated or
+  /// rescaled as ordinary parent text.
+  late final List<ForumBodyParagraphRun> parentRuns = _parentInput.runs;
+  late final _parentInput = _buildTextSpan();
+
+  void validateDimensions(List<PlaceholderDimensions> dimensions) {
+    if (dimensions.length != projection.atoms.length) {
+      throw ArgumentError('Native inline dimensions do not match atoms');
+    }
+    for (final dimension in dimensions) {
+      _validateDimension(dimension);
+    }
+  }
+
+  ({TextSpan span, List<ForumBodyParagraphRun> runs}) _buildTextSpan() {
     final children = <InlineSpan>[];
+    final parentRunIndices = <int>{};
     final parts = projection.display.parts;
     final atoms = projection.atoms;
     var partIndex = 0;
@@ -137,6 +153,7 @@ final class ForumBodyInlineSpanContent {
         partIndex++;
       }
       final part = parts[partIndex];
+      parentRunIndices.add(part.runIndex);
       final partEnd = part.utf16Start + part.text.length;
       final end =
           atomIndex < atoms.length &&
@@ -154,9 +171,12 @@ final class ForumBodyInlineSpanContent {
       );
       cursor = end;
     }
-    return TextSpan(
-      style: style.textStyle,
-      children: List.unmodifiable(children),
+    return (
+      span: TextSpan(
+        style: style.textStyle,
+        children: List.unmodifiable(children),
+      ),
+      runs: List.unmodifiable(parentRunIndices.map((index) => runs[index])),
     );
   }
 }
@@ -181,20 +201,7 @@ final class _NativeInlinePlaceholder extends PlaceholderSpan {
       throw StateError('Native inline placeholder dimensions are missing');
     }
     final dimension = dimensions[builder.placeholderCount];
-    if (dimension.alignment != alignment ||
-        dimension.baseline != baseline ||
-        !dimension.size.width.isFinite ||
-        !dimension.size.height.isFinite ||
-        dimension.size.width < 0 ||
-        dimension.size.height <= 0 ||
-        dimension.size.width > 16384 ||
-        dimension.size.height > 16384 ||
-        dimension.baselineOffset == null ||
-        !dimension.baselineOffset!.isFinite ||
-        dimension.baselineOffset! < 0 ||
-        dimension.baselineOffset! > dimension.size.height) {
-      throw ArgumentError('Invalid native inline placeholder geometry');
-    }
+    _validateDimension(dimension);
     builder.addPlaceholder(
       dimension.size.width,
       dimension.size.height,
@@ -232,4 +239,21 @@ final class _NativeInlinePlaceholder extends PlaceholderSpan {
       : RenderComparison.layout;
   @override
   bool debugAssertIsValid() => true;
+}
+
+void _validateDimension(PlaceholderDimensions dimension) {
+  if (dimension.alignment != ui.PlaceholderAlignment.baseline ||
+      dimension.baseline != TextBaseline.alphabetic ||
+      !dimension.size.width.isFinite ||
+      !dimension.size.height.isFinite ||
+      dimension.size.width < 0 ||
+      dimension.size.height <= 0 ||
+      dimension.size.width > 16384 ||
+      dimension.size.height > 16384 ||
+      dimension.baselineOffset == null ||
+      !dimension.baselineOffset!.isFinite ||
+      dimension.baselineOffset! < 0 ||
+      dimension.baselineOffset! > dimension.size.height) {
+    throw ArgumentError('Invalid native inline placeholder geometry');
+  }
 }

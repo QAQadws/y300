@@ -11,6 +11,34 @@ HtmlDisplayTextProjection project(String text, [int source = 0]) =>
     ]);
 
 void main() {
+  test(
+    'raw physical-row offsets keep code units without legalizing grapheme cuts',
+    () {
+      final map = HtmlInlineTextProjection.build(
+        display: project('AB👩‍💻e\u0301Z'),
+        atomicRanges: [(startUtf16: 0, endUtf16: 2)],
+      );
+      expect(map.engineText, '\uFFFC👩‍💻e\u0301Z');
+      expect(map.displayOffsetAtEngineUtf16(1), 2);
+      expect(map.displayOffsetAtEngineUtf16(2), 3);
+      expect(map.displayAtEngineUtf16(2).displayUtf16, 7);
+      expect(map.displayAtEngineUtf16(2).isExact, isFalse);
+      expect(
+        () => map.displayRangeForEngineRange(startUtf16: 0, endUtf16: 2),
+        throwsArgumentError,
+      );
+      expect(
+        map.displayOffsetAtEngineUtf16(map.engineText.length),
+        map.display.text.length,
+      );
+      expect(() => map.displayOffsetAtEngineUtf16(-1), throwsRangeError);
+      expect(
+        () => map.displayOffsetAtEngineUtf16(map.engineText.length + 1),
+        throwsRangeError,
+      );
+    },
+  );
+
   test('ordinary Unicode text retains every affinity without placeholders', () {
     final display = project('e\u0301👩‍💻אב\nZ', 10);
     final map = HtmlInlineTextProjection.build(

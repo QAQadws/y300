@@ -145,23 +145,27 @@ final class HtmlInlineTextProjection {
     int offset, {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,
   }) {
-    RangeError.checkValueInInterval(offset, 0, engineText.length, 'offset');
-    final index = _lastAtomAtOrBefore(offset, engine: true);
-    final int rawDisplay;
-    if (index < 0) {
-      rawDisplay = offset;
-    } else {
-      final atom = atoms[index];
-      rawDisplay = offset == atom.engineUtf16
-          ? atom.displayStartUtf16
-          : offset - atom.engineEndUtf16 + atom.displayEndUtf16;
-    }
+    final rawDisplay = displayOffsetAtEngineUtf16(offset);
     final position = engineAtDisplayUtf16(rawDisplay, affinity: affinity);
     return HtmlInlineTextPosition._(
       engineUtf16: position.engineUtf16,
       displayUtf16: position.displayUtf16,
       isExact: position.isExact && position.engineUtf16 == offset,
     );
+  }
+
+  /// Raw UTF-16 transform for engine line geometry. A physical fallback row can
+  /// end inside an ordinary grapheme: keep that offset while marking its break
+  /// illegal via [displayAtEngineUtf16]. Never use this raw value as a caret,
+  /// semantic anchor or legal display/HTML slice boundary.
+  int displayOffsetAtEngineUtf16(int offset) {
+    RangeError.checkValueInInterval(offset, 0, engineText.length, 'offset');
+    final index = _lastAtomAtOrBefore(offset, engine: true);
+    if (index < 0) return offset;
+    final atom = atoms[index];
+    return offset == atom.engineUtf16
+        ? atom.displayStartUtf16
+        : offset - atom.engineEndUtf16 + atom.displayEndUtf16;
   }
 
   HtmlProjectedSourcePosition sourceAtEngineUtf16(
