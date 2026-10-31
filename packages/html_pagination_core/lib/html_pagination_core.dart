@@ -26,6 +26,8 @@ export 'src/inline_text_projection.dart'
         HtmlInlineTextLimitException,
         HtmlInlineTextProjection;
 export 'src/source_text_map.dart' show HtmlSourceTextMap, HtmlSourceTextRange;
+export 'src/text_band_projection.dart'
+    show HtmlTextBandProjection, HtmlTextBandChild, HtmlTextBandLimitException;
 export 'src/work_slice.dart' show HtmlPaginationWorkSlice;
 export 'src/complex_slice.dart'
     show
