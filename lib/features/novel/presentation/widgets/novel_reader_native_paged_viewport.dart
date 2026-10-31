@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/widgets.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 
 import '../controllers/novel_reader_native_paged_controller.dart';
 import '../controllers/novel_reader_paged_navigation_controller.dart';
@@ -231,6 +232,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   ScrollHoldController? _hold;
   NovelReaderPagedNavigationBinding? _navigationBinding;
   bool _chapterTurnRequested = false;
+  _NativeTapTurn? _tapTurn;
+  int? _tapResetPage;
 
   @override
   void initState() {
@@ -243,6 +246,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     _changes = widget.controller.changes.listen(
       (_) {
         if (!mounted) return;
+        _reconcileTapTurn();
         setState(() {});
         _afterFrame();
       },
@@ -260,6 +264,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       oldWidget.navigationController,
       widget.navigationController,
     )) {
+      _retireTapTurn(cancelNavigation: true);
       _navigationBinding?.dispose();
       _navigationBinding = widget.navigationController?.bind(this);
     }
@@ -268,6 +273,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     }
     if (widget.frozen != oldWidget.frozen ||
         widget.reverse != oldWidget.reverse) {
+      _retireTapTurn(cancelNavigation: true);
       _frame++;
       _userDrag = false;
       _scrolling = false;
@@ -311,6 +317,15 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   bool turnNext() => _turnByCommand(1);
 
   bool _turnByCommand(int delta) {
+    _reconcileTapTurn();
+    final previous = _tapTurn;
+    if (previous != null) {
+      if (delta == previous.to - previous.from) return false;
+      // Opposite input starts from the last confirmed page, even when the old
+      // animation has crossed PageView's onPageChanged threshold.
+      _retireTapTurn(cancelNavigation: true);
+      _resetTapPosition();
+    }
     final page = _settledCommandPage;
     if (page == null || widget.chapterTurnIsInFlight || _chapterTurnRequested) {
       return false;
@@ -322,7 +337,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     final prefix = controller.snapshot!;
     final target = page + delta;
     if (target >= 0 && (target < prefix.length || !prefix.isComplete)) {
-      return controller.requestPage(target);
+      if (!controller.requestPage(target)) return false;
+      _tapTurn = _NativeTapTurn(page, target, controller.navigationRevision);
+      return true;
     }
     if (!prefix.isComplete) return false;
     final accepted =
@@ -361,16 +378,65 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     _chapterTurnRequested = false;
   }
 
+  void _reconcileTapTurn() {
+    final turn = _tapTurn;
+    if (turn == null) return;
+    final controller = widget.controller;
+    if (controller.isClosed ||
+        controller.isSuspended ||
+        controller.navigationRevision != turn.revision ||
+        !controller.hasPendingNavigation ||
+        !_fits) {
+      // A newer controller request owns its own lifetime. Retire only motion;
+      // never cancel that newer seek while stopping an older tap animation.
+      _retireTapTurn(cancelNavigation: !_fits);
+    }
+  }
+
+  void _retireTapTurn({bool cancelNavigation = false, bool snap = true}) {
+    final turn = _tapTurn;
+    if (turn == null) return;
+    _tapTurn = null;
+    _frame++;
+    if (snap && turn.started) {
+      _tapResetPage = widget.controller.visiblePageIndex ?? turn.from;
+    }
+    if (cancelNavigation &&
+        widget.controller.navigationRevision == turn.revision) {
+      widget.controller.cancelPendingNavigation();
+    }
+  }
+
+  void _resetTapPosition() {
+    final page = _tapResetPage;
+    if (page == null || !_pages.hasClients || widget.frozen) return;
+    _tapResetPage = null;
+    _scrolling = false;
+    _activity(false);
+    // jumpToPage also disposes the old DrivenScrollActivity; invalidating its
+    // Future alone would leave pixels moving towards the obsolete destination.
+    _pages.jumpToPage(page);
+    _page = page;
+    _afterFrame();
+  }
+
+  Future<void> _animateTap(_NativeTapTurn turn) async {
+    turn.started = true;
+    await _pages.animateToPage(
+      turn.to,
+      duration: ReaderPagedTurnMotion.animationDuration,
+      curve: ReaderPagedTurnMotion.animationCurve,
+    );
+    if (mounted && identical(_tapTurn, turn)) _afterFrame();
+  }
+
   void _afterFrame() {
     final frame = ++_frame;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          frame != _frame ||
-          widget.frozen ||
-          _scrolling ||
-          !_fits) {
-        return;
-      }
+      if (!mounted || frame != _frame || widget.frozen) return;
+      _reconcileTapTurn();
+      _resetTapPosition();
+      if (_scrolling || !_fits) return;
       final controller = widget.controller;
       if (controller.isClosed || !_pages.hasClients) return;
       final actualPage = _pages.page;
@@ -386,8 +452,15 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       final target = controller.readyTarget;
       final destination = target?.pageIndex ?? controller.visiblePageIndex;
       if (destination != null && destination != _page) {
-        // Programmatic restore/arrival never enters the drag navigation path.
-        // Jumping avoids keeping an obsolete automatic animation alive.
+        final turn = _tapTurn;
+        if (turn != null &&
+            turn.revision == target?.requestId &&
+            turn.to == destination &&
+            !turn.started) {
+          unawaited(_animateTap(turn));
+          return;
+        }
+        // Restore/search/seek have no tap motion intent.
         _pages.jumpToPage(destination);
         _afterFrame();
         return;
@@ -396,7 +469,10 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       final leases = _mountedPages[target.view];
       if (leases == null) return;
       final position = controller.confirmVisible(target, leases);
-      if (position != null) widget.onPositionChanged(position);
+      if (position != null) {
+        _tapTurn = null;
+        widget.onPositionChanged(position);
+      }
     });
     // A jump or scroll-end callback may run after this frame's painting. Merely
     // registering another post-frame callback would leave it waiting at idle.
@@ -411,6 +487,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       _activity(true);
       _frame++;
       if (notification.dragDetails != null) {
+        _retireTapTurn(snap: false);
+        _tapResetPage = null;
         _userDrag = true;
         _edgeIntent = false;
         controller.cancelPendingNavigation();
@@ -523,6 +601,10 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                         return _NativeMountedPage(
                           key: ObjectKey(view),
                           view: view,
+                          // Cancellation may be observed on the same frame the
+                          // animation reaches its old destination. Keep exactly
+                          // the confirmed origin mounted until actual arrival.
+                          keepAlive: page == controller.visiblePageIndex,
                           onMounted: _mounted,
                           onUnmounted: _unmounted,
                         );
@@ -545,6 +627,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
 
   @override
   void dispose() {
+    _tapTurn = null;
+    _tapResetPage = null;
     _frame++;
     _activityRevision++;
     _navigationBinding?.dispose();
@@ -555,14 +639,24 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   }
 }
 
+final class _NativeTapTurn {
+  _NativeTapTurn(this.from, this.to, this.revision);
+  final int from;
+  final int to;
+  final int revision;
+  bool started = false;
+}
+
 class _NativeMountedPage extends StatefulWidget {
   const _NativeMountedPage({
     super.key,
     required this.view,
+    required this.keepAlive,
     required this.onMounted,
     required this.onUnmounted,
   });
   final NovelReaderNativePageView view;
+  final bool keepAlive;
   final void Function(NovelReaderNativePageView, List<ForumBodyParagraphLease>)
   onMounted;
   final ValueChanged<NovelReaderNativePageView> onUnmounted;
@@ -571,7 +665,8 @@ class _NativeMountedPage extends StatefulWidget {
   State<_NativeMountedPage> createState() => _NativeMountedPageState();
 }
 
-class _NativeMountedPageState extends State<_NativeMountedPage> {
+class _NativeMountedPageState extends State<_NativeMountedPage>
+    with AutomaticKeepAliveClientMixin {
   late final List<ForumBodyParagraphLease> _leases;
 
   @override
@@ -582,7 +677,17 @@ class _NativeMountedPageState extends State<_NativeMountedPage> {
   }
 
   @override
+  void didUpdateWidget(covariant _NativeMountedPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.keepAlive != oldWidget.keepAlive) updateKeepAlive();
+  }
+
+  @override
+  bool get wantKeepAlive => widget.keepAlive;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_leases.any((lease) => !lease.isActive)) return const SizedBox.shrink();
     final view = widget.view;
     return ForumBodyTextPageSurface(

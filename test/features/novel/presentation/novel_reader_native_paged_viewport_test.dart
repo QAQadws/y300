@@ -79,6 +79,7 @@ Widget _reader(
   NovelReaderPagedNavigationController? navigation,
   bool Function(NovelReaderChapterEdge)? onChapter,
   bool chapterInFlight = false,
+  bool active = true,
 }) => Directionality(
   textDirection: TextDirection.ltr,
   child: Align(
@@ -91,6 +92,7 @@ Widget _reader(
         ownerIdentity: owner,
         readingAuthorityIdentity: authority,
         reverse: reverse,
+        active: active,
         navigationController: navigation,
         onTurnToAdjacentChapter: onChapter,
         chapterTurnIsInFlight: chapterInFlight,
@@ -122,6 +124,19 @@ final class _FrameGate {
   }
 }
 
+double _physicalPage(WidgetTester tester) =>
+    tester.widget<PageView>(find.byType(PageView)).controller!.page!;
+
+Future<void> _startTapMotion(WidgetTester tester, int from) async {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 1));
+    if (_physicalPage(tester) != from) break;
+  }
+  await tester.pump(const Duration(milliseconds: 60));
+  expect(_physicalPage(tester), greaterThan(from + .5));
+  expect(_physicalPage(tester), lessThan(from + 1));
+}
+
 void main() {
   for (final reverse in [false, true]) {
     testWidgets(
@@ -148,6 +163,10 @@ void main() {
         expect(navigation.turnNext(), isTrue);
         expect(navigation.turnNext(), isFalse);
         expect(reports, hasLength(1));
+        await _startTapMotion(tester, 2);
+        expect(reports, hasLength(1));
+        expect(controller.visiblePageIndex, 2);
+        expect(navigation.confirmChapterEndNavigation(), isFalse);
         await tester.pumpAndSettle();
         expect(reports.last.pageIndex, 3);
         expect(reports.last.hasUserNavigated, isTrue);
@@ -161,6 +180,287 @@ void main() {
         expect(fixture.session.activeIssuedLeases, 0);
       },
     );
+
+    testWidgets(
+      'opposite tap retires crossed-threshold motion in reverse=$reverse',
+      (tester) async {
+        final fixture = _fixture();
+        final controller = _controller(fixture, offset: 45);
+        final reports = <NovelReaderPaginationPosition>[];
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        await tester.pumpWidget(
+          _reader(
+            controller,
+            Object(),
+            Object(),
+            reports,
+            reverse: reverse,
+            navigation: navigation,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(navigation.turnNext(), isTrue);
+        await _startTapMotion(tester, 2);
+        expect(navigation.turnPrevious(), isTrue);
+        expect(_physicalPage(tester), 2);
+        await tester.pumpAndSettle();
+        expect(reports.map((position) => position.pageIndex), [2, 1]);
+        await tester.pump(const Duration(seconds: 1));
+        expect(_physicalPage(tester), 1);
+        expect(reports, hasLength(2));
+        expect(fixture.cache.layoutBuildCount, 1);
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.close();
+        expect(fixture.session.activeIssuedLeases, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'external seek cancels moving pixels without canceling its new intent in reverse=$reverse',
+      (tester) async {
+        final fixture = _fixture();
+        final controller = _controller(fixture, offset: 45);
+        final reports = <NovelReaderPaginationPosition>[];
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        await tester.pumpWidget(
+          _reader(
+            controller,
+            Object(),
+            Object(),
+            reports,
+            reverse: reverse,
+            navigation: navigation,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(navigation.turnNext(), isTrue);
+        await _startTapMotion(tester, 2);
+        expect(controller.requestPage(5), isTrue);
+        await tester.pumpAndSettle();
+        expect(reports.map((position) => position.pageIndex), [2, 5]);
+        expect(reports.last.hasUserNavigated, isTrue);
+        await tester.pump(const Duration(seconds: 1));
+        expect(_physicalPage(tester), 5);
+        expect(reports, hasLength(2));
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'physical drag takes motion over without snapping back in reverse=$reverse',
+      (tester) async {
+        final fixture = _fixture();
+        final controller = _controller(fixture, offset: 45);
+        final reports = <NovelReaderPaginationPosition>[];
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        await tester.pumpWidget(
+          _reader(
+            controller,
+            Object(),
+            Object(),
+            reports,
+            reverse: reverse,
+            navigation: navigation,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(navigation.turnNext(), isTrue);
+        await _startTapMotion(tester, 2);
+        await tester.drag(
+          find.byType(PageView),
+          Offset(reverse ? -100 : 100, 0),
+        );
+        await tester.pumpAndSettle();
+        expect(reports.last.pageIndex, lessThanOrEqualTo(2));
+        expect(reports.last.hasUserNavigated, isTrue);
+        expect(reports.where((position) => position.pageIndex == 3), isEmpty);
+        final settled = _physicalPage(tester);
+        await tester.pump(const Duration(seconds: 1));
+        expect(_physicalPage(tester), settled);
+        expect(controller.hasPendingNavigation, isFalse);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final interruption in [
+    'hidden',
+    'reverse',
+    'suspended',
+    'cancelled',
+    'cropped',
+  ]) {
+    testWidgets('tap motion is retired when $interruption', (tester) async {
+      final fixture = _fixture();
+      final controller = _controller(fixture, offset: 45, futureAnchor: true);
+      final owner = Object();
+      final authority = Object();
+      final reports = <NovelReaderPaginationPosition>[];
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      Widget reader({
+        bool active = true,
+        bool reverse = false,
+        double width = 100,
+      }) => _reader(
+        controller,
+        owner,
+        authority,
+        reports,
+        active: active,
+        reverse: reverse,
+        navigation: navigation,
+        width: width,
+      );
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+      final from = reports.single.pageIndex;
+      expect(reports.single.isReadOnlyCompatibilityRestore, isTrue);
+      expect(navigation.turnNext(), isTrue);
+      await _startTapMotion(tester, from);
+      switch (interruption) {
+        case 'hidden':
+          await tester.pumpWidget(reader(active: false));
+        case 'reverse':
+          await tester.pumpWidget(reader(reverse: true));
+        case 'suspended':
+          controller.suspend();
+        case 'cancelled':
+          controller.cancelPendingNavigation();
+        case 'cropped':
+          await tester.pumpWidget(reader(width: 60));
+      }
+      await tester.pumpAndSettle();
+      expect(reports, hasLength(1));
+      await tester.pump(const Duration(seconds: 1));
+      if (interruption == 'suspended') controller.resume();
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+      expect(_physicalPage(tester), from);
+      expect(reports.every((position) => !position.hasUserNavigated), isTrue);
+      expect(
+        reports.every((position) => position.isReadOnlyCompatibilityRestore),
+        isTrue,
+      );
+      expect(
+        navigation.turnNext(),
+        isTrue,
+        reason:
+            'after $interruption: '
+            'pending=${controller.requestedPageIndex} visible=${controller.visiblePageIndex} '
+            'scrolling=${tester.widget<PageView>(find.byType(PageView)).controller!.position.isScrollingNotifier.value}',
+      );
+      await tester.pumpAndSettle();
+      expect(reports.last.pageIndex, from + 1);
+      expect(reports.last.hasUserNavigated, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.close();
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'confirmed origin retention stays bounded across repeated tap turns',
+    (tester) async {
+      final fixture = _fixture();
+      final controller = _controller(fixture);
+      final reports = <NovelReaderPaginationPosition>[];
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          Object(),
+          Object(),
+          reports,
+          navigation: navigation,
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (var page = 1; page < 10; page++) {
+        expect(navigation.turnNext(), isTrue);
+        await tester.pumpAndSettle();
+        expect(reports.last.pageIndex, page);
+        expect(fixture.session.activeIssuedLeases, lessThanOrEqualTo(3));
+      }
+      for (var page = 8; page >= 0; page--) {
+        expect(navigation.turnPrevious(), isTrue);
+        await tester.pumpAndSettle();
+        expect(reports.last.pageIndex, page);
+        expect(fixture.session.activeIssuedLeases, lessThanOrEqualTo(3));
+      }
+      expect(fixture.cache.layoutBuildCount, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.close();
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final replacement in ['reflow', 'owner', 'dispose']) {
+    testWidgets('$replacement retires a moving tap and its late completion', (
+      tester,
+    ) async {
+      final old = _fixture();
+      final oldController = _controller(old, offset: 45);
+      final reports = <NovelReaderPaginationPosition>[];
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      final owner = Object();
+      final authority = Object();
+      await tester.pumpWidget(
+        _reader(
+          oldController,
+          owner,
+          authority,
+          reports,
+          navigation: navigation,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(navigation.turnNext(), isTrue);
+      await _startTapMotion(tester, 2);
+      NativeReaderTestFixture? next;
+      _FrameGate? frames;
+      if (replacement == 'dispose') {
+        await tester.pumpWidget(const SizedBox.shrink());
+      } else {
+        next = _fixture(width: 60, layoutId: 'layout-b', cache: old.cache);
+        frames = _FrameGate();
+        final controller = _controller(next, offset: 45, frames: frames);
+        await tester.pumpWidget(
+          _reader(
+            controller,
+            replacement == 'owner' ? Object() : owner,
+            authority,
+            reports,
+            width: 60,
+            navigation: navigation,
+          ),
+        );
+      }
+      oldController.close();
+      await tester.pump(const Duration(seconds: 1));
+      expect(reports, hasLength(1));
+      if (replacement == 'owner' || replacement == 'dispose') {
+        expect(old.session.activeIssuedLeases, 0);
+      }
+      frames?.release();
+      await tester.pumpAndSettle();
+      expect(reports.every((position) => !position.hasUserNavigated), isTrue);
+      if (next != null) {
+        expect(reports.last.anchor.textOffset, 45);
+        expect(old.session.activeIssuedLeases, 0);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(navigation.turnNext(), isFalse);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets(
