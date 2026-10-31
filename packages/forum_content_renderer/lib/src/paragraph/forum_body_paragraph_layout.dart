@@ -159,8 +159,9 @@ final class ForumBodyParagraphLayout implements ForumBodyNativeParagraphLayout {
   final double width;
   final double height;
   final double _paintScale;
-  @override
   final List<ForumBodyParagraphLine> lines;
+  @override
+  int get lineCount => lines.length;
   bool _disposed = false;
   @override
   bool get isDisposed => _disposed;

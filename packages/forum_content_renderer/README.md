@@ -178,6 +178,22 @@ view.paint 只复用已提交快照，未准备时明确失败，不在 paint �
 验收通过。owner 退役同时关闭字体资源、待提交票据和已提交图片，view 单独退休不关闭
 兄弟 view；Picture 创建回调中的退休也禁止迟到提交。批次输入/排字 revision 均为 1。
 
-本原语尚未接入正式 native cache、分组 lease 和页面准备器。后续必须把批次与绘图快照
-全部纳入现有 owner 的预算/释放/取消合同，再完成可见整页绑定与 profile 验收；不能只按
-TextPainter 数量计账，或用该原语的单项验证代替复杂正文阅读器验收。
+`ForumBodyParagraphCache.acquireBandChild/tryAcquireBandChildCached` 返回当前来源绑定的
+子行租约，所有子项共同 pin 一个批次条目，和普通/混排段落使用同一预算与 LRU；warm miss
+不排字也不录制图片。key 核对全部子来源映射、span、字体/样式/后端版本、有效字号、
+方向/对齐/locale 与隔离距离；租约暴露当前 content，不使用缓存资源的旧交互元数据。
+纯 budget probe 的 includeBandChild 以完整批次去重，不创建 native 资源。
+
+`prepareBandChildPaint` 在可见 paint 外录制一项、核算成本，再交付给同一批次。原始估算
+为每项预留 4096 字节绘图容量，实际 approximateBytes 超过全部 slot 预留时增加同一条目
+的成本并触发全局准入；字节估算不因失败下降，也不增加条目数量上限。拒绝只关闭新票据，
+保留已交付图片。pinned 错误记录增量字节与所需新增条目数，以区分其他 view 的 pin 与
+自身整页超限。图片构建数仅统计成功交付，已交付数量随淘汰/关闭清零。
+
+native 释放钩子可重入获取、释放或关闭 owner。准入在每次淘汰后重新核对状态和预算，
+pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnpinned 只清理仍匹配原
+条目且仍未被 pin 的快照。close 先从索引移除全部条目，随后逐项退休，避免迟到回填、
+重复扣账或 observer 修改正在迭代的索引。单子行 release 不关闭兄弟 view 的字形/图片。
+
+分组 lease 与页面准备器尚待接入，再完成可见整页绑定与 profile 验收；不能只按
+TextPainter 数量计账，或用原语/缓存的验证代替复杂正文阅读器验收。

@@ -7,9 +7,12 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_inline_span_content.dart';
+import '../inline/forum_body_text_band_content.dart';
+import '../inline/forum_body_text_band_layout.dart';
 import 'forum_body_native_paragraph_layout.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
+import 'forum_body_text_band_cache_key.dart';
 
 /// Content cannot fit the total budget; pinned pressure may clear when visible
 /// leases release. Callers must not spin/restart a source traversal for either.
@@ -19,9 +22,11 @@ final class ForumBodyParagraphBudgetException implements Exception {
   const ForumBodyParagraphBudgetException(
     this.failure, {
     this.requiredEstimatedBytes,
+    this.requiredAdditionalEntries = 1,
   });
   final ForumBodyParagraphBudgetFailure failure;
   final int? requiredEstimatedBytes;
+  final int requiredAdditionalEntries;
   @override
   String toString() => 'ForumBodyParagraphBudgetException(${failure.name})';
 }
@@ -46,6 +51,8 @@ final class ForumBodyParagraphCache {
   int _leases = 0;
   int _builds = 0;
   int _hits = 0;
+  int _pictureBuilds = 0;
+  bool _preparingPicture = false;
   bool _closed = false;
   int _budgetRevision = 0;
   StreamController<int>? _budgetEvents;
@@ -55,6 +62,15 @@ final class ForumBodyParagraphCache {
   int get activeLeases => _leases;
   int get layoutBuildCount => _builds;
   int get hitCount => _hits;
+  int get pictureBuildCount => _pictureBuilds;
+  int get preparedPictureCount => _entries.values.fold<int>(
+    0,
+    (sum, entry) =>
+        sum +
+        (entry.layout is ForumBodyTextBandLayout
+            ? (entry.layout as ForumBodyTextBandLayout).preparedPictureCount
+            : 0),
+  );
   bool get isClosed => _closed;
 
   /// Proves the supplied live handle belongs to this reading owner. Does not
@@ -195,22 +211,151 @@ final class ForumBodyParagraphCache {
         : ForumBodyInlineParagraphLease._(this, entry, content);
   }
 
+  ForumBodyTextBandChildLease acquireBandChild({
+    required ForumBodyTextBandContent content,
+    required int childIndex,
+    TextScaler textScaler = TextScaler.noScaling,
+    double? gutter,
+  }) => _acquireBandChild(
+    content: content,
+    childIndex: childIndex,
+    textScaler: textScaler,
+    gutter: gutter,
+    allowBuild: true,
+  )!;
+
+  /// A miss does no native work, including picture recording. Every child pins
+  /// the same band entry in this owner's existing entry and byte budgets.
+  ForumBodyTextBandChildLease? tryAcquireBandChildCached({
+    required ForumBodyTextBandContent content,
+    required int childIndex,
+    TextScaler textScaler = TextScaler.noScaling,
+    double? gutter,
+  }) => _acquireBandChild(
+    content: content,
+    childIndex: childIndex,
+    textScaler: textScaler,
+    gutter: gutter,
+    allowBuild: false,
+  );
+
+  ForumBodyTextBandChildLease? _acquireBandChild({
+    required ForumBodyTextBandContent content,
+    required int childIndex,
+    required TextScaler textScaler,
+    required double? gutter,
+    required bool allowBuild,
+  }) {
+    if (_closed) throw StateError('Paragraph cache is closed');
+    RangeError.checkValidIndex(childIndex, content.contexts, 'childIndex');
+    final resolved = ForumBodyTextBandLayout.validateInputs(
+      content: content,
+      textScaler: textScaler,
+      gutter: gutter,
+    );
+    if (_closed) throw StateError('Paragraph cache is closed');
+    final key = ForumBodyTextBandCacheKey(
+      content,
+      resolved.scales,
+      resolved.gutter,
+    );
+    final entry = _acquireEntry(
+      key: key,
+      allowBuild: allowBuild,
+      minimumBytes: forumBodyTextBandMinimumBytes(content),
+      build: () => ForumBodyTextBandLayout.create(
+        content: content,
+        textScaler: textScaler,
+        gutter: resolved.gutter,
+      ),
+    );
+    if (entry == null) return null;
+    try {
+      return ForumBodyTextBandChildLease._(
+        this,
+        entry,
+        content,
+        childIndex,
+        (entry.layout as ForumBodyTextBandLayout).view(childIndex),
+      );
+    } catch (_) {
+      _release(entry);
+      rethrow;
+    }
+  }
+
+  /// Cooperative work outside paint: record one child, admit its measured
+  /// display-list cost, then publish. A rejection drops only the new ticket.
+  bool prepareBandChildPaint(ForumBodyTextBandChildLease lease) {
+    if (!ownsLease(lease)) {
+      throw StateError('Text band lease is retired or foreign');
+    }
+    final entry = lease._entry;
+    final band = entry.layout as ForumBodyTextBandLayout;
+    if (band.isPaintPrepared(lease.childIndex)) return false;
+    if (_preparingPicture) throw StateError('Picture preparation is reentrant');
+    _preparingPicture = true;
+    ForumBodyTextBandPaint? ticket;
+    try {
+      ticket = band.recordPaint(lease.childIndex);
+      if (!ownsLease(lease)) throw StateError('Text band lease is retired');
+      final reserve = (entry.key as ForumBodyTextBandCacheKey).pictureReserve;
+      final extra = band.approximatePictureBytes - reserve;
+      final target = entry.initialBytes + (extra > 0 ? extra : 0);
+      final growth = target > entry.bytes ? target - entry.bytes : 0;
+      if (target > maxEstimatedBytes) {
+        throw ForumBodyParagraphBudgetException(
+          ForumBodyParagraphBudgetFailure.content,
+          requiredEstimatedBytes: target,
+        );
+      }
+      _makeRoom(growth, newEntry: false);
+      if (!ownsLease(lease)) throw StateError('Text band lease is retired');
+      // No caller code runs between admission and adoption. The native ticket
+      // remains owned here until the band explicitly consumes it.
+      _bytes += growth;
+      entry.bytes += growth;
+      band.adoptPaint(ticket);
+      _pictureBuilds++;
+      return true;
+    } finally {
+      try {
+        ticket?.close();
+      } finally {
+        _preparingPicture = false;
+      }
+    }
+  }
+
   _LayoutEntry? _acquireEntry({
     required Object key,
     required bool allowBuild,
     required int minimumBytes,
     required ForumBodyNativeParagraphLayout Function() build,
   }) {
-    var entry = _entries.remove(key);
-    if (entry != null && entry.layout.isDisposed) {
-      _retire(entry);
-      entry = null;
+    if (_buildingKeys.contains(key)) {
+      throw StateError('Native paragraph shaping is reentrant');
     }
-    if (entry != null) {
+    var entry = _entries[key];
+    if (entry != null && !entry.layout.isDisposed) {
+      _entries.remove(key);
+      _entries[key] = entry;
       _hits++;
-    } else {
+      entry.leases++;
+      _leases++;
+      return entry;
+    }
+    _buildingKeys.add(key);
+    ForumBodyNativeParagraphLayout? built;
+    var installed = false;
+    try {
+      if (entry != null) {
+        _entries.remove(key);
+        _retire(entry);
+      }
+      if (_closed) throw StateError('Paragraph cache is closed');
       if (!allowBuild) return null;
-      var pinned = _pinnedFootprint();
+      final pinned = _pinnedFootprint();
       if (minimumBytes > maxEstimatedBytes) {
         throw ForumBodyParagraphBudgetException(
           ForumBodyParagraphBudgetFailure.content,
@@ -224,59 +369,73 @@ final class ForumBodyParagraphCache {
           requiredEstimatedBytes: minimumBytes,
         );
       }
-      if (!_buildingKeys.add(key)) {
-        throw StateError('Native paragraph shaping is reentrant');
-      }
-      final ForumBodyNativeParagraphLayout layout;
+      built = build();
+      _builds++;
+      if (_closed) throw StateError('Paragraph cache is closed');
+      final bytes = minimumBytes + built.lineCount * 96;
+      // TextScaler is caller code: a nested request can acquire another entry
+      // while the engine shapes. Recheck actual pins before admission/eviction.
+      _makeRoom(bytes, newEntry: true);
+      entry = _LayoutEntry(built, bytes, key);
+      _bytes += bytes;
+      _entries[key] = entry;
+      installed = true;
+      entry.leases++;
+      _leases++;
+      return entry;
+    } finally {
       try {
-        layout = build();
-        _builds++;
+        if (!installed) built?.dispose();
       } finally {
         _buildingKeys.remove(key);
       }
-      if (_closed) {
-        layout.dispose();
-        throw StateError('Paragraph cache is closed');
-      }
-      final bytes = minimumBytes + layout.lines.length * 96;
-      // TextScaler is caller code: a nested request can acquire another entry
-      // while the engine shapes. Recheck actual pins before admission/eviction.
-      pinned = _pinnedFootprint();
-      if (pinned.entries >= maxEntries ||
-          bytes > maxEstimatedBytes - pinned.bytes) {
-        layout.dispose();
+    }
+  }
+
+  void _makeRoom(int bytes, {required bool newEntry}) {
+    var evictions = 0;
+    while (true) {
+      if (_closed) throw StateError('Paragraph cache is closed');
+      if (bytes > maxEstimatedBytes) {
         throw ForumBodyParagraphBudgetException(
-          bytes > maxEstimatedBytes
-              ? ForumBodyParagraphBudgetFailure.content
-              : ForumBodyParagraphBudgetFailure.pinned,
+          ForumBodyParagraphBudgetFailure.content,
           requiredEstimatedBytes: bytes,
         );
       }
-      while (_entries.length >= maxEntries ||
-          _bytes + bytes > maxEstimatedBytes) {
-        Object? victim;
-        for (final candidate in _entries.entries) {
-          if (candidate.value.leases == 0) {
-            victim = candidate.key;
-            break;
-          }
-        }
-        if (victim == null) {
-          layout.dispose();
-          throw ForumBodyParagraphBudgetException(
-            ForumBodyParagraphBudgetFailure.pinned,
-            requiredEstimatedBytes: bytes,
-          );
-        }
-        _retire(_entries.remove(victim)!);
+      final pinned = _pinnedFootprint();
+      if ((newEntry && pinned.entries >= maxEntries) ||
+          bytes > maxEstimatedBytes - pinned.bytes) {
+        throw ForumBodyParagraphBudgetException(
+          ForumBodyParagraphBudgetFailure.pinned,
+          requiredEstimatedBytes: bytes,
+          requiredAdditionalEntries: newEntry ? 1 : 0,
+        );
       }
-      entry = _LayoutEntry(layout, bytes, key);
-      _bytes += bytes;
+      if ((!newEntry || _entries.length < maxEntries) &&
+          bytes <= maxEstimatedBytes - _bytes) {
+        return;
+      }
+      Object? victim;
+      for (final candidate in _entries.entries) {
+        if (candidate.value.leases == 0) {
+          victim = candidate.key;
+          break;
+        }
+      }
+      if (victim == null) {
+        throw ForumBodyParagraphBudgetException(
+          ForumBodyParagraphBudgetFailure.pinned,
+          requiredEstimatedBytes: bytes,
+          requiredAdditionalEntries: newEntry ? 1 : 0,
+        );
+      }
+      // Native disposal hooks may reacquire other entries. Bound this one
+      // admission even if an observer keeps replenishing unpinned victims.
+      if (evictions++ >= maxEntries) {
+        throw StateError('Cache eviction is reentrant');
+      }
+      _retire(_entries.remove(victim)!);
     }
-    _entries[entry.key] = entry;
-    entry.leases++;
-    _leases++;
-    return entry;
   }
 
   ({int entries, int bytes}) _pinnedFootprint() {
@@ -310,7 +469,7 @@ final class ForumBodyParagraphCache {
       kept.add(lease._entry);
     }
     final keptBytes = kept.fold<int>(0, (sum, entry) => sum + entry.bytes);
-    if (kept.length >= maxEntries ||
+    if (kept.length + rejection.requiredAdditionalEntries > maxEntries ||
         (rejection.requiredEstimatedBytes != null &&
             rejection.requiredEstimatedBytes! >
                 maxEstimatedBytes - keptBytes)) {
@@ -341,6 +500,7 @@ final class ForumBodyParagraphCache {
   }
 
   void _retire(_LayoutEntry entry) {
+    if (entry.retired) return;
     entry.retired = true;
     _bytes -= entry.bytes;
     _leases -= entry.leases;
@@ -349,24 +509,46 @@ final class ForumBodyParagraphCache {
   }
 
   void clearUnpinned() {
-    final victims = _entries.keys
-        .where((key) => _entries[key]!.leases == 0)
+    if (_closed) return;
+    final victims = _entries.entries
+        .where((item) => item.value.leases == 0)
         .toList();
-    for (final key in victims) {
-      _retire(_entries.remove(key)!);
+    Object? failure;
+    StackTrace? stack;
+    for (final victim in victims) {
+      if (identical(_entries[victim.key], victim.value) &&
+          victim.value.leases == 0) {
+        _entries.remove(victim.key);
+        try {
+          _retire(victim.value);
+        } catch (error, trace) {
+          failure ??= error;
+          stack ??= trace;
+        }
+      }
     }
+    if (failure != null) Error.throwWithStackTrace(failure, stack!);
   }
 
   void close() {
     if (_closed) return;
     _closed = true;
-    for (final entry in _entries.values) {
-      _retire(entry);
-    }
+    final entries = _entries.values.toList();
     _entries.clear();
+    Object? failure;
+    StackTrace? stack;
+    for (final entry in entries) {
+      try {
+        _retire(entry);
+      } catch (error, trace) {
+        failure ??= error;
+        stack ??= trace;
+      }
+    }
     _budgetChanged();
     final events = _budgetEvents;
     if (events != null) unawaited(events.close());
+    if (failure != null) Error.throwWithStackTrace(failure, stack!);
   }
 }
 
@@ -436,6 +618,33 @@ final class ForumBodyParagraphBudgetProbe {
       cache,
       key,
       _minimumInlineEstimatedBytes(content) + minimumLineCount * 96,
+    );
+  }
+
+  void includeBandChild({
+    required ForumBodyTextBandContent content,
+    required int childIndex,
+    TextScaler textScaler = TextScaler.noScaling,
+    double? gutter,
+  }) {
+    final cache = _cache;
+    if (cache == null || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    RangeError.checkValidIndex(childIndex, content.contexts, 'childIndex');
+    final resolved = ForumBodyTextBandLayout.validateInputs(
+      content: content,
+      textScaler: textScaler,
+      gutter: gutter,
+    );
+    if (!identical(_cache, cache) || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    _include(
+      cache,
+      ForumBodyTextBandCacheKey(content, resolved.scales, resolved.gutter),
+      forumBodyTextBandMinimumBytes(content) +
+          (content.contexts.length * 2 - 1) * 96,
     );
   }
 
@@ -514,11 +723,38 @@ final class ForumBodyInlineParagraphLease
   }
 }
 
+final class ForumBodyTextBandChildLease extends ForumBodyNativeParagraphLease {
+  ForumBodyTextBandChildLease._(
+    super.owner,
+    super.entry,
+    this.bandContent,
+    this.childIndex,
+    this._view,
+  ) : super._();
+  final ForumBodyTextBandContent bandContent;
+  final int childIndex;
+  final ForumBodyTextBandChildLayout _view;
+  ForumBodyParagraphContent get content => bandContent.contexts[childIndex];
+  @override
+  bool get isActive => super.isActive && !_view.isDisposed;
+  ForumBodyTextBandChildLayout get layout {
+    if (!isActive) throw StateError('Text band lease is retired');
+    return _view;
+  }
+
+  @override
+  void release() {
+    _view.dispose();
+    super.release();
+  }
+}
+
 final class _LayoutEntry {
-  _LayoutEntry(this.layout, this.bytes, this.key);
+  _LayoutEntry(this.layout, this.bytes, this.key) : initialBytes = bytes;
   final ForumBodyNativeParagraphLayout layout;
   final Object key;
-  final int bytes;
+  final int initialBytes;
+  int bytes;
   int leases = 0;
   bool retired = false;
 }

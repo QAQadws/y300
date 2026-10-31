@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_layout.dart';
+import '../paragraph/forum_body_native_paragraph_layout.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_paint.dart';
 
@@ -42,7 +43,7 @@ final class ForumBodyTextBandChildGeometry {
 /// One TextPainter for bounded independent intrinsic text contexts. Virtual
 /// separators have zero font metrics; transparent spacer rows isolate paint.
 /// Each child is a source-bound view, never a separately shaped paragraph.
-final class ForumBodyTextBandLayout {
+final class ForumBodyTextBandLayout implements ForumBodyNativeParagraphLayout {
   ForumBodyTextBandLayout._(
     this._painter,
     this.projection,
@@ -54,6 +55,33 @@ final class ForumBodyTextBandLayout {
       );
   static const revision = 1;
   factory ForumBodyTextBandLayout.create({
+    required ForumBodyTextBandContent content,
+    TextScaler textScaler = TextScaler.noScaling,
+    double? gutter,
+  }) {
+    final resolved = validateInputs(
+      content: content,
+      textScaler: textScaler,
+      gutter: gutter,
+    );
+    final separation = resolved.gutter;
+    final first = content.contexts.first;
+    final painter = TextPainter(
+      text: buildForumBodyTextBandSpan(content, separation),
+      textAlign: first.style.textAlign,
+      textDirection: first.style.textDirection,
+      textScaler: textScaler,
+      locale: first.style.textStyle.locale,
+    );
+    try {
+      return _shape(content, painter, separation);
+    } catch (_) {
+      painter.dispose();
+      rethrow;
+    }
+  }
+
+  static ({Map<double, double> scales, double gutter}) validateInputs({
     required ForumBodyTextBandContent content,
     TextScaler textScaler = TextScaler.noScaling,
     double? gutter,
@@ -81,132 +109,127 @@ final class ForumBodyTextBandLayout {
         ForumBodyTextBandLayoutFailure.geometry,
       );
     }
-    final first = content.contexts.first;
-    final painter = TextPainter(
-      text: buildForumBodyTextBandSpan(content, separation),
-      textAlign: first.style.textAlign,
-      textDirection: first.style.textDirection,
-      textScaler: textScaler,
-      locale: first.style.textStyle.locale,
-    );
-    try {
-      painter.layout(maxWidth: double.infinity);
-      if (!painter.width.isFinite || painter.width > 16384) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.width,
-        );
-      }
-      final metrics = painter.computeLineMetrics();
-      if (metrics.length != content.contexts.length * 2 - 1 ||
-          !painter.height.isFinite ||
-          painter.height > 1048576) {
+    return (scales: Map.unmodifiable(scales), gutter: separation);
+  }
+
+  static ForumBodyTextBandLayout _shape(
+    ForumBodyTextBandContent content,
+    TextPainter painter,
+    double separation,
+  ) {
+    painter.layout(maxWidth: double.infinity);
+    if (!painter.width.isFinite || painter.width > 16384) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.width,
+      );
+    }
+    final metrics = painter.computeLineMetrics();
+    if (metrics.length != content.contexts.length * 2 - 1 ||
+        !painter.height.isFinite ||
+        painter.height > 1048576) {
+      throw const ForumBodyTextBandLayoutException(
+        ForumBodyTextBandLayoutFailure.geometry,
+      );
+    }
+    final origins = <Offset>[];
+    final sizes = <Size>[];
+    final baselines = <double>[];
+    final bounds = <Rect>[];
+    for (var i = 0; i < content.contexts.length; i++) {
+      final window = content.projection.children[i];
+      final metric = metrics[i * 2];
+      final range = painter.getLineBoundary(
+        TextPosition(offset: window.engineStartUtf16),
+      );
+      if (range.start != window.engineStartUtf16 ||
+          (range.end != window.engineEndUtf16 &&
+              !(i + 1 < content.contexts.length &&
+                  range.end == window.engineEndUtf16 + 1))) {
         throw const ForumBodyTextBandLayoutException(
           ForumBodyTextBandLayoutFailure.geometry,
         );
       }
-      final origins = <Offset>[];
-      final sizes = <Size>[];
-      final baselines = <double>[];
-      final bounds = <Rect>[];
-      for (var i = 0; i < content.contexts.length; i++) {
-        final window = content.projection.children[i];
-        final metric = metrics[i * 2];
-        final range = painter.getLineBoundary(
-          TextPosition(offset: window.engineStartUtf16),
-        );
-        if (range.start != window.engineStartUtf16 ||
-            (range.end != window.engineEndUtf16 &&
-                !(i + 1 < content.contexts.length &&
-                    range.end == window.engineEndUtf16 + 1))) {
-          throw const ForumBodyTextBandLayoutException(
-            ForumBodyTextBandLayoutFailure.geometry,
-          );
-        }
-        // Native height rounds ascent+descent; LineMetrics.height additionally
-        // clamps to one pixel. Standalone tiny lines can instead have height 0.
-        // Its rounding delta belongs to the baseline, not the raw ascent.
-        final height = (metric.ascent + metric.descent).roundToDouble();
-        final baseline = height - metric.descent;
-        final origin = Offset(metric.left, metric.baseline - baseline);
-        var width = metric.width;
-        final boxes = painter.getBoxesForSelection(
-          TextSelection(
-            baseOffset: window.engineStartUtf16,
-            extentOffset: window.engineEndUtf16,
-          ),
-        );
-        for (final box in boxes) {
-          width = math.max(width, box.right - origin.dx);
-        }
-        final size = Size(width, height);
-        var fontBounds = Offset.zero & size;
-        for (final box in boxes) {
-          fontBounds = fontBounds.expandToInclude(box.toRect().shift(-origin));
-        }
-        if (!origin.dx.isFinite ||
-            !origin.dy.isFinite ||
-            !baseline.isFinite ||
-            !size.width.isFinite ||
-            size.width < 0 ||
-            size.width > 16384 ||
-            !size.height.isFinite ||
-            size.height < 0 ||
-            !fontBounds.left.isFinite ||
-            !fontBounds.right.isFinite ||
-            !fontBounds.top.isFinite ||
-            !fontBounds.bottom.isFinite) {
-          throw const ForumBodyTextBandLayoutException(
-            ForumBodyTextBandLayoutFailure.geometry,
-          );
-        }
-        origins.add(origin);
-        sizes.add(size);
-        baselines.add(baseline);
-        bounds.add(fontBounds);
-      }
-      final globals = [
-        for (var i = 0; i < bounds.length; i++) bounds[i].shift(origins[i]),
-      ];
-      for (var i = 1; i < globals.length; i++) {
-        final gap = globals[i].top - globals[i - 1].bottom;
-        if (gap < 1) {
-          throw ForumBodyTextBandLayoutException(
-            ForumBodyTextBandLayoutFailure.isolation,
-            requiredGutter: separation + 1 - gap,
-          );
-        }
-      }
-      final children = <ForumBodyTextBandChildGeometry>[];
-      for (var i = 0; i < globals.length; i++) {
-        final top = i == 0
-            ? globals[i].top - separation / 2
-            : (globals[i - 1].bottom + globals[i].top) / 2;
-        final bottom = i + 1 == globals.length
-            ? globals[i].bottom + separation / 2
-            : (globals[i].bottom + globals[i + 1].top) / 2;
-        // Keep horizontal overhang (e.g. italics) and a generous vertical strip,
-        // while excluding every other child's font bounds and glyph baseline.
-        final clip = Rect.fromLTRB(-16384, top, painter.width + 16384, bottom);
-        children.add(
-          ForumBodyTextBandChildGeometry._(
-            sizes[i],
-            baselines[i],
-            bounds[i],
-            origins[i],
-            clip,
-          ),
-        );
-      }
-      return ForumBodyTextBandLayout._(
-        painter,
-        content.projection,
-        List.unmodifiable(children),
-        separation,
+      // Native height rounds ascent+descent; LineMetrics.height additionally
+      // clamps to one pixel. Standalone tiny lines can instead have height 0.
+      // Its rounding delta belongs to the baseline, not the raw ascent.
+      final height = (metric.ascent + metric.descent).roundToDouble();
+      final baseline = height - metric.descent;
+      final origin = Offset(metric.left, metric.baseline - baseline);
+      var width = metric.width;
+      final boxes = painter.getBoxesForSelection(
+        TextSelection(
+          baseOffset: window.engineStartUtf16,
+          extentOffset: window.engineEndUtf16,
+        ),
       );
-    } catch (_) {
-      painter.dispose();
-      rethrow;
+      for (final box in boxes) {
+        width = math.max(width, box.right - origin.dx);
+      }
+      final size = Size(width, height);
+      var fontBounds = Offset.zero & size;
+      for (final box in boxes) {
+        fontBounds = fontBounds.expandToInclude(box.toRect().shift(-origin));
+      }
+      if (!origin.dx.isFinite ||
+          !origin.dy.isFinite ||
+          !baseline.isFinite ||
+          !size.width.isFinite ||
+          size.width < 0 ||
+          size.width > 16384 ||
+          !size.height.isFinite ||
+          size.height < 0 ||
+          !fontBounds.left.isFinite ||
+          !fontBounds.right.isFinite ||
+          !fontBounds.top.isFinite ||
+          !fontBounds.bottom.isFinite) {
+        throw const ForumBodyTextBandLayoutException(
+          ForumBodyTextBandLayoutFailure.geometry,
+        );
+      }
+      origins.add(origin);
+      sizes.add(size);
+      baselines.add(baseline);
+      bounds.add(fontBounds);
     }
+    final globals = [
+      for (var i = 0; i < bounds.length; i++) bounds[i].shift(origins[i]),
+    ];
+    for (var i = 1; i < globals.length; i++) {
+      final gap = globals[i].top - globals[i - 1].bottom;
+      if (gap < 1) {
+        throw ForumBodyTextBandLayoutException(
+          ForumBodyTextBandLayoutFailure.isolation,
+          requiredGutter: separation + 1 - gap,
+        );
+      }
+    }
+    final children = <ForumBodyTextBandChildGeometry>[];
+    for (var i = 0; i < globals.length; i++) {
+      final top = i == 0
+          ? globals[i].top - separation / 2
+          : (globals[i - 1].bottom + globals[i].top) / 2;
+      final bottom = i + 1 == globals.length
+          ? globals[i].bottom + separation / 2
+          : (globals[i].bottom + globals[i + 1].top) / 2;
+      // Keep horizontal overhang (e.g. italics) and a generous vertical strip,
+      // while excluding every other child's font bounds and glyph baseline.
+      final clip = Rect.fromLTRB(-16384, top, painter.width + 16384, bottom);
+      children.add(
+        ForumBodyTextBandChildGeometry._(
+          sizes[i],
+          baselines[i],
+          bounds[i],
+          origins[i],
+          clip,
+        ),
+      );
+    }
+    return ForumBodyTextBandLayout._(
+      painter,
+      content.projection,
+      List.unmodifiable(children),
+      separation,
+    );
   }
 
   final TextPainter _painter;
@@ -215,12 +238,14 @@ final class ForumBodyTextBandLayout {
   final double gutter;
   final ForumBodyTextBandPaintStore _paintStore;
   bool _disposed = false;
+  @override
   bool get isDisposed => _disposed;
   int get preparedPictureCount => _paintStore.preparedCount;
   int get pendingPictureCount => _paintStore.pendingCount;
 
   /// Engine's approximate display-list allocation, not font/image/GPU memory.
   int get approximatePictureBytes => _paintStore.approximateBytes;
+  @override
   int get lineCount => children.length * 2 - 1;
   void _ensureOpen() {
     if (_disposed) throw StateError('Text band is retired');
@@ -262,6 +287,7 @@ final class ForumBodyTextBandLayout {
     return true;
   }
 
+  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;

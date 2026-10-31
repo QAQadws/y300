@@ -226,8 +226,9 @@ final class ForumBodyInlineParagraphLayout
   final TextPainter _painter;
   final double width;
   final double height;
-  @override
   final List<ForumBodyParagraphLine> lines;
+  @override
+  int get lineCount => lines.length;
   final List<TextBox> atomBoxes;
   final List<PlaceholderDimensions> dimensions;
   bool _disposed = false;
