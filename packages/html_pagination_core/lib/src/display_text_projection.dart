@@ -48,6 +48,7 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
+  static const revision = 1;
   HtmlDisplayTextProjection._(
     this.text,
     this.parts,

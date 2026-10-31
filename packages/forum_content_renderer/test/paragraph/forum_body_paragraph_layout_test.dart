@@ -141,7 +141,7 @@ void main() {
             layout.lines.every(
               (line) =>
                   line.startUtf16 >= 0 &&
-                  line.endUtf16 <= layout.content.projection.text.length,
+                  line.endUtf16 <= layout.projection.text.length,
             ),
             isTrue,
           );

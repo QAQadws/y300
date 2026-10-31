@@ -5,6 +5,7 @@ export 'src/document/forum_body_document.dart';
 export 'src/document/forum_body_parser.dart';
 export 'src/paragraph/forum_body_paragraph_content.dart';
 export 'src/paragraph/forum_body_paragraph_layout.dart';
+export 'src/paragraph/forum_body_paragraph_cache.dart';
 export 'src/style/forum_body_length.dart';
 export 'src/style/forum_body_style_options.dart';
 export 'src/style/forum_body_style_resolver.dart';

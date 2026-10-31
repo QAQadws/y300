@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
+import '../document/forum_body_document.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_content.dart';
 
@@ -39,49 +40,22 @@ final class ForumBodyParagraphLine {
 /// release it; a disposed view fails before touching an engine resource.
 final class ForumBodyParagraphLayout {
   ForumBodyParagraphLayout._(
-    this.content,
+    ForumBodyParagraphContent content,
     this._painter,
     this.width,
     this.height,
     List<ForumBodyParagraphLine> lines,
-  ) : lines = List.unmodifiable(lines);
+  ) : lines = List.unmodifiable(lines),
+      identity = content.identity,
+      path = content.path,
+      projection = content.projection;
 
   factory ForumBodyParagraphLayout.create({
     required ForumBodyParagraphContent content,
     required double width,
     TextScaler textScaler = TextScaler.noScaling,
   }) {
-    if (!width.isFinite || width <= 0 || width > 16384) {
-      throw const ForumBodyParagraphLayoutException(
-        ForumBodyParagraphLayoutFailure.width,
-      );
-    }
-    if (content.style.indent.value != 0) {
-      throw const ForumBodyParagraphLayoutException(
-        ForumBodyParagraphLayoutFailure.indent,
-      );
-    }
-    for (final style in [
-      content.style,
-      ...content.runs.map((run) => run.style),
-    ]) {
-      if (style.textDirection != content.style.textDirection) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.direction,
-        );
-      }
-      if (style.whiteSpace == ForumBodyWhiteSpace.pre) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.noWrap,
-        );
-      }
-      final scaled = textScaler.scale(style.textStyle.fontSize!);
-      if (!scaled.isFinite || scaled <= 0 || scaled > 4096) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.scale,
-        );
-      }
-    }
+    validateInputs(content: content, width: width, textScaler: textScaler);
     final painter = TextPainter(
       text: content.textSpan,
       textAlign: content.style.textAlign,
@@ -127,8 +101,52 @@ final class ForumBodyParagraphLayout {
     }
   }
 
+  /// Also used before a cache lookup so warm hits cannot bypass admission.
+  static Map<double, double> validateInputs({
+    required ForumBodyParagraphContent content,
+    required double width,
+    required TextScaler textScaler,
+  }) {
+    if (!width.isFinite || width <= 0 || width > 16384) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.width,
+      );
+    }
+    if (content.style.indent.value != 0) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.indent,
+      );
+    }
+    final scales = <double, double>{};
+    for (final style in [
+      content.style,
+      ...content.runs.map((run) => run.style),
+    ]) {
+      if (style.textDirection != content.style.textDirection) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.direction,
+        );
+      }
+      if (style.whiteSpace == ForumBodyWhiteSpace.pre) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.noWrap,
+        );
+      }
+      final size = style.textStyle.fontSize!;
+      final scaled = scales.putIfAbsent(size, () => textScaler.scale(size));
+      if (!scaled.isFinite || scaled <= 0 || scaled > 4096) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.scale,
+        );
+      }
+    }
+    return scales;
+  }
+
   static const backendRevision = 1;
-  final ForumBodyParagraphContent content;
+  final ForumBodyIdentity identity;
+  final String? path;
+  final HtmlDisplayTextProjection projection;
   final TextPainter _painter;
   final double width;
   final double height;
@@ -148,7 +166,7 @@ final class ForumBodyParagraphLayout {
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
     final position = _painter.getPositionForOffset(offset);
-    return content.projection.sourceAtUtf16(
+    return projection.sourceAtUtf16(
       position.offset,
       affinity: position.affinity == TextAffinity.upstream
           ? HtmlProjectionAffinity.upstream
@@ -159,10 +177,10 @@ final class ForumBodyParagraphLayout {
   List<TextBox> selectionBoxes(int startUtf16, int endUtf16) {
     _ensureOpen();
     RangeError.checkValueInInterval(startUtf16, 0, endUtf16, 'startUtf16');
-    final start = content.projection
+    final start = projection
         .sourceAtUtf16(startUtf16, affinity: HtmlProjectionAffinity.upstream)
         .displayUtf16;
-    final end = content.projection.sourceAtUtf16(endUtf16).displayUtf16;
+    final end = projection.sourceAtUtf16(endUtf16).displayUtf16;
     return List.unmodifiable(
       _painter.getBoxesForSelection(
         TextSelection(baseOffset: start, extentOffset: end),
