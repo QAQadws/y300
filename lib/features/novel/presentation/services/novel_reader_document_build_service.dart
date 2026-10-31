@@ -1,6 +1,7 @@
 import 'dart:isolate';
 
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_source_provenance.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
@@ -28,7 +29,13 @@ abstract interface class NovelReaderDocumentBuildExecutor {
 
 class IsolateNovelReaderDocumentBuildExecutor
     implements NovelReaderDocumentBuildExecutor {
-  const IsolateNovelReaderDocumentBuildExecutor();
+  const IsolateNovelReaderDocumentBuildExecutor({
+    this.captureSourceProvenance = false,
+    this.sourceProvenanceLimits = const NovelReaderSourceProvenanceLimits(),
+  });
+
+  final bool captureSourceProvenance;
+  final NovelReaderSourceProvenanceLimits sourceProvenanceLimits;
 
   @override
   Future<NovelReaderDocument> buildInBackground(
@@ -36,7 +43,9 @@ class IsolateNovelReaderDocumentBuildExecutor
   ) async {
     // The document contains data only. Isolate.run transfers ownership on exit;
     // encoding a DTO then decoding its entire block tree on UI undoes that win.
-    return Isolate.run(() => _buildDocument(request));
+    final capture = captureSourceProvenance;
+    final limits = sourceProvenanceLimits;
+    return Isolate.run(() => _buildDocument(request, capture, limits));
   }
 }
 
@@ -96,6 +105,7 @@ class AdaptiveNovelReaderDocumentBuildService
       plainText: document.plainText,
       wordCount: document.wordCount,
       textConversionIdentity: converter.mode.name,
+      sourceProvenance: document.sourceProvenance,
     );
   }
 
@@ -136,8 +146,15 @@ class AdaptiveNovelReaderDocumentBuildService
   }
 }
 
-NovelReaderDocument _buildDocument(NovelReaderDocumentBuildRequest request) {
-  const parser = DiscuzNovelReaderDocumentParser();
+NovelReaderDocument _buildDocument(
+  NovelReaderDocumentBuildRequest request,
+  bool capture,
+  NovelReaderSourceProvenanceLimits limits,
+) {
+  final parser = DiscuzNovelReaderDocumentParser(
+    captureSourceProvenance: capture,
+    sourceProvenanceLimits: limits,
+  );
   return parser.parse(
     episodeId: request.episodeId,
     rawHtml: request.rawHtml,

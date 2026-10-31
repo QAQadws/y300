@@ -1,8 +1,12 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/features/novel/domain/services/novel_reader_text_normalization.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_source_provenance.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/services/forum_post_dom_extractor.dart';
 
@@ -21,9 +25,13 @@ abstract class NovelReaderDocumentParser {
 class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
   const DiscuzNovelReaderDocumentParser({
     ForumPostDomExtractor domExtractor = const ForumPostDomExtractor(),
+    this.captureSourceProvenance = false,
+    this.sourceProvenanceLimits = const NovelReaderSourceProvenanceLimits(),
   }) : _domExtractor = domExtractor;
 
   final ForumPostDomExtractor _domExtractor;
+  final bool captureSourceProvenance;
+  final NovelReaderSourceProvenanceLimits sourceProvenanceLimits;
 
   static const Set<String> _skipTags = <String>{
     'script',
@@ -66,15 +74,27 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
     }
 
     final fragment = html_parser.parseFragment(normalizedHtml);
-    final builder = _BlockBuilder(this);
-    for (final child in fragment.nodes) {
-      builder.appendNode(child, const _InlineStyle());
+    final origins = captureSourceProvenance
+        ? _SourceOriginRecorder(sourceProvenanceLimits)
+        : null;
+    final builder = _BlockBuilder(this, origins);
+    for (var i = 0; i < fragment.nodes.length; i++) {
+      builder.appendNode(
+        fragment.nodes[i],
+        const _InlineStyle(),
+        origins?.isRecording == true ? '$i' : null,
+      );
     }
 
     if (builder.blocks.isEmpty) {
       return _fallbackDocument(episodeId, rawHtml, fallbackParagraphs);
     }
-    return _documentFromBlocks(episodeId, rawHtml, builder.blocks);
+    return _documentFromBlocks(
+      episodeId,
+      rawHtml,
+      builder.blocks,
+      sourceProvenance: origins?.finish(normalizedHtml),
+    );
   }
 
   NovelReaderDocument _fallbackDocument(
@@ -103,8 +123,9 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
   NovelReaderDocument _documentFromBlocks(
     String episodeId,
     String rawHtml,
-    List<RichBlock> blocks,
-  ) {
+    List<RichBlock> blocks, {
+    NovelReaderSourceProvenance? sourceProvenance,
+  }) {
     final plainText = blocks
         .map((block) => block.novelPlainText.trim())
         .where((text) => text.isNotEmpty)
@@ -119,6 +140,7 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
           .where((rune) => !_isWhitespaceRune(rune))
           .length,
       textConversionIdentity: 'none',
+      sourceProvenance: sourceProvenance,
     );
   }
 
@@ -230,20 +252,26 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
 /// inline runs into a [RichTextBlock]; images, dividers and spacers become
 /// their own blocks. Ids stay `node-N` so persisted progress anchors resolve.
 class _BlockBuilder {
-  _BlockBuilder(this._parser);
+  _BlockBuilder(this._parser, this._origins);
 
   final DiscuzNovelReaderDocumentParser _parser;
+  final _SourceOriginRecorder? _origins;
   final List<RichBlock> blocks = <RichBlock>[];
   var _nextId = 0;
   var _imageIndex = 0;
 
   String _takeId() => _parser._nodeId(_nextId++);
 
-  void appendNode(html_dom.Node node, _InlineStyle style) {
+  void appendNode(html_dom.Node node, _InlineStyle style, String? path) {
     if (node is html_dom.Text) {
       final text = _parser._normalizeText(node.text);
       if (text.isNotEmpty) {
-        _emitText(<RichRun>[style.run(text)]);
+        _emitText(
+          <RichRun>[style.run(text)],
+          path,
+          node.text,
+          NovelReaderSourceTextPolicy.trimmedTextNode,
+        );
       }
       return;
     }
@@ -270,14 +298,22 @@ class _BlockBuilder {
     if (tag == 'a') {
       final link = _parser._linkFromElement(node);
       if (link != null) {
-        _emitText(<RichRun>[
-          style.run(link.text, linkUrl: link.url, linkTid: link.tid),
-        ]);
+        _emitText(
+          <RichRun>[style.run(link.text, linkUrl: link.url, linkTid: link.tid)],
+          path,
+          path == null ? '' : node.text,
+          NovelReaderSourceTextPolicy.trimmedElementText,
+        );
         return;
       }
       final text = _parser._normalizeText(node.text);
       if (text.isNotEmpty) {
-        _emitText(<RichRun>[style.run(text)]);
+        _emitText(
+          <RichRun>[style.run(text)],
+          path,
+          path == null ? '' : node.text,
+          NovelReaderSourceTextPolicy.trimmedElementText,
+        );
       }
       return;
     }
@@ -291,6 +327,7 @@ class _BlockBuilder {
     if (isQuote || isHeading || isBlock) {
       _emitStructured(
         node,
+        path: path,
         style: nextStyle,
         kind: isQuote
             ? _StructuredKind.quote
@@ -301,19 +338,28 @@ class _BlockBuilder {
       return;
     }
 
-    for (final child in node.nodes) {
-      appendNode(child, nextStyle);
+    for (var i = 0; i < node.nodes.length; i++) {
+      appendNode(node.nodes[i], nextStyle, _childSourcePath(_origins, path, i));
     }
   }
 
   void _emitStructured(
     html_dom.Element element, {
+    required String? path,
     required _InlineStyle style,
     required _StructuredKind kind,
   }) {
-    final collector = _InlineCollector(_parser);
-    for (final child in element.nodes) {
-      collector.visit(child, style);
+    final collector = _InlineCollector(
+      _parser,
+      _origins,
+      _origins?.isRecording == true ? _parser._nodeId(_nextId) : '',
+    );
+    for (var i = 0; i < element.nodes.length; i++) {
+      collector.visit(
+        element.nodes[i],
+        style,
+        _childSourcePath(_origins, path, i),
+      );
     }
     final runs = collector.takeRuns();
     final imageElements = collector.imageElements;
@@ -350,12 +396,28 @@ class _BlockBuilder {
     }
   }
 
-  void _emitText(List<RichRun> runs) {
+  void _emitText(
+    List<RichRun> runs,
+    String? path,
+    String sourceText,
+    NovelReaderSourceTextPolicy policy,
+  ) {
     final merged = _mergeRuns(runs);
     if (merged.isEmpty) {
       return;
     }
-    blocks.add(RichTextBlock(anchorId: _takeId(), runs: merged));
+    final id = _takeId();
+    blocks.add(RichTextBlock(anchorId: id, runs: merged));
+    if (path != null) {
+      _origins?.record(
+        path: path,
+        sourceText: sourceText,
+        run: merged.single,
+        nodeId: id,
+        semanticStart: 0,
+        policy: policy,
+      );
+    }
   }
 
   void _emitImage(html_dom.Element element) {
@@ -382,17 +444,25 @@ class _BlockBuilder {
 
 /// Collects inline runs (and any block images) inside a structured element.
 class _InlineCollector {
-  _InlineCollector(this._parser);
+  _InlineCollector(this._parser, this._origins, this._nodeId);
 
   final DiscuzNovelReaderDocumentParser _parser;
+  final _SourceOriginRecorder? _origins;
+  final String _nodeId;
+  int _semanticStart = 0;
   final List<RichRun> _runs = <RichRun>[];
   final List<html_dom.Element> imageElements = <html_dom.Element>[];
 
-  void visit(html_dom.Node node, _InlineStyle style) {
+  void visit(html_dom.Node node, _InlineStyle style, String? path) {
     if (node is html_dom.Text) {
       final text = _parser._normalizeInlineText(node.text);
       if (text.trim().isNotEmpty) {
-        _runs.add(style.run(text));
+        _append(
+          style.run(text),
+          path,
+          node.text,
+          NovelReaderSourceTextPolicy.inlineTextNode,
+        );
       }
       return;
     }
@@ -404,7 +474,12 @@ class _InlineCollector {
       return;
     }
     if (tag == 'br') {
-      _runs.add(const RichRun(text: '\n'));
+      _append(
+        const RichRun(text: '\n'),
+        path,
+        '\n',
+        NovelReaderSourceTextPolicy.hardBreak,
+      );
       return;
     }
     if (tag == 'img') {
@@ -414,19 +489,51 @@ class _InlineCollector {
     if (tag == 'a') {
       final link = _parser._linkFromElement(node);
       if (link != null) {
-        _runs.add(style.run(link.text, linkUrl: link.url, linkTid: link.tid));
+        _append(
+          style.run(link.text, linkUrl: link.url, linkTid: link.tid),
+          path,
+          path == null ? '' : node.text,
+          NovelReaderSourceTextPolicy.trimmedElementText,
+        );
         return;
       }
       final text = _parser._normalizeText(node.text);
       if (text.isNotEmpty) {
-        _runs.add(style.run(text));
+        _append(
+          style.run(text),
+          path,
+          path == null ? '' : node.text,
+          NovelReaderSourceTextPolicy.trimmedElementText,
+        );
       }
       return;
     }
 
     final nextStyle = _parser._styleForElement(node, style);
-    for (final child in node.nodes) {
-      visit(child, nextStyle);
+    for (var i = 0; i < node.nodes.length; i++) {
+      visit(node.nodes[i], nextStyle, _childSourcePath(_origins, path, i));
+    }
+  }
+
+  void _append(
+    RichRun run,
+    String? path,
+    String sourceText,
+    NovelReaderSourceTextPolicy policy,
+  ) {
+    _runs.add(run);
+    if (path != null && _origins?.isRecording == true) {
+      _origins!.record(
+        path: path,
+        sourceText: sourceText,
+        run: run,
+        nodeId: _nodeId,
+        semanticStart: _semanticStart,
+        policy: policy,
+      );
+      if (_origins.isRecording) {
+        _semanticStart += run.text.runes.length;
+      }
     }
   }
 
@@ -453,6 +560,69 @@ class _InlineCollector {
 }
 
 enum _StructuredKind { paragraph, heading, quote }
+
+String? _childSourcePath(
+  _SourceOriginRecorder? recorder,
+  String? path,
+  int i,
+) => path != null && recorder?.isRecording == true ? '$path/$i' : null;
+
+/// Source capture is opt-in and fails closed as a whole, without affecting the
+/// historical semantic parse. Even one huge structured block cannot accumulate
+/// unbounded pending origins while waiting for its semantic node to be emitted.
+final class _SourceOriginRecorder {
+  _SourceOriginRecorder(this.limits) {
+    if (limits.maxEntries < 0 ||
+        limits.maxSourceCodeUnits < 0 ||
+        limits.maxPathCodeUnits < 0) {
+      throw ArgumentError('Invalid semantic source provenance limits');
+    }
+  }
+  final NovelReaderSourceProvenanceLimits limits;
+  final _origins = <NovelReaderTextSourceOrigin>[];
+  int _sourceCodeUnits = 0;
+  int _pathCodeUnits = 0;
+  bool isRecording = true;
+
+  void record({
+    required String path,
+    required String sourceText,
+    required RichRun run,
+    required String nodeId,
+    required int semanticStart,
+    required NovelReaderSourceTextPolicy policy,
+  }) {
+    if (!isRecording) return;
+    if (_origins.length >= limits.maxEntries ||
+        sourceText.length > limits.maxSourceCodeUnits - _sourceCodeUnits ||
+        path.length > limits.maxPathCodeUnits - _pathCodeUnits) {
+      isRecording = false;
+      _origins.clear();
+      _sourceCodeUnits = 0;
+      _pathCodeUnits = 0;
+      return;
+    }
+    _sourceCodeUnits += sourceText.length;
+    _pathCodeUnits += path.length;
+    _origins.add(
+      NovelReaderTextSourceOrigin(
+        path: path,
+        sourceText: sourceText,
+        text: run.text,
+        nodeId: nodeId,
+        semanticCodePointStart: semanticStart,
+        policy: policy,
+      ),
+    );
+  }
+
+  NovelReaderSourceProvenance? finish(String input) => isRecording
+      ? NovelReaderSourceProvenance(
+          inputHash: sha256.convert(utf8.encode(input)).toString(),
+          origins: _origins,
+        )
+      : null;
+}
 
 class _LinkInfo {
   const _LinkInfo({required this.url, required this.text, this.tid});

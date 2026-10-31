@@ -1,5 +1,7 @@
 import 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
+import 'novel_reader_source_provenance.dart';
+
 export 'package:y300/features/reader_shared/domain/rich_text/document/rich_document.dart';
 
 /// Lightweight tap payload for a novel reader link. The reader opens an in-app
@@ -26,6 +28,7 @@ class NovelReaderDocument {
     required this.plainText,
     required this.wordCount,
     this.textConversionIdentity,
+    this.sourceProvenance,
   });
 
   final String episodeId;
@@ -37,6 +40,10 @@ class NovelReaderDocument {
   /// The conversion mode that produced this document, never the UI preview.
   /// Null means that the caller has not established display provenance.
   final String? textConversionIdentity;
+
+  /// Absent for uncaptured/fallback/over-budget inputs; never infer DOM origins
+  /// from literal equality when this proof is unavailable.
+  final NovelReaderSourceProvenance? sourceProvenance;
 
   /// Block tree in document order.
   List<RichBlock> get blocks => body.blocks;

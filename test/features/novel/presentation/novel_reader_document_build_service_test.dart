@@ -1,6 +1,10 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_source_provenance.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
@@ -10,6 +14,66 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'converted provenance survives synchronous and real-isolate builds',
+    () async {
+      const parser = DiscuzNovelReaderDocumentParser(
+        captureSourceProvenance: true,
+      );
+      const executor = IsolateNovelReaderDocumentBuildExecutor(
+        captureSourceProvenance: true,
+      );
+      const service = AdaptiveNovelReaderDocumentBuildService(
+        parser: parser,
+        executor: executor,
+      );
+      for (final length in [3, 13000]) {
+        final source = List.filled(length, '臺').join();
+        final document = await service.build(
+          NovelReaderDocumentBuildRequest(
+            episodeId: 'converted-origin-$length',
+            rawHtml: '<p>$source</p>',
+            fallbackParagraphs: const [],
+          ),
+          converter: _RecordingConverter(TextConversionMode.toSimplified),
+        );
+        final display = source.replaceAll('臺', '台');
+        final provenance = document.sourceProvenance!;
+        expect(document.textConversionIdentity, 'toSimplified');
+        expect(document.plainText, display);
+        expect(
+          provenance.inputHash,
+          sha256.convert(utf8.encode('<p>$display</p>')).toString(),
+        );
+        expect(provenance.origins.single.path, '0/0');
+        expect(provenance.origins.single.sourceText, display);
+        expect(provenance.origins.single.nodeId, 'node-0');
+        expect(provenance.origins.single.semanticCodePointStart, 0);
+      }
+    },
+  );
+
+  test(
+    'isolate honors source metadata budgets without discarding the body',
+    () async {
+      final document =
+          await const IsolateNovelReaderDocumentBuildExecutor(
+            captureSourceProvenance: true,
+            sourceProvenanceLimits: NovelReaderSourceProvenanceLimits(
+              maxSourceCodeUnits: 1,
+            ),
+          ).buildInBackground(
+            const NovelReaderDocumentBuildRequest(
+              episodeId: 'capped-origin',
+              rawHtml: '<p>ab</p>',
+              fallbackParagraphs: [],
+            ),
+          );
+      expect(document.plainText, 'ab');
+      expect(document.sourceProvenance, isNull);
+    },
+  );
 
   test(
     'chapter conversion never dispatches native work on the UI thread',
