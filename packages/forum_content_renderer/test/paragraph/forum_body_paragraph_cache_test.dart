@@ -37,6 +37,32 @@ ForumBodyParagraphContent content(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'cache-only admission acquires warm layouts but never builds on a miss',
+    () {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 2,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final input = content('<p>abc</p>');
+      expect(cache.tryAcquireCached(content: input, width: 100), isNull);
+      expect(cache.layoutBuildCount, 0);
+      final lease = cache.acquire(content: input, width: 100);
+      final cached = cache.tryAcquireCached(content: input, width: 100)!;
+      expect(cached.layout, same(lease.layout));
+      expect(cache.tryAcquireCached(content: input, width: 101), isNull);
+      expect(cache.layoutBuildCount, 1);
+      expect(
+        () => cache.tryAcquireCached(content: input, width: 0),
+        throwsA(isA<ForumBodyParagraphLayoutException>()),
+      );
+      lease.release();
+      cached.release();
+      expect(cache.activeLeases, 0);
+    },
+  );
+
   test('equal paint text does not reuse a different source projection', () {
     final document = const ForumBodyParser().parse(
       html: '<p><span>a</span><span>a</span></p>',

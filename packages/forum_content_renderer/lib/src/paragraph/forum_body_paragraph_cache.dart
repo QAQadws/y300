@@ -11,8 +11,12 @@ import 'forum_body_paragraph_layout.dart';
 enum ForumBodyParagraphBudgetFailure { content, pinned }
 
 final class ForumBodyParagraphBudgetException implements Exception {
-  const ForumBodyParagraphBudgetException(this.failure);
+  const ForumBodyParagraphBudgetException(
+    this.failure, {
+    this.requiredEstimatedBytes,
+  });
   final ForumBodyParagraphBudgetFailure failure;
+  final int? requiredEstimatedBytes;
   @override
   String toString() => 'ForumBodyParagraphBudgetException(${failure.name})';
 }
@@ -49,6 +53,31 @@ final class ForumBodyParagraphCache {
     required ForumBodyParagraphContent content,
     required double width,
     TextScaler textScaler = TextScaler.noScaling,
+  }) => _acquire(
+    content: content,
+    width: width,
+    textScaler: textScaler,
+    allowBuild: true,
+  )!;
+
+  /// A cache miss never shapes. A returned lease has the usual ownership;
+  /// invalid inputs and owner retirement still fail before any cache access.
+  ForumBodyParagraphLease? tryAcquireCached({
+    required ForumBodyParagraphContent content,
+    required double width,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) => _acquire(
+    content: content,
+    width: width,
+    textScaler: textScaler,
+    allowBuild: false,
+  );
+
+  ForumBodyParagraphLease? _acquire({
+    required ForumBodyParagraphContent content,
+    required double width,
+    required TextScaler textScaler,
+    required bool allowBuild,
   }) {
     if (_closed) throw StateError('Paragraph cache is closed');
     final scales = ForumBodyParagraphLayout.validateInputs(
@@ -67,6 +96,7 @@ final class ForumBodyParagraphCache {
     if (entry != null) {
       _hits++;
     } else {
+      if (!allowBuild) return null;
       final minimumBytes =
           4096 +
           content.projection.text.length * 96 +
@@ -80,14 +110,16 @@ final class ForumBodyParagraphCache {
         }
       }
       if (minimumBytes > maxEstimatedBytes) {
-        throw const ForumBodyParagraphBudgetException(
+        throw ForumBodyParagraphBudgetException(
           ForumBodyParagraphBudgetFailure.content,
+          requiredEstimatedBytes: minimumBytes,
         );
       }
       if (pinnedEntries >= maxEntries ||
           minimumBytes > maxEstimatedBytes - pinnedBytes) {
-        throw const ForumBodyParagraphBudgetException(
+        throw ForumBodyParagraphBudgetException(
           ForumBodyParagraphBudgetFailure.pinned,
+          requiredEstimatedBytes: minimumBytes,
         );
       }
       final layout = ForumBodyParagraphLayout.create(
@@ -107,6 +139,7 @@ final class ForumBodyParagraphCache {
           bytes > maxEstimatedBytes
               ? ForumBodyParagraphBudgetFailure.content
               : ForumBodyParagraphBudgetFailure.pinned,
+          requiredEstimatedBytes: bytes,
         );
       }
       while (_entries.length >= maxEntries ||
@@ -120,8 +153,9 @@ final class ForumBodyParagraphCache {
         }
         if (victim == null) {
           layout.dispose();
-          throw const ForumBodyParagraphBudgetException(
+          throw ForumBodyParagraphBudgetException(
             ForumBodyParagraphBudgetFailure.pinned,
+            requiredEstimatedBytes: bytes,
           );
         }
         _retire(_entries.remove(victim)!);
@@ -133,6 +167,36 @@ final class ForumBodyParagraphCache {
     entry.leases++;
     _leases++;
     return ForumBodyParagraphLease._(this, entry, content);
+  }
+
+  /// Test whether releasing other entries could unblock this rejection. Alias
+  /// leases of our own entries add no capacity, and our own footprint plus the
+  /// rejected input can already prove an intrinsic page-budget failure.
+  bool isBlockedByExternalPins(
+    ForumBodyParagraphBudgetException rejection,
+    Iterable<ForumBodyParagraphLease> owned,
+  ) {
+    if (_closed) throw StateError('Paragraph cache is closed');
+    if (rejection.failure != ForumBodyParagraphBudgetFailure.pinned) {
+      return false;
+    }
+    final kept = <_LayoutEntry>{};
+    for (final lease in owned) {
+      if (!identical(lease._owner, this) || !lease.isActive) {
+        throw StateError('Prepared lease is not active in this cache');
+      }
+      kept.add(lease._entry);
+    }
+    final keptBytes = kept.fold<int>(0, (sum, entry) => sum + entry.bytes);
+    if (kept.length >= maxEntries ||
+        (rejection.requiredEstimatedBytes != null &&
+            rejection.requiredEstimatedBytes! >
+                maxEstimatedBytes - keptBytes)) {
+      return false;
+    }
+    return _entries.values.any(
+      (entry) => entry.leases > 0 && !kept.contains(entry),
+    );
   }
 
   void _release(_LayoutEntry entry) {

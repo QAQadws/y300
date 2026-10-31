@@ -383,7 +383,7 @@ void main() {
     });
   }
 
-  test('page materialization is transactional under pinned-cache pressure', () {
+  test('cold page preparation cannot wait forever on its own native pins', () {
     final fixture = _Fixture(
       '<p style="margin:0">a</p><p style="margin:0">b</p>',
       entries: 1,
@@ -393,7 +393,13 @@ void main() {
     final prefix = session.snapshot;
     expect(
       () => session.preparePageLeases(0),
-      throwsA(isA<ForumBodyParagraphBudgetException>()),
+      _failure(ForumBodyTextPageSessionFailure.pageNotPrepared),
+    );
+    final preparation = session.openPagePreparation(0);
+    preparation.advance(maxFragments: 2);
+    expect(
+      () => preparation.advance(maxFragments: 2),
+      throwsA(isA<ForumBodyTextPagePreparationException>()),
     );
     expect(fixture.cache.activeLeases, 0);
     expect(session.activeIssuedLeases, 0);
@@ -462,6 +468,11 @@ void main() {
       factor = 2;
       expect(
         () => session.preparePageLeases(0),
+        _failure(ForumBodyTextPageSessionFailure.pageNotPrepared),
+      );
+      final preparation = session.openPagePreparation(0);
+      expect(
+        () => preparation.advance(maxFragments: 1),
         throwsA(isA<ForumBodyTextPageSurfaceException>()),
       );
       expect(fixture.cache.activeLeases, 0);

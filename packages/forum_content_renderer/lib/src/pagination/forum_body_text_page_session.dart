@@ -6,8 +6,8 @@ import '../flow/forum_body_text_flow_cursor.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
-import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
+import 'forum_body_text_page_preparation.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -18,6 +18,8 @@ enum ForumBodyTextPageSessionFailure {
   leaseLimit,
   ownerRetired,
   decoration,
+  preparationLimit,
+  pageNotPrepared,
 }
 
 final class ForumBodyTextPageSessionException implements Exception {
@@ -38,6 +40,7 @@ final class ForumBodyTextPageSessionLimits {
     required this.maxRuns,
     required this.maxIssuedLeases,
     this.maxStyleIssues = 128,
+    this.maxPagePreparations = 3,
   });
   final int maxPages;
   final int maxFragments;
@@ -46,6 +49,7 @@ final class ForumBodyTextPageSessionLimits {
   final int maxRuns;
   final int maxIssuedLeases;
   final int maxStyleIssues;
+  final int maxPagePreparations;
 
   void _validate() {
     if (maxPages <= 0 ||
@@ -54,7 +58,8 @@ final class ForumBodyTextPageSessionLimits {
         maxTextCodeUnits < 0 ||
         maxRuns < 0 ||
         maxIssuedLeases <= 0 ||
-        maxStyleIssues < 0) {
+        maxStyleIssues < 0 ||
+        maxPagePreparations <= 0) {
       throw ArgumentError('Invalid text page session limits');
     }
   }
@@ -160,6 +165,8 @@ final class ForumBodyTextPageSession {
   final ForumBodyTextPageSessionLimits limits;
   final _RetainedParagraphs _content;
   final _issued = <ForumBodyParagraphLease>{};
+  final _preparations = <ForumBodyTextPagePreparation>{};
+  int _reservedLeases = 0;
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
@@ -179,6 +186,8 @@ final class ForumBodyTextPageSession {
   int get retainedTextCodeUnits => _content.textCodeUnits;
   int get retainedRuns => _content.runs;
   int get activeIssuedLeases => _issued.where((lease) => lease.isActive).length;
+  int get pendingPreparationCount => _preparations.length;
+  int get reservedViewLeases => _reservedLeases;
   int get droppedStyleIssueCount => _droppedIssues;
 
   /// Each call handles at most one paragraph/padding input and publishes at
@@ -316,45 +325,74 @@ final class ForumBodyTextPageSession {
     }
   }
 
-  /// Only published pages can be materialized. Acquisitions are transactional;
-  /// a view-budget/native failure leaves the generation and existing views
-  /// usable. Surface later releases mounted leases; abandoned views are the
-  /// caller's responsibility, and session close retires every issued lease.
+  /// Warm-only convenience. A miss never shapes and rolls back partial work;
+  /// use openPagePreparation to prepare cold fragments outside Widget build.
   List<ForumBodyParagraphLease> preparePageLeases(int pageIndex) {
+    final preparation = openPagePreparation(pageIndex);
+    try {
+      if (!preparation.tryPrepareCached()) {
+        throw const ForumBodyTextPageSessionException(
+          ForumBodyTextPageSessionFailure.pageNotPrepared,
+        );
+      }
+      return preparation.takeLeases();
+    } finally {
+      preparation.close();
+    }
+  }
+
+  /// Reserve the whole visible fragment budget before acquiring any lease.
+  /// Concurrent/partial preparations count, including empty-page requests.
+  ForumBodyTextPagePreparation openPagePreparation(int pageIndex) {
     _ensureUsable();
-    final page = snapshot[pageIndex];
+    final prefix = snapshot;
+    final page = prefix[pageIndex];
+    if (_preparations.length >= limits.maxPagePreparations) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.preparationLimit,
+      );
+    }
     _issued.removeWhere((lease) => !lease.isActive);
-    if (page.fragments.length > limits.maxIssuedLeases - _issued.length) {
+    if (page.fragments.length >
+        limits.maxIssuedLeases - _issued.length - _reservedLeases) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.leaseLimit,
       );
     }
-    final prepared = <ForumBodyParagraphLease>[];
-    try {
-      for (final fragment in page.fragments) {
-        prepared.add(
-          _cache.acquire(
-            content: _content.items[fragment.paragraphIndex],
-            width: fragment.width,
-            textScaler: _textScaler,
-          ),
-        );
-      }
-      _ensureUsable();
-      validateForumBodyTextPageBinding(
-        snapshot: snapshot,
-        pageIndex: pageIndex,
-        layoutId: snapshot.layoutId,
-        leases: prepared,
-      );
-      _issued.addAll(prepared);
-      return List.unmodifiable(prepared);
-    } catch (_) {
-      for (final lease in prepared) {
-        lease.release();
-      }
-      rethrow;
+    final preparation = createForumBodyTextPagePreparation(
+      cache: _cache,
+      snapshot: prefix,
+      pageIndex: pageIndex,
+      contents: [
+        for (final fragment in page.fragments)
+          _content.items[fragment.paragraphIndex],
+      ],
+      textScaler: _textScaler,
+      ensureOwner: _ensureUsable,
+      onTransfer: _transferPreparation,
+      onRetire: _retirePreparation,
+    );
+    _preparations.add(preparation);
+    _reservedLeases += page.fragments.length;
+    return preparation;
+  }
+
+  void _retirePreparation(ForumBodyTextPagePreparation preparation) {
+    if (_preparations.remove(preparation)) {
+      _reservedLeases -= preparation.expectedFragmentCount;
     }
+  }
+
+  void _transferPreparation(
+    ForumBodyTextPagePreparation preparation,
+    List<ForumBodyParagraphLease> leases,
+  ) {
+    _ensureUsable();
+    if (!_preparations.contains(preparation)) {
+      throw StateError('Unregistered page preparation');
+    }
+    _retirePreparation(preparation);
+    _issued.addAll(leases);
   }
 
   void _recordPublished() {
@@ -408,8 +446,14 @@ final class ForumBodyTextPageSession {
 
   void close() {
     if (isClosed) return;
+    _state = ForumBodyTextPageSessionState.closed;
     _flow.close();
     _composer.close();
+    for (final preparation in _preparations.toList()) {
+      preparation.close();
+    }
+    _preparations.clear();
+    _reservedLeases = 0;
     for (final lease in _issued) {
       lease.release();
     }
@@ -419,7 +463,6 @@ final class ForumBodyTextPageSession {
     _margin = 0;
     _waiting = false;
     _issues.clear();
-    _state = ForumBodyTextPageSessionState.closed;
   }
 }
 
