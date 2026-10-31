@@ -14,6 +14,14 @@ enum ForumBodyParagraphLayoutFailure {
   coverage,
 }
 
+/// Logical hard-break flow can display the pre-break rows and the final empty
+/// row separately, without shaping again or inventing a blank-line height.
+enum ForumBodyParagraphWindow {
+  full,
+  beforeTerminalEmptyLine,
+  terminalEmptyLine,
+}
+
 final class ForumBodyParagraphLayoutException implements Exception {
   const ForumBodyParagraphLayoutException(this.failure);
   final ForumBodyParagraphLayoutFailure failure;
@@ -275,6 +283,30 @@ final class ForumBodyParagraphLayout {
       );
     }
     return ForumBodyParagraphFragment._(this, startLine, endLine);
+  }
+
+  /// Restricted windows over an already shaped paragraph, not a seek or HTML
+  /// slicing API. Non-full windows require the actual terminal empty hard-break
+  /// row. Its source coverage is empty; the preceding row owns the separator.
+  ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) {
+    _ensureOpen();
+    if (window == ForumBodyParagraphWindow.full) {
+      return (startLine: 0, endLine: lines.length);
+    }
+    final length = projection.text.length;
+    if (lines.length < 2 ||
+        length == 0 ||
+        !_isDisplayLineBreak(projection.text.codeUnitAt(length - 1)) ||
+        lines.last.width != 0 ||
+        lines.last.coverageStartUtf16 != length ||
+        lines.last.coverageEndUtf16 != length) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    return window == ForumBodyParagraphWindow.beforeTerminalEmptyLine
+        ? (startLine: 0, endLine: lines.length - 1)
+        : (startLine: lines.length - 1, endLine: lines.length);
   }
 
   void dispose() {

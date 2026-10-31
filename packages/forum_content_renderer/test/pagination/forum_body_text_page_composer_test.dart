@@ -91,6 +91,81 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'hard-break windows share real layout and preserve one final empty row',
+    () {
+      final input = _Input('<p>a<br></p>');
+      final first = input.lease(0);
+      final tail = input.lease(0);
+      final layout = first.layout;
+      expect(layout.height, 20);
+      final composer = input.composer(height: 40);
+      composer.append(
+        lease: first,
+        paragraphIndex: 0,
+        left: 0,
+        spaceBefore: 0,
+        spaceAtPageStart: 0,
+        window: ForumBodyParagraphWindow.beforeTerminalEmptyLine,
+      );
+      _consume(composer);
+      composer.append(
+        lease: tail,
+        paragraphIndex: 1,
+        left: 0,
+        spaceBefore: 0,
+        spaceAtPageStart: 0,
+        window: ForumBodyParagraphWindow.terminalEmptyLine,
+      );
+      _consume(composer);
+      composer.finish();
+      final fragments = composer.snapshot.single.fragments;
+      expect(
+        fragments.map((fragment) => (fragment.startLine, fragment.endLine)),
+        [(0, 1), (1, 2)],
+      );
+      expect(
+        fragments.map(
+          (fragment) =>
+              (fragment.coverageStartUtf16, fragment.coverageEndUtf16),
+        ),
+        [(0, 2), (2, 2)],
+      );
+      expect(fragments.map((fragment) => fragment.top), [0, 10]);
+      expect(composer.snapshot.single.usedHeight, layout.height);
+      expect(input.cache.layoutBuildCount, 1);
+      expect(input.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'nonexistent terminal windows are rejected without consuming the lease',
+    () {
+      final input = _Input('<p>x</p>');
+      final lease = input.lease(0);
+      addTearDown(lease.release);
+      final composer = input.composer();
+      for (final window in [
+        ForumBodyParagraphWindow.beforeTerminalEmptyLine,
+        ForumBodyParagraphWindow.terminalEmptyLine,
+      ]) {
+        expect(
+          () => composer.append(
+            lease: lease,
+            paragraphIndex: 0,
+            left: 0,
+            spaceBefore: 0,
+            spaceAtPageStart: 0,
+            window: window,
+          ),
+          throwsA(isA<ForumBodyParagraphLayoutException>()),
+        );
+        expect(lease.isActive, isTrue);
+        expect(composer.needsParagraph, isTrue);
+      }
+    },
+  );
+
+  test(
     'bounded composition reuses one layout and publishes fixed native-free prefixes',
     () {
       final input = _Input('<p>a<br>b<br>c<br>d<br>e<br>f</p>');

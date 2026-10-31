@@ -173,6 +173,7 @@ final class ForumBodyTextPageComposer {
     required double left,
     required double spaceBefore,
     required double spaceAtPageStart,
+    ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
   }) {
     _ensureOpen();
     if (_active != null) throw StateError('A paragraph is still pending');
@@ -188,12 +189,15 @@ final class ForumBodyTextPageComposer {
         spaceAtPageStart < 0) {
       throw ArgumentError('Invalid paragraph composition inputs');
     }
+    final range = layout.lineWindow(window);
     _active = _ActiveParagraph(
       lease,
       paragraphIndex,
       left,
       spaceBefore,
       spaceAtPageStart,
+      range.startLine,
+      range.endLine,
     );
   }
 
@@ -217,7 +221,7 @@ final class ForumBodyTextPageComposer {
           active.groupEnd = 0;
         }
         while (active.groupEnd == null && inspected < maxLines) {
-          if (active.scanLine >= layout.lines.length) {
+          if (active.scanLine >= active.endLine) {
             _fail(ForumBodyTextPageFailure.invalidGeometry);
           }
           final line = layout.lines[active.scanLine++];
@@ -231,7 +235,7 @@ final class ForumBodyTextPageComposer {
         final firstLine = continuation
             ? _draft.last.startLine
             : active.nextLine;
-        final gap = active.nextLine == 0
+        final gap = active.nextLine == active.firstLine
             ? (_draft.isEmpty ? active.spaceAtPageStart : active.spaceBefore)
             : 0.0;
         final top = continuation ? _draft.last.top : _usedHeight + gap;
@@ -278,7 +282,7 @@ final class ForumBodyTextPageComposer {
         active.nextLine = end;
         active.scanLine = end;
         active.groupEnd = null;
-        final paragraphComplete = end == layout.lines.length;
+        final paragraphComplete = end == active.endLine;
         if (paragraphComplete) {
           active.lease.release();
           _active = null;
@@ -355,13 +359,18 @@ final class _ActiveParagraph {
     this.left,
     this.spaceBefore,
     this.spaceAtPageStart,
-  );
+    this.firstLine,
+    this.endLine,
+  ) : nextLine = firstLine,
+      scanLine = firstLine;
   final ForumBodyParagraphLease lease;
   final int index;
   final double left;
   final double spaceBefore;
   final double spaceAtPageStart;
-  int nextLine = 0;
-  int scanLine = 0;
+  final int firstLine;
+  final int endLine;
+  int nextLine;
+  int scanLine;
   int? groupEnd;
 }
