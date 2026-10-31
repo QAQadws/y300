@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
+import 'novel_reader_anchor_navigation_request.dart';
+
 @immutable
 class NovelReaderPaginationPosition {
   const NovelReaderPaginationPosition({
@@ -43,5 +45,4 @@ class NovelReaderPageSeekRequest {
   final int pageIndex;
 }
 
-/// A command result, never a reading position or permission to persist one.
-enum NovelReaderPageSeekOutcome { arrived, unavailable, retired }
+typedef NovelReaderPageSeekOutcome = NovelReaderNavigationOutcome;

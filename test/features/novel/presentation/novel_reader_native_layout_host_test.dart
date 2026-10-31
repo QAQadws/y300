@@ -5,11 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
@@ -94,6 +96,8 @@ class _Reader {
   final activity = <bool>[];
   final seekResults =
       <(NovelReaderPageSeekRequest, NovelReaderPageSeekOutcome)>[];
+  final anchorResults =
+      <(NovelReaderAnchorNavigationRequest, NovelReaderNavigationOutcome)>[];
   int ready = 0;
   int terminal = 0;
   NovelReaderPreferences get preferences => NovelReaderPreferences.defaults()
@@ -119,6 +123,8 @@ Future<void> _show(
   bool active = true,
   NovelReaderPagedNavigationController? navigation,
   NovelReaderPageSeekRequest? seek,
+  NovelReaderAnchorNavigationRequest? anchorNavigation,
+  bool startsAtBeginning = false,
   NovelReaderPaginationPerformancePolicy performance =
       const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) async {
@@ -155,6 +161,10 @@ Future<void> _show(
                 active: active,
                 navigationController: navigation,
                 pageSeekRequest: seek,
+                navigationRequest: anchorNavigation,
+                startsAtBeginning: startsAtBeginning,
+                onNavigationFinished: (request, outcome) =>
+                    reader.anchorResults.add((request, outcome)),
                 onPageSeekFinished: (request, outcome) =>
                     reader.seekResults.add((request, outcome)),
                 preparationService: reader.service,
@@ -196,6 +206,425 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets(
+    'a missing anchor completes as unavailable while preserving the healthy mounted position',
+    (tester) async {
+      final reader = _Reader(html: '<p>a\u0301b</p>');
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final before = reader.positions.last;
+      final request = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: before.anchor.copyWith(textOffset: 1),
+      );
+      await _show(tester, reader, anchorNavigation: request);
+      await tester.pumpAndSettle();
+      await _show(tester, reader, anchorNavigation: request);
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, [
+        (request, NovelReaderNavigationOutcome.unavailable),
+      ]);
+      expect(reader.positions, [before]);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+      expect(reader.statuses.last.controller!.error, isNull);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'semantic navigation can hit or reject a finite paused prefix without retrying its source',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>${List.filled(20, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote><p>outside</p>',
+      );
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final error = controller.error;
+      final prefix = controller.snapshot;
+      final hit = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: reader.positions.last.anchor.copyWith(textOffset: 125),
+      );
+      await _show(tester, reader, anchorNavigation: hit);
+      await tester.pumpAndSettle();
+      final actual = reader.positions.last;
+      expect(actual.anchor.textOffset, 125);
+      expect(reader.anchorResults, [
+        (hit, NovelReaderNavigationOutcome.arrived),
+      ]);
+      final outside = reader.semantic.sourceProvenance!.origins.last;
+      final miss = NovelReaderAnchorNavigationRequest(
+        requestId: 2,
+        anchor: NovelReaderTextAnchor(
+          episodeId: reader.episodeId,
+          nodeId: outside.nodeId,
+          textOffset: 1,
+          formatVersion: 1,
+          textIdentity: NovelReaderAnchorFormat.textIdentity(outside.text),
+        ),
+      );
+      await _show(tester, reader, anchorNavigation: miss);
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults.last, (
+        miss,
+        NovelReaderNavigationOutcome.unavailable,
+      ));
+      expect(reader.positions.last, same(actual));
+      expect(controller.error, same(error));
+      expect(controller.snapshot, same(prefix));
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.snapshot!.isComplete, isFalse);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'semantic navigation timeout finishes once and ignores its late target',
+    (tester) async {
+      final reader = _Reader();
+      var held = false;
+      final gate = Completer<void>();
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      const policy = NovelReaderPaginationPerformancePolicy(
+        targetPageWait: Duration(seconds: 1),
+      );
+      await _show(tester, reader, scheduler: scheduler, performance: policy);
+      await tester.pumpAndSettle();
+      final before = reader.positions.last;
+      final request = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: before.anchor.copyWith(textOffset: 125),
+      );
+      held = true;
+      await _show(
+        tester,
+        reader,
+        scheduler: scheduler,
+        performance: policy,
+        anchorNavigation: request,
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, [
+        (request, NovelReaderNavigationOutcome.unavailable),
+      ]);
+      expect(reader.positions, [before]);
+      held = false;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, hasLength(1));
+      expect(reader.positions, [before]);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets('owner handoff suppresses the old semantic request completion', (
+    tester,
+  ) async {
+    final old = _Reader();
+    var held = false;
+    final gate = Completer<void>();
+    final scheduler = NovelReaderNativeWorkScheduler(
+      nextFrame: () async {
+        if (held) {
+          await gate.future;
+        } else {
+          await WidgetsBinding.instance.endOfFrame;
+        }
+      },
+    );
+    await _show(tester, old, scheduler: scheduler);
+    await tester.pumpAndSettle();
+    final request = NovelReaderAnchorNavigationRequest(
+      requestId: 1,
+      anchor: old.positions.last.anchor.copyWith(textOffset: 125),
+    );
+    held = true;
+    await _show(tester, old, scheduler: scheduler, anchorNavigation: request);
+    await tester.pumpAndSettle();
+    final next = _Reader(episodeId: 'next');
+    await _show(tester, next);
+    await tester.pumpAndSettle();
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(old.anchorResults, isEmpty);
+    expect(next.anchorResults, isEmpty);
+    expect(old.positions, hasLength(1));
+    expect(next.positions, hasLength(1));
+    expect(old.owner.activeCacheHandles, 0);
+    await _unmount(tester, next);
+  });
+
+  testWidgets(
+    'initial semantic navigation confirms its actual anchor once and ignores legacy page hints',
+    (tester) async {
+      final reader = _Reader();
+      final origin = reader.semantic.sourceProvenance!.origins.first;
+      final anchor = NovelReaderTextAnchor(
+        episodeId: reader.episodeId,
+        nodeId: origin.nodeId,
+        textOffset: 125,
+        formatVersion: 1,
+        textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+        pageIndex: 99,
+        progressPercent: .99,
+        isProgressPercentValid: true,
+      );
+      final request = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: anchor,
+      );
+      await _show(tester, reader, anchorNavigation: request);
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(1));
+      expect(reader.positions.single.anchor.textOffset, 125);
+      expect(reader.positions.single.hasUserNavigated, isTrue);
+      expect(reader.anchorResults, [
+        (request, NovelReaderNavigationOutcome.arrived),
+      ]);
+      await _show(
+        tester,
+        reader,
+        anchorNavigation: NovelReaderAnchorNavigationRequest(
+          requestId: 1,
+          anchor: anchor.copyWith(pageIndex: 7, progressPercent: .2),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(1));
+      expect(reader.anchorResults, hasLength(1));
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final first in ['page', 'anchor']) {
+    testWidgets(
+      'latest $first replacement owns the single navigation lane and removing older input cannot cancel it',
+      (tester) async {
+        final reader = _Reader();
+        var held = false;
+        final gate = Completer<void>();
+        final scheduler = NovelReaderNativeWorkScheduler(
+          nextFrame: () async {
+            if (held) {
+              await gate.future;
+            } else {
+              await WidgetsBinding.instance.endOfFrame;
+            }
+          },
+        );
+        await _show(tester, reader, scheduler: scheduler);
+        await tester.pumpAndSettle();
+        final before = reader.positions.last;
+        final seek = NovelReaderPageSeekRequest(
+          requestId: 1,
+          episodeId: reader.episodeId,
+          paginationKey: before.paginationKey,
+          pageIndex: 7,
+        );
+        final navigation = NovelReaderAnchorNavigationRequest(
+          requestId: 1,
+          anchor: before.anchor.copyWith(textOffset: 125),
+        );
+        held = true;
+        await _show(
+          tester,
+          reader,
+          scheduler: scheduler,
+          seek: first == 'page' ? seek : null,
+          anchorNavigation: first == 'anchor' ? navigation : null,
+        );
+        await tester.pumpAndSettle();
+        await _show(
+          tester,
+          reader,
+          scheduler: scheduler,
+          seek: seek,
+          anchorNavigation: navigation,
+        );
+        await tester.pumpAndSettle();
+        // Remove the older input while the newer request is still waiting.
+        await _show(
+          tester,
+          reader,
+          scheduler: scheduler,
+          seek: first == 'anchor' ? seek : null,
+          anchorNavigation: first == 'page' ? navigation : null,
+        );
+        await tester.pumpAndSettle();
+        expect(reader.positions, [before]);
+        held = false;
+        gate.complete();
+        await tester.pumpAndSettle();
+        if (first == 'page') {
+          expect(reader.seekResults, [
+            (seek, NovelReaderNavigationOutcome.retired),
+          ]);
+          expect(reader.anchorResults, [
+            (navigation, NovelReaderNavigationOutcome.arrived),
+          ]);
+          expect(reader.positions.last.anchor.textOffset, 125);
+        } else {
+          expect(reader.anchorResults, [
+            (navigation, NovelReaderNavigationOutcome.retired),
+          ]);
+          expect(reader.seekResults, [
+            (seek, NovelReaderNavigationOutcome.arrived),
+          ]);
+          expect(reader.positions.last.pageIndex, 7);
+        }
+        expect(reader.positions, hasLength(2));
+        expect(reader.service.calls, 1);
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  testWidgets(
+    'simultaneous new inputs choose the semantic request without reviving the ignored page seek',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final before = reader.positions.last;
+      final seek = NovelReaderPageSeekRequest(
+        requestId: 1,
+        episodeId: reader.episodeId,
+        paginationKey: before.paginationKey,
+        pageIndex: 7,
+      );
+      final navigation = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: before.anchor.copyWith(textOffset: 125),
+      );
+      await _show(tester, reader, seek: seek, anchorNavigation: navigation);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.anchor.textOffset, 125);
+      expect(reader.anchorResults, [
+        (navigation, NovelReaderNavigationOutcome.arrived),
+      ]);
+      expect(reader.seekResults, isEmpty);
+      await _show(tester, reader, seek: seek);
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(2));
+      expect(reader.seekResults, isEmpty);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'unavailable initial anchor reports failure even when explicit chapter-start fallback is navigable',
+    (tester) async {
+      final reader = _Reader(html: '<p>a\u0301b</p>');
+      final origin = reader.semantic.sourceProvenance!.origins.first;
+      final navigation = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: NovelReaderTextAnchor(
+          episodeId: reader.episodeId,
+          nodeId: origin.nodeId,
+          textOffset: 1,
+          formatVersion: 1,
+          textIdentity: NovelReaderAnchorFormat.textIdentity(origin.text),
+        ),
+      );
+      await _show(
+        tester,
+        reader,
+        anchorNavigation: navigation,
+        startsAtBeginning: true,
+      );
+      await tester.pumpAndSettle();
+      expect(reader.anchorResults, [
+        (navigation, NovelReaderNavigationOutcome.unavailable),
+      ]);
+      expect(reader.positions, hasLength(1));
+      expect(reader.positions.single.anchor.textOffset, 0);
+      expect(reader.positions.single.hasUserNavigated, isTrue);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+      expect(reader.statuses.last.controller!.error, isNull);
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final replacement in ['remove', 'hide', 'reflow']) {
+    testWidgets(
+      '$replacement retires pending semantic navigation without replaying its target',
+      (tester) async {
+        final reader = _Reader();
+        var held = false;
+        final gate = Completer<void>();
+        final scheduler = NovelReaderNativeWorkScheduler(
+          nextFrame: () async {
+            if (held) {
+              await gate.future;
+            } else {
+              await WidgetsBinding.instance.endOfFrame;
+            }
+          },
+        );
+        await _show(tester, reader, scheduler: scheduler);
+        await tester.pumpAndSettle();
+        final before = reader.positions.last;
+        final navigation = NovelReaderAnchorNavigationRequest(
+          requestId: 1,
+          anchor: before.anchor.copyWith(textOffset: 125),
+        );
+        held = true;
+        await _show(
+          tester,
+          reader,
+          scheduler: scheduler,
+          anchorNavigation: navigation,
+        );
+        await tester.pumpAndSettle();
+        await _show(
+          tester,
+          reader,
+          scheduler: scheduler,
+          anchorNavigation: replacement == 'remove' ? null : navigation,
+          active: replacement != 'hide',
+          preferences: replacement == 'reflow'
+              ? reader.preferences.copyWith(fontSize: 20)
+              : null,
+        );
+        await tester.pumpAndSettle();
+        expect(reader.anchorResults, [
+          (navigation, NovelReaderNavigationOutcome.retired),
+        ]);
+        held = false;
+        gate.complete();
+        await tester.pumpAndSettle();
+        if (replacement == 'hide') {
+          await _show(
+            tester,
+            reader,
+            scheduler: scheduler,
+            anchorNavigation: navigation,
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(
+          reader.positions.last.anchor.textOffset,
+          before.anchor.textOffset,
+        );
+        expect(reader.anchorResults, hasLength(1));
+        if (replacement != 'remove') {
+          expect(reader.positions.last.hasUserNavigated, isFalse);
+        }
+        await _unmount(tester, reader);
+      },
+    );
+  }
   testWidgets(
     'a paused source still accepts a seek within its verified readable prefix',
     (tester) async {
