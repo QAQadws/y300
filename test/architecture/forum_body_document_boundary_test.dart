@@ -6,10 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'dart_dependency_directives.dart';
 
 void main() {
-  test('native style/paragraph graph excludes legacy UI and Host', () {
+  test('native style/flow/paragraph graph excludes legacy UI and Host', () {
     const root = 'packages/forum_content_renderer/lib/';
     final pending = [
-      for (final module in ['style', 'paragraph'])
+      for (final module in ['style', 'flow', 'paragraph'])
         ...Directory('${root}src/$module')
             .listSync()
             .whereType<File>()
