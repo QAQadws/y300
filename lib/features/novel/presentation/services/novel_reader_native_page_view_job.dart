@@ -14,8 +14,15 @@ enum NovelReaderNativeViewJobState {
   waitingForBudget,
   checkingCoverage,
   complete,
+  deferred,
   failed,
   closed,
+}
+
+/// Optional neighbor work met real external pressure. Retrying requires new
+/// demand/budget evidence; intrinsic capacity failures retain their own type.
+final class NovelReaderNativeViewBudgetDeferred implements Exception {
+  const NovelReaderNativeViewBudgetDeferred();
 }
 
 final class NovelReaderNativeViewJobLimits {
@@ -45,6 +52,7 @@ final class NovelReaderNativePageViewJob {
     required NovelReaderNativeAnchorMap anchors,
     required int pageIndex,
     required NovelReaderPaginationCancellationToken parent,
+    bool waitForLayoutBudget = true,
     NovelReaderNativeWorkScheduler scheduler =
         const NovelReaderNativeWorkScheduler(),
     NovelReaderNativeViewJobLimits limits =
@@ -74,6 +82,7 @@ final class NovelReaderNativePageViewJob {
       preparation,
       scheduler,
       limits,
+      waitForLayoutBudget,
     );
     job._bind(session, parent);
     return job;
@@ -86,6 +95,7 @@ final class NovelReaderNativePageViewJob {
     this._preparation,
     this._scheduler,
     this.limits,
+    this._waitForLayoutBudget,
   );
   ForumBodyTextPageSession? _session;
   NovelReaderNativeAnchorMap? _anchors;
@@ -93,6 +103,7 @@ final class NovelReaderNativePageViewJob {
   ForumBodyTextPagePreparation? _preparation;
   NovelReaderNativeWorkScheduler? _scheduler;
   final NovelReaderNativeViewJobLimits limits;
+  bool _waitForLayoutBudget;
   final _token = NovelReaderPaginationCancellationToken();
   final _clock = Stopwatch();
   int _steps = 0;
@@ -107,6 +118,18 @@ final class NovelReaderNativePageViewJob {
 
   NovelReaderNativeViewJobState get state => _state;
   int get framesWaited => _frames;
+
+  /// Promotion keeps the same preparation. Never revive terminal work.
+  bool promote() {
+    if (_state == NovelReaderNativeViewJobState.complete ||
+        _state == NovelReaderNativeViewJobState.deferred ||
+        _state == NovelReaderNativeViewJobState.failed ||
+        _state == NovelReaderNativeViewJobState.closed) {
+      return false;
+    }
+    _waitForLayoutBudget = true;
+    return true;
+  }
 
   void _bind(
     ForumBodyTextPageSession session,
@@ -161,6 +184,9 @@ final class NovelReaderNativePageViewJob {
         );
         _guard();
         if (step.waitingForLayoutBudget) {
+          if (!_waitForLayoutBudget) {
+            throw const NovelReaderNativeViewBudgetDeferred();
+          }
           _state = NovelReaderNativeViewJobState.waitingForBudget;
           final session = _session!;
           await _scheduler!.waitForLayoutBudget(
@@ -213,6 +239,9 @@ final class NovelReaderNativePageViewJob {
         view.close();
         rethrow;
       }
+    } on NovelReaderNativeViewBudgetDeferred {
+      _state = NovelReaderNativeViewJobState.deferred;
+      rethrow;
     } catch (_) {
       if (_token.isCancelled) {
         _token.throwIfCancelled();
