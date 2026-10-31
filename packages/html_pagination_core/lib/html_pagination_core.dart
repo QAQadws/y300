@@ -15,6 +15,7 @@ export 'src/display_text_projection.dart'
         HtmlProjectionAffinity,
         HtmlDisplayTextRun,
         HtmlDisplayTextPart,
+        HtmlDisplayTextSegment,
         HtmlProjectedSourcePosition,
         HtmlDisplayTextLimitException,
         HtmlDisplayTextProjection;

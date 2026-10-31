@@ -32,7 +32,17 @@ Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以�
 `preserveCollapsibleEdges: true`，将两端可折叠空白保留为有真实来源范围的一个空格，
 交由父格式化上下文决定摆放或修剪；实际硬换行边缘仍不保留折叠空白。
 默认段落行为保持修剪边缘，预格式化、NBSP/全角空格和来源缺口规则不变。
-该选项不插入虚构字元，也不决定 ruby 分段、可见 coverage 或语义身份；投影 revision 为 3。
+该选项不插入虚构字元，也不决定 ruby 分段、可见 coverage 或语义身份。
+
+`HtmlDisplayTextProjection.concatenate` 组合已经独立排版的文字上下文，不重新折叠空白，
+不跨上下文合并字素；通过 `HtmlDisplayTextSegment.runIndexOffset` 显式绑定父级样式表。
+普通相邻样式 span 仍应一次 build，避免把样式边界误当成独立字素上下文。
+`slice` 仅裁出显示坐标窗口，端点必须是现有完整字素边界，不是 HTML 切片。
+窗口保留原 run 编号，以及两端来源缺口的上下游亲和性，空窗口也遵循此约定。
+组合输入须按真实来源排序，并受输出文字和片段数量预算限制。
+来源映射相等还需核对字素分段与边缘亲和性；只比较相同文字不足以复用来源映射。
+`displaySegmentationHash`/`hasSameDisplaySegmentation` 仅描述文字与独立字素边界，
+不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 4。
 
 ## Fit 与协作端口
 

@@ -35,6 +35,14 @@ final class HtmlDisplayTextPart {
   final int utf16Start;
 }
 
+/// An independently formatted child, with explicit parent style-run ownership.
+/// Ordinary adjacent style spans should still be built as one run sequence.
+final class HtmlDisplayTextSegment {
+  const HtmlDisplayTextSegment(this.projection, {this.runIndexOffset = 0});
+  final HtmlDisplayTextProjection projection;
+  final int runIndexOffset;
+}
+
 final class HtmlProjectedSourcePosition {
   const HtmlProjectedSourcePosition({
     required this.sourceRune,
@@ -57,7 +65,7 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
-  static const revision = 3;
+  static const revision = 4;
 
   /// Whitespace accepted by the explicit single-line projection policy. This
   /// predicate does not classify forum content or change normal HTML spacing.
@@ -86,8 +94,11 @@ final class HtmlDisplayTextProjection {
     this._runes,
     this._utf16Starts,
     this._graphemeBoundaries,
-    this._emptySource,
-  );
+    this._emptySource, {
+    int? leadingBeforeSource,
+    int? trailingAfterSource,
+  }) : _leadingBeforeSource = leadingBeforeSource,
+       _trailingAfterSource = trailingAfterSource;
 
   factory HtmlDisplayTextProjection.build(
     List<HtmlDisplayTextRun> runs, {
@@ -115,19 +126,189 @@ final class HtmlDisplayTextProjection {
     return builder.finish(runs.isEmpty ? 0 : runs.first.sourceRuneStart);
   }
 
+  /// Concatenates already projected, independent formatting contexts without
+  /// normalizing whitespace or joining graphemes across their boundaries.
+  /// Run offsets address the caller's combined style table, not DOM positions.
+  factory HtmlDisplayTextProjection.concatenate(
+    List<HtmlDisplayTextSegment> segments, {
+    int maxOutputCodeUnits = 16384,
+    int maxSegments = 512,
+  }) {
+    if (maxOutputCodeUnits < 0 || maxSegments < 0) {
+      throw ArgumentError('Invalid projection budget');
+    }
+    if (segments.length > maxSegments) {
+      throw const HtmlDisplayTextLimitException();
+    }
+    final text = StringBuffer();
+    final parts = <HtmlDisplayTextPart>[];
+    final runes = <_ProjectedRune>[];
+    final utf16Starts = <int>[0];
+    final boundaries = <int>[0];
+    var length = 0;
+    int? previousSourceEnd;
+    for (final segment in segments) {
+      final projection = segment.projection;
+      if (segment.runIndexOffset < 0) {
+        throw ArgumentError.value(segment.runIndexOffset);
+      }
+      final sourceStart = projection._runes.isEmpty
+          ? projection._leadingBefore
+          : projection._runes.first.start;
+      final sourceEnd = projection._runes.isEmpty
+          ? projection._trailingAfter
+          : projection._runes.last.end;
+      if (previousSourceEnd != null && sourceStart < previousSourceEnd) {
+        throw ArgumentError(
+          'Projected segments overlap or reverse source order',
+        );
+      }
+      previousSourceEnd = sourceEnd;
+      if (length + projection.text.length > maxOutputCodeUnits) {
+        throw const HtmlDisplayTextLimitException();
+      }
+      text.write(projection.text);
+      for (final part in projection.parts) {
+        parts.add(
+          HtmlDisplayTextPart(
+            part.runIndex + segment.runIndexOffset,
+            part.text,
+            part.utf16Start + length,
+          ),
+        );
+      }
+      for (final rune in projection._runes) {
+        runes.add(
+          _ProjectedRune(
+            rune.rune,
+            rune.start,
+            rune.end,
+            rune.runIndex + segment.runIndexOffset,
+          ),
+        );
+      }
+      utf16Starts.addAll(
+        projection._utf16Starts.skip(1).map((offset) => offset + length),
+      );
+      boundaries.addAll(
+        projection._graphemeBoundaries.skip(1).map((offset) => offset + length),
+      );
+      length += projection.text.length;
+    }
+    return HtmlDisplayTextProjection._(
+      text.toString(),
+      List.unmodifiable(parts),
+      List.unmodifiable(runes),
+      List.unmodifiable(utf16Starts),
+      List.unmodifiable(boundaries),
+      segments.isEmpty ? 0 : segments.first.projection._emptySource,
+      leadingBeforeSource: segments.isEmpty
+          ? 0
+          : segments.first.projection._leadingBefore,
+      trailingAfterSource: segments.isEmpty
+          ? 0
+          : segments.last.projection._trailingAfter,
+    );
+  }
+
   final String text;
   final List<HtmlDisplayTextPart> parts;
   final List<_ProjectedRune> _runes;
   final List<int> _utf16Starts;
   final List<int> _graphemeBoundaries;
   final int _emptySource;
+  final int? _leadingBeforeSource;
+  final int? _trailingAfterSource;
+  int get _leadingBefore =>
+      _leadingBeforeSource ??
+      (_runes.isEmpty ? _emptySource : _runes.first.start);
+  int get _trailingAfter =>
+      _trailingAfterSource ??
+      (_runes.isEmpty ? _leadingBefore : _runes.last.end);
+
+  /// Display text and its actual independent grapheme contexts, without source
+  /// or style ownership. Glyph reuse still needs complete font/layout inputs.
+  late final int displaySegmentationHash = Object.hash(
+    text,
+    Object.hashAll(_graphemeBoundaries),
+  );
+  bool hasSameDisplaySegmentation(HtmlDisplayTextProjection other) {
+    if (identical(this, other)) return true;
+    if (displaySegmentationHash != other.displaySegmentationHash ||
+        text != other.text ||
+        _graphemeBoundaries.length != other._graphemeBoundaries.length) {
+      return false;
+    }
+    for (var index = 0; index < _graphemeBoundaries.length; index++) {
+      if (_graphemeBoundaries[index] != other._graphemeBoundaries[index]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// A display-coordinate window, never an HTML slice. Both endpoints must be
+  /// existing grapheme boundaries. Boundary affinity/source gaps and original
+  /// style-run indices survive, including an empty window at a source gap.
+  HtmlDisplayTextProjection slice({
+    required int startUtf16,
+    required int endUtf16,
+  }) {
+    RangeError.checkValidRange(startUtf16, endUtf16, text.length);
+    final firstBoundary = _lowerBound(_graphemeBoundaries, startUtf16);
+    final lastBoundary = _lowerBound(_graphemeBoundaries, endUtf16);
+    if (_graphemeBoundaries[firstBoundary] != startUtf16 ||
+        _graphemeBoundaries[lastBoundary] != endUtf16) {
+      throw ArgumentError(
+        'Display slice endpoints must be grapheme boundaries',
+      );
+    }
+    final firstRune = _lowerBound(_utf16Starts, startUtf16);
+    final lastRune = _lowerBound(_utf16Starts, endUtf16);
+    final parts = <HtmlDisplayTextPart>[];
+    for (final part in this.parts) {
+      final start = (startUtf16 - part.utf16Start).clamp(0, part.text.length);
+      final end = (endUtf16 - part.utf16Start).clamp(start, part.text.length);
+      if (start < end) {
+        parts.add(
+          HtmlDisplayTextPart(
+            part.runIndex,
+            part.text.substring(start, end),
+            part.utf16Start + start - startUtf16,
+          ),
+        );
+      }
+    }
+    return HtmlDisplayTextProjection._(
+      text.substring(startUtf16, endUtf16),
+      List.unmodifiable(parts),
+      List.unmodifiable(_runes.sublist(firstRune, lastRune)),
+      List.unmodifiable(
+        _utf16Starts
+            .sublist(firstRune, lastRune + 1)
+            .map((value) => value - startUtf16),
+      ),
+      List.unmodifiable(
+        _graphemeBoundaries
+            .sublist(firstBoundary, lastBoundary + 1)
+            .map((value) => value - startUtf16),
+      ),
+      sourceAtUtf16(startUtf16).sourceRune,
+      leadingBeforeSource: sourceAtUtf16(
+        startUtf16,
+        affinity: HtmlProjectionAffinity.upstream,
+      ).sourceRune,
+      trailingAfterSource: sourceAtUtf16(endUtf16).sourceRune,
+    );
+  }
 
   /// Process-local hash for caches retaining this source projection. Never a
   /// persisted identity: callers must also use [hasSameSourceMapping] to handle
   /// hash collisions. Style/run ownership is deliberately independent.
   late final int sourceMappingHash = Object.hash(
-    text,
-    _runes.isEmpty ? _emptySource : null,
+    displaySegmentationHash,
+    _leadingBefore,
+    _trailingAfter,
     Object.hashAll(_runes.map((rune) => Object.hash(rune.start, rune.end))),
   );
 
@@ -138,11 +319,12 @@ final class HtmlDisplayTextProjection {
   bool hasSameSourceMapping(HtmlDisplayTextProjection other) {
     if (identical(this, other)) return true;
     if (sourceMappingHash != other.sourceMappingHash ||
-        text != other.text ||
+        !hasSameDisplaySegmentation(other) ||
+        _leadingBefore != other._leadingBefore ||
+        _trailingAfter != other._trailingAfter ||
         _runes.length != other._runes.length) {
       return false;
     }
-    if (_runes.isEmpty) return _emptySource == other._emptySource;
     for (var index = 0; index < _runes.length; index++) {
       final first = _runes[index];
       final second = other._runes[index];
@@ -188,10 +370,10 @@ final class HtmlDisplayTextProjection {
         ? _graphemeBoundaries[graphemeIndex]
         : _graphemeBoundaries[graphemeIndex - 1];
     final runeIndex = _lowerBound(_utf16Starts, display);
-    final before = runeIndex > 0
-        ? _runes[runeIndex - 1].end
-        : (_runes.isEmpty ? _emptySource : _runes.first.start);
-    final after = runeIndex < _runes.length ? _runes[runeIndex].start : before;
+    final before = runeIndex > 0 ? _runes[runeIndex - 1].end : _leadingBefore;
+    final after = runeIndex < _runes.length
+        ? _runes[runeIndex].start
+        : _trailingAfter;
     return HtmlProjectedSourcePosition(
       sourceRune: downstream ? after : before,
       displayUtf16: display,
