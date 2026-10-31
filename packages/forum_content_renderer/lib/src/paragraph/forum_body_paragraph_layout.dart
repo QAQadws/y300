@@ -5,6 +5,7 @@ import '../document/forum_body_document.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
+import 'forum_body_native_paragraph_layout.dart';
 
 export 'forum_body_paragraph_geometry.dart'
     show
@@ -16,7 +17,7 @@ export 'forum_body_paragraph_geometry.dart'
 /// Owns one TextPainter layout, shared by geometry, paint, hit-test and boxes.
 /// No caller can mutate the painter. The owner must dispose it after all views
 /// release it; a disposed view fails before touching an engine resource.
-final class ForumBodyParagraphLayout {
+final class ForumBodyParagraphLayout implements ForumBodyNativeParagraphLayout {
   ForumBodyParagraphLayout._(
     ForumBodyParagraphContent content,
     this._painter,
@@ -158,8 +159,10 @@ final class ForumBodyParagraphLayout {
   final double width;
   final double height;
   final double _paintScale;
+  @override
   final List<ForumBodyParagraphLine> lines;
   bool _disposed = false;
+  @override
   bool get isDisposed => _disposed;
 
   void _ensureOpen() {
@@ -264,6 +267,7 @@ final class ForumBodyParagraphLayout {
         : (startLine: lines.length - 1, endLine: lines.length);
   }
 
+  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;

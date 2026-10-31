@@ -111,4 +111,19 @@ coverage 范围，前者保留真实子文字，后者用于引擎边界。物�
 分片借用同一引擎，按合法行框裁剪并保持两套 coverage；`paintParent` 只绘制父文字，
 consumer 仍须准备、核对并绘制实际子布局，不能据此单独发布可读页。父布局只拥有自己
 的 native 对象，dispose 使其全部借用分片失效，不关闭子 owner。混排布局 revision 为 1；
-该原语仍待 owner 缓存与正式分页消费，不引入第二套预算或整段常驻子租约。
+正式分页消费仍待接入，不引入整段常驻子租约。
+
+普通与混排原生对象统一归 `ForumBodyParagraphCache` 的一套条数/估算字节预算、LRU、
+pin、预算释放通知与 owner 关闭生命周期。`acquireInline` 返回 typed lease；
+`tryAcquireInlineCached` 缺失时不测量，供协作准备完成后获取可见 view。
+混排 key 核对文档/path、字体/样式及后端版本、完整父 span、来源/原子映射、实际尺寸和
+alphabetic baseline、有效父字体缩放、对齐/方向/模式/宽度。固有模式跨有效请求宽度
+复用，但 warm lookup 仍完整准入。子方向/缩放归其独立布局，不重复作用到父占位框。
+
+缓存后的混排对象只保留坐标及实际父 native 资源；**当前子样式与交互必须从 lease.content
+取得**，不能从复用引擎的旧输入恢复。`ForumBodyNativeParagraphLease` 的共同生命周期
+只用于混合 pin 集合与释放，不擦除两种 layout 的绘制/命中类型。纯 budget probe 的
+`includeInline` 与普通 include 共计 footprint、按实际 key 去重且不测量。
+排版期间 owner 退役禁止回填；同 key 重入测量明确失败，不覆盖活跃条目；其他条目的
+重入获取须在 native 返回后再次核对实际 pin。字节是保守准入估算，不能冒充真实 native
+heap/GPU 观测。子几何的协作准备、可见绑定及正式 flow/session/page 消费仍待接入。

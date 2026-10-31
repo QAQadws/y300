@@ -5,6 +5,9 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../inline/forum_body_inline_paragraph_layout.dart';
+import '../inline/forum_body_inline_span_content.dart';
+import 'forum_body_native_paragraph_layout.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
 
@@ -37,7 +40,8 @@ final class ForumBodyParagraphCache {
   }
   final int maxEntries;
   final int maxEstimatedBytes;
-  final _entries = <_LayoutKey, _LayoutEntry>{};
+  final _entries = <Object, _LayoutEntry>{};
+  final _buildingKeys = <Object>{};
   int _bytes = 0;
   int _leases = 0;
   int _builds = 0;
@@ -103,6 +107,95 @@ final class ForumBodyParagraphCache {
     // Caller-provided TextScaler runs during validation and native shaping.
     if (_closed) throw StateError('Paragraph cache is closed');
     final key = _LayoutKey(content, width, scales);
+    final entry = _acquireEntry(
+      key: key,
+      allowBuild: allowBuild,
+      minimumBytes: _minimumEstimatedBytes(content),
+      build: () => ForumBodyParagraphLayout.create(
+        content: content,
+        width: width,
+        textScaler: textScaler,
+      ),
+    );
+    return entry == null
+        ? null
+        : ForumBodyParagraphLease._(this, entry, content);
+  }
+
+  ForumBodyInlineParagraphLease acquireInline({
+    required ForumBodyInlineSpanContent content,
+    required double width,
+    required List<PlaceholderDimensions> dimensions,
+    TextScaler textScaler = TextScaler.noScaling,
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+  }) => _acquireInline(
+    content: content,
+    width: width,
+    dimensions: dimensions,
+    textScaler: textScaler,
+    layoutMode: layoutMode,
+    allowBuild: true,
+  )!;
+
+  /// Never builds a parent or a child on a miss. Consumers prepare native work
+  /// cooperatively before acquiring a visible view from this same owner.
+  ForumBodyInlineParagraphLease? tryAcquireInlineCached({
+    required ForumBodyInlineSpanContent content,
+    required double width,
+    required List<PlaceholderDimensions> dimensions,
+    TextScaler textScaler = TextScaler.noScaling,
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+  }) => _acquireInline(
+    content: content,
+    width: width,
+    dimensions: dimensions,
+    textScaler: textScaler,
+    layoutMode: layoutMode,
+    allowBuild: false,
+  );
+
+  ForumBodyInlineParagraphLease? _acquireInline({
+    required ForumBodyInlineSpanContent content,
+    required double width,
+    required List<PlaceholderDimensions> dimensions,
+    required TextScaler textScaler,
+    required ForumBodyParagraphLayoutMode layoutMode,
+    required bool allowBuild,
+  }) {
+    if (_closed) throw StateError('Paragraph cache is closed');
+    final snapshot = List<PlaceholderDimensions>.unmodifiable(dimensions);
+    final scales = ForumBodyInlineParagraphLayout.validateInputs(
+      content: content,
+      width: width,
+      dimensions: snapshot,
+      textScaler: textScaler,
+      layoutMode: layoutMode,
+    );
+    if (_closed) throw StateError('Paragraph cache is closed');
+    final key = _InlineLayoutKey(content, width, scales, snapshot, layoutMode);
+    final entry = _acquireEntry(
+      key: key,
+      allowBuild: allowBuild,
+      minimumBytes: _minimumInlineEstimatedBytes(content),
+      build: () => ForumBodyInlineParagraphLayout.create(
+        content: content,
+        width: width,
+        dimensions: snapshot,
+        textScaler: textScaler,
+        layoutMode: layoutMode,
+      ),
+    );
+    return entry == null
+        ? null
+        : ForumBodyInlineParagraphLease._(this, entry, content);
+  }
+
+  _LayoutEntry? _acquireEntry({
+    required Object key,
+    required bool allowBuild,
+    required int minimumBytes,
+    required ForumBodyNativeParagraphLayout Function() build,
+  }) {
     var entry = _entries.remove(key);
     if (entry != null && entry.layout.isDisposed) {
       _retire(entry);
@@ -112,40 +205,40 @@ final class ForumBodyParagraphCache {
       _hits++;
     } else {
       if (!allowBuild) return null;
-      final minimumBytes = _minimumEstimatedBytes(content);
-      var pinnedBytes = 0;
-      var pinnedEntries = 0;
-      for (final resident in _entries.values) {
-        if (resident.leases > 0) {
-          pinnedEntries++;
-          pinnedBytes += resident.bytes;
-        }
-      }
+      var pinned = _pinnedFootprint();
       if (minimumBytes > maxEstimatedBytes) {
         throw ForumBodyParagraphBudgetException(
           ForumBodyParagraphBudgetFailure.content,
           requiredEstimatedBytes: minimumBytes,
         );
       }
-      if (pinnedEntries >= maxEntries ||
-          minimumBytes > maxEstimatedBytes - pinnedBytes) {
+      if (pinned.entries >= maxEntries ||
+          minimumBytes > maxEstimatedBytes - pinned.bytes) {
         throw ForumBodyParagraphBudgetException(
           ForumBodyParagraphBudgetFailure.pinned,
           requiredEstimatedBytes: minimumBytes,
         );
       }
-      final layout = ForumBodyParagraphLayout.create(
-        content: content,
-        width: width,
-        textScaler: textScaler,
-      );
-      _builds++;
+      if (!_buildingKeys.add(key)) {
+        throw StateError('Native paragraph shaping is reentrant');
+      }
+      final ForumBodyNativeParagraphLayout layout;
+      try {
+        layout = build();
+        _builds++;
+      } finally {
+        _buildingKeys.remove(key);
+      }
       if (_closed) {
         layout.dispose();
         throw StateError('Paragraph cache is closed');
       }
       final bytes = minimumBytes + layout.lines.length * 96;
-      if (bytes > maxEstimatedBytes - pinnedBytes) {
+      // TextScaler is caller code: a nested request can acquire another entry
+      // while the engine shapes. Recheck actual pins before admission/eviction.
+      pinned = _pinnedFootprint();
+      if (pinned.entries >= maxEntries ||
+          bytes > maxEstimatedBytes - pinned.bytes) {
         layout.dispose();
         throw ForumBodyParagraphBudgetException(
           bytes > maxEstimatedBytes
@@ -156,7 +249,7 @@ final class ForumBodyParagraphCache {
       }
       while (_entries.length >= maxEntries ||
           _bytes + bytes > maxEstimatedBytes) {
-        _LayoutKey? victim;
+        Object? victim;
         for (final candidate in _entries.entries) {
           if (candidate.value.leases == 0) {
             victim = candidate.key;
@@ -178,7 +271,19 @@ final class ForumBodyParagraphCache {
     _entries[entry.key] = entry;
     entry.leases++;
     _leases++;
-    return ForumBodyParagraphLease._(this, entry, content);
+    return entry;
+  }
+
+  ({int entries, int bytes}) _pinnedFootprint() {
+    var count = 0;
+    var bytes = 0;
+    for (final entry in _entries.values) {
+      if (entry.leases > 0) {
+        count++;
+        bytes += entry.bytes;
+      }
+    }
+    return (entries: count, bytes: bytes);
   }
 
   /// Test whether releasing other entries could unblock this rejection. Alias
@@ -186,7 +291,7 @@ final class ForumBodyParagraphCache {
   /// rejected input can already prove an intrinsic page-budget failure.
   bool isBlockedByExternalPins(
     ForumBodyParagraphBudgetException rejection,
-    Iterable<ForumBodyParagraphLease> owned,
+    Iterable<ForumBodyNativeParagraphLease> owned,
   ) {
     if (_closed) throw StateError('Paragraph cache is closed');
     if (rejection.failure != ForumBodyParagraphBudgetFailure.pinned) {
@@ -266,7 +371,7 @@ final class ForumBodyParagraphCache {
 final class ForumBodyParagraphBudgetProbe {
   ForumBodyParagraphBudgetProbe._(this._cache);
   ForumBodyParagraphCache? _cache;
-  final _bytesByKey = <_LayoutKey, int>{};
+  final _bytesByKey = <Object, int>{};
   int _bytes = 0;
 
   void include({
@@ -290,7 +395,46 @@ final class ForumBodyParagraphBudgetProbe {
       throw StateError('Paragraph budget probe is retired');
     }
     final key = _LayoutKey(content, width, scales);
-    var bytes = _minimumEstimatedBytes(content) + minimumLineCount * 96;
+    _include(
+      cache,
+      key,
+      _minimumEstimatedBytes(content) + minimumLineCount * 96,
+    );
+  }
+
+  void includeInline({
+    required ForumBodyInlineSpanContent content,
+    required double width,
+    required List<PlaceholderDimensions> dimensions,
+    required int minimumLineCount,
+    required TextScaler textScaler,
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+  }) {
+    final cache = _cache;
+    if (cache == null || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    if (minimumLineCount < 0) throw ArgumentError.value(minimumLineCount);
+    final snapshot = List<PlaceholderDimensions>.unmodifiable(dimensions);
+    final scales = ForumBodyInlineParagraphLayout.validateInputs(
+      content: content,
+      width: width,
+      dimensions: snapshot,
+      textScaler: textScaler,
+      layoutMode: layoutMode,
+    );
+    if (!identical(_cache, cache) || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    final key = _InlineLayoutKey(content, width, scales, snapshot, layoutMode);
+    _include(
+      cache,
+      key,
+      _minimumInlineEstimatedBytes(content) + minimumLineCount * 96,
+    );
+  }
+
+  void _include(ForumBodyParagraphCache cache, Object key, int bytes) {
     final resident = cache._entries[key];
     if (resident != null &&
         !resident.layout.isDisposed &&
@@ -321,19 +465,18 @@ final class ForumBodyParagraphBudgetProbe {
 int _minimumEstimatedBytes(ForumBodyParagraphContent content) =>
     4096 + content.projection.text.length * 96 + content.runs.length * 256;
 
-final class ForumBodyParagraphLease {
-  ForumBodyParagraphLease._(this._owner, this._entry, this.content);
+int _minimumInlineEstimatedBytes(ForumBodyInlineSpanContent content) =>
+    4096 +
+    content.projection.display.text.length * 96 +
+    content.runs.length * 256 +
+    content.projection.atoms.length * 256;
+
+sealed class ForumBodyNativeParagraphLease {
+  ForumBodyNativeParagraphLease._(this._owner, this._entry);
   final ForumBodyParagraphCache _owner;
   final _LayoutEntry _entry;
-
-  /// Current box/role/interaction metadata, separate from cached native input.
-  final ForumBodyParagraphContent content;
   bool _released = false;
   bool get isActive => !_released && !_entry.retired;
-  ForumBodyParagraphLayout get layout {
-    if (!isActive) throw StateError('Paragraph lease is retired');
-    return _entry.layout;
-  }
 
   void release() {
     if (_released) return;
@@ -342,10 +485,34 @@ final class ForumBodyParagraphLease {
   }
 }
 
+final class ForumBodyParagraphLease extends ForumBodyNativeParagraphLease {
+  ForumBodyParagraphLease._(super.owner, super.entry, this.content) : super._();
+
+  /// Current box/role/interaction metadata, separate from cached native input.
+  final ForumBodyParagraphContent content;
+  ForumBodyParagraphLayout get layout {
+    if (!isActive) throw StateError('Paragraph lease is retired');
+    return _entry.layout as ForumBodyParagraphLayout;
+  }
+}
+
+final class ForumBodyInlineParagraphLease
+    extends ForumBodyNativeParagraphLease {
+  ForumBodyInlineParagraphLease._(super.owner, super.entry, this.content)
+    : super._();
+
+  /// Always the current child styles/interactions, not a cached engine's input.
+  final ForumBodyInlineSpanContent content;
+  ForumBodyInlineParagraphLayout get layout {
+    if (!isActive) throw StateError('Paragraph lease is retired');
+    return _entry.layout as ForumBodyInlineParagraphLayout;
+  }
+}
+
 final class _LayoutEntry {
   _LayoutEntry(this.layout, this.bytes, this.key);
-  final ForumBodyParagraphLayout layout;
-  final _LayoutKey key;
+  final ForumBodyNativeParagraphLayout layout;
+  final Object key;
   final int bytes;
   int leases = 0;
   bool retired = false;
@@ -374,9 +541,7 @@ final class _LayoutKey {
       layoutMode = content.layoutMode,
       align = content.style.textAlign,
       direction = content.style.textDirection,
-      scales = (scales.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
-          .map((entry) => (entry.key, entry.value))
-          .toList(growable: false);
+      scales = _sortedScales(scales);
   final ForumBodyIdentity identity;
   final String? path;
   final String fontRevision;
@@ -424,3 +589,98 @@ final class _LayoutKey {
     Object.hashAll(scales),
   );
 }
+
+final class _InlineLayoutKey {
+  _InlineLayoutKey(
+    ForumBodyInlineSpanContent content,
+    double requestWidth,
+    Map<double, double> scales,
+    List<PlaceholderDimensions> dimensions,
+    this.layoutMode,
+  ) : width = layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
+          ? 0
+          : requestWidth,
+      identity = content.identity,
+      path = content.path,
+      fontRevision = content.fontRevision,
+      styleRevision = content.styleRevision,
+      backendRevision = ForumBodyParagraphLayout.backendRevision,
+      layoutRevision = ForumBodyInlineParagraphLayout.revision,
+      inputRevision = ForumBodyInlineSpanContent.revision,
+      projectionRevision = HtmlDisplayTextProjection.revision,
+      inlineRevision = HtmlInlineTextProjection.revision,
+      projection = content.projection,
+      span = content.textSpan,
+      align = content.style.textAlign,
+      direction = content.style.textDirection,
+      scales = _sortedScales(scales),
+      dimensions = dimensions
+          .map(
+            (item) => (item.size.width, item.size.height, item.baselineOffset!),
+          )
+          .toList(growable: false);
+  final ForumBodyIdentity identity;
+  final String? path;
+  final String fontRevision;
+  final int styleRevision;
+  final int backendRevision;
+  final int layoutRevision;
+  final int inputRevision;
+  final int projectionRevision;
+  final int inlineRevision;
+  final HtmlInlineTextProjection projection;
+  final TextSpan span;
+  final ForumBodyParagraphLayoutMode layoutMode;
+  final TextAlign align;
+  final TextDirection direction;
+  final double width;
+  final List<(double, double)> scales;
+  final List<(double, double, double)> dimensions;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _InlineLayoutKey &&
+      identity == other.identity &&
+      path == other.path &&
+      fontRevision == other.fontRevision &&
+      styleRevision == other.styleRevision &&
+      backendRevision == other.backendRevision &&
+      layoutRevision == other.layoutRevision &&
+      inputRevision == other.inputRevision &&
+      projectionRevision == other.projectionRevision &&
+      inlineRevision == other.inlineRevision &&
+      projection.hasSameMapping(other.projection) &&
+      span == other.span &&
+      layoutMode == other.layoutMode &&
+      align == other.align &&
+      direction == other.direction &&
+      width == other.width &&
+      listEquals(scales, other.scales) &&
+      listEquals(dimensions, other.dimensions);
+
+  @override
+  int get hashCode => Object.hash(
+    identity,
+    path,
+    fontRevision,
+    styleRevision,
+    backendRevision,
+    layoutRevision,
+    inputRevision,
+    projectionRevision,
+    inlineRevision,
+    projection.mappingHash,
+    span,
+    layoutMode,
+    align,
+    direction,
+    width,
+    Object.hashAll(scales),
+    Object.hashAll(dimensions),
+  );
+}
+
+List<(double, double)> _sortedScales(Map<double, double> scales) =>
+    (scales.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
+        .map((entry) => (entry.key, entry.value))
+        .toList(growable: false);

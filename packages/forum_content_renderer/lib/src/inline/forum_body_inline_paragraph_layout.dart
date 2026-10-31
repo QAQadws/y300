@@ -3,6 +3,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
+import '../paragraph/forum_body_native_paragraph_layout.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_span_content.dart';
 
@@ -51,9 +52,10 @@ final class ForumBodyInlineSelection {
 /// One native parent paragraph, containing ordinary text and opaque inline
 /// slots. Owns only its parent TextPainter; children are prepared separately.
 /// Engine and display coordinates remain explicit in every line/fragment.
-final class ForumBodyInlineParagraphLayout {
+final class ForumBodyInlineParagraphLayout
+    implements ForumBodyNativeParagraphLayout {
   ForumBodyInlineParagraphLayout._({
-    required this.content,
+    required this.projection,
     required TextPainter painter,
     required this.width,
     required this.height,
@@ -146,7 +148,7 @@ final class ForumBodyInlineParagraphLayout {
         }
       }
       return ForumBodyInlineParagraphLayout._(
-        content: content,
+        projection: content.projection,
         painter: painter,
         width: layoutWidth,
         height: painter.height,
@@ -218,14 +220,18 @@ final class ForumBodyInlineParagraphLayout {
     return scales;
   }
 
-  final ForumBodyInlineSpanContent content;
+  /// Native source coordinates only. Current child style/interaction metadata
+  /// belongs to the typed lease, not a reused engine's original input object.
+  final HtmlInlineTextProjection projection;
   final TextPainter _painter;
   final double width;
   final double height;
+  @override
   final List<ForumBodyParagraphLine> lines;
   final List<TextBox> atomBoxes;
   final List<PlaceholderDimensions> dimensions;
   bool _disposed = false;
+  @override
   bool get isDisposed => _disposed;
   void _ensureOpen() {
     if (_disposed) throw StateError('Inline parent layout is disposed');
@@ -251,7 +257,7 @@ final class ForumBodyInlineParagraphLayout {
     }
     final position = _painter.getPositionForOffset(offset);
     return ForumBodyInlineTextHit(
-      content.projection.sourceAtEngineUtf16(
+      projection.sourceAtEngineUtf16(
         position.offset,
         affinity: position.affinity == TextAffinity.upstream
             ? HtmlProjectionAffinity.upstream
@@ -262,7 +268,6 @@ final class ForumBodyInlineParagraphLayout {
 
   ForumBodyInlineSelection selection(int startUtf16, int endUtf16) {
     _ensureOpen();
-    final projection = content.projection;
     final display = projection.display;
     RangeError.checkValidRange(startUtf16, endUtf16, display.text.length);
     if (startUtf16 == endUtf16) {
@@ -326,6 +331,7 @@ final class ForumBodyInlineParagraphLayout {
     return ForumBodyInlineParagraphFragment._(this, startLine, endLine);
   }
 
+  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -357,7 +363,7 @@ final class ForumBodyInlineParagraphFragment {
 
   Iterable<int> get atomIndices sync* {
     layout._ensureOpen();
-    for (final atom in layout.content.projection.atoms) {
+    for (final atom in layout.projection.atoms) {
       if (atom.engineUtf16 >= engineCoverageStartUtf16 &&
           atom.engineUtf16 < engineCoverageEndUtf16) {
         yield atom.index;
