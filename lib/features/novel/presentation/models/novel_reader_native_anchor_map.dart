@@ -67,6 +67,7 @@ final class NovelReaderNativeAnchorMap {
   NovelReaderTextAnchor? anchorAtSourceRune(
     int sourceRune, {
     required HtmlProjectionAffinity affinity,
+    bool requireAdjacentOrigin = false,
   }) {
     RangeError.checkValueInInterval(
       sourceRune,
@@ -94,6 +95,16 @@ final class NovelReaderNativeAnchorMap {
     final segment = affinity == HtmlProjectionAffinity.downstream
         ? after ?? before
         : before ?? after;
+    // Coverage must have a known origin on the glyph's actual side. A point
+    // lookup may use the opposite side at an endpoint; that is insufficient
+    // proof when its adjacent glyph belongs to an unmapped origin.
+    if (requireAdjacentOrigin &&
+        segment != null &&
+        (affinity == HtmlProjectionAffinity.downstream
+            ? sourceRune >= segment.sourceEnd
+            : sourceRune <= segment.sourceStart)) {
+      return null;
+    }
     return segment?.projection.anchorAtSourceRune(
       sourceRune - segment.sourceStart,
     );
