@@ -32,6 +32,17 @@ final class ForumBodyInlineParagraphView {
       coverageStartUtf16 = fragment.coverageStartUtf16,
       coverageEndUtf16 = fragment.coverageEndUtf16;
 
+  ForumBodyInlineParagraphView._empty(ForumBodyInlineParagraphLease parent)
+    : _parent = parent,
+      _fragment = null,
+      _children = const {},
+      width = parent.layout.width,
+      height = parent.layout.height,
+      startLine = 0,
+      endLine = 0,
+      coverageStartUtf16 = 0,
+      coverageEndUtf16 = 0;
+
   /// Consumes these handles on success AND failure. Non-visible groups are
   /// rejected, so one view cannot silently pin an entire long paragraph.
   factory ForumBodyInlineParagraphView.adopt({
@@ -50,6 +61,12 @@ final class ForumBodyInlineParagraphView {
               rubyGroups.length) {
         _fail(ForumBodyInlineViewFailure.leases);
       }
+      if (parent.layout.lines.isEmpty) {
+        if (startLine != 0 || endLine != 0 || rubyGroups.isNotEmpty) {
+          _fail(ForumBodyInlineViewFailure.coverage);
+        }
+        return ForumBodyInlineParagraphView._empty(parent);
+      }
       final fragment = parent.layout.fragment(startLine, endLine);
       final indices = fragment.atomIndices.toList(growable: false);
       if (indices.length != rubyGroups.length ||
@@ -58,32 +75,22 @@ final class ForumBodyInlineParagraphView {
       }
       final bindings = <int, _RubyBinding>{};
       final content = parent.content;
-      final contexts =
-          Map<ForumBodyParagraphContent, ForumBodyInlineContext?>.identity();
-      for (final context in content.contexts) {
-        contexts[context.content] = contexts.containsKey(context.content)
-            ? null
-            : context;
-      }
       for (final index in indices) {
         final group = rubyGroups[index]!;
-        final atom = content.projection.atoms[index];
         final base = group.contentFor(ForumBodyRubyPart.base);
         final annotation = group.contentFor(ForumBodyRubyPart.annotation);
-        final baseWindow = contexts[base];
-        final annotationWindow = group.hasAnnotation
-            ? contexts[annotation]
-            : null;
-        if (baseWindow == null ||
-            (group.hasAnnotation && annotationWindow == null)) {
-          _fail(ForumBodyInlineViewFailure.identity);
-        }
-        if (baseWindow.startUtf16 != atom.displayStartUtf16 ||
-            baseWindow.endUtf16 !=
-                (annotationWindow?.startUtf16 ?? atom.displayEndUtf16) ||
-            (annotationWindow != null &&
-                annotationWindow.endUtf16 != atom.displayEndUtf16)) {
-          _fail(ForumBodyInlineViewFailure.coverage);
+        final List<ForumBodyInlineContext> windows;
+        try {
+          windows = content.resolveAtomicContexts(index, [
+            base,
+            if (group.hasAnnotation) annotation,
+          ]);
+        } on ForumBodyParagraphInputException catch (error) {
+          _fail(
+            error.failure == ForumBodyParagraphInputFailure.identity
+                ? ForumBodyInlineViewFailure.identity
+                : ForumBodyInlineViewFailure.coverage,
+          );
         }
         final dimension = parent.layout.dimensions[index];
         if ((dimension.size.width - group.size.width).abs() > 1e-4 ||
@@ -91,7 +98,11 @@ final class ForumBodyInlineParagraphView {
             (dimension.baselineOffset! - group.baseline).abs() > 1e-4) {
           _fail(ForumBodyInlineViewFailure.geometry);
         }
-        bindings[index] = _RubyBinding(group, baseWindow, annotationWindow);
+        bindings[index] = _RubyBinding(
+          group,
+          windows.first,
+          group.hasAnnotation ? windows.last : null,
+        );
       }
       return ForumBodyInlineParagraphView._(
         parent,
@@ -133,6 +144,7 @@ final class ForumBodyInlineParagraphView {
 
   void paint(Canvas canvas, Offset offset) {
     _ensureActive();
+    if (_fragment == null) return;
     canvas.save();
     try {
       canvas.clipRect(offset & Size(width, height));
@@ -156,6 +168,14 @@ final class ForumBodyInlineParagraphView {
     _ensureActive();
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
+    }
+    if (_fragment == null || content.projection.display.text.isEmpty) {
+      final empty = content.projection.display.sourceAtUtf16(0);
+      return HtmlProjectedSourcePosition(
+        sourceRune: empty.sourceRune,
+        displayUtf16: 0,
+        isExact: false,
+      );
     }
     final point = Offset(
       offset.dx.clamp(0, width),

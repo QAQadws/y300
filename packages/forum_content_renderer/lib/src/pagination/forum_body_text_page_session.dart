@@ -11,6 +11,7 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_preparation.dart';
 import 'forum_body_prepared_text_fragment.dart';
+import 'forum_body_text_page_content.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -346,7 +347,12 @@ final class ForumBodyTextPageSession {
   List<ForumBodyParagraphLease> preparePageLeases(int pageIndex) {
     final preparation = openPagePreparation(pageIndex);
     try {
-      if (!preparation.tryPrepareCached()) {
+      if (!preparation.tryPrepareCached(
+        maxParts:
+            1 +
+            preparation.expectedNativeLeaseCount +
+            2 * preparation.expectedFragmentCount,
+      )) {
         throw const ForumBodyTextPageSessionException(
           ForumBodyTextPageSessionFailure.pageNotPrepared,
         );
@@ -362,7 +368,12 @@ final class ForumBodyTextPageSession {
   List<ForumBodyPreparedTextFragment> preparePageFragments(int pageIndex) {
     final preparation = openPagePreparation(pageIndex);
     try {
-      if (!preparation.tryPrepareCached()) {
+      if (!preparation.tryPrepareCached(
+        maxParts:
+            1 +
+            preparation.expectedNativeLeaseCount +
+            2 * preparation.expectedFragmentCount,
+      )) {
         throw const ForumBodyTextPageSessionException(
           ForumBodyTextPageSessionFailure.pageNotPrepared,
         );
@@ -391,33 +402,40 @@ final class ForumBodyTextPageSession {
       fragment.close();
       _issued.remove(fragment);
     }
-    if (page.fragments.length >
-        limits.maxIssuedLeases - activeIssuedLeases - _reservedLeases) {
-      throw const ForumBodyTextPageSessionException(
-        ForumBodyTextPageSessionFailure.leaseLimit,
+    final inputs = <ForumBodyTextPageContent>[];
+    var requested = 0;
+    final available =
+        limits.maxIssuedLeases - activeIssuedLeases - _reservedLeases;
+    for (final fragment in page.fragments) {
+      final input = ForumBodyTextPageContent.paragraph(
+        _content.items[fragment.paragraphIndex],
       );
+      requested += input.nativeHandleCountFor(fragment);
+      if (requested > available) {
+        throw const ForumBodyTextPageSessionException(
+          ForumBodyTextPageSessionFailure.leaseLimit,
+        );
+      }
+      inputs.add(input);
     }
     final preparation = createForumBodyTextPagePreparation(
       cache: _cache,
       snapshot: prefix,
       pageIndex: pageIndex,
-      contents: [
-        for (final fragment in page.fragments)
-          _content.items[fragment.paragraphIndex],
-      ],
+      inputs: inputs,
       textScaler: _textScaler,
       ensureOwner: _ensureUsable,
       onTransfer: _transferPreparation,
       onRetire: _retirePreparation,
     );
     _preparations.add(preparation);
-    _reservedLeases += page.fragments.length;
+    _reservedLeases += preparation.expectedNativeLeaseCount;
     return preparation;
   }
 
   void _retirePreparation(ForumBodyTextPagePreparation preparation) {
     if (_preparations.remove(preparation)) {
-      _reservedLeases -= preparation.expectedFragmentCount;
+      _reservedLeases -= preparation.expectedNativeLeaseCount;
     }
   }
 

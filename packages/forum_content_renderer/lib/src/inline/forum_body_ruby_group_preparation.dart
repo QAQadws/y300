@@ -75,6 +75,7 @@ final class ForumBodyRubyGroupPreparation {
     required ForumBodyTextRequest base,
     required ForumBodyTextRequest annotation,
     required void Function() ensureOwner,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
@@ -92,6 +93,7 @@ final class ForumBodyRubyGroupPreparation {
       annotation,
       ensureOwner,
       textScaler,
+      additionalOwnedLeases,
       gap,
       maxWidth,
       annotation.content.projection.text.isEmpty ? 1 : 2,
@@ -104,6 +106,7 @@ final class ForumBodyRubyGroupPreparation {
     ForumBodyTextRequest annotation,
     this._ensureOwner,
     this._textScaler,
+    this._additionalOwnedLeases,
     this.gap,
     this.maxWidth,
     this.expectedPartCount,
@@ -113,6 +116,8 @@ final class ForumBodyRubyGroupPreparation {
   List<ForumBodyTextRequest> _requests;
   void Function()? _ensureOwner;
   TextScaler? _textScaler;
+  Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwnedLeases;
+  ForumBodyParagraphBudgetException? _lastBudgetRejection;
   final double gap;
   final double maxWidth;
   final int expectedPartCount;
@@ -128,6 +133,12 @@ final class ForumBodyRubyGroupPreparation {
   bool get isReady => _state == ForumBodyRubyGroupPreparationState.ready;
   bool get waitingForLayoutBudget => _waiting;
   int get preparedPartCount => _preparedParts;
+  ForumBodyParagraphBudgetException? get lastBudgetRejection =>
+      _lastBudgetRejection;
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
+    ..._leases,
+    if (_group != null) ..._group!.nativeLeases,
+  ];
 
   ForumBodyRubyGroupPreparationStep advance() {
     if (_state != ForumBodyRubyGroupPreparationState.active) {
@@ -142,6 +153,7 @@ final class ForumBodyRubyGroupPreparation {
       var inspected = 0;
       var rejectedAt = cache.budgetRevision;
       _waiting = false;
+      _lastBudgetRejection = null;
       try {
         while (_preparedParts < expectedPartCount) {
           rejectedAt = cache.budgetRevision;
@@ -163,7 +175,17 @@ final class ForumBodyRubyGroupPreparation {
       } on ForumBodyParagraphBudgetException catch (error) {
         _guard();
         if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
-        if (!cache.isBlockedByExternalPins(error, _leases)) {
+        _lastBudgetRejection = error;
+        final additional =
+            _additionalOwnedLeases?.call() ??
+            const <ForumBodyNativeParagraphLease>[];
+        _guard();
+        final external = cache.isBlockedByExternalPins(error, [
+          ..._leases,
+          ...additional,
+        ]);
+        _guard();
+        if (!external) {
           throw const ForumBodyRubyGroupPreparationException(
             ForumBodyRubyGroupPreparationFailure.intrinsicBudget,
           );
@@ -188,6 +210,7 @@ final class ForumBodyRubyGroupPreparation {
     _guard();
     if (isReady) return true;
     _waiting = false;
+    _lastBudgetRejection = null;
     while (_preparedParts < expectedPartCount) {
       if (_leases.length == _preparedParts && !_acquire(cachedOnly: true)) {
         return false;
@@ -323,6 +346,8 @@ final class ForumBodyRubyGroupPreparation {
     _requests = const [];
     _textScaler = null;
     _ensureOwner = null;
+    _additionalOwnedLeases = null;
+    _lastBudgetRejection = null;
     _waiting = false;
   }
 

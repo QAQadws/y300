@@ -130,6 +130,54 @@ final class ForumBodyInlineSpanContent {
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;
 
+  late final _contextIndex = _indexContexts();
+  Map<ForumBodyParagraphContent, ForumBodyInlineContext?> _indexContexts() {
+    final result =
+        Map<ForumBodyParagraphContent, ForumBodyInlineContext?>.identity();
+    for (final context in contexts) {
+      result[context.content] = result.containsKey(context.content)
+          ? null
+          : context;
+    }
+    return result;
+  }
+
+  /// Resolve actual independent children covering one engine atom. Empty
+  /// non-painted children are omitted. Equal text is never a context identity.
+  List<ForumBodyInlineContext> resolveAtomicContexts(
+    int index,
+    List<ForumBodyParagraphContent> children,
+  ) {
+    RangeError.checkValidIndex(index, projection.atoms, 'index');
+    final atom = projection.atoms[index];
+    final result = <ForumBodyInlineContext>[];
+    var cursor = atom.displayStartUtf16;
+    for (final child in children) {
+      final context = _contextIndex[child];
+      if (context == null) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.identity,
+          child.path,
+        );
+      }
+      if (context.startUtf16 != cursor || context.endUtf16 <= cursor) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.structure,
+          child.path,
+        );
+      }
+      result.add(context);
+      cursor = context.endUtf16;
+    }
+    if (cursor != atom.displayEndUtf16) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.structure,
+        path,
+      );
+    }
+    return List.unmodifiable(result);
+  }
+
   /// Direct TextPainter input only. Set its placeholder dimensions in atom
   /// order, using the already-scaled child geometry. RichText/WidgetSpan scale
   /// extraction is intentionally outside this native span contract.

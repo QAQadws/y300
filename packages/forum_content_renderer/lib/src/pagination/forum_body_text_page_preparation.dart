@@ -1,10 +1,12 @@
+import 'dart:math' as math;
 import 'package:flutter/painting.dart';
-
+import '../inline/forum_body_ruby_group_preparation.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
-import '../paragraph/forum_body_paragraph_content.dart';
+import 'forum_body_prepared_text_fragment.dart';
+import 'forum_body_inline_page_preparation.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
-import 'forum_body_prepared_text_fragment.dart';
+import 'forum_body_text_page_content.dart';
 
 enum ForumBodyTextPagePreparationState {
   active,
@@ -30,24 +32,33 @@ final class ForumBodyTextPagePreparationStep {
     this.isReady,
     this.waitingForLayoutBudget, {
     this.fragmentsInspected = 0,
+    this.partsPrepared = 0,
+    this.partsInspected = 0,
+    this.picturesBuilt = 0,
   });
   final int fragmentsPrepared;
   final int layoutsBuilt;
   final bool isReady;
   final bool waitingForLayoutBudget;
   final int fragmentsInspected;
-  // A discarded build under budget pressure is cost, not retained progress.
+  final int partsPrepared;
+  final int partsInspected;
+  final int picturesBuilt;
+  // A discarded native build is cost, not retained preparation progress.
   bool get madeProgress =>
-      fragmentsPrepared > 0 || fragmentsInspected > 0 || isReady;
+      fragmentsPrepared > 0 ||
+      fragmentsInspected > 0 ||
+      partsPrepared > 0 ||
+      partsInspected > 0 ||
+      isReady;
 }
 
-// Internal construction keeps reservation/owner callbacks in the session; only
-// cursor types, not this factory, are exported through the package entry.
+// Construction and reservations stay with the existing session owner.
 ForumBodyTextPagePreparation createForumBodyTextPagePreparation({
   required ForumBodyParagraphCache cache,
   required ForumBodyTextPageSnapshot snapshot,
   required int pageIndex,
-  required List<ForumBodyParagraphContent> contents,
+  required List<ForumBodyTextPageContent> inputs,
   required TextScaler textScaler,
   required void Function() ensureOwner,
   required void Function(
@@ -56,27 +67,41 @@ ForumBodyTextPagePreparation createForumBodyTextPagePreparation({
   )
   onTransfer,
   required void Function(ForumBodyTextPagePreparation) onRetire,
-}) => ForumBodyTextPagePreparation._(
-  cache,
-  snapshot,
-  pageIndex,
-  contents,
-  textScaler,
-  ensureOwner,
-  onTransfer,
-  onRetire,
-);
+}) {
+  final page = snapshot[pageIndex];
+  if (inputs.length != page.fragments.length ||
+      inputs.any((input) => input.identity != snapshot.identity)) {
+    throw const ForumBodyTextPageSurfaceException(
+      ForumBodyTextPageSurfaceFailure.identity,
+    );
+  }
+  final count = inputs.indexed.fold<int>(
+    0,
+    (sum, item) => sum + item.$2.nativeHandleCountFor(page.fragments[item.$1]),
+  );
+  return ForumBodyTextPagePreparation._(
+    cache,
+    snapshot,
+    pageIndex,
+    List.unmodifiable(inputs),
+    count,
+    textScaler,
+    ensureOwner,
+    onTransfer,
+    onRetire,
+  );
+}
 
-/// A transactional view preparation for one already published page. Each
-/// advance acquires at most maxFragments and stops after its first native build.
-/// Partial leases are never exposed; close rolls them back. Terminal cursors
-/// drop cache/content/owner references while retaining only pure page metadata.
+/// One page transaction with at most one partial mixed fragment. Native shape
+/// and picture work use distinct cooperative units. Only complete, validated
+/// fragments transfer; cancellation releases parents and every visible child.
 final class ForumBodyTextPagePreparation {
   ForumBodyTextPagePreparation._(
     this._cache,
     this.snapshot,
     this.pageIndex,
-    this._contents,
+    this._inputs,
+    this.expectedNativeLeaseCount,
     this._textScaler,
     this._ensureOwner,
     this._onTransfer,
@@ -85,7 +110,8 @@ final class ForumBodyTextPagePreparation {
   ForumBodyParagraphCache? _cache;
   final ForumBodyTextPageSnapshot snapshot;
   final int pageIndex;
-  List<ForumBodyParagraphContent> _contents;
+  final int expectedNativeLeaseCount;
+  List<ForumBodyTextPageContent> _inputs;
   TextScaler? _textScaler;
   void Function()? _ensureOwner;
   void Function(
@@ -95,32 +121,54 @@ final class ForumBodyTextPagePreparation {
   _onTransfer;
   void Function(ForumBodyTextPagePreparation)? _onRetire;
   final _fragments = <ForumBodyPreparedTextFragment>[];
-  ForumBodyTextPagePreparationState _state =
-      ForumBodyTextPagePreparationState.active;
+  ForumBodyInlinePagePreparation? _inline;
+  var _state = ForumBodyTextPagePreparationState.active;
+  bool _operating = false;
   bool _waiting = false;
+  int _completedWork = 0;
+  int get _retainedWork => _completedWork + (_inline?.workCount ?? 0);
   ForumBodyParagraphBudgetProbe? _budgetProbe;
-  int _probeIndex = 0;
+  Iterator<bool>? _probeWork;
+  int _probePartsRead = 0;
   int _rejectedAtRevision = 0;
+  int _probeBuilds = 0;
+  int _probePictures = 0;
   bool _pageBudgetChecked = false;
-
+  int _checkedBuilds = 0;
+  int _checkedPictures = 0;
   ForumBodyTextPagePreparationState get state => _state;
   bool get isReady => _state == ForumBodyTextPagePreparationState.ready;
   bool get waitingForLayoutBudget => _waiting;
   int get preparedFragmentCount => _fragments.length;
   int get expectedFragmentCount => snapshot[pageIndex].fragments.length;
+  Iterable<ForumBodyNativeParagraphLease> get _ownedLeases sync* {
+    for (final fragment in _fragments) {
+      yield* fragment.nativeLeases;
+    }
+    final active = _inline;
+    if (active != null) {
+      yield* active.nativeLeases;
+    }
+  }
 
-  ForumBodyTextPagePreparationStep advance({required int maxFragments}) {
-    _guard();
+  ForumBodyTextPagePreparationStep advance({
+    required int maxFragments,
+    int maxParts = 32,
+  }) {
+    _ensureEntry();
     if (_state != ForumBodyTextPagePreparationState.active) {
       throw StateError('Page preparation is not active');
     }
-    if (maxFragments <= 0) {
-      throw ArgumentError.value(maxFragments, 'maxFragments');
+    if (maxFragments <= 0 || maxParts <= 0) {
+      throw ArgumentError('Invalid page preparation budget');
     }
     final cache = _cache!;
     final before = _fragments.length;
+    final workBefore = _retainedWork;
     final buildsBefore = cache.layoutBuildCount;
-    var inspected = 0;
+    final picturesBefore = cache.pictureBuildCount;
+    var inspectedFragments = 0;
+    var inspectedParts = 0;
     _waiting = false;
     ForumBodyTextPagePreparationStep result() =>
         ForumBodyTextPagePreparationStep(
@@ -128,149 +176,248 @@ final class ForumBodyTextPagePreparation {
           cache.layoutBuildCount - buildsBefore,
           isReady,
           _waiting,
-          fragmentsInspected: inspected,
+          fragmentsInspected: inspectedFragments,
+          partsPrepared: _retainedWork - workBefore,
+          partsInspected: inspectedParts,
+          picturesBuilt: cache.pictureBuildCount - picturesBefore,
         );
+    _operating = true;
     try {
       if (_budgetProbe != null) {
-        inspected = _inspectBudget(maxFragments);
+        final work = _inspectBudget(math.min(maxFragments, maxParts));
+        inspectedFragments = work.fragments;
+        inspectedParts = work.parts;
         return result();
       }
-      while (_fragments.length < expectedFragmentCount &&
-          _fragments.length - before < maxFragments) {
+      for (
+        var parts = 0;
+        parts < maxParts &&
+            _fragments.length < expectedFragmentCount &&
+            _fragments.length - before < maxFragments;
+        parts++
+      ) {
         _rejectedAtRevision = cache.budgetRevision;
-        _acquire(cachedOnly: false);
-        if (cache.layoutBuildCount != buildsBefore) break;
+        _prepareNext(cachedOnly: false);
+        if (cache.layoutBuildCount != buildsBefore ||
+            cache.pictureBuildCount != picturesBefore) {
+          break;
+        }
       }
       _finishIfReady();
       return result();
+    } on ForumBodyRubyGroupPreparationException {
+      _abort();
+      throw const ForumBodyTextPagePreparationException(
+        ForumBodyTextPagePreparationFailure.intrinsicBudget,
+      );
     } on ForumBodyParagraphBudgetException catch (error) {
-      var externalPressure = false;
       try {
         _guard();
-        externalPressure = cache.isBlockedByExternalPins(
-          error,
-          _fragments.expand((fragment) => fragment.nativeLeases),
-        );
+        if (error.failure != ForumBodyParagraphBudgetFailure.pinned) {
+          _abort();
+          rethrow;
+        }
+        if (!cache.isBlockedByExternalPins(error, _ownedLeases)) {
+          throw const ForumBodyTextPagePreparationException(
+            ForumBodyTextPagePreparationFailure.intrinsicBudget,
+          );
+        }
+        _guard();
+        final current =
+            _pageBudgetChecked &&
+            _checkedBuilds == cache.layoutBuildCount &&
+            _checkedPictures == cache.pictureBuildCount;
+        if (!current) {
+          _startBudgetProbe();
+          final work = _inspectBudget(math.min(maxFragments, maxParts));
+          inspectedFragments = work.fragments;
+          inspectedParts = work.parts;
+        } else {
+          _waiting = cache.budgetRevision == _rejectedAtRevision;
+        }
+        return result();
       } catch (_) {
         _abort();
         rethrow;
       }
-      if (error.failure == ForumBodyParagraphBudgetFailure.pinned) {
-        if (externalPressure) {
-          if (!_pageBudgetChecked) {
-            _budgetProbe = cache.createBudgetProbe();
-            try {
-              inspected = _inspectBudget(maxFragments);
-            } catch (_) {
-              _abort();
-              rethrow;
-            }
-            return result();
-          }
-          _waiting = true;
-          return result();
-        }
-        _abort();
-        throw const ForumBodyTextPagePreparationException(
-          ForumBodyTextPagePreparationFailure.intrinsicBudget,
-        );
-      }
-      _abort();
-      rethrow;
     } catch (_) {
       _abort();
       rethrow;
+    } finally {
+      _operating = false;
     }
   }
 
-  int _inspectBudget(int maxFragments) {
-    var inspected = 0;
-    final probe = _budgetProbe!;
+  /// Warm lookup is bounded too. A miss or exhausted part budget retains
+  /// partial work without shaping or recording pictures inside Widget build.
+  bool tryPrepareCached({int maxParts = 32}) {
+    _ensureEntry();
+    if (maxParts <= 0) throw ArgumentError.value(maxParts, 'maxParts');
+    if (isReady) return true;
+    _operating = true;
+    _waiting = false;
     try {
-      while (_probeIndex < expectedFragmentCount && inspected < maxFragments) {
-        final fragment = snapshot[pageIndex].fragments[_probeIndex];
-        probe.include(
-          content: _contents[_probeIndex],
-          width: fragment.width,
-          minimumLineCount: fragment.endLine,
-          textScaler: _textScaler!,
-        );
+      for (
+        var parts = 0;
+        parts < maxParts && _fragments.length < expectedFragmentCount;
+        parts++
+      ) {
+        if (!_prepareNext(cachedOnly: true)) return false;
+      }
+      _finishIfReady();
+      return isReady;
+    } catch (_) {
+      _abort();
+      rethrow;
+    } finally {
+      _operating = false;
+    }
+  }
+
+  bool _prepareNext({required bool cachedOnly}) {
+    final index = _fragments.length;
+    final fragment = snapshot[pageIndex].fragments[index];
+    final input = _inputs[index];
+    final cache = _cache!;
+    if (input is ForumBodyParagraphPageContent) {
+      final requestWidth = input.requestWidthFor(fragment);
+      final lease = cachedOnly
+          ? cache.tryAcquireCached(
+              content: input.content,
+              width: requestWidth,
+              textScaler: _textScaler!,
+            )
+          : cache.acquire(
+              content: input.content,
+              width: requestWidth,
+              textScaler: _textScaler!,
+            );
+      try {
         _guard();
-        _probeIndex++;
-        inspected++;
+      } catch (_) {
+        lease?.release();
+        rethrow;
       }
-      if (_probeIndex == expectedFragmentCount) {
-        _pageBudgetChecked = true;
-        probe.close();
-        _budgetProbe = null;
-        // A release during bounded inspection must cause a fresh admission,
-        // not a wait for an event that has already happened.
-        _waiting = _cache!.budgetRevision == _rejectedAtRevision;
+      if (lease == null) return false;
+      try {
+        _fragments.add(
+          ForumBodyPreparedTextFragment.paragraph(
+            lease: lease,
+            startLine: fragment.startLine,
+            endLine: fragment.endLine,
+          ),
+        );
+      } on RangeError {
+        throw const ForumBodyTextPageSurfaceException(
+          ForumBodyTextPageSurfaceFailure.geometry,
+        );
       }
-      return inspected;
+      _completedWork++;
+      return true;
+    }
+    final active = _inline ??= ForumBodyInlinePagePreparation(
+      input: input as ForumBodyInlinePageContent,
+      fragment: fragment,
+      identity: snapshot.identity,
+      cache: cache,
+      textScaler: _textScaler!,
+      ensureOwner: _guard,
+      ownedPageLeases: () => _ownedLeases.toList(growable: false),
+    );
+    final step = active.advance(cachedOnly: cachedOnly);
+    final view = step.view;
+    if (view != null) {
+      _inline = null;
+      _completedWork += active.workCount;
+      _fragments.add(ForumBodyPreparedTextFragment.inline(view));
+    }
+    return !step.cacheMiss;
+  }
+
+  void _startBudgetProbe() {
+    _budgetProbe?.close();
+    _budgetProbe = _cache!.createBudgetProbe();
+    _probePartsRead = 0;
+    _probeBuilds = _cache!.layoutBuildCount;
+    _probePictures = _cache!.pictureBuildCount;
+    _probeWork = _budgetParts(_budgetProbe!).iterator;
+  }
+
+  // Parent and child requests are separate bounded inspection units. No native
+  // work or large list of callbacks is retained by the whole-page probe.
+  Iterable<bool> _budgetParts(ForumBodyParagraphBudgetProbe probe) sync* {
+    final page = snapshot[pageIndex];
+    for (final (index, input) in _inputs.indexed) {
+      final fragment = page.fragments[index];
+      switch (input) {
+        case ForumBodyParagraphPageContent():
+          probe.include(
+            content: input.content,
+            width: input.requestWidthFor(fragment),
+            minimumLineCount: fragment.endLine,
+            textScaler: _textScaler!,
+          );
+          yield true;
+        case ForumBodyInlinePageContent():
+          probe.includeInline(
+            content: input.content,
+            width: input.requestWidthFor(fragment),
+            dimensions: input.dimensions,
+            minimumLineCount: fragment.endLine,
+            textScaler: _textScaler!,
+            layoutMode: input.layoutMode,
+          );
+          yield true;
+          for (final atom in input.visibleAtoms(fragment)) {
+            final request = input.rubyGroups[atom];
+            request.base.includeBudget(
+              probe,
+              width: request.maxWidth,
+              textScaler: _textScaler!,
+            );
+            yield false;
+            if (request.hasAnnotation) {
+              request.annotation.includeBudget(
+                probe,
+                width: request.maxWidth,
+                textScaler: _textScaler!,
+              );
+              yield false;
+            }
+          }
+      }
+    }
+  }
+
+  ({int fragments, int parts}) _inspectBudget(int limit) {
+    var fragments = 0;
+    var parts = 0;
+    try {
+      while (_probePartsRead < expectedNativeLeaseCount && parts < limit) {
+        if (!_probeWork!.moveNext()) {
+          throw StateError('Unordered page budget input');
+        }
+        _guard();
+        _probePartsRead++;
+        parts++;
+        if (_probeWork!.current) fragments++;
+      }
+      if (_probePartsRead == expectedNativeLeaseCount) {
+        _pageBudgetChecked =
+            _probeBuilds == _cache!.layoutBuildCount &&
+            _probePictures == _cache!.pictureBuildCount;
+        _checkedBuilds = _probeBuilds;
+        _checkedPictures = _probePictures;
+        _closeProbe();
+        _waiting =
+            _pageBudgetChecked && _cache!.budgetRevision == _rejectedAtRevision;
+      }
+      return (fragments: fragments, parts: parts);
     } on ForumBodyParagraphBudgetException {
-      // The whole lower bound exceeds capacity even after every foreign pin
-      // releases. Preserve visible/source owners and roll back just this view.
       throw const ForumBodyTextPagePreparationException(
         ForumBodyTextPagePreparationFailure.intrinsicBudget,
       );
     }
-  }
-
-  /// Bounded by the reserved page's fragment count; never shapes on a miss.
-  /// A miss retains warm partial work so advance can continue outside build.
-  bool tryPrepareCached() {
-    _guard();
-    if (isReady) return true;
-    _waiting = false;
-    try {
-      while (_fragments.length < expectedFragmentCount) {
-        if (!_acquire(cachedOnly: true)) return false;
-      }
-      _finishIfReady();
-      return true;
-    } catch (_) {
-      _abort();
-      rethrow;
-    }
-  }
-
-  bool _acquire({required bool cachedOnly}) {
-    final index = _fragments.length;
-    final fragment = snapshot[pageIndex].fragments[index];
-    final cache = _cache!;
-    final lease = cachedOnly
-        ? cache.tryAcquireCached(
-            content: _contents[index],
-            width: fragment.width,
-            textScaler: _textScaler!,
-          )
-        : cache.acquire(
-            content: _contents[index],
-            width: fragment.width,
-            textScaler: _textScaler!,
-          );
-    try {
-      _guard();
-    } catch (_) {
-      lease?.release();
-      rethrow;
-    }
-    if (lease == null) return false;
-    try {
-      _fragments.add(
-        ForumBodyPreparedTextFragment.paragraph(
-          lease: lease,
-          startLine: fragment.startLine,
-          endLine: fragment.endLine,
-        ),
-      );
-    } on RangeError {
-      throw const ForumBodyTextPageSurfaceException(
-        ForumBodyTextPageSurfaceFailure.geometry,
-      );
-    }
-    return true;
   }
 
   void _finishIfReady() {
@@ -282,12 +429,13 @@ final class ForumBodyTextPagePreparation {
       layoutId: snapshot.layoutId,
       fragments: _fragments,
     );
+    _closeProbe();
     _state = ForumBodyTextPagePreparationState.ready;
     _waiting = false;
   }
 
   List<ForumBodyParagraphLease> takeLeases() {
-    _guard();
+    _ensureEntry();
     if (!isReady) throw StateError('Page preparation is not ready');
     if (_fragments.any(
       (fragment) => fragment is! ForumBodyPreparedParagraphFragment,
@@ -301,11 +449,10 @@ final class ForumBodyTextPagePreparation {
     );
   }
 
-  /// Transfers complete typed fragments through the same reservation and owner
-  /// transaction as the ordinary convenience API. No partial handles escape.
   List<ForumBodyPreparedTextFragment> takeFragments() {
-    _guard();
+    _ensureEntry();
     if (!isReady) throw StateError('Page preparation is not ready');
+    _operating = true;
     try {
       validateForumBodyPreparedTextPageBinding(
         snapshot: snapshot,
@@ -325,6 +472,25 @@ final class ForumBodyTextPagePreparation {
     } catch (_) {
       _abort();
       rethrow;
+    } finally {
+      _operating = false;
+    }
+  }
+
+  void _checkReentry() {
+    if (_operating) throw StateError('Page preparation operation is reentrant');
+  }
+
+  void _ensureEntry() {
+    _checkReentry();
+    _operating = true;
+    try {
+      _guard();
+    } catch (_) {
+      _abort();
+      rethrow;
+    } finally {
+      _operating = false;
     }
   }
 
@@ -336,7 +502,9 @@ final class ForumBodyTextPagePreparation {
     if (_state != ForumBodyTextPagePreparationState.active && !isReady) {
       throw StateError('Page preparation is retired');
     }
-    if (_cache!.isClosed || _fragments.any((fragment) => !fragment.isActive)) {
+    if (_cache!.isClosed ||
+        _fragments.any((fragment) => !fragment.isActive) ||
+        _ownedLeases.any((lease) => !_cache!.ownsLease(lease))) {
       throw StateError('Page preparation owner or fragment is retired');
     }
   }
@@ -352,6 +520,8 @@ final class ForumBodyTextPagePreparation {
   void _retire(ForumBodyTextPagePreparationState state) {
     if (_state != ForumBodyTextPagePreparationState.active && !isReady) return;
     _state = state;
+    _inline?.close();
+    _inline = null;
     for (final fragment in _fragments) {
       fragment.close();
     }
@@ -361,11 +531,16 @@ final class ForumBodyTextPagePreparation {
     retire?.call(this);
   }
 
-  void _dropOwner() {
+  void _closeProbe() {
     _budgetProbe?.close();
     _budgetProbe = null;
+    _probeWork = null;
+  }
+
+  void _dropOwner() {
+    _closeProbe();
     _cache = null;
-    _contents = const [];
+    _inputs = const [];
     _textScaler = null;
     _ensureOwner = null;
     _onTransfer = null;

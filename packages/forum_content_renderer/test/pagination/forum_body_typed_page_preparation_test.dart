@@ -202,7 +202,10 @@ void main() {
           cache: input.cache,
           snapshot: input.session.snapshot,
           pageIndex: 0,
-          contents: input.contents,
+          inputs: [
+            for (final content in input.contents)
+              ForumBodyTextPageContent.paragraph(content),
+          ],
           textScaler: TextScaler.noScaling,
           ensureOwner: () {},
           onTransfer: (preparation, fragments) {
@@ -223,6 +226,76 @@ void main() {
         expect(rejected!.every((fragment) => !fragment.isActive), isTrue);
         expect(retired, 1);
         expect(input.cache.activeLeases, 0);
+      },
+    );
+  }
+  for (final typed in [false, true]) {
+    test(
+      'warm convenience remains complete beyond the cooperative part limit (typed=$typed)',
+      () {
+        final doc = const ForumBodyParser().parse(
+          html: List.filled(40, '<p style="margin:0">x</p>').join(),
+          sourceId: 'warm-many-fragments',
+          conversionIdentity: 'none',
+        );
+        final cache = ForumBodyParagraphCache(
+          maxEntries: 64,
+          maxEstimatedBytes: 1 << 20,
+        );
+        final session = ForumBodyTextPageSession(
+          document: doc,
+          reader: ForumBodyReaderStyle(
+            textStyle: const TextStyle(
+              fontFamily: 'Ahem',
+              fontSize: 10,
+              height: 1,
+            ),
+            fontRevision: 'loaded',
+            linkColor: const Color(0xff0000ff),
+          ),
+          cache: cache,
+          limits: const ForumBodyTextPageSessionLimits(
+            maxPages: 10,
+            maxFragments: 100,
+            maxParagraphs: 100,
+            maxTextCodeUnits: 1000,
+            maxRuns: 100,
+            maxIssuedLeases: 80,
+          ),
+          layoutId: 'warm-many',
+          width: 100,
+          height: 1000,
+        );
+        addTearDown(() {
+          session.close();
+          cache.close();
+        });
+        for (var n = 0; n < 1000 && !session.isComplete; n++) {
+          session.advance(maxEvents: 8, maxLines: 2);
+        }
+        expect(session.isComplete, isTrue);
+        expect(session.snapshot.single.fragments.length, 40);
+        final builds = cache.layoutBuildCount;
+        final bounded = session.openPagePreparation(0);
+        expect(bounded.tryPrepareCached(maxParts: 1), isFalse);
+        expect(bounded.preparedFragmentCount, 1);
+        bounded.close();
+        if (typed) {
+          final fragments = session.preparePageFragments(0);
+          expect(fragments.length, 40);
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        } else {
+          final leases = session.preparePageLeases(0);
+          expect(leases.length, 40);
+          for (final lease in leases) {
+            lease.release();
+          }
+        }
+        expect(cache.layoutBuildCount, builds);
+        expect(session.activeIssuedLeases, 0);
+        expect(session.reservedViewLeases, 0);
       },
     );
   }

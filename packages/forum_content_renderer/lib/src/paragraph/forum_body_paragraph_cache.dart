@@ -77,7 +77,10 @@ final class ForumBodyParagraphCache {
   /// Proves the supplied live handle belongs to this reading owner. Does not
   /// acquire an alias, touch the LRU or invoke native/user callbacks.
   bool ownsLease(ForumBodyNativeParagraphLease lease) =>
-      !_closed && identical(lease._owner, this) && lease.isActive;
+      !_closed &&
+      identical(lease._owner, this) &&
+      lease.isActive &&
+      !lease._entry.layout.isDisposed;
 
   /// Monotonic evidence that a lease was released or this owner retired.
   /// Callers must still retry admission; aliases need not free a native entry.
