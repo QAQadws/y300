@@ -66,4 +66,6 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 `placeholderDimensions` 是已经缩放的直接 TextPainter 行内几何；父排版不得再次进行 inline Widget 自动缩放。gap 使用已解析的逻辑像素；改变 gap 或有效最大宽度可重组几何而复用原生字形。空注音不建立额外布局或保留空白上行。组宽超过显式最大值、无效几何、不同来源/字体或非固有单行内容均明确失败；失败与 `close` 仅释放本组 lease，owner 关闭使活跃组立即失效，不能晚访问已销毁的 native 布局。
 
+作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 1，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
+
 这是行内排版的分组端口，不是完整 ruby HTML consumer。ruby 语法分组、父段落的源码/engine placeholder 投影、分页合法边界、复制与完整无障碍接入仍由后续组合层实现；普通文字流继续拒绝 ruby，不因该端口存在放宽格式准入或分流旧 renderer。

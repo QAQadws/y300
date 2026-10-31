@@ -9,13 +9,15 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
   String annotation = 'xy',
   double annotationSize = 10,
   String direction = 'ltr',
+  double baseLineHeight = 1,
+  double annotationLineHeight = 1,
   String fontRevision = 'ahem',
   ForumBodyParagraphLayoutMode layoutMode =
       ForumBodyParagraphLayoutMode.intrinsicSingleLine,
 }) {
   final document = const ForumBodyParser().parse(
     html:
-        '<p><span dir="$direction">$base</span><span style="font-size:${annotationSize}px">$annotation</span></p>',
+        '<p><span dir="$direction" style="line-height:$baseLineHeight">$base</span><span style="font-size:${annotationSize}px;line-height:$annotationLineHeight">$annotation</span></p>',
     sourceId: 'ruby-group',
     conversionIdentity: 'none',
   );
@@ -375,6 +377,68 @@ void main() {
         await pixels(expected, group.size),
       );
       expect(cache.layoutBuildCount, 2);
+    },
+  );
+
+  test(
+    'tight child line heights retain real font boxes without clipping either row',
+    () async {
+      final tight = pair(baseLineHeight: .25, annotationLineHeight: .25);
+      final normal = pair();
+      final tightGroup = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: tight.base,
+        annotation: tight.annotation,
+        gap: 2,
+      );
+      final normalGroup = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: normal.base,
+        annotation: normal.annotation,
+        gap: 2,
+      );
+      addTearDown(tightGroup.close);
+      addTearDown(normalGroup.close);
+      final baseBoxes = tightGroup.selectionBoxes(
+        part: ForumBodyRubyPart.base,
+        startUtf16: 0,
+        endUtf16: 2,
+      );
+      final annotationBoxes = tightGroup.selectionBoxes(
+        part: ForumBodyRubyPart.annotation,
+        startUtf16: 0,
+        endUtf16: 2,
+      );
+      for (final box in [...baseBoxes, ...annotationBoxes]) {
+        expect(box.top, greaterThanOrEqualTo(0));
+        expect(box.bottom, lessThanOrEqualTo(tightGroup.size.height));
+      }
+      expect(
+        baseBoxes.first.top,
+        greaterThanOrEqualTo(annotationBoxes.first.bottom + 2),
+      );
+      final baseHit = tightGroup.sourceAt(
+        Offset(baseBoxes.first.left + .1, baseBoxes.first.top + .1),
+      );
+      expect(baseHit.part, ForumBodyRubyPart.base);
+      expect(baseHit.position.sourceRune, 0);
+      final annotationHit = tightGroup.sourceAt(
+        Offset(
+          annotationBoxes.first.left + .1,
+          annotationBoxes.first.bottom - .1,
+        ),
+      );
+      expect(annotationHit.part, ForumBodyRubyPart.annotation);
+      expect(annotationHit.position.sourceRune, 2);
+      expect(tightGroup.size, normalGroup.size);
+      final tightRecorder = ui.PictureRecorder();
+      tightGroup.paint(Canvas(tightRecorder), Offset.zero);
+      final normalRecorder = ui.PictureRecorder();
+      normalGroup.paint(Canvas(normalRecorder), Offset.zero);
+      expect(
+        await pixels(tightRecorder, tightGroup.size),
+        await pixels(normalRecorder, normalGroup.size),
+      );
     },
   );
 

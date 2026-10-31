@@ -32,6 +32,10 @@ final class ForumBodyRubyHit {
 /// nor flattens its annotation into ordinary text. The parent inline composer
 /// owns group/source ordering, legal page boundaries and placeholder placement.
 final class ForumBodyRubyGroupLayout {
+  /// Parent inline/layout identities include this geometry contract separately
+  /// from the underlying paragraph shaping backend revision.
+  static const revision = 1;
+
   ForumBodyRubyGroupLayout._({
     required ForumBodyParagraphLease base,
     required ForumBodyParagraphLease? annotation,
@@ -40,9 +44,11 @@ final class ForumBodyRubyGroupLayout {
     required this.baseline,
     required this.baseOffset,
     required this.annotationOffset,
+    required double annotationHitBoundary,
   }) : _base = base,
        _annotation = annotation,
        hasAnnotation = annotation != null,
+       _annotationHitBoundary = annotationHitBoundary,
        _annotationProjection = annotationProjection;
 
   factory ForumBodyRubyGroupLayout.create({
@@ -94,13 +100,20 @@ final class ForumBodyRubyGroupLayout {
         );
       }
       final baseLayout = baseLease.layout;
-      final annotationLayout = annotationLease?.layout;
-      final width = math.max(baseLayout.width, annotationLayout?.width ?? 0);
-      final baseTop = annotationLayout == null
+      final baseBounds = _textBounds(baseLease);
+      final annotationBounds = annotationLease == null
+          ? Rect.zero
+          : _textBounds(annotationLease);
+      final width = math.max(baseBounds.width, annotationBounds.width);
+      final baseTop = annotationLease == null
           ? 0.0
-          : annotationLayout.height + gap;
-      final height = baseTop + baseLayout.height;
-      final baseline = baseTop + baseLayout.lines.single.baseline;
+          : annotationBounds.height + gap;
+      final baseOffset = Offset(
+        (width - baseBounds.width) / 2 - baseBounds.left,
+        baseTop - baseBounds.top,
+      );
+      final height = baseTop + baseBounds.height;
+      final baseline = baseOffset.dy + baseLayout.lines.single.baseline;
       if (width > maxWidth) {
         throw const ForumBodyRubyGroupException(
           ForumBodyRubyGroupFailure.overflow,
@@ -122,11 +135,12 @@ final class ForumBodyRubyGroupLayout {
         annotationProjection: annotation.projection,
         size: Size(width, height),
         baseline: baseline,
-        baseOffset: Offset((width - baseLayout.width) / 2, baseTop),
+        baseOffset: baseOffset,
         annotationOffset: Offset(
-          (width - (annotationLayout?.width ?? 0)) / 2,
-          0,
+          (width - annotationBounds.width) / 2 - annotationBounds.left,
+          -annotationBounds.top,
         ),
+        annotationHitBoundary: annotationBounds.height + gap / 2,
       );
     } catch (_) {
       annotationLease?.release();
@@ -143,9 +157,25 @@ final class ForumBodyRubyGroupLayout {
   final Offset baseOffset;
   final Offset annotationOffset;
   final bool hasAnnotation;
+  final double _annotationHitBoundary;
 
   bool get isActive =>
       _base?.isActive == true && (_annotation?.isActive ?? true);
+
+  static Rect _textBounds(ForumBodyParagraphLease lease) {
+    final layout = lease.layout;
+    var bounds = Rect.fromLTWH(0, 0, layout.width, layout.height);
+    // Author line-height can be smaller than the actual font boxes, including
+    // fallback emoji and nested larger runs. Reserve their real extent without
+    // reshaping the font or changing the paragraph's source coordinates.
+    for (final box in layout.selectionBoxes(
+      0,
+      lease.content.projection.text.length,
+    )) {
+      bounds = bounds.expandToInclude(box.toRect());
+    }
+    return bounds;
+  }
 
   /// Already scaled geometry for a direct TextPainter placeholder. A Widget
   /// host must not apply an additional inline-widget scale to this native box.
@@ -179,8 +209,7 @@ final class ForumBodyRubyGroupLayout {
     }
     final annotation = _annotation;
     final useAnnotation =
-        annotation != null &&
-        offset.dy < (annotation.layout.height + baseOffset.dy) / 2;
+        annotation != null && offset.dy < _annotationHitBoundary;
     return ForumBodyRubyHit(
       part: useAnnotation
           ? ForumBodyRubyPart.annotation
