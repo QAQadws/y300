@@ -138,6 +138,62 @@ Future<void> _startTapMotion(WidgetTester tester, int from) async {
 }
 
 void main() {
+  for (final reverse in [false, true]) {
+    testWidgets(
+      'mixed native pages mount, navigate and preserve read-only restoration in reverse=$reverse',
+      (tester) async {
+        final fixture = _fixture(
+          width: 30,
+          html:
+              '<p>${List.filled(10, 'X<ruby>AB<rt>xy</rt></ruby>').join()}</p>',
+        );
+        final controller = _controller(fixture, futureAnchor: true);
+        final reports = <NovelReaderPaginationPosition>[];
+        final navigation = NovelReaderPagedNavigationController();
+        addTearDown(navigation.dispose);
+        final owner = Object();
+        final authority = Object();
+        Widget reader() => _reader(
+          controller,
+          owner,
+          authority,
+          reports,
+          width: 30,
+          reverse: reverse,
+          navigation: navigation,
+        );
+        await tester.pumpWidget(reader());
+        await tester.pumpAndSettle();
+        expect(find.byType(ForumBodyTextPageSurface), findsWidgets);
+        expect(fixture.session.activeIssuedLeases, greaterThan(1));
+        expect(reports, isNotEmpty);
+        expect(reports.last.isReadOnlyCompatibilityRestore, isTrue);
+        expect(reports.last.hasUserNavigated, isFalse);
+        final firstIdentity = reports.last.anchor.textIdentity;
+        await tester.pumpWidget(reader());
+        await tester.pumpAndSettle();
+        expect(
+          reports.every((report) => report.isReadOnlyCompatibilityRestore),
+          isTrue,
+        );
+        expect(navigation.turnNext(), isTrue);
+        await tester.pumpAndSettle();
+        expect(reports.last.pageIndex, 1);
+        expect(reports.last.isReadOnlyCompatibilityRestore, isFalse);
+        expect(reports.last.hasUserNavigated, isTrue);
+        expect(reports.last.anchor.formatVersion, 1);
+        expect(reports.last.anchor.textIdentity, firstIdentity);
+        expect(reports.last.anchor.textOffset, greaterThan(0));
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.close();
+        expect(fixture.session.activeIssuedLeases, 0);
+        expect(fixture.session.reservedViewLeases, 0);
+        expect(fixture.cache.activeLeases, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'inactive viewport defers a created source until it becomes active',
     (tester) async {

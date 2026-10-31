@@ -81,6 +81,25 @@ final class _Fixture {
     return preparation.takeLeases();
   }
 
+  List<ForumBodyPreparedTextFragment> prepareFragments(int page) {
+    final preparation = session.openPagePreparation(page);
+    while (!preparation.isReady) {
+      preparation.advance(maxFragments: 8);
+    }
+    return preparation.takeFragments();
+  }
+
+  NovelReaderNativePageCoverageCursor preparedCursor(
+    int page,
+    List<ForumBodyPreparedTextFragment> fragments,
+  ) => NovelReaderNativePageCoverageCursor.prepared(
+    anchors: anchors,
+    snapshot: session.snapshot,
+    pageIndex: page,
+    layoutId: 'generation-a',
+    fragments: fragments,
+  );
+
   NovelReaderNativePageCoverageCursor cursor(
     int page,
     List<ForumBodyParagraphLease> leases, {
@@ -127,6 +146,125 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('mixed coverage proves actual base and annotation glyphs in the current page only', () {
+    final fixture = _Fixture(
+      '<p>X<ruby>AB<rp>(fallback)</rp><rt>xy</rt><rp>(hidden)</rp></ruby>Y</p>',
+      width: 30,
+      height: 15,
+    );
+    expect(fixture.session.snapshot, hasLength(2));
+    final fragments = fixture.prepareFragments(0);
+    expect(fragments.single, isA<ForumBodyPreparedInlineFragment>());
+    final builds = fixture.cache.layoutBuildCount;
+    final coverage = _finish(fixture.preparedCursor(0, fragments));
+    expect(fixture.cache.layoutBuildCount, builds);
+    expect(coverage.hasClippedGlyphs, isFalse);
+    expect(coverage.points.map((point) => point.sourceRune).toSet(), {
+      0,
+      1,
+      2,
+      3,
+      13,
+      14,
+      15,
+    });
+    expect(fragments.every((fragment) => fragment.isActive), isTrue);
+    final tail = _finish(
+      fixture.preparedCursor(1, fixture.prepareFragments(1)),
+    );
+    expect(tail.points.map((point) => point.sourceRune).toSet(), {23, 24});
+  });
+
+  test('mixed coverage rejects clipped glyphs even when UI selection boxes are clipped inside the frame', () {
+    final fixture = _Fixture(
+      '<p style="line-height:.25">X<ruby>A<rt>x</rt></ruby>Z</p>',
+      width: 20,
+      height: 100,
+    );
+    final fragments = fixture.prepareFragments(0);
+    final mixed = fragments.single as ForumBodyPreparedInlineFragment;
+    final clipped = mixed.view.selectionBoxes(3, 4);
+    final actual = mixed.glyphBoxes(3, 4);
+    expect(clipped, isNotEmpty);
+    expect(actual, isNotEmpty);
+    expect(
+      actual.any((box) => box.bottom > mixed.view.height || box.top < 0),
+      isTrue,
+    );
+    expect(
+      clipped.every((box) => box.bottom <= mixed.view.height && box.top >= 0),
+      isTrue,
+    );
+    final coverage = _finish(fixture.preparedCursor(0, fragments));
+    expect(coverage.hasClippedGlyphs, isTrue);
+    expect(coverage.points.where((point) => point.sourceRune == 4), isEmpty);
+  });
+
+  test('hidden annotation glyphs cannot prove source positions through the parent atom', () {
+    final fixture = _Fixture(
+      '<p>X<ruby>AB<rt style="visibility:hidden">xyz</rt></ruby>Y</p>',
+      width: 100,
+      height: 30,
+    );
+    final coverage = _finish(
+      fixture.preparedCursor(0, fixture.prepareFragments(0)),
+    );
+    expect(coverage.points.map((point) => point.sourceRune).toSet(), {
+      0,
+      1,
+      2,
+      3,
+      6,
+      7,
+    });
+    expect(coverage.points.where((point) => point.sourceRune == 4), isEmpty);
+    expect(coverage.points.where((point) => point.sourceRune == 5), isEmpty);
+  });
+
+  test('continuation mixed rows expose fragment-local native geometry without changing source coordinates', () {
+    final fixture = _Fixture(
+      '<p>X<ruby>AB<rt>xy</rt></ruby><ruby>CD<rt>zw</rt></ruby>Y</p>',
+      width: 30,
+      height: 15,
+    );
+    final fragments = fixture.prepareFragments(1);
+    final mixed = fragments.single as ForumBodyPreparedInlineFragment;
+    expect(mixed.view.startLine, greaterThan(0));
+    final line = mixed.lines.single;
+    expect(line.top, 0);
+    expect(line.bottom, mixed.view.height);
+    expect(line.startUtf16, greaterThan(0));
+    final coverage = _finish(fixture.preparedCursor(1, fragments));
+    expect(coverage.points.map((point) => point.sourceRune).toSet(), {
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+    });
+  });
+
+  test('retiring one mixed child discards partial proof without releasing borrowed siblings', () {
+    final fixture = _Fixture('<p>X<ruby>AB<rt>xy</rt></ruby>Y</p>');
+    final fragments = fixture.prepareFragments(0);
+    final handles = fragments.single.nativeLeases.toList();
+    expect(handles.length, greaterThan(1));
+    final cursor = fixture.preparedCursor(0, fragments);
+    cursor.advance(maxGraphemes: 1, maxFragments: 1);
+    handles.last.release();
+    expect(
+      () => cursor.advance(maxGraphemes: 1, maxFragments: 1),
+      _failure(NovelReaderNativeCoverageFailure.retired),
+    );
+    expect(() => cursor.result, throwsStateError);
+    expect(handles.first.isActive, isTrue);
+    cursor.close();
+    expect(handles.first.isActive, isTrue);
+    fragments.single.close();
+    expect(handles.every((handle) => !handle.isActive), isTrue);
+  });
 
   test('bounded native box checks publish only whole immutable proof and never shape', () {
     final fixture = _Fixture('<p>abcdef</p>', width: 30, height: 20);

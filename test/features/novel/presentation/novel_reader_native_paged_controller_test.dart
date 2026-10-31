@@ -110,6 +110,44 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final source in [
+    '<p style="line-height:.25">X<ruby>A<rt>x</rt></ruby>Z</p>',
+    '<p>a</p><p style="line-height:.25">b</p>',
+  ]) {
+    test(
+      'clipped actual glyphs cannot confirm body-end visibility: $source',
+      () async {
+        final fixture = NativeReaderTestFixture(source, width: 20, height: 100);
+        final controller = _controller(fixture);
+        controller.start();
+        await _until(
+          () => controller.readyTarget != null || controller.error != null,
+        );
+        expect(controller.error, isNull);
+        final delivery = controller.readyTarget!;
+        final fragments = delivery.view.takeFragments();
+        expect(delivery.view.coverage.points, isNotEmpty);
+        expect(delivery.view.coverage.hasClippedGlyphs, isTrue);
+        final position = controller.confirmPreparedVisible(
+          delivery,
+          fragments,
+        )!;
+        expect(position.isWholeBodyVisible, isFalse);
+        expect(position.isBodyEndVisible, isFalse);
+        expect(
+          controller.confirmPreparedChapterEndNavigation(
+            delivery.view,
+            fragments,
+          ),
+          isNull,
+        );
+        for (final fragment in fragments) {
+          fragment.close();
+        }
+      },
+    );
+  }
+
   for (final edge in NovelReaderChapterEdge.values) {
     test(
       '$edge provenance requires actual binding and cannot leak to a subsequent turn',

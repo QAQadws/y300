@@ -339,6 +339,16 @@ final class NovelReaderNativePagedController {
     NovelReaderNativePageDelivery delivery,
     List<ForumBodyParagraphLease> leases,
   ) {
+    final fragments = _legacyFragments(delivery.view, leases);
+    return fragments == null
+        ? null
+        : confirmPreparedVisible(delivery, fragments);
+  }
+
+  NovelReaderPaginationPosition? confirmPreparedVisible(
+    NovelReaderNativePageDelivery delivery,
+    List<ForumBodyPreparedTextFragment> fragments,
+  ) {
     if (isClosed ||
         _suspended ||
         (_error != null && !_prefixNavigation) ||
@@ -350,11 +360,11 @@ final class NovelReaderNativePagedController {
       return null;
     }
     try {
-      validateForumBodyTextPageBinding(
+      validateForumBodyPreparedTextPageBinding(
         snapshot: delivery.view.snapshot,
         pageIndex: delivery.pageIndex,
         layoutId: _snapshot!.layoutId,
-        leases: leases,
+        fragments: fragments,
       );
     } on ForumBodyTextPageSurfaceException {
       return null;
@@ -366,7 +376,7 @@ final class NovelReaderNativePagedController {
     final actual =
         anchor?.anchor ??
         (coverage.points.isEmpty ? null : coverage.points.first.anchor);
-    final wholePage = actual != null && _wholePageVisible(delivery, leases);
+    final wholePage = actual != null && _wholePageVisible(delivery, fragments);
     _visible = delivery;
     _target = null;
     _phase = _error == null
@@ -503,6 +513,16 @@ final class NovelReaderNativePagedController {
     NovelReaderNativePageView view,
     List<ForumBodyParagraphLease> leases,
   ) {
+    final fragments = _legacyFragments(view, leases);
+    return fragments == null
+        ? null
+        : confirmPreparedChapterEndNavigation(view, fragments);
+  }
+
+  NovelReaderPaginationPosition? confirmPreparedChapterEndNavigation(
+    NovelReaderNativePageView view,
+    List<ForumBodyPreparedTextFragment> fragments,
+  ) {
     if (isClosed ||
         _suspended ||
         _ticket != null ||
@@ -513,11 +533,11 @@ final class NovelReaderNativePagedController {
       return null;
     }
     try {
-      validateForumBodyTextPageBinding(
+      validateForumBodyPreparedTextPageBinding(
         snapshot: view.snapshot,
         pageIndex: view.pageIndex,
         layoutId: _snapshot!.layoutId,
-        leases: leases,
+        fragments: fragments,
       );
     } on ForumBodyTextPageSurfaceException {
       return null;
@@ -529,11 +549,11 @@ final class NovelReaderNativePagedController {
       hasUserNavigated: true,
       restoredAnchor: _lastPosition?.anchor,
     );
-    if (!_wholePageVisible(delivery, leases)) return null;
+    if (!_wholePageVisible(delivery, fragments)) return null;
     _requestId++;
     _target = delivery;
     _prefixNavigation = _error != null;
-    return confirmVisible(delivery, leases);
+    return confirmPreparedVisible(delivery, fragments);
   }
 
   void _startPublishedNavigation(int page, {bool resolveAnchor = false}) {
@@ -726,30 +746,51 @@ final class NovelReaderNativePagedController {
 
   bool _wholePageVisible(
     NovelReaderNativePageDelivery delivery,
-    List<ForumBodyParagraphLease> leases,
+    List<ForumBodyPreparedTextFragment> fragments,
   ) {
     final snapshot = delivery.view.snapshot;
+    if (delivery.view.coverage.hasClippedGlyphs) return false;
     for (final (index, fragment)
         in snapshot[delivery.pageIndex].fragments.indexed) {
-      final layout = leases[index].layout;
-      if (layout.lines.isEmpty) continue;
-      final window = layout.fragment(fragment.startLine, fragment.endLine);
-      for (var row = fragment.startLine; row < fragment.endLine; row++) {
-        final line = layout.lines[row];
-        final top = fragment.top + line.top - window.top;
+      for (final line in fragments[index].lines) {
+        final top = fragment.top + line.top;
         if (line.left < -precisionErrorTolerance ||
             line.left + line.width > fragment.width + precisionErrorTolerance ||
             fragment.left + line.left < -precisionErrorTolerance ||
             fragment.left + line.left + line.width >
                 snapshot.width + precisionErrorTolerance ||
             top < -precisionErrorTolerance ||
-            fragment.top + line.bottom - window.top >
+            fragment.top + line.bottom >
                 snapshot.height + precisionErrorTolerance) {
           return false;
         }
       }
     }
     return true;
+  }
+
+  List<ForumBodyPreparedTextFragment>? _legacyFragments(
+    NovelReaderNativePageView view,
+    List<ForumBodyParagraphLease> leases,
+  ) {
+    try {
+      validateForumBodyTextPageBinding(
+        snapshot: view.snapshot,
+        pageIndex: view.pageIndex,
+        layoutId: view.snapshot.layoutId,
+        leases: leases,
+      );
+      return [
+        for (final (index, lease) in leases.indexed)
+          ForumBodyPreparedTextFragment.paragraph(
+            lease: lease,
+            startLine: view.snapshot[view.pageIndex].fragments[index].startLine,
+            endLine: view.snapshot[view.pageIndex].fragments[index].endLine,
+          ),
+      ];
+    } on ForumBodyTextPageSurfaceException {
+      return null;
+    }
   }
 
   void _restartProducer() {

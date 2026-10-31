@@ -65,6 +65,26 @@ final class ForumBodyParagraphLine {
   final int engineCoverageEndUtf16;
   final bool canBreakBefore;
   final bool canBreakAfter;
+
+  /// Translate only physical geometry; source/display/engine coordinates and
+  /// legal break boundaries keep their original explicit units.
+  ForumBodyParagraphLine shift(Offset offset) => ForumBodyParagraphLine(
+    top: top + offset.dy,
+    bottom: bottom + offset.dy,
+    baseline: baseline + offset.dy,
+    left: left + offset.dx,
+    width: width,
+    startUtf16: startUtf16,
+    endUtf16: endUtf16,
+    coverageStartUtf16: coverageStartUtf16,
+    coverageEndUtf16: coverageEndUtf16,
+    engineStartUtf16: engineStartUtf16,
+    engineEndUtf16: engineEndUtf16,
+    engineCoverageStartUtf16: engineCoverageStartUtf16,
+    engineCoverageEndUtf16: engineCoverageEndUtf16,
+    canBreakBefore: canBreakBefore,
+    canBreakAfter: canBreakAfter,
+  );
 }
 
 bool forumBodyIsDisplayLineBreak(int codeUnit) =>

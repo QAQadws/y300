@@ -7,7 +7,7 @@ import 'novel_reader_native_page_coverage.dart';
 
 enum NovelReaderNativePageViewState { owned, transferred, closed }
 
-/// Owns an unmounted, fully checked view. takeLeases transfers ownership to
+/// Owns an unmounted, fully checked view. takeFragments transfers ownership to
 /// the caller/Surface exactly once; a later close never releases mounted views.
 final class NovelReaderNativePageView {
   factory NovelReaderNativePageView.own({
@@ -23,22 +23,57 @@ final class NovelReaderNativePageView {
         ForumBodyTextPageSessionFailure.ownerRetired,
       );
     }
+    validateForumBodyTextPageBinding(
+      snapshot: session.snapshot,
+      pageIndex: pageIndex,
+      layoutId: session.snapshot.layoutId,
+      leases: leases,
+    );
+    return NovelReaderNativePageView.ownPrepared(
+      session: session,
+      pageIndex: pageIndex,
+      coverage: coverage,
+      parent: parent,
+      fragments: [
+        for (final (index, lease) in leases.indexed)
+          ForumBodyPreparedTextFragment.paragraph(
+            lease: lease,
+            startLine: session.snapshot[pageIndex].fragments[index].startLine,
+            endLine: session.snapshot[pageIndex].fragments[index].endLine,
+          ),
+      ],
+    );
+  }
+
+  factory NovelReaderNativePageView.ownPrepared({
+    required ForumBodyTextPageSession session,
+    required int pageIndex,
+    required List<ForumBodyPreparedTextFragment> fragments,
+    required NovelReaderNativePageCoverage coverage,
+    required NovelReaderPaginationCancellationToken parent,
+  }) {
+    parent.throwIfCancelled();
+    if (session.isClosed || session.isLayoutOwnerRetired) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.ownerRetired,
+      );
+    }
     final snapshot = session.snapshot;
     if (coverage.identity != snapshot.identity ||
         coverage.layoutId != snapshot.layoutId ||
         coverage.pageIndex != pageIndex) {
       throw StateError('Native view coverage identity changed');
     }
-    validateForumBodyTextPageBinding(
+    validateForumBodyPreparedTextPageBinding(
       snapshot: snapshot,
       pageIndex: pageIndex,
       layoutId: snapshot.layoutId,
-      leases: leases,
+      fragments: fragments,
     );
     final view = NovelReaderNativePageView._(
       snapshot,
       pageIndex,
-      List.unmodifiable(leases),
+      List.unmodifiable(fragments),
       coverage,
     );
     view._bind(session, parent);
@@ -48,13 +83,13 @@ final class NovelReaderNativePageView {
   NovelReaderNativePageView._(
     this.snapshot,
     this.pageIndex,
-    this._leases,
+    this._fragments,
     this.coverage,
   );
   final ForumBodyTextPageSnapshot snapshot;
   final int pageIndex;
   final NovelReaderNativePageCoverage coverage;
-  List<ForumBodyParagraphLease> _leases;
+  List<ForumBodyPreparedTextFragment> _fragments;
   NovelReaderNativePageViewState _state = NovelReaderNativePageViewState.owned;
   void Function()? _removeParent;
   StreamSubscription<void>? _retirement;
@@ -63,7 +98,7 @@ final class NovelReaderNativePageView {
   NovelReaderNativePageViewState get state => _state;
   bool get isReady =>
       _state == NovelReaderNativePageViewState.owned &&
-      _leases.every((lease) => lease.isActive);
+      _fragments.every((fragment) => fragment.isActive);
 
   void _bind(
     ForumBodyTextPageSession session,
@@ -89,21 +124,33 @@ final class NovelReaderNativePageView {
   }
 
   List<ForumBodyParagraphLease> takeLeases() {
+    if (_fragments.any(
+      (fragment) => fragment is! ForumBodyPreparedParagraphFragment,
+    )) {
+      throw StateError('Native view contains mixed fragments');
+    }
+    return [
+      for (final fragment in takeFragments())
+        (fragment as ForumBodyPreparedParagraphFragment).lease,
+    ];
+  }
+
+  List<ForumBodyPreparedTextFragment> takeFragments() {
     if (_state != NovelReaderNativePageViewState.owned) {
       throw StateError('Native view leases already transferred or retired');
     }
     try {
-      validateForumBodyTextPageBinding(
+      validateForumBodyPreparedTextPageBinding(
         snapshot: snapshot,
         pageIndex: pageIndex,
         layoutId: snapshot.layoutId,
-        leases: _leases,
+        fragments: _fragments,
       );
-      final leases = _leases;
-      _leases = const [];
+      final fragments = _fragments;
+      _fragments = const [];
       _state = NovelReaderNativePageViewState.transferred;
       _unbind();
-      return leases;
+      return fragments;
     } catch (_) {
       close();
       rethrow;
@@ -125,9 +172,9 @@ final class NovelReaderNativePageView {
     if (_state == NovelReaderNativePageViewState.closed) return;
     _state = NovelReaderNativePageViewState.closed;
     _unbind();
-    for (final lease in _leases) {
-      lease.release();
+    for (final fragment in _fragments) {
+      fragment.close();
     }
-    _leases = const [];
+    _fragments = const [];
   }
 }

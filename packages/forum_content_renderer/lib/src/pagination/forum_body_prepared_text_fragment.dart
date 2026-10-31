@@ -1,6 +1,10 @@
+import 'package:flutter/painting.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
+
 import '../inline/forum_body_inline_paragraph_view.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
+import '../paragraph/forum_body_paragraph_content.dart';
 
 /// One complete prepared fragment. Each concurrently mounted view must own
 /// distinct handles even when they share the same cache entry. These values
@@ -20,6 +24,19 @@ sealed class ForumBodyPreparedTextFragment {
   /// Borrowed for the same owner's page-budget checks and lifecycle counts.
   /// Reading this list never acquires aliases or transfers the handles.
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases;
+
+  HtmlDisplayTextProjection get projection;
+  List<ForumBodyParagraphRun> get runs;
+
+  /// Current native rows, with physical coordinates relative to this fragment.
+  /// Logical display/source offsets are unchanged by the window translation.
+  Iterable<ForumBodyParagraphLine> get lines;
+
+  /// Real native glyph boxes in fragment-local coordinates, bounded to this
+  /// fragment's display range but deliberately NOT clipped to its frame. A
+  /// coverage checker must reject a partly hidden glyph, not prove its clipped
+  /// rectangle. Mixed atoms resolve through their actual prepared child glyphs.
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16);
   void close();
 }
 
@@ -57,6 +74,46 @@ final class ForumBodyPreparedParagraphFragment
   @override
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [lease];
   @override
+  HtmlDisplayTextProjection get projection => lease.content.projection;
+  @override
+  List<ForumBodyParagraphRun> get runs => lease.content.runs;
+  @override
+  Iterable<ForumBodyParagraphLine> get lines {
+    final window = view;
+    if (window == null) return const [];
+    final top = window.top;
+    return lease.layout.lines
+        .getRange(startLine, endLine)
+        .map((line) => line.shift(Offset(0, -top)));
+  }
+
+  @override
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) {
+    RangeError.checkValidRange(startUtf16, endUtf16, projection.text.length);
+    final window = view;
+    if (window == null) return const [];
+    final start = startUtf16.clamp(
+      window.coverageStartUtf16,
+      window.coverageEndUtf16,
+    );
+    final end = endUtf16.clamp(
+      window.coverageStartUtf16,
+      window.coverageEndUtf16,
+    );
+    if (start >= end) return const [];
+    return List.unmodifiable([
+      for (final box in lease.layout.selectionBoxes(start, end))
+        TextBox.fromLTRBD(
+          box.left,
+          box.top - window.top,
+          box.right,
+          box.bottom - window.top,
+          box.direction,
+        ),
+    ]);
+  }
+
+  @override
   void close() => lease.release();
 }
 
@@ -68,6 +125,15 @@ final class ForumBodyPreparedInlineFragment
   bool get isActive => view.isActive;
   @override
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => view.nativeLeases;
+  @override
+  HtmlDisplayTextProjection get projection => view.content.projection.display;
+  @override
+  List<ForumBodyParagraphRun> get runs => view.content.runs;
+  @override
+  Iterable<ForumBodyParagraphLine> get lines => view.lines;
+  @override
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) =>
+      view.selectionBoxes(startUtf16, endUtf16, clipToView: false);
   @override
   void close() => view.close();
 }

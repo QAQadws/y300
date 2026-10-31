@@ -54,6 +54,38 @@ final class NovelReaderNativePageCoverageCursor {
     NovelReaderNativeCoverageLimits limits =
         const NovelReaderNativeCoverageLimits(),
   }) {
+    validateForumBodyTextPageBinding(
+      snapshot: snapshot,
+      pageIndex: pageIndex,
+      layoutId: layoutId,
+      leases: leases,
+    );
+    return NovelReaderNativePageCoverageCursor.prepared(
+      anchors: anchors,
+      snapshot: snapshot,
+      pageIndex: pageIndex,
+      layoutId: layoutId,
+      fragments: [
+        for (final (index, lease) in leases.indexed)
+          ForumBodyPreparedTextFragment.paragraph(
+            lease: lease,
+            startLine: snapshot[pageIndex].fragments[index].startLine,
+            endLine: snapshot[pageIndex].fragments[index].endLine,
+          ),
+      ],
+      limits: limits,
+    );
+  }
+
+  factory NovelReaderNativePageCoverageCursor.prepared({
+    required NovelReaderNativeAnchorMap anchors,
+    required ForumBodyTextPageSnapshot snapshot,
+    required int pageIndex,
+    required String layoutId,
+    required List<ForumBodyPreparedTextFragment> fragments,
+    NovelReaderNativeCoverageLimits limits =
+        const NovelReaderNativeCoverageLimits(),
+  }) {
     if (limits.maxFragments < 0 ||
         limits.maxGraphemes < 0 ||
         limits.maxPoints < 0) {
@@ -65,18 +97,18 @@ final class NovelReaderNativePageCoverageCursor {
     if (snapshot[pageIndex].fragments.length > limits.maxFragments) {
       _fail(NovelReaderNativeCoverageFailure.budget);
     }
-    validateForumBodyTextPageBinding(
+    validateForumBodyPreparedTextPageBinding(
       snapshot: snapshot,
       pageIndex: pageIndex,
       layoutId: layoutId,
-      leases: leases,
+      fragments: fragments,
     );
     return NovelReaderNativePageCoverageCursor._(
       anchors,
       snapshot,
       pageIndex,
       layoutId,
-      List.unmodifiable(leases),
+      List.unmodifiable(fragments),
       limits,
     );
   }
@@ -86,13 +118,13 @@ final class NovelReaderNativePageCoverageCursor {
     this._snapshot,
     this.pageIndex,
     this.layoutId,
-    this._leases,
+    this._fragments,
     this.limits,
   );
 
   NovelReaderNativeAnchorMap? _anchors;
   ForumBodyTextPageSnapshot? _snapshot;
-  List<ForumBodyParagraphLease> _leases;
+  List<ForumBodyPreparedTextFragment> _fragments;
   final int pageIndex;
   final String layoutId;
   final NovelReaderNativeCoverageLimits limits;
@@ -101,8 +133,9 @@ final class NovelReaderNativePageCoverageCursor {
   NovelReaderNativePageCoverage? _result;
   int _fragmentIndex = 0;
   int _graphemes = 0;
+  bool _hasClippedGlyphs = false;
   Iterator<({int startUtf16, int endUtf16})>? _ranges;
-  ForumBodyParagraphLayout? _layout;
+  ForumBodyPreparedTextFragment? _fragment;
   Rect _clip = Rect.zero;
 
   NovelReaderNativeCoverageState get state => _state;
@@ -137,7 +170,7 @@ final class NovelReaderNativePageCoverageCursor {
           _fragmentIndex++;
           fragments++;
           _ranges = null;
-          _layout = null;
+          _fragment = null;
           continue;
         }
         if (_graphemes >= limits.maxGraphemes) {
@@ -167,25 +200,21 @@ final class NovelReaderNativePageCoverageCursor {
   Iterator<({int startUtf16, int endUtf16})> _openFragment(
     ForumBodyTextPageFragment fragment,
   ) {
-    final layout = _leases[_fragmentIndex].layout;
-    _layout = layout;
-    final viewTop = layout.lines.isEmpty
-        ? 0.0
-        : layout.fragment(fragment.startLine, fragment.endLine).top;
+    final prepared = _fragments[_fragmentIndex];
+    _fragment = prepared;
     final snapshot = _snapshot!;
-    _clip = Rect.fromLTWH(0, viewTop, fragment.width, fragment.height)
-        .intersect(
-          Rect.fromLTWH(
-            -fragment.left,
-            viewTop - fragment.top,
-            snapshot.width,
-            snapshot.height,
-          ),
-        );
+    _clip = Rect.fromLTWH(0, 0, fragment.width, fragment.height).intersect(
+      Rect.fromLTWH(
+        -fragment.left,
+        -fragment.top,
+        snapshot.width,
+        snapshot.height,
+      ),
+    );
     if (_clip.isEmpty) {
       return const <({int startUtf16, int endUtf16})>[].iterator;
     }
-    return layout.projection
+    return prepared.projection
         .graphemeRanges(
           startUtf16: fragment.coverageStartUtf16,
           endUtf16: fragment.coverageEndUtf16,
@@ -194,18 +223,15 @@ final class NovelReaderNativePageCoverageCursor {
   }
 
   void _includeGrapheme(int start, int end) {
-    final content = _leases[_fragmentIndex].content;
-    if (!_visibleStyles(content, start, end)) return;
-    final layout = _layout!;
-    final boxes = layout.selectionBoxes(start, end);
+    final prepared = _fragment!;
+    if (!_visibleStyles(prepared.projection, prepared.runs, start, end)) return;
+    final boxes = prepared.glyphBoxes(start, end);
     if (boxes.isEmpty) {
       // An explicit separator belongs to the preceding physical row, even
       // when the engine emits no selection box. Require that entire measured
       // row to fit; do not invent a caret or blank-line height.
-      final fragment = _snapshot![pageIndex].fragments[_fragmentIndex];
       var coveredBreak = false;
-      for (var index = fragment.startLine; index < fragment.endLine; index++) {
-        final line = layout.lines[index];
+      for (final line in prepared.lines) {
         if (line.endUtf16 == start &&
             line.coverageEndUtf16 == end &&
             _contains(
@@ -222,10 +248,11 @@ final class NovelReaderNativePageCoverageCursor {
       }
       if (!coveredBreak) return;
     } else if (boxes.any((box) => !_contains(box.toRect()))) {
+      _hasClippedGlyphs = true;
       return;
     }
-    _addPoint(content, start, HtmlProjectionAffinity.downstream);
-    _addPoint(content, end, HtmlProjectionAffinity.upstream);
+    _addPoint(prepared.projection, start, HtmlProjectionAffinity.downstream);
+    _addPoint(prepared.projection, end, HtmlProjectionAffinity.upstream);
   }
 
   bool _contains(Rect box) =>
@@ -236,11 +263,11 @@ final class NovelReaderNativePageCoverageCursor {
       box.bottom <= _clip.bottom + precisionErrorTolerance;
 
   void _addPoint(
-    ForumBodyParagraphContent content,
+    HtmlDisplayTextProjection projection,
     int offset,
     HtmlProjectionAffinity affinity,
   ) {
-    final source = content.projection.sourceAtUtf16(offset, affinity: affinity);
+    final source = projection.sourceAtUtf16(offset, affinity: affinity);
     final anchor = _anchors!.anchorAtSourceRune(
       source.sourceRune,
       affinity: affinity,
@@ -262,7 +289,7 @@ final class NovelReaderNativePageCoverageCursor {
   }
 
   void _ensureLive() {
-    if (_leases.any((lease) => !lease.isActive)) {
+    if (_fragments.any((fragment) => !fragment.isActive)) {
       _fail(NovelReaderNativeCoverageFailure.retired);
     }
   }
@@ -273,6 +300,7 @@ final class NovelReaderNativePageCoverageCursor {
       identity: _snapshot!.identity,
       layoutId: layoutId,
       pageIndex: pageIndex,
+      hasClippedGlyphs: _hasClippedGlyphs,
       points: _points,
     );
     _state = NovelReaderNativeCoverageState.complete;
@@ -283,9 +311,9 @@ final class NovelReaderNativePageCoverageCursor {
     _points.clear();
     _anchors = null;
     _snapshot = null;
-    _leases = const [];
+    _fragments = const [];
     _ranges = null;
-    _layout = null;
+    _fragment = null;
   }
 
   void close() {
@@ -296,8 +324,13 @@ final class NovelReaderNativePageCoverageCursor {
   }
 }
 
-bool _visibleStyles(ForumBodyParagraphContent content, int start, int end) {
-  final parts = content.projection.parts;
+bool _visibleStyles(
+  HtmlDisplayTextProjection projection,
+  List<ForumBodyParagraphRun> runs,
+  int start,
+  int end,
+) {
+  final parts = projection.parts;
   var low = 0;
   var high = parts.length;
   while (low < high) {
@@ -313,7 +346,7 @@ bool _visibleStyles(ForumBodyParagraphContent content, int start, int end) {
     index < parts.length && parts[index].utf16Start < end;
     index++
   ) {
-    if (content.runs[parts[index].runIndex].style.visibilityHidden) {
+    if (runs[parts[index].runIndex].style.visibilityHidden) {
       return false;
     }
   }

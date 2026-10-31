@@ -272,7 +272,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   late final double _height;
   StreamSubscription<void>? _changes;
   final _mountedPages =
-      <NovelReaderNativePageView, List<ForumBodyParagraphLease>>{};
+      <NovelReaderNativePageView, List<ForumBodyPreparedTextFragment>>{};
   int _page = 0;
   int _frame = 0;
   bool _scrolling = false;
@@ -436,7 +436,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     }
     for (final entry in _mountedPages.entries) {
       if (entry.key.pageIndex != page) continue;
-      final position = widget.controller.confirmChapterEndNavigation(
+      final position = widget.controller.confirmPreparedChapterEndNavigation(
         entry.key,
         entry.value,
       );
@@ -648,9 +648,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         _confirmChapterRelease();
         return;
       }
-      final leases = _mountedPages[target.view];
-      if (leases == null) return;
-      final position = controller.confirmVisible(target, leases);
+      final fragments = _mountedPages[target.view];
+      if (fragments == null) return;
+      final position = controller.confirmPreparedVisible(target, fragments);
       if (position != null) {
         _tapTurn = null;
         widget.onPositionChanged(position);
@@ -748,9 +748,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
 
   void _mounted(
     NovelReaderNativePageView view,
-    List<ForumBodyParagraphLease> leases,
+    List<ForumBodyPreparedTextFragment> fragments,
   ) {
-    _mountedPages[view] = leases;
+    _mountedPages[view] = fragments;
     _afterFrame();
   }
 
@@ -871,7 +871,10 @@ class _NativeMountedPage extends StatefulWidget {
   });
   final NovelReaderNativePageView view;
   final bool keepAlive;
-  final void Function(NovelReaderNativePageView, List<ForumBodyParagraphLease>)
+  final void Function(
+    NovelReaderNativePageView,
+    List<ForumBodyPreparedTextFragment>,
+  )
   onMounted;
   final ValueChanged<NovelReaderNativePageView> onUnmounted;
 
@@ -881,13 +884,13 @@ class _NativeMountedPage extends StatefulWidget {
 
 class _NativeMountedPageState extends State<_NativeMountedPage>
     with AutomaticKeepAliveClientMixin {
-  late final List<ForumBodyParagraphLease> _leases;
+  late final List<ForumBodyPreparedTextFragment> _fragments;
 
   @override
   void initState() {
     super.initState();
-    _leases = widget.view.takeLeases();
-    widget.onMounted(widget.view, _leases);
+    _fragments = widget.view.takeFragments();
+    widget.onMounted(widget.view, _fragments);
   }
 
   @override
@@ -902,13 +905,15 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_leases.any((lease) => !lease.isActive)) return const SizedBox.shrink();
+    if (_fragments.any((fragment) => !fragment.isActive)) {
+      return const SizedBox.shrink();
+    }
     final view = widget.view;
-    return ForumBodyTextPageSurface(
+    return ForumBodyTextPageSurface.prepared(
       snapshot: view.snapshot,
       pageIndex: view.pageIndex,
       layoutId: view.snapshot.layoutId,
-      leases: _leases,
+      fragments: _fragments,
     );
   }
 
@@ -916,8 +921,8 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
   void dispose() {
     widget.onUnmounted(widget.view);
     // Surface normally releases these; also handle an abandoned/unpainted cell.
-    for (final lease in _leases) {
-      lease.release();
+    for (final fragment in _fragments) {
+      fragment.close();
     }
     super.dispose();
   }

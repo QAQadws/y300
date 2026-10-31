@@ -26,11 +26,16 @@ final class NovelReaderNativePageCoverage {
     required this.layoutId,
     required this.pageIndex,
     required Iterable<NovelReaderNativeCoveragePoint> points,
+    this.hasClippedGlyphs = false,
   }) : points = List.unmodifiable(points);
   final ForumBodyIdentity identity;
   final String layoutId;
   final int pageIndex;
   final List<NovelReaderNativeCoveragePoint> points;
+
+  /// A visible-style glyph extends outside the actual fragment/page clip.
+  /// Complete native rows alone cannot prove body-end visibility in that case.
+  final bool hasClippedGlyphs;
 
   /// Only matching format/text/episode/node/offset is exact. Endpoint plateaus
   /// choose the first downstream or last upstream point in this page. This

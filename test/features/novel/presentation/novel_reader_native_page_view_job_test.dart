@@ -69,6 +69,97 @@ Matcher get _cancelled => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'mixed jobs transfer all native children once and mounted surfaces own their lifetime',
+    (tester) async {
+      final fixture = NativeReaderTestFixture(
+        '<p>X<ruby>AB<rp>(fallback)</rp><rt>xy</rt></ruby>Y</p>',
+        width: 100,
+        height: 30,
+      );
+      fixture.cache.clearUnpinned();
+      final frames = _Frames();
+      final job = _job(fixture, frames);
+      final running = job.run();
+      var previous = fixture.cache.layoutBuildCount;
+      while (job.state != NovelReaderNativeViewJobState.complete) {
+        expect(frames.pending, isNotEmpty);
+        frames.pending.removeFirst().complete();
+        await tester.pump();
+        expect(fixture.cache.layoutBuildCount - previous, lessThanOrEqualTo(1));
+        previous = fixture.cache.layoutBuildCount;
+      }
+      final view = await running;
+      expect(view.coverage.points, hasLength(12));
+      expect(view.takeLeases, throwsStateError);
+      expect(view.isReady, isTrue);
+      final fragments = view.takeFragments();
+      expect(fragments.single, isA<ForumBodyPreparedInlineFragment>());
+      final handles = fragments.single.nativeLeases.toList();
+      expect(handles, hasLength(3));
+      expect(handles.every((handle) => handle.isActive), isTrue);
+      expect(view.takeFragments, throwsStateError);
+      view.close();
+      fixture.parent.cancel();
+      expect(handles.every((handle) => handle.isActive), isTrue);
+      final builds = fixture.cache.layoutBuildCount;
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ForumBodyTextPageSurface.prepared(
+              snapshot: view.snapshot,
+              pageIndex: 0,
+              layoutId: view.snapshot.layoutId,
+              fragments: fragments,
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(fixture.cache.layoutBuildCount, builds);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(handles.every((handle) => !handle.isActive), isTrue);
+      expect(fixture.cache.activeLeases, 0);
+      expect(fixture.session.reservedViewLeases, 0);
+    },
+  );
+
+  test('mixed coverage failure rolls back every issued child and can retry the same source page', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>X<ruby>AB<rt>xy</rt></ruby>Y</p>',
+    );
+    final frames = _Frames();
+    final job = _job(
+      fixture,
+      frames,
+      limits: const NovelReaderNativeViewJobLimits(
+        coverage: NovelReaderNativeCoverageLimits(maxPoints: 1),
+      ),
+    );
+    final running = job.run();
+    final failed = expectLater(
+      running,
+      throwsA(isA<NovelReaderNativeCoverageException>()),
+    );
+    await frames.until(() => job.state == NovelReaderNativeViewJobState.failed);
+    await failed;
+    expect(fixture.cache.activeLeases, 0);
+    expect(fixture.session.reservedViewLeases, 0);
+    expect(fixture.session.snapshot, hasLength(1));
+    final retry = _job(fixture, frames);
+    final retried = retry.run();
+    await frames.until(
+      () => retry.state == NovelReaderNativeViewJobState.complete,
+    );
+    final view = await retried;
+    final fragments = view.takeFragments();
+    expect(fragments.single, isA<ForumBodyPreparedInlineFragment>());
+    fragments.single.close();
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   test('cancelling a budget wait detaches only that task and allows a fresh request', () async {
     final fixture = NativeReaderTestFixture(
       '<p>a</p><p>b</p>',

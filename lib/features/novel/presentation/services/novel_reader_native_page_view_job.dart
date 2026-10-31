@@ -109,7 +109,7 @@ final class NovelReaderNativePageViewJob {
   int _steps = 0;
   int _frames = 0;
   NovelReaderNativePageCoverageCursor? _coverage;
-  List<ForumBodyParagraphLease> _leases = const [];
+  List<ForumBodyPreparedTextFragment> _fragments = const [];
   Future<NovelReaderNativePageView>? _running;
   NovelReaderNativeViewJobState _state = NovelReaderNativeViewJobState.pending;
   void Function()? _removeParent;
@@ -203,14 +203,14 @@ final class NovelReaderNativePageViewJob {
           await _yieldFrame();
         }
       }
-      _leases = preparation.takeLeases();
+      _fragments = preparation.takeFragments();
       _guard();
-      final coverage = NovelReaderNativePageCoverageCursor(
+      final coverage = NovelReaderNativePageCoverageCursor.prepared(
         anchors: _anchors!,
         snapshot: preparation.snapshot,
         pageIndex: preparation.pageIndex,
         layoutId: preparation.snapshot.layoutId,
-        leases: _leases,
+        fragments: _fragments,
         limits: limits.coverage,
       );
       _coverage = coverage;
@@ -223,16 +223,16 @@ final class NovelReaderNativePageViewJob {
         );
         _guard();
       }
-      final view = NovelReaderNativePageView.own(
+      final view = NovelReaderNativePageView.ownPrepared(
         session: _session!,
         pageIndex: preparation.pageIndex,
-        leases: _leases,
+        fragments: _fragments,
         coverage: coverage.result,
         parent: _parent!,
       );
       try {
         _guard();
-        _leases = const [];
+        _fragments = const [];
         _state = NovelReaderNativeViewJobState.complete;
         return view;
       } catch (_) {
@@ -298,10 +298,10 @@ final class NovelReaderNativePageViewJob {
     _coverage = null;
     _preparation?.close();
     _preparation = null;
-    for (final lease in _leases) {
-      lease.release();
+    for (final fragment in _fragments) {
+      fragment.close();
     }
-    _leases = const [];
+    _fragments = const [];
     _session = null;
     _anchors = null;
     _parent = null;

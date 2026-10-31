@@ -5,6 +5,8 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import 'forum_body_inline_paragraph_layout.dart';
 import 'forum_body_inline_span_content.dart';
+import '../paragraph/forum_body_paragraph_layout.dart'
+    show ForumBodyParagraphLine;
 import 'forum_body_ruby_group_layout.dart';
 
 enum ForumBodyInlineViewFailure { leases, coverage, identity, geometry }
@@ -137,6 +139,19 @@ final class ForumBodyInlineParagraphView {
   }
 
   Iterable<int> get atomIndices => _children.keys;
+
+  /// Actual visible native rows in this view's physical coordinates. Returning
+  /// immutable row values neither borrows paint ownership nor proves coverage.
+  Iterable<ForumBodyParagraphLine> get lines {
+    _ensureActive();
+    final fragment = _fragment;
+    if (fragment == null) return const [];
+    final top = fragment.top;
+    return fragment.layout.lines
+        .getRange(startLine, endLine)
+        .map((line) => line.shift(Offset(0, -top)));
+  }
+
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_parent,
     for (final binding in _children.values) ...binding.group.nativeLeases,
@@ -227,7 +242,11 @@ final class ForumBodyInlineParagraphView {
 
   /// Resolves partial base/RT selections through the child's actual text
   /// geometry. A placeholder rectangle is never substituted for glyph boxes.
-  List<TextBox> selectionBoxes(int startUtf16, int endUtf16) {
+  List<TextBox> selectionBoxes(
+    int startUtf16,
+    int endUtf16, {
+    bool clipToView = true,
+  }) {
     _ensureActive();
     RangeError.checkValidRange(
       startUtf16,
@@ -240,10 +259,10 @@ final class ForumBodyInlineParagraphView {
     final selected = _fragment!.layout.selection(start, end);
     final result = <TextBox>[];
     void add(TextBox box, Offset translation) {
-      final rect = box
-          .toRect()
-          .shift(translation)
-          .intersect(Offset.zero & Size(width, height));
+      final raw = box.toRect().shift(translation);
+      final rect = clipToView
+          ? raw.intersect(Offset.zero & Size(width, height))
+          : raw;
       if (!rect.isEmpty) {
         result.add(
           TextBox.fromLTRBD(
