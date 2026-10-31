@@ -3,6 +3,57 @@ import 'package:test/test.dart';
 
 void main() {
   test(
+    'line windows enumerate only their actual complete display graphemes',
+    () {
+      final projection = HtmlDisplayTextProjection.build([
+        const HtmlDisplayTextRun(
+          text: '甲e\u0301🙂乙\n丙',
+          sourceRuneStart: 20,
+          whiteSpace: HtmlDisplayWhiteSpace.preWrap,
+        ),
+      ]);
+      expect(projection.graphemeRanges(startUtf16: 1, endUtf16: 6).toList(), [
+        (startUtf16: 1, endUtf16: 3),
+        (startUtf16: 3, endUtf16: 5),
+        (startUtf16: 5, endUtf16: 6),
+      ]);
+      expect(projection.graphemeRanges(startUtf16: 6, endUtf16: 7).single, (
+        startUtf16: 6,
+        endUtf16: 7,
+      ));
+      expect(projection.graphemeRanges(startUtf16: 8, endUtf16: 8), isEmpty);
+      for (final range in [(2, 6), (1, 4), (4, 4)]) {
+        expect(
+          () => projection
+              .graphemeRanges(startUtf16: range.$1, endUtf16: range.$2)
+              .toList(),
+          throwsArgumentError,
+        );
+      }
+      expect(
+        () => projection.graphemeRanges(startUtf16: -1, endUtf16: 0).toList(),
+        throwsRangeError,
+      );
+      expect(
+        () => projection.graphemeRanges(startUtf16: 0, endUtf16: 9).toList(),
+        throwsRangeError,
+      );
+    },
+  );
+
+  test('display grapheme windows do not fill missing source or empty text', () {
+    final projection = HtmlDisplayTextProjection.build([
+      const HtmlDisplayTextRun(text: 'a', sourceRuneStart: 0),
+      const HtmlDisplayTextRun(text: 'b', sourceRuneStart: 7),
+    ]);
+    expect(projection.graphemeRanges(startUtf16: 0, endUtf16: 2).length, 2);
+    expect(projection.sourceAtUtf16(1).isExact, isFalse);
+    expect(projection.sourceAtUtf16(1).sourceRune, 7);
+    final empty = HtmlDisplayTextProjection.build(const []);
+    expect(empty.graphemeRanges(startUtf16: 0, endUtf16: 0), isEmpty);
+  });
+
+  test(
     'source mapping equality ignores run partition but preserves coordinates',
     () {
       final whole = HtmlDisplayTextProjection.build([

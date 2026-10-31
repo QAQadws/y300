@@ -116,6 +116,31 @@ final class HtmlDisplayTextProjection {
     return true;
   }
 
+  /// Enumerates only complete display graphemes in a verified line window.
+  /// Invalid/non-grapheme endpoints are rejected rather than rounded. Source
+  /// gaps still require explicit sourceAtUtf16 affinity; these ranges do not
+  /// prove application semantic coverage or the visibility of any glyph.
+  Iterable<({int startUtf16, int endUtf16})> graphemeRanges({
+    required int startUtf16,
+    required int endUtf16,
+  }) sync* {
+    RangeError.checkValidRange(startUtf16, endUtf16, text.length);
+    final start = _lowerBound(_graphemeBoundaries, startUtf16);
+    final end = _lowerBound(_graphemeBoundaries, endUtf16);
+    if (_graphemeBoundaries[start] != startUtf16 ||
+        _graphemeBoundaries[end] != endUtf16) {
+      throw ArgumentError(
+        'Display range endpoints must be grapheme boundaries',
+      );
+    }
+    for (var index = start; index < end; index++) {
+      yield (
+        startUtf16: _graphemeBoundaries[index],
+        endUtf16: _graphemeBoundaries[index + 1],
+      );
+    }
+  }
+
   HtmlProjectedSourcePosition sourceAtUtf16(
     int offset, {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,
