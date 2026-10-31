@@ -236,3 +236,16 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 
 本绑定当前消费已配对的叶子 ruby；分层/多注音及正式分页准备、flow/session/page
 装配仍待完成。单项/分片像素和来源验证不能代替实际复杂正文页面的 profile 验收。
+
+## 普通与混排共享分页
+
+`ForumBodyTextPageComposer.appendInline` 接管已测量的父租约，与普通 append 共用同一
+行扫描、合法断界、段距/续页及稳定封页流程。只保留一个活跃父输入；完成、退出或失败
+释放父租约，组合器不接管子组。真实显示 coverage 与原始 sourceHint 来自父 display
+投影，不能把 U+FFFC 引擎范围用作显示或小说语义 offset；hint 仍不证明实际可见覆盖。
+
+快照只追加数值元数据并标记 `ForumBodyTextPageFragmentKind`，composer revision 为 6。
+排字、子租约或回调不进入已发布页；超高不可拆组明确失败，已封页前缀不受晚失败影响。
+只接受普通租约的旧页面绑定明确拒绝 inline 分片，不能用同尺寸的普通字形或父占位框
+冒充完整交付。下一步仍须将来源绑定的可见 view 和全部子绘图预算纳入既有页面准备/
+会话，再连接正式 flow；本组合能力不启用旧 renderer 兜底或自动切换阅读模式。

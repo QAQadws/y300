@@ -2,8 +2,10 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
+import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
@@ -14,6 +16,8 @@ enum ForumBodyTextPageFailure {
   pageLimit,
   fragmentLimit,
 }
+
+enum ForumBodyTextPageFragmentKind { paragraph, inline }
 
 final class ForumBodyTextPageException implements Exception {
   const ForumBodyTextPageException(this.failure);
@@ -39,6 +43,7 @@ final class ForumBodyTextPageFragment {
     required this.top,
     required this.width,
     required this.height,
+    required this.kind,
   });
   final int paragraphIndex;
   final String? path;
@@ -56,6 +61,7 @@ final class ForumBodyTextPageFragment {
   final double top;
   final double width;
   final double height;
+  final ForumBodyTextPageFragmentKind kind;
 }
 
 final class ForumBodyTextPage {
@@ -114,7 +120,7 @@ final class _PagePrefix extends ListBase<ForumBodyTextPage> {
       throw UnsupportedError('Read-only page prefix');
 }
 
-/// Low-level ordinary-text composition over actual native line geometry.
+/// Text and mixed-inline composition over actual native line geometry.
 /// The block layer resolves CSS/reader spacing and horizontal placement first;
 /// this class does not collapse margins or infer settings. It consumes at most
 /// one paragraph lease, releases it on completion/close/failure, and stops each
@@ -143,7 +149,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 5;
+  static const revision = 6;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -194,23 +200,57 @@ final class ForumBodyTextPageComposer {
     required double spaceBefore,
     required double spaceAtPageStart,
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
+  }) => _append(
+    input: _CompositionParagraph.paragraph(lease),
+    paragraphIndex: paragraphIndex,
+    left: left,
+    spaceBefore: spaceBefore,
+    spaceAtPageStart: spaceAtPageStart,
+    window: window,
+  );
+
+  /// Owns only the already measured parent. Child dimensions are part of its
+  /// native input; readable page delivery separately requires source-bound
+  /// visible child views, never parent paint or placeholder coverage alone.
+  void appendInline({
+    required ForumBodyInlineParagraphLease lease,
+    required int paragraphIndex,
+    required double left,
+    required double spaceBefore,
+    required double spaceAtPageStart,
+  }) => _append(
+    input: _CompositionParagraph.inline(lease),
+    paragraphIndex: paragraphIndex,
+    left: left,
+    spaceBefore: spaceBefore,
+    spaceAtPageStart: spaceAtPageStart,
+    window: ForumBodyParagraphWindow.full,
+  );
+
+  void _append({
+    required _CompositionParagraph input,
+    required int paragraphIndex,
+    required double left,
+    required double spaceBefore,
+    required double spaceAtPageStart,
+    required ForumBodyParagraphWindow window,
   }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
-    final layout = lease.layout;
+    input.ensureActive();
     if (paragraphIndex != _nextParagraphIndex ||
-        lease.content.identity != identity ||
+        input.identity != identity ||
         !left.isFinite ||
         left < 0 ||
-        left + layout.width > width ||
+        left + input.width > width ||
         !spaceBefore.isFinite ||
         !spaceAtPageStart.isFinite ||
         spaceAtPageStart < 0) {
       throw ArgumentError('Invalid paragraph composition inputs');
     }
-    final range = layout.lineWindow(window);
+    final range = input.lineWindow(window);
     _active = _ActiveParagraph(
-      lease,
+      input,
       paragraphIndex,
       left,
       spaceBefore,
@@ -299,7 +339,8 @@ final class ForumBodyTextPageComposer {
     var inspected = 0;
     try {
       final active = _active!;
-      final layout = active.lease.layout;
+      final layout = active.input;
+      layout.ensureActive();
       while (true) {
         if (layout.lines.isEmpty && active.groupEnd == null) {
           active.groupEnd = 0;
@@ -349,15 +390,15 @@ final class ForumBodyTextPageComposer {
         }
         final fragment = ForumBodyTextPageFragment._(
           paragraphIndex: active.index,
-          path: active.lease.content.path,
-          fontRevision: active.lease.content.fontRevision,
-          styleRevision: active.lease.content.styleRevision,
+          path: layout.path,
+          fontRevision: layout.fontRevision,
+          styleRevision: layout.styleRevision,
           startLine: firstLine,
           endLine: end,
           coverageStartUtf16: view?.coverageStartUtf16 ?? 0,
           coverageEndUtf16: view?.coverageEndUtf16 ?? 0,
           sourceHint: forumBodySourceHint(
-            active.lease.content.projection,
+            layout.projection,
             view?.coverageStartUtf16 ?? 0,
             view?.coverageEndUtf16 ?? 0,
           ),
@@ -365,6 +406,7 @@ final class ForumBodyTextPageComposer {
           top: top,
           width: layout.width,
           height: fragmentHeight,
+          kind: layout.kind,
         );
         if (continuation) {
           _draft[_draft.length - 1] = fragment;
@@ -379,7 +421,7 @@ final class ForumBodyTextPageComposer {
         active.groupEnd = null;
         final paragraphComplete = end == active.endLine;
         if (paragraphComplete) {
-          active.lease.release();
+          active.input.lease.release();
           _active = null;
           _nextParagraphIndex++;
         }
@@ -440,13 +482,79 @@ final class ForumBodyTextPageComposer {
   void close() {
     if (_closed) return;
     _closed = true;
-    _active?.lease.release();
+    _active?.input.lease.release();
     _active = null;
     _padding = null;
     _fragmentCount -= _draft.length;
     _draft.clear();
     _usedHeight = 0;
     _flowHeight = 0;
+  }
+}
+
+/// One private typed adapter for the sole active input. Only numeric fragment
+/// records reach snapshots; no native layout, callback or child lease is stored
+/// in a published page. Keep both public lease APIs concrete.
+final class _CompositionParagraph {
+  _CompositionParagraph.paragraph(ForumBodyParagraphLease current)
+    : lease = current,
+      _text = current.layout,
+      _inline = null,
+      identity = current.content.identity,
+      path = current.content.path,
+      fontRevision = current.content.fontRevision,
+      styleRevision = current.content.styleRevision,
+      projection = current.content.projection,
+      kind = ForumBodyTextPageFragmentKind.paragraph;
+  _CompositionParagraph.inline(ForumBodyInlineParagraphLease current)
+    : lease = current,
+      _text = null,
+      _inline = current.layout,
+      identity = current.content.identity,
+      path = current.content.path,
+      fontRevision = current.content.fontRevision,
+      styleRevision = current.content.styleRevision,
+      projection = current.content.projection.display,
+      kind = ForumBodyTextPageFragmentKind.inline;
+  final ForumBodyNativeParagraphLease lease;
+  final ForumBodyParagraphLayout? _text;
+  final ForumBodyInlineParagraphLayout? _inline;
+  final ForumBodyIdentity identity;
+  final String? path;
+  final String fontRevision;
+  final int styleRevision;
+  final HtmlDisplayTextProjection projection;
+  final ForumBodyTextPageFragmentKind kind;
+  double get width => _text?.width ?? _inline!.width;
+  double get height => _text?.height ?? _inline!.height;
+  List<ForumBodyParagraphLine> get lines => _text?.lines ?? _inline!.lines;
+  void ensureActive() {
+    if (!lease.isActive || (_text?.isDisposed ?? _inline!.isDisposed)) {
+      throw StateError('Composition paragraph lease is retired');
+    }
+  }
+
+  ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) =>
+      _text?.lineWindow(window) ?? (startLine: 0, endLine: lines.length);
+  ({double height, int coverageStartUtf16, int coverageEndUtf16}) fragment(
+    int start,
+    int end,
+  ) {
+    final text = _text;
+    if (text != null) {
+      final view = text.fragment(start, end);
+      return (
+        height: view.height,
+        coverageStartUtf16: view.coverageStartUtf16,
+        coverageEndUtf16: view.coverageEndUtf16,
+      );
+    }
+    final view = _inline!.fragment(start, end);
+    return (
+      height: view.height,
+      coverageStartUtf16: view.coverageStartUtf16,
+      coverageEndUtf16: view.coverageEndUtf16,
+    );
   }
 }
 
@@ -460,7 +568,7 @@ final class _ActivePadding {
 
 final class _ActiveParagraph {
   _ActiveParagraph(
-    this.lease,
+    this.input,
     this.index,
     this.left,
     this.spaceBefore,
@@ -469,7 +577,7 @@ final class _ActiveParagraph {
     this.endLine,
   ) : nextLine = firstLine,
       scanLine = firstLine;
-  final ForumBodyParagraphLease lease;
+  final _CompositionParagraph input;
   final int index;
   final double left;
   final double spaceBefore;

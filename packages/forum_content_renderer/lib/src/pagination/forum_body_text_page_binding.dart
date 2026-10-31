@@ -33,6 +33,9 @@ ForumBodyTextPage validateForumBodyTextPageBinding({
     _fail(ForumBodyTextPageSurfaceFailure.leases);
   }
   for (final (index, fragment) in page.fragments.indexed) {
+    if (fragment.kind != ForumBodyTextPageFragmentKind.paragraph) {
+      _fail(ForumBodyTextPageSurfaceFailure.identity);
+    }
     final lease = leases[index];
     final content = lease.content;
     if (content.identity != snapshot.identity ||
