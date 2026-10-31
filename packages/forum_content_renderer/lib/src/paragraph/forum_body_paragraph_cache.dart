@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
@@ -41,6 +43,8 @@ final class ForumBodyParagraphCache {
   int _builds = 0;
   int _hits = 0;
   bool _closed = false;
+  int _budgetRevision = 0;
+  StreamController<int>? _budgetEvents;
 
   int get entryCount => _entries.length;
   int get estimatedRetainedBytes => _bytes;
@@ -48,6 +52,17 @@ final class ForumBodyParagraphCache {
   int get layoutBuildCount => _builds;
   int get hitCount => _hits;
   bool get isClosed => _closed;
+
+  /// Monotonic evidence that a lease was released or this owner retired.
+  /// Callers must still retry admission; aliases need not free a native entry.
+  int get budgetRevision => _budgetRevision;
+
+  /// Lazy, asynchronous broadcast avoids re-entering cache mutation from a
+  /// release callback. Subscribe and then recheck budgetRevision to avoid a
+  /// lost wake-up. Acquisition alone is not a reason to retry a blocked input.
+  Stream<int> get budgetChanges => _closed
+      ? const Stream<int>.empty()
+      : (_budgetEvents ??= StreamController<int>.broadcast()).stream;
 
   ForumBodyParagraphLease acquire({
     required ForumBodyParagraphContent content,
@@ -203,6 +218,12 @@ final class ForumBodyParagraphCache {
     if (entry.retired) return;
     entry.leases--;
     _leases--;
+    _budgetChanged();
+  }
+
+  void _budgetChanged() {
+    _budgetRevision++;
+    _budgetEvents?.add(_budgetRevision);
   }
 
   void _retire(_LayoutEntry entry) {
@@ -229,6 +250,9 @@ final class ForumBodyParagraphCache {
       _retire(entry);
     }
     _entries.clear();
+    _budgetChanged();
+    final events = _budgetEvents;
+    if (events != null) unawaited(events.close());
   }
 }
 

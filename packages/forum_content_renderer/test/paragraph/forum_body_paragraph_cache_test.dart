@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
@@ -36,6 +38,99 @@ ForumBodyParagraphContent content(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'release revisions are synchronous while budget events cannot reenter mutation',
+    () async {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 2,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final changes = <int>[];
+      var insideRelease = false;
+      final done = Completer<void>();
+      final subscription = cache.budgetChanges.listen((revision) {
+        expect(insideRelease, isFalse);
+        changes.add(revision);
+      }, onDone: done.complete);
+      addTearDown(subscription.cancel);
+      final input = content('<p>abc</p>');
+      final first = cache.acquire(content: input, width: 100);
+      final alias = cache.acquire(content: input, width: 100);
+      expect(cache.budgetRevision, 0);
+      insideRelease = true;
+      first.release();
+      insideRelease = false;
+      expect(cache.budgetRevision, 1);
+      expect(changes, isEmpty);
+      await Future<void>.delayed(Duration.zero);
+      expect(changes, [1]);
+      expect(alias.isActive, isTrue);
+      alias.release();
+      expect(cache.budgetRevision, 2);
+      cache.close();
+      expect(cache.budgetRevision, 3);
+      await done.future;
+      expect(changes, [1, 2, 3]);
+      alias.release();
+      cache.close();
+      expect(cache.budgetRevision, 3);
+      expect(await cache.budgetChanges.toList(), isEmpty);
+    },
+  );
+
+  test(
+    'budget consumers can independently unsubscribe without affecting leases',
+    () async {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 1,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final firstEvents = <int>[];
+      final secondEvents = <int>[];
+      final first = cache.budgetChanges.listen(firstEvents.add);
+      final second = cache.budgetChanges.listen(secondEvents.add);
+      addTearDown(second.cancel);
+      final input = content('<p>a</p>');
+      final one = cache.acquire(content: input, width: 100);
+      final two = cache.acquire(content: input, width: 100);
+      one.release();
+      await Future<void>.delayed(Duration.zero);
+      await first.cancel();
+      two.release();
+      await Future<void>.delayed(Duration.zero);
+      expect(firstEvents, [1]);
+      expect(secondEvents, [1, 2]);
+      expect(cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'asynchronous budget listeners may safely retire or reacquire the owner',
+    () async {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 1,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final done = Completer<void>();
+      final subscription = cache.budgetChanges.listen((revision) {
+        if (revision != 1) return;
+        final lease = cache.acquire(content: content('<p>b</p>'), width: 100);
+        expect(lease.isActive, isTrue);
+        cache.close();
+        expect(lease.isActive, isFalse);
+      }, onDone: done.complete);
+      addTearDown(subscription.cancel);
+      cache.acquire(content: content('<p>a</p>'), width: 100).release();
+      await done.future;
+      expect(cache.isClosed, isTrue);
+      expect(cache.activeLeases, 0);
+      expect(cache.estimatedRetainedBytes, 0);
+    },
+  );
 
   test(
     'cache-only admission acquires warm layouts but never builds on a miss',
