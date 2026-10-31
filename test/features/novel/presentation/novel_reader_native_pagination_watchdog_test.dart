@@ -14,6 +14,29 @@ import '../test_support/native_reader_test_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('reading another existing page cannot reset the outstanding background stall allowance', () {
+    fakeAsync((clock) {
+      final failures = <String?>[];
+      final watch = NovelReaderNativePaginationWatchdog(
+        parent: NovelReaderPaginationCancellationToken(),
+        elapsed: () => clock.elapsed,
+        onExpired: (error, _) => failures.add(error.code),
+      );
+      watch.publication(pageCount: 10, isComplete: false);
+      watch.markReadable(watch.startTarget());
+      clock.elapse(const Duration(milliseconds: 1500));
+      final navigation = watch.startTarget();
+      clock.elapse(const Duration(seconds: 1));
+      expect(failures, isEmpty);
+      watch.markReadable(navigation);
+      clock.elapse(const Duration(milliseconds: 499));
+      expect(failures, isEmpty);
+      clock.elapse(const Duration(milliseconds: 1));
+      expect(failures, ['backgroundPaginationIdle']);
+      expect(clock.nonPeriodicTimerCount, 0);
+    });
+  });
   test('target deadline includes preparation and cannot be satisfied by publication or EOF', () {
     fakeAsync((clock) {
       final parent = NovelReaderPaginationCancellationToken();

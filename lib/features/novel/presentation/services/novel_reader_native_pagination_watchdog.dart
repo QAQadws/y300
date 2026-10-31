@@ -101,8 +101,10 @@ final class NovelReaderNativePaginationWatchdog {
     _targetTimer?.cancel();
     _targetTimer = null;
     _target = null;
+    // A new target can be an already published page. Preserve stalled source
+    // time across navigation; only genuine source growth resets it thereafter.
+    if (!_readable) _remaining = policy.backgroundIdle;
     _readable = true;
-    _remaining = policy.backgroundIdle;
     _syncBackground();
     return true;
   }
