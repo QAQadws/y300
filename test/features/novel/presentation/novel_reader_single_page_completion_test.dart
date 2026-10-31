@@ -26,6 +26,8 @@ import 'package:y300/features/novel/presentation/controllers/novel_reader_contro
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
@@ -39,6 +41,110 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets(
+    'native page persists canonical SQLite completion after stability',
+    (tester) async {
+      final fixture = (await tester.runAsync(_Fixture.create))!;
+      try {
+        await tester.pumpWidget(fixture.app(nativePagination: true));
+        await _pumpSinglePageReady(tester);
+        expect(
+          (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+          isNot(true),
+        );
+        await tester.pump(const Duration(milliseconds: 249));
+        expect(
+          (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+          isNot(true),
+        );
+        await tester.pump(const Duration(milliseconds: 1));
+        final state = await fixture.load(tester);
+        expect(state.episodeStates[_chapter]?.isRead, isTrue);
+        expect(state.progressByEpisode[_chapter]!.anchorFormatVersion, 1);
+        expect(
+          state.progressByEpisode[_chapter]!.anchorTextIdentity,
+          isNotEmpty,
+        );
+        expect(
+          state.progressByEpisode[_chapter]!.paginationKey,
+          tester
+              .widget<NovelReaderNativePagedViewport>(
+                find.byType(NovelReaderNativePagedViewport),
+              )
+              .controller
+              .paginationKey,
+        );
+        expect(state.recentEpisodeId, _chapter);
+      } finally {
+        await fixture.close(tester);
+      }
+    },
+  );
+
+  testWidgets(
+    'native passive compatibility restore leaves the SQLite row intact',
+    (tester) async {
+      final fixture = (await tester.runAsync(_Fixture.create))!;
+      try {
+        await tester.runAsync(fixture.seedUnfinishedPosition);
+        final before = (await tester.runAsync(
+          () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+        ))!;
+        await tester.pumpWidget(fixture.app(nativePagination: true));
+        await _pumpSinglePageReady(tester);
+        await tester.pump(const Duration(seconds: 1));
+        var state = await fixture.load(tester);
+        expect(state.episodeStates[_chapter]?.isRead, isNot(true));
+        await tester.pumpWidget(const SizedBox());
+        state = await fixture.load(tester);
+        expect(state.episodeStates[_chapter]?.isRead, isNot(true));
+        expect(
+          (await tester.runAsync(
+            () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+          ))!,
+          before,
+        );
+      } finally {
+        await fixture.close(tester);
+      }
+    },
+  );
+
+  testWidgets(
+    'native real chapter turns commit and rearm through the main page',
+    (tester) async {
+      final fixture = (await tester.runAsync(_Fixture.create))!;
+      try {
+        await tester.runAsync(fixture.seedUnfinishedPosition);
+        await tester.pumpWidget(fixture.app(nativePagination: true));
+        await _pumpSinglePageReady(tester);
+        await tester.pump(const Duration(seconds: 1));
+        expect(
+          (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+          isNot(true),
+        );
+        tester
+            .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+            .onRightTap!();
+        await _pumpSinglePageReady(tester, episode: _next, advanceTime: true);
+        final state = await fixture.load(tester);
+        expect(state.episodeStates[_chapter]?.isRead, isTrue);
+        expect(state.progressByEpisode[_chapter]!.anchorFormatVersion, 1);
+        tester
+            .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+            .onLeftTap!();
+        await _pumpSinglePageReady(tester, advanceTime: true);
+        tester
+            .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+            .onRightTap!();
+        await _pumpSinglePageReady(tester, episode: _next, advanceTime: true);
+        expect(_readerState(tester).currentEpisode.episodeId, _next);
+      } finally {
+        await fixture.close(tester);
+      }
+    },
+  );
 
   testWidgets(
     'the first fully readable single page completes after stability',
@@ -216,9 +322,10 @@ void main() {
         await _pumpUntil(
           tester,
           () =>
-              _readerState(
-                tester,
-              ).readingState?.episodeStates[_chapter]?.isRead ==
+              _readerState(tester)
+                  .readingState
+                  ?.episodeStates[_chapter]
+                  ?.isRead ==
               true,
         );
         final failureMessage = AppLocalizations.of(
@@ -285,6 +392,29 @@ Future<void> _pumpSinglePageReady(
     await tester.pump(
       advanceTime ? const Duration(milliseconds: 16) : Duration.zero,
     );
+    if (tester
+        .widget<NovelReaderPage>(find.byType(NovelReaderPage))
+        .nativePagination) {
+      final viewport = find.byType(NovelReaderNativePagedViewport);
+      if (viewport.evaluate().isEmpty ||
+          _readerState(tester).currentEpisode.episodeId != episode) {
+        continue;
+      }
+      final controller = tester
+          .widget<NovelReaderNativePagedViewport>(viewport)
+          .controller;
+      if (!controller.isSuspended &&
+          controller.snapshot?.isComplete == true &&
+          controller.visiblePageIndex == 0 &&
+          !controller.hasPendingNavigation) {
+        expect(controller.snapshot!.length, 1);
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+        return;
+      }
+      continue;
+    }
     final surface = find.byType(NovelReaderHtmlPagedSurface);
     final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
     if (surface.evaluate().isNotEmpty &&
@@ -352,6 +482,7 @@ final class _Fixture {
   Widget app({
     GlobalKey<NavigatorState>? navigation,
     NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
+    bool nativePagination = false,
   }) => ProviderScope(
     overrides: [
       novelRepositoryProvider.overrideWithValue(repository),
@@ -373,6 +504,8 @@ final class _Fixture {
         novelId: _work,
         initialEpisodeId: _chapter,
         openPolicy: openPolicy,
+        nativePagination: nativePagination,
+        nativeIdleScheduler: _nativeIdle,
       ),
     ),
   );
@@ -440,6 +573,8 @@ final class _Fixture {
     });
   }
 }
+
+Future<void> _nativeIdle() async {}
 
 final class _ReadFailureRepository extends LocalNovelRepository {
   _ReadFailureRepository(super.dbFuture);

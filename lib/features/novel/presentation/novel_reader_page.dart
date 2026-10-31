@@ -38,6 +38,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_paged_indic
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_source_thread_route_launcher.dart';
 
@@ -47,12 +49,16 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_catalog_ro
 
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_chapter_interactions_button.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -61,6 +67,7 @@ import 'package:y300/features/thread/presentation/thread_image_reader_page.dart'
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/link_copy_feedback.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
@@ -70,11 +77,20 @@ class NovelReaderPage extends ConsumerStatefulWidget {
     required this.novelId,
     required this.initialEpisodeId,
     this.openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
+    this.nativePagination = const bool.fromEnvironment(
+      'Y300_NATIVE_PAGINATION',
+    ),
+    this.nativeIdleScheduler,
   });
 
   final String novelId;
   final String initialEpisodeId;
   final NovelEpisodeOpenPolicy openPolicy;
+
+  /// Consumer-wide controlled entry while the native format/settings gates are
+  /// being completed. Native pagination never falls back on a document/error.
+  final bool nativePagination;
+  final NovelReaderPaginationIdleScheduler? nativeIdleScheduler;
 
   @override
   ConsumerState<NovelReaderPage> createState() => _NovelReaderPageState();
@@ -105,6 +121,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   NovelReaderPaginationSessionCache _paginationSessionCache =
       NovelReaderPaginationSessionCache();
   NovelReaderController? _paginationSessionController;
+  NovelReaderNativeOwner? _nativeOwner;
+  final _nativeActivity = ValueNotifier(false);
+  NovelReaderNativeHostStatus? _nativeStatus;
+  String? _nativeStatusSurface;
+  NovelReaderPaginationPosition? _nativeUnpublishedPosition;
+  ({String surface, String key, int count, bool isFinal})? _nativeControls;
+  ({String surface, bool previous})? _nativeOverlayTurn;
   NovelReaderPreparedChapterCache get _preparedChapterCache =>
       _paginationSessionCache.preparedChapterCache;
   NovelReaderDisplayPreferencesCoordinator? _displayPreferencesCoordinator;
@@ -136,12 +159,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   String? _verticalDockIdentity;
   String? _pendingVerticalDockIdentity;
   bool _verticalDockUpdateScheduled = false;
+  bool _elementActive = true;
+  int _visibilityFlushes = 0;
 
   bool get _hasRestoredOffset => _verticalSession.hasRestoredOffset;
 
   bool get _isReadingVisible =>
+      _elementActive &&
       _resumed &&
       _readerSemanticsSuspendCount == 0 &&
+      (!widget.nativePagination || !_overlayController.contentObscured.value) &&
       (ModalRoute.of(context)?.isCurrent ?? true);
 
   NovelReaderArgs get _args => NovelReaderArgs(
@@ -163,9 +190,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
     WidgetsBinding.instance.addObserver(this);
     _overlayController = ReaderOverlayController();
+    _overlayController.contentObscured.addListener(_overlayObstructionChanged);
     _readerGestureCoordinator = ReaderGestureCoordinator(
       doubleTapTimeout: ReaderPagedTurnMotion.tapConfirmationDelay,
-    );
+    )..addPointerListener(_retireObscuredNavigation);
     _pagedNavigationController = NovelReaderPagedNavigationController();
     _scrollController = NovelReaderScrollController()..addListener(_onScroll);
     _resumed =
@@ -179,21 +207,105 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _syncReadingVisibility();
   }
 
+  @override
+  void deactivate() {
+    _elementActive = false;
+    _nativeStatus = null;
+    _nativeStatusSurface = null;
+    _nativeOverlayTurn = null;
+    // Descendants have not deactivated yet. A signal here would ask them to
+    // rebuild from an unrelated build target; dispose retires owned work in
+    // this same synchronous frame, before any producer can resume.
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _elementActive = true;
+  }
+
   void _syncReadingVisibility() {
-    if (!mounted) return;
+    if (!mounted || !_elementActive) return;
+    _syncNativeActivity();
     ref
         .read(novelReaderControllerProvider(_args).notifier)
         .updateReadingVisibility(
           frontmost:
               (ModalRoute.of(context)?.isCurrent ?? true) &&
-              _readerSemanticsSuspendCount == 0,
+              _readerSemanticsSuspendCount == 0 &&
+              (!widget.nativePagination ||
+                  !_overlayController.contentObscured.value),
           resumed: _resumed,
         );
     _observeReadingSurface();
   }
 
+  void _syncNativeActivity([NovelReaderViewState? current]) {
+    if (!mounted || !_elementActive) return;
+    final state = ref.read(novelReaderControllerProvider(_args));
+    final viewState = current ?? (state.isLoading ? null : state.asData?.value);
+    final active =
+        widget.nativePagination &&
+        _isReadingVisible &&
+        viewState != null &&
+        viewState.transition == null &&
+        viewState.preferences.flowMode != NovelReaderFlowMode.vertical;
+    if (!active) {
+      _nativeStatus = null;
+      _nativeStatusSurface = null;
+      if (!_resumed ||
+          _readerSemanticsSuspendCount > 0 ||
+          !(ModalRoute.of(context)?.isCurrent ?? true) ||
+          viewState == null ||
+          viewState.transition != null) {
+        _nativeOverlayTurn = null;
+      }
+    }
+    _nativeActivity.value = active;
+  }
+
+  void _overlayObstructionChanged() {
+    if (!mounted || !_elementActive || !widget.nativePagination) return;
+    _syncNativeActivity();
+    if (_overlayController.contentObscured.value) {
+      ref
+          .read(novelReaderControllerProvider(_args).notifier)
+          .cancelPendingCompletion();
+      unawaited(_flushBeforeVisibilityUpdate('reader_menu'));
+    } else {
+      _syncReadingVisibility();
+    }
+  }
+
+  Future<void> _flushBeforeVisibilityUpdate(String reason) async {
+    final current = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    final identity = current == null ? null : _readerSurfaceIdentity(current);
+    _visibilityFlushes++;
+    try {
+      await _saveVisibleProgressNow(reason: reason);
+    } catch (_) {
+      if (mounted && identity != null && _isCurrentReaderSurface(identity)) {
+        _showReaderSnackBar(
+          AppLocalizations.of(context).novelSaveReadingProgressFailed,
+        );
+      }
+    } finally {
+      _visibilityFlushes--;
+      if (mounted) _syncReadingVisibility();
+    }
+  }
+
   @override
   void dispose() {
+    _overlayController.contentObscured.removeListener(
+      _overlayObstructionChanged,
+    );
+    _nativeOwner?.dispose();
+    _nativeActivity.dispose();
     _paginationSessionCache.dispose();
     _verticalDockVisible.dispose();
     _postRouteSession.dispose();
@@ -212,17 +324,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _resumed = state == AppLifecycleState.resumed;
+    // A paused app may never build another frame. Retire native work before
+    // awaiting the existing flush of the last qualified position lease.
+    _syncNativeActivity();
     if (!_resumed) {
       ref
           .read(novelReaderControllerProvider(_args).notifier)
           .cancelPendingCompletion();
-      unawaited(() async {
-        try {
-          await _saveVisibleProgressNow(reason: 'lifecycle_${state.name}');
-        } finally {
-          if (mounted) _syncReadingVisibility();
-        }
-      }());
+      unawaited(_flushBeforeVisibilityUpdate('lifecycle_${state.name}'));
     } else {
       _syncReadingVisibility();
     }
@@ -232,11 +341,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   Widget build(BuildContext context) {
     final readerProvider = novelReaderControllerProvider(_args);
     ref.listen(readerProvider, (previous, next) {
+      _syncNativeActivity(next.isLoading ? null : next.asData?.value);
       if (previous?.asData?.value.readingAuthorityRevision !=
               next.asData?.value.readingAuthorityRevision ||
           previous?.asData?.value.readingSurfaceRevision !=
               next.asData?.value.readingSurfaceRevision) {
         _pagedPosition = null;
+        _nativeUnpublishedPosition = null;
+        _nativeOverlayTurn = null;
         // A source route/reset supplied a newer public position. A visible
         // hint from before that handoff must not override its restore target.
         _conversionPosition = null;
@@ -319,6 +431,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             );
           },
           data: (viewState) {
+            _syncNativeActivity(viewState);
             _scheduleFontReferenceRepair(viewState, controller);
             final systemPadding = MediaQuery.paddingOf(context);
             final readerSurfaceIdentity = _readerSurfaceIdentity(viewState);
@@ -357,6 +470,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               _readerGestureCoordinator.cancelPendingTap();
               _progressControlOwner = paginationGeometryOwner;
               _pagedPosition = null;
+              _nativeUnpublishedPosition = null;
+              _nativeControls = null;
+              _nativeOverlayTurn = null;
               _bodyGeometry = null;
               _bodyGeometryOwner = null;
               _imagesReady = true;
@@ -479,7 +595,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                       viewState.currentEpisode.episodeId;
                   return NovelReaderDelayedLoadingBoundary(
                     identity: loadingIdentity,
-                    isLoading: readerIsLoading,
+                    isLoading:
+                        readerIsLoading &&
+                        !(widget.nativePagination &&
+                            viewState.preferences.flowMode !=
+                                NovelReaderFlowMode.vertical),
                     backgroundColor: palette.background,
                     child: Stack(
                       children: [
@@ -491,7 +611,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                             child: ExcludeSemantics(
                               excluding: _readerSemanticsSuspendCount > 0,
                               child: KeyedSubtree(
-                                key: ValueKey<String>(readerSurfaceIdentity),
+                                key: widget.nativePagination
+                                    ? ObjectKey(_nativeOwner)
+                                    : ValueKey<String>(readerSurfaceIdentity),
                                 child: reader,
                               ),
                             ),
@@ -585,7 +707,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   bool _isCurrentReaderSurface(String identity) {
-    if (!mounted) {
+    if (!mounted || !_elementActive) {
       return false;
     }
     final state = ref.read(novelReaderControllerProvider(_args));
@@ -615,6 +737,21 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     final isRtl = current.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
     final isPrevious = isRtl ? !isLeftTap : isLeftTap;
+    if (widget.nativePagination &&
+        (_overlayController.contentObscured.value ||
+            _nativeOverlayTurn != null)) {
+      if (!_resumed ||
+          _readerSemanticsSuspendCount > 0 ||
+          !(ModalRoute.of(context)?.isCurrent ?? true)) {
+        return;
+      }
+      // A side tap still turns the page after closing the menu. It must wait
+      // for the existing Host to revalidate its actual visible layout first.
+      _nativeOverlayTurn = (surface: surfaceIdentity, previous: isPrevious);
+      _overlayController.hideMenu();
+      _observeReadingSurface();
+      return;
+    }
     if (isPrevious) {
       _pagedNavigationController.turnPrevious();
     } else {
@@ -624,6 +761,21 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   void _cancelPendingReaderTap() {
     _readerGestureCoordinator.cancelPendingTap();
+  }
+
+  void _retireObscuredNavigation(PointerEvent event) {
+    if (!widget.nativePagination ||
+        (event is! PointerDownEvent && event is! PointerCancelEvent)) {
+      return;
+    }
+    _nativeOverlayTurn = null;
+    if (_pendingPageSeekRequest != null) {
+      setState(() {
+        _pendingPageSeekRequest = null;
+        _isProgressSeekInFlight = false;
+        _progressSliderPreview = null;
+      });
+    }
   }
 
   ReaderTopBarConfig _buildTopBarConfig(NovelReaderViewState viewState) {
@@ -701,12 +853,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
 
     final position = _pagedPosition;
-    final isFinal =
-        position?.episodeId == viewState.currentEpisode.episodeId &&
-        position?.isPageCountFinal == true;
-    final total = isFinal
-        ? position!.pageCount
-        : (viewState.progressSnapshot.pageCount ?? 1);
+    final metrics = _pagedControlMetrics(viewState);
+    final isFinal = metrics.isFinal;
+    final total = metrics.count;
     final currentIndex =
         (_progressSliderPreview?.round() ??
                 (position?.pageIndex ?? viewState.progressSnapshot.pageIndex))
@@ -835,17 +984,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   void _seekPagedProgress(double value, NovelReaderViewState viewState) {
     final position = _pagedPosition;
+    final metrics = _pagedControlMetrics(viewState);
     if (_isProgressSeekInFlight ||
         position == null ||
-        !position.isPageCountFinal ||
+        !metrics.isFinal ||
         position.episodeId != viewState.currentEpisode.episodeId) {
       if (mounted) {
         setState(() => _progressSliderPreview = null);
       }
       return;
     }
-    final targetIndex = value.round().clamp(0, position.pageCount - 1).toInt();
+    final targetIndex = value.round().clamp(0, metrics.count - 1).toInt();
     setState(() {
+      _nativeOverlayTurn = null;
       _isProgressSeekInFlight = true;
       _progressSliderPreview = targetIndex.toDouble();
       _pendingPageSeekRequest = NovelReaderPageSeekRequest(
@@ -855,6 +1006,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         pageIndex: targetIndex,
       );
     });
+    if (widget.nativePagination) _overlayController.hideMenu();
   }
 
   void _bindPaginationCacheSession(NovelReaderController controller) {
@@ -864,9 +1016,182 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _conversionPosition = null;
       _paginationSessionCache.dispose();
       _paginationSessionCache = NovelReaderPaginationSessionCache();
+      _nativeOwner?.dispose();
+      _nativeOwner = null;
+      _nativeStatus = null;
+      _nativeStatusSurface = null;
+      _nativeUnpublishedPosition = null;
+      _nativeControls = null;
+      _nativeOverlayTurn = null;
       _paginationSessionController = controller;
     }
+    if (widget.nativePagination) _nativeOwner ??= NovelReaderNativeOwner();
   }
+
+  bool _nativePositionIsCurrent(NovelReaderViewState viewState) {
+    final status = _nativeStatus;
+    final position = _pagedPosition;
+    final controller = status?.controller;
+    return _nativeActivity.value &&
+        _nativeStatusSurface == _readerSurfaceIdentity(viewState) &&
+        status != null &&
+        (status.phase == NovelReaderNativeHostPhase.reading ||
+            status.phase == NovelReaderNativeHostPhase.paused) &&
+        status.hasVisiblePage &&
+        !status.isRetainingPreviousLayout &&
+        controller != null &&
+        !controller.isClosed &&
+        !controller.isSuspended &&
+        position != null &&
+        position.episodeId == viewState.currentEpisode.episodeId &&
+        position.paginationKey == controller.paginationKey &&
+        position.pageIndex == status.visiblePageIndex;
+  }
+
+  ({int count, bool isFinal}) _pagedControlMetrics(
+    NovelReaderViewState viewState,
+  ) {
+    final position = _pagedPosition;
+    final native = _nativeControls;
+    if (widget.nativePagination &&
+        native != null &&
+        native.surface == _readerSurfaceIdentity(viewState) &&
+        native.key == position?.paginationKey) {
+      return (count: native.count, isFinal: native.isFinal);
+    }
+    final isFinal =
+        position?.episodeId == viewState.currentEpisode.episodeId &&
+        position?.isPageCountFinal == true;
+    return (
+      count: isFinal
+          ? position!.pageCount
+          : viewState.progressSnapshot.pageCount ?? 1,
+      isFinal: isFinal,
+    );
+  }
+
+  void _nativeStatusChanged(
+    String identity,
+    NovelReaderNativeHostStatus status,
+  ) {
+    if (!_isCurrentReaderSurface(identity)) return;
+    _nativeStatus = status;
+    _nativeStatusSurface = identity;
+    final current = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData!
+        .value;
+    if (_nativePositionIsCurrent(current)) {
+      final metrics = (
+        surface: identity,
+        key: status.controller!.paginationKey,
+        count: status.pageCount,
+        isFinal: status.isPageCountFinal,
+      );
+      // Growing source counts drive controls only. They cannot create a new
+      // reading position or end-of-body proof without a visible delivery.
+      if (_nativeControls != metrics) {
+        setState(() => _nativeControls = metrics);
+      }
+      _markReaderSurfaceReady(identity);
+      final turn = _nativeOverlayTurn;
+      if (turn != null) {
+        _nativeOverlayTurn = null;
+        if (turn.surface == identity) {
+          if (turn.previous) {
+            _pagedNavigationController.turnPrevious();
+          } else {
+            _pagedNavigationController.turnNext();
+          }
+        }
+      }
+      _publishPagedPosition();
+    }
+    _observeReadingSurface();
+  }
+
+  Widget _buildNativePagedReader(
+    NovelReaderViewState viewState,
+    ReaderChromeInsets chromeInsets,
+    String identity,
+  ) => NovelReaderNativePagedSurface(
+    owner: _nativeOwner!,
+    readingAuthorityIdentity: viewState.readingAuthorityRevision,
+    preparationService: ref.watch(novelReaderNativePreparationServiceProvider),
+    rawHtml: viewState.currentContent.rawHtml,
+    episode: viewState.currentEpisode,
+    preferences: viewState.renderPreferences,
+    resolvedFont: viewState.bodyFont,
+    converter: resolveTextConverter(
+      viewState.renderPreferences.sharedConversionMode,
+    ),
+    progressSnapshot: viewState.progressSnapshot,
+    startsAtBeginning: ref
+        .read(novelReaderControllerProvider(_args).notifier)
+        .startsPagedAtBeginning,
+    chromeInsets: chromeInsets,
+    semanticDocument: viewState.document,
+    activity: _nativeActivity,
+    idleScheduler: widget.nativeIdleScheduler,
+    navigationController: _pagedNavigationController,
+    pageSeekRequest: _pendingPageSeekRequest,
+    onPageSeekFinished: (request, outcome) {
+      if (!_isCurrentReaderSurface(identity) ||
+          !identical(_pendingPageSeekRequest, request)) {
+        return;
+      }
+      setState(() {
+        _pendingPageSeekRequest = null;
+        _isProgressSeekInFlight = false;
+        _progressSliderPreview = null;
+      });
+      if (outcome == NovelReaderNavigationOutcome.unavailable) {
+        _showReaderSnackBar(AppLocalizations.of(context).novelPositionChanged);
+      }
+      _observeReadingSurface();
+    },
+    chapterEntryRequest: _pendingChapterEntryRequest,
+    chapterTurnIsInFlight: _pendingChapterEntryRequest != null,
+    onChapterEntryApplied: (request) {
+      if (_isCurrentReaderSurface(identity)) {
+        _retireChapterEntryRequest(requestId: request.requestId);
+      }
+    },
+    onChapterEntryRetired: (request) {
+      if (_isCurrentReaderSurface(identity)) {
+        _retireChapterEntryRequest(requestId: request.requestId);
+      }
+    },
+    previousChapterTitle: viewState.previousEpisode?.episodeTitle,
+    nextChapterTitle: viewState.nextEpisode?.episodeTitle,
+    onTurnToAdjacentChapter: (edge) =>
+        _isCurrentReaderSurface(identity) &&
+        _turnToAdjacentChapter(edge, viewState),
+    onContentReady: () => _markReaderSurfaceReady(identity),
+    onStatusChanged: (status) => _nativeStatusChanged(identity, status),
+    onChooseScrollMode: () {
+      if (_isCurrentReaderSurface(identity)) {
+        _chooseScrollMode(
+          ref.read(novelReaderControllerProvider(_args).notifier),
+        );
+      }
+    },
+    onPositionChanged: (position) {
+      if (!_isCurrentReaderSurface(identity) || !_nativeActivity.value) return;
+      setState(() {
+        _pagedPosition = position;
+        _nativeUnpublishedPosition = position;
+      });
+      _publishPagedPosition();
+      _observeReadingSurface();
+    },
+    onScrollActivityChanged: (scrolling) {
+      if (_isCurrentReaderSurface(identity)) {
+        _readingScrolling = scrolling;
+        _observeReadingSurface();
+      }
+    },
+  );
 
   Widget _buildReaderList(
     NovelReaderViewState viewState,
@@ -878,6 +1203,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     required String surfaceIdentity,
   }) {
     if (viewState.preferences.flowMode != NovelReaderFlowMode.vertical) {
+      if (widget.nativePagination) {
+        return _buildNativePagedReader(
+          viewState,
+          chromeInsets,
+          surfaceIdentity,
+        );
+      }
       return NovelReaderHtmlPagedSurface(
         readingAuthorityIdentity: viewState.readingAuthorityRevision,
         preparationService: ref.watch(
@@ -1377,7 +1709,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   void _observeReadingSurface() {
-    if (!mounted) return;
+    if (!mounted || !_elementActive) return;
     if (!_isReadingVisible) {
       ref
           .read(novelReaderControllerProvider(_args).notifier)
@@ -1407,14 +1739,27 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final identity = _readerSurfaceIdentity(viewState);
     final vertical =
         viewState.preferences.flowMode == NovelReaderFlowMode.vertical;
+    final native = widget.nativePagination && !vertical;
+    final currentNativeLayout = !native || _nativePositionIsCurrent(viewState);
+    if (native && !currentNativeLayout && _visibilityFlushes > 0) {
+      // A frameless hide/resume can revalidate while the last qualified
+      // snapshot is still flushing. Retire completion now, but do not revoke
+      // that position lease before its write settles. New native reports are
+      // independently gated by the actual validated layout.
+      controller.cancelPendingCompletion();
+      return;
+    }
     final geometry = vertical ? _currentBodyGeometry(viewState) : null;
     final position = _pagedPosition;
     controller.observeReadingSurface(
       bodyReady:
           _imagesReady &&
+          currentNativeLayout &&
           _readyReaderSurfaceIdentity == identity &&
           (vertical ? _verticalSession.contentReady : position != null),
-      restoreSettled: vertical ? _hasRestoredOffset : position != null,
+      restoreSettled:
+          currentNativeLayout &&
+          (vertical ? _hasRestoredOffset : position != null),
       finalBoundaryKnown: vertical
           ? geometry?.finalBoundaryKnown == true
           : position?.isPageCountFinal == true,
@@ -1429,6 +1774,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       idle:
           !_readingScrolling &&
           !_isProgressSeekInFlight &&
+          (!native ||
+              (_nativeOverlayTurn == null &&
+                  _nativeStatus?.controller?.hasPendingNavigation == false)) &&
           !_isProgrammaticScrollChange &&
           !_verticalSession.hasPendingThemeRestore,
       geometryIdentity: vertical
@@ -1456,6 +1804,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         viewState == null ||
         _readyReaderSurfaceIdentity != _readerSurfaceIdentity(viewState)) {
       return;
+    }
+    if (widget.nativePagination) {
+      if (!_nativePositionIsCurrent(viewState) ||
+          !identical(position, _nativeUnpublishedPosition)) {
+        return;
+      }
+      // A status/resume can validate existing paint without reporting new
+      // navigation. Publish each actual visible delivery at most once.
+      _nativeUnpublishedPosition = null;
     }
     ref
         .read(novelReaderControllerProvider(_args).notifier)

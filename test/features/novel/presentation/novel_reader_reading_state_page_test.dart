@@ -12,6 +12,7 @@ import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/library_shared/data/providers/library_state_providers.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_state_models.dart';
@@ -28,11 +29,19 @@ import 'package:y300/features/novel/domain/repositories/novel_chapter_interactio
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reading_state_repository.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
@@ -49,6 +58,414 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
+
+  testWidgets(
+    'controlled native entry renders and commits through the reader',
+    (tester) async {
+      final repository = _ReadingRepository(_nativeLongBody);
+      await tester.pumpWidget(_app(repository, nativePagination: true));
+      await _pumpNativeReady(tester);
+      expect(find.byType(NovelReaderHtmlPagedSurface), findsNothing);
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-surface')),
+        findsNothing,
+      );
+      final native = tester.widget<NovelReaderNativePagedSurface>(
+        find.byType(NovelReaderNativePagedSurface),
+      );
+      final controller = _nativeController(tester);
+      expect(native.resolvedFont.id, native.preferences.fontFamily);
+      expect(controller.snapshot!.length, greaterThan(2));
+      expect(controller.visiblePageIndex, 0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(repository.progress[_chapter]!.anchorFormatVersion, 1);
+      expect(
+        repository.progress[_chapter]!.paginationKey,
+        controller.paginationKey,
+      );
+      expect(repository.completed, isEmpty);
+      final owner = native.owner;
+      await tester.pumpWidget(const SizedBox());
+      expect(owner.isClosed, isTrue);
+      expect(owner.activeCacheHandles, 0);
+      expect(owner.estimatedRetainedBytes, 0);
+    },
+  );
+
+  testWidgets('native completion waits for the actual menu slide out', (
+    tester,
+  ) async {
+    final repository = _ReadingRepository('<p>完整而短的一章。</p>');
+    await tester.pumpWidget(_app(repository, nativePagination: true));
+    await _pumpNativeReady(tester);
+    final overlay = tester
+        .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+        .controller!;
+    final controller = _nativeController(tester);
+    overlay.showMenu();
+    expect(controller.isSuspended, isTrue);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.completed, isEmpty);
+
+    overlay.hideMenu();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(controller.isSuspended, isTrue);
+    expect(repository.completed, isEmpty);
+    await tester.pump(const Duration(milliseconds: 120));
+    await _pumpNativeReady(tester);
+    expect(_nativeController(tester), same(controller));
+    expect(repository.completed, isEmpty);
+    await tester.pump(const Duration(milliseconds: 249));
+    expect(repository.completed, isEmpty);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(repository.completed, [_chapter]);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('native lifecycle pauses work before an inactive frame', (
+    tester,
+  ) async {
+    final repository = _ReadingRepository('<p>暂停前的短章。</p>');
+    await tester.pumpWidget(_app(repository, nativePagination: true));
+    await _pumpNativeReady(tester);
+    final controller = _nativeController(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    expect(controller.isSuspended, isTrue);
+    await tester.pump(const Duration(hours: 1));
+    expect(repository.completed, isEmpty);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpNativeReady(tester);
+    expect(_nativeController(tester), same(controller));
+    expect(repository.completed, isEmpty);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(repository.completed, [_chapter]);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final lifecycle in [false, true]) {
+    testWidgets('frameless native hide/resume keeps the qualified flush lease '
+        '(lifecycle: $lifecycle)', (tester) async {
+      final repository = _ReadingRepository(_nativeLongBody);
+      await tester.pumpWidget(_app(repository, nativePagination: true));
+      await _pumpNativeReady(tester);
+      final gate = repository.commitGate = Completer<void>();
+      if (lifecycle) {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      } else {
+        final overlay = tester
+            .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+            .controller!;
+        overlay.showMenu();
+        overlay.hideMenu();
+      }
+      await _pumpNativeReady(tester);
+      expect(repository.committed, isEmpty);
+      expect(repository.completed, isEmpty);
+      gate.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(repository.progress[_chapter]!.anchorFormatVersion, 1);
+      expect(repository.completed, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final rtl in [false, true]) {
+    testWidgets('native side tap closes the menu and turns once (rtl: $rtl)', (
+      tester,
+    ) async {
+      final repository = _ReadingRepository(_nativeLongBody);
+      await tester.pumpWidget(
+        _app(
+          repository,
+          nativePagination: true,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: rtl
+                ? NovelReaderFlowMode.pagedRtl
+                : NovelReaderFlowMode.pagedLtr,
+          ),
+        ),
+      );
+      await _pumpNativeReady(tester);
+      final overlayFinder = find.byType(ReaderOverlayScaffold);
+      tester
+          .widget<ReaderOverlayScaffold>(overlayFinder)
+          .controller!
+          .showMenu();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 240));
+      final overlay = tester.widget<ReaderOverlayScaffold>(overlayFinder);
+      (rtl ? overlay.onLeftTap : overlay.onRightTap)!();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(_nativeController(tester).visiblePageIndex, 0);
+      await tester.pump(const Duration(milliseconds: 120));
+      await _pumpNativeReady(tester, page: 1, advanceTime: true);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(repository.progress[_chapter]!.pageIndex, 1);
+      expect(_nativeController(tester).visiblePageIndex, 1);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('native slider request closes the menu before actual arrival', (
+    tester,
+  ) async {
+    final repository = _ReadingRepository(_nativeLongBody);
+    await tester.pumpWidget(_app(repository, nativePagination: true));
+    await _pumpNativeReady(tester);
+    final overlayFinder = find.byType(ReaderOverlayScaffold);
+    tester.widget<ReaderOverlayScaffold>(overlayFinder).controller!.showMenu();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 240));
+    tester
+        .widget<ReaderOverlayScaffold>(overlayFinder)
+        .bottomBar
+        .progress!
+        .onChangeEnd(2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(_nativeController(tester).visiblePageIndex, 0);
+    await tester.pump(const Duration(milliseconds: 120));
+    await _pumpNativeReady(tester, page: 2);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(repository.progress[_chapter]!.pageIndex, 2);
+    expect(
+      tester
+          .widget<ReaderOverlayScaffold>(overlayFinder)
+          .bottomBar
+          .progress!
+          .interactionLocked,
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final seek in [false, true]) {
+    testWidgets('new pointer retires a turn waiting for menu dismissal '
+        '(seek: $seek)', (tester) async {
+      final repository = _ReadingRepository(_nativeLongBody);
+      await tester.pumpWidget(_app(repository, nativePagination: true));
+      await _pumpNativeReady(tester);
+      final overlayFinder = find.byType(ReaderOverlayScaffold);
+      tester
+          .widget<ReaderOverlayScaffold>(overlayFinder)
+          .controller!
+          .showMenu();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 240));
+      final overlay = tester.widget<ReaderOverlayScaffold>(overlayFinder);
+      if (seek) {
+        overlay.bottomBar.progress!.onChangeEnd(2);
+      } else {
+        overlay.onRightTap!();
+      }
+      await tester.pump();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(NovelReaderNativePagedSurface)),
+      );
+      await gesture.moveBy(const Offset(40, 0));
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 240));
+      await _pumpNativeReady(tester, page: 0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(_nativeController(tester).visiblePageIndex, 0);
+      expect(
+        tester
+            .widget<ReaderOverlayScaffold>(overlayFinder)
+            .bottomBar
+            .progress!
+            .interactionLocked,
+        isFalse,
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets(
+    'native menu flush failure retires completion and reports the error',
+    (tester) async {
+      final repository = _ReadingRepository('<p>保存失败后仍可阅读的短章。</p>');
+      await tester.pumpWidget(_app(repository, nativePagination: true));
+      await _pumpNativeReady(tester);
+      repository.failNextCommit = true;
+      tester
+          .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+          .controller!
+          .showMenu();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(_nativeController(tester).isSuspended, isTrue);
+      expect(repository.completed, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('native reflow retains the reading owner and mounted shell', (
+    tester,
+  ) async {
+    final repository = _ReadingRepository(_nativeLongBody);
+    await tester.pumpWidget(_app(repository, nativePagination: true));
+    await _pumpNativeReady(tester);
+    final surfaceFinder = find.byType(NovelReaderNativePagedSurface);
+    final shellState = tester.state(surfaceFinder);
+    final owner = tester
+        .widget<NovelReaderNativePagedSurface>(surfaceFinder)
+        .owner;
+    final oldController = _nativeController(tester);
+    final overlay = tester
+        .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+        .controller!;
+    overlay.showMenu();
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NovelReaderPage)),
+      listen: false,
+    );
+    final reader = container.read(
+      novelReaderControllerProvider(_args).notifier,
+    );
+    reader.previewPreferences(
+      container
+          .read(novelReaderControllerProvider(_args))
+          .requireValue
+          .preferences
+          .copyWith(fontSize: 28),
+    );
+    await tester.pump();
+    expect(tester.state(surfaceFinder), same(shellState));
+    expect(
+      tester.widget<NovelReaderNativePagedSurface>(surfaceFinder).owner,
+      same(owner),
+    );
+    expect(oldController.isSuspended, isTrue);
+    expect(repository.completed, isEmpty);
+    overlay.hideMenu();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 240));
+    await _pumpNativeReady(tester);
+    expect(_nativeController(tester), isNot(same(oldController)));
+    expect(oldController.isClosed, isTrue);
+    expect(tester.state(surfaceFinder), same(shellState));
+    expect(
+      tester
+          .widget<NovelReaderNativePagedSurface>(surfaceFinder)
+          .preferences
+          .fontSize,
+      28,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'native failure preserves the mode until explicit scroll choice',
+    (tester) async {
+      final repository = _ReadingRepository('<p>不会被自动旧渲染器接管的正文。</p>');
+      final preparation = _NativePreparationProbe()..fail = true;
+      await tester.pumpWidget(
+        _app(
+          repository,
+          nativePagination: true,
+          nativePreparation: preparation,
+        ),
+      );
+      for (
+        var frame = 0;
+        frame < 100 &&
+            find
+                .byKey(const Key('novel-reader-pagination-fallback'))
+                .evaluate()
+                .isEmpty;
+        frame++
+      ) {
+        await tester.pump();
+      }
+      expect(
+        find.byKey(const Key('novel-reader-pagination-fallback')),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(preparation.calls, 1);
+      expect(find.byType(NovelReaderHtmlPagedSurface), findsNothing);
+      expect(repository.committed, isEmpty);
+      expect(
+        tester
+            .widget<NovelReaderNativePagedSurface>(
+              find.byType(NovelReaderNativePagedSurface),
+            )
+            .preferences
+            .flowMode,
+        NovelReaderFlowMode.pagedLtr,
+      );
+      await tester.tap(
+        find.byKey(const Key('novel-reader-pagination-fallback')),
+      );
+      await _pumpBodyWithoutAdvancingTime(tester);
+      expect(find.byType(NovelReaderNativePagedSurface), findsNothing);
+      expect(
+        find.byKey(const Key('novel-reader-paragraph-list')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  for (final hideWithRoute in [false, true]) {
+    testWidgets('late native preparation cannot report under a hidden reader '
+        '(route: $hideWithRoute)', (tester) async {
+      final repository = _ReadingRepository('<p>等待准备时遮挡的完整短章。</p>');
+      final preparation = _NativePreparationProbe()..gate = Completer<void>();
+      final navigation = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        _app(
+          repository,
+          nativePagination: true,
+          nativePreparation: preparation,
+          navigation: navigation,
+        ),
+      );
+      for (var frame = 0; frame < 100 && preparation.calls == 0; frame++) {
+        await tester.pump();
+      }
+      expect(preparation.calls, 1);
+      if (hideWithRoute) {
+        unawaited(
+          navigation.currentState!.push<void>(
+            MaterialPageRoute(builder: (_) => const Scaffold(body: SizedBox())),
+          ),
+        );
+        await tester.pump();
+      } else {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      }
+      preparation.gate!.complete();
+      await tester.pump(const Duration(seconds: 1));
+      expect(repository.committed, isEmpty);
+      expect(repository.completed, isEmpty);
+      if (hideWithRoute) {
+        navigation.currentState!.pop();
+        await tester.pumpAndSettle();
+      } else {
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      }
+      await _pumpNativeReady(tester);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump();
+      expect(repository.completed, [_chapter]);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets(
     'source menu actual body reading returns to the latest common position',
@@ -657,9 +1074,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump();
         expect(
-          ModalRoute.of(
-            tester.element(find.byType(NovelReaderPage)),
-          )!.isCurrent,
+          ModalRoute.of(tester.element(find.byType(NovelReaderPage)))!
+              .isCurrent,
           isTrue,
         );
         expect(
@@ -833,6 +1249,8 @@ Widget _app(
   ThreadRepository? threadRepository,
   ThreadPostLocator? locator,
   EdgeInsets safeArea = EdgeInsets.zero,
+  bool nativePagination = false,
+  NovelReaderNativePreparationService? nativePreparation,
 }) => ProviderScope(
   overrides: [
     novelRepositoryProvider.overrideWithValue(repository),
@@ -841,7 +1259,9 @@ Widget _app(
         ..preferences =
             preferences ??
             NovelReaderPreferences.defaults().copyWith(
-              flowMode: NovelReaderFlowMode.vertical,
+              flowMode: nativePagination
+                  ? NovelReaderFlowMode.pagedLtr
+                  : NovelReaderFlowMode.vertical,
             ),
     ),
     novelChapterInteractionsDockPreferencesRepositoryProvider.overrideWithValue(
@@ -852,6 +1272,10 @@ Widget _app(
     imageCacheServiceProvider.overrideWithValue(images ?? _PendingImageCache()),
     if (preparation != null)
       novelReaderHtmlPreparationServiceProvider.overrideWithValue(preparation),
+    if (nativePreparation != null)
+      novelReaderNativePreparationServiceProvider.overrideWithValue(
+        nativePreparation,
+      ),
     if (threadRepository != null)
       threadRepositoryProvider.overrideWithValue(threadRepository),
     if (locator != null) threadPostLocatorProvider.overrideWithValue(locator),
@@ -859,14 +1283,90 @@ Widget _app(
   child: LocalizedTestApp(
     navigatorKey: navigation,
     builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(
-        context,
-      ).copyWith(padding: safeArea, viewPadding: safeArea),
+      data: MediaQuery.of(context)
+          .copyWith(padding: safeArea, viewPadding: safeArea),
       child: child!,
     ),
-    home: const NovelReaderPage(novelId: _work, initialEpisodeId: _chapter),
+    home: NovelReaderPage(
+      novelId: _work,
+      initialEpisodeId: _chapter,
+      nativePagination: nativePagination,
+      nativeIdleScheduler: _nativeIdle,
+    ),
   ),
 );
+
+Future<void> _nativeIdle() async {}
+
+final _nativeLongBody = List.generate(
+  16,
+  (index) => '<p>第$index段：${List.filled(40, '小说正文').join()}。</p>',
+).join();
+
+NovelReaderNativePagedController _nativeController(WidgetTester tester) =>
+    tester
+        .widget<NovelReaderNativePagedViewport>(
+          find.byType(NovelReaderNativePagedViewport).last,
+        )
+        .controller;
+
+Future<void> _pumpNativeReady(
+  WidgetTester tester, {
+  int? page,
+  bool advanceTime = false,
+}) async {
+  for (var frame = 0; frame < 250; frame++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 2)),
+    );
+    await tester.pump(
+      advanceTime ? const Duration(milliseconds: 16) : Duration.zero,
+    );
+    if (find.byType(NovelReaderNativePagedViewport).evaluate().isEmpty) {
+      continue;
+    }
+    final controller = _nativeController(tester);
+    if (!controller.isSuspended &&
+        controller.snapshot?.isComplete == true &&
+        controller.visiblePageIndex != null &&
+        (page == null || controller.visiblePageIndex == page) &&
+        !controller.hasPendingNavigation) {
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      return;
+    }
+  }
+  fail('The native reading page did not confirm the requested visible page');
+}
+
+class _NativePreparationProbe implements NovelReaderNativePreparationService {
+  int calls = 0;
+  bool fail = false;
+  Completer<void>? gate;
+
+  @override
+  Future<NovelReaderNativeChapterPreparation> prepare({
+    required String episodeId,
+    required String sourceId,
+    required String rawHtml,
+    required NovelReaderDocument semanticDocument,
+    required NovelReaderPaginationCancellationToken cancellation,
+    TextConverter converter = const IdentityTextConverter(),
+  }) async {
+    calls++;
+    await gate?.future;
+    if (fail) throw StateError('test native preparation failure');
+    return const DefaultNovelReaderNativePreparationService().prepare(
+      episodeId: episodeId,
+      sourceId: sourceId,
+      rawHtml: rawHtml,
+      semanticDocument: semanticDocument,
+      cancellation: cancellation,
+      converter: converter,
+    );
+  }
+}
 
 class _GatedHtmlPreparation implements NovelReaderHtmlPreparationService {
   final gate = Completer<void>();
@@ -913,6 +1413,8 @@ class _ReadingRepository
   final commitCompletionFlags = <bool>[];
   final completed = <String>[];
   String? recent;
+  Completer<void>? commitGate;
+  bool failNextCommit = false;
 
   @override
   Future<List<NovelEpisodeItem>> getEpisodes({
@@ -978,6 +1480,12 @@ class _ReadingRepository
     bool markCompleted = false,
     bool Function()? canCommit,
   }) async {
+    final gate = commitGate;
+    if (gate != null) await gate.future;
+    if (failNextCommit) {
+      failNextCommit = false;
+      throw StateError('test progress commit failure');
+    }
     if (canCommit?.call() == false) return false;
     this.progress[progress.episodeId] = progress;
     recent = progress.episodeId;
