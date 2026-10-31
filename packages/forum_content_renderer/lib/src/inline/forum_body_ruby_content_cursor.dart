@@ -68,7 +68,7 @@ final class ForumBodyRubyContentCursor {
     }
   }
 
-  static const revision = 1;
+  static const revision = 2;
   ForumBodyStyledFlowCursor? _flow;
   ForumBodyStyledFlowEvent? _root;
   ForumBodyStyledFlowEvent? _last;
@@ -276,18 +276,6 @@ final class ForumBodyRubyContentCursor {
       }
       return false;
     }
-    if (direct && _annotationMode) {
-      if (node is ForumBodyText && node.text.runes.every(_interElementSpace)) {
-        _whitespace.add(event);
-        return false;
-      }
-      _carryWhitespace = _whitespace.iterator;
-      _whitespace = [];
-      _deferred = event;
-      _annotationMode = false;
-      _publish();
-      return _current != null;
-    }
     if (event.style.hidden) {
       if (node is ForumBodyElement) {
         _skip(node, ForumBodyRubyIgnoredReason.hidden);
@@ -301,6 +289,18 @@ final class ForumBodyRubyContentCursor {
         );
       }
       return false;
+    }
+    if (direct && _annotationMode) {
+      if (node is ForumBodyText && node.text.runes.every(_interElementSpace)) {
+        _whitespace.add(event);
+        return false;
+      }
+      _carryWhitespace = _whitespace.iterator;
+      _whitespace = [];
+      _deferred = event;
+      _annotationMode = false;
+      _publish();
+      return _current != null;
     }
     final target = _annotation ?? _base!;
     if (node is ForumBodyElement && node.kind == ForumBodyElementKind.ruby) {

@@ -172,6 +172,26 @@ void main() {
     },
   );
 
+  test(
+    'hidden siblings do not terminate annotation mode or create a space base',
+    () {
+      final run = open(
+        '<ruby>A<rt>a</rt> <span hidden>hidden</span> <rt>b</rt> </ruby>',
+      );
+      final groups = drain(run.cursor);
+      expect(groups, hasLength(1));
+      expect(text(groups.single.base), 'A');
+      expect(groups.single.annotations.map((rt) => text(rt.parts)), ['a', 'b']);
+      expect(
+        run.cursor.takeIgnored().map((item) => item.reason),
+        containsAll([
+          ForumBodyRubyIgnoredReason.hidden,
+          ForumBodyRubyIgnoredReason.annotationWhitespace,
+        ]),
+      );
+    },
+  );
+
   test('multiple RTs share their base without becoming ordinary body text', () {
     final run = open(
       '<ruby>漢字<rt>かんじ</rt><rt lang="en">characters</rt></ruby>',
