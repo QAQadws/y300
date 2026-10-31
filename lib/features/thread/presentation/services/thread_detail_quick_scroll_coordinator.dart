@@ -1,4 +1,5 @@
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 enum ThreadDetailQuickScrollTarget { top, bottom }
@@ -37,6 +38,7 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
   bool _isNavigating = false;
   bool _navigationInterrupted = false;
   bool _isDisposed = false;
+  bool _notificationScheduled = false;
   int _navigationGeneration = 0;
   _EndpointBinding? _endpointBinding;
 
@@ -59,7 +61,7 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     if (wasNavigating && _scrollController.hasClients) {
       _scrollController.jumpTo(_scrollController.position.pixels);
     }
-    if (wasNavigating && !_isDisposed) notifyListeners();
+    if (wasNavigating && !_isDisposed) _notifyChanges();
   }
 
   ThreadDetailQuickScrollTarget get target => _target;
@@ -109,7 +111,7 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     }
 
     if (changed) {
-      notifyListeners();
+      _notifyChanges();
     }
   }
 
@@ -143,7 +145,7 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     bool isCurrent() => !_isDisposed && generation == _navigationGeneration;
     onNavigationStarted?.call();
     _navigationInterrupted = false;
-    notifyListeners();
+    _notifyChanges();
     try {
       final endpoint = _endpointBinding;
       if (endpoint != null) {
@@ -209,7 +211,7 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
         if (_scrollController.hasClients) {
           updateMetrics(_scrollController.position);
         }
-        notifyListeners();
+        _notifyChanges();
       }
     }
   }
@@ -264,6 +266,25 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
       return;
     }
     _target = value;
+    _notifyChanges();
+  }
+
+  void _notifyChanges() {
+    if (_isDisposed) return;
+    final binding = WidgetsBinding.instance;
+    // Applying new viewport dimensions can emit scroll notifications during
+    // layout. Keep state current, but rebuild the dock after layout completes.
+    if (binding.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      if (_notificationScheduled) return;
+      _notificationScheduled = true;
+      binding.addPostFrameCallback((_) {
+        if (!_notificationScheduled) return;
+        _notificationScheduled = false;
+        if (!_isDisposed) notifyListeners();
+      });
+      return;
+    }
+    _notificationScheduled = false;
     notifyListeners();
   }
 

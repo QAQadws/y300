@@ -1,11 +1,65 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 
 void main() {
+  testWidgets('disposal retires a queued layout notification', (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final coordinator = ThreadDetailQuickScrollCoordinator(
+      scrollController: controller,
+    );
+    var notifications = 0;
+    coordinator.addListener(() => notifications++);
+    await tester.pumpWidget(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          coordinator.updateMetrics(_metrics(pixels: 0));
+          coordinator.dispose();
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+    expect(notifications, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('layout metric changes notify once after the frame', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    final coordinator = ThreadDetailQuickScrollCoordinator(
+      scrollController: controller,
+    );
+    addTearDown(coordinator.dispose);
+    addTearDown(controller.dispose);
+    final phases = <SchedulerPhase>[];
+    coordinator.addListener(() {
+      phases.add(SchedulerBinding.instance.schedulerPhase);
+    });
+    await tester.pumpWidget(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          coordinator.updateMetrics(_metrics(pixels: 0));
+          coordinator.updateMetrics(_metrics(pixels: 1000));
+          coordinator.updateMetrics(_metrics(pixels: 0));
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+    expect(phases, [SchedulerPhase.postFrameCallbacks]);
+    expect(coordinator.isScrollable, isTrue);
+    expect(coordinator.target, ThreadDetailQuickScrollTarget.bottom);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final replacement in [false, true]) {
     testWidgets(
       'a late endpoint result is retired after ${replacement ? 'host replacement' : 'cancellation'}',
