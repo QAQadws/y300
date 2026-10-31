@@ -30,6 +30,24 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   test(
+    'author font declarations inherit reader metrics without complex probes',
+    () async {
+      final chapter = await _prepare(
+        '<p style="font-family: MissingAuthorFont">'
+        '<font face="Tahoma">跟随阅读器字体。</font></p>',
+      );
+      final adapter = _RecordingMeasureAdapter();
+      final plan = await _planner(adapter)
+          .paginate(chapter, _key(chapter, height: 200));
+      expect(plan.routeCounts[NovelReaderPaginationRoute.safeText], 1);
+      expect(plan.complexSearchProbeCount, 0);
+      expect(plan.pages.single.html, isNot(contains('font-family')));
+      expect(plan.pages.single.html, isNot(contains('face=')));
+      expect(_visibleText(plan.pages.single.html), '跟随阅读器字体。');
+    },
+  );
+
+  test(
     'collapse followed by style and line breaks has no blank final page',
     () async {
       const content =
@@ -683,7 +701,7 @@ void main() {
     'cancelling a pending measurement disposes once and cannot fall back',
     () async {
       final chapter = await _prepare(
-        '<font face="Fantasy Novel Font">复杂正文。</font>',
+        '<font style="letter-spacing: 1px">复杂正文。</font>',
       );
       final adapter = _GatedSessionFactory(disposeCompletesError: true);
       final token = NovelReaderPaginationCancellationToken();
@@ -789,7 +807,7 @@ void main() {
     'nearby pages pause probes and promotion resumes the same session',
     () async {
       final chapter = await _prepare(
-        '<p><font face="Fantasy Novel Font">${'甲' * 96}</font></p>',
+        '<p><font style="letter-spacing: 1px">${'甲' * 96}</font></p>',
       );
       final key = _key(chapter, height: 80);
       double heightFor(NovelReaderPaginationMeasureRequest request, int _) =>
@@ -880,7 +898,7 @@ void main() {
     'cancelling deferred work releases its session without late cache writes',
     () async {
       final chapter = await _prepare(
-        '<p><font face="Fantasy Novel Font">${'甲' * 96}</font></p>',
+        '<p><font style="letter-spacing: 1px">${'甲' * 96}</font></p>',
       );
       final idle = Completer<void>();
       final deferred = Completer<void>();
@@ -943,7 +961,7 @@ void main() {
     'complete-plan callers remain eager when a demand object is supplied',
     () async {
       final chapter = await _prepare(
-        '<p><font face="Fantasy Novel Font">${'甲' * 48}</font></p>',
+        '<p><font style="letter-spacing: 1px">${'甲' * 48}</font></p>',
       );
       final demand = NovelReaderPaginationDemand(
         lookAhead: 0,
@@ -1171,7 +1189,7 @@ void main() {
   test('composes safe, flowable complex and safe text on one page', () async {
     final chapter = await _prepare(
       '<p>前文。</p>'
-      '<p><font face="Fantasy Novel Font">复杂标题。</font></p>'
+      '<p><font style="letter-spacing: 1px">复杂标题。</font></p>'
       '<p>后文。</p>',
     );
     final adapter = _RecordingMeasureAdapter(
@@ -1203,7 +1221,7 @@ void main() {
 
   test('shares the boundary index across isolated production plans', () async {
     final chapter = await _prepare(
-      '<p><font face="Fantasy Novel Font">复杂缓存正文。</font></p>',
+      '<p><font style="letter-spacing: 1px">复杂缓存正文。</font></p>',
     );
     final planner = _planner(
       _RecordingMeasureAdapter(
@@ -1224,7 +1242,7 @@ void main() {
 
   test('paginates a long flowable complex atom across three pages', () async {
     final chapter = await _prepare(
-      '<p><font face="Fantasy Novel Font">${List.filled(24, '甲').join()}</font></p>',
+      '<p><font style="letter-spacing: 1px">${List.filled(24, '甲').join()}</font></p>',
     );
     final adapter = _RecordingMeasureAdapter(
       heightFor: (request, _) =>
@@ -1261,7 +1279,7 @@ void main() {
       () async {
         final text = List<String>.filled(96, '甲').join();
         final chapter = await _prepare(
-          '<p><font face="Fantasy Novel Font">$text</font></p>',
+          '<p><font style="letter-spacing: 1px">$text</font></p>',
         );
         final secondPageStarted = Completer<void>();
         final releaseSecondPage = Completer<void>();
@@ -1368,7 +1386,7 @@ void main() {
     () async {
       final text = '甲' * 9000;
       final chapter = await _prepare(
-        '<p><font face="Fantasy Novel Font">$text</font></p>',
+        '<p><font style="letter-spacing: 1px">$text</font></p>',
       );
       final adapter = _RecordingMeasureAdapter(
         heightFor: (request, _) =>
@@ -1412,7 +1430,7 @@ void main() {
     'falls back atomically when the minimum complex fragment overflows',
     () async {
       final chapter = await _prepare(
-        '<p><font face="Fantasy Novel Font">复杂正文。</font></p>',
+        '<p><font style="letter-spacing: 1px">复杂正文。</font></p>',
       );
 
       final plan = await _planner(
@@ -1440,7 +1458,7 @@ void main() {
             ? List.filled(9000, '甲').join()
             : List.filled(160, '<span>甲</span>').join();
         final chapter = await _prepare(
-          '<p><font face="Fantasy Novel Font">$content</font></p>',
+          '<p><font style="letter-spacing: 1px">$content</font></p>',
         );
         if (limit == 'html') {
           expect(chapter.html.length, greaterThan(8192));
@@ -1532,7 +1550,7 @@ void main() {
       'a propagated $code cannot be swallowed into an atomic measurement',
       () async {
         final chapter = await _prepare(
-          '<p><font face="Fantasy Novel Font">复杂正文</font></p>',
+          '<p><font style="letter-spacing: 1px">复杂正文</font></p>',
         );
         final adapter = _RecordingMeasureAdapter();
         await expectLater(

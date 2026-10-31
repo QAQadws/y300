@@ -5,6 +5,34 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
+  test(
+    'reader font policy removes author families but retains other styling',
+    () {
+      final policy = _policy(
+        renderTestOptions.copyWith(preserveAuthorFontFamily: false),
+      );
+      final result = _prepareHtml(
+        policy,
+        '<p style="font-family: MissingAuthorFont !important; font-size: 24px; '
+        'font-weight: 700; font-style: italic; color: red; text-align: center">'
+        '<font face="Tahoma" size="5" color="#f00">正文</font></p>',
+      );
+      expect(result, isNot(contains('font-family')));
+      expect(result, isNot(contains('face=')));
+      expect(result, contains('font-size: 24px'));
+      expect(result, contains('font-weight: 700'));
+      expect(result, contains('font-style: italic'));
+      expect(result, contains('color: red'));
+      expect(result, contains('text-align: center'));
+      expect(result, contains('color="#f00"'));
+      expect(result, contains('正文'));
+      expect(
+        renderTestOptions,
+        isNot(renderTestOptions.copyWith(preserveAuthorFontFamily: false)),
+      );
+    },
+  );
+
   testWidgets('builds base text style from options', (tester) async {
     late TextStyle style;
     final options = renderTestOptions.copyWith(

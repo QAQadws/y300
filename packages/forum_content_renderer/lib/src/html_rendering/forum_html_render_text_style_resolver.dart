@@ -141,12 +141,14 @@ final class DefaultForumHtmlRenderTextStyleResolver
       style = style.copyWith(fontStyle: fontStyle.value);
     }
 
-    final family = _resolveFontFamily(element, declarations);
-    if (family.failure != null) {
-      return ForumHtmlResolvedTextStyle.unsupported(style, family.failure);
-    }
-    if (family.hasValue) {
-      style = style.copyWith(fontFamily: family.value);
+    if (options.preserveAuthorFontFamily) {
+      final family = _resolveFontFamily(element, declarations);
+      if (family.failure != null) {
+        return ForumHtmlResolvedTextStyle.unsupported(style, family.failure);
+      }
+      if (family.hasValue) {
+        style = style.copyWith(fontFamily: family.value);
+      }
     }
     return ForumHtmlResolvedTextStyle.supported(style);
   }

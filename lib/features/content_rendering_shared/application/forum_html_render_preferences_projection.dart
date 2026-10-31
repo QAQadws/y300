@@ -9,5 +9,7 @@ extension ForumHtmlRenderPreferencesProjection on ForumHtmlReaderPreferences {
     lineHeightScale: typography.lineHeightScale,
     paragraphSpacing: typography.paragraphSpacing,
     preserveAuthorFontSize: preserveAuthorFontSize,
+    // Both the system default and an imported font are explicit reader choices.
+    preserveAuthorFontFamily: false,
   );
 }

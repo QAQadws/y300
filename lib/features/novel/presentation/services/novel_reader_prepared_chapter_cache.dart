@@ -283,6 +283,7 @@ final class _PreparationCacheKey {
       sourceTid,
       preferences.hashCode.toString(),
       preferences.typography.hashCode.toString(),
+      preferences.renderOptions.hashCode.toString(),
       preferences.conversionMode.name,
       preferences.preserveAuthorFontSize.toString(),
       themeSignature,

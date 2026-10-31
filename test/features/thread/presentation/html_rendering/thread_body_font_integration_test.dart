@@ -173,7 +173,7 @@ void main() {
         closeTo(20 * 1.6, 0.001),
       );
       final authorStyle = _styleForText(tester, 'Author emphasis');
-      expect(authorStyle.fontFamily, 'AuthorFont');
+      expect(authorStyle.fontFamily, FontIdentity.runtimeFamily(_first.id));
       expect(authorStyle.fontWeight, FontWeight.w700);
       expect(authorStyle.fontStyle, FontStyle.italic);
       expect(tester.takeException(), isNull);

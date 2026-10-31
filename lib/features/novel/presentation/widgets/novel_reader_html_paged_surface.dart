@@ -446,9 +446,9 @@ class _NovelReaderHtmlPagedSurfaceState
                 ),
                 themeSignature: widget.theme.signature,
                 imageDimensionRevision: prepared.imageDimensionRevision,
-                // fwfh 0.17.4 changes paragraph spacing and list geometry.
+                // Reader font precedence changes glyph metrics and line wrapping.
                 // Old persisted page indexes must use the reflow restore path.
-                rendererRevision: 21,
+                rendererRevision: 22,
                 topChromeInsetPx: NovelReaderPaginationKey.logicalPixels(
                   topChromeInset,
                 ),

@@ -83,9 +83,8 @@ void main() {
   test(
     'shared preparation gives vertical and paged consumers normalized HTML',
     () async {
-      final source = File(
-        novelComplexHtmlInvalidFontFixturePath,
-      ).readAsStringSync();
+      final source = File(novelComplexHtmlInvalidFontFixturePath)
+          .readAsStringSync();
       final prepared = await _prepare(source, theme: _sepiaTheme);
 
       expect(prepared.legacyMarkupNormalization.revision, 1);
@@ -101,7 +100,7 @@ void main() {
     },
   );
 
-  test('keeps valid unknown fonts on the flowable complex route', () async {
+  test('keeps valid source fonts but removes their display override', () async {
     final prepared = await _prepare(
       '<p><font face="Uninstalled Fantasy Font">有效未知字体</font></p>',
       theme: _lightTheme,
@@ -120,8 +119,9 @@ void main() {
 
     expect(prepared.html, contains('face="Uninstalled Fantasy Font"'));
     expect(prepared.legacyMarkupNormalization.normalizedAttributeCount, 0);
-    expect(classified.route, NovelReaderPaginationRoute.flowableComplexText);
-    expect(classified.reason, NovelReaderPaginationRouteReason.unsupportedFont);
+    expect(classified.route, NovelReaderPaginationRoute.safeText);
+    expect(classified.reason, NovelReaderPaginationRouteReason.safeTextSubset);
+    expect(prepared.renderDocument.preparedHtml, isNot(contains('face=')));
   });
 
   test(

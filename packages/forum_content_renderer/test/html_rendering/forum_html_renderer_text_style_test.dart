@@ -1,10 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:html/parser.dart' as html_parser;
 
 import 'render_test_support.dart';
 
 void main() {
+  test('measurement inherits the reader family while retaining emphasis', () {
+    const resolver = DefaultForumHtmlRenderTextStyleResolver();
+    const base = TextStyle(fontFamily: 'ReaderFont', fontSize: 20);
+    for (final html in [
+      '<font face="Tahoma" style="font-weight:700; font-style:italic">text</font>',
+      '<span style="font-family:MissingAuthorFont; font-weight:700; '
+          'font-style:italic">text</span>',
+    ]) {
+      final result = resolver.resolve(
+        element: html_parser.parseFragment(html).children.single,
+        parentStyle: base,
+        baseStyle: base,
+        options: _options.copyWith(preserveAuthorFontFamily: false),
+        theme: forumHtmlTestTheme,
+      );
+      expect(result.isSupported, isTrue);
+      expect(result.style.fontFamily, 'ReaderFont');
+      expect(result.style.fontWeight, FontWeight.w700);
+      expect(result.style.fontStyle, FontStyle.italic);
+    }
+  });
+
   testWidgets('resolved style is not scaled twice and author CSS still wins', (
     tester,
   ) async {

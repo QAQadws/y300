@@ -165,7 +165,7 @@ class ForumHtmlRenderStylePolicy {
   }
 
   void normalizeAuthorStyles(html_dom.DocumentFragment fragment) {
-    if (!options.preserveAuthorFontSize) {
+    if (!options.preserveAuthorFontSize || !options.preserveAuthorFontFamily) {
       for (final element in fragment.querySelectorAll('[style]')) {
         _sanitizeStyle(element);
       }
@@ -317,6 +317,9 @@ class ForumHtmlRenderStylePolicy {
     if (element.localName?.toLowerCase() != 'font') {
       return;
     }
+    if (!options.preserveAuthorFontFamily) {
+      element.attributes.remove('face');
+    }
     if (!options.preserveAuthorFontSize) {
       element.attributes.remove('size');
     } else {
@@ -357,6 +360,7 @@ class ForumHtmlRenderStylePolicy {
   }
 
   bool _shouldDropStyleProperty(String property) {
-    return !options.preserveAuthorFontSize && property == 'font-size';
+    return !options.preserveAuthorFontSize && property == 'font-size' ||
+        !options.preserveAuthorFontFamily && property == 'font-family';
   }
 }

@@ -28,34 +28,34 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('flowable titles compose with adjacent text after Phase 5', () async {
-    final html = File(
-      novelComplexHtmlInvalidFontFixturePath,
-    ).readAsStringSync();
+    final html = File(novelComplexHtmlInvalidFontFixturePath)
+        .readAsStringSync()
+        .replaceAll('<font ', '<font style="letter-spacing:1px" ');
     final baseline = await _paginate(
       html: html,
       episodeId: 'phase0-invalid-font',
       legacyMarkupNormalizer: const NoopNovelReaderLegacyMarkupNormalizer(),
     );
-    final unsupportedFontAtoms = baseline.classified
+    final complexTitleAtoms = baseline.classified
         .where(
           (atom) =>
               atom.route == NovelReaderPaginationRoute.flowableComplexText &&
-              atom.reason == NovelReaderPaginationRouteReason.unsupportedFont,
+              atom.reason == NovelReaderPaginationRouteReason.unsupportedStyle,
         )
         .toList(growable: false);
 
-    expect(unsupportedFontAtoms, hasLength(2));
+    expect(complexTitleAtoms, hasLength(2));
     expect(
-      unsupportedFontAtoms.map((atom) => atom.layoutPolicy.measure),
+      complexTitleAtoms.map((atom) => atom.layoutPolicy.measure),
       everyElement(NovelReaderPaginationMeasurePolicy.htmlRendererRange),
     );
     expect(
-      unsupportedFontAtoms.map((atom) => atom.layoutPolicy.split),
+      complexTitleAtoms.map((atom) => atom.layoutPolicy.split),
       everyElement(NovelReaderPaginationSplitPolicy.domBoundaries),
     );
     expect(
-      unsupportedFontAtoms.map((atom) => atom.atom.html),
-      everyElement(contains('face="&amp;quot"')),
+      complexTitleAtoms.map((atom) => atom.atom.html),
+      everyElement(contains('letter-spacing:1px')),
     );
     expect(baseline.plan.pageCount, 1);
     expect(baseline.plan.complexBlockCount, 2);
@@ -81,7 +81,7 @@ void main() {
     // ignore: avoid_print
     print(
       'NOVEL_COMPLEX_HTML_PHASE0 pages=${baseline.plan.pageCount} '
-      'unsupportedFontAtoms=${unsupportedFontAtoms.length} '
+      'complexTitleAtoms=${complexTitleAtoms.length} '
       'measurements=${baseline.plan.measurementCount} '
       'rendererValidations=${baseline.plan.rendererValidationCount} '
       'routes=$routeCounts reasons=$reasonCounts '
@@ -193,9 +193,8 @@ void main() {
   test(
     'phase 2 normalizes invalid font titles onto the safe text path',
     () async {
-      final html = File(
-        novelComplexHtmlInvalidFontFixturePath,
-      ).readAsStringSync();
+      final html = File(novelComplexHtmlInvalidFontFixturePath)
+          .readAsStringSync();
       final normalized = await _paginate(
         html: html,
         episodeId: 'phase2-normalized-font',

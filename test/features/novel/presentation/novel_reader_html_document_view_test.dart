@@ -19,6 +19,27 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_html_docum
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
+  testWidgets(
+    'the system body font also overrides author family declarations',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          theme: _lightTheme,
+          preparer: const NovelHtmlChapterRenderPreparer(),
+          rawHtml:
+              '<p>默认正文</p><p style="font-family: MissingAuthorFont">'
+              '<font face="Tahoma">跟随默认字体</font></p>',
+          typography: _fontTypography(null),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final family = _styleForText(tester, '跟随默认字体').fontFamily;
+      expect(family, _styleForText(tester, '默认正文').fontFamily);
+      expect(family, isNot(anyOf('Tahoma', 'MissingAuthorFont')));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('long v1 br text uses background preparation and lazy chunks', (
     tester,
   ) async {
@@ -343,12 +364,12 @@ void main() {
   );
 
   testWidgets(
-    'custom body font retains author emphasis and expanded collapse on reflow',
+    'selected body font overrides author faces while preserving emphasis and folds',
     (tester) async {
       const rawHtml =
           '<p>默认正文</p>'
           '<p style="font-family: AuthorFont; font-weight:700">'
-          '<i>作者强调</i></p>'
+          '<font face="Tahoma"><i>作者强调</i></font></p>'
           '<div id="font-collapse" class="showcollapse_box">'
           '<div class="showcollapse_title">目录</div>'
           '<div class="showcollapse_content">展开内容</div></div>';
@@ -366,7 +387,7 @@ void main() {
         'Y300ImportedFont_fixtureA',
       );
       final author = _styleForText(tester, '作者强调');
-      expect(author.fontFamily, 'AuthorFont');
+      expect(author.fontFamily, 'Y300ImportedFont_fixtureA');
       expect(author.fontWeight, FontWeight.w700);
       expect(author.fontStyle, FontStyle.italic);
       await tester.tap(
@@ -384,7 +405,7 @@ void main() {
         'Y300ImportedFont_fixtureB',
       );
       final changedAuthor = _styleForText(tester, '作者强调');
-      expect(changedAuthor.fontFamily, 'AuthorFont');
+      expect(changedAuthor.fontFamily, 'Y300ImportedFont_fixtureB');
       expect(changedAuthor.fontWeight, FontWeight.w700);
       expect(changedAuthor.fontStyle, FontStyle.italic);
       expect(find.textContaining('展开内容', findRichText: true), findsOneWidget);
@@ -484,7 +505,7 @@ Widget _host({
   );
 }
 
-NovelReaderTypography _fontTypography(String family) => NovelReaderTypography(
+NovelReaderTypography _fontTypography(String? family) => NovelReaderTypography(
   body: TextStyle(
     fontFamily: family,
     color: _lightTheme.foreground,

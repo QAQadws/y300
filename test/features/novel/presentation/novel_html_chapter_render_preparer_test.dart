@@ -14,6 +14,29 @@ void main() {
   const preparer = NovelHtmlChapterRenderPreparer();
   const colorParser = CsslibAuthorColorParser();
 
+  test(
+    'display font cleanup leaves the canonical chapter markup intact',
+    () async {
+      const rawHtml =
+          '<p style="font-family: MissingAuthorFont; font-weight:700">'
+          '<font face="Tahoma"><i>正文</i></font></p>';
+      final prepared = await preparer.prepare(
+        rawHtml: rawHtml,
+        preferences: ForumHtmlReaderPreferences.defaults(),
+        theme: _darkTheme,
+        sourceId: 'fixture-episode',
+        threadId: '100',
+        imageCacheOwnerId: '100',
+      );
+      expect(prepared.html, rawHtml);
+      expect(prepared.document.preparedHtml, isNot(contains('font-family')));
+      expect(prepared.document.preparedHtml, isNot(contains('face=')));
+      expect(prepared.document.preparedHtml, contains('font-weight: 700'));
+      expect(prepared.document.preparedHtml, contains('<i>正文</i>'));
+      expect(prepared.legacyMarkupNormalization.normalizedAttributeCount, 0);
+    },
+  );
+
   test('large chapter projection finishes on the preparation worker', () async {
     final parent = Isolate.current.hashCode;
     final result = await preparer.prepareAndProject(

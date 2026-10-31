@@ -268,7 +268,7 @@ String _riskHtmlFor(int targetPages) {
 
 String _mixedHtmlFor(int safeParagraphCount) {
   const safe = '<p>普通文字路径不应触发复杂 HTML renderer probe。</p>';
-  const complex = '<p><font face="Fantasy Novel Font">复杂样式正文。</font></p>';
+  const complex = '<p><font style="letter-spacing: 1px">复杂样式正文。</font></p>';
   final before = List<String>.filled(safeParagraphCount ~/ 2, safe).join();
   final after = List<String>.filled(
     safeParagraphCount - safeParagraphCount ~/ 2,

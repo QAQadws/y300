@@ -122,7 +122,7 @@ void main() {
     );
     final ordinaryTarget = runs.singleWhere((run) => run.text == '中');
     final complexAtom = _atom(
-      '<p><font face="Uninstalled Fantasy Font">'
+      '<p><font style="letter-spacing:1px">'
       '$prefix<span>中</span></font></p>',
       sourceAnchorProjection: projection,
     );
@@ -253,8 +253,8 @@ void main() {
   );
 
   test('routes text-bearing unsupported styles to flowable complex text', () {
-    final unknownFont = classifier.classify(
-      atom: _atom('<p><font face="Uninstalled Fantasy Font">正文</font></p>'),
+    final spacedText = classifier.classify(
+      atom: _atom('<p><font style="letter-spacing:1px">正文</font></p>'),
       baseStyle: _baseStyle,
       preferences: _preferences,
       theme: _lightTheme,
@@ -274,10 +274,10 @@ void main() {
       theme: _lightTheme,
     );
 
-    expect(unknownFont.route, NovelReaderPaginationRoute.flowableComplexText);
+    expect(spacedText.route, NovelReaderPaginationRoute.flowableComplexText);
     expect(
-      unknownFont.reason,
-      NovelReaderPaginationRouteReason.unsupportedFont,
+      spacedText.reason,
+      NovelReaderPaginationRouteReason.unsupportedStyle,
     );
     expect(
       unsupportedCss.route,
@@ -295,7 +295,7 @@ void main() {
       unsupportedDecoration.reason,
       NovelReaderPaginationRouteReason.unsupportedStyle,
     );
-    expect(unknownFont.isBreakable, isTrue);
+    expect(spacedText.isBreakable, isTrue);
     expect(unsupportedCss.isBreakable, isTrue);
     expect(unsupportedDecoration.isBreakable, isTrue);
   });
@@ -387,7 +387,7 @@ void main() {
     expect(run.style.decoration, TextDecoration.underline);
   });
 
-  test('accepts standard root alignment with a known author font', () {
+  test('keeps root alignment while author fonts inherit reader typography', () {
     for (final alignment in const <String>[
       'left',
       'right',
@@ -416,7 +416,7 @@ void main() {
             theme: _lightTheme,
           )
           .single;
-      expect(run.style.fontFamily, 'Arial', reason: alignment);
+      expect(run.style.fontFamily, _baseStyle.fontFamily, reason: alignment);
     }
   });
 
@@ -499,7 +499,7 @@ void main() {
     },
   );
 
-  test('maps common Song typeface names through the shared resolver', () {
+  test('author Song typeface names also inherit the reader family', () {
     for (final family in const <String>['宋体', 'SimSun']) {
       final classified = classifier.classify(
         atom: _atom('<div><font face="$family">章节标题</font></div>'),
@@ -517,7 +517,7 @@ void main() {
             theme: _lightTheme,
           )
           .single;
-      expect(run.style.fontFamily, 'SimSun');
+      expect(run.style.fontFamily, _baseStyle.fontFamily);
     }
   });
 
