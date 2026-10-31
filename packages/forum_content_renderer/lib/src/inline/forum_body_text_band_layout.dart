@@ -5,6 +5,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_native_paragraph_layout.dart';
+import '../paragraph/forum_body_text_layout.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_paint.dart';
 
@@ -301,28 +302,36 @@ final class ForumBodyTextBandLayout implements ForumBodyNativeParagraphLayout {
 
 /// An independently disposable view borrowing its band's one native resource.
 /// Source coordinates remain this child's actual projection, not band offsets.
-final class ForumBodyTextBandChildLayout {
+final class ForumBodyTextBandChildLayout implements ForumBodyTextLayout {
   ForumBodyTextBandChildLayout._(this._band, this.index);
   final ForumBodyTextBandLayout _band;
   final int index;
   bool _disposed = false;
+  @override
   bool get isDisposed => _disposed || _band.isDisposed;
+  @override
   bool get isPaintPrepared => !isDisposed && _band.isPaintPrepared(index);
   ForumBodyTextBandChildGeometry get geometry => _band.children[index];
+  @override
   HtmlDisplayTextProjection get projection =>
       _band.projection.children[index].display;
+  @override
   double get width => geometry.size.width;
+  @override
   double get height => geometry.size.height;
+  @override
   double get alphabeticBaseline => geometry.baseline;
   void _ensureOpen() {
     if (isDisposed) throw StateError('Text band child is retired');
   }
 
+  @override
   void paint(Canvas canvas, Offset offset) {
     _ensureOpen();
     _band._paintStore.paint(index, canvas, offset - geometry._origin);
   }
 
+  @override
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
@@ -397,6 +406,7 @@ final class ForumBodyTextBandChildLayout {
     );
   }
 
+  @override
   List<TextBox> selectionBoxes(int startUtf16, int endUtf16) {
     _ensureOpen();
     final range = _band.projection.engineRangeForChildSelection(

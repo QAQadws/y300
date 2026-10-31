@@ -11,7 +11,8 @@ export 'src/inline/forum_body_inline_span_content.dart';
 export 'src/inline/forum_body_inline_paragraph_layout.dart';
 export 'src/inline/forum_body_ruby_group_layout.dart';
 export 'src/inline/forum_body_ruby_group_preparation.dart';
-export 'src/inline/forum_body_text_band_content.dart' show ForumBodyTextBandContent;
+export 'src/inline/forum_body_text_band_content.dart'
+    show ForumBodyTextBandContent;
 export 'src/inline/forum_body_text_band_layout.dart';
 export 'src/inline/forum_body_ruby_content.dart';
 export 'src/inline/forum_body_ruby_content_cursor.dart';
@@ -30,6 +31,7 @@ export 'src/pagination/forum_body_text_page_surface.dart';
 export 'src/paragraph/forum_body_paragraph_content.dart';
 export 'src/paragraph/forum_body_paragraph_layout.dart';
 export 'src/paragraph/forum_body_paragraph_cache.dart';
+export 'src/paragraph/forum_body_text_layout.dart';
 export 'src/paragraph/forum_body_paragraph_surface.dart';
 export 'src/style/forum_body_length.dart';
 export 'src/style/forum_body_box_style.dart';

@@ -13,6 +13,7 @@ import 'forum_body_native_paragraph_layout.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
 import 'forum_body_text_band_cache_key.dart';
+import 'forum_body_text_layout.dart';
 
 /// Content cannot fit the total budget; pinned pressure may clear when visible
 /// leases release. Callers must not spin/restart a source traversal for either.
@@ -699,11 +700,21 @@ sealed class ForumBodyNativeParagraphLease {
   }
 }
 
-final class ForumBodyParagraphLease extends ForumBodyNativeParagraphLease {
+/// Current metadata and source-local text contract; native ownership remains
+/// in the common cache. A band child never impersonates a whole paragraph.
+sealed class ForumBodyTextLease extends ForumBodyNativeParagraphLease {
+  ForumBodyTextLease._(super.owner, super.entry) : super._();
+  ForumBodyParagraphContent get content;
+  ForumBodyTextLayout get layout;
+}
+
+final class ForumBodyParagraphLease extends ForumBodyTextLease {
   ForumBodyParagraphLease._(super.owner, super.entry, this.content) : super._();
 
   /// Current box/role/interaction metadata, separate from cached native input.
+  @override
   final ForumBodyParagraphContent content;
+  @override
   ForumBodyParagraphLayout get layout {
     if (!isActive) throw StateError('Paragraph lease is retired');
     return _entry.layout as ForumBodyParagraphLayout;
@@ -723,7 +734,7 @@ final class ForumBodyInlineParagraphLease
   }
 }
 
-final class ForumBodyTextBandChildLease extends ForumBodyNativeParagraphLease {
+final class ForumBodyTextBandChildLease extends ForumBodyTextLease {
   ForumBodyTextBandChildLease._(
     super.owner,
     super.entry,
@@ -734,9 +745,11 @@ final class ForumBodyTextBandChildLease extends ForumBodyNativeParagraphLease {
   final ForumBodyTextBandContent bandContent;
   final int childIndex;
   final ForumBodyTextBandChildLayout _view;
+  @override
   ForumBodyParagraphContent get content => bandContent.contexts[childIndex];
   @override
   bool get isActive => super.isActive && !_view.isDisposed;
+  @override
   ForumBodyTextBandChildLayout get layout {
     if (!isActive) throw StateError('Text band lease is retired');
     return _view;

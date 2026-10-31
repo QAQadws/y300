@@ -6,6 +6,7 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
 import 'forum_body_native_paragraph_layout.dart';
+import 'forum_body_text_layout.dart';
 
 export 'forum_body_paragraph_geometry.dart'
     show
@@ -17,7 +18,8 @@ export 'forum_body_paragraph_geometry.dart'
 /// Owns one TextPainter layout, shared by geometry, paint, hit-test and boxes.
 /// No caller can mutate the painter. The owner must dispose it after all views
 /// release it; a disposed view fails before touching an engine resource.
-final class ForumBodyParagraphLayout implements ForumBodyNativeParagraphLayout {
+final class ForumBodyParagraphLayout
+    implements ForumBodyNativeParagraphLayout, ForumBodyTextLayout {
   ForumBodyParagraphLayout._(
     ForumBodyParagraphContent content,
     this._painter,
@@ -154,14 +156,25 @@ final class ForumBodyParagraphLayout implements ForumBodyNativeParagraphLayout {
       codeUnit == 0x0a || codeUnit == 0x2028 || codeUnit == 0x2029;
   final ForumBodyIdentity identity;
   final String? path;
+  @override
   final HtmlDisplayTextProjection projection;
   final TextPainter _painter;
+  @override
   final double width;
+  @override
   final double height;
   final double _paintScale;
   final List<ForumBodyParagraphLine> lines;
   @override
   int get lineCount => lines.length;
+  @override
+  double get alphabeticBaseline {
+    _ensureOpen();
+    return lines.first.baseline;
+  }
+
+  @override
+  bool get isPaintPrepared => !isDisposed;
   bool _disposed = false;
   @override
   bool get isDisposed => _disposed;
@@ -170,6 +183,7 @@ final class ForumBodyParagraphLayout implements ForumBodyNativeParagraphLayout {
     if (_disposed) throw StateError('Paragraph layout is disposed');
   }
 
+  @override
   void paint(Canvas canvas, Offset offset) {
     _ensureOpen();
     if (_paintScale == 1) {
@@ -186,6 +200,7 @@ final class ForumBodyParagraphLayout implements ForumBodyNativeParagraphLayout {
     }
   }
 
+  @override
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
     final position = _painter.getPositionForOffset(offset / _paintScale);
@@ -197,6 +212,7 @@ final class ForumBodyParagraphLayout implements ForumBodyNativeParagraphLayout {
     );
   }
 
+  @override
   List<TextBox> selectionBoxes(int startUtf16, int endUtf16) {
     _ensureOpen();
     RangeError.checkValueInInterval(startUtf16, 0, endUtf16, 'startUtf16');

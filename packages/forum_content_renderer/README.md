@@ -195,5 +195,13 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 条目且仍未被 pin 的快照。close 先从索引移除全部条目，随后逐项退休，避免迟到回填、
 重复扣账或 observer 修改正在迭代的索引。单子行 release 不关闭兄弟 view 的字形/图片。
 
-分组 lease 与页面准备器尚待接入，再完成可见整页绑定与 profile 验收；不能只按
-TextPainter 数量计账，或用原语/缓存的验证代替复杂正文阅读器验收。
+`ForumBodyTextLayout` 提供来源局部的宽高、首行基线、投影、选区、命中和绘图准备状态；
+普通段落与 band 子项分别实现它，不伪造 band 虚拟行的显示 coverage。对应的
+`ForumBodyTextLease` 保留当前 ParagraphContent 和明确的 owner 生命周期，旧的普通
+段落租约仍返回原来的具体 layout 类型。
+
+`ForumBodyRubyGroupLayout.adopt` 可消费普通行、band 子行及二者混合，但必须同 owner、
+同有效作用域且各项 paint 已准备；成功与失败都消费传入句柄，不退休其他别名或兄弟行。
+几何、选区和命中只使用来源局部契约，字体框与极小行高仍参与完整分组尺寸计算。
+页面准备器与可见整页绑定尚待接入，并完成 profile 验收；不能只按 TextPainter 数量
+计账，或用原语/缓存/分组的验证代替复杂正文阅读器验收。

@@ -37,8 +37,8 @@ final class ForumBodyRubyGroupLayout {
   static const revision = 1;
 
   ForumBodyRubyGroupLayout._({
-    required ForumBodyParagraphLease base,
-    required ForumBodyParagraphLease? annotation,
+    required ForumBodyTextLease base,
+    required ForumBodyTextLease? annotation,
     required HtmlDisplayTextProjection annotationProjection,
     required this.size,
     required this.baseline,
@@ -187,9 +187,9 @@ final class ForumBodyRubyGroupLayout {
   /// children without lookup, scaling callbacks or another native build.
   factory ForumBodyRubyGroupLayout.adopt({
     required ForumBodyParagraphCache cache,
-    required ForumBodyParagraphLease baseLease,
+    required ForumBodyTextLease baseLease,
     required ForumBodyParagraphContent annotation,
-    ForumBodyParagraphLease? annotationLease,
+    ForumBodyTextLease? annotationLease,
     double gap = 0,
     double maxWidth = 16384,
   }) {
@@ -214,6 +214,11 @@ final class ForumBodyRubyGroupLayout {
         );
       }
       final baseLayout = baseLease.layout;
+      if (!baseLayout.isPaintPrepared ||
+          (annotationLease != null &&
+              !annotationLease.layout.isPaintPrepared)) {
+        throw StateError('Ruby child paint is not prepared');
+      }
       final baseBounds = _textBounds(baseLease);
       final annotationBounds = annotationLease == null
           ? Rect.zero
@@ -227,7 +232,7 @@ final class ForumBodyRubyGroupLayout {
         baseTop - baseBounds.top,
       );
       final height = baseTop + baseBounds.height;
-      final baseline = baseOffset.dy + baseLayout.lines.single.baseline;
+      final baseline = baseOffset.dy + baseLayout.alphabeticBaseline;
       if (width > maxWidth) {
         throw const ForumBodyRubyGroupException(
           ForumBodyRubyGroupFailure.overflow,
@@ -263,8 +268,8 @@ final class ForumBodyRubyGroupLayout {
     }
   }
 
-  ForumBodyParagraphLease? _base;
-  ForumBodyParagraphLease? _annotation;
+  ForumBodyTextLease? _base;
+  ForumBodyTextLease? _annotation;
   final HtmlDisplayTextProjection _annotationProjection;
   final Size size;
   final double baseline;
@@ -276,7 +281,7 @@ final class ForumBodyRubyGroupLayout {
   bool get isActive =>
       _base?.isActive == true && (_annotation?.isActive ?? true);
 
-  static Rect _textBounds(ForumBodyParagraphLease lease) {
+  static Rect _textBounds(ForumBodyTextLease lease) {
     final layout = lease.layout;
     var bounds = Rect.fromLTWH(0, 0, layout.width, layout.height);
     // Author line-height can be smaller than the actual font boxes, including
