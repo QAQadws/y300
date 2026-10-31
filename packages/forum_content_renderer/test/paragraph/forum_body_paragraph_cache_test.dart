@@ -9,6 +9,7 @@ ForumBodyParagraphContent content(
   double after = 10,
   String fontRevision = 'loaded',
   Color color = const Color(0xff000000),
+  ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
 }) {
   final document = const ForumBodyParser().parse(
     html: html,
@@ -33,11 +34,49 @@ ForumBodyParagraphContent content(
     document: document,
     styles: styles,
     path: '0',
+    layoutMode: layoutMode,
   );
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'fitted and wrapped layouts never alias even when neither needs to shrink',
+    () {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final wrapped = cache.acquire(content: content('<p>ab</p>'), width: 100);
+      final fitted = cache.acquire(
+        content: content(
+          '<p>ab</p>',
+          layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+        ),
+        width: 100,
+      );
+      final alias = cache.acquire(
+        content: content(
+          '<p>ab</p>',
+          layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+        ),
+        width: 100,
+      );
+      expect(fitted.layout.height, wrapped.layout.height);
+      expect(fitted.layout, isNot(same(wrapped.layout)));
+      expect(alias.layout, same(fitted.layout));
+      expect(cache.layoutBuildCount, 2);
+      expect(cache.hitCount, 1);
+      wrapped.release();
+      fitted.release();
+      alias.release();
+      cache.close();
+      expect(cache.activeLeases, 0);
+      expect(cache.estimatedRetainedBytes, 0);
+    },
+  );
 
   test(
     'release revisions are synchronous while budget events cannot reenter mutation',

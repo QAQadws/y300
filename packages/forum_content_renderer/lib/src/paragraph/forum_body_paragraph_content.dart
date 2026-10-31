@@ -13,6 +13,10 @@ enum ForumBodyParagraphInputFailure {
   runLimit,
 }
 
+/// Fitting is applied after the actual per-font-size TextScaler. A single-line
+/// caller must supply a projection without hard breaks; no text is truncated.
+enum ForumBodyParagraphLayoutMode { wrap, fitSingleLine }
+
 final class ForumBodyParagraphInputException implements Exception {
   const ForumBodyParagraphInputException(this.failure, this.path);
   final ForumBodyParagraphInputFailure failure;
@@ -36,6 +40,7 @@ final class ForumBodyParagraphContent {
     required this.fontRevision,
     required this.styleRevision,
     required this.style,
+    required this.layoutMode,
     required this.projection,
     required List<ForumBodyParagraphRun> runs,
     required List<ForumBodyStyleIssue> issues,
@@ -47,6 +52,7 @@ final class ForumBodyParagraphContent {
   final String fontRevision;
   final int styleRevision;
   final ForumBodyResolvedStyle style;
+  final ForumBodyParagraphLayoutMode layoutMode;
   final HtmlDisplayTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyStyleIssue> issues;
@@ -89,6 +95,7 @@ final class ForumBodyParagraphContentBuilder {
     required ForumBodyDocument document,
     required ForumBodyStyleResult styles,
     String? path,
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) {
     if (document.identity != styles.identity) {
       throw ForumBodyParagraphInputException(
@@ -119,6 +126,7 @@ final class ForumBodyParagraphContentBuilder {
       fontRevision: styles.fontRevision,
       styleRevision: styles.resolverRevision,
       style: base,
+      layoutMode: layoutMode,
       limits: this,
       emptySourceRune: root?.source.runeStart ?? 0,
     );
@@ -149,7 +157,10 @@ final class ForumBodyParagraphContentBuilder {
   /// Consume the current ordinary subtree without a full style map. The flow is
   /// borrowed exclusively until the accumulator completes or closes; it remains
   /// owned by the caller. Diagnostics remain with that flow's consumer.
-  ForumBodyParagraphAccumulator openCurrent(ForumBodyStyledFlowCursor flow) {
+  ForumBodyParagraphAccumulator openCurrent(
+    ForumBodyStyledFlowCursor flow, {
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+  }) {
     if (flow.isClosed) throw StateError('Styled flow cursor is closed');
     final event = flow.current;
     if (event == null || event.phase == ForumBodyFlowPhase.close) {
@@ -164,6 +175,7 @@ final class ForumBodyParagraphContentBuilder {
       fontRevision: flow.fontRevision,
       styleRevision: flow.styleRevision,
       style: event.style,
+      layoutMode: layoutMode,
       limits: this,
       emptySourceRune: event.node.source.runeStart,
     );
@@ -182,6 +194,7 @@ final class ForumBodyParagraphContentBuilder {
   ForumBodyParagraphSequence openSequence(
     ForumBodyStyledFlowCursor flow, {
     ForumBodyStyledFlowEvent? block,
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) {
     if (flow.isClosed) throw StateError('Styled flow cursor is closed');
     if (block != null &&
@@ -202,6 +215,7 @@ final class ForumBodyParagraphContentBuilder {
         fontRevision: flow.fontRevision,
         styleRevision: flow.styleRevision,
         style: block?.style ?? flow.rootStyle,
+        layoutMode: layoutMode,
         limits: this,
         emptySourceRune:
             block?.node.source.runeStart ??
@@ -395,6 +409,7 @@ final class _ParagraphCollector {
     required this.fontRevision,
     required this.styleRevision,
     required this.style,
+    required this.layoutMode,
     required this.limits,
     required this.emptySourceRune,
   });
@@ -403,6 +418,7 @@ final class _ParagraphCollector {
   final String fontRevision;
   final int styleRevision;
   final ForumBodyResolvedStyle style;
+  final ForumBodyParagraphLayoutMode layoutMode;
   final ForumBodyParagraphContentBuilder limits;
   final int emptySourceRune;
   final _inputs = <HtmlDisplayTextRun>[];
@@ -422,6 +438,7 @@ final class _ParagraphCollector {
   void absorb(_ParagraphCollector other) {
     if (identity != other.identity ||
         path != other.path ||
+        layoutMode != other.layoutMode ||
         !identical(style, other.style)) {
       throw ForumBodyParagraphInputException(
         ForumBodyParagraphInputFailure.identity,
@@ -515,6 +532,7 @@ final class _ParagraphCollector {
         fontRevision: fontRevision,
         styleRevision: styleRevision,
         style: style,
+        layoutMode: layoutMode,
         projection: projection,
         runs: _runs,
         issues: issues

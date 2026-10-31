@@ -11,6 +11,7 @@ enum ForumBodyParagraphLayoutFailure {
   indent,
   direction,
   noWrap,
+  singleLine,
   coverage,
 }
 
@@ -70,6 +71,7 @@ final class ForumBodyParagraphLayout {
     this._painter,
     this.width,
     this.height,
+    this._paintScale,
     List<ForumBodyParagraphLine> lines,
   ) : lines = List.unmodifiable(lines),
       identity = content.identity,
@@ -82,6 +84,8 @@ final class ForumBodyParagraphLayout {
     TextScaler textScaler = TextScaler.noScaling,
   }) {
     validateInputs(content: content, width: width, textScaler: textScaler);
+    final fitted =
+        content.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine;
     final painter = TextPainter(
       text: content.textSpan,
       textAlign: content.style.textAlign,
@@ -91,9 +95,26 @@ final class ForumBodyParagraphLayout {
       textWidthBasis: TextWidthBasis.parent,
     );
     try {
-      // A fixed content width also avoids TextPainter's alignment resize path.
-      painter.layout(minWidth: width, maxWidth: width);
+      // Shape at the selected font/scaler first. Fitting transforms that same
+      // layout, rather than measuring repeatedly at guessed smaller font sizes.
+      painter.layout(
+        minWidth: width,
+        maxWidth: fitted ? double.infinity : width,
+      );
+      final paintScale = fitted && painter.width > width
+          ? width / painter.width
+          : 1.0;
+      if (!paintScale.isFinite || paintScale <= 0) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.scale,
+        );
+      }
       final metrics = painter.computeLineMetrics();
+      if (fitted && metrics.length > 1) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.singleLine,
+        );
+      }
       final text = content.projection.text;
       final lines = <ForumBodyParagraphLine>[];
       var start = 0;
@@ -139,11 +160,11 @@ final class ForumBodyParagraphLayout {
         }
         lines.add(
           ForumBodyParagraphLine(
-            top: metric.baseline - metric.ascent,
-            bottom: metric.baseline + metric.descent,
-            baseline: metric.baseline,
-            left: metric.left,
-            width: metric.width,
+            top: (metric.baseline - metric.ascent) * paintScale,
+            bottom: (metric.baseline + metric.descent) * paintScale,
+            baseline: metric.baseline * paintScale,
+            left: metric.left * paintScale,
+            width: metric.width * paintScale,
             startUtf16: range.start,
             endUtf16: range.end,
             coverageStartUtf16: start,
@@ -165,7 +186,8 @@ final class ForumBodyParagraphLayout {
         content,
         painter,
         width,
-        painter.height,
+        painter.height * paintScale,
+        paintScale,
         lines,
       );
     } catch (_) {
@@ -190,6 +212,14 @@ final class ForumBodyParagraphLayout {
         ForumBodyParagraphLayoutFailure.indent,
       );
     }
+    if (content.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine &&
+        content.projection.text.runes.any(
+          (rune) => _isDisplayLineBreak(rune) || rune == 0x0d || rune == 0x85,
+        )) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.singleLine,
+      );
+    }
     final scales = <double, double>{};
     for (final style in [
       content.style,
@@ -200,7 +230,8 @@ final class ForumBodyParagraphLayout {
           ForumBodyParagraphLayoutFailure.direction,
         );
       }
-      if (style.whiteSpace == ForumBodyWhiteSpace.pre) {
+      if (style.whiteSpace == ForumBodyWhiteSpace.pre &&
+          content.layoutMode != ForumBodyParagraphLayoutMode.fitSingleLine) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.noWrap,
         );
@@ -216,7 +247,7 @@ final class ForumBodyParagraphLayout {
     return scales;
   }
 
-  static const backendRevision = 2;
+  static const backendRevision = 3;
   static bool _isDisplayLineBreak(int codeUnit) =>
       codeUnit == 0x0a || codeUnit == 0x2028 || codeUnit == 0x2029;
   final ForumBodyIdentity identity;
@@ -225,6 +256,7 @@ final class ForumBodyParagraphLayout {
   final TextPainter _painter;
   final double width;
   final double height;
+  final double _paintScale;
   final List<ForumBodyParagraphLine> lines;
   bool _disposed = false;
   bool get isDisposed => _disposed;
@@ -235,12 +267,23 @@ final class ForumBodyParagraphLayout {
 
   void paint(Canvas canvas, Offset offset) {
     _ensureOpen();
-    _painter.paint(canvas, offset);
+    if (_paintScale == 1) {
+      _painter.paint(canvas, offset);
+      return;
+    }
+    canvas.save();
+    try {
+      canvas.translate(offset.dx, offset.dy);
+      canvas.scale(_paintScale, _paintScale);
+      _painter.paint(canvas, Offset.zero);
+    } finally {
+      canvas.restore();
+    }
   }
 
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
-    final position = _painter.getPositionForOffset(offset);
+    final position = _painter.getPositionForOffset(offset / _paintScale);
     return projection.sourceAtUtf16(
       position.offset,
       affinity: position.affinity == TextAffinity.upstream
@@ -256,11 +299,22 @@ final class ForumBodyParagraphLayout {
         .sourceAtUtf16(startUtf16, affinity: HtmlProjectionAffinity.upstream)
         .displayUtf16;
     final end = projection.sourceAtUtf16(endUtf16).displayUtf16;
-    return List.unmodifiable(
-      _painter.getBoxesForSelection(
-        TextSelection(baseOffset: start, extentOffset: end),
-      ),
+    final boxes = _painter.getBoxesForSelection(
+      TextSelection(baseOffset: start, extentOffset: end),
     );
+    return List.unmodifiable([
+      for (final box in boxes)
+        if (_paintScale == 1)
+          box
+        else
+          TextBox.fromLTRBD(
+            box.left * _paintScale,
+            box.top * _paintScale,
+            box.right * _paintScale,
+            box.bottom * _paintScale,
+            box.direction,
+          ),
+    ]);
   }
 
   ForumBodyParagraphFragment fragment(int startLine, int endLine) {

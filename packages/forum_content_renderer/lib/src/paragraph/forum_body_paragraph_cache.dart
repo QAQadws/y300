@@ -367,6 +367,7 @@ final class _LayoutKey {
       projectionRevision = HtmlDisplayTextProjection.revision,
       projection = content.projection,
       span = content.textSpan,
+      layoutMode = content.layoutMode,
       align = content.style.textAlign,
       direction = content.style.textDirection,
       scales = (scales.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
@@ -380,6 +381,7 @@ final class _LayoutKey {
   final int projectionRevision;
   final HtmlDisplayTextProjection projection;
   final TextSpan span;
+  final ForumBodyParagraphLayoutMode layoutMode;
   final TextAlign align;
   final TextDirection direction;
   final double width;
@@ -396,6 +398,7 @@ final class _LayoutKey {
       projectionRevision == other.projectionRevision &&
       projection.hasSameSourceMapping(other.projection) &&
       span == other.span &&
+      layoutMode == other.layoutMode &&
       align == other.align &&
       direction == other.direction &&
       width == other.width &&
@@ -410,6 +413,7 @@ final class _LayoutKey {
     projectionRevision,
     projection.sourceMappingHash,
     span,
+    layoutMode,
     align,
     direction,
     width,

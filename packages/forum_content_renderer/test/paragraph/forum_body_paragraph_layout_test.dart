@@ -4,7 +4,10 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-ForumBodyParagraphContent content(String html) {
+ForumBodyParagraphContent content(
+  String html, {
+  ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+}) {
   final document = const ForumBodyParser().parse(
     html: html,
     sourceId: 'layout',
@@ -27,6 +30,7 @@ ForumBodyParagraphContent content(String html) {
     document: document,
     styles: styles,
     path: '0',
+    layoutMode: layoutMode,
   );
 }
 
@@ -69,6 +73,190 @@ Future<List<int>> raster(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'fitted single line keeps every glyph and scales actual line geometry',
+    () {
+      const html = '<p>abcdefghijklmnopqrst</p>';
+      final natural = ForumBodyParagraphLayout.create(
+        content: content(html),
+        width: 400,
+      );
+      final fitted = ForumBodyParagraphLayout.create(
+        content: content(
+          html,
+          layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+        ),
+        width: 100,
+      );
+      addTearDown(natural.dispose);
+      addTearDown(fitted.dispose);
+      expect(natural.lines.single.width, 400);
+      expect(fitted.lines, hasLength(1));
+      expect(fitted.width, 100);
+      expect(fitted.height, closeTo(natural.height / 4, 1e-6));
+      expect(fitted.lines.single.width, closeTo(100, 1e-6));
+      expect(
+        fitted.lines.single.baseline,
+        closeTo(natural.lines.single.baseline / 4, 1e-6),
+      );
+      expect(fitted.projection.text, 'abcdefghijklmnopqrst');
+      expect(fitted.lines.single.coverageEndUtf16, 20);
+      expect(fitted.selectionBoxes(19, 20).single.right, closeTo(100, 1e-6));
+    },
+  );
+
+  test(
+    'fitted selection and hits use the same transformed source coordinates',
+    () {
+      const html = '<p>abcdefghijklmnopqrst</p>';
+      final natural = ForumBodyParagraphLayout.create(
+        content: content(html),
+        width: 400,
+      );
+      final fitted = ForumBodyParagraphLayout.create(
+        content: content(
+          html,
+          layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+        ),
+        width: 100,
+      );
+      addTearDown(natural.dispose);
+      addTearDown(fitted.dispose);
+      final naturalBox = natural.selectionBoxes(3, 6).single;
+      final fittedBox = fitted.selectionBoxes(3, 6).single;
+      expect(
+        fittedBox.toRect(),
+        Rect.fromLTRB(
+          naturalBox.left / 4,
+          naturalBox.top / 4,
+          naturalBox.right / 4,
+          naturalBox.bottom / 4,
+        ),
+      );
+      for (var index = 0; index < 20; index++) {
+        final box = fitted.selectionBoxes(index, index + 1).single.toRect();
+        final probe = Offset(box.left + box.width * .1, box.center.dy);
+        expect(
+          fitted.sourceAt(probe).sourceRune,
+          natural.sourceAt(probe * 4).sourceRune,
+        );
+        expect(
+          fitted.fragment(0, 1).sourceAt(probe).sourceRune,
+          fitted.sourceAt(probe).sourceRune,
+        );
+      }
+    },
+  );
+
+  for (final direction in ['ltr', 'rtl']) {
+    test(
+      'short fitted text is never enlarged and preserves $direction alignment',
+      () {
+        final html = '<p dir="$direction">ab</p>';
+        final ordinary = ForumBodyParagraphLayout.create(
+          content: content(html),
+          width: 200,
+        );
+        final fitted = ForumBodyParagraphLayout.create(
+          content: content(
+            html,
+            layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+          ),
+          width: 200,
+        );
+        addTearDown(ordinary.dispose);
+        addTearDown(fitted.dispose);
+        expect(fitted.height, ordinary.height);
+        expect(fitted.lines.single.width, ordinary.lines.single.width);
+        expect(
+          fitted.selectionBoxes(0, 2).map((box) => box.toRect()),
+          ordinary.selectionBoxes(0, 2).map((box) => box.toRect()),
+        );
+      },
+    );
+  }
+
+  test('single-line fitting follows actual mixed nonlinear font scaling', () {
+    const html = '<p>aaa<span style="font-size:40px">bbb</span>ccc</p>';
+    final natural = ForumBodyParagraphLayout.create(
+      content: content(html),
+      width: 1000,
+      textScaler: const _NonlinearScaler(),
+    );
+    final fitted = ForumBodyParagraphLayout.create(
+      content: content(
+        html,
+        layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+      ),
+      width: 100,
+      textScaler: const _NonlinearScaler(),
+    );
+    addTearDown(natural.dispose);
+    addTearDown(fitted.dispose);
+    final ratio = 100 / natural.lines.single.width;
+    expect(ratio, lessThan(1));
+    expect(fitted.height, closeTo(natural.height * ratio, 1e-6));
+    expect(fitted.lines.single.width, closeTo(100, 1e-6));
+    final fullBox = natural.selectionBoxes(3, 6).single;
+    final fittedBox = fitted.selectionBoxes(3, 6).single;
+    expect(fittedBox.left, closeTo(fullBox.left * ratio, 1e-6));
+    expect(fittedBox.right, closeTo(fullBox.right * ratio, 1e-6));
+  });
+
+  test('fitted fragment pixels match the complete single-line paint', () async {
+    final layout = ForumBodyParagraphLayout.create(
+      content: content(
+        '<p>abcdefghijklmnopqrst</p>',
+        layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+      ),
+      width: 100,
+    );
+    addTearDown(layout.dispose);
+    final full = await raster(layout);
+    expect(full.where((channel) => channel != 0), isNotEmpty);
+    expect(await raster(layout, fragments: true), full);
+  });
+
+  test(
+    'fitting rejects hard lines instead of clipping or dropping their text',
+    () {
+      for (final html in [
+        '<p>a<br>b</p>',
+        '<p style="white-space:pre">a\r\nb</p>',
+        '<p>a\u2028b</p>',
+        '<p>a\u2029b</p>',
+        '<p>a\u0085b</p>',
+      ]) {
+        expect(
+          () => ForumBodyParagraphLayout.create(
+            content: content(
+              html,
+              layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+            ),
+            width: 100,
+          ),
+          throwsA(
+            isA<ForumBodyParagraphLayoutException>().having(
+              (error) => error.failure,
+              'failure',
+              ForumBodyParagraphLayoutFailure.singleLine,
+            ),
+          ),
+        );
+      }
+      final pre = ForumBodyParagraphLayout.create(
+        content: content(
+          '<p style="white-space:pre">a  b</p>',
+          layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
+        ),
+        width: 20,
+      );
+      addTearDown(pre.dispose);
+      expect(pre.projection.text, 'a  b');
+      expect(pre.lines, hasLength(1));
+    },
+  );
 
   test(
     'display coverage includes hard breaks, blank lines and trailing newline',
