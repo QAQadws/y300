@@ -120,6 +120,7 @@ final class ForumBodyParagraphContentBuilder {
       styleRevision: styles.resolverRevision,
       style: base,
       limits: this,
+      emptySourceRune: root?.source.runeStart ?? 0,
     );
     try {
       while (pending.isNotEmpty) {
@@ -164,6 +165,7 @@ final class ForumBodyParagraphContentBuilder {
       styleRevision: flow.styleRevision,
       style: event.style,
       limits: this,
+      emptySourceRune: event.node.source.runeStart,
     );
     try {
       collector.visit(event.node, event.style, isRoot: true);
@@ -172,6 +174,98 @@ final class ForumBodyParagraphContentBuilder {
       collector.close();
       rethrow;
     }
+  }
+
+  /// Start an inline sequence inside a currently open containing block, or the
+  /// anonymous document context. The caller advances the flow and appends only
+  /// its current inline/text events; no complete style map or copied IR is used.
+  ForumBodyParagraphSequence openSequence(
+    ForumBodyStyledFlowCursor flow, {
+    ForumBodyStyledFlowEvent? block,
+  }) {
+    if (flow.isClosed) throw StateError('Styled flow cursor is closed');
+    if (block != null &&
+        (!flow.owns(block) ||
+            !flow.isOpenElement(block) ||
+            block.phase != ForumBodyFlowPhase.open ||
+            block.style.display == ForumBodyDisplay.inline)) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        block.node.path,
+      );
+    }
+    return ForumBodyParagraphSequence._(
+      flow,
+      _ParagraphCollector(
+        identity: flow.identity,
+        path: block?.node.path,
+        fontRevision: flow.fontRevision,
+        styleRevision: flow.styleRevision,
+        style: block?.style ?? flow.rootStyle,
+        limits: this,
+        emptySourceRune:
+            block?.node.source.runeStart ??
+            flow.current?.node.source.runeStart ??
+            0,
+      ),
+    );
+  }
+}
+
+/// Inline sequence assembly owned by one structural flow. It does not advance
+/// the borrowed cursor, allowing its owner to partition at real hard breaks or
+/// block boundaries while preserving author inheritance and source run order.
+final class ForumBodyParagraphSequence {
+  ForumBodyParagraphSequence._(this._flow, this._collector);
+  ForumBodyStyledFlowCursor? _flow;
+  final _ParagraphCollector _collector;
+  ForumBodyStyledFlowEvent? _last;
+  bool _closed = false;
+  bool get isClosed => _closed;
+  bool get hasInput => !_closed && _collector.hasInput;
+
+  void appendCurrent() {
+    if (_closed) throw StateError('Paragraph sequence is closed');
+    try {
+      final flow = _flow!;
+      if (flow.isClosed) throw StateError('Styled flow cursor is closed');
+      final event = flow.current;
+      final path = _collector.path;
+      if (event == null ||
+          identical(event, _last) ||
+          event.phase == ForumBodyFlowPhase.close ||
+          (path != null && !event.node.path.startsWith('$path/'))) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.identity,
+          event?.node.path,
+        );
+      }
+      _collector.visit(event.node, event.style, isRoot: false);
+      _last = event;
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
+
+  ForumBodyParagraphContent finish({
+    Iterable<ForumBodyStyleIssue> issues = const [],
+  }) {
+    if (_closed) throw StateError('Paragraph sequence is closed');
+    try {
+      if (_flow!.isClosed) throw StateError('Styled flow cursor is closed');
+      return _collector.finish(issues);
+    } finally {
+      close();
+    }
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _flow = null;
+    _last = null;
+    _collector.close();
   }
 }
 
@@ -265,6 +359,7 @@ final class _ParagraphCollector {
     required this.styleRevision,
     required this.style,
     required this.limits,
+    required this.emptySourceRune,
   });
   final ForumBodyIdentity identity;
   final String? path;
@@ -272,9 +367,11 @@ final class _ParagraphCollector {
   final int styleRevision;
   final ForumBodyResolvedStyle style;
   final ForumBodyParagraphContentBuilder limits;
+  final int emptySourceRune;
   final _inputs = <HtmlDisplayTextRun>[];
   final _runs = <ForumBodyParagraphRun>[];
   int _inputSize = 0;
+  bool get hasInput => _inputs.isNotEmpty;
 
   bool visit(
     ForumBodyNode node,
@@ -345,7 +442,9 @@ final class _ParagraphCollector {
         styleRevision: styleRevision,
         style: style,
         projection: HtmlDisplayTextProjection.build(
-          _inputs,
+          _inputs.isEmpty
+              ? [HtmlDisplayTextRun(text: '', sourceRuneStart: emptySourceRune)]
+              : _inputs,
           maxOutputCodeUnits: limits.maxInputCodeUnits,
         ),
         runs: _runs,

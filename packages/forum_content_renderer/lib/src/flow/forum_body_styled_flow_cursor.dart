@@ -15,12 +15,14 @@ final class ForumBodyStyledFlowEvent {
     required this.node,
     required this.style,
     required this.depth,
-  });
+    required Object owner,
+  }) : _owner = owner;
 
   final ForumBodyFlowPhase phase;
   final ForumBodyNode node;
   final ForumBodyResolvedStyle style;
   final int depth;
+  final Object _owner;
 }
 
 /// Forward-only structural consumption over the sole style cursor. At most one
@@ -34,6 +36,7 @@ final class ForumBodyStyledFlowCursor {
   }) : _styles = const ForumBodyStyleResolver().open(document, reader);
 
   final ForumBodyStyleCursor _styles;
+  final _owner = Object();
   final _open = <ForumBodyStyledFlowEvent>[];
   final _pendingIssues = <ForumBodyStyleIssue>[];
   ForumBodyNode? _nextNode;
@@ -52,6 +55,11 @@ final class ForumBodyStyledFlowCursor {
   int get resolvedNodeCount => _styles.resolvedNodeCount;
   bool get isComplete => _complete;
   bool get isClosed => _closed;
+
+  /// Provenance is a token, never a reference back to this cursor or a UI owner.
+  bool owns(ForumBodyStyledFlowEvent event) => identical(event._owner, _owner);
+  bool isOpenElement(ForumBodyStyledFlowEvent event) =>
+      !_closed && _open.any((opened) => identical(opened, event));
 
   bool moveNext() {
     if (_closed) throw StateError('Styled flow cursor is closed');
@@ -84,6 +92,7 @@ final class ForumBodyStyledFlowCursor {
         node: opened.node,
         style: opened.style,
         depth: opened.depth,
+        owner: _owner,
       );
       return true;
     }
@@ -98,6 +107,7 @@ final class ForumBodyStyledFlowCursor {
       node: next,
       style: _nextStyle!,
       depth: _open.length,
+      owner: _owner,
     );
     _nextNode = null;
     _nextStyle = null;
