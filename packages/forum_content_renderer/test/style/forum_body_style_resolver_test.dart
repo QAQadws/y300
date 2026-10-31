@@ -51,6 +51,97 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test(
+    'ruby base retains its containing role while only RT gets annotation defaults',
+    () {
+      final result = resolve(
+        '<p><ruby id="body">漢<rt id="rt">かん<span id="span">字</span></rt></ruby></p>'
+        '<h2><ruby id="heading">字<rt id="headingRt">じ</rt></ruby></h2>',
+      );
+      expect(byId(result, 'body').role, ForumBodyTextRole.body);
+      expect(byId(result, 'body').textStyle.fontSize, 20);
+      expect(byId(result, 'rt').role, ForumBodyTextRole.ruby);
+      expect(byId(result, 'rt').textStyle.fontSize, 10);
+      expect(byId(result, 'rt').textStyle.height, 1);
+      expect(byId(result, 'span').textStyle.fontSize, 10); // No second halving.
+      expect(byId(result, 'heading').role, ForumBodyTextRole.heading);
+      expect(byId(result, 'heading').textStyle.fontSize, 30);
+      expect(byId(result, 'headingRt').textStyle.fontSize, 15);
+      expect(byId(result, 'headingRt').textStyle.fontFamily, 'ReaderFont');
+    },
+  );
+
+  test(
+    'explicit annotation size and inherited line height override UA defaults',
+    () {
+      final result = resolve(
+        '<ruby style="font-size:30px;line-height:48px">漢'
+        '<rt id="inherit" style="font-size:inherit;line-height:inherit">a</rt>'
+        '<rt id="relative" style="font-size:80%;line-height:2">b</rt>'
+        '<rt id="invalid" style="font-size:invalid;line-height:invalid">c</rt>'
+        '<rt id="normal" style="line-height:normal">d</rt></ruby>',
+      );
+      expect(byId(result, 'inherit').textStyle.fontSize, 30);
+      expect(byId(result, 'inherit').lineHeight.pixels, 48);
+      expect(byId(result, 'relative').textStyle.fontSize, 24);
+      expect(byId(result, 'relative').textStyle.height, 2);
+      expect(byId(result, 'invalid').textStyle.fontSize, 15);
+      expect(byId(result, 'invalid').textStyle.height, 1);
+      expect(byId(result, 'normal').lineHeight.pixels, isNull);
+      expect(byId(result, 'normal').lineHeight.factor, isNull);
+      expect(
+        result.styles.issues.where(
+          (issue) =>
+              issue.path ==
+              result.document.descendants
+                  .whereType<ForumBodyElement>()
+                  .firstWhere((node) => node.attributes['id'] == 'invalid')
+                  .path,
+        ),
+        hasLength(2),
+      );
+    },
+  );
+
+  test(
+    'body-only reader overrides apply to ruby base and stop at annotation role',
+    () {
+      const html =
+          '<div style="font-size:30px;color:red;line-height:48px">'
+          '<ruby id="base">漢<rt id="rt">かん</rt></ruby></div>';
+      final body = resolve(
+        html,
+        options: reader(
+          policy: ForumBodyStylePolicy({
+            ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceBody,
+            ForumBodyStyleProperty.foreground: ForumBodyStyleScope.forceBody,
+          }),
+        ),
+      );
+      expect(byId(body, 'base').textStyle.fontSize, 20);
+      expect(byId(body, 'base').textStyle.color, const Color(0xff202020));
+      expect(
+        byId(body, 'rt').textStyle.fontSize,
+        15,
+      ); // Author inheritance at role boundary.
+      expect(byId(body, 'rt').textStyle.color, const Color(0xffff0000));
+      final all = resolve(
+        html,
+        options: reader(
+          policy: ForumBodyStylePolicy({
+            ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceAll,
+            ForumBodyStyleProperty.foreground: ForumBodyStyleScope.forceAll,
+            ForumBodyStyleProperty.lineHeight: ForumBodyStyleScope.forceAll,
+          }),
+        ),
+      );
+      expect(byId(all, 'base').textStyle.fontSize, 20);
+      expect(byId(all, 'rt').textStyle.fontSize, 20);
+      expect(byId(all, 'rt').textStyle.height, 1.6);
+      expect(byId(all, 'rt').textStyle.color, const Color(0xff202020));
+    },
+  );
+
   test('box widths cascade valid declarations and inherit only explicitly', () {
     final result = resolve(
       '<div style="font-size:10px;width:8em;min-width:20%;max-width:20rem;'

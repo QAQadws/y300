@@ -215,7 +215,11 @@ final class ForumBodyParagraphLayout {
         ForumBodyParagraphLayoutFailure.width,
       );
     }
-    if (content.style.indent.value != 0) {
+    // Intrinsic inline text is not a paragraph's first line. Its containing
+    // block owns indentation; applying that inherited value here duplicates it.
+    if (content.style.indent.value != 0 &&
+        content.layoutMode !=
+            ForumBodyParagraphLayoutMode.intrinsicSingleLine) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.indent,
       );
@@ -255,7 +259,7 @@ final class ForumBodyParagraphLayout {
     return scales;
   }
 
-  static const backendRevision = 4;
+  static const backendRevision = 5;
   static bool _isDisplayLineBreak(int codeUnit) =>
       codeUnit == 0x0a || codeUnit == 0x2028 || codeUnit == 0x2029;
   final ForumBodyIdentity identity;

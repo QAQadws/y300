@@ -75,6 +75,44 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'intrinsic inline glyphs leave inherited indentation to their containing block',
+    () {
+      final inline = ForumBodyParagraphLayout.create(
+        content: content(
+          '<p style="text-indent:2em">abc</p>',
+          layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+        ),
+        width: 20,
+      );
+      addTearDown(inline.dispose);
+      expect(inline.width, 60);
+      expect(inline.lines.single.left, 0);
+      expect(inline.selectionBoxes(0, 1).single.left, 0);
+      for (final mode in [
+        ForumBodyParagraphLayoutMode.wrap,
+        ForumBodyParagraphLayoutMode.fitSingleLine,
+      ]) {
+        expect(
+          () => ForumBodyParagraphLayout.create(
+            content: content(
+              '<p style="text-indent:2em">abc</p>',
+              layoutMode: mode,
+            ),
+            width: 100,
+          ),
+          throwsA(
+            isA<ForumBodyParagraphLayoutException>().having(
+              (error) => error.failure,
+              'failure',
+              ForumBodyParagraphLayoutFailure.indent,
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test(
     'intrinsic single line preserves natural glyph metrics beyond the request width',
     () {
       final input = content(

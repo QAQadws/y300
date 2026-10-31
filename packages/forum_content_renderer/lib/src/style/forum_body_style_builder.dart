@@ -7,7 +7,7 @@ import 'forum_body_length.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 4;
+const forumBodyStyleRevision = 5;
 ForumBodyLineHeight forumBodyReaderHeight(ForumBodyReaderStyle reader) {
   final height = reader.textStyle.height;
   return height == null || height == kTextHeightNone
@@ -95,6 +95,8 @@ final class ForumBodyStyleBuilder {
       size *= .85;
     } else if (node.kind == ForumBodyElementKind.editStatus) {
       size = baseSize * .88;
+    } else if (node.kind == ForumBodyElementKind.rubyText) {
+      size *= .5;
     }
     String? value(String property) =>
         declarations.value(property)?.toLowerCase();
@@ -153,10 +155,18 @@ final class ForumBodyStyleBuilder {
       };
     }
 
-    var height = parent.lineHeight;
+    var height = node.kind == ForumBodyElementKind.rubyText
+        ? const ForumBodyLineHeight.factor(1)
+        : parent.lineHeight;
     final rawHeight = value('line-height');
     if (rawHeight != null) {
-      height = _lineHeight(node, rawHeight, size, height);
+      height = _lineHeight(
+        node,
+        rawHeight,
+        size,
+        height,
+        inherited: parent.lineHeight,
+      );
     }
     if (_force(ForumBodyStyleProperty.lineHeight, role)) {
       height = forumBodyReaderHeight(reader);
@@ -482,7 +492,6 @@ final class ForumBodyStyleBuilder {
     ForumBodyElementKind.listItem => ForumBodyTextRole.list,
     ForumBodyElementKind.table ||
     ForumBodyElementKind.tableCell => ForumBodyTextRole.table,
-    ForumBodyElementKind.ruby ||
     ForumBodyElementKind.rubyText => ForumBodyTextRole.ruby,
     ForumBodyElementKind.editStatus ||
     ForumBodyElementKind.locked => ForumBodyTextRole.notice,
@@ -554,9 +563,10 @@ final class ForumBodyStyleBuilder {
     ForumBodyElement node,
     String raw,
     double size,
-    ForumBodyLineHeight parent,
-  ) {
-    if (raw == 'inherit' || raw == 'unset') return parent;
+    ForumBodyLineHeight fallback, {
+    required ForumBodyLineHeight inherited,
+  }) {
+    if (raw == 'inherit' || raw == 'unset') return inherited;
     if (raw == 'normal' || raw == 'initial') {
       return const ForumBodyLineHeight.natural();
     }
@@ -575,7 +585,7 @@ final class ForumBodyStyleBuilder {
         return ForumBodyLineHeight.pixels(pixels);
       }
     }
-    return _unsupported(node, 'line-height', raw, parent);
+    return _unsupported(node, 'line-height', raw, fallback);
   }
 
   double _spacing(

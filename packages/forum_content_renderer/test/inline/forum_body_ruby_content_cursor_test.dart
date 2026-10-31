@@ -18,13 +18,17 @@ final _reader = ForumBodyReaderStyle(
   ForumBodyRubyContentLimits limits = const ForumBodyRubyContentLimits(),
   ForumBodyParagraphContentBuilder builder =
       const ForumBodyParagraphContentBuilder(),
+  ForumBodyReaderStyle? reader,
 }) {
   final doc = const ForumBodyParser().parse(
     html: html,
     sourceId: 'ruby-content',
     conversionIdentity: 'none',
   );
-  final flow = ForumBodyStyledFlowCursor(document: doc, reader: _reader);
+  final flow = ForumBodyStyledFlowCursor(
+    document: doc,
+    reader: reader ?? _reader,
+  );
   while (flow.moveNext()) {
     final event = flow.current!;
     if (event.phase == ForumBodyFlowPhase.open &&
@@ -70,6 +74,58 @@ String text(List<ForumBodyRubyInlineContent> parts) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'ruby base retains reader body inputs while inline geometry excludes block indentation',
+    () {
+      final run = open(
+        '<ruby>AB<rt>abc</rt></ruby>',
+        reader: ForumBodyReaderStyle(
+          textStyle: const TextStyle(
+            fontSize: 20,
+            height: 1,
+            fontFamily: 'Ahem',
+          ),
+          fontRevision: 'ahem',
+          linkColor: const Color(0xff0000ff),
+          firstLineIndent: const ForumBodyLength(2, ForumBodyLengthUnit.em),
+        ),
+      );
+      final group = drain(run.cursor).single;
+      final base = texts(group.base).single;
+      final annotation = texts(group.annotations.single.parts).single;
+      expect(base.style.role, ForumBodyTextRole.body);
+      expect(base.style.indent.value, 2);
+      expect(base.style.indent.unit, ForumBodyLengthUnit.em);
+      expect(annotation.style.role, ForumBodyTextRole.ruby);
+      expect(annotation.style.textStyle.fontSize, 10);
+      expect(annotation.style.indent.value, 0);
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final layout = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: base,
+        annotation: annotation,
+      );
+      expect(layout.size, const Size(40, 30));
+      expect(
+        layout
+            .selectionBoxes(
+              part: ForumBodyRubyPart.base,
+              startUtf16: 0,
+              endUtf16: 1,
+            )
+            .single
+            .left,
+        0,
+      );
+      layout.close();
+      expect(cache.activeLeases, 0);
+    },
+  );
 
   test(
     'real IR groups alternate base and annotation with original styles and coordinates',
