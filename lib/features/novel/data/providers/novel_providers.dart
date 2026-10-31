@@ -46,6 +46,7 @@ import 'package:y300/features/novel/domain/services/novel_sync_request_governor.
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
@@ -195,7 +196,7 @@ final novelIntroSectionExtractorProvider = Provider<NovelIntroSectionExtractor>(
 final novelReaderDocumentParserProvider = Provider<NovelReaderDocumentParser>((
   ref,
 ) {
-  return const DiscuzNovelReaderDocumentParser();
+  return const DiscuzNovelReaderDocumentParser(captureSourceProvenance: true);
 });
 
 final novelReaderSearchServiceProvider = Provider<NovelReaderSearchService>((
@@ -208,6 +209,9 @@ final novelReaderDocumentBuildServiceProvider =
     Provider<NovelReaderDocumentBuildService>((ref) {
       return AdaptiveNovelReaderDocumentBuildService(
         parser: ref.watch(novelReaderDocumentParserProvider),
+        executor: const IsolateNovelReaderDocumentBuildExecutor(
+          captureSourceProvenance: true,
+        ),
         htmlConversionService: ref.watch(htmlTextNodeConversionServiceProvider),
         paragraphConversionService: ref.watch(
           plainTextBatchConversionServiceProvider,
@@ -221,6 +225,13 @@ final novelReaderHtmlPreparationServiceProvider =
         preparer: NovelHtmlChapterRenderPreparer(
           conversionService: ref.watch(htmlTextNodeConversionServiceProvider),
         ),
+      );
+    });
+
+final novelReaderNativePreparationServiceProvider =
+    Provider<NovelReaderNativePreparationService>((ref) {
+      return DefaultNovelReaderNativePreparationService(
+        conversionService: ref.watch(htmlTextNodeConversionServiceProvider),
       );
     });
 
