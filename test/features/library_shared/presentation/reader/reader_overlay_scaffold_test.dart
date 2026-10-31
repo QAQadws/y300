@@ -1,10 +1,218 @@
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
 void main() {
+  testWidgets(
+    'body obstruction outlives desired visibility through slide out',
+    (tester) async {
+      final controller = ReaderOverlayController();
+      addTearDown(controller.dispose);
+      final menuEvents = <bool>[];
+      final obstructionEvents = <bool>[];
+      controller.addListener(() => menuEvents.add(controller.isMenuVisible));
+      controller.contentObscured.addListener(
+        () => obstructionEvents.add(controller.contentObscured.value),
+      );
+      await tester.pumpWidget(
+        _buildScaffold(
+          controller: controller,
+          animationDuration: const Duration(milliseconds: 240),
+        ),
+      );
+
+      controller.showMenu();
+      expect(controller.contentObscured.value, isTrue);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 240));
+
+      controller.hideMenu();
+      expect(controller.isMenuVisible, isFalse);
+      expect(controller.contentObscured.value, isTrue);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(controller.contentObscured.value, isTrue);
+      expect(menuEvents, [true, false]);
+      expect(obstructionEvents, [true]);
+
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(controller.contentObscured.value, isFalse);
+      expect(obstructionEvents, [true, false]);
+      expect(menuEvents, [true, false]);
+    },
+  );
+
+  testWidgets('reversing a closing menu never clears body obstruction', (
+    tester,
+  ) async {
+    final controller = ReaderOverlayController()..showMenu();
+    addTearDown(controller.dispose);
+    final events = <bool>[];
+    controller.contentObscured.addListener(
+      () => events.add(controller.contentObscured.value),
+    );
+    await tester.pumpWidget(
+      _buildScaffold(
+        controller: controller,
+        animationDuration: const Duration(milliseconds: 240),
+      ),
+    );
+
+    controller.hideMenu();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    controller.showMenu();
+    await tester.pumpAndSettle();
+    expect(controller.contentObscured.value, isTrue);
+    expect(events, [true]);
+
+    controller.hideMenu();
+    await tester.pumpAndSettle();
+    expect(events, [true, false]);
+  });
+
+  testWidgets(
+    'detached commands preserve visibility without body obstruction',
+    (tester) async {
+      final controller = ReaderOverlayController()..showMenu();
+      addTearDown(controller.dispose);
+      expect(controller.isMenuVisible, isTrue);
+      expect(controller.contentObscured.value, isFalse);
+
+      await tester.pumpWidget(_buildScaffold(controller: controller));
+      expect(controller.contentObscured.value, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      expect(controller.isMenuVisible, isTrue);
+      expect(controller.contentObscured.value, isFalse);
+
+      await tester.pumpWidget(_buildScaffold(controller: controller));
+      expect(controller.contentObscured.value, isTrue);
+      controller.hideMenu();
+      await tester.pump();
+      expect(controller.contentObscured.value, isFalse);
+    },
+  );
+
+  testWidgets(
+    'initial visible menu and replacement binding report obstruction',
+    (tester) async {
+      final first = ReaderOverlayController();
+      final second = ReaderOverlayController();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      final firstMenuEvents = <bool>[];
+      first.addListener(() => firstMenuEvents.add(first.isMenuVisible));
+      await tester.pumpWidget(
+        _buildScaffold(
+          controller: first,
+          menuInitiallyVisible: true,
+          animationDuration: const Duration(milliseconds: 240),
+        ),
+      );
+      expect(first.contentObscured.value, isTrue);
+      expect(firstMenuEvents, isEmpty);
+
+      await tester.pumpWidget(
+        _buildScaffold(
+          controller: second,
+          animationDuration: const Duration(milliseconds: 240),
+        ),
+      );
+      expect(first.contentObscured.value, isFalse);
+      expect(second.isMenuVisible, isFalse);
+      expect(second.contentObscured.value, isTrue);
+      first.hideMenu();
+      first.showMenu();
+      await tester.pumpAndSettle();
+      expect(first.isMenuVisible, isTrue);
+      expect(first.contentObscured.value, isFalse);
+      expect(second.contentObscured.value, isFalse);
+    },
+  );
+
+  testWidgets('old scaffold disposal cannot detach a newer bound scaffold', (
+    tester,
+  ) async {
+    final controller = ReaderOverlayController()..showMenu();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _buildScaffold(controller: controller, overlayKey: const ValueKey(1)),
+    );
+    await tester.pumpWidget(
+      _buildScaffold(controller: controller, overlayKey: const ValueKey(2)),
+    );
+    expect(controller.contentObscured.value, isTrue);
+    controller.hideMenu();
+    await tester.pump();
+    expect(controller.isMenuVisible, isFalse);
+    expect(controller.contentObscured.value, isFalse);
+  });
+
+  testWidgets('synchronous menu reversal publishes current obstruction', (
+    tester,
+  ) async {
+    final controller = ReaderOverlayController();
+    addTearDown(controller.dispose);
+    controller.addListener(() {
+      if (controller.isMenuVisible) controller.hideMenu();
+    });
+    final events = <bool>[];
+    controller.contentObscured.addListener(
+      () => events.add(controller.contentObscured.value),
+    );
+    await tester.pumpWidget(_buildScaffold(controller: controller));
+    controller.showMenu();
+    await tester.pumpAndSettle();
+    expect(controller.isMenuVisible, isFalse);
+    expect(controller.contentObscured.value, isFalse);
+    expect(events, isEmpty);
+  });
+
+  testWidgets('disposed controller ignores late animation and detach signals', (
+    tester,
+  ) async {
+    final controller = ReaderOverlayController()..showMenu();
+    final events = <bool>[];
+    controller.contentObscured.addListener(
+      () => events.add(controller.contentObscured.value),
+    );
+    await tester.pumpWidget(
+      _buildScaffold(
+        controller: controller,
+        animationDuration: const Duration(milliseconds: 240),
+      ),
+    );
+    controller.hideMenu();
+    controller.dispose();
+    controller.toggleMenu();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    expect(events, [true]);
+    expect(controller.contentObscured.value, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final disposeFromContentSignal in [true, false]) {
+    testWidgets('controller can retire during its own signal dispatch '
+        '(content: $disposeFromContentSignal)', (tester) async {
+      final controller = ReaderOverlayController();
+      await tester.pumpWidget(_buildScaffold(controller: controller));
+      if (disposeFromContentSignal) {
+        controller.contentObscured.addListener(controller.dispose);
+      } else {
+        controller.addListener(controller.dispose);
+      }
+      controller.showMenu();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('ReaderOverlayScaffold hides menu by default', (tester) async {
     await tester.pumpWidget(_buildScaffold());
 
@@ -185,14 +393,17 @@ Widget _buildScaffold({
   VoidCallback? onCenterTap,
   ReaderOverlayController? controller,
   ThemeData? theme,
+  Duration animationDuration = Duration.zero,
+  Key? overlayKey,
 }) {
   return LocalizedTestApp(
     theme: theme,
     home: Scaffold(
       body: ReaderOverlayScaffold(
+        key: overlayKey,
         controller: controller,
         menuInitiallyVisible: menuInitiallyVisible,
-        animationDuration: Duration.zero,
+        animationDuration: animationDuration,
         onCenterTap: onCenterTap,
         topBar: ReaderTopBarConfig(
           title: '作品名',

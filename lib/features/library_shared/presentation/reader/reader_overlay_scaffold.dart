@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_bottom_overlay_panel.dart';
@@ -9,10 +11,18 @@ import 'package:y300/features/library_shared/presentation/reader/reader_top_over
 class ReaderOverlayController extends ChangeNotifier {
   bool _isMenuVisible = false;
   _ReaderOverlayScaffoldState? _state;
+  final _contentObscured = ValueNotifier(false);
+  bool _disposed = false;
+  int _notificationDepth = 0;
 
   bool get isMenuVisible => _state?._isMenuVisible ?? _isMenuVisible;
 
+  /// Remains true until the bound menu has finished sliding out of the body.
+  /// Detached menu commands only preserve the desired visibility for remount.
+  ValueListenable<bool> get contentObscured => _contentObscured;
+
   void showMenu() {
+    if (_disposed) return;
     final state = _state;
     if (state != null) {
       state._setMenuVisible(true);
@@ -22,6 +32,7 @@ class ReaderOverlayController extends ChangeNotifier {
   }
 
   void hideMenu() {
+    if (_disposed) return;
     final state = _state;
     if (state != null) {
       state._setMenuVisible(false);
@@ -31,6 +42,7 @@ class ReaderOverlayController extends ChangeNotifier {
   }
 
   void toggleMenu() {
+    if (_disposed) return;
     final state = _state;
     if (state != null) {
       state._setMenuVisible(!state._isMenuVisible);
@@ -40,8 +52,10 @@ class ReaderOverlayController extends ChangeNotifier {
   }
 
   void _attach(_ReaderOverlayScaffoldState state) {
+    if (_disposed) return;
     _state = state;
     _isMenuVisible = state._isMenuVisible;
+    _syncContentObscured();
   }
 
   void _detach(_ReaderOverlayScaffoldState state) {
@@ -50,14 +64,34 @@ class ReaderOverlayController extends ChangeNotifier {
     }
     _isMenuVisible = state._isMenuVisible;
     _state = null;
+    _syncContentObscured();
   }
 
-  void _syncFromState(bool value) {
-    if (_isMenuVisible == value) {
-      return;
+  void _syncFromState(_ReaderOverlayScaffoldState state) {
+    if (_disposed || _state != state) return;
+    if (_isMenuVisible != state._isMenuVisible) {
+      _isMenuVisible = state._isMenuVisible;
+      _dispatchNotification(notifyListeners);
     }
-    _isMenuVisible = value;
-    notifyListeners();
+    // A menu listener may reverse the transition or rebind the controller.
+    // Read the current binding after dispatch rather than publishing old state.
+    _syncContentObscured();
+  }
+
+  void _syncContentObscured() {
+    if (_disposed) return;
+    final value = _state?._contentObscured ?? false;
+    if (_contentObscured.value == value) return;
+    _dispatchNotification(() => _contentObscured.value = value);
+  }
+
+  void _dispatchNotification(VoidCallback callback) {
+    _notificationDepth++;
+    try {
+      callback();
+    } finally {
+      _notificationDepth--;
+    }
   }
 
   void _setDetachedValue(bool value) {
@@ -65,7 +99,24 @@ class ReaderOverlayController extends ChangeNotifier {
       return;
     }
     _isMenuVisible = value;
-    notifyListeners();
+    _dispatchNotification(notifyListeners);
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _state = null;
+    if (_notificationDepth > 0) {
+      // Retire synchronously, but let an in-flight signal finish its dispatch.
+      scheduleMicrotask(() {
+        _contentObscured.dispose();
+        super.dispose();
+      });
+    } else {
+      _contentObscured.dispose();
+      super.dispose();
+    }
   }
 }
 
@@ -112,6 +163,8 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
   late final Animation<Offset> _bottomSlideAnimation;
   late bool _isMenuVisible;
 
+  bool get _contentObscured => _isMenuVisible || _animationController.value > 0;
+
   @override
   void initState() {
     super.initState();
@@ -122,7 +175,7 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
       vsync: this,
       duration: widget.animationDuration,
       value: _isMenuVisible ? 1 : 0,
-    );
+    )..addListener(_handleAnimationChanged);
     final curve = CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeOutCubic,
@@ -155,6 +208,7 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
   @override
   void dispose() {
     widget.controller?._detach(this);
+    _animationController.removeListener(_handleAnimationChanged);
     _animationController.dispose();
     super.dispose();
   }
@@ -213,12 +267,16 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
     setState(() {
       _isMenuVisible = visible;
     });
-    widget.controller?._syncFromState(visible);
+    widget.controller?._syncFromState(this);
     if (_isMenuVisible) {
       _animationController.forward();
       return;
     }
     _animationController.reverse();
+  }
+
+  void _handleAnimationChanged() {
+    widget.controller?._syncFromState(this);
   }
 
   void _handleCenterTap() {
