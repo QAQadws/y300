@@ -165,14 +165,22 @@ final class ForumPreparationScope {
   }
 }
 
-final class ForumPreparationLease<T extends Object> {
+abstract interface class ForumPreparationWorkLease<T extends Object> {
+  Future<T?> get future;
+  void release();
+}
+
+final class ForumPreparationLease<T extends Object>
+    implements ForumPreparationWorkLease<T> {
   ForumPreparationLease._(this._scheduler, this._entry, this._owner);
   final ForumPreparationScheduler _scheduler;
   final _TypedEntry<T> _entry;
   final Object _owner;
   bool _released = false;
+  @override
   Future<T?> get future => _entry.completer.future;
 
+  @override
   void release() {
     if (_released) return;
     _released = true;

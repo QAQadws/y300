@@ -2,6 +2,7 @@
 library;
 
 export 'application/forum_body_preparation_executor.dart';
+export 'application/forum_body_preparation_controller.dart';
 export 'application/forum_html_reader_preferences_controller.dart';
 export 'application/forum_html_reader_font_binding.dart';
 export 'application/forum_html_reader_preferences_repository_provider.dart';

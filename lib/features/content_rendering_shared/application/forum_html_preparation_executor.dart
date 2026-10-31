@@ -209,9 +209,12 @@ class ForumHtmlPreparationExecutor extends ChangeNotifier {
   }
 }
 
-final class ForumHtmlPreparationLease {
+final class ForumHtmlPreparationLease
+    implements ForumPreparationWorkLease<ForumHtmlPreparedRenderDocument> {
   ForumHtmlPreparationLease._(this._lease);
   final ForumPreparationLease<ForumHtmlPreparedRenderDocument> _lease;
+  @override
   Future<ForumHtmlPreparedRenderDocument?> get future => _lease.future;
+  @override
   void release() => _lease.release();
 }
