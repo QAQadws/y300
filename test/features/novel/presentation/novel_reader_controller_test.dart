@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_native_layout_host.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/fonts/domain/repositories/font_library_repository.dart';
@@ -42,6 +42,8 @@ import 'package:y300/features/novel/presentation/services/novel_reader_document_
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_progress_committer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
+
+import '../../../test_support/localized_test_app.dart';
 
 void main() {
   for (final version in [0, 1, 37]) {
@@ -106,7 +108,7 @@ void main() {
         addTearDown(navigation.dispose);
         final positions = <NovelReaderPaginationPosition>[];
         await controller.saveCurrentProgressNow(loaded.progressSnapshot);
-        await _showNativeControllerHost(
+        await _showNativeControllerSurface(
           tester,
           container,
           args,
@@ -126,7 +128,7 @@ void main() {
         controller.previewPreferences(
           loaded.preferences.copyWith(fontSize: 20),
         );
-        await _showNativeControllerHost(
+        await _showNativeControllerSurface(
           tester,
           container,
           args,
@@ -136,7 +138,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(positions.last.isReadOnlyCompatibilityRestore, isTrue);
-        await _showNativeControllerHost(
+        await _showNativeControllerSurface(
           tester,
           container,
           args,
@@ -147,7 +149,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(navigation.turnNext(), isFalse);
-        await _showNativeControllerHost(
+        await _showNativeControllerSurface(
           tester,
           container,
           args,
@@ -221,7 +223,7 @@ void main() {
       addTearDown(owner.dispose);
       addTearDown(navigation.dispose);
       final positions = <NovelReaderPaginationPosition>[];
-      await _showNativeControllerHost(
+      await _showNativeControllerSurface(
         tester,
         container,
         args,
@@ -2651,7 +2653,7 @@ void main() {
   );
 }
 
-Future<void> _showNativeControllerHost(
+Future<void> _showNativeControllerSurface(
   WidgetTester tester,
   ProviderContainer container,
   NovelReaderArgs args,
@@ -2665,48 +2667,46 @@ Future<void> _showNativeControllerHost(
   final controller = container.read(provider.notifier);
   controller.updateReadingVisibility(frontmost: active, resumed: active);
   await tester.pumpWidget(
-    MediaQuery(
-      data: const MediaQueryData(),
-      child: Directionality(
-        textDirection: TextDirection.ltr,
-        child: Theme(
-          data: ThemeData(
-            textTheme: const TextTheme(
-              bodyMedium: TextStyle(
-                fontFamily: 'Ahem',
-                letterSpacing: 0,
-                wordSpacing: 0,
-              ),
-            ),
+    LocalizedTestApp(
+      theme: ThemeData(
+        textTheme: const TextTheme(
+          bodyMedium: TextStyle(
+            fontFamily: 'Ahem',
+            letterSpacing: 0,
+            wordSpacing: 0,
           ),
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: 100,
-              height: 40,
-              child: NovelReaderNativeLayoutHost(
-                owner: owner,
-                sourceId: state.currentEpisode.episodeId,
-                rawHtml: state.currentContent.rawHtml,
-                semanticDocument: state.document,
-                preferences: state.renderPreferences,
-                resolvedFont: state.bodyFont,
-                progressSnapshot: state.progressSnapshot,
-                readingAuthorityIdentity: state.readingAuthorityRevision,
-                preparationService: container.read(
-                  novelReaderNativePreparationServiceProvider,
-                ),
-                startsAtBeginning: controller.startsPagedAtBeginning,
-                active: active,
-                navigationController: navigation,
-                onPositionChanged: (position) {
-                  positions.add(position);
-                  controller.onPagedPositionChanged(position);
-                },
-                idleScheduler: () async {},
-                performance: const NovelReaderPaginationPerformancePolicy(
-                  enforceBudgets: false,
-                ),
+        ),
+      ),
+      home: MediaQuery(
+        data: const MediaQueryData(),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            // Preserve the previous 100x40 body box after real shell chrome.
+            width: 116,
+            height: 104,
+            child: NovelReaderNativePagedSurface(
+              owner: owner,
+              episode: state.currentEpisode,
+              rawHtml: state.currentContent.rawHtml,
+              semanticDocument: state.document,
+              preferences: state.renderPreferences,
+              resolvedFont: state.bodyFont,
+              progressSnapshot: state.progressSnapshot,
+              readingAuthorityIdentity: state.readingAuthorityRevision,
+              preparationService: container.read(
+                novelReaderNativePreparationServiceProvider,
+              ),
+              startsAtBeginning: controller.startsPagedAtBeginning,
+              active: active,
+              navigationController: navigation,
+              onPositionChanged: (position) {
+                positions.add(position);
+                controller.onPagedPositionChanged(position);
+              },
+              idleScheduler: () async {},
+              performance: const NovelReaderPaginationPerformancePolicy(
+                enforceBudgets: false,
               ),
             ),
           ),

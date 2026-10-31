@@ -1,0 +1,685 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/fonts/fonts.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
+import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
+import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_layout_host.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
+import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
+import 'package:y300/l10n/app_localizations.dart';
+
+import '../../../test_support/localized_test_app.dart';
+
+const _episode = NovelEpisodeItem(
+  episodeId: 'episode',
+  novelId: 'novel',
+  sourceTid: '1',
+  episodeTitle: 'Chapter',
+  orderIndex: 0,
+);
+
+// FakeAsync cannot advance vsync while Flutter retries low-priority Timer.run
+// tasks at the same timestamp. Keep the Host's existing idle test port explicit.
+Future<void> _idle() async {}
+
+class _Preparation implements NovelReaderNativePreparationService {
+  int calls = 0;
+  bool fail = false;
+  Completer<void>? gate;
+  @override
+  Future<NovelReaderNativeChapterPreparation> prepare({
+    required String episodeId,
+    required String sourceId,
+    required String rawHtml,
+    required NovelReaderDocument semanticDocument,
+    required NovelReaderPaginationCancellationToken cancellation,
+    TextConverter converter = const IdentityTextConverter(),
+  }) async {
+    calls++;
+    await gate?.future;
+    if (fail) throw StateError('private preparation error');
+    return const DefaultNovelReaderNativePreparationService().prepare(
+      episodeId: episodeId,
+      sourceId: sourceId,
+      rawHtml: rawHtml,
+      semanticDocument: semanticDocument,
+      cancellation: cancellation,
+      converter: converter,
+    );
+  }
+}
+
+class _Reader {
+  _Reader({String? html}) {
+    rawHtml =
+        html ?? '<p>${List.filled(100, 'abcdefghijklmnopqrst').join()}</p>';
+    document =
+        const DiscuzNovelReaderDocumentParser(captureSourceProvenance: true)
+            .parse(
+              episodeId: _episode.episodeId,
+              rawHtml: rawHtml,
+              fallbackParagraphs: const [],
+            );
+    final origin = document.sourceProvenance?.origins.firstOrNull;
+    snapshot = NovelReaderProgressSnapshot(
+      novelId: _episode.novelId,
+      episodeId: _episode.episodeId,
+      flowMode: NovelReaderFlowMode.pagedLtr,
+      scrollOffset: 0,
+      pageIndex: 0,
+      anchorNodeId: origin?.nodeId,
+      anchorTextOffset: 0,
+      anchorFormatVersion: 37,
+      anchorTextIdentity: origin == null
+          ? null
+          : NovelReaderAnchorFormat.textIdentity(origin.text),
+      progressPercent: 0,
+      isProgressPercentValid: true,
+    );
+    addTearDown(() {
+      navigation.dispose();
+      owner.dispose();
+      fonts.dispose();
+    });
+  }
+  late final String rawHtml;
+  late final NovelReaderDocument document;
+  late final NovelReaderProgressSnapshot snapshot;
+  final fonts = ChangeNotifier();
+  late final owner = NovelReaderNativeOwner(fontChanges: fonts);
+  final authority = Object();
+  final navigation = NovelReaderPagedNavigationController();
+  final service = _Preparation();
+  final positions = <NovelReaderPaginationPosition>[];
+  final statuses = <NovelReaderNativeHostStatus>[];
+  final edges = <NovelReaderChapterEdge>[];
+  final endConfirmations = <bool>[];
+  int ready = 0;
+  int terminal = 0;
+  int scrollChoices = 0;
+  NovelReaderPreferences get preferences =>
+      NovelReaderPreferences.defaults().copyWith(
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        fontSize: 10,
+        lineHeight: 1,
+        pagePadding: 8,
+        paragraphSpacing: 0,
+        contentMaxWidth: 240,
+      );
+}
+
+Future<void> _show(
+  WidgetTester tester,
+  _Reader reader, {
+  double width = 400,
+  double height = 400,
+  ReaderChromeInsets insets = const ReaderChromeInsets.zero(),
+  NovelReaderPreferences? preferences,
+  bool active = true,
+  TextScaler scaler = TextScaler.noScaling,
+  Object? authority,
+  Locale locale = const Locale('zh'),
+  NovelReaderPagedNavigationController? navigation,
+}) => tester.pumpWidget(
+  LocalizedTestApp(
+    locale: locale,
+    theme: ThemeData.light().copyWith(
+      textTheme: const TextTheme(
+        bodyMedium: TextStyle(
+          fontFamily: 'Ahem',
+          letterSpacing: 0,
+          wordSpacing: 0,
+        ),
+      ),
+    ),
+    home: MediaQuery(
+      data: MediaQueryData(textScaler: scaler),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: NovelReaderNativePagedSurface(
+            owner: reader.owner,
+            episode: _episode,
+            rawHtml: reader.rawHtml,
+            semanticDocument: reader.document,
+            preferences: preferences ?? reader.preferences,
+            resolvedFont: ResolvedFont.system,
+            progressSnapshot: reader.snapshot,
+            readingAuthorityIdentity: authority ?? reader.authority,
+            preparationService: reader.service,
+            chromeInsets: insets,
+            active: active,
+            navigationController: navigation ?? reader.navigation,
+            previousChapterTitle: 'previous',
+            nextChapterTitle: 'next',
+            onTurnToAdjacentChapter: (edge) {
+              reader.edges.add(edge);
+              if (edge == NovelReaderChapterEdge.end) {
+                reader.endConfirmations.add(
+                  reader.navigation.confirmChapterEndNavigation(),
+                );
+              }
+              return true;
+            },
+            onPositionChanged: reader.positions.add,
+            onStatusChanged: reader.statuses.add,
+            onContentReady: () => reader.ready++,
+            onContentTerminal: () => reader.terminal++,
+            onChooseScrollMode: () => reader.scrollChoices++,
+            performance: const NovelReaderPaginationPerformancePolicy(
+              enforceBudgets: false,
+            ),
+            idleScheduler: _idle,
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+
+AppLocalizations _l10n(WidgetTester tester) => AppLocalizations.of(
+  tester.element(find.byType(NovelReaderNativePagedSurface)),
+);
+
+Future<void> _unmount(WidgetTester tester, _Reader reader) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pumpAndSettle();
+  expect(reader.owner.activeCacheHandles, 0);
+  expect(tester.takeException(), isNull);
+}
+
+void main() {
+  for (final replacement in ['owner', 'dispose']) {
+    testWidgets(
+      'stale semantics after $replacement cannot follow a shared port into another reader',
+      (tester) async {
+        final old = _Reader();
+        await _show(tester, old);
+        await tester.pumpAndSettle();
+        final semantics = tester.widget<Semantics>(
+          find.byKey(const Key('novel-reader-native-paged-semantics')),
+        );
+        final staleIncrease = semantics.properties.onIncrease!;
+        if (replacement == 'dispose') await _unmount(tester, old);
+        final next = _Reader();
+        await _show(tester, next, navigation: old.navigation);
+        await tester.pumpAndSettle();
+        final reports = next.positions.length;
+        staleIncrease();
+        await tester.pumpAndSettle();
+        expect(next.positions, hasLength(reports));
+        expect(old.navigation.turnNext(), isTrue);
+        await tester.pumpAndSettle();
+        expect(next.positions.last.pageIndex, 1);
+        expect(next.positions.last.hasUserNavigated, isTrue);
+        await _unmount(tester, next);
+      },
+    );
+  }
+  testWidgets(
+    'an unbounded window reports one terminal geometry result without preparing content',
+    (tester) async {
+      final reader = _Reader();
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: SingleChildScrollView(
+            child: NovelReaderNativePagedSurface(
+              owner: reader.owner,
+              episode: _episode,
+              rawHtml: reader.rawHtml,
+              semanticDocument: reader.document,
+              preferences: reader.preferences,
+              resolvedFont: ResolvedFont.system,
+              progressSnapshot: reader.snapshot,
+              readingAuthorityIdentity: reader.authority,
+              preparationService: reader.service,
+              onContentTerminal: () => reader.terminal++,
+              onStatusChanged: reader.statuses.add,
+              onPositionChanged: reader.positions.add,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(_l10n(tester).novelPagedWindowUnavailable),
+        findsOneWidget,
+      );
+      expect(reader.terminal, 1);
+      expect(reader.statuses.single.phase, NovelReaderNativeHostPhase.failed);
+      expect(reader.service.calls, 0);
+      expect(reader.positions, isEmpty);
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final preset in [
+    NovelReaderThemePreset.dark,
+    NovelReaderThemePreset.sepia,
+  ]) {
+    testWidgets(
+      'recovery uses the selected reader palette for $preset on a light app theme',
+      (tester) async {
+        final reader = _Reader()..service.fail = true;
+        final preferences = reader.preferences.copyWith(themePreset: preset);
+        await _show(tester, reader, preferences: preferences);
+        await tester.pumpAndSettle();
+        final context = tester.element(
+          find.byType(NovelReaderNativePagedSurface),
+        );
+        final palette = const NovelReaderThemeResolver().resolve(
+          preferences: preferences,
+          theme: Theme.of(context),
+        );
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const Key('novel-reader-pagination-paused')),
+              )
+              .style!
+              .color,
+          palette.muted,
+        );
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byKey(const Key('novel-reader-pagination-retry')),
+              )
+              .color,
+          palette.foreground,
+        );
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byKey(const Key('novel-reader-pagination-fallback')),
+              )
+              .color,
+          palette.foreground,
+        );
+        await _unmount(tester, reader);
+      },
+    );
+  }
+  for (final height in [50.0, 180.0]) {
+    testWidgets(
+      'narrow recovery fits width=100 height=$height without inventing a page',
+      (tester) async {
+        final reader = _Reader()..service.fail = true;
+        await _show(tester, reader, width: 100, height: height);
+        await tester.pumpAndSettle();
+        expect(reader.positions, isEmpty);
+        expect(reader.scrollChoices, 0);
+        expect(
+          find.byKey(const Key('novel-reader-pagination-retry')),
+          findsOneWidget,
+        );
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  testWidgets(
+    'Traditional Chinese recovery uses current locale and keeps failures private',
+    (tester) async {
+      final reader = _Reader()..service.fail = true;
+      await _show(tester, reader, locale: const Locale('zh', 'TW'));
+      await tester.pumpAndSettle();
+      expect(_l10n(tester).localeName, 'zh_TW');
+      expect(find.text(_l10n(tester).novelPagedLayoutFailed), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('novel-reader-pagination-retry')),
+            )
+            .tooltip,
+        _l10n(tester).commonRetry,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('novel-reader-pagination-fallback')),
+            )
+            .tooltip,
+        _l10n(tester).novelReturnToScroll,
+      );
+      expect(find.textContaining('private preparation error'), findsNothing);
+      await _unmount(tester, reader);
+    },
+  );
+  testWidgets(
+    'one exact body box excludes margins, safe area, persistent chrome and footer',
+    (tester) async {
+      final reader = _Reader();
+      await _show(
+        tester,
+        reader,
+        height: 600,
+        insets: const ReaderChromeInsets(
+          top: 12,
+          safeAreaTop: 30,
+          bottom: 14,
+          safeAreaBottom: 20,
+          pageIndicatorReservedHeight: 18,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final body = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+      final footer = tester.getRect(
+        find.byKey(const Key('novel-reader-native-footer')),
+      );
+      expect(body, const Rect.fromLTWH(80, 50, 240, 460));
+      expect(footer.top, body.bottom);
+      expect(body.overlaps(footer), isFalse);
+      final snapshot = reader.statuses.last.controller!.snapshot!;
+      expect(snapshot.width, body.width);
+      expect(snapshot.height, body.height);
+      expect(reader.positions.first.isReadOnlyCompatibilityRestore, isTrue);
+      expect(
+        find.byKey(const Key('novel-reader-page-indicator-text')),
+        findsOneWidget,
+      );
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'scaled footer stays outside reflowed native text and retains its canonical point',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final before = reader.statuses.last.controller;
+      final body = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+      await _show(tester, reader, scaler: const TextScaler.linear(3));
+      await tester.pumpAndSettle();
+      final after = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+      final footer = tester.getRect(
+        find.byKey(const Key('novel-reader-native-footer')),
+      );
+      expect(after.height, lessThan(body.height));
+      expect(after.overlaps(footer), isFalse);
+      expect(reader.statuses.last.controller, isNot(same(before)));
+      expect(
+        reader.positions.last.anchor.textOffset,
+        reader.positions.first.anchor.textOffset,
+      );
+      expect(
+        reader.positions.every(
+          (p) => p.isReadOnlyCompatibilityRestore && !p.hasUserNavigated,
+        ),
+        isTrue,
+      );
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'indicator visibility follows actual fixed-footer geometry without reparsing or new positions',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final before = reader.statuses.last.controller;
+      final box = tester.getSize(find.byType(NovelReaderNativeLayoutHost));
+      final reports = reader.positions.length;
+      await _show(
+        tester,
+        reader,
+        preferences: reader.preferences.copyWith(showProgressIndicator: false),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('novel-reader-page-indicator-text')),
+        findsNothing,
+      );
+      expect(tester.getSize(find.byType(NovelReaderNativeLayoutHost)), box);
+      expect(reader.statuses.last.controller, same(before));
+      expect(reader.positions, hasLength(reports));
+      expect(reader.service.calls, 1);
+      await _unmount(tester, reader);
+    },
+  );
+
+  for (final rtl in [false, true]) {
+    testWidgets(
+      'localized visible hint does not cover text or reflow while pulling in rtl=$rtl',
+      (tester) async {
+        final reader = _Reader(html: '<p>abcd</p>');
+        await _show(
+          tester,
+          reader,
+          preferences: reader.preferences.copyWith(
+            flowMode: rtl
+                ? NovelReaderFlowMode.pagedRtl
+                : NovelReaderFlowMode.pagedLtr,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final box = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+        final controller = reader.statuses.last.controller;
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(PageView)),
+        );
+        await gesture.moveBy(Offset(rtl ? 80 : -80, 0));
+        await tester.pumpAndSettle();
+        final hint = find.byKey(
+          const Key('novel-reader-chapter-turn-hint-text'),
+        );
+        expect(
+          tester.widget<Text>(hint).data,
+          NovelTextResolver.chapterTurnHint(
+            _l10n(tester),
+            const NovelReaderChapterTurnHint(
+              edge: NovelReaderChapterEdge.end,
+              chapterTitle: 'next',
+              isReadyToCommit: true,
+            ),
+          ),
+        );
+        expect(tester.getRect(hint).overlaps(box), isFalse);
+        expect(tester.getRect(find.byType(NovelReaderNativeLayoutHost)), box);
+        expect(reader.statuses.last.controller, same(controller));
+        expect(reader.edges, isEmpty);
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(reader.edges, [NovelReaderChapterEdge.end]);
+        expect(reader.endConfirmations, [true]);
+        expect(reader.positions.last.hasUserNavigated, isTrue);
+        expect(
+          find.byKey(const Key('novel-reader-chapter-turn-hint-text')),
+          findsNothing,
+        );
+        await _unmount(tester, reader);
+      },
+    );
+  }
+
+  testWidgets(
+    'initial failure uses localized recovery and explicit retry keeps the same body box',
+    (tester) async {
+      final reader = _Reader()..service.fail = true;
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final box = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+      expect(find.text(_l10n(tester).novelPagedLayoutFailed), findsOneWidget);
+      expect(find.textContaining('private preparation error'), findsNothing);
+      expect(reader.positions, isEmpty);
+      expect(reader.scrollChoices, 0);
+      reader.service.fail = false;
+      await tester.tap(find.byKey(const Key('novel-reader-pagination-retry')));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.byType(NovelReaderNativeLayoutHost)), box);
+      expect(reader.service.calls, 2);
+      expect(reader.ready, 1);
+      expect(reader.positions.single.isReadOnlyCompatibilityRestore, isTrue);
+      expect(reader.scrollChoices, 0);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'only an explicit scroll choice calls the mode callback and hidden recovery is disabled',
+    (tester) async {
+      final reader = _Reader()..service.fail = true;
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('novel-reader-pagination-fallback')),
+      );
+      expect(reader.scrollChoices, 1);
+      await _show(tester, reader, active: false);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('novel-reader-pagination-retry')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('novel-reader-pagination-fallback')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(reader.service.calls, 1);
+      expect(reader.positions, isEmpty);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'a late source failure preserves native pages with recovery outside their geometry',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>${List.filled(100, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+      );
+      await _show(tester, reader, width: 200, height: 180);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.paused);
+      final box = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+      expect(find.byType(ForumBodyTextPageSurface), findsWidgets);
+      expect(
+        tester
+            .getRect(find.byKey(const Key('novel-reader-pagination-retry')))
+            .overlaps(box),
+        isFalse,
+      );
+      expect(reader.navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, 1);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.paused);
+      expect(reader.scrollChoices, 0);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'empty source renders localized empty state without a page or native cache handle',
+    (tester) async {
+      final reader = _Reader(html: '');
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(find.text(_l10n(tester).novelPagedNoContent), findsOneWidget);
+      expect(
+        find.byKey(const Key('novel-reader-page-indicator-text')),
+        findsNothing,
+      );
+      expect(reader.positions, isEmpty);
+      expect(reader.owner.activeCacheHandles, 0);
+      expect(reader.terminal, 1);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'hidden shell retains paint but disables navigation until same-controller resume',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller;
+      final reports = reader.positions.length;
+      await _show(tester, reader, active: false);
+      await tester.pumpAndSettle();
+      expect(find.byType(ForumBodyTextPageSurface), findsWidgets);
+      expect(reader.navigation.turnNext(), isFalse);
+      final semantics = tester.widget<Semantics>(
+        find.byKey(const Key('novel-reader-native-paged-semantics')),
+      );
+      expect(semantics.properties.onIncrease, isNull);
+      expect(reader.positions, hasLength(reports));
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.service.calls, 1);
+      expect(reader.positions.every((p) => !p.hasUserNavigated), isTrue);
+      await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'new owner suppresses the old pending shell and preparation callbacks',
+    (tester) async {
+      final old = _Reader()..service.gate = Completer<void>();
+      await _show(tester, old);
+      await tester.pumpAndSettle();
+      final next = _Reader(html: '<p>abcd</p>');
+      await _show(tester, next);
+      await tester.pumpAndSettle();
+      old.service.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(old.positions, isEmpty);
+      expect(old.ready, 0);
+      expect(next.positions, hasLength(1));
+      expect(old.owner.activeCacheHandles, 0);
+      await _unmount(tester, next);
+    },
+  );
+
+  testWidgets(
+    'semantic page action uses the same native navigation and confirms only actual arrival',
+    (tester) async {
+      final reader = _Reader();
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final semantics = tester.widget<Semantics>(
+        find.byKey(const Key('novel-reader-native-paged-semantics')),
+      );
+      expect(semantics.properties.onIncrease, isNotNull);
+      final reports = reader.positions.length;
+      semantics.properties.onIncrease!();
+      expect(reader.positions, hasLength(reports));
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, 1);
+      expect(reader.positions.last.hasUserNavigated, isTrue);
+      await _unmount(tester, reader);
+    },
+  );
+}
