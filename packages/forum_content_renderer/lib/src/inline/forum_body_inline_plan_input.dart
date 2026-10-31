@@ -11,7 +11,7 @@ import 'forum_body_text_band_content.dart';
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
   ForumBodyInlinePlanInput._(this.content, this.groups, this.width);
-  static const revision = 2;
+  static const revision = 3;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -30,21 +30,31 @@ final class ForumBodyInlinePlanInput {
         >[];
     final atoms = <({int startUtf16, int endUtf16})>[];
     var offset = 0;
+    var previousCollapsibleSpace = false;
     void append(ForumBodyParagraphContent context) {
       contexts.add(context);
       offset += context.projection.text.length;
     }
 
+    void appendPlain(
+      ForumBodyParagraphContent context, {
+      bool trailing = false,
+    }) {
+      final plain = _plainContext(
+        context,
+        leading: offset == 0 || previousCollapsibleSpace,
+        trailing: trailing,
+      );
+      append(plain);
+      if (plain.projection.text.isNotEmpty) {
+        previousCollapsibleSpace = _collapsibleEdge(plain, leading: false);
+      }
+    }
+
     for (final (index, part) in input.parts.indexed) {
       switch (part) {
         case ForumBodyInlineFlowText():
-          append(
-            _plainContext(
-              part.content,
-              leading: index == 0,
-              trailing: index == input.parts.length - 1,
-            ),
-          );
+          appendPlain(part.content, trailing: index == input.parts.length - 1);
         case ForumBodyInlineFlowRuby():
           final group = part.group;
           if (group.identity != input.identity ||
@@ -60,16 +70,10 @@ final class ForumBodyInlinePlanInput {
               group.annotations.length > 1) {
             _unsupported(group.rootPath);
           }
-          final base = (group.base.single as ForumBodyRubyTextContent).content;
+          var base = (group.base.single as ForumBodyRubyTextContent).content;
           final ForumBodyParagraphContent annotation;
           if (group.annotations.isEmpty) {
-            append(
-              _plainContext(
-                base,
-                leading: index == 0,
-                trailing: index == input.parts.length - 1,
-              ),
-            );
+            appendPlain(base, trailing: index == input.parts.length - 1);
             continue;
           } else {
             final parts = group.annotations.single.parts;
@@ -85,17 +89,24 @@ final class ForumBodyInlinePlanInput {
               trailing: true,
             );
           }
-          // These edges need base-level whitespace planning across atoms. Do
-          // not pin a collapsed space inside a box or discard it silently.
-          if (_collapsibleEdge(base, leading: true) ||
-              _collapsibleEdge(base, leading: false)) {
+          // A trailing space precedes RT in source order. It cannot be moved
+          // behind the atom by concatenating source windows. Whitespace-only
+          // annotated bases also need their own explicit preservation policy.
+          if (_collapsibleEdge(base, leading: false)) {
             _unsupported(group.rootPath);
+          }
+          if (_collapsibleEdge(base, leading: true)) {
+            // Keep the space outside the opaque box so the actual parent can
+            // trim it at a line break. Both windows retain original ownership.
+            appendPlain(_window(base, 0, 1));
+            base = _window(base, 1, base.projection.text.length);
           }
           final start = offset;
           append(base);
           append(annotation);
           atoms.add((startUtf16: start, endUtf16: offset));
           pairs.add((base: base, annotation: annotation));
+          previousCollapsibleSpace = false;
       }
     }
     final content = ForumBodyInlineSpanContent.compose(
@@ -170,6 +181,14 @@ ForumBodyParagraphContent _plainContext(
     end--;
   }
   if (start == 0 && end == context.projection.text.length) return context;
+  return _window(context, start, end);
+}
+
+ForumBodyParagraphContent _window(
+  ForumBodyParagraphContent context,
+  int start,
+  int end,
+) {
   // Preserve complete graphemes and actual source affinity. A raw whitespace
   // normalizer must resolve a space joined to a combining mark, not split it.
   if (context.projection.sourceAtUtf16(start).displayUtf16 != start ||

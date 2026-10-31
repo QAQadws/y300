@@ -431,6 +431,182 @@ void main() {
     expect(f.cache.activeLeases, 0);
   });
 
+  for (final (prefix, display, source) in [
+    ('', 'ABxy', 1),
+    ('X', 'X ABxy', 2),
+    ('X ', 'X ABxy', 3),
+  ]) {
+    test('base leading whitespace belongs to its ordinary parent: $prefix', () {
+      final f = _Fixture(
+        '<p>$prefix<ruby> AB<rt>xy</rt></ruby></p>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(prepared.view.content.projection.display.text, display);
+        final leases = prepared.nativeLeases.toList();
+        final base = leases[1] as ForumBodyTextLease;
+        expect(base.content.projection.text, 'AB');
+        expect(base.layout.width, 40);
+        expect(base.content.projection.sourceAtUtf16(0).sourceRune, source);
+        final parent = leases.first as ForumBodyInlineParagraphLease;
+        expect(
+          parent.layout.atomBoxes.single.right -
+              parent.layout.atomBoxes.single.left,
+          40,
+        );
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+    });
+  }
+
+  test('extracted leading space trims at the actual native line edge', () {
+    final f = _Fixture('<p>X<ruby> AB<rt>xy</rt></ruby></p>', height: 100);
+    f.finish();
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      final parent =
+          prepared.nativeLeases.first as ForumBodyInlineParagraphLease;
+      expect(parent.layout.lines, hasLength(2));
+      expect(parent.layout.atomBoxes.single.left, 0);
+      expect(prepared.view.content.projection.engineText, 'X \uFFFC');
+      final base = prepared.nativeLeases.elementAt(1) as ForumBodyTextLease;
+      final rt = prepared.nativeLeases.elementAt(2) as ForumBodyTextLease;
+      final metrics = ForumBodyRubyGroupMetrics.measure(
+        cache: f.cache,
+        baseLease: base,
+        annotation: rt.content,
+        annotationLease: rt,
+        maxWidth: 60,
+      );
+      final box = base.layout.selectionBoxes(1, 2).single.toRect();
+      final hit = prepared.view.sourceAt(
+        parent.layout.atomBoxes.single.toRect().topLeft +
+            metrics.baseOffset +
+            Offset(box.left + .1, (box.top + box.bottom) / 2),
+      );
+      expect(hit.isExact, isTrue);
+      expect(hit.sourceRune, 3);
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'base leading space folds against an unannotated ordinary ruby tail',
+    () {
+      final f = _Fixture(
+        '<p><ruby>AB<rt>xy</rt>T </ruby><ruby> CD<rt>z</rt></ruby></p>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(prepared.view.content.projection.display.text, 'ABxyT CDz');
+        expect(prepared.view.content.projection.engineText, '\uFFFCT \uFFFC');
+        expect(prepared.view.atomIndices, [0, 1]);
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('extracting a styled leading space preserves both run owners', () {
+    final f = _Fixture(
+      '<p>X<ruby><span style="color:red"> </span>'
+      '<span style="color:green">AB</span><rt>xy</rt></ruby></p>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      final content = prepared.view.content;
+      expect(content.projection.display.text, 'X ABxy');
+      expect(content.runs, hasLength(4));
+      final space = content.projection.display.parts.singleWhere(
+        (part) => part.utf16Start == 1,
+      );
+      expect(
+        content.runs[space.runIndex].style.textStyle.color,
+        const Color(0xffff0000),
+      );
+      final base = prepared.nativeLeases.elementAt(1) as ForumBodyTextLease;
+      expect(base.content.projection.text, 'AB');
+      final baseRun = base.content.projection.parts.single.runIndex;
+      expect(
+        base.content.runs[baseRun].style.textStyle.color,
+        const Color(0xff008000),
+      );
+    } finally {
+      prepared.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  for (final (prefix, display) in [
+    ('<span style="white-space:pre-wrap">X </span>', 'X  ABxy'),
+    ('X&nbsp;', 'X\u00a0 ABxy'),
+  ]) {
+    test(
+      'base space does not collapse preserved preceding whitespace: $prefix',
+      () {
+        final f = _Fixture(
+          '<p>$prefix<ruby> AB<rt>xy</rt></ruby></p>',
+          width: 200,
+          height: 100,
+        );
+        f.finish();
+        final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(prepared.view.content.projection.display.text, display);
+        } finally {
+          prepared.close();
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  test('a real BR resets the base leading edge without moving source', () {
+    final f = _Fixture(
+      '<p>X<br> <ruby> AB<rt>xy</rt></ruby></p>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    final fragments = f.prepare(0);
+    try {
+      final mixed = fragments
+          .whereType<ForumBodyPreparedInlineFragment>()
+          .single;
+      expect(mixed.view.content.projection.display.text, 'ABxy');
+      expect(mixed.view.content.projection.engineText, '\uFFFC');
+      final base = mixed.nativeLeases.elementAt(1) as ForumBodyTextLease;
+      expect(base.content.projection.sourceAtUtf16(0).sourceRune, 4);
+    } finally {
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('a leading base space joined to a combining mark is not cut', () {
+    final f = _Fixture('<ruby> \u0301AB<rt>xy</rt></ruby>');
+    expect(f.finish, throwsA(isA<ForumBodyParagraphInputException>()));
+    expect(f.cache.layoutBuildCount, 0);
+    expect(f.session.snapshot, isEmpty);
+  });
+
   for (final base in [
     '&nbsp;AB',
     '<span style="white-space:pre"> AB </span>',
@@ -450,7 +626,8 @@ void main() {
   }
 
   for (final html in [
-    '<ruby> A<rt>a</rt></ruby>',
+    '<ruby>A <rt>a</rt></ruby>',
+    '<ruby> <rt>a</rt></ruby>',
     '<ruby>A<rt>a</rt><rt>b</rt></ruby>',
     '<ruby><rt>orphan</rt></ruby>',
     '<ruby>A<ruby>B<rt>b</rt></ruby><rt>a</rt></ruby>',

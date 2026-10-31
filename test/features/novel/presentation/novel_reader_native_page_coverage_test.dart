@@ -147,6 +147,34 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('extracted base space preserves post-break native source coverage', () {
+    final fixture = _Fixture(
+      '<p>X <ruby> AB<rt>xy</rt></ruby>Y</p>',
+      width: 30,
+      height: 20,
+    );
+    expect(fixture.session.snapshot, hasLength(2));
+    final fragments = fixture.prepareFragments(1);
+    try {
+      final mixed = fragments.single as ForumBodyPreparedInlineFragment;
+      expect(mixed.view.content.projection.display.text, 'X ABxyY');
+      final builds = fixture.cache.layoutBuildCount;
+      final coverage = _finish(fixture.preparedCursor(1, fragments));
+      expect(fixture.cache.layoutBuildCount, builds);
+      expect(coverage.hasClippedGlyphs, isFalse);
+      final sources = coverage.points.map((point) => point.sourceRune).toSet();
+      expect(sources, containsAll({4, 5, 6, 7, 8}));
+      expect(sources, isNot(contains(2)));
+      expect(fragments.every((fragment) => fragment.isActive), isTrue);
+    } finally {
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+    }
+    expect(fixture.session.activeIssuedLeases, 0);
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   test('mixed coverage proves actual base and annotation glyphs in the current page only', () {
     final fixture = _Fixture(
       '<p>X<ruby>AB<rp>(fallback)</rp><rt>xy</rt><rp>(hidden)</rp></ruby>Y</p>',

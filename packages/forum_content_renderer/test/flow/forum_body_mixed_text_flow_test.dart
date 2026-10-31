@@ -391,7 +391,7 @@ void main() {
   });
 
   test(
-    'unresolved format whitespace fails before shaping and reports bounded replay progress',
+    'resolved base whitespace retains bounded replay progress through shaping',
     () {
       final cache = ForumBodyParagraphCache(
         maxEntries: 8,
@@ -416,20 +416,35 @@ void main() {
       );
       addTearDown(session.close);
       var replaySteps = 0;
-      expect(() {
-        for (var i = 0; i < 1000; i++) {
-          final step = session.advance(maxEvents: 1, maxLines: 1);
-          expect(step.flowWorkDone, lessThanOrEqualTo(1));
-          if (step.eventsRead == 0 && step.flowWorkDone == 1) {
-            expect(step.madeProgress, isTrue);
-            replaySteps++;
-          }
+      for (var i = 0; !session.isComplete && i < 1000; i++) {
+        final step = session.advance(maxEvents: 1, maxLines: 1);
+        expect(step.flowWorkDone, lessThanOrEqualTo(1));
+        expect(step.layoutsBuilt, lessThanOrEqualTo(1));
+        if (step.eventsRead == 0 && step.flowWorkDone == 1) {
+          expect(step.madeProgress, isTrue);
+          replaySteps++;
         }
-      }, throwsA(isA<ForumBodyParagraphInputException>()));
+      }
       expect(replaySteps, greaterThan(0));
-      expect(session.state, ForumBodyTextPageSessionState.failed);
-      expect(session.snapshot, isEmpty);
-      expect(cache.layoutBuildCount, 0);
+      expect(session.state, ForumBodyTextPageSessionState.complete);
+      expect(cache.pictureBuildCount, 0);
+      final preparation = session.openPagePreparation(0);
+      addTearDown(preparation.close);
+      for (var i = 0; !preparation.isReady && i < 1000; i++) {
+        final step = preparation.advance(maxFragments: 1, maxParts: 1);
+        expect(step.layoutsBuilt + step.picturesBuilt, lessThanOrEqualTo(1));
+      }
+      expect(preparation.isReady, isTrue);
+      final fragments = preparation.takeFragments();
+      try {
+        final mixed = fragments.single as ForumBodyPreparedInlineFragment;
+        expect(mixed.view.content.projection.display.text, '前Aa Bb后');
+        expect(mixed.view.atomIndices, [0, 1]);
+      } finally {
+        for (final fragment in fragments) {
+          fragment.close();
+        }
+      }
       expect(cache.activeLeases, 0);
     },
   );
