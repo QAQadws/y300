@@ -37,10 +37,13 @@ ForumBodyParagraphContent content(
 Future<List<int>> raster(
   ForumBodyParagraphLayout layout, {
   bool fragments = false,
+  ForumBodyParagraphFragment? window,
 }) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  if (fragments) {
+  if (window != null) {
+    window.paint(canvas, Offset.zero);
+  } else if (fragments) {
     var start = 0;
     for (var i = 0; i < layout.lines.length; i++) {
       if (!layout.lines[i].canBreakAfter) continue;
@@ -57,7 +60,7 @@ Future<List<int>> raster(
   try {
     final image = await picture.toImage(
       layout.width.ceil(),
-      layout.height.ceil(),
+      (window?.height ?? layout.height).ceil(),
     );
     try {
       return (await image.toByteData(
@@ -73,6 +76,34 @@ Future<List<int>> raster(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'a terminal empty native row cannot paint the previous tight-line glyph',
+    () async {
+      final layout = ForumBodyParagraphLayout.create(
+        content: content(
+          '<p style="white-space:pre-wrap;line-height:.25">A\n</p>',
+        ),
+        width: 100,
+      );
+      addTearDown(layout.dispose);
+      final last = layout.lines.length - 1;
+      final empty = layout.fragment(last, last + 1);
+      expect(empty.height, greaterThan(0));
+      expect(empty.coverageStartUtf16, empty.coverageEndUtf16);
+      final visible = await raster(layout, window: layout.fragment(0, last));
+      expect(visible.any((value) => value != 0), isTrue);
+      final pixels = await raster(layout, window: empty);
+      expect(pixels.every((value) => value == 0), isTrue);
+      layout.dispose();
+      final recorder = ui.PictureRecorder();
+      expect(
+        () => empty.paint(Canvas(recorder), Offset.zero),
+        throwsStateError,
+      );
+      recorder.endRecording().dispose();
+    },
+  );
 
   test(
     'intrinsic inline glyphs leave inherited indentation to their containing block',

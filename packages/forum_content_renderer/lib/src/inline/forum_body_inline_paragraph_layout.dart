@@ -384,6 +384,10 @@ final class ForumBodyInlineParagraphFragment {
 
   void paintParent(Canvas canvas, Offset offset) {
     layout._ensureOpen();
+    if (coverageStartUtf16 == coverageEndUtf16 &&
+        engineCoverageStartUtf16 == engineCoverageEndUtf16) {
+      return;
+    }
     canvas.save();
     try {
       canvas.clipRect(

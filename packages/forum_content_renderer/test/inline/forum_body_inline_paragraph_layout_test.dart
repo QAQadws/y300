@@ -13,8 +13,62 @@ const _dimension = PlaceholderDimensions(
   baselineOffset: 26,
 );
 
+Future<List<int>> _rasterParent(ForumBodyInlineParagraphFragment window) async {
+  final recorder = ui.PictureRecorder();
+  window.paintParent(Canvas(recorder), Offset.zero);
+  final picture = recorder.endRecording();
+  try {
+    final image = await picture.toImage(
+      window.layout.width.ceil(),
+      window.height.ceil(),
+    );
+    try {
+      return (await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      ))!.buffer.asUint8List().toList();
+    } finally {
+      image.dispose();
+    }
+  } finally {
+    picture.dispose();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'a terminal empty mixed row cannot paint a previous ordinary glyph',
+    () async {
+      final input = mixedInlineInput(
+        suffix: 'Y<br>',
+        paragraphStyle: 'line-height:.25',
+      );
+      final layout = ForumBodyInlineParagraphLayout.create(
+        content: input.content,
+        width: 40,
+        dimensions: [_dimension],
+      );
+      addTearDown(layout.dispose);
+      final last = layout.lines.length - 1;
+      final empty = layout.fragment(last, last + 1);
+      expect(empty.height, greaterThan(0));
+      expect(empty.coverageStartUtf16, empty.coverageEndUtf16);
+      expect(empty.engineCoverageStartUtf16, empty.engineCoverageEndUtf16);
+      expect(empty.atomIndices, isEmpty);
+      final visible = await _rasterParent(layout.fragment(last - 1, last));
+      expect(visible.any((value) => value != 0), isTrue);
+      final pixels = await _rasterParent(empty);
+      expect(pixels.every((value) => value == 0), isTrue);
+      layout.dispose();
+      final recorder = ui.PictureRecorder();
+      expect(
+        () => empty.paintParent(Canvas(recorder), Offset.zero),
+        throwsStateError,
+      );
+      recorder.endRecording().dispose();
+    },
+  );
 
   test(
     'actual mixed lines and fragments preserve distinct display and engine ranges',

@@ -304,6 +304,9 @@ final class ForumBodyParagraphFragment {
 
   void paint(Canvas canvas, Offset offset) {
     _layout._ensureOpen();
+    // Tight line-height can put the previous row's glyphs inside this blank
+    // row's clip. Empty coverage has no text of its own to paint.
+    if (coverageStartUtf16 == coverageEndUtf16) return;
     canvas.save();
     try {
       canvas.clipRect(
