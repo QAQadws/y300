@@ -8,6 +8,7 @@ import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 
 part 'forum_body_ruby_numeric_work.dart';
+part 'forum_body_ruby_segment_metrics.dart';
 
 /// Numeric geometry for one original annotation rank. Empty positions remain
 /// in the list; they neither borrow a glyph handle nor reserve a gap by itself.
@@ -22,6 +23,39 @@ final class ForumBodyRubyAnnotationMetrics {
     this.bandTop = 0,
     this.bandBottom = 0,
   });
+
+  /// Borrows one actual native member. This value owns no glyph lease and is
+  /// shared by column measurement and annotation spans, not another shaper.
+  factory ForumBodyRubyAnnotationMetrics.measure({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextLease? lease,
+    required ForumBodyRubySide side,
+    double gap = 0,
+  }) {
+    if (!gap.isFinite || gap < 0 || gap > 16384) {
+      ForumBodyRubyGroupMetrics._invalid();
+    }
+    if (lease != null && !cache.ownsLease(lease)) {
+      throw StateError('Ruby annotation owner is retired');
+    }
+    if (lease != null && lease.content.projection.text.isEmpty) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.content,
+      );
+    }
+    final bounds = lease == null
+        ? Rect.zero
+        : ForumBodyRubyGroupMetrics._textBounds(lease);
+    final baseline = lease?.layout.alphabeticBaseline ?? 0;
+    if (!baseline.isFinite) ForumBodyRubyGroupMetrics._invalid();
+    return ForumBodyRubyAnnotationMetrics._(
+      side: side,
+      gap: gap,
+      hasAnnotation: lease != null,
+      fontBaseline: baseline,
+      bounds: bounds,
+    );
+  }
 
   final ForumBodyRubySide side;
   final double gap;
@@ -417,17 +451,11 @@ final class ForumBodyRubyGroupMeasurement {
         ForumBodyRubyGroupFailure.content,
       );
     }
-    final bounds = lease == null
-        ? Rect.zero
-        : ForumBodyRubyGroupMetrics._textBounds(lease);
-    final baseline = lease?.layout.alphabeticBaseline ?? 0;
-    if (!baseline.isFinite) ForumBodyRubyGroupMetrics._invalid();
-    final raw = ForumBodyRubyAnnotationMetrics._(
+    final raw = ForumBodyRubyAnnotationMetrics.measure(
+      cache: cache,
+      lease: lease,
       side: item.side,
       gap: item.gap,
-      hasAnnotation: lease != null,
-      fontBaseline: baseline,
-      bounds: bounds,
     );
     final target =
         level?.annotations[measuredAnnotations] ??
@@ -436,7 +464,7 @@ final class ForumBodyRubyGroupMeasurement {
     _raw.add(raw);
     _positions.add(_stack!.append(target));
     _signature.write(item.side.index);
-    _width = math.max(_width, bounds.width);
+    _width = math.max(_width, raw.bounds.width);
   }
 
   int advance({required int maxParts}) {

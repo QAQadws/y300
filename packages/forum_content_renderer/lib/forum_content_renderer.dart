@@ -24,7 +24,11 @@ export 'src/inline/forum_body_ruby_group_metrics.dart'
         ForumBodyRubyGroupMetrics,
         ForumBodyRubyAnnotationMetrics,
         ForumBodyRubyLevelMetrics,
-        ForumBodyRubyAnnotationLevelMetrics;
+        ForumBodyRubyAnnotationLevelMetrics,
+        ForumBodyRubySegmentMetrics,
+        ForumBodyRubyMeasuredSpan,
+        ForumBodyRubyPlacedSpan;
+export 'src/inline/forum_body_ruby_segment_layout.dart';
 export 'src/inline/forum_body_ruby_group_preparation.dart';
 export 'src/inline/forum_body_text_band_content.dart'
     show ForumBodyTextBandContent;
