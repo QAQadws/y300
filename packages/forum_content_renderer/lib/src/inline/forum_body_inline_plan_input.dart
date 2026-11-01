@@ -3,6 +3,8 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_column_request.dart';
+import 'forum_body_ruby_atom_request.dart';
+import 'forum_body_ruby_segment_request.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_span_content.dart';
 import 'forum_body_ruby_annotation_input.dart';
@@ -16,14 +18,14 @@ import 'forum_body_text_band_content.dart';
 final class ForumBodyInlinePlanInput {
   ForumBodyInlinePlanInput._(
     this.content,
-    this.groups,
+    this.atoms,
     this.width,
     List<int> levelIds,
   ) : rubyLevelIds = List.unmodifiable(levelIds),
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 12;
+  static const revision = 13;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -34,14 +36,7 @@ final class ForumBodyInlinePlanInput {
     }
     final contexts = <ForumBodyParagraphContent>[];
     final sourceOrder = <int>[];
-    final columns =
-        <
-          ({
-            ForumBodyParagraphContent base,
-            List<({ForumBodyParagraphContent content, ForumBodyRubySide side})>
-            annotations,
-          })
-        >[];
+    final requestsByAtom = <ForumBodyRubyAtomRequest>[];
     final atoms = <({int startUtf16, int endUtf16})>[];
     final levelIds = <int>[];
     final roots = <String, int>{};
@@ -108,7 +103,22 @@ final class ForumBodyInlinePlanInput {
         }
       }
       atoms.add((startUtf16: start, endUtf16: offset));
-      columns.add((base: base, annotations: annotations));
+      requestsByAtom.add(
+        ForumBodyRubyAtomRequest.column(
+          ForumBodyRubyColumnRequest.layers(
+            base: ForumBodyTextRequest.paragraph(base),
+            annotations: [
+              for (final a in annotations)
+                (
+                  request: ForumBodyTextRequest.paragraph(a.content),
+                  gap: 0.0,
+                  side: a.side,
+                ),
+            ],
+            maxWidth: width,
+          ),
+        ),
+      );
       levelIds.add(levelId);
       previousCollapsibleSpace = false;
       atLineStart = false;
@@ -138,9 +148,102 @@ final class ForumBodyInlinePlanInput {
             group: group,
             baseColumnCount: unitCount,
           );
-          // One spanning context cannot be copied into several placeholders.
-          // Multi-column intervals need the segment composition path.
-          if (pairing.hasMultiColumnSpans) _unsupported(group.rootPath);
+          if (pairing.hasMultiColumnSpans) {
+            // Current anonymous-box pairing spans the complete original group.
+            // Its interior column edges cannot become independent parent atoms.
+            final segmentBases = <ForumBodyParagraphContent>[];
+            final baseSources = [for (final _ in bases) <int>[]];
+            final annotationSources = <int>[];
+            ForumBodyParagraphContent? tail;
+            List<int>? tailSource;
+            var column = 0;
+            for (final (index, unit) in bases.indexed) {
+              final sources = baseSources[index];
+              var base = unit.content;
+              if (unit.kind == ForumBodyRubyBaseInputKind.gap) {
+                if (column != 0 &&
+                    column != unitCount &&
+                    base.projection.text.isNotEmpty) {
+                  // Internal gap geometry has its own renderer contract. Do not
+                  // silently delete a real space inside a spanning component.
+                  _unsupported(group.rootPath);
+                }
+                final end = base.projection.text.length;
+                sources.add(append(_window(base, end, end)));
+                continue;
+              }
+              if (unit.kind == ForumBodyRubyBaseInputKind.implicit) {
+                if (_collapsibleEdge(base, leading: true)) {
+                  if (column != 0) _unsupported(group.rootPath);
+                  sources.add(appendPlain(_window(base, 0, 1)));
+                  base = _window(base, 1, base.projection.text.length);
+                }
+                if (_collapsibleEdge(base, leading: false)) {
+                  if (column + 1 != unitCount) _unsupported(group.rootPath);
+                  final end = base.projection.text.length;
+                  tail = _window(base, end - 1, end);
+                  tailSource = sources;
+                  base = _window(base, 0, end - 1);
+                }
+              }
+              segmentBases.add(base);
+              column++;
+            }
+            while (segmentBases.length < pairing.columnCount) {
+              segmentBases.add(_anonymousBase(group));
+            }
+            final start = offset;
+            var sourceColumn = 0;
+            for (final (index, unit) in bases.indexed) {
+              if (unit.kind == ForumBodyRubyBaseInputKind.gap) continue;
+              final base = segmentBases[sourceColumn++];
+              if (!base.isSourceFree) baseSources[index].add(append(base));
+            }
+            final spans = <ForumBodyRubySpanRequest>[];
+            for (final (rank, level) in pairing.levels.indexed) {
+              for (final span in level.spans) {
+                if (span.isMultiColumn &&
+                    (span.startColumn != 0 ||
+                        span.endColumn != pairing.columnCount)) {
+                  _unsupported(group.rootPath);
+                }
+                final annotation = _annotationInput(group, span.box);
+                if (!annotation.isSourceFree) {
+                  annotationSources.add(append(annotation));
+                }
+                spans.add((
+                  request: ForumBodyTextRequest.paragraph(annotation),
+                  startColumn: span.startColumn,
+                  endColumn: span.endColumn,
+                  annotationIndex: rank,
+                  gap: 0.0,
+                ));
+              }
+            }
+            atoms.add((startUtf16: start, endUtf16: offset));
+            requestsByAtom.add(
+              ForumBodyRubyAtomRequest.segment(
+                ForumBodyRubySegmentRequest(
+                  bases: [
+                    for (final base in segmentBases)
+                      ForumBodyTextRequest.paragraph(base),
+                  ],
+                  sides: [for (final level in pairing.levels) level.side],
+                  spans: spans,
+                  direction: group.style.textDirection,
+                  maxWidth: width,
+                ),
+              ),
+            );
+            levelIds.add(levelId);
+            previousCollapsibleSpace = false;
+            atLineStart = false;
+            lastPlain = null;
+            if (tail != null) tailSource!.add(appendPlain(tail));
+            sourceOrder.addAll(baseSources.expand((sources) => sources));
+            sourceOrder.addAll(annotationSources);
+            continue;
+          }
           final levels = pairing.levels;
           final annotationCount = pairing.annotatedColumnCount;
           if (bases.isEmpty && annotationCount == 0) {
@@ -252,40 +355,23 @@ final class ForumBodyInlinePlanInput {
       sourceOrder: sourceOrder,
     );
     final glyphContexts = Set<ForumBodyParagraphContent>.identity();
-    for (final column in columns) {
-      glyphContexts.add(column.base);
-      for (final item in column.annotations) {
-        if (item.content.projection.text.isNotEmpty) {
-          glyphContexts.add(item.content);
-        }
-      }
+    for (final atom in requestsByAtom) {
+      glyphContexts.addAll(atom.nativeRequests.map((r) => r.content));
     }
     final requests = _requests([
       // Batch children in the same explicit ORIGINAL source order as the parent
       // projection, not their reordered display columns. Never sort or rebase.
       for (final index in sourceOrder)
         if (glyphContexts.contains(contexts[index])) contexts[index],
-      for (final column in columns)
-        if (column.base.isSourceFree) column.base,
+      for (final atom in requestsByAtom)
+        for (final request in atom.nativeRequests)
+          if (request.content.isSourceFree) request.content,
     ]);
     return ForumBodyInlinePlanInput._(
       content,
       [
-        for (final column in columns)
-          ForumBodyRubyColumnRequest.layers(
-            base: requests[column.base]!,
-            annotations: [
-              for (final item in column.annotations)
-                (
-                  request:
-                      requests[item.content] ??
-                      ForumBodyTextRequest.paragraph(item.content),
-                  gap: 0.0,
-                  side: item.side,
-                ),
-            ],
-            maxWidth: width,
-          ),
+        for (final atom in requestsByAtom)
+          atom.mapRequests((r) => requests[r.content] ?? r),
       ],
       width,
       levelIds,
@@ -298,7 +384,16 @@ final class ForumBodyInlinePlanInput {
   final List<int> atomEngineOffsets;
   // Rebound only before publication when native isolation supplies a new
   // request. Published PageContent freezes its own copy of this pure list.
-  final List<ForumBodyRubyColumnRequest> groups;
+  final List<ForumBodyRubyAtomRequest> atoms;
+  List<ForumBodyRubyColumnRequest> get groups => List.unmodifiable([
+    for (final atom in atoms)
+      switch (atom) {
+        ForumBodyRubyColumnAtomRequest(:final value) => value,
+        _ => throw StateError(
+          'Inline plan contains a segment, not only columns',
+        ),
+      },
+  ]);
 
   void replaceBand(ForumBodyTextBandContent band, double? gutter) {
     ForumBodyTextRequest replace(ForumBodyTextRequest request) {
@@ -315,16 +410,8 @@ final class ForumBodyInlinePlanInput {
             );
     }
 
-    for (var i = 0; i < groups.length; i++) {
-      final pair = groups[i];
-      groups[i] = ForumBodyRubyColumnRequest.layers(
-        base: replace(pair.base),
-        annotations: [
-          for (final item in pair.annotations)
-            (request: replace(item.request), gap: item.gap, side: item.side),
-        ],
-        maxWidth: pair.maxWidth,
-      );
+    for (var i = 0; i < atoms.length; i++) {
+      atoms[i] = atoms[i].mapRequests(replace);
     }
   }
 }

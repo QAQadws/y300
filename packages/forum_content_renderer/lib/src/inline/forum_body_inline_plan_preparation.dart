@@ -4,8 +4,11 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_inline_plan_input.dart';
+import 'forum_body_ruby_atom_plan.dart';
+import 'forum_body_ruby_atom_request.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
+import 'forum_body_ruby_segment_metrics_preparation.dart';
 import 'forum_body_ruby_row_alignment.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_layout.dart';
@@ -13,7 +16,7 @@ import 'forum_body_text_band_layout.dart';
 enum _State { active, ready, transferred, closed }
 
 /// The session's one pending mixed format, using its cache/guard/scheduler.
-/// Pair glyph metrics and the parent shape occur in distinct bounded units;
+/// Child glyph metrics and the parent shape occur in distinct bounded units;
 /// published input is pure and only the actual parent lease enters composer.
 final class ForumBodyInlinePlanPreparation {
   ForumBodyInlinePlanPreparation({
@@ -32,10 +35,11 @@ final class ForumBodyInlinePlanPreparation {
   TextScaler? _textScaler;
   void Function()? _ensureOwner;
   final double width;
-  final _metrics = <ForumBodyRubyGroupMetrics>[];
+  final _metrics = <ForumBodyRubyAtomMetrics>[];
   ForumBodyRubyRowAlignment? _alignment;
   final _retriedBands = Set<ForumBodyTextBandContent>.identity();
   ForumBodyRubyGroupPreparation? _pair;
+  ForumBodyRubySegmentMetricsPreparation? _segment;
   ForumBodyInlineParagraphLease? _parent;
   ForumBodyInlineParagraphLease? _probe;
   ForumBodyInlinePageContent? _result;
@@ -54,29 +58,16 @@ final class ForumBodyInlinePlanPreparation {
       final before = cache.layoutBuildCount;
       var parts = 0;
       var waiting = false;
-      while (_metrics.length < _input!.groups.length && parts < maxParts) {
-        final request = _input!.groups[_metrics.length];
-        final pair = _pair ??= ForumBodyRubyGroupPreparation.forLayerMetrics(
-          cache: cache,
-          base: request.base,
-          annotations: request.annotations,
-          ensureOwner: _guard,
-          textScaler: _textScaler!,
-          maxWidth: request.maxWidth,
-        );
+      while (_metrics.length < _input!.atoms.length && parts < maxParts) {
+        final request = _input!.atoms[_metrics.length];
         try {
           final revisionBefore = cache.budgetRevision;
-          final step = pair.advance(maxParts: maxParts - parts);
+          final step = _advanceMetric(request, maxParts - parts);
           final budgetChanged = cache.budgetRevision != revisionBefore;
           parts += step.formatUnitsPrepared;
           if (step.formatUnitsPrepared == 0 &&
               (step.madeProgress || budgetChanged)) {
             parts++;
-          }
-          if (step.isReady) {
-            _metrics.add(pair.takeMetrics());
-            pair.close();
-            _pair = null;
           }
           waiting = step.waitingForLayoutBudget;
           if (!step.madeProgress) {
@@ -90,11 +81,14 @@ final class ForumBodyInlinePlanPreparation {
           _guard();
           // Native child counts omit empty ranks, just like admission. Numeric
           // finalization cannot throw a native band isolation exception.
-          if (pair.preparedPartCount >= request.nativeRequests.length) rethrow;
-          final failed = request.nativeRequests[pair.preparedPartCount];
+          final count = _pair?.preparedPartCount;
+          final failed =
+              _segment?.failedRequest ??
+              (count != null && count < request.nativeRequests.length
+                  ? request.nativeRequests[count]
+                  : null);
           if (failed is! ForumBodyTextBandChildRequest) rethrow;
-          pair.close();
-          _pair = null;
+          _closeMetric();
           final hint = error.requiredGutter;
           final retry =
               error.failure == ForumBodyTextBandLayoutFailure.isolation &&
@@ -114,7 +108,7 @@ final class ForumBodyInlinePlanPreparation {
           break;
         }
       }
-      if (_metrics.length == _input!.groups.length &&
+      if (_metrics.length == _input!.atoms.length &&
           parts < maxParts &&
           cache.layoutBuildCount == before) {
         final step = _advanceLayout(maxParts: maxParts - parts);
@@ -129,11 +123,54 @@ final class ForumBodyInlinePlanPreparation {
     });
   }
 
+  ForumBodyRubyGroupPreparationStep _advanceMetric(
+    ForumBodyRubyAtomRequest request,
+    int maxParts,
+  ) {
+    switch (request) {
+      case ForumBodyRubyColumnAtomRequest(:final value):
+        final pair = _pair ??= ForumBodyRubyGroupPreparation.forLayerMetrics(
+          cache: _cache!,
+          base: value.base,
+          annotations: value.annotations,
+          ensureOwner: _guard,
+          textScaler: _textScaler!,
+          maxWidth: value.maxWidth,
+        );
+        final step = pair.advance(maxParts: maxParts);
+        if (step.isReady) {
+          _metrics.add(ForumBodyRubyAtomMetrics.column(pair.takeMetrics()));
+          _closeMetric();
+        }
+        return step;
+      case ForumBodyRubySegmentAtomRequest(:final value):
+        final segment = _segment ??= ForumBodyRubySegmentMetricsPreparation(
+          cache: _cache!,
+          request: value,
+          ensureOwner: _guard,
+          textScaler: _textScaler!,
+        );
+        final step = segment.advance(maxParts: maxParts);
+        if (step.isReady) {
+          _metrics.add(ForumBodyRubyAtomMetrics.segment(segment.takeMetrics()));
+          _closeMetric();
+        }
+        return step;
+    }
+  }
+
+  void _closeMetric() {
+    _pair?.close();
+    _pair = null;
+    _segment?.close();
+    _segment = null;
+  }
+
   ({int partsPrepared, bool waitingForLayoutBudget}) _advanceLayout({
     required int maxParts,
   }) {
-    final alignment = _alignment ??= ForumBodyRubyRowAlignment(
-      columns: _metrics,
+    final alignment = _alignment ??= ForumBodyRubyRowAlignment.atoms(
+      atoms: _metrics,
       levelIds: _input!.rubyLevelIds,
       atomOffsets: _input!.atomEngineOffsets,
     );
@@ -239,11 +276,28 @@ final class ForumBodyInlinePlanPreparation {
 
   void _makeReady(ForumBodyRubyRowAlignment alignment) {
     _guard();
-    _result = ForumBodyInlinePageContent(
+    _result = ForumBodyInlinePageContent.atoms(
       content: _input!.content,
       dimensions: alignment.dimensions,
-      rubyGroups: _input!.groups,
-      rubyLevelMetrics: alignment.targets,
+      rubyAtoms: [
+        for (final (index, request) in _input!.atoms.indexed)
+          switch ((request, alignment.results[index])) {
+            (
+              ForumBodyRubyColumnAtomRequest(:final value),
+              ForumBodyRubyColumnMetrics(),
+            ) =>
+              ForumBodyRubyAtomPlan.column(
+                request: value,
+                level: alignment.targets[index],
+              ),
+            (
+              ForumBodyRubySegmentAtomRequest(:final value),
+              ForumBodyRubyComponentMetrics(value: final metrics),
+            ) =>
+              ForumBodyRubyAtomPlan.segment(request: value, metrics: metrics),
+            _ => throw StateError('Inline numeric/request atom kinds differ'),
+          },
+      ],
     );
     _guard();
     _state = _State.ready;
@@ -289,8 +343,7 @@ final class ForumBodyInlinePlanPreparation {
   }
 
   void _drop() {
-    _pair?.close();
-    _pair = null;
+    _closeMetric();
     _parent?.release();
     _parent = null;
     _probe?.releaseProvisional();

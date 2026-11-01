@@ -59,6 +59,115 @@ void main() {
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  for (final rtl in [false, true]) {
+    for (final under in [false, true]) {
+      for (final readOnlyRestore in [false, true]) {
+        testWidgets(
+          'original spanning component completes only at physical EOF (rtl=$rtl, under=$under, readOnly=$readOnlyRestore)',
+          (tester) async {
+            tester.view.physicalSize = const Size(360, 480);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            final fixture = (await tester.runAsync(
+              () => _Fixture.create(
+                rawBody: (
+                  '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:40px">A</rb><rb style="font-size:40px">B</rb><rtc style="font-size:20px">word</rtc><rb style="font-size:200px">C</rb><rb style="font-size:200px">D</rb><rt style="font-size:100px">zz</rt></ruby></p>',
+                  'ABwordCDzz',
+                ),
+              ),
+            ))!;
+            try {
+              if (readOnlyRestore) {
+                await tester.runAsync(fixture.seedUnfinishedPosition);
+              }
+              final before = (await tester.runAsync(
+                () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+              ))!;
+              await tester.pumpWidget(
+                fixture.app(
+                  nativePagination: true,
+                  preferences: NovelReaderPreferences.defaults().copyWith(
+                    flowMode: rtl
+                        ? NovelReaderFlowMode.pagedRtl
+                        : NovelReaderFlowMode.pagedLtr,
+                  ),
+                ),
+              );
+              await _pumpNativePageReady(tester, page: 0);
+              final controller = tester
+                  .widget<NovelReaderNativePagedViewport>(
+                    find.byType(NovelReaderNativePagedViewport),
+                  )
+                  .controller;
+              expect(controller.snapshot!.length, 2);
+              // A real two-base span shares the first row with C+zz. Original
+              // semantic EOF is already visible; unannotated D is on page two.
+              expect(
+                controller
+                    .viewForPage(0)!
+                    .coverage
+                    .points
+                    .any((p) => p.sourceRune == 10),
+                isTrue,
+              );
+              await tester.pump(const Duration(milliseconds: 300));
+              expect(
+                (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+                isNot(true),
+              );
+              if (readOnlyRestore) {
+                expect(
+                  (await tester.runAsync(
+                    () =>
+                        fixture.db.query(AppDatabase.novelReadingProgressTable),
+                  ))!,
+                  before,
+                );
+              }
+              await tester.drag(
+                find.byType(NovelReaderNativePagedViewport),
+                Offset(rtl ? 280 : -280, 0),
+              );
+              await _pumpNativePageReady(tester, page: 1, animate: true);
+              final last = controller.viewForPage(1)!;
+              expect(last.coverage.hasClippedGlyphs, isFalse);
+              expect(last.coverage.points, isNotEmpty);
+              expect(
+                last.coverage.points.every(
+                  (p) => p.sourceRune >= 7 && p.sourceRune <= 8,
+                ),
+                isTrue,
+              );
+              await tester.pump(const Duration(milliseconds: 249));
+              expect(
+                (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+                isNot(true),
+              );
+              await tester.pump(const Duration(milliseconds: 1));
+              final state = await fixture.load(tester);
+              expect(state.episodeStates[_chapter]?.isRead, isTrue);
+              final progress = state.progressByEpisode[_chapter]!;
+              expect(progress.pageIndex, 1);
+              expect(progress.anchorFormatVersion, 1);
+              expect(progress.anchorTextOffset, 7);
+              expect(
+                progress.anchorTextIdentity,
+                last.coverage.points.first.anchor.textIdentity,
+              );
+              expect(
+                progress.anchorTextOffset,
+                last.coverage.points.first.anchor.textOffset,
+              );
+            } finally {
+              await fixture.close(tester);
+            }
+          },
+        );
+      }
+    }
+  }
+
   for (final (rtl, rtc, under, levelCount) in [
     for (final rtl in [false, true])
       for (final rtc in [false, true])
