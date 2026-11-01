@@ -2,71 +2,16 @@ import 'package:flutter/painting.dart';
 import '../document/forum_body_document.dart';
 
 import '../inline/forum_body_inline_span_content.dart';
-import '../inline/forum_body_ruby_group_contract.dart';
+import '../inline/forum_body_ruby_atom_plan.dart';
+import '../inline/forum_body_ruby_column_request.dart';
 import '../inline/forum_body_ruby_group_metrics.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
-import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
+import '../inline/forum_body_text_band_content.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 
-/// Pure source-bound child requests. Dimensions belong to the measured parent
-/// plan, not these requests; visible preparation rechecks actual child metrics.
-final class ForumBodyRubyColumnRequest {
-  ForumBodyRubyColumnRequest({
-    required ForumBodyTextRequest base,
-    required ForumBodyTextRequest annotation,
-    double gap = 0,
-    double maxWidth = 16384,
-    ForumBodyRubySide side = ForumBodyRubySide.over,
-  }) : this.layers(
-         base: base,
-         annotations: [(request: annotation, gap: gap, side: side)],
-         maxWidth: maxWidth,
-       );
-
-  ForumBodyRubyColumnRequest.layers({
-    required this.base,
-    required List<
-      ({ForumBodyTextRequest request, double gap, ForumBodyRubySide side})
-    >
-    annotations,
-    this.maxWidth = 16384,
-  }) : annotations = List.unmodifiable(annotations),
-       nativeRequests = List.unmodifiable([
-         base,
-         for (final item in annotations)
-           if (item.request.content.projection.text.isNotEmpty) item.request,
-       ]) {
-    validateForumBodyRubyColumnInputs(
-      base: base.content,
-      annotations: [
-        for (final item in this.annotations)
-          (content: item.request.content, gap: item.gap),
-      ],
-      maxWidth: maxWidth,
-    );
-  }
-  final ForumBodyTextRequest base;
-  final List<
-    ({ForumBodyTextRequest request, double gap, ForumBodyRubySide side})
-  >
-  annotations;
-
-  /// Actual native positions in base/rank order, omitting missing glyph ranks.
-  /// The base is always present, including its source-free native font strut.
-  final List<ForumBodyTextRequest> nativeRequests;
-  final double maxWidth;
-  ForumBodyTextRequest get annotation => annotations.single.request;
-  double get gap => annotations.single.gap;
-  ForumBodyRubySide get side => annotations.single.side;
-  bool get hasAnnotation => nativeRequests.length > 1;
-  int get nativeHandleCount => nativeRequests.length;
-}
-
-/// Existing single-level callers construct the same column value. There is no
-/// second pair implementation or implicit first-annotation view of many ranks.
-typedef ForumBodyRubyPairRequest = ForumBodyRubyColumnRequest;
+export '../inline/forum_body_ruby_column_request.dart';
 
 /// Retained pure input for one composed paragraph, without a native owner,
 /// preparation cursor, Context or callback. The session controls total input
@@ -83,6 +28,12 @@ sealed class ForumBodyTextPageContent {
     List<ForumBodyRubyLevelMetrics?>? rubyLevelMetrics,
     ForumBodyParagraphLayoutMode layoutMode,
   }) = ForumBodyInlinePageContent;
+  factory ForumBodyTextPageContent.inlineAtoms({
+    required ForumBodyInlineSpanContent content,
+    required List<PlaceholderDimensions> dimensions,
+    required List<ForumBodyRubyAtomPlan> rubyAtoms,
+    ForumBodyParagraphLayoutMode layoutMode,
+  }) = ForumBodyInlinePageContent.atoms;
   int get textCodeUnits;
   int get runCount;
   ForumBodyIdentity get identity;
@@ -125,41 +76,54 @@ final class ForumBodyParagraphPageContent extends ForumBodyTextPageContent {
 
 final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   ForumBodyInlinePageContent({
-    required this.content,
+    required ForumBodyInlineSpanContent content,
     required List<PlaceholderDimensions> dimensions,
     required List<ForumBodyRubyColumnRequest> rubyGroups,
     List<ForumBodyRubyLevelMetrics?>? rubyLevelMetrics,
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+  }) : this.atoms(
+         content: content,
+         dimensions: dimensions,
+         rubyAtoms: _columnAtoms(rubyGroups, rubyLevelMetrics),
+         layoutMode: layoutMode,
+       );
+
+  ForumBodyInlinePageContent.atoms({
+    required this.content,
+    required List<PlaceholderDimensions> dimensions,
+    required List<ForumBodyRubyAtomPlan> rubyAtoms,
     this.layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) : dimensions = List.unmodifiable(dimensions),
-       rubyGroups = List.unmodifiable(rubyGroups),
-       rubyLevelMetrics = List.unmodifiable(
-         rubyLevelMetrics ?? List.filled(rubyGroups.length, null),
-       ),
+       rubyAtoms = List.unmodifiable(rubyAtoms),
        super._() {
     content.validateDimensions(this.dimensions);
-    if (rubyGroups.length != content.projection.atoms.length ||
-        this.rubyLevelMetrics.length != rubyGroups.length ||
+    if (rubyAtoms.length != content.projection.atoms.length ||
         layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine) {
       throw ArgumentError('Invalid inline page input');
     }
     final retained = Set<ForumBodyParagraphContent>.identity()
       ..addAll(content.contexts.map((item) => item.content));
-    for (final (index, group) in rubyGroups.indexed) {
-      final level = this.rubyLevelMetrics[index];
-      if (level != null &&
-          (level.annotations.length != group.annotations.length ||
-              group.annotations.indexed.any(
-                (item) => item.$2.side != level.annotations[item.$1].side,
-              ))) {
-        throw ArgumentError('Ruby row target does not match column ranks');
+    final checkedBands = Set<ForumBodyTextBandContent>.identity();
+    for (final (index, plan) in rubyAtoms.indexed) {
+      if (plan is ForumBodyRubySegmentPlan) {
+        final target = plan.metrics;
+        final dimension = this.dimensions[index];
+        if ((dimension.size.width - target.size.width).abs() > 1e-4 ||
+            (dimension.size.height - target.size.height).abs() > 1e-4 ||
+            (dimension.baselineOffset! - target.baseline).abs() > 1e-4) {
+          throw ArgumentError(
+            'Ruby segment dimensions do not match numeric target',
+          );
+        }
       }
       content.resolveAtomicContexts(index, [
-        for (final request in group.nativeRequests) request.content,
+        for (final request in plan.nativeRequests) request.content,
       ]);
-      for (final request in group.nativeRequests) {
+      for (final request in plan.nativeRequests) {
         // Keep the complete band input inside this already bounded paragraph.
         // An off-input tail must not evade the session's retention accounting.
         if (request is ForumBodyTextBandChildRequest &&
+            checkedBands.add(request.band) &&
             request.band.contexts.any(
               (context) => !retained.contains(context),
             )) {
@@ -173,8 +137,22 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   }
   final ForumBodyInlineSpanContent content;
   final List<PlaceholderDimensions> dimensions;
-  final List<ForumBodyRubyColumnRequest> rubyGroups;
-  final List<ForumBodyRubyLevelMetrics?> rubyLevelMetrics;
+  final List<ForumBodyRubyAtomPlan> rubyAtoms;
+  // Legacy column-only access remains explicit: never drop component members
+  // or silently present its first column as the complete parent atom.
+  late final List<ForumBodyRubyColumnRequest> rubyGroups = List.unmodifiable([
+    for (final atom in rubyAtoms)
+      atom is ForumBodyRubyColumnPlan
+          ? atom.request
+          : throw StateError('Inline input contains segment atoms'),
+  ]);
+  late final List<ForumBodyRubyLevelMetrics?> rubyLevelMetrics =
+      List.unmodifiable([
+        for (final atom in rubyAtoms)
+          atom is ForumBodyRubyColumnPlan
+              ? atom.level
+              : throw StateError('Inline input contains segment atoms'),
+      ]);
   final ForumBodyParagraphLayoutMode layoutMode;
   @override
   ForumBodyIdentity get identity => content.identity;
@@ -225,5 +203,18 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       1 +
       visibleAtoms(
         fragment,
-      ).fold<int>(0, (sum, index) => sum + rubyGroups[index].nativeHandleCount);
+      ).fold<int>(0, (sum, index) => sum + rubyAtoms[index].nativeHandleCount);
+}
+
+List<ForumBodyRubyAtomPlan> _columnAtoms(
+  List<ForumBodyRubyColumnRequest> requests,
+  List<ForumBodyRubyLevelMetrics?>? levels,
+) {
+  if (levels != null && levels.length != requests.length) {
+    throw ArgumentError('Invalid inline page targets');
+  }
+  return [
+    for (final (index, request) in requests.indexed)
+      ForumBodyRubyAtomPlan.column(request: request, level: levels?[index]),
+  ];
 }

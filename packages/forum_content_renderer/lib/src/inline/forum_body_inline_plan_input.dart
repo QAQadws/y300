@@ -2,7 +2,7 @@ import '../flow/forum_body_inline_flow_content.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_text_request.dart';
-import '../pagination/forum_body_text_page_content.dart';
+import 'forum_body_ruby_column_request.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_span_content.dart';
 import 'forum_body_ruby_annotation_input.dart';

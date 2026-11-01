@@ -384,7 +384,7 @@ final class ForumBodyTextPagePreparation {
           );
           yield true;
           for (final atom in input.visibleAtoms(fragment)) {
-            final request = input.rubyGroups[atom];
+            final request = input.rubyAtoms[atom];
             for (final child in request.nativeRequests) {
               child.includeBudget(
                 probe,
