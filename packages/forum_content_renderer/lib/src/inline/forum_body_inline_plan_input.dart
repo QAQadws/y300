@@ -5,6 +5,7 @@ import '../paragraph/forum_body_text_request.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_span_content.dart';
+import 'forum_body_ruby_base_input.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_text_band_content.dart';
 
@@ -12,7 +13,7 @@ import 'forum_body_text_band_content.dart';
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
   ForumBodyInlinePlanInput._(this.content, this.groups, this.width);
-  static const revision = 6;
+  static const revision = 7;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -74,6 +75,25 @@ final class ForumBodyInlinePlanInput {
       return index;
     }
 
+    void appendColumn(
+      ForumBodyParagraphContent base,
+      ForumBodyParagraphContent annotation,
+      List<int> baseIndices,
+      List<int> annotationIndices,
+    ) {
+      if (base.projection.text.isEmpty && annotation.projection.text.isEmpty) {
+        _unsupported(base.path ?? annotation.path);
+      }
+      final start = offset;
+      if (!base.isSourceFree) baseIndices.add(append(base));
+      if (!annotation.isSourceFree) annotationIndices.add(append(annotation));
+      atoms.add((startUtf16: start, endUtf16: offset));
+      pairs.add((base: base, annotation: annotation));
+      previousCollapsibleSpace = false;
+      atLineStart = false;
+      lastPlain = null;
+    }
+
     for (final part in input.parts) {
       switch (part) {
         case ForumBodyInlineFlowText():
@@ -88,77 +108,89 @@ final class ForumBodyInlinePlanInput {
               group.rootPath,
             );
           }
-          if (group.base.length > 1 ||
-              (group.base.isNotEmpty &&
-                  group.base.single is! ForumBodyRubyTextContent)) {
+          final bases = resolveForumBodyRubyBaseInputs(group);
+          if (bases.isEmpty && group.annotations.isEmpty) {
             _unsupported(group.rootPath);
           }
-          var base = group.base.isEmpty
-              ? null
-              : (group.base.single as ForumBodyRubyTextContent).content;
-          if (group.annotations.isEmpty) {
-            if (base == null) _unsupported(group.rootPath);
-            sourceOrder.add(appendPlain(base));
-            continue;
-          }
-          base ??= _anonymousBase(group);
-          // Implicit whitespace-only bases need structural ruby pairing. Do
-          // not mistake source indentation for an explicit annotated RB space.
-          if (base.projection.text == ' ' &&
-              _collapsibleEdge(base, leading: false)) {
-            _unsupported(group.rootPath);
-          }
-          if (_collapsibleEdge(base, leading: true)) {
-            // Keep the space outside the opaque box so the actual parent can
-            // trim it at a line break. Both windows retain original ownership.
-            sourceOrder.add(appendPlain(_window(base, 0, 1)));
-            base = _window(base, 1, base.projection.text.length);
-          }
-          ForumBodyParagraphContent? trailing;
-          if (_collapsibleEdge(base, leading: false)) {
-            final end = base.projection.text.length;
-            trailing = _window(base, end - 1, end);
-            base = _window(base, 0, end - 1);
-          }
+          final annotations = [
+            for (final annotation in group.annotations)
+              _annotationInput(annotation),
+          ];
+          final baseSources = [for (final _ in bases) <int>[]];
           final annotationIndices = <int>[];
-          ForumBodyParagraphContent? extraBase;
-          for (final (index, annotationContent) in group.annotations.indexed) {
-            final parts = annotationContent.parts;
-            if (parts.length != 1 ||
-                parts.single is! ForumBodyRubyTextContent) {
-              _unsupported(group.rootPath);
+          final unitCount = bases
+              .where((base) => base.kind != ForumBodyRubyBaseInputKind.gap)
+              .length;
+          var column = 0;
+          ForumBodyParagraphContent? anonymous;
+          ({ForumBodyParagraphContent content, List<int> source})? deferredTail;
+          for (final (index, unit) in bases.indexed) {
+            final sources = baseSources[index];
+            var base = unit.content;
+            if (unit.kind == ForumBodyRubyBaseInputKind.gap) {
+              // Structural edge indentation is omitted; inter-base whitespace
+              // uses the actual parent's text layout, without consuming an RT.
+              final end = base.projection.text.length;
+              sources.add(
+                column == 0 || column == unitCount
+                    ? append(_window(base, end, end))
+                    : appendPlain(base),
+              );
+              continue;
             }
-            // Semantic annotations stay associated in the IR. In this single
-            // annotation level, excess RTs pair with anonymous empty bases.
-            final columnBase = index == 0
-                ? base
-                : (extraBase ??= _anonymousBase(group));
-            final annotation = _plainContext(
-              (parts.single as ForumBodyRubyTextContent).content,
-              leading: true,
-              trailing: true,
+            if (column >= annotations.length &&
+                unit.kind == ForumBodyRubyBaseInputKind.implicit) {
+              sources.add(appendPlain(base));
+              column++;
+              continue;
+            }
+            ForumBodyParagraphContent? trailing;
+            if (unit.kind == ForumBodyRubyBaseInputKind.implicit) {
+              if (base.projection.text == ' ' &&
+                  _collapsibleEdge(base, leading: false)) {
+                _unsupported(group.rootPath);
+              }
+              if (_collapsibleEdge(base, leading: true)) {
+                sources.add(appendPlain(_window(base, 0, 1)));
+                base = _window(base, 1, base.projection.text.length);
+              }
+              if (_collapsibleEdge(base, leading: false)) {
+                final end = base.projection.text.length;
+                trailing = _window(base, end - 1, end);
+                base = _window(base, 0, end - 1);
+              }
+            }
+            appendColumn(
+              base,
+              column < annotations.length
+                  ? annotations[column]
+                  : (anonymous ??= _anonymousBase(group)),
+              sources,
+              annotationIndices,
             );
-            if (columnBase.projection.text.isEmpty &&
-                annotation.projection.text.isEmpty) {
-              _unsupported(group.rootPath);
+            column++;
+            if (trailing != null) {
+              if (column == unitCount) {
+                deferredTail = (content: trailing, source: sources);
+              } else {
+                sources.add(appendPlain(trailing));
+              }
             }
-            final start = offset;
-            final baseIndex = columnBase.isSourceFree
-                ? null
-                : append(columnBase);
-            annotationIndices.add(append(annotation));
-            atoms.add((startUtf16: start, endUtf16: offset));
-            pairs.add((base: columnBase, annotation: annotation));
-            if (baseIndex != null) sourceOrder.add(baseIndex);
           }
-          previousCollapsibleSpace = false;
-          atLineStart = false;
-          lastPlain = null;
-          if (trailing != null) {
-            // Display after the complete annotation range, but validate before
-            // every RT in source order. Never insert this space between columns.
-            sourceOrder.add(appendPlain(trailing));
+          for (; column < annotations.length; column++) {
+            appendColumn(
+              anonymous ??= _anonymousBase(group),
+              annotations[column],
+              const [],
+              annotationIndices,
+            );
           }
+          if (deferredTail != null) {
+            deferredTail.source.add(appendPlain(deferredTail.content));
+          }
+          // Columns display base/RT pairs, but original bases (and gaps) all
+          // precede RTs. Preserve that explicit order without rewriting source.
+          sourceOrder.addAll(baseSources.expand((sources) => sources));
           sourceOrder.addAll(annotationIndices);
       }
     }
@@ -175,11 +207,20 @@ final class ForumBodyInlinePlanInput {
       atomicRanges: atoms,
       sourceOrder: sourceOrder,
     );
+    final glyphContexts = Set<ForumBodyParagraphContent>.identity();
+    for (final pair in pairs) {
+      glyphContexts.add(pair.base);
+      if (pair.annotation.projection.text.isNotEmpty) {
+        glyphContexts.add(pair.annotation);
+      }
+    }
     final requests = _requests([
-      for (final pair in pairs) ...[
-        pair.base,
-        if (pair.annotation.projection.text.isNotEmpty) pair.annotation,
-      ],
+      // Batch children in the same explicit ORIGINAL source order as the parent
+      // projection, not their reordered display columns. Never sort or rebase.
+      for (final index in sourceOrder)
+        if (glyphContexts.contains(contexts[index])) contexts[index],
+      for (final pair in pairs)
+        if (pair.base.isSourceFree) pair.base,
     ]);
     return ForumBodyInlinePlanInput._(content, [
       for (final pair in pairs)
@@ -233,6 +274,20 @@ ForumBodyParagraphContent _anonymousBase(ForumBodyRubyGroupContent group) =>
       styleRevision: group.styleRevision,
       style: group.style,
     );
+
+ForumBodyParagraphContent _annotationInput(
+  ForumBodyRubyAnnotationContent annotation,
+) {
+  final parts = annotation.parts;
+  if (parts.length != 1 || parts.single is! ForumBodyRubyTextContent) {
+    _unsupported(annotation.path);
+  }
+  return _plainContext(
+    (parts.single as ForumBodyRubyTextContent).content,
+    leading: true,
+    trailing: true,
+  );
+}
 
 ForumBodyParagraphContent _plainContext(
   ForumBodyParagraphContent context, {

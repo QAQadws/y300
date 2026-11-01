@@ -49,6 +49,43 @@ NovelReaderNativePageHintSearch _search(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('explicit RB coarse hints cannot prove an interior base point on a neighboring page', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p><ruby><rb>AA</rb><rb>BC</rb><rt>xx</rt><rt>yy</rt></ruby></p>',
+      width: 20,
+      height: 15,
+    );
+    final target = _anchor(fixture, 3);
+    final sharedBoundary = _anchor(fixture, 2);
+    final builds = fixture.cache.layoutBuildCount;
+    final hints = _collect(_search(fixture, target));
+    expect(hints.map((hint) => hint.pageIndex), [0, 1]);
+    expect(fixture.cache.layoutBuildCount, builds);
+    for (final page in [0, 1]) {
+      final view = await NovelReaderNativePageViewJob(
+        session: fixture.session,
+        anchors: fixture.anchors,
+        pageIndex: page,
+        parent: fixture.parent,
+        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+      ).run();
+      try {
+        expect(view.coverage.locate(target) != null, page == 1);
+        expect(
+          view.coverage.locate(sharedBoundary)?.affinity,
+          page == 0
+              ? HtmlProjectionAffinity.upstream
+              : HtmlProjectionAffinity.downstream,
+        );
+        expect(view.coverage.hasClippedGlyphs, isFalse);
+      } finally {
+        view.close();
+      }
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(fixture.cache.activeLeases, 0);
+    }
+  });
+
   test(
     'orphan annotation restores its real source beyond the font strut',
     () async {

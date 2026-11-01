@@ -277,6 +277,189 @@ void main() {
     }
   });
 
+  test(
+    'explicit bases pair in columns while retaining original source order',
+    () {
+      final f = _Fixture(
+        '<ruby><rb>A</rb><rb>B</rb><rt>xx</rt><rt>yy</rt></ruby>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.projection.text, 'AxxByy');
+        expect(fragment.view.content.projection.engineText, '\uFFFC\uFFFC');
+        expect(fragment.projection.sourceAtUtf16(3).sourceRune, 1);
+        expect(fragment.projection.sourceAtUtf16(3).isExact, isFalse);
+        final leases = fragment.nativeLeases.toList();
+        expect(leases, hasLength(5));
+        expect((leases[3] as ForumBodyTextLease).content.projection.text, 'B');
+        expect(
+          leases.whereType<ForumBodyTextLease>().any(
+            (lease) => lease.content.isSourceFree,
+          ),
+          isFalse,
+        );
+        final glyph = fragment.glyphBoxes(5, 6).single;
+        final hit = fragment.view.sourceAt(
+          Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+        );
+        expect(hit.sourceRune, 5);
+        expect(hit.isExact, isTrue);
+        expect(f.session.snapshot.single.fragments.single.sourceHint, (
+          runeStart: 0,
+          runeEnd: 6,
+        ));
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'explicit columns publish overlapping hints but only visible RT glyphs',
+    () {
+      final f = _Fixture(
+        '<ruby><rb>A</rb><rb>B</rb><rt>xx</rt><rt>yy</rt></ruby>',
+        width: 20,
+        height: 30,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(2));
+      for (var page = 0; page < 2; page++) {
+        final fragment =
+            f.prepare(page).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.view.atomIndices, [page]);
+          expect(f.session.snapshot[page].fragments.single.sourceHint, (
+            runeStart: page,
+            runeEnd: page == 0 ? 4 : 6,
+          ));
+          final start = page == 0 ? 2 : 5;
+          final glyph = fragment.glyphBoxes(start, start + 1).single;
+          final hit = fragment.view.sourceAt(
+            Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+          );
+          expect(hit.sourceRune, page == 0 ? 3 : 5);
+          expect(hit.isExact, isTrue);
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+        expect(f.session.activeIssuedLeases, 0);
+      }
+    },
+  );
+
+  for (final (html, text, engine) in [
+    (
+      '<ruby> \n<rb>A</rb> <rb>B</rb> \n<rt>xx</rt><rt>yy</rt></ruby>',
+      'Axx Byy',
+      '\uFFFC \uFFFC',
+    ),
+    (
+      '<ruby><rb>A</rb><rb> </rb><rb>B</rb><rt>x</rt><rt>·</rt><rt>y</rt></ruby>',
+      'Ax ·By',
+      '\uFFFC\uFFFC\uFFFC',
+    ),
+    (
+      '<ruby>A<rb>B</rb>C<rt>xx</rt><rt>yy</rt><rt>zz</rt></ruby>',
+      'AxxByyCzz',
+      '\uFFFC\uFFFC\uFFFC',
+    ),
+  ]) {
+    test(
+      'explicit base units and structural gaps retain distinct whitespace: $html',
+      () {
+        final f = _Fixture(html, width: 200, height: 100);
+        f.finish();
+        final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.projection.text, text);
+          expect(fragment.view.content.projection.engineText, engine);
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  test('an actual empty RB retains its own native font metrics', () {
+    final f = _Fixture(
+      '<ruby><rb style="font-size:30px"></rb><rt>xy</rt></ruby>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      final base = fragment.nativeLeases.elementAt(1) as ForumBodyTextLease;
+      expect(base.content.isSourceFree, isFalse);
+      expect(base.content.projection.text, isEmpty);
+      expect(base.layout.height, 30);
+      expect(fragment.projection.text, 'xy');
+      expect(fragment.view.height, 40);
+      expect(f.cache.pictureBuildCount, 1);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  for (final (html, text, handles, end) in [
+    ('<ruby><rb>A</rb><rb>B</rb><rt>xx</rt></ruby>', 'AxxB', 4, 4),
+    ('<ruby><rb>A</rb><rt>xx</rt><rt>yy</rt></ruby>', 'Axxyy', 5, 5),
+  ]) {
+    test(
+      'missing and excess RT units retain actual base/source coverage: $html',
+      () {
+        final f = _Fixture(html, width: 200, height: 100);
+        f.finish();
+        final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.projection.text, text);
+          expect(fragment.nativeLeases, hasLength(handles));
+          expect(f.session.snapshot.single.fragments.single.sourceHint, (
+            runeStart: 0,
+            runeEnd: end,
+          ));
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  test(
+    'sixty explicit base columns stay in the existing native cache budget',
+    () {
+      final f = _Fixture(
+        '<ruby>${List.filled(60, '<rb>A</rb>').join()}${List.generate(60, (i) => '<rt>r$i</rt>').join()}</ruby>',
+        width: 600,
+        height: 100,
+        entries: 4,
+      );
+      f.finish();
+      expect(f.cache.layoutBuildCount, 3);
+      expect(f.cache.pictureBuildCount, 0);
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.view.atomIndices, hasLength(60));
+        expect(fragment.nativeLeases, hasLength(121));
+        expect(f.cache.entryCount, lessThanOrEqualTo(4));
+        expect(f.cache.pictureBuildCount, 120);
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+    },
+  );
+
   test('consecutive RTs pair with one actual and one anonymous base', () {
     final f = _Fixture(
       '<ruby>AB<rt>xy</rt><rt>z</rt></ruby>',

@@ -38,7 +38,13 @@ const _work = 'novel:49:100';
 const _chapter = '$_work:5001';
 const _next = '$_work:5003';
 
-enum _BodySample { paragraphs, rubyPair, orphanRuby, consecutiveRuby }
+enum _BodySample {
+  paragraphs,
+  rubyPair,
+  orphanRuby,
+  consecutiveRuby,
+  explicitRuby,
+}
 
 void main() {
   sqfliteFfiInit();
@@ -537,6 +543,10 @@ final class _Fixture {
       _BodySample.consecutiveRuby => (
         '<p><ruby>A <rt>x</rt><rt>y</rt></ruby></p>',
         'A xy',
+      ),
+      _BodySample.explicitRuby => (
+        '<p><ruby><rb>A</rb><rb> </rb><rb>B</rb><rt>x</rt><rt>·</rt><rt>y</rt></ruby></p>',
+        'A Bx·y',
       ),
     };
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
