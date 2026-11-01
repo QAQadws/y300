@@ -20,6 +20,11 @@ import 'novel_pagination_profile_fixtures.dart';
 
 const _baseline = bool.fromEnvironment('PROFILE_BASELINE');
 const _inlineSoftSpace = bool.fromEnvironment('PROFILE_INLINE_SOFT_SPACE');
+const _corpus = String.fromEnvironment(
+  'PROFILE_CORPUS',
+  defaultValue: 'baseline',
+);
+final _fixtures = novelMainPageProfileFixtures(_corpus);
 const _backend = String.fromEnvironment(
   'PROFILE_BACKEND',
   defaultValue: 'both',
@@ -35,6 +40,9 @@ final _runtimeErrors = <String>[];
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   _config.validate();
+  // Resolve before launching any routes so a misspelled corpus cannot pass as
+  // an empty benchmark matrix.
+  if (_fixtures.isEmpty) throw StateError('Empty profile corpus');
   if (!['native', 'legacy', 'both'].contains(_backend)) {
     throw ArgumentError('Unknown profile backend');
   }
@@ -194,6 +202,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'baseline': _baseline,
       'sampleConfig': _config.toJson(),
       'inlineSoftSpaceRequested': _inlineSoftSpace,
+      'corpus': _corpus,
     });
     var inlineSoftSpaceCases = 0;
     try {
@@ -207,7 +216,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         if (_backend != 'both' && _backend != (native ? 'native' : 'legacy')) {
           continue;
         }
-        for (final fixture in novelProfileFixtures) {
+        for (final fixture in _fixtures) {
           for (
             var i = 0;
             i < (_baseline ? _config.warmupsPerFixture : 0);
@@ -258,7 +267,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     final matrix = <Map<String, Object?>>[];
     for (final backend in ['legacy', 'native']) {
       if (_backend != 'both' && _backend != backend) continue;
-      for (final fixture in novelProfileFixtures) {
+      for (final fixture in _fixtures) {
         final runs = _runs.where(
           (run) => run['backend'] == backend && run['fixture'] == fixture.name,
         );

@@ -15,6 +15,7 @@ enum ForumBodyTextPageFailure {
   invalidGeometry,
   pageLimit,
   fragmentLimit,
+  nativeHandleLimit,
 }
 
 enum ForumBodyTextPageFragmentKind { paragraph, inline }
@@ -138,6 +139,7 @@ final class ForumBodyTextPageComposer {
     required this.height,
     required this.maxPages,
     required this.maxFragments,
+    this.maxNativeHandlesPerPage,
   }) {
     if (layoutId.isEmpty ||
         !width.isFinite ||
@@ -145,11 +147,12 @@ final class ForumBodyTextPageComposer {
         !height.isFinite ||
         height <= 0 ||
         maxPages <= 0 ||
-        maxFragments <= 0) {
+        maxFragments <= 0 ||
+        (maxNativeHandlesPerPage != null && maxNativeHandlesPerPage! <= 0)) {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 8;
+  static const revision = 9;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -158,6 +161,9 @@ final class ForumBodyTextPageComposer {
   /// Explicit metadata budgets, not measured native/GPU memory.
   final int maxPages;
   final int maxFragments;
+  final int? maxNativeHandlesPerPage;
+  int _usedNativeHandles = 0;
+  int _lastFragmentNativeHandles = 0;
   final _pages = <ForumBodyTextPage>[];
   final _draft = <ForumBodyTextPageFragment>[];
   ForumBodyTextPageSnapshot? _snapshot;
@@ -219,8 +225,9 @@ final class ForumBodyTextPageComposer {
     required double spaceBefore,
     required double spaceAtPageStart,
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
+    int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange,
   }) => _append(
-    input: _CompositionParagraph.inline(lease),
+    input: _CompositionParagraph.inline(lease, nativeHandleCountInRange),
     paragraphIndex: paragraphIndex,
     left: left,
     spaceBefore: spaceBefore,
@@ -250,6 +257,13 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid paragraph composition inputs');
     }
     final range = input.lineWindow(window);
+    if (maxNativeHandlesPerPage != null &&
+        input.kind == ForumBodyTextPageFragmentKind.inline &&
+        input.nativeHandleCountInRange == null) {
+      throw ArgumentError(
+        'Bounded inline composition requires actual request costs',
+      );
+    }
     _active = _ActiveParagraph(
       input,
       paragraphIndex,
@@ -389,6 +403,26 @@ final class ForumBodyTextPageComposer {
         if (!continuation && _fragmentCount >= maxFragments) {
           _fail(ForumBodyTextPageFailure.fragmentLimit);
         }
+        final limit = maxNativeHandlesPerPage;
+        final handles = limit == null
+            ? 0
+            : layout.nativeHandleCountInRange?.call(
+                    view?.coverageStartUtf16 ?? 0,
+                    view?.coverageEndUtf16 ?? 0,
+                  ) ??
+                  1;
+        if (limit != null && handles <= 0) {
+          _fail(ForumBodyTextPageFailure.invalidGeometry);
+        }
+        final replaced = continuation ? _lastFragmentNativeHandles : 0;
+        final proposed = _usedNativeHandles - replaced + handles;
+        if (limit != null && proposed > limit) {
+          if (_draft.isEmpty && _usedHeight == 0) {
+            _fail(ForumBodyTextPageFailure.nativeHandleLimit);
+          }
+          _seal();
+          return _result(inspected, pagesBefore, false);
+        }
         // Only inspect newly consumed display text. Reordered source windows
         // need actual range envelopes; rescanning a growing fragment for every
         // appended row would make continuation composition quadratic.
@@ -433,6 +467,8 @@ final class ForumBodyTextPageComposer {
           _draft.add(fragment);
           _fragmentCount++;
         }
+        _usedNativeHandles = proposed;
+        _lastFragmentNativeHandles = handles;
         _flowHeight = bottom;
         _usedHeight = math.max(_usedHeight, bottom);
         active.nextLine = end;
@@ -486,6 +522,8 @@ final class ForumBodyTextPageComposer {
     if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
     _pages.add(ForumBodyTextPage._(_pages.length, _draft, _usedHeight));
     _draft.clear();
+    _usedNativeHandles = 0;
+    _lastFragmentNativeHandles = 0;
     _usedHeight = 0;
     _flowHeight = 0;
     _snapshot = null;
@@ -506,6 +544,8 @@ final class ForumBodyTextPageComposer {
     _padding = null;
     _fragmentCount -= _draft.length;
     _draft.clear();
+    _usedNativeHandles = 0;
+    _lastFragmentNativeHandles = 0;
     _usedHeight = 0;
     _flowHeight = 0;
   }
@@ -517,6 +557,7 @@ final class ForumBodyTextPageComposer {
 final class _CompositionParagraph {
   _CompositionParagraph.paragraph(ForumBodyParagraphLease current)
     : lease = current,
+      nativeHandleCountInRange = null,
       _text = current.layout,
       _inline = null,
       identity = current.content.identity,
@@ -529,8 +570,10 @@ final class _CompositionParagraph {
       throw ArgumentError('Anonymous font struts are not document paragraphs');
     }
   }
-  _CompositionParagraph.inline(ForumBodyInlineParagraphLease current)
-    : lease = current,
+  _CompositionParagraph.inline(
+    ForumBodyInlineParagraphLease current,
+    this.nativeHandleCountInRange,
+  ) : lease = current,
       _text = null,
       _inline = current.layout,
       identity = current.content.identity,
@@ -540,6 +583,7 @@ final class _CompositionParagraph {
       projection = current.content.projection.display,
       kind = ForumBodyTextPageFragmentKind.inline;
   final ForumBodyNativeParagraphLease lease;
+  final int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange;
   final ForumBodyParagraphLayout? _text;
   final ForumBodyInlineParagraphLayout? _inline;
   final ForumBodyIdentity identity;

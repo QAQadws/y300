@@ -98,6 +98,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   }) : dimensions = List.unmodifiable(dimensions),
        rubyAtoms = List.unmodifiable(rubyAtoms),
        trimmedAtomIndices = Set.unmodifiable(trimmedAtomIndices),
+       _nativeHandlePrefix = List.filled(rubyAtoms.length + 1, 0),
        super._() {
     content.validateDimensions(this.dimensions);
     if (rubyAtoms.length != content.projection.atoms.length ||
@@ -115,6 +116,9 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       }
     }
     for (final (index, plan) in rubyAtoms.indexed) {
+      _nativeHandlePrefix[index + 1] =
+          _nativeHandlePrefix[index] +
+          (trimmedAtomIndices.contains(index) ? 0 : plan.nativeHandleCount);
       if (content.projection.atoms[index].isSoftSpace !=
           (plan is ForumBodyRubySoftSpacePlan)) {
         throw ArgumentError(
@@ -165,6 +169,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   final List<PlaceholderDimensions> dimensions;
   final List<ForumBodyRubyAtomPlan> rubyAtoms;
   final Set<int> trimmedAtomIndices;
+  final List<int> _nativeHandlePrefix;
   // Legacy column-only access remains explicit: never drop component members
   // or silently present its first column as the complete parent atom.
   late final List<ForumBodyRubyColumnRequest> rubyGroups = List.unmodifiable([
@@ -231,6 +236,40 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       visibleAtoms(
         fragment,
       ).fold<int>(0, (sum, index) => sum + rubyAtoms[index].nativeHandleCount);
+
+  /// Actual parent plus visible child request slots in a legal display window.
+  /// Prefix sums are built in the existing bounded input validation pass;
+  /// composition queries are logarithmic and never measure or retain leases.
+  int nativeHandleCountInRange(int start, int end) {
+    RangeError.checkValidRange(start, end, textCodeUnits);
+    final atoms = content.projection.atoms;
+    int lowerBound(int offset, {required bool byEnd}) {
+      var low = 0;
+      var high = atoms.length;
+      while (low < high) {
+        final mid = (low + high) ~/ 2;
+        final before = byEnd
+            ? atoms[mid].displayEndUtf16 <= offset
+            : atoms[mid].displayStartUtf16 < offset;
+        if (before) {
+          low = mid + 1;
+        } else {
+          high = mid;
+        }
+      }
+      return low;
+    }
+
+    final first = lowerBound(start, byEnd: true);
+    final after = lowerBound(end, byEnd: false);
+    if ((first < atoms.length && atoms[first].displayStartUtf16 < start) ||
+        (after > 0 && atoms[after - 1].displayEndUtf16 > end)) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
+    return 1 + _nativeHandlePrefix[after] - _nativeHandlePrefix[first];
+  }
 }
 
 List<ForumBodyRubyAtomPlan> _columnAtoms(

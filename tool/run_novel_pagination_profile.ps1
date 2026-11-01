@@ -7,6 +7,8 @@ param(
     [switch]$InlineSoftSpace,
     [ValidateSet('native', 'legacy', 'both')]
     [string]$Backend = 'both',
+    [ValidateSet('baseline', 'ruby-gaps')]
+    [string]$Corpus = 'baseline',
     [switch]$PrepareOnly
 )
 
@@ -24,6 +26,9 @@ if (-not $PrepareOnly -and [string]::IsNullOrWhiteSpace($Device)) {
 }
 if ($InlineSoftSpace -and -not $MainPage) {
     throw '-InlineSoftSpace requires -MainPage.'
+}
+if ($Corpus -ne 'baseline' -and -not $MainPage) {
+    throw '-Corpus ruby-gaps requires -MainPage.'
 }
 
 function Read-Utf8([string]$Path) {
@@ -139,6 +144,7 @@ flutter:
             '--dart-define=PROFILE_AUTO_EXIT=true')
         if ($Baseline) { $runArguments += '--dart-define=PROFILE_BASELINE=true' }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_BACKEND=$Backend" }
+        if ($MainPage) { $runArguments += "--dart-define=PROFILE_CORPUS=$Corpus" }
         if ($InlineSoftSpace) { $runArguments += '--dart-define=PROFILE_INLINE_SOFT_SPACE=true' }
         $script:profileSuiteResult = $null
         & flutter @runArguments 2>&1 | ForEach-Object {

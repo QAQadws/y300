@@ -135,8 +135,13 @@ final class ForumBodyTextPageSession {
     ForumBodyParagraphContentBuilder paragraphBuilder =
         const ForumBodyParagraphContentBuilder(),
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
+    int? maxNativeHandlesPerPage,
   }) {
     limits._validate();
+    if (maxNativeHandlesPerPage != null &&
+        maxNativeHandlesPerPage > limits.maxIssuedLeases) {
+      throw ArgumentError('Page handle limit exceeds session capacity');
+    }
     if (cache.isClosed) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.ownerRetired,
@@ -149,6 +154,7 @@ final class ForumBodyTextPageSession {
       height: height,
       maxPages: limits.maxPages,
       maxFragments: limits.maxFragments,
+      maxNativeHandlesPerPage: maxNativeHandlesPerPage,
     );
     try {
       return ForumBodyTextPageSession._(
@@ -317,6 +323,7 @@ final class ForumBodyTextPageSession {
               spaceBefore: _margin,
               spaceAtPageStart: 0,
               window: mixed.paragraph.window,
+              nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
             );
           } catch (_) {
             ready.lease.release();

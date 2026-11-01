@@ -87,11 +87,13 @@ Future<NovelReaderNativeLayoutScope> _scope(
   double height = 200,
   NovelReaderPaginationCancellationToken? cancellation,
   int maxSizes = 2048,
+  int maxIssuedLeases = 128,
 }) => NovelReaderNativeLayoutScope.prepare(
   chapter: chapter,
   environment: environment,
   width: width,
   height: height,
+  maxIssuedLeases: maxIssuedLeases,
   cancellation: cancellation ?? NovelReaderPaginationCancellationToken(),
   maxScaledFontSizes: maxSizes,
 );
@@ -106,6 +108,29 @@ const _limits = ForumBodyTextPageSessionLimits(
 );
 
 void main() {
+  testWidgets('page handle capacity is frozen into layout identity', (
+    tester,
+  ) async {
+    final chapter = await _chapter();
+    final environment = await _environment(tester);
+    final one = await _scope(chapter, environment, maxIssuedLeases: 128);
+    final two = await _scope(chapter, environment, maxIssuedLeases: 512);
+    expect(one.maxNativeHandlesPerPage, 64);
+    expect(two.maxNativeHandlesPerPage, 256);
+    expect(one.paginationKey, isNot(two.paginationKey));
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 8,
+      maxEstimatedBytes: 1 << 20,
+    );
+    addTearDown(cache.close);
+    expect(
+      () =>
+          two.openSession(cache: cache, layoutId: 'mismatch', limits: _limits),
+      throwsArgumentError,
+    );
+    expect(cache.activeLeases, 0);
+  });
+
   testWidgets(
     'equivalent effective inputs have stable keys across objects and policy order',
     (tester) async {
@@ -147,6 +172,7 @@ void main() {
         height: 200,
         cancellation: NovelReaderPaginationCancellationToken(),
         fontCollectionGeneration: 1,
+        maxIssuedLeases: 128,
       );
       expect(fontChanged.paginationKey, isNot(unchangedFonts.paginationKey));
     },

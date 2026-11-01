@@ -37,8 +37,9 @@ final class NovelReaderNativeLayoutScope {
     required this.width,
     required this.height,
     required this.paginationKey,
+    required this.maxNativeHandlesPerPage,
   });
-  static const fingerprintRevision = 5;
+  static const fingerprintRevision = 6;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -46,6 +47,7 @@ final class NovelReaderNativeLayoutScope {
   final double width;
   final double height;
   final String paginationKey;
+  final int maxNativeHandlesPerPage;
 
   static Future<NovelReaderNativeLayoutScope> prepare({
     required NovelReaderNativePreparedChapter chapter,
@@ -55,8 +57,10 @@ final class NovelReaderNativeLayoutScope {
     required NovelReaderPaginationCancellationToken cancellation,
     int maxScaledFontSizes = 2048,
     int fontCollectionGeneration = 0,
+    int maxIssuedLeases = 512,
   }) async {
     cancellation.throwIfCancelled();
+    final pageHandleLimit = _pageHandleLimit(maxIssuedLeases);
     if (!width.isFinite ||
         width <= 0 ||
         width > 16384 ||
@@ -129,6 +133,7 @@ final class NovelReaderNativeLayoutScope {
       NovelReaderSourceProvenance.revision,
       width,
       height,
+      pageHandleLimit,
       reader.fontRevision,
       fontCollectionGeneration,
       _styleValue(reader.textStyle),
@@ -151,6 +156,7 @@ final class NovelReaderNativeLayoutScope {
       backgroundColor: background,
       width: width,
       height: height,
+      maxNativeHandlesPerPage: pageHandleLimit,
       paginationKey:
           'native-$fingerprintRevision-${sha256.convert(utf8.encode(jsonEncode(payload)))}',
     );
@@ -160,20 +166,35 @@ final class NovelReaderNativeLayoutScope {
     required ForumBodyParagraphCache cache,
     required String layoutId,
     required ForumBodyTextPageSessionLimits limits,
-  }) => ForumBodyTextPageSession(
-    document: chapter.document,
-    reader: reader,
-    textScaler: textScaler,
-    width: width,
-    height: height,
-    cache: cache,
-    layoutId: layoutId,
-    limits: limits,
-    // A mixed run retains text parts, annotation containers and groups in
-    // addition to its glyph runs. Budget these pure values separately; native
-    // cache and issued-handle admission remain under their existing limits.
-    rubyLimits: const ForumBodyRubyContentLimits(maxStructureItems: 2048),
-  );
+  }) {
+    if (_pageHandleLimit(limits.maxIssuedLeases) != maxNativeHandlesPerPage) {
+      throw ArgumentError(
+        'Session handle budget differs from its layout fingerprint',
+      );
+    }
+    return ForumBodyTextPageSession(
+      document: chapter.document,
+      reader: reader,
+      textScaler: textScaler,
+      width: width,
+      height: height,
+      cache: cache,
+      layoutId: layoutId,
+      limits: limits,
+      // Current and target pages coexist during a real PageView turn. Reserve
+      // their shared issued-handle budget before publishing legal physical rows.
+      maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+      // A mixed run retains text parts, annotation containers and groups in
+      // addition to its glyph runs. Budget these pure values separately; native
+      // cache and issued-handle admission remain under their existing limits.
+      rubyLimits: const ForumBodyRubyContentLimits(maxStructureItems: 2048),
+    );
+  }
+}
+
+int _pageHandleLimit(int issued) {
+  if (issued <= 0) throw ArgumentError.value(issued, 'maxIssuedLeases');
+  return issued >= 2 ? issued ~/ 2 : 1;
 }
 
 List<double> _fontSizes(
