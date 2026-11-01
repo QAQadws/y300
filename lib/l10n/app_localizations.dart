@@ -9490,6 +9490,96 @@ abstract class AppLocalizations {
   /// **'精华'**
   String get forumThreadBadgeDigest;
 
+  /// No description provided for @novelTextAlignment.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文对齐'**
+  String get novelTextAlignment;
+
+  /// No description provided for @novelTextAlignmentScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'对齐应用范围'**
+  String get novelTextAlignmentScope;
+
+  /// No description provided for @novelTextAlignmentOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始规则'**
+  String get novelTextAlignmentOriginal;
+
+  /// No description provided for @novelTextAlignmentMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'补充缺省'**
+  String get novelTextAlignmentMissing;
+
+  /// No description provided for @novelTextAlignmentBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelTextAlignmentBody;
+
+  /// No description provided for @novelTextAlignmentAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部文字'**
+  String get novelTextAlignmentAll;
+
+  /// No description provided for @novelTextAlignmentMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'对齐方式'**
+  String get novelTextAlignmentMode;
+
+  /// No description provided for @novelTextAlignmentStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'行首对齐'**
+  String get novelTextAlignmentStart;
+
+  /// No description provided for @novelTextAlignmentEnd.
+  ///
+  /// In zh, this message translates to:
+  /// **'行尾对齐'**
+  String get novelTextAlignmentEnd;
+
+  /// No description provided for @novelTextAlignmentJustify.
+  ///
+  /// In zh, this message translates to:
+  /// **'两端对齐'**
+  String get novelTextAlignmentJustify;
+
+  /// No description provided for @novelTextAlignmentCenter.
+  ///
+  /// In zh, this message translates to:
+  /// **'居中'**
+  String get novelTextAlignmentCenter;
+
+  /// No description provided for @novelTextAlignmentHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'行首与行尾跟随正文方向，与左右翻页无关。两端对齐不拉伸段落末行及手动换行的末行。统一正文保留标题、代码、引用等角色的作者对齐规则。'**
+  String get novelTextAlignmentHint;
+
+  /// No description provided for @novelTextAlignmentAllHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部文字也覆盖标题、代码、引用和注音的对齐规则。行首、行尾跟随正文方向；两端对齐的末行保持行首对齐。'**
+  String get novelTextAlignmentAllHint;
+
+  /// No description provided for @novelTextAlignmentUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设置目前用于原生翻页阅读。已保存的对齐方式会保留，也可以单独重置。'**
+  String get novelTextAlignmentUnavailable;
+
+  /// No description provided for @novelTextAlignmentReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置对齐方式及其应用范围，保留其他设置'**
+  String get novelTextAlignmentReset;
+
   /// No description provided for @novelFontWeight.
   ///
   /// In zh, this message translates to:

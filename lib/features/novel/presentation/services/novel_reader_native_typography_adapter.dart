@@ -10,6 +10,7 @@ import '../../domain/models/novel_reader_preferences.dart';
   double? letterSpacing,
   double? wordSpacing,
   FontWeight? fontWeight,
+  TextAlign? textAlign,
   ForumBodyStylePolicy policy,
 })
 resolveNovelReaderNativeTypography(
@@ -37,7 +38,16 @@ resolveNovelReaderNativeTypography(
   final sizeScope = preferences.typography.fontSizeScope;
   final heightScope = preferences.typography.lineHeightScope;
   final weight = preferences.typography.fontWeight;
+  final alignment = preferences.typography.textAlignment;
   return (
+    textAlign: alignment == null
+        ? null
+        : switch (alignment.mode) {
+            NovelReaderTextAlignMode.start => TextAlign.start,
+            NovelReaderTextAlignMode.end => TextAlign.end,
+            NovelReaderTextAlignMode.center => TextAlign.center,
+            NovelReaderTextAlignMode.justify => TextAlign.justify,
+          },
     fontWeight: resolveNovelReaderNativeFontWeight(weight),
     wordSpacing: words?.logicalPixels,
     letterSpacing: letters?.logicalPixels,
@@ -56,10 +66,13 @@ resolveNovelReaderNativeTypography(
             words == null &&
             sizeScope == null &&
             heightScope == null &&
-            weight == null
+            weight == null &&
+            alignment == null
         ? (base ?? ForumBodyStylePolicy())
         : ForumBodyStylePolicy({
             ...?base?.values,
+            if (alignment != null)
+              ForumBodyStyleProperty.textAlign: _scope(alignment.scope),
             if (weight != null)
               ForumBodyStyleProperty.fontWeight: _scope(weight.scope),
             if (sizeScope != null)

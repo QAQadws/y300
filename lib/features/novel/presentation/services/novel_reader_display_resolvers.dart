@@ -150,6 +150,8 @@ class NovelReaderTypographyResolver {
         return TextAlign.center;
       case NovelReaderTextAlignMode.start:
         return TextAlign.start;
+      case NovelReaderTextAlignMode.end:
+        return TextAlign.end;
     }
   }
 

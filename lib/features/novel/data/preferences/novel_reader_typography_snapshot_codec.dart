@@ -1,6 +1,7 @@
 import '../../domain/models/novel_reader_typography_overrides.dart';
 import '../../domain/repositories/novel_reader_preferences_repository.dart';
 import 'novel_reader_style_scope_snapshot_codec.dart';
+import 'novel_reader_text_alignment_snapshot_codec.dart';
 
 /// Optional versioned namespace in the existing snapshot. New fields are
 /// additive; older writers retain them as unknown extensions.
@@ -8,6 +9,7 @@ final class NovelReaderTypographySnapshotCodec {
   const NovelReaderTypographySnapshotCodec();
   static const schemaVersion = 1;
   static const _scopePolicy = NovelReaderStyleScopeSnapshotCodec();
+  static const _alignment = NovelReaderTextAlignmentSnapshotCodec();
   static const _weight = _NumericRequestCodec(
     unit: 'cssWeight',
     minimum: 100,
@@ -54,6 +56,7 @@ final class NovelReaderTypographySnapshotCodec {
     fontSizeScope: input.fontSizeScope,
     lineHeightScope: input.lineHeightScope,
     fontWeight: input.fontWeight?.isValid == true ? input.fontWeight : null,
+    textAlignment: input.textAlignment,
   );
 
   NovelReaderTypographyOverrides decode(Object? source) {
@@ -67,6 +70,7 @@ final class NovelReaderTypographySnapshotCodec {
     final words = _words.decode(source['wordSpacing']);
     final weight = _weight.decode(source['fontWeight']);
     return NovelReaderTypographyOverrides(
+      textAlignment: _alignment.decode(source['textAlignment']),
       fontWeight: weight == null
           ? null
           : NovelReaderFontWeight(
@@ -120,6 +124,10 @@ final class NovelReaderTypographySnapshotCodec {
     final words = normalized.wordSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
     final requests = {
+      'textAlignment': _alignment.encode(
+        normalized.textAlignment,
+        previous: prior?['textAlignment'],
+      ),
       'fontWeight': _weight.encode(
         prior?['fontWeight'],
         normalized.fontWeight == null

@@ -232,6 +232,21 @@ void main() {
       final chapter = await _chapter();
       final baseEnvironment = await _environment(tester);
       final base = await _scope(chapter, baseEnvironment);
+      final equivalentAlignment = await _scope(
+        chapter,
+        await _environment(
+          tester,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            typography: const NovelReaderTypographyOverrides(
+              textAlignment: NovelReaderTextAlignment(
+                mode: NovelReaderTextAlignMode.start,
+                scope: NovelReaderStyleScope.asDefault,
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(equivalentAlignment.paginationKey, base.paginationKey);
       final styles = <TextStyle>[
         const TextStyle(fontFamily: 'other'),
         const TextStyle(fontFamilyFallback: ['fallback-a']),
@@ -274,6 +289,12 @@ void main() {
         NovelReaderPreferences.defaults().copyWith(fontSize: 25),
         NovelReaderPreferences.defaults().copyWith(lineHeight: 2),
         NovelReaderPreferences.defaults().copyWith(fontWeight: 700),
+        for (final mode in NovelReaderTextAlignMode.values)
+          NovelReaderPreferences.defaults().copyWith(
+            typography: NovelReaderTypographyOverrides(
+              textAlignment: NovelReaderTextAlignment(mode: mode),
+            ),
+          ),
         NovelReaderPreferences.defaults().copyWith(
           typography: const NovelReaderTypographyOverrides(
             fontWeight: NovelReaderFontWeight(value: 600),

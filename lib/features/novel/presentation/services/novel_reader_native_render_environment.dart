@@ -59,7 +59,7 @@ final class NovelReaderNativeRenderEnvironment {
         textStyle: textStyle,
         fontRevision: resolvedFont.cacheKey,
         linkColor: palette.link,
-        textAlign: typography.textAlign,
+        textAlign: nativeTypography.textAlign ?? typography.textAlign,
         textDirection: Directionality.of(context),
         paragraphBefore: nativeTypography.paragraphBefore,
         paragraphAfter: nativeTypography.paragraphAfter,

@@ -20,18 +20,47 @@ enum _Setting {
   indent('indent'),
   paragraphSpacing('paragraph-spacing'),
   letterSpacing('letter-spacing'),
-  letterSpacingRuby('letter-spacing'),
+  letterSpacingRuby('letter-spacing', mixed: true),
   wordSpacing('word-spacing'),
-  wordSpacingRuby('word-spacing'),
+  wordSpacingRuby('word-spacing', mixed: true),
   fontSizePolicy('font-size'),
-  fontSizePolicyRuby('font-size'),
+  fontSizePolicyRuby('font-size', mixed: true),
   lineHeightPolicy('line-height'),
-  lineHeightPolicyRuby('line-height'),
+  lineHeightPolicyRuby('line-height', mixed: true),
   fontWeight('font-weight'),
-  fontWeightRuby('font-weight');
+  fontWeightRuby('font-weight', mixed: true),
+  alignmentStart('text-alignment', alignment: NovelReaderTextAlignMode.start),
+  alignmentEnd('text-alignment', alignment: NovelReaderTextAlignMode.end),
+  alignmentJustify(
+    'text-alignment',
+    alignment: NovelReaderTextAlignMode.justify,
+  ),
+  alignmentCenter('text-alignment', alignment: NovelReaderTextAlignMode.center),
+  alignmentStartRuby(
+    'text-alignment',
+    mixed: true,
+    alignment: NovelReaderTextAlignMode.start,
+  ),
+  alignmentEndRuby(
+    'text-alignment',
+    mixed: true,
+    alignment: NovelReaderTextAlignMode.end,
+  ),
+  alignmentJustifyRuby(
+    'text-alignment',
+    mixed: true,
+    alignment: NovelReaderTextAlignMode.justify,
+  ),
+  alignmentCenterRuby(
+    'text-alignment',
+    mixed: true,
+    alignment: NovelReaderTextAlignMode.center,
+  );
 
-  const _Setting(this.keyPrefix);
+  const _Setting(this.keyPrefix, {this.mixed = false, this.alignment});
   final String keyPrefix;
+  final bool mixed;
+  final NovelReaderTextAlignMode? alignment;
 }
 
 void main() {
@@ -52,12 +81,9 @@ void main() {
 
 void _testSettings(_Setting setting) {
   final spacing = setting == _Setting.paragraphSpacing;
-  final mixed =
-      setting == _Setting.letterSpacingRuby ||
-      setting == _Setting.wordSpacingRuby ||
-      setting == _Setting.fontSizePolicyRuby ||
-      setting == _Setting.lineHeightPolicyRuby ||
-      setting == _Setting.fontWeightRuby;
+  final mixed = setting.mixed;
+  final alignment = setting.alignment;
+  final aligning = alignment != null;
   final letters =
       setting == _Setting.letterSpacing ||
       setting == _Setting.letterSpacingRuby;
@@ -71,7 +97,8 @@ void _testSettings(_Setting setting) {
       setting == _Setting.lineHeightPolicyRuby;
   final weight =
       setting == _Setting.fontWeight || setting == _Setting.fontWeightRuby;
-  final extended = letters || words || sizePolicy || heightPolicy || weight;
+  final extended =
+      letters || words || sizePolicy || heightPolicy || weight || aligning;
   testWidgets(
     'settings reflow keeps coverage and persists across reader owners ($setting)',
     (tester) async {
@@ -83,7 +110,7 @@ void _testSettings(_Setting setting) {
           );
       await repository().save(
         profileReaderPreferences.copyWith(
-          fontSize: sizePolicy || heightPolicy || weight
+          fontSize: sizePolicy || heightPolicy || weight || aligning
               ? 20
               : profileReaderPreferences.fontSize,
           typography: NovelReaderTypographyOverrides(
@@ -93,16 +120,22 @@ void _testSettings(_Setting setting) {
             paragraphSpacing: extended
                 ? const NovelReaderParagraphSpacing(before: 12, after: 31)
                 : null,
-            letterSpacing: words || sizePolicy || heightPolicy || weight
+            letterSpacing:
+                words || sizePolicy || heightPolicy || weight || aligning
                 ? const NovelReaderLetterSpacing(logicalPixels: -1.25)
                 : null,
-            wordSpacing: sizePolicy || heightPolicy || weight
+            wordSpacing: sizePolicy || heightPolicy || weight || aligning
                 ? const NovelReaderWordSpacing(logicalPixels: 7.5)
                 : null,
-            fontSizeScope: heightPolicy || weight
+            fontSizeScope: heightPolicy || weight || aligning
                 ? NovelReaderStyleScope.forceBody
                 : null,
-            lineHeightScope: weight ? NovelReaderStyleScope.forceBody : null,
+            lineHeightScope: weight || aligning
+                ? NovelReaderStyleScope.forceBody
+                : null,
+            fontWeight: aligning
+                ? const NovelReaderFontWeight(value: 700)
+                : null,
           ),
         ),
       );
@@ -118,10 +151,12 @@ void _testSettings(_Setting setting) {
                   ? ';font-size:12px'
                   : weight
                   ? ';font-weight:300'
+                  : aligning
+                  ? ';text-align:right'
                   : ''}">Paragraph $i: '
               '${mixed ? 'before <ruby>base<rt>note</rt></ruby> after. ' : ''}'
               '${weight ? '<strong>emphasis</strong> ' : ''}'
-              'Synthetic text for checking actual native reading geometry.</p>',
+              'Synthetic text for checking actual native reading geometry.${aligning ? '<br>short tail' : ''}</p>',
         ).join(),
       );
       final args = NovelReaderArgs(
@@ -570,6 +605,108 @@ void _testSettings(_Setting setting) {
         );
       }
 
+      void checkVisibleAlignment(
+        ProfileReaderObservation observation,
+        TextAlign expected,
+      ) {
+        final target = observation.nativeController!.viewForPage(
+          observation.page!,
+        )!;
+        expect(target.coverage.hasClippedGlyphs, isFalse);
+        var checked = 0;
+        void verify(
+          ForumBodyResolvedStyle style,
+          List<ForumBodyParagraphLine> rows,
+          double width,
+          double inset,
+          ForumBodyFirstLineIndentGeometry indent,
+          bool appliesIndent,
+        ) {
+          expect(style.textDirection, TextDirection.ltr);
+          expect(style.textAlign, expected);
+          expect(style.textStyle.fontWeight, FontWeight.w700);
+          expect(style.textStyle.letterSpacing, -1.25);
+          expect(style.textStyle.wordSpacing, 7.5);
+          expect(indent.appliedAdvance, closeTo(appliesIndent ? 30 : 0, .001));
+          final innerWidth = width - 2 * inset;
+          final factor = switch (expected) {
+            TextAlign.right || TextAlign.end => 1.0,
+            TextAlign.center => .5,
+            _ => 0.0,
+          };
+          // Native LineMetrics.left includes the font/tracking edge bearing.
+          // Measure that with an independent native paragraph; zero is not a
+          // valid assumption for the retained negative letter-spacing setting.
+          final probe = TextPainter(
+            text: TextSpan(text: 'probe', style: style.textStyle),
+            textAlign: expected,
+            textDirection: style.textDirection,
+          )..layout(minWidth: innerWidth, maxWidth: innerWidth);
+          final native = probe.computeLineMetrics().single;
+          final bearing = native.left - (innerWidth - native.width) * factor;
+          probe.dispose();
+          for (final (index, row) in rows.indexed) {
+            // The real first-row prefix has neutral tracking. BR continuations
+            // have no prefix and keep the actual source font's edge bearing.
+            final edge = index == 0 && indent.appliedAdvance > 0 ? 0 : bearing;
+            final left = inset + (innerWidth - row.width) * factor + edge;
+            expect(row.left, closeTo(left, .002));
+          }
+          checked++;
+        }
+
+        void collect(Element element) {
+          if (element.widget case ForumBodyParagraphSurface(lease: final lease)
+              when lease.isActive) {
+            final layout = lease.layout;
+            verify(
+              lease.content.style,
+              layout.lines,
+              layout.width,
+              layout.horizontalInset,
+              layout.firstLineIndent,
+              lease.content.appliesFirstLineIndent,
+            );
+          }
+          if (element.widget
+              case ForumBodyInlineParagraphSurface(view: final view)
+              when view.isActive) {
+            final layout = view.nativeLeases
+                .whereType<ForumBodyInlineParagraphLease>()
+                .single
+                .layout;
+            verify(
+              view.content.style,
+              layout.lines,
+              layout.width,
+              layout.horizontalInset,
+              layout.firstLineIndent,
+              view.content.appliesFirstLineIndent,
+            );
+          }
+          element.visitChildElements(collect);
+        }
+
+        void visit(Element element) {
+          if (element.widget.key case ObjectKey(value: final value)
+              when identical(value, target)) {
+            collect(element);
+          } else {
+            element.visitChildElements(visit);
+          }
+        }
+
+        key.currentContext!.visitChildElements(visit);
+        expect(checked, greaterThan(0));
+      }
+
+      final selectedAlignment = switch (alignment) {
+        NovelReaderTextAlignMode.start || null => TextAlign.start,
+        NovelReaderTextAlignMode.end => TextAlign.end,
+        NovelReaderTextAlignMode.justify => TextAlign.justify,
+        NovelReaderTextAlignMode.center => TextAlign.center,
+      };
+
       await mount();
       var popped = open();
       var observation = await wait((value) => value.ready && value.complete);
@@ -608,12 +745,27 @@ void _testSettings(_Setting setting) {
           _Setting.lineHeightPolicyRuby => l10n.novelLineHeightPolicyBody,
           _Setting.fontWeight ||
           _Setting.fontWeightRuby => l10n.novelFontWeightBody,
+          _ => l10n.novelTextAlignmentBody,
         }),
       );
       await tester.ensureVisible(bodyChoice);
       await tester.tap(bodyChoice);
       await tester.pump();
-      if (weight) {
+      if (alignment != null) {
+        final label = switch (alignment) {
+          NovelReaderTextAlignMode.start => l10n.novelTextAlignmentStart,
+          NovelReaderTextAlignMode.end => l10n.novelTextAlignmentEnd,
+          NovelReaderTextAlignMode.justify => l10n.novelTextAlignmentJustify,
+          NovelReaderTextAlignMode.center => l10n.novelTextAlignmentCenter,
+        };
+        final option = find.descendant(
+          of: find.byKey(const Key('novel-reader-text-alignment-mode')),
+          matching: find.text(label),
+        );
+        await tester.ensureVisible(option);
+        await tester.tap(option);
+        await tester.pump();
+      } else if (weight) {
         tester
             .widget<Slider>(
               find.byKey(const Key('novel-reader-font-weight-slider')),
@@ -692,6 +844,9 @@ void _testSettings(_Setting setting) {
         _Setting.fontWeightRuby => baseline.typography.withFontWeight(
           const NovelReaderFontWeight(value: 700),
         ),
+        _ => baseline.typography.withTextAlignment(
+          NovelReaderTextAlignment(mode: alignment!),
+        ),
       };
       final selectedFontSize = sizePolicy ? 22.0 : baseline.fontSize;
       final selectedLineHeight = heightPolicy ? 2.0 : baseline.lineHeight;
@@ -715,7 +870,8 @@ void _testSettings(_Setting setting) {
             .locate(anchor),
         isNotNull,
       );
-      checkVisibleIndent(observation, 1.5);
+      if (!aligning) checkVisibleIndent(observation, 1.5);
+      if (aligning) checkVisibleAlignment(observation, selectedAlignment);
       if (spacing || extended) {
         checkVisibleSpacing(observation, 31);
       }
@@ -776,7 +932,8 @@ void _testSettings(_Setting setting) {
             .locate(anchor),
         isNotNull,
       );
-      checkVisibleIndent(observation, 1.5);
+      if (!aligning) checkVisibleIndent(observation, 1.5);
+      if (aligning) checkVisibleAlignment(observation, selectedAlignment);
       if (spacing || extended) {
         checkVisibleSpacing(observation, 31);
       }
@@ -811,7 +968,7 @@ void _testSettings(_Setting setting) {
             value.ready &&
             value.complete &&
             state().persistedPreferences.typography == baseline.typography &&
-            (!(sizePolicy || heightPolicy || weight) ||
+            (!(sizePolicy || heightPolicy || weight || aligning) ||
                 value.paginationKey != beforeResetKey),
       );
       expect(
@@ -821,6 +978,18 @@ void _testSettings(_Setting setting) {
           lineHeight: selectedLineHeight,
         ),
       );
+      if (aligning) {
+        expect(position(), savedPosition);
+        expect(
+          observation.nativeController!
+              .viewForPage(observation.page!)!
+              .coverage
+              .locate(anchor),
+          isNotNull,
+        );
+        checkVisibleAlignment(observation, TextAlign.right);
+        checkVisibleSpacing(observation, 31);
+      }
       if (weight) {
         expect(position(), savedPosition);
         expect(

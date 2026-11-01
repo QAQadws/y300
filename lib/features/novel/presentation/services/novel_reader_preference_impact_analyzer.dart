@@ -68,6 +68,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.typography.letterSpacing != next.typography.letterSpacing ||
         previous.typography.wordSpacing != next.typography.wordSpacing ||
         previous.typography.fontWeight != next.typography.fontWeight ||
+        previous.typography.textAlignment != next.typography.textAlignment ||
         previous.typography.fontSizeScope != next.typography.fontSizeScope ||
         previous.typography.lineHeightScope !=
             next.typography.lineHeightScope ||

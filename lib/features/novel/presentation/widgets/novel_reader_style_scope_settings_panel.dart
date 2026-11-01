@@ -18,8 +18,8 @@ typedef NovelReaderStyleScopeLabels = ({
 
 enum _ScopeChoice { original, author, body, all }
 
-/// Policy-only presentation. Typed wrappers bind each policy to its single
-/// persisted value; this widget has no storage or body-layout responsibilities.
+/// Shared scope presentation. A typed wrapper may supply a value control;
+/// storage and body layout remain outside this widget.
 class NovelReaderStyleScopeSettingsPanel extends StatelessWidget {
   const NovelReaderStyleScopeSettingsPanel({
     super.key,
@@ -28,12 +28,14 @@ class NovelReaderStyleScopeSettingsPanel extends StatelessWidget {
     required this.enabled,
     required this.labels,
     required this.onChanged,
+    this.valueControl,
   });
   final String keyPrefix;
   final NovelReaderStyleScope? value;
   final bool enabled;
   final NovelReaderStyleScopeLabels labels;
   final ValueChanged<NovelReaderStyleScope?> onChanged;
+  final Widget? valueControl;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +67,7 @@ class NovelReaderStyleScopeSettingsPanel extends StatelessWidget {
             _ScopeChoice.all => NovelReaderStyleScope.forceAll,
           }),
         ),
+        ?valueControl,
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: Text(

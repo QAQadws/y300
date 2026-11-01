@@ -7,8 +7,6 @@ enum NovelReaderThemePreset { followApp, light, sepia, dark }
 
 enum NovelReaderFlowMode { vertical, pagedLtr, pagedRtl }
 
-enum NovelReaderTextAlignMode { start, justify, center }
-
 /// Traditional/simplified conversion direction for the novel reader.
 enum NovelReaderConversionMode { none, toSimplified, toTraditional }
 
@@ -110,6 +108,8 @@ extension NovelReaderTextAlignModeCodec on NovelReaderTextAlignMode {
         return 'justify';
       case NovelReaderTextAlignMode.center:
         return 'center';
+      case NovelReaderTextAlignMode.end:
+        return 'end';
     }
   }
 
@@ -119,6 +119,8 @@ extension NovelReaderTextAlignModeCodec on NovelReaderTextAlignMode {
         return NovelReaderTextAlignMode.justify;
       case 'center':
         return NovelReaderTextAlignMode.center;
+      case 'end':
+        return NovelReaderTextAlignMode.end;
       case 'start':
       default:
         return NovelReaderTextAlignMode.start;
@@ -227,6 +229,8 @@ class NovelReaderPreferences {
 
   /// Legacy transient input. Native persisted requests live in typography.
   final int fontWeight;
+
+  /// Legacy transient input. Native persisted requests live in typography.
   final NovelReaderTextAlignMode textAlign;
   final bool showProgressIndicator;
   final NovelReaderConversionMode conversionMode;

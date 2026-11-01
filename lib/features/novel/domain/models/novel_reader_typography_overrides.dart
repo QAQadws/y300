@@ -1,6 +1,25 @@
 /// Reader requests, independent of Flutter style types and storage payloads.
 enum NovelReaderStyleScope { asDefault, forceBody, forceAll }
 
+/// Logical alignment follows paragraph direction, not page-turn direction.
+enum NovelReaderTextAlignMode { start, justify, center, end }
+
+final class NovelReaderTextAlignment {
+  const NovelReaderTextAlignment({
+    required this.mode,
+    this.scope = NovelReaderStyleScope.forceBody,
+  });
+  final NovelReaderTextAlignMode mode;
+  final NovelReaderStyleScope scope;
+  @override
+  bool operator ==(Object other) =>
+      other is NovelReaderTextAlignment &&
+      other.mode == mode &&
+      other.scope == scope;
+  @override
+  int get hashCode => Object.hash(mode, scope);
+}
+
 enum NovelReaderIndentUnit { logicalPixels, em }
 
 typedef NovelReaderEffectiveIndent = ({
@@ -150,12 +169,14 @@ final class NovelReaderTypographyOverrides {
     this.fontSizeScope,
     this.lineHeightScope,
     this.fontWeight,
+    this.textAlignment,
   });
   final NovelReaderFirstLineIndent? firstLineIndent;
   final NovelReaderParagraphSpacing? paragraphSpacing;
   final NovelReaderLetterSpacing? letterSpacing;
   final NovelReaderWordSpacing? wordSpacing;
   final NovelReaderFontWeight? fontWeight;
+  final NovelReaderTextAlignment? textAlignment;
 
   /// Null inherits the preceding scope; asDefault explicitly keeps author sizes.
   final NovelReaderStyleScope? fontSizeScope;
@@ -169,12 +190,14 @@ final class NovelReaderTypographyOverrides {
       wordSpacing == null &&
       fontSizeScope == null &&
       lineHeightScope == null &&
-      fontWeight == null;
+      fontWeight == null &&
+      textAlignment == null;
 
   NovelReaderTypographyOverrides withFirstLineIndent(
     NovelReaderFirstLineIndent? value,
   ) => NovelReaderTypographyOverrides(
     firstLineIndent: value,
+    textAlignment: textAlignment,
     fontWeight: fontWeight,
     paragraphSpacing: paragraphSpacing,
     letterSpacing: letterSpacing,
@@ -188,6 +211,7 @@ final class NovelReaderTypographyOverrides {
   ) => NovelReaderTypographyOverrides(
     firstLineIndent: firstLineIndent,
     paragraphSpacing: value,
+    textAlignment: textAlignment,
     fontWeight: fontWeight,
     letterSpacing: letterSpacing,
     wordSpacing: wordSpacing,
@@ -201,6 +225,7 @@ final class NovelReaderTypographyOverrides {
     firstLineIndent: firstLineIndent,
     paragraphSpacing: paragraphSpacing,
     letterSpacing: value,
+    textAlignment: textAlignment,
     fontWeight: fontWeight,
     wordSpacing: wordSpacing,
     fontSizeScope: fontSizeScope,
@@ -214,6 +239,7 @@ final class NovelReaderTypographyOverrides {
     paragraphSpacing: paragraphSpacing,
     letterSpacing: letterSpacing,
     wordSpacing: value,
+    textAlignment: textAlignment,
     fontWeight: fontWeight,
     fontSizeScope: fontSizeScope,
     lineHeightScope: lineHeightScope,
@@ -227,6 +253,7 @@ final class NovelReaderTypographyOverrides {
     letterSpacing: letterSpacing,
     wordSpacing: wordSpacing,
     fontSizeScope: value,
+    textAlignment: textAlignment,
     fontWeight: fontWeight,
     lineHeightScope: lineHeightScope,
   );
@@ -240,6 +267,7 @@ final class NovelReaderTypographyOverrides {
     wordSpacing: wordSpacing,
     fontSizeScope: fontSizeScope,
     lineHeightScope: value,
+    textAlignment: textAlignment,
     fontWeight: fontWeight,
   );
 
@@ -252,7 +280,21 @@ final class NovelReaderTypographyOverrides {
         fontSizeScope: fontSizeScope,
         lineHeightScope: lineHeightScope,
         fontWeight: value,
+        textAlignment: textAlignment,
       );
+
+  NovelReaderTypographyOverrides withTextAlignment(
+    NovelReaderTextAlignment? value,
+  ) => NovelReaderTypographyOverrides(
+    firstLineIndent: firstLineIndent,
+    paragraphSpacing: paragraphSpacing,
+    letterSpacing: letterSpacing,
+    wordSpacing: wordSpacing,
+    fontSizeScope: fontSizeScope,
+    lineHeightScope: lineHeightScope,
+    fontWeight: fontWeight,
+    textAlignment: value,
+  );
 
   NovelReaderTypographyOverrides over(NovelReaderTypographyOverrides base) =>
       NovelReaderTypographyOverrides(
@@ -263,6 +305,7 @@ final class NovelReaderTypographyOverrides {
         fontSizeScope: fontSizeScope ?? base.fontSizeScope,
         lineHeightScope: lineHeightScope ?? base.lineHeightScope,
         fontWeight: fontWeight ?? base.fontWeight,
+        textAlignment: textAlignment ?? base.textAlignment,
       );
 
   @override
@@ -274,7 +317,8 @@ final class NovelReaderTypographyOverrides {
       other.wordSpacing == wordSpacing &&
       other.fontSizeScope == fontSizeScope &&
       other.lineHeightScope == lineHeightScope &&
-      other.fontWeight == fontWeight;
+      other.fontWeight == fontWeight &&
+      other.textAlignment == textAlignment;
   @override
   int get hashCode => Object.hash(
     firstLineIndent,
@@ -284,5 +328,6 @@ final class NovelReaderTypographyOverrides {
     fontSizeScope,
     lineHeightScope,
     fontWeight,
+    textAlignment,
   );
 }

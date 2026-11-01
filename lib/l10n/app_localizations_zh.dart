@@ -5666,6 +5666,54 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumThreadBadgeDigest => '精华';
 
   @override
+  String get novelTextAlignment => '正文对齐';
+
+  @override
+  String get novelTextAlignmentScope => '对齐应用范围';
+
+  @override
+  String get novelTextAlignmentOriginal => '原始规则';
+
+  @override
+  String get novelTextAlignmentMissing => '补充缺省';
+
+  @override
+  String get novelTextAlignmentBody => '统一正文';
+
+  @override
+  String get novelTextAlignmentAll => '全部文字';
+
+  @override
+  String get novelTextAlignmentMode => '对齐方式';
+
+  @override
+  String get novelTextAlignmentStart => '行首对齐';
+
+  @override
+  String get novelTextAlignmentEnd => '行尾对齐';
+
+  @override
+  String get novelTextAlignmentJustify => '两端对齐';
+
+  @override
+  String get novelTextAlignmentCenter => '居中';
+
+  @override
+  String get novelTextAlignmentHint =>
+      '行首与行尾跟随正文方向，与左右翻页无关。两端对齐不拉伸段落末行及手动换行的末行。统一正文保留标题、代码、引用等角色的作者对齐规则。';
+
+  @override
+  String get novelTextAlignmentAllHint =>
+      '全部文字也覆盖标题、代码、引用和注音的对齐规则。行首、行尾跟随正文方向；两端对齐的末行保持行首对齐。';
+
+  @override
+  String get novelTextAlignmentUnavailable =>
+      '此设置目前用于原生翻页阅读。已保存的对齐方式会保留，也可以单独重置。';
+
+  @override
+  String get novelTextAlignmentReset => '重置对齐方式及其应用范围，保留其他设置';
+
+  @override
   String get novelFontWeight => '正文基础字重';
 
   @override
@@ -11428,6 +11476,54 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get forumThreadBadgeDigest => '精華';
+
+  @override
+  String get novelTextAlignment => '正文對齊';
+
+  @override
+  String get novelTextAlignmentScope => '對齊套用範圍';
+
+  @override
+  String get novelTextAlignmentOriginal => '原始規則';
+
+  @override
+  String get novelTextAlignmentMissing => '補充預設';
+
+  @override
+  String get novelTextAlignmentBody => '統一正文';
+
+  @override
+  String get novelTextAlignmentAll => '全部文字';
+
+  @override
+  String get novelTextAlignmentMode => '對齊方式';
+
+  @override
+  String get novelTextAlignmentStart => '行首對齊';
+
+  @override
+  String get novelTextAlignmentEnd => '行尾對齊';
+
+  @override
+  String get novelTextAlignmentJustify => '兩端對齊';
+
+  @override
+  String get novelTextAlignmentCenter => '置中';
+
+  @override
+  String get novelTextAlignmentHint =>
+      '行首與行尾跟隨正文方向，與左右翻頁無關。兩端對齊不拉伸段落末行及手動換行的末行。統一正文保留標題、程式碼、引用等角色的作者對齊規則。';
+
+  @override
+  String get novelTextAlignmentAllHint =>
+      '全部文字也覆蓋標題、程式碼、引用和注音的對齊規則。行首、行尾跟隨正文方向；兩端對齊的末行保持行首對齊。';
+
+  @override
+  String get novelTextAlignmentUnavailable =>
+      '此設定目前用於原生翻頁閱讀。已儲存的對齊方式會保留，也可以單獨重設。';
+
+  @override
+  String get novelTextAlignmentReset => '重設對齊方式及其套用範圍，保留其他設定';
 
   @override
   String get novelFontWeight => '正文基礎字重';
