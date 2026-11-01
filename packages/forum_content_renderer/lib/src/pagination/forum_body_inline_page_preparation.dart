@@ -112,19 +112,22 @@ final class ForumBodyInlinePagePreparation {
           additionalOwnedLeases: _ownedPageLeases,
         );
         final before = pair.nativeLeases.length;
+        final beforeWork = pair.workCount;
         final pictures = cache.pictureBuildCount;
         final ready = cachedOnly
             ? pair.tryPrepareCached()
             : pair.advance().isReady;
         _guard();
-        _workCount +=
-            math.max(0, pair.nativeLeases.length - before) +
-            cache.pictureBuildCount -
-            pictures;
+        _workCount += math.max(
+          pair.workCount - beforeWork,
+          math.max(0, pair.nativeLeases.length - before) +
+              cache.pictureBuildCount -
+              pictures,
+        );
         if (!ready) {
           final rejection = pair.lastBudgetRejection;
           if (rejection != null) throw rejection;
-          return (cacheMiss: cachedOnly, view: null);
+          return (cacheMiss: cachedOnly && pair.cacheMiss, view: null);
         }
         _groups[index] = pair.takeLayout();
         _pair = null;

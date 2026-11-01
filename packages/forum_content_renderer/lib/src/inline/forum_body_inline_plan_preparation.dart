@@ -68,9 +68,13 @@ final class ForumBodyInlinePlanPreparation {
         );
         try {
           final revisionBefore = cache.budgetRevision;
-          final step = pair.advance();
+          final step = pair.advance(maxParts: maxParts - parts);
           final budgetChanged = cache.budgetRevision != revisionBefore;
-          if (step.madeProgress || budgetChanged) parts++;
+          parts += step.formatUnitsPrepared;
+          if (step.formatUnitsPrepared == 0 &&
+              (step.madeProgress || budgetChanged)) {
+            parts++;
+          }
           if (step.isReady) {
             _metrics.add(pair.takeMetrics());
             pair.close();

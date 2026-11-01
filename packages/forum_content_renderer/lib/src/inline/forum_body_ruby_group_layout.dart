@@ -241,41 +241,47 @@ final class ForumBodyRubyGroupLayout {
     ForumBodyRubyLevelMetrics? level,
   }) {
     final inputs = List.of(annotations);
+    ForumBodyRubyGroupAssembly? assembly;
+    var transferred = false;
     try {
-      final handles = Set<ForumBodyTextLease>.identity()..add(baseLease);
-      for (final item in inputs) {
-        if (item.lease != null && !handles.add(item.lease!)) {
-          throw StateError(
-            'Each ruby position must transfer a distinct handle',
-          );
-        }
+      if (!cache.ownsLease(baseLease) ||
+          inputs.any(
+            (item) => item.lease != null && !cache.ownsLease(item.lease!),
+          )) {
+        throw StateError(
+          'Ruby child lease is not active in this reading owner',
+        );
       }
-      final measured = ForumBodyRubyGroupMetrics.measureLayers(
+      assembly = ForumBodyRubyGroupAssembly(
         cache: cache,
-        baseLease: baseLease,
-        annotations: inputs,
-        maxWidth: maxWidth,
-      );
-      final metrics = level == null ? measured : measured.alignedTo(level);
-      if (handles.any((lease) => !lease.layout.isPaintPrepared)) {
-        throw StateError('Ruby child paint is not prepared');
-      }
-      return ForumBodyRubyGroupLayout._(
-        base: baseLease,
+        base: baseLease.content,
         annotations: [
-          for (final item in inputs) (content: item.content, lease: item.lease),
+          for (final item in inputs)
+            (content: item.content, gap: item.gap, side: item.side),
         ],
-        metrics: metrics,
+        maxWidth: maxWidth,
+        level: level,
       );
-    } catch (_) {
+      assembly.addBase(baseLease);
       for (final item in inputs) {
-        item.lease?.release();
+        assembly.addAnnotation(item.lease);
       }
-      baseLease.release();
-      rethrow;
+      while (!assembly.isReady) {
+        assembly.advance(maxParts: 32);
+      }
+      final result = assembly.takeLayout();
+      transferred = true;
+      return result;
+    } finally {
+      assembly?.close();
+      if (!transferred) {
+        for (final item in inputs) {
+          item.lease?.release();
+        }
+        baseLease.release();
+      }
     }
   }
-
   ForumBodyTextLease? _base;
   List<({ForumBodyParagraphContent content, ForumBodyTextLease? lease})>
   _annotations;
@@ -452,5 +458,156 @@ final class ForumBodyRubyGroupLayout {
       item.lease?.release();
     }
     base?.release();
+  }
+}
+
+/// Internal ownership transaction shared by synchronous adoption and bounded
+/// preparation. Each append measures exactly its transferred child; numeric
+/// finalization never revisits native glyphs or remeasures an entire column.
+final class ForumBodyRubyGroupAssembly {
+  ForumBodyRubyGroupAssembly({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyParagraphContent base,
+    required List<
+      ({ForumBodyParagraphContent content, double gap, ForumBodyRubySide side})
+    >
+    annotations,
+    double maxWidth = 16384,
+    ForumBodyRubyLevelMetrics? level,
+    this.preparePaint = true,
+  }) : _cache = cache,
+       _contents = [for (final item in annotations) item.content],
+       _measurement = ForumBodyRubyGroupMeasurement(
+         base: base,
+         annotations: annotations,
+         maxWidth: maxWidth,
+         level: level,
+       );
+  ForumBodyParagraphCache? _cache;
+  List<ForumBodyParagraphContent> _contents;
+  ForumBodyRubyGroupMeasurement? _measurement;
+  final bool preparePaint;
+  ForumBodyTextLease? _base;
+  final _handles = Set<ForumBodyTextLease>.identity();
+  final _annotations =
+      <({ForumBodyParagraphContent content, ForumBodyTextLease? lease})>[];
+  bool get isReady => _measurement?.isReady == true;
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => _handles;
+
+  void addBase(ForumBodyTextLease lease) {
+    if (_base != null || _cache == null) {
+      lease.release();
+      throw StateError('Ruby assembly cannot accept a base');
+    }
+    _base = lease;
+    _handles.add(lease);
+    try {
+      _guard();
+      _measurement!.addBase(_cache!, lease);
+      _guard();
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
+
+  void addAnnotation(ForumBodyTextLease? lease) {
+    try {
+      _guard();
+      if (_base == null || _annotations.length >= _contents.length) {
+        throw StateError('Ruby assembly rank is out of order');
+      }
+      if (lease != null && !_handles.add(lease)) {
+        throw StateError('Each ruby position must transfer a distinct handle');
+      }
+      _annotations.add((content: _contents[_annotations.length], lease: lease));
+      _measurement!.addAnnotation(_cache!, lease);
+      _guard();
+    } catch (_) {
+      lease?.release();
+      close();
+      rethrow;
+    }
+  }
+
+  int advance({required int maxParts}) {
+    try {
+      _guard();
+      final first = _measurement!.positionedAnnotations;
+      final parts = _measurement!.advance(maxParts: maxParts);
+      if (!preparePaint) {
+        for (var rank = first; rank < first + parts; rank++) {
+          final item = _annotations[rank];
+          _annotations[rank] = (content: item.content, lease: null);
+          _handles.remove(item.lease);
+          item.lease?.release();
+          _guard();
+        }
+        if (isReady) {
+          final base = _base;
+          _base = null;
+          _handles.remove(base);
+          base?.release();
+        }
+      }
+      _guard();
+      return parts;
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
+
+  ForumBodyRubyGroupLayout takeLayout() {
+    _guard();
+    if (!isReady || !preparePaint) {
+      throw StateError('Ruby readable assembly is not ready');
+    }
+    final result = ForumBodyRubyGroupLayout._(
+      base: _base!,
+      annotations: _annotations,
+      metrics: _measurement!.takeMetrics(),
+    );
+    _handles.clear();
+    _base = null;
+    close();
+    return result;
+  }
+
+  ForumBodyRubyGroupMetrics takeMetrics() {
+    _guard();
+    if (!isReady || preparePaint) {
+      throw StateError('Ruby metric assembly is not ready');
+    }
+    final result = _measurement!.takeMetrics();
+    close();
+    return result;
+  }
+
+  void _guard() {
+    final cache = _cache;
+    if (cache == null || cache.isClosed) {
+      throw StateError('Ruby assembly owner is retired');
+    }
+    for (final handle in _handles) {
+      if (!cache.ownsLease(handle) ||
+          (preparePaint && !handle.layout.isPaintPrepared)) {
+        throw StateError('Ruby child is retired or unprepared');
+      }
+    }
+  }
+
+  void close() {
+    final handles = _handles.toList();
+    _handles.clear();
+    _base = null;
+    _annotations.clear();
+    _contents = const [];
+    _measurement?.close();
+    _measurement = null;
+    _cache = null;
+    for (final handle in handles) {
+      handle.release();
+    }
   }
 }

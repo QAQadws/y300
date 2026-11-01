@@ -71,8 +71,11 @@ final class ForumBodyRubyGroupMetrics {
     required this.baseAscent,
     required this.baseDescent,
     required List<ForumBodyRubyAnnotationMetrics> annotations,
+    String? alignmentSignature,
   }) : annotations = List.unmodifiable(annotations),
-       alignmentSignature = annotations.map((item) => item.side.index).join();
+       alignmentSignature =
+           alignmentSignature ??
+           annotations.map((item) => item.side.index).join();
 
   static const revision = 6;
   static const geometryTolerance = 1e-4;
@@ -120,62 +123,27 @@ final class ForumBodyRubyGroupMetrics {
         )) {
       throw StateError('Ruby child lease is not active in this reading owner');
     }
-    validateForumBodyRubyColumnInputs(
+    final measurement = ForumBodyRubyGroupMeasurement(
       base: baseLease.content,
       annotations: [
-        for (final item in annotations) (content: item.content, gap: item.gap),
+        for (final item in annotations)
+          (content: item.content, gap: item.gap, side: item.side),
       ],
       maxWidth: maxWidth,
     );
-    final baseBounds = _textBounds(baseLease);
-    final baseFontBaseline = baseLease.layout.alphabeticBaseline;
-    if (!baseFontBaseline.isFinite) _invalid();
-    final measured = <ForumBodyRubyAnnotationMetrics>[];
-    var width = baseBounds.width;
-    for (final item in annotations) {
-      final lease = item.lease;
-      if (item.content.projection.text.isNotEmpty != (lease != null) ||
-          (lease != null && !identical(lease.content, item.content))) {
-        throw const ForumBodyRubyGroupException(
-          ForumBodyRubyGroupFailure.content,
-        );
+    try {
+      measurement.addBase(cache, baseLease);
+      for (final item in annotations) {
+        measurement.addAnnotation(cache, item.lease);
       }
-      final bounds = lease == null ? Rect.zero : _textBounds(lease);
-      final fontBaseline = lease?.layout.alphabeticBaseline ?? 0;
-      if (!fontBaseline.isFinite) _invalid();
-      measured.add(
-        ForumBodyRubyAnnotationMetrics._(
-          side: item.side,
-          gap: item.gap,
-          hasAnnotation: lease != null,
-          fontBaseline: fontBaseline,
-          bounds: bounds,
-        ),
-      );
-      width = math.max(width, bounds.width);
+      while (!measurement.isReady) {
+        measurement.advance(maxParts: 32);
+      }
+      return measurement.takeMetrics();
+    } finally {
+      measurement.close();
     }
-    if (width > maxWidth) {
-      throw const ForumBodyRubyGroupException(
-        ForumBodyRubyGroupFailure.overflow,
-      );
-    }
-    final raw = ForumBodyRubyGroupMetrics._(
-      size: Size(width, baseBounds.height),
-      baseline: baseFontBaseline - baseBounds.top,
-      baseOffset: Offset(
-        (width - baseBounds.width) / 2 - baseBounds.left,
-        -baseBounds.top,
-      ),
-      baseBandTop: 0,
-      baseBandBottom: baseBounds.height,
-      baseFontBaseline: baseFontBaseline,
-      baseAscent: baseFontBaseline - baseBounds.top,
-      baseDescent: baseBounds.bottom - baseFontBaseline,
-      annotations: measured,
-    );
-    return raw._positioned(ForumBodyRubyLevelMetrics.single(raw));
   }
-
   final Size size;
   final double baseline;
   final Offset baseOffset;
@@ -330,6 +298,14 @@ final class ForumBodyRubyAnnotationLevelMetrics {
     descent: math.max(descent, item.descent),
     gap: math.max(gap, item.hasAnnotation ? item.gap : 0),
   );
+
+  bool _contains(ForumBodyRubyAnnotationMetrics item) {
+    const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
+    return side == item.side &&
+        item.ascent <= ascent + tolerance &&
+        item.descent <= descent + tolerance &&
+        (!item.hasAnnotation || (hasAnnotation && item.gap <= gap + tolerance));
+  }
 }
 
 /// Numeric union for one ruby column stack on one physical line. It retains no
@@ -383,37 +359,225 @@ final class ForumBodyRubyLevelMetrics {
     return _sameRanks(column) &&
         column.baseAscent <= baseAscent + tolerance &&
         column.baseDescent <= baseDescent + tolerance &&
-        annotations.indexed.every((entry) {
-          final item = column.annotations[entry.$1];
-          final level = entry.$2;
-          return item.ascent <= level.ascent + tolerance &&
-              item.descent <= level.descent + tolerance &&
-              (!item.hasAnnotation ||
-                  (level.hasAnnotation && item.gap <= level.gap + tolerance));
-        });
+        annotations.indexed.every(
+          (entry) => entry.$2._contains(column.annotations[entry.$1]),
+        );
   }
 
   List<({double baseline, double top, double bottom})> _positions() {
-    var over = baseAscent;
-    var under = baseDescent;
-    final result = <({double baseline, double top, double bottom})>[];
-    for (final item in annotations) {
-      if (!item.hasAnnotation) {
-        result.add((baseline: 0.0, top: 0.0, bottom: 0.0));
-      } else if (item.side == ForumBodyRubySide.over) {
-        final bottom = -over - item.gap;
-        over += item.gap + item.ascent + item.descent;
-        result.add((
-          baseline: bottom - item.descent,
-          top: -over,
-          bottom: bottom,
-        ));
-      } else {
-        final top = under + item.gap;
-        under += item.gap + item.ascent + item.descent;
-        result.add((baseline: top + item.ascent, top: top, bottom: under));
-      }
+    final stack = _RubyStack(baseAscent, baseDescent);
+    return [for (final item in annotations) stack.append(item)];
+  }
+}
+
+/// Format-internal incremental measurement. Borrow a single child per append;
+/// final positioning consumes at most maxParts ranks. No lease or cache is
+/// retained here, and transferred numeric output retains no planned content.
+final class ForumBodyRubyGroupMeasurement {
+  ForumBodyRubyGroupMeasurement({
+    required ForumBodyParagraphContent base,
+    required List<
+      ({ForumBodyParagraphContent content, double gap, ForumBodyRubySide side})
+    >
+    annotations,
+    this.maxWidth = 16384,
+    this.level,
+  }) : _baseContent = base,
+       _inputs = List.of(annotations) {
+    validateForumBodyRubyColumnInputs(
+      base: base,
+      annotations: [
+        for (final item in _inputs) (content: item.content, gap: item.gap),
+      ],
+      maxWidth: maxWidth,
+    );
+    if (level != null && level!.annotations.length != _inputs.length) {
+      ForumBodyRubyGroupMetrics._invalid();
     }
+  }
+  ForumBodyParagraphContent? _baseContent;
+  List<
+    ({ForumBodyParagraphContent content, double gap, ForumBodyRubySide side})
+  >
+  _inputs;
+  final double maxWidth;
+  final ForumBodyRubyLevelMetrics? level;
+  Rect? _baseBounds;
+  double _baseFontBaseline = 0;
+  double _baseAscent = 0;
+  double _baseDescent = 0;
+  double _width = 0;
+  _RubyStack? _stack;
+  final _raw = <ForumBodyRubyAnnotationMetrics>[];
+  final _positions = <({double baseline, double top, double bottom})>[];
+  final _positioned = <ForumBodyRubyAnnotationMetrics>[];
+  final _signature = StringBuffer();
+  ForumBodyRubyGroupMetrics? _result;
+  bool _closed = false;
+  int get measuredAnnotations => _raw.length;
+  int get positionedAnnotations => _positioned.length;
+  bool get isMeasured => _baseBounds != null && _raw.length == _inputs.length;
+  bool get isReady => _result != null;
+
+  void addBase(ForumBodyParagraphCache cache, ForumBodyTextLease lease) {
+    _ensureActive();
+    if (_baseBounds != null) throw StateError('Ruby base was already measured');
+    if (!cache.ownsLease(lease)) throw StateError('Ruby base owner is retired');
+    if (!identical(lease.content, _baseContent)) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.content,
+      );
+    }
+    final bounds = ForumBodyRubyGroupMetrics._textBounds(lease);
+    final baseline = lease.layout.alphabeticBaseline;
+    if (!baseline.isFinite) ForumBodyRubyGroupMetrics._invalid();
+    _baseBounds = bounds;
+    _baseFontBaseline = baseline;
+    _baseAscent = baseline - bounds.top;
+    _baseDescent = bounds.bottom - baseline;
+    _width = bounds.width;
+    const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
+    if (level != null &&
+        (_baseAscent > level!.baseAscent + tolerance ||
+            _baseDescent > level!.baseDescent + tolerance)) {
+      ForumBodyRubyGroupMetrics._invalid();
+    }
+    _stack = _RubyStack(
+      level?.baseAscent ?? _baseAscent,
+      level?.baseDescent ?? _baseDescent,
+    );
+  }
+
+  void addAnnotation(ForumBodyParagraphCache cache, ForumBodyTextLease? lease) {
+    _ensureActive();
+    if (_baseBounds == null || measuredAnnotations >= _inputs.length) {
+      throw StateError('Ruby annotation is out of order');
+    }
+    final item = _inputs[measuredAnnotations];
+    if (lease != null && !cache.ownsLease(lease)) {
+      throw StateError('Ruby annotation owner is retired');
+    }
+    if (item.content.projection.text.isNotEmpty != (lease != null) ||
+        (lease != null && !identical(lease.content, item.content))) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.content,
+      );
+    }
+    final bounds = lease == null
+        ? Rect.zero
+        : ForumBodyRubyGroupMetrics._textBounds(lease);
+    final baseline = lease?.layout.alphabeticBaseline ?? 0;
+    if (!baseline.isFinite) ForumBodyRubyGroupMetrics._invalid();
+    final raw = ForumBodyRubyAnnotationMetrics._(
+      side: item.side,
+      gap: item.gap,
+      hasAnnotation: lease != null,
+      fontBaseline: baseline,
+      bounds: bounds,
+    );
+    final target =
+        level?.annotations[measuredAnnotations] ??
+        ForumBodyRubyAnnotationLevelMetrics._single(raw);
+    if (!target._contains(raw)) ForumBodyRubyGroupMetrics._invalid();
+    _raw.add(raw);
+    _positions.add(_stack!.append(target));
+    _signature.write(item.side.index);
+    _width = math.max(_width, bounds.width);
+  }
+
+  int advance({required int maxParts}) {
+    _ensureActive();
+    if (maxParts <= 0) throw ArgumentError.value(maxParts);
+    if (!isMeasured) throw StateError('Ruby glyph measurement is incomplete');
+    final over = _stack!.over;
+    final height = over + _stack!.under;
+    if (_width > maxWidth) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.overflow,
+      );
+    }
+    if (!height.isFinite ||
+        height <= 0 ||
+        height > 16384 ||
+        !over.isFinite ||
+        over < 0 ||
+        over > height) {
+      ForumBodyRubyGroupMetrics._invalid();
+    }
+    var parts = 0;
+    while (_positioned.length < _raw.length && parts < maxParts) {
+      final index = _positioned.length;
+      final position = _positions[index];
+      _positioned.add(
+        _raw[index]._positioned(
+          width: _width,
+          baseline: over,
+          relativeBaseline: position.baseline,
+          top: position.top,
+          bottom: position.bottom,
+        ),
+      );
+      parts++;
+    }
+    if (_positioned.length == _raw.length && _result == null) {
+      _result = ForumBodyRubyGroupMetrics._(
+        size: Size(_width, height),
+        baseline: over,
+        baseOffset: Offset(
+          (_width - _baseBounds!.width) / 2 - _baseBounds!.left,
+          over - _baseFontBaseline,
+        ),
+        baseBandTop: over - (level?.baseAscent ?? _baseAscent),
+        baseBandBottom: over + (level?.baseDescent ?? _baseDescent),
+        baseFontBaseline: _baseFontBaseline,
+        baseAscent: _baseAscent,
+        baseDescent: _baseDescent,
+        annotations: _positioned,
+        alignmentSignature: _signature.toString(),
+      );
+    }
+    return parts;
+  }
+
+  ForumBodyRubyGroupMetrics takeMetrics() {
+    _ensureActive();
+    if (!isReady) throw StateError('Ruby positions are incomplete');
+    final result = _result!;
+    close();
     return result;
+  }
+
+  void _ensureActive() {
+    if (_closed) throw StateError('Ruby measurement is retired');
+  }
+
+  void close() {
+    _closed = true;
+    _baseContent = null;
+    _inputs = const [];
+    _result = null;
+    _raw.clear();
+    _positions.clear();
+    _positioned.clear();
+    _signature.clear();
+  }
+}
+
+final class _RubyStack {
+  _RubyStack(this.over, this.under);
+  double over;
+  double under;
+  ({double baseline, double top, double bottom}) append(
+    ForumBodyRubyAnnotationLevelMetrics item,
+  ) {
+    if (!item.hasAnnotation) return (baseline: 0.0, top: 0.0, bottom: 0.0);
+    if (item.side == ForumBodyRubySide.over) {
+      final bottom = -over - item.gap;
+      over += item.gap + item.ascent + item.descent;
+      return (baseline: bottom - item.descent, top: -over, bottom: bottom);
+    }
+    final top = under + item.gap;
+    under += item.gap + item.ascent + item.descent;
+    return (baseline: top + item.ascent, top: top, bottom: under);
   }
 }
