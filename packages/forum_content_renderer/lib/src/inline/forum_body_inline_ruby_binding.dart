@@ -29,44 +29,6 @@ final class _RubyColumnWindows {
       : annotations[hit.annotationIndex!]!;
 }
 
-({List<_RubyColumnWindows> columns, List<ForumBodyInlineContext?> spans})
-_rubyWindows(
-  ForumBodyInlineSpanContent content,
-  int index,
-  List<ForumBodyRubyGroupMemberSnapshot> columns,
-  List<ForumBodyRubySegmentAnnotation> spans,
-) {
-  final windows = content.resolveAtomicContexts(index, [
-    for (final column in columns) ...[
-      column.base.content,
-      for (final annotation in column.annotations)
-        if (annotation.lease != null) annotation.content,
-    ],
-    for (final span in spans)
-      if (span.lease != null) span.content,
-  ]);
-  var cursor = 0;
-  final columnWindows = <_RubyColumnWindows>[];
-  for (final column in columns) {
-    final base = windows[cursor++];
-    columnWindows.add(
-      _RubyColumnWindows(
-        base,
-        List.unmodifiable([
-          for (final annotation in column.annotations)
-            annotation.lease == null ? null : windows[cursor++],
-        ]),
-      ),
-    );
-  }
-  return (
-    columns: List.unmodifiable(columnWindows),
-    spans: List.unmodifiable([
-      for (final span in spans) span.lease == null ? null : windows[cursor++],
-    ]),
-  );
-}
-
 List<TextBox> _selectRubyWindow(
   ForumBodyInlineContext? window,
   int start,
@@ -82,16 +44,6 @@ List<TextBox> _selectRubyWindow(
 
 final class _RubyColumnBinding extends _RubyBinding {
   const _RubyColumnBinding(this.group, this.windows);
-  factory _RubyColumnBinding.bind(
-    ForumBodyInlineSpanContent content,
-    int index,
-    ForumBodyRubyGroupLayout group,
-  ) => _RubyColumnBinding(
-    group,
-    _rubyWindows(content, index, [
-      group.inspectMembers(),
-    ], const []).columns.single,
-  );
   final ForumBodyRubyGroupLayout group;
   final _RubyColumnWindows windows;
   @override
@@ -142,17 +94,6 @@ final class _RubyColumnBinding extends _RubyBinding {
 
 final class _RubySegmentBinding extends _RubyBinding {
   const _RubySegmentBinding(this.segment, this.columns, this.spans);
-  factory _RubySegmentBinding.bind(
-    ForumBodyInlineSpanContent content,
-    int index,
-    ForumBodyRubySegmentLayout segment,
-  ) {
-    final members = segment.inspectMembers();
-    final windows = _rubyWindows(content, index, [
-      for (final column in members.columns) column.inspectMembers(),
-    ], members.spans);
-    return _RubySegmentBinding(segment, windows.columns, windows.spans);
-  }
   final ForumBodyRubySegmentLayout segment;
   final List<_RubyColumnWindows> columns;
   final List<ForumBodyInlineContext?> spans;

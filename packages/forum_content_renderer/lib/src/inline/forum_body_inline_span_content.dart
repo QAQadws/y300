@@ -155,17 +155,27 @@ final class ForumBodyInlineSpanContent {
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;
 
-  late final _contextIndex = _indexContexts();
-  Map<ForumBodyParagraphContent, ForumBodyInlineContext?> _indexContexts() {
-    final result =
-        Map<ForumBodyParagraphContent, ForumBodyInlineContext?>.identity();
-    for (final context in contexts) {
-      result[context.content] = result.containsKey(context.content)
-          ? null
-          : context;
+  final _contextIndex =
+      Map<ForumBodyParagraphContent, ForumBodyInlineContext?>.identity();
+  var _indexedContexts = 0;
+  bool get isContextIndexReady => _indexedContexts == contexts.length;
+
+  /// Pure derived indexing, reusable across cancelled reading preparations.
+  /// No native owner, callback or resource enters this immutable input cache.
+  int prepareContextIndex({required int maxContexts}) {
+    if (maxContexts <= 0) throw ArgumentError.value(maxContexts);
+    var work = 0;
+    while (!isContextIndexReady && work < maxContexts) {
+      final context = contexts[_indexedContexts++];
+      _contextIndex[context.content] =
+          _contextIndex.containsKey(context.content) ? null : context;
+      work++;
     }
-    return result;
+    return work;
   }
+
+  ForumBodyInlineAtomicContextCursor openAtomicContexts(int index) =>
+      ForumBodyInlineAtomicContextCursor._(this, index);
 
   /// Resolve actual independent children covering one engine atom. Explicit
   /// source-free font struts occupy no display range; they cannot provide glyph
@@ -174,47 +184,20 @@ final class ForumBodyInlineSpanContent {
     int index,
     List<ForumBodyParagraphContent> children,
   ) {
-    RangeError.checkValidIndex(index, projection.atoms, 'index');
-    final atom = projection.atoms[index];
+    while (!isContextIndexReady) {
+      prepareContextIndex(maxContexts: 32);
+    }
+    final cursor = openAtomicContexts(index);
     final result = <ForumBodyInlineContext>[];
-    var cursor = atom.displayStartUtf16;
-    for (final child in children) {
-      if (child.isSourceFree) {
-        if (child.identity != identity ||
-            child.fontRevision != fontRevision ||
-            child.styleRevision != styleRevision ||
-            child.projection.text.isNotEmpty) {
-          throw ForumBodyParagraphInputException(
-            ForumBodyParagraphInputFailure.identity,
-            child.path,
-          );
-        }
-        result.add(ForumBodyInlineContext._(child, cursor, cursor));
-        continue;
+    try {
+      for (final child in children) {
+        result.add(cursor.resolve(child));
       }
-      final context = _contextIndex[child];
-      if (context == null) {
-        throw ForumBodyParagraphInputException(
-          ForumBodyParagraphInputFailure.identity,
-          child.path,
-        );
-      }
-      if (context.startUtf16 != cursor || context.endUtf16 < cursor) {
-        throw ForumBodyParagraphInputException(
-          ForumBodyParagraphInputFailure.structure,
-          child.path,
-        );
-      }
-      result.add(context);
-      cursor = context.endUtf16;
+      cursor.finish();
+      return List.unmodifiable(result);
+    } finally {
+      cursor.close();
     }
-    if (cursor != atom.displayEndUtf16) {
-      throw ForumBodyParagraphInputException(
-        ForumBodyParagraphInputFailure.structure,
-        path,
-      );
-    }
-    return List.unmodifiable(result);
   }
 
   /// Direct TextPainter input only. Set its placeholder dimensions in atom
@@ -284,6 +267,71 @@ final class ForumBodyInlineSpanContent {
       runs: List.unmodifiable(parentRunIndices.map((index) => runs[index])),
     );
   }
+}
+
+/// One atom's source cursor over an already indexed current parent. Every
+/// source decision is shared by synchronous lookup and cooperative binding.
+final class ForumBodyInlineAtomicContextCursor {
+  ForumBodyInlineAtomicContextCursor._(
+    ForumBodyInlineSpanContent content,
+    int index,
+  ) : _content = content {
+    RangeError.checkValidIndex(index, content.projection.atoms, 'index');
+    if (!content.isContextIndexReady) {
+      throw StateError('Inline context index is incomplete');
+    }
+    final atom = content.projection.atoms[index];
+    _offset = atom.displayStartUtf16;
+    _end = atom.displayEndUtf16;
+  }
+  ForumBodyInlineSpanContent? _content;
+  late int _offset;
+  late final int _end;
+  ForumBodyInlineContext resolve(ForumBodyParagraphContent child) {
+    final content = _content;
+    if (content == null) throw StateError('Inline source cursor is retired');
+    if (child.isSourceFree) {
+      if (child.identity != content.identity ||
+          child.fontRevision != content.fontRevision ||
+          child.styleRevision != content.styleRevision ||
+          child.projection.text.isNotEmpty) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.identity,
+          child.path,
+        );
+      }
+      return ForumBodyInlineContext._(child, _offset, _offset);
+    }
+    final window = content._contextIndex[child];
+    if (window == null) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        child.path,
+      );
+    }
+    if (window.startUtf16 != _offset || window.endUtf16 < _offset) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.structure,
+        child.path,
+      );
+    }
+    _offset = window.endUtf16;
+    return window;
+  }
+
+  void finish() {
+    final content = _content;
+    if (content == null) throw StateError('Inline source cursor is retired');
+    if (_offset != _end) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.structure,
+        content.path,
+      );
+    }
+    close();
+  }
+
+  void close() => _content = null;
 }
 
 /// A native paragraph placeholder has no Widget subtree or gesture recognizer.

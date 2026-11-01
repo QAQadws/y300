@@ -405,42 +405,41 @@ final class ForumBodyTextPageSession {
   /// Warm-only convenience. A miss never shapes and rolls back partial work;
   /// use openPagePreparation to prepare cold fragments outside Widget build.
   List<ForumBodyParagraphLease> preparePageLeases(int pageIndex) {
+    _ensureUsable();
+    if (snapshot[pageIndex].fragments.any(
+      (fragment) => fragment.kind == ForumBodyTextPageFragmentKind.inline,
+    )) {
+      throw StateError('Mixed pages require typed fragment delivery');
+    }
     final preparation = openPagePreparation(pageIndex);
     try {
-      if (!preparation.tryPrepareCached(
-        maxParts:
-            1 +
-            preparation.expectedNativeLeaseCount +
-            2 * preparation.expectedFragmentCount,
-      )) {
-        throw const ForumBodyTextPageSessionException(
-          ForumBodyTextPageSessionFailure.pageNotPrepared,
-        );
-      }
+      _completeWarmPreparation(preparation);
       return preparation.takeLeases();
     } finally {
       preparation.close();
     }
   }
 
-  /// Warm-only typed delivery through the same reserved preparation. A miss
-  /// releases this request; cold work belongs to openPagePreparation/advance.
+  /// Synchronous warm-only delivery drives the same bounded numeric worker.
+  /// Only an actual glyph/picture miss retires this convenience request;
+  /// cooperative UI work uses openPagePreparation/advance between quanta.
   List<ForumBodyPreparedTextFragment> preparePageFragments(int pageIndex) {
     final preparation = openPagePreparation(pageIndex);
     try {
-      if (!preparation.tryPrepareCached(
-        maxParts:
-            1 +
-            preparation.expectedNativeLeaseCount +
-            2 * preparation.expectedFragmentCount,
-      )) {
+      _completeWarmPreparation(preparation);
+      return preparation.takeFragments();
+    } finally {
+      preparation.close();
+    }
+  }
+
+  void _completeWarmPreparation(ForumBodyTextPagePreparation preparation) {
+    while (!preparation.tryPrepareCached()) {
+      if (preparation.cacheMiss) {
         throw const ForumBodyTextPageSessionException(
           ForumBodyTextPageSessionFailure.pageNotPrepared,
         );
       }
-      return preparation.takeFragments();
-    } finally {
-      preparation.close();
     }
   }
 

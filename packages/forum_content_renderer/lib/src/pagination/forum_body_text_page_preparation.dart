@@ -125,6 +125,7 @@ final class ForumBodyTextPagePreparation {
   var _state = ForumBodyTextPagePreparationState.active;
   bool _operating = false;
   bool _waiting = false;
+  bool _cacheMiss = false;
   int _completedWork = 0;
   int get _retainedWork => _completedWork + (_inline?.workCount ?? 0);
   ForumBodyParagraphBudgetProbe? _budgetProbe;
@@ -139,6 +140,8 @@ final class ForumBodyTextPagePreparation {
   ForumBodyTextPagePreparationState get state => _state;
   bool get isReady => _state == ForumBodyTextPagePreparationState.ready;
   bool get waitingForLayoutBudget => _waiting;
+  bool get cacheMiss =>
+      _state == ForumBodyTextPagePreparationState.active && _cacheMiss;
   int get preparedFragmentCount => _fragments.length;
   int get expectedFragmentCount => snapshot[pageIndex].fragments.length;
   Iterable<ForumBodyNativeParagraphLease> get _ownedLeases sync* {
@@ -170,6 +173,7 @@ final class ForumBodyTextPagePreparation {
     var inspectedFragments = 0;
     var inspectedParts = 0;
     _waiting = false;
+    _cacheMiss = false;
     ForumBodyTextPagePreparationStep result() =>
         ForumBodyTextPagePreparationStep(
           _fragments.length - before,
@@ -194,10 +198,11 @@ final class ForumBodyTextPagePreparation {
         parts < maxParts &&
             _fragments.length < expectedFragmentCount &&
             _fragments.length - before < maxFragments;
-        parts++
       ) {
         _rejectedAtRevision = cache.budgetRevision;
-        _prepareNext(cachedOnly: false);
+        final beforeWork = _retainedWork;
+        _prepareNext(cachedOnly: false, maxParts: maxParts - parts);
+        parts += math.max(1, _retainedWork - beforeWork);
         if (cache.layoutBuildCount != buildsBefore ||
             cache.pictureBuildCount != picturesBefore) {
           break;
@@ -229,7 +234,12 @@ final class ForumBodyTextPagePreparation {
             _checkedPictures == cache.pictureBuildCount;
         if (!current) {
           _startBudgetProbe();
-          final work = _inspectBudget(math.min(maxFragments, maxParts));
+          final work = _inspectBudget(
+            math.min(
+              maxFragments,
+              math.max(0, maxParts - (_retainedWork - workBefore)),
+            ),
+          );
           inspectedFragments = work.fragments;
           inspectedParts = work.parts;
         } else {
@@ -256,13 +266,18 @@ final class ForumBodyTextPagePreparation {
     if (isReady) return true;
     _operating = true;
     _waiting = false;
+    _cacheMiss = false;
     try {
       for (
         var parts = 0;
         parts < maxParts && _fragments.length < expectedFragmentCount;
-        parts++
       ) {
-        if (!_prepareNext(cachedOnly: true)) return false;
+        final beforeWork = _retainedWork;
+        if (!_prepareNext(cachedOnly: true, maxParts: maxParts - parts)) {
+          _cacheMiss = true;
+          return false;
+        }
+        parts += math.max(1, _retainedWork - beforeWork);
       }
       _finishIfReady();
       return isReady;
@@ -274,7 +289,7 @@ final class ForumBodyTextPagePreparation {
     }
   }
 
-  bool _prepareNext({required bool cachedOnly}) {
+  bool _prepareNext({required bool cachedOnly, required int maxParts}) {
     final index = _fragments.length;
     final fragment = snapshot[pageIndex].fragments[index];
     final input = _inputs[index];
@@ -324,7 +339,7 @@ final class ForumBodyTextPagePreparation {
       ensureOwner: _guard,
       ownedPageLeases: () => _ownedLeases.toList(growable: false),
     );
-    final step = active.advance(cachedOnly: cachedOnly);
+    final step = active.advance(cachedOnly: cachedOnly, maxParts: maxParts);
     final view = step.view;
     if (view != null) {
       _inline = null;

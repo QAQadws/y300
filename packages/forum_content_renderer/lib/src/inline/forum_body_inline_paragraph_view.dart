@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -11,6 +13,8 @@ import 'forum_body_ruby_group_layout.dart';
 import 'forum_body_ruby_segment_layout.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
+part 'forum_body_inline_view_assembly.dart';
+part 'forum_body_inline_ruby_binding_work.dart';
 
 enum ForumBodyInlineViewFailure { leases, coverage, identity, geometry }
 
@@ -59,78 +63,21 @@ final class ForumBodyInlineParagraphView {
     Map<int, ForumBodyRubyGroupLayout> rubyGroups = const {},
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
   }) {
-    final groups = Map<int, ForumBodyRubyGroupLayout>.of(rubyGroups);
-    final segments = Map<int, ForumBodyRubySegmentLayout>.of(rubySegments);
+    final assembly = ForumBodyInlineViewAssembly(
+      cache: cache,
+      parent: parent,
+      startLine: startLine,
+      endLine: endLine,
+      rubyGroups: rubyGroups,
+      rubySegments: rubySegments,
+    );
     try {
-      final members = [
-        for (final group in groups.values) ...group.nativeLeases,
-        for (final segment in segments.values) ...segment.nativeLeases,
-      ];
-      if (!cache.ownsLease(parent) ||
-          parent.layout.isDisposed ||
-          groups.values.any((group) => !group.isOwnedBy(cache)) ||
-          segments.values.any((segment) => !segment.isOwnedBy(cache)) ||
-          groups.keys.any(segments.containsKey) ||
-          (Set<ForumBodyNativeParagraphLease>.identity()..addAll(members))
-                  .length !=
-              members.length) {
-        _fail(ForumBodyInlineViewFailure.leases);
+      while (!assembly.isReady) {
+        assembly.advance(maxParts: 32);
       }
-      if (parent.layout.lines.isEmpty) {
-        if (startLine != 0 ||
-            endLine != 0 ||
-            groups.isNotEmpty ||
-            segments.isNotEmpty) {
-          _fail(ForumBodyInlineViewFailure.coverage);
-        }
-        return ForumBodyInlineParagraphView._empty(parent);
-      }
-      final fragment = parent.layout.fragment(startLine, endLine);
-      final indices = fragment.atomIndices.toList(growable: false);
-      if (indices.length != groups.length + segments.length ||
-          indices.any(
-            (index) =>
-                !groups.containsKey(index) && !segments.containsKey(index),
-          )) {
-        _fail(ForumBodyInlineViewFailure.coverage);
-      }
-      final bindings = <int, _RubyBinding>{};
-      final content = parent.content;
-      for (final index in indices) {
-        final _RubyBinding binding;
-        try {
-          binding = groups.containsKey(index)
-              ? _RubyColumnBinding.bind(content, index, groups[index]!)
-              : _RubySegmentBinding.bind(content, index, segments[index]!);
-        } on ForumBodyParagraphInputException catch (error) {
-          _fail(
-            error.failure == ForumBodyParagraphInputFailure.identity
-                ? ForumBodyInlineViewFailure.identity
-                : ForumBodyInlineViewFailure.coverage,
-          );
-        }
-        final dimension = parent.layout.dimensions[index];
-        if ((dimension.size.width - binding.size.width).abs() > 1e-4 ||
-            (dimension.size.height - binding.size.height).abs() > 1e-4 ||
-            (dimension.baselineOffset! - binding.baseline).abs() > 1e-4) {
-          _fail(ForumBodyInlineViewFailure.geometry);
-        }
-        bindings[index] = binding;
-      }
-      return ForumBodyInlineParagraphView._(
-        parent,
-        fragment,
-        Map.unmodifiable(bindings),
-      );
-    } catch (_) {
-      for (final group in groups.values) {
-        group.close();
-      }
-      for (final segment in segments.values) {
-        segment.close();
-      }
-      parent.release();
-      rethrow;
+      return assembly.takeView();
+    } finally {
+      assembly.close();
     }
   }
 

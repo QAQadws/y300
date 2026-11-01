@@ -110,11 +110,14 @@ void main() {
       final warm = input.open(0);
       expect(warm.tryPrepareCached(maxParts: 1), isFalse);
       expect(input.cache.activeLeases, 1);
-      for (var i = 0; i < 3; i++) {
-        expect(warm.tryPrepareCached(maxParts: 1), isFalse);
-        expect(input.cache.activeLeases, 3 + i * 2);
+      var calls = 0;
+      while (!warm.isReady && calls++ < 1000) {
+        final leases = input.cache.activeLeases;
+        warm.tryPrepareCached(maxParts: 1);
+        expect(input.cache.activeLeases - leases, inInclusiveRange(0, 1));
       }
-      expect(warm.tryPrepareCached(maxParts: 1), isTrue);
+      expect(warm.isReady, isTrue);
+      expect(calls, greaterThan(10));
       expect(input.cache.layoutBuildCount, builds);
       expect(input.cache.pictureBuildCount, pictures);
       warm.takeFragments().single.close();

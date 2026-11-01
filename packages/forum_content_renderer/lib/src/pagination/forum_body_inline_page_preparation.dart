@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/painting.dart';
 
@@ -43,6 +41,7 @@ final class ForumBodyInlinePagePreparation {
   final _groups = <int, ForumBodyRubyGroupLayout>{};
   int _nextGroup = 0;
   ForumBodyRubyGroupPreparation? _pair;
+  ForumBodyInlineViewAssembly? _binding;
   bool _closed = false;
   bool _advancing = false;
   int _workCount = 0;
@@ -51,17 +50,21 @@ final class ForumBodyInlinePagePreparation {
     ?_parent,
     for (final group in _groups.values) ...group.nativeLeases,
     if (_pair != null) ..._pair!.nativeLeases,
+    if (_binding != null) ..._binding!.nativeLeases,
   ];
 
   ({bool cacheMiss, ForumBodyInlineParagraphView? view}) advance({
     required bool cachedOnly,
+    int maxParts = 32,
   }) {
+    if (maxParts <= 0) throw ArgumentError.value(maxParts);
     if (_advancing) throw StateError('Inline preparation is reentrant');
     _advancing = true;
     try {
       _guard();
       final input = _input!;
       final cache = _cache!;
+      if (_binding != null) return _advanceBinding(maxParts);
       if (_parent == null) {
         final requestWidth = input.requestWidthFor(fragment);
         final parent = cachedOnly
@@ -109,19 +112,12 @@ final class ForumBodyInlinePagePreparation {
           ensureOwner: _guard,
           additionalOwnedLeases: _ownedPageLeases,
         );
-        final before = pair.nativeLeases.length;
         final beforeWork = pair.workCount;
-        final pictures = cache.pictureBuildCount;
         final ready = cachedOnly
-            ? pair.tryPrepareCached()
-            : pair.advance().isReady;
+            ? pair.tryPrepareCached(maxParts: maxParts)
+            : pair.advance(maxParts: maxParts).isReady;
         _guard();
-        _workCount += math.max(
-          pair.workCount - beforeWork,
-          math.max(0, pair.nativeLeases.length - before) +
-              cache.pictureBuildCount -
-              pictures,
-        );
+        _workCount += pair.workCount - beforeWork;
         if (!ready) {
           final rejection = pair.lastBudgetRejection;
           if (rejection != null) throw rejection;
@@ -132,27 +128,39 @@ final class ForumBodyInlinePagePreparation {
         _nextGroup++;
         return (cacheMiss: false, view: null);
       }
-      final view = ForumBodyInlineParagraphView.adopt(
+      _binding = ForumBodyInlineViewAssembly(
         cache: cache,
         parent: _parent!,
         startLine: fragment.startLine,
         endLine: fragment.endLine,
         rubyGroups: _groups,
+        ensureOwner: _guard,
       );
-      try {
-        _guard();
-      } catch (_) {
-        view.close();
-        rethrow;
-      }
       _parent = null;
       _groups.clear();
-      _workCount++;
-      close();
-      return (cacheMiss: false, view: view);
+      return _advanceBinding(maxParts);
     } finally {
       _advancing = false;
     }
+  }
+
+  ({bool cacheMiss, ForumBodyInlineParagraphView? view}) _advanceBinding(
+    int maxParts,
+  ) {
+    final binding = _binding!;
+    _workCount += binding.advance(maxParts: maxParts);
+    _guard();
+    if (!binding.isReady) return (cacheMiss: false, view: null);
+    final view = binding.takeView();
+    _binding = null;
+    try {
+      _guard();
+    } catch (_) {
+      view.close();
+      rethrow;
+    }
+    close();
+    return (cacheMiss: false, view: view);
   }
 
   List<int> _validateParent(
@@ -226,6 +234,8 @@ final class ForumBodyInlinePagePreparation {
   void close() {
     if (_closed) return;
     _closed = true;
+    _binding?.close();
+    _binding = null;
     _pair?.close();
     _pair = null;
     for (final group in _groups.values) {

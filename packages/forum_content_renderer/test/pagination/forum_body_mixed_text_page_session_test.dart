@@ -1456,6 +1456,34 @@ void main() {
     },
   );
 
+  for (final ranks in [1, 100]) {
+    test(
+      'warm typed convenience completes cached $ranks ranks and plain delivery rejects inline upfront',
+      () {
+        final f = _Fixture(
+          '<ruby><rb>AB</rb>${List.generate(ranks, (i) => '<rtc><rt style="font-size:1px">r$i</rt></rtc>').join()}</ruby>',
+          width: 300,
+          height: 500,
+        );
+        f.finish();
+        for (final fragment in f.prepare(0)) {
+          fragment.close();
+        }
+        final before = (f.cache.layoutBuildCount, f.cache.pictureBuildCount);
+        final fragments = f.session.preparePageFragments(0);
+        expect(fragments.single, isA<ForumBodyPreparedInlineFragment>());
+        expect(fragments.single.nativeLeases.length, ranks + 2);
+        for (final fragment in fragments) {
+          fragment.close();
+        }
+        expect(f.session.activeIssuedLeases, 0);
+        expect(() => f.session.preparePageLeases(0), throwsStateError);
+        expect(f.cache.activeLeases, 0);
+        expect((f.cache.layoutBuildCount, f.cache.pictureBuildCount), before);
+      },
+    );
+  }
+
   test(
     '120 actual groups shape in bounded bands and record only the requested page',
     () {
