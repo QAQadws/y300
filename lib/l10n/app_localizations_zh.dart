@@ -5666,6 +5666,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumThreadBadgeDigest => '精华';
 
   @override
+  String get novelFontWeight => '正文基础字重';
+
+  @override
+  String get novelFontWeightScope => '字重应用范围';
+
+  @override
+  String get novelFontWeightOriginal => '原始规则';
+
+  @override
+  String get novelFontWeightMissing => '补充缺省';
+
+  @override
+  String get novelFontWeightBody => '统一正文';
+
+  @override
+  String get novelFontWeightAll => '全部文字';
+
+  @override
+  String get novelFontWeightAmount => '基础字重';
+
+  @override
+  String get novelFontWeightHint =>
+      '基础字重为 100–800，强调文字请求更粗字重，最高 900。统一正文保留标题、代码和注音的规则；全部文字也覆盖这些角色。实际效果取决于字体可用字形，缺少字重时可能合成或回退，不同数值可能显示相同。';
+
+  @override
+  String get novelFontWeightUnavailable => '此设置目前用于原生翻页阅读。已保存的字重会保留，也可以单独重置。';
+
+  @override
+  String get novelFontWeightReset => '重置基础字重及其应用范围，保留其他设置';
+
+  @override
+  String novelFontWeightValue(String value) {
+    return '$value';
+  }
+
+  @override
   String get fontSelectorTitle => '字体';
 
   @override
@@ -11392,6 +11428,42 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get forumThreadBadgeDigest => '精華';
+
+  @override
+  String get novelFontWeight => '正文基礎字重';
+
+  @override
+  String get novelFontWeightScope => '字重套用範圍';
+
+  @override
+  String get novelFontWeightOriginal => '原始規則';
+
+  @override
+  String get novelFontWeightMissing => '補充預設';
+
+  @override
+  String get novelFontWeightBody => '統一正文';
+
+  @override
+  String get novelFontWeightAll => '全部文字';
+
+  @override
+  String get novelFontWeightAmount => '基礎字重';
+
+  @override
+  String get novelFontWeightHint =>
+      '基礎字重為 100–800，強調文字請求更粗字重，最高 900。統一正文保留標題、程式碼和注音的規則；全部文字也覆蓋這些角色。實際效果取決於字型可用字形，缺少字重時可能合成或回退，不同數值可能顯示相同。';
+
+  @override
+  String get novelFontWeightUnavailable => '此設定目前用於原生翻頁閱讀。已儲存的字重會保留，也可以單獨重設。';
+
+  @override
+  String get novelFontWeightReset => '重設基礎字重及其套用範圍，保留其他設定';
+
+  @override
+  String novelFontWeightValue(String value) {
+    return '$value';
+  }
 
   @override
   String get fontSelectorTitle => '字型';

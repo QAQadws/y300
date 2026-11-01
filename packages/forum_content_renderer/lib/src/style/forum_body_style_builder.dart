@@ -8,7 +8,7 @@ import 'forum_body_language.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 9;
+const forumBodyStyleRevision = 10;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -153,7 +153,8 @@ final class ForumBodyStyleBuilder {
     }
     if (_force(ForumBodyStyleProperty.fontWeight, role)) {
       final baseWeight = reader.textStyle.fontWeight ?? FontWeight.w400;
-      weight = strong && baseWeight.value < 700 ? FontWeight.w700 : baseWeight;
+      // A fixed 700 would erase emphasis when the reader also requests 700.
+      weight = strong ? _weight('bolder', baseWeight)! : baseWeight;
     }
     var italic =
         node.kind == ForumBodyElementKind.editStatus ||

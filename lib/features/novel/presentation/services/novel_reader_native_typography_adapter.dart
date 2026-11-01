@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../domain/models/novel_reader_preferences.dart';
@@ -8,6 +9,7 @@ import '../../domain/models/novel_reader_preferences.dart';
   double paragraphAfter,
   double? letterSpacing,
   double? wordSpacing,
+  FontWeight? fontWeight,
   ForumBodyStylePolicy policy,
 })
 resolveNovelReaderNativeTypography(
@@ -34,7 +36,9 @@ resolveNovelReaderNativeTypography(
   }
   final sizeScope = preferences.typography.fontSizeScope;
   final heightScope = preferences.typography.lineHeightScope;
+  final weight = preferences.typography.fontWeight;
   return (
+    fontWeight: resolveNovelReaderNativeFontWeight(weight),
     wordSpacing: words?.logicalPixels,
     letterSpacing: letters?.logicalPixels,
     paragraphBefore: effectiveSpacing.before,
@@ -51,10 +55,13 @@ resolveNovelReaderNativeTypography(
             letters == null &&
             words == null &&
             sizeScope == null &&
-            heightScope == null
+            heightScope == null &&
+            weight == null
         ? (base ?? ForumBodyStylePolicy())
         : ForumBodyStylePolicy({
             ...?base?.values,
+            if (weight != null)
+              ForumBodyStyleProperty.fontWeight: _scope(weight.scope),
             if (sizeScope != null)
               ForumBodyStyleProperty.fontSize: _scope(sizeScope),
             if (heightScope != null)
@@ -69,6 +76,14 @@ resolveNovelReaderNativeTypography(
               ForumBodyStyleProperty.wordSpacing: _scope(words.scope),
           }),
   );
+}
+
+/// Shared by the native environment and font picker preview. This is a request
+/// to the engine, not an assertion that a particular face or synthesis exists.
+FontWeight? resolveNovelReaderNativeFontWeight(NovelReaderFontWeight? request) {
+  if (request == null) return null;
+  if (!request.isValid) throw ArgumentError('Invalid reader font weight');
+  return FontWeight.values[request.value ~/ 100 - 1];
 }
 
 ForumBodyStyleScope _scope(NovelReaderStyleScope value) => switch (value) {

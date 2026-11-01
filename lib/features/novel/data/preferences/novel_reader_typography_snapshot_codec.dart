@@ -8,6 +8,13 @@ final class NovelReaderTypographySnapshotCodec {
   const NovelReaderTypographySnapshotCodec();
   static const schemaVersion = 1;
   static const _scopePolicy = NovelReaderStyleScopeSnapshotCodec();
+  static const _weight = _NumericRequestCodec(
+    unit: 'cssWeight',
+    minimum: 100,
+    maximum: 800,
+    step: 100,
+    fields: ['value'],
+  );
   static const _indent = _NumericRequestCodec(
     unit: 'em',
     maximum: NovelReaderFirstLineIndent.maximumEm,
@@ -46,6 +53,7 @@ final class NovelReaderTypographySnapshotCodec {
     wordSpacing: input.wordSpacing?.isValid == true ? input.wordSpacing : null,
     fontSizeScope: input.fontSizeScope,
     lineHeightScope: input.lineHeightScope,
+    fontWeight: input.fontWeight?.isValid == true ? input.fontWeight : null,
   );
 
   NovelReaderTypographyOverrides decode(Object? source) {
@@ -57,7 +65,14 @@ final class NovelReaderTypographySnapshotCodec {
     final spacing = _spacing.decode(source['paragraphSpacing']);
     final letters = _letters.decode(source['letterSpacing']);
     final words = _words.decode(source['wordSpacing']);
+    final weight = _weight.decode(source['fontWeight']);
     return NovelReaderTypographyOverrides(
+      fontWeight: weight == null
+          ? null
+          : NovelReaderFontWeight(
+              value: weight.values['value']!.toInt(),
+              scope: weight.scope,
+            ),
       fontSizeScope: _scopePolicy.decode(source['fontSizePolicy']),
       lineHeightScope: _scopePolicy.decode(source['lineHeightPolicy']),
       wordSpacing: words == null
@@ -105,6 +120,15 @@ final class NovelReaderTypographySnapshotCodec {
     final words = normalized.wordSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
     final requests = {
+      'fontWeight': _weight.encode(
+        prior?['fontWeight'],
+        normalized.fontWeight == null
+            ? null
+            : (
+                scope: normalized.fontWeight!.scope,
+                values: {'value': normalized.fontWeight!.value.toDouble()},
+              ),
+      ),
       'lineHeightPolicy': _scopePolicy.encode(
         normalized.lineHeightScope,
         previous: prior?['lineHeightPolicy'],
@@ -165,10 +189,12 @@ final class _NumericRequestCodec {
     required this.maximum,
     required this.fields,
     this.minimum = 0,
+    this.step,
   });
   final String unit;
   final double maximum;
   final double minimum;
+  final double? step;
   final List<String> fields;
   static const _metadata = {'unit', 'scope', 'enabled'};
 
@@ -188,7 +214,8 @@ final class _NumericRequestCodec {
       if (value is! num ||
           !value.isFinite ||
           value < minimum ||
-          value > maximum) {
+          value > maximum ||
+          (step != null && (value - minimum) % step! != 0)) {
         return null;
       }
       values[field] = value.toDouble();
@@ -227,7 +254,7 @@ final class _NumericRequestCodec {
       'unit': unit,
       ...?old?.values,
       if (old == null)
-        for (final field in fields) field: 0.0,
+        for (final field in fields) field: minimum,
       'scope':
           (old?.scope ??
                   NovelReaderStyleScopeSnapshotCodec.parseScope(

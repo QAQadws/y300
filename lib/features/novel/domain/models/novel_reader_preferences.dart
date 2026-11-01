@@ -225,6 +225,7 @@ class NovelReaderPreferences {
     );
   }
 
+  /// Legacy transient input. Native persisted requests live in typography.
   final int fontWeight;
   final NovelReaderTextAlignMode textAlign;
   final bool showProgressIndicator;

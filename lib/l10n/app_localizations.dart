@@ -9490,6 +9490,72 @@ abstract class AppLocalizations {
   /// **'精华'**
   String get forumThreadBadgeDigest;
 
+  /// No description provided for @novelFontWeight.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文基础字重'**
+  String get novelFontWeight;
+
+  /// No description provided for @novelFontWeightScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'字重应用范围'**
+  String get novelFontWeightScope;
+
+  /// No description provided for @novelFontWeightOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始规则'**
+  String get novelFontWeightOriginal;
+
+  /// No description provided for @novelFontWeightMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'补充缺省'**
+  String get novelFontWeightMissing;
+
+  /// No description provided for @novelFontWeightBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelFontWeightBody;
+
+  /// No description provided for @novelFontWeightAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部文字'**
+  String get novelFontWeightAll;
+
+  /// No description provided for @novelFontWeightAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'基础字重'**
+  String get novelFontWeightAmount;
+
+  /// No description provided for @novelFontWeightHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'基础字重为 100–800，强调文字请求更粗字重，最高 900。统一正文保留标题、代码和注音的规则；全部文字也覆盖这些角色。实际效果取决于字体可用字形，缺少字重时可能合成或回退，不同数值可能显示相同。'**
+  String get novelFontWeightHint;
+
+  /// No description provided for @novelFontWeightUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设置目前用于原生翻页阅读。已保存的字重会保留，也可以单独重置。'**
+  String get novelFontWeightUnavailable;
+
+  /// No description provided for @novelFontWeightReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置基础字重及其应用范围，保留其他设置'**
+  String get novelFontWeightReset;
+
+  /// No description provided for @novelFontWeightValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value}'**
+  String novelFontWeightValue(String value);
+
   /// No description provided for @fontSelectorTitle.
   ///
   /// In zh, this message translates to:

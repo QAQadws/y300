@@ -104,6 +104,62 @@ void main() {
     expect(changed.last.lineHeight, closeTo(1.9, 0.0001));
   });
 
+  for (final mode in NovelReaderFlowMode.values) {
+    testWidgets(
+      'font preview follows native draft weight and retains it after font confirmation ($mode)',
+      (tester) async {
+        final changed = <NovelReaderPreferences>[];
+        final initial = NovelReaderPreferences.defaults().copyWith(
+          flowMode: mode,
+          typography: const NovelReaderTypographyOverrides(
+            fontWeight: NovelReaderFontWeight(value: 500),
+            wordSpacing: NovelReaderWordSpacing(logicalPixels: 7.5),
+          ),
+        );
+        await _pump(
+          tester,
+          service: service,
+          initialPreferences: initial,
+          onChanged: changed.add,
+          nativeTypography: true,
+        );
+        if (mode != NovelReaderFlowMode.vertical) {
+          tester
+              .widget<Slider>(
+                find.byKey(const Key('novel-reader-font-weight-slider')),
+              )
+              .onChanged!(700);
+          await tester.pump();
+        }
+        await tester.ensureVisible(
+          find.byKey(const Key('novel-reader-font-selector')),
+        );
+        await _open(tester);
+        await tester.tap(find.byKey(Key('body-font-item-${_font.id}')));
+        await tester.pumpAndSettle();
+        final preview = tester.widget<Text>(
+          find.byKey(const Key('body-font-preview')),
+        );
+        expect(
+          preview.style?.fontWeight,
+          mode == NovelReaderFlowMode.vertical ? isNull : FontWeight.w700,
+        );
+        expect(preview.style?.fontFamily, FontIdentity.runtimeFamily(_font.id));
+        await tester.tap(find.byKey(const Key('body-font-apply')));
+        await tester.pumpAndSettle();
+        expect(changed.last.fontFamily, _font.id);
+        expect(
+          changed.last.typography,
+          initial.typography.withFontWeight(
+            NovelReaderFontWeight(
+              value: mode == NovelReaderFlowMode.vertical ? 500 : 700,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   testWidgets('cancel keeps the prior font and emits no preference change', (
     tester,
   ) async {
@@ -222,6 +278,7 @@ Future<void> _pump(
   required ValueChanged<NovelReaderPreferences> onChanged,
   NovelReaderPreferences? initialPreferences,
   Widget Function()? buildSheet,
+  bool nativeTypography = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -234,6 +291,7 @@ Future<void> _pump(
           body:
               buildSheet?.call() ??
               NovelReaderDisplaySettingsSheet(
+                nativeTypography: nativeTypography,
                 initialPreferences:
                     initialPreferences ?? NovelReaderPreferences.defaults(),
                 onPreferencesChanged: onChanged,

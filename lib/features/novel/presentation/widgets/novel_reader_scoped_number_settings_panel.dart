@@ -37,6 +37,8 @@ class NovelReaderScopedNumberSettingsPanel extends StatelessWidget {
     required this.labels,
     required this.enabled,
     required this.onChanged,
+    this.initialNumber = 0,
+    this.fractionDigits = 2,
   });
   final String keyPrefix;
   final NovelReaderScopedNumberValue? value;
@@ -47,6 +49,8 @@ class NovelReaderScopedNumberSettingsPanel extends StatelessWidget {
   final NovelReaderScopedNumberLabels labels;
   final bool enabled;
   final ValueChanged<NovelReaderScopedNumberValue?> onChanged;
+  final double initialNumber;
+  final int fractionDigits;
 
   @override
   Widget build(BuildContext context) {
@@ -58,8 +62,9 @@ class NovelReaderScopedNumberSettingsPanel extends StatelessWidget {
             NovelReaderStyleScope.forceBody => _ScopeChoice.body,
             NovelReaderStyleScope.forceAll => _ScopeChoice.all,
           };
-    String amount(double number) =>
-        labels.formatNumber((number == 0 ? 0.0 : number).toStringAsFixed(2));
+    String amount(double number) => labels.formatNumber(
+      (number == 0 ? 0.0 : number).toStringAsFixed(fractionDigits),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -79,7 +84,7 @@ class NovelReaderScopedNumberSettingsPanel extends StatelessWidget {
             next == _ScopeChoice.original
                 ? null
                 : (
-                    number: request?.number ?? 0,
+                    number: request?.number ?? initialNumber,
                     scope: switch (next) {
                       _ScopeChoice.missing => NovelReaderStyleScope.asDefault,
                       _ScopeChoice.body => NovelReaderStyleScope.forceBody,

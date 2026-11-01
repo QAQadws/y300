@@ -51,6 +51,30 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test(
+    'heavy forced body weights retain emphasis and restore excluded author roles',
+    () {
+      for (final base in [FontWeight.w700, FontWeight.w800]) {
+        final result = resolve(
+          '<div style="font-weight:300"><p id="p">text<strong id="s">bold'
+          '<span id="n">nested</span></strong><code id="c">code</code></p></div>',
+          options: ForumBodyReaderStyle(
+            textStyle: TextStyle(fontSize: 20, fontWeight: base),
+            fontRevision: 'weight-request',
+            linkColor: const Color(0xff0044cc),
+            policy: ForumBodyStylePolicy({
+              ForumBodyStyleProperty.fontWeight: ForumBodyStyleScope.forceBody,
+            }),
+          ),
+        );
+        expect(byId(result, 'p').textStyle.fontWeight, base);
+        expect(byId(result, 's').textStyle.fontWeight, FontWeight.w900);
+        expect(byId(result, 'n').textStyle.fontWeight, FontWeight.w900);
+        expect(byId(result, 'c').textStyle.fontWeight, FontWeight.w300);
+      }
+    },
+  );
+
   test('RTC owns annotation defaults for actual RT and anonymous text', () {
     final result = resolve(
       '<ruby id="base">A<rt id="direct">a</rt>'

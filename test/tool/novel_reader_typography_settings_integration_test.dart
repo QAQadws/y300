@@ -26,7 +26,9 @@ enum _Setting {
   fontSizePolicy('font-size'),
   fontSizePolicyRuby('font-size'),
   lineHeightPolicy('line-height'),
-  lineHeightPolicyRuby('line-height');
+  lineHeightPolicyRuby('line-height'),
+  fontWeight('font-weight'),
+  fontWeightRuby('font-weight');
 
   const _Setting(this.keyPrefix);
   final String keyPrefix;
@@ -54,7 +56,8 @@ void _testSettings(_Setting setting) {
       setting == _Setting.letterSpacingRuby ||
       setting == _Setting.wordSpacingRuby ||
       setting == _Setting.fontSizePolicyRuby ||
-      setting == _Setting.lineHeightPolicyRuby;
+      setting == _Setting.lineHeightPolicyRuby ||
+      setting == _Setting.fontWeightRuby;
   final letters =
       setting == _Setting.letterSpacing ||
       setting == _Setting.letterSpacingRuby;
@@ -66,6 +69,9 @@ void _testSettings(_Setting setting) {
   final heightPolicy =
       setting == _Setting.lineHeightPolicy ||
       setting == _Setting.lineHeightPolicyRuby;
+  final weight =
+      setting == _Setting.fontWeight || setting == _Setting.fontWeightRuby;
+  final extended = letters || words || sizePolicy || heightPolicy || weight;
   testWidgets(
     'settings reflow keeps coverage and persists across reader owners ($setting)',
     (tester) async {
@@ -77,25 +83,26 @@ void _testSettings(_Setting setting) {
           );
       await repository().save(
         profileReaderPreferences.copyWith(
-          fontSize: sizePolicy || heightPolicy
+          fontSize: sizePolicy || heightPolicy || weight
               ? 20
               : profileReaderPreferences.fontSize,
           typography: NovelReaderTypographyOverrides(
             firstLineIndent: setting != _Setting.indent
                 ? const NovelReaderFirstLineIndent(em: 1.5)
                 : null,
-            paragraphSpacing: letters || words || sizePolicy || heightPolicy
+            paragraphSpacing: extended
                 ? const NovelReaderParagraphSpacing(before: 12, after: 31)
                 : null,
-            letterSpacing: words || sizePolicy || heightPolicy
+            letterSpacing: words || sizePolicy || heightPolicy || weight
                 ? const NovelReaderLetterSpacing(logicalPixels: -1.25)
                 : null,
-            wordSpacing: sizePolicy || heightPolicy
+            wordSpacing: sizePolicy || heightPolicy || weight
                 ? const NovelReaderWordSpacing(logicalPixels: 7.5)
                 : null,
-            fontSizeScope: heightPolicy
+            fontSizeScope: heightPolicy || weight
                 ? NovelReaderStyleScope.forceBody
                 : null,
+            lineHeightScope: weight ? NovelReaderStyleScope.forceBody : null,
           ),
         ),
       );
@@ -109,8 +116,11 @@ void _testSettings(_Setting setting) {
                   ? ';font-size:12px;line-height:28px'
                   : sizePolicy
                   ? ';font-size:12px'
+                  : weight
+                  ? ';font-weight:300'
                   : ''}">Paragraph $i: '
               '${mixed ? 'before <ruby>base<rt>note</rt></ruby> after. ' : ''}'
+              '${weight ? '<strong>emphasis</strong> ' : ''}'
               'Synthetic text for checking actual native reading geometry.</p>',
         ).join(),
       );
@@ -124,7 +134,7 @@ void _testSettings(_Setting setting) {
         data.scope(
           MaterialApp(
             navigatorKey: navigator,
-            theme: letters || words || sizePolicy || heightPolicy
+            theme: extended
                 ? ThemeData.light().copyWith(
                     textTheme: const TextTheme(
                       bodyMedium: TextStyle(
@@ -498,6 +508,68 @@ void _testSettings(_Setting setting) {
         );
       }
 
+      void checkVisibleWeight(
+        ProfileReaderObservation observation,
+        FontWeight base,
+      ) {
+        final target = observation.nativeController!.viewForPage(
+          observation.page!,
+        )!;
+        expect(target.coverage.hasClippedGlyphs, isFalse);
+        var checked = 0;
+        void verify(
+          ForumBodyResolvedStyle style,
+          List<ForumBodyParagraphRun> runs,
+        ) {
+          expect(style.textStyle.fontWeight, base);
+          expect(runs.any((run) => run.style.strong), isTrue);
+          for (final run in runs.where(
+            (r) => r.style.role == ForumBodyTextRole.body,
+          )) {
+            expect(
+              run.style.textStyle.fontWeight,
+              run.style.strong
+                  ? (base == FontWeight.w700
+                        ? FontWeight.w900
+                        : FontWeight.w400)
+                  : base,
+            );
+          }
+          checked++;
+        }
+
+        void collect(Element element) {
+          if (element.widget case ForumBodyParagraphSurface(lease: final lease)
+              when lease.isActive) {
+            verify(lease.content.style, lease.content.runs);
+          }
+          if (element.widget
+              case ForumBodyInlineParagraphSurface(view: final view)
+              when view.isActive) {
+            verify(view.content.style, view.content.runs);
+          }
+          element.visitChildElements(collect);
+        }
+
+        void visit(Element element) {
+          if (element.widget.key case ObjectKey(value: final value)
+              when identical(value, target)) {
+            collect(element);
+          } else {
+            element.visitChildElements(visit);
+          }
+        }
+
+        key.currentContext!.visitChildElements(visit);
+        expect(checked, greaterThan(0));
+        checkVisibleLetters(
+          observation,
+          -1.25,
+          wordSpacing: 7.5,
+          checkSpaces: true,
+        );
+      }
+
       await mount();
       var popped = open();
       var observation = await wait((value) => value.ready && value.complete);
@@ -534,12 +606,20 @@ void _testSettings(_Setting setting) {
           _Setting.fontSizePolicyRuby => l10n.novelFontSizePolicyBody,
           _Setting.lineHeightPolicy ||
           _Setting.lineHeightPolicyRuby => l10n.novelLineHeightPolicyBody,
+          _Setting.fontWeight ||
+          _Setting.fontWeightRuby => l10n.novelFontWeightBody,
         }),
       );
       await tester.ensureVisible(bodyChoice);
       await tester.tap(bodyChoice);
       await tester.pump();
-      if (heightPolicy) {
+      if (weight) {
+        tester
+            .widget<Slider>(
+              find.byKey(const Key('novel-reader-font-weight-slider')),
+            )
+            .onChanged!(700);
+      } else if (heightPolicy) {
         tester
             .widget<Slider>(
               find.descendant(
@@ -608,6 +688,10 @@ void _testSettings(_Setting setting) {
           baseline.typography.withLineHeightScope(
             NovelReaderStyleScope.forceBody,
           ),
+        _Setting.fontWeight ||
+        _Setting.fontWeightRuby => baseline.typography.withFontWeight(
+          const NovelReaderFontWeight(value: 700),
+        ),
       };
       final selectedFontSize = sizePolicy ? 22.0 : baseline.fontSize;
       final selectedLineHeight = heightPolicy ? 2.0 : baseline.lineHeight;
@@ -632,9 +716,10 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters || words || sizePolicy || heightPolicy) {
+      if (spacing || extended) {
         checkVisibleSpacing(observation, 31);
       }
+      if (weight) checkVisibleWeight(observation, FontWeight.w700);
       if (heightPolicy) checkVisibleLineHeight(observation, 40);
       if (letters) checkVisibleLetters(observation, -1.25);
       if (words) {
@@ -692,9 +777,10 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters || words || sizePolicy || heightPolicy) {
+      if (spacing || extended) {
         checkVisibleSpacing(observation, 31);
       }
+      if (weight) checkVisibleWeight(observation, FontWeight.w700);
       if (heightPolicy) checkVisibleLineHeight(observation, 40);
       if (letters) checkVisibleLetters(observation, -1.25);
       if (words) {
@@ -725,7 +811,7 @@ void _testSettings(_Setting setting) {
             value.ready &&
             value.complete &&
             state().persistedPreferences.typography == baseline.typography &&
-            (!(sizePolicy || heightPolicy) ||
+            (!(sizePolicy || heightPolicy || weight) ||
                 value.paginationKey != beforeResetKey),
       );
       expect(
@@ -735,6 +821,19 @@ void _testSettings(_Setting setting) {
           lineHeight: selectedLineHeight,
         ),
       );
+      if (weight) {
+        expect(position(), savedPosition);
+        expect(
+          observation.nativeController!
+              .viewForPage(observation.page!)!
+              .coverage
+              .locate(anchor),
+          isNotNull,
+        );
+        checkVisibleWeight(observation, FontWeight.w300);
+        checkVisibleIndent(observation, 1.5);
+        checkVisibleSpacing(observation, 31);
+      }
       if (heightPolicy) {
         expect(state().preferences.lineHeight, 2.0);
         expect(position(), savedPosition);

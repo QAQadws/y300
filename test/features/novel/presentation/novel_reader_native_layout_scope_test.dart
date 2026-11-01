@@ -274,6 +274,19 @@ void main() {
         NovelReaderPreferences.defaults().copyWith(fontSize: 25),
         NovelReaderPreferences.defaults().copyWith(lineHeight: 2),
         NovelReaderPreferences.defaults().copyWith(fontWeight: 700),
+        NovelReaderPreferences.defaults().copyWith(
+          typography: const NovelReaderTypographyOverrides(
+            fontWeight: NovelReaderFontWeight(value: 600),
+          ),
+        ),
+        NovelReaderPreferences.defaults().copyWith(
+          typography: const NovelReaderTypographyOverrides(
+            fontWeight: NovelReaderFontWeight(
+              value: 400,
+              scope: NovelReaderStyleScope.forceAll,
+            ),
+          ),
+        ),
         NovelReaderPreferences.defaults().copyWith(paragraphSpacing: 27),
         NovelReaderPreferences.defaults().copyWith(firstLineIndent: 17),
         NovelReaderPreferences.defaults().copyWith(
