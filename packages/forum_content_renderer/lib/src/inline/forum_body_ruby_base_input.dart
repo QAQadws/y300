@@ -32,6 +32,7 @@ List<ForumBodyRubyBaseInput> resolveForumBodyRubyBaseInputs(
           kind: ForumBodyRubyBaseInputKind.explicit,
         ),
         ForumBodyRubyNestedContent() => _unsupported(part.path),
+        ForumBodyRubyAnnotationContent() => _unsupported(part.path),
       },
   ]);
 }

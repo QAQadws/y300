@@ -75,6 +75,174 @@ String text(List<ForumBodyRubyInlineContent> parts) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'RTC levels retain actual RT boxes, source ranges and inherited style',
+    () {
+      final run = open(
+        '<ruby><rb>A</rb><rb>B</rb><rtc style="color:#ff0000"><rt>x</rt><rt>y</rt></rtc><rtc><rt>word</rt></rtc></ruby>',
+      );
+      final group = drain(run.cursor).single;
+      expect(group.base, hasLength(2));
+      final levels = group.annotations
+          .cast<ForumBodyRubyAnnotationContainerContent>();
+      expect(
+        levels.map((level) => (level.source.runeStart, level.source.runeEnd)),
+        [(2, 4), (4, 8)],
+      );
+      final first = levels.first;
+      final annotations = first.parts
+          .cast<ForumBodyRubyTextAnnotationContent>();
+      expect(annotations.map((rt) => text(rt.parts)), ['x', 'y']);
+      expect(annotations.map((rt) => rt.style.textStyle.fontSize), [10, 10]);
+      expect(first.style.textStyle.fontSize, 20);
+      expect(annotations.first.style.textStyle.color, const Color(0xffff0000));
+      expect(
+        texts(
+          annotations.last.parts,
+        ).single.projection.sourceAtUtf16(0).sourceRune,
+        3,
+      );
+      expect(() => first.parts.clear(), throwsUnsupportedError);
+      expect(() => annotations.first.parts.clear(), throwsUnsupportedError);
+      expect(run.cursor.inputCodeUnits, 8);
+      expect(run.cursor.groupCount, 1);
+    },
+  );
+
+  test('direct RT and RTC order belongs to the same actual base segment', () {
+    final run = open(
+      '<ruby>A<rt>x</rt><rtc><rt>y</rt></rtc><rt>z</rt>B<rtc><rt>w</rt></rtc></ruby>',
+    );
+    final groups = drain(run.cursor);
+    expect(groups.map((group) => text(group.base)), ['A', 'B']);
+    expect(groups.first.annotations, [
+      isA<ForumBodyRubyTextAnnotationContent>(),
+      isA<ForumBodyRubyAnnotationContainerContent>(),
+      isA<ForumBodyRubyTextAnnotationContent>(),
+    ]);
+    expect(groups.first.annotations.map((rt) => rt.source.runeStart), [
+      1,
+      2,
+      3,
+    ]);
+    expect(groups.last.annotations.single.source.runeStart, 5);
+    expect(run.cursor.groupCount, 2);
+  });
+
+  test(
+    'orphan RTs wait for later RTC levels instead of publishing partial columns',
+    () {
+      final run = open(
+        '<ruby><rt>x</rt><rt>y</rt><rtc><rt>u</rt><rt>v</rt></rtc></ruby>',
+      );
+      final group = drain(run.cursor).single;
+      expect(group.base, isEmpty);
+      expect(group.annotations, hasLength(3));
+      expect(group.annotations.take(2).map((rt) => text(rt.parts)), ['x', 'y']);
+      final level =
+          group.annotations.last as ForumBodyRubyAnnotationContainerContent;
+      expect(
+        level.parts.cast<ForumBodyRubyTextAnnotationContent>().map(
+          (rt) => text(rt.parts),
+        ),
+        ['u', 'v'],
+      );
+      expect(run.cursor.groupCount, 2);
+      expect(run.flow.current!.phase, ForumBodyFlowPhase.close);
+      expect(run.flow.current!.node.path, group.rootPath);
+    },
+  );
+
+  test(
+    'RTC anonymous text, whitespace and nested ruby remain ordered structure',
+    () {
+      final run = open(
+        '<ruby>A<rtc> pre <ruby>B<rt>b</rt></ruby> post <rt>x<ruby>C<rt>c</rt></ruby></rt> </rtc></ruby>',
+      );
+      final level =
+          drain(run.cursor).single.annotations.single
+              as ForumBodyRubyAnnotationContainerContent;
+      expect(level.parts, hasLength(5));
+      expect(text([level.parts.first]), ' pre ');
+      expect(level.parts[1], isA<ForumBodyRubyNestedContent>());
+      expect(text([level.parts[2]]), ' post ');
+      final rt = level.parts[3] as ForumBodyRubyTextAnnotationContent;
+      expect(rt.parts.last, isA<ForumBodyRubyNestedContent>());
+      expect(text([level.parts.last]), ' ');
+      expect(run.cursor.groupCount, 3);
+    },
+  );
+
+  test('RTC empty ranges and anonymous styles do not invent RT boxes', () {
+    final run = open(
+      '<ruby>A<rtc></rtc><rtc> word <b>x</b><br> y </rtc></ruby>',
+    );
+    final entries = drain(run.cursor).single.annotations;
+    expect(entries.first.parts, isEmpty);
+    expect(entries.first.source.runeStart, entries.first.source.runeEnd);
+    final context = texts(entries.last.parts).single;
+    expect(context.projection.text, ' word x y ');
+    expect(context.runs.first.style.textStyle.fontSize, 20);
+    expect(context.runs[1].style.textStyle.fontWeight, FontWeight.w700);
+  });
+
+  test(
+    'RTC hidden and fallback subtrees retain ignored provenance and raw input',
+    () {
+      final run = open(
+        '<ruby>A<rtc hidden>secret<rt>h</rt></rtc><rtc><rp>(</rp><rt>x</rt><rp>)</rp><rt hidden>hidden</rt></rtc></ruby>',
+      );
+      final level =
+          drain(run.cursor).single.annotations.single
+              as ForumBodyRubyAnnotationContainerContent;
+      expect(level.parts, hasLength(1));
+      expect(
+        text((level.parts.single as ForumBodyRubyTextAnnotationContent).parts),
+        'x',
+      );
+      final ignored = run.cursor.takeIgnored();
+      expect(
+        ignored.where(
+          (item) => item.reason == ForumBodyRubyIgnoredReason.hidden,
+        ),
+        hasLength(2),
+      );
+      expect(
+        ignored.where(
+          (item) => item.reason == ForumBodyRubyIgnoredReason.fallback,
+        ),
+        hasLength(2),
+      );
+      expect(run.cursor.inputCodeUnits, 17);
+    },
+  );
+
+  test(
+    'canceling or externally advancing a pending RTC cannot publish its prefix',
+    () {
+      for (final foreignAdvance in [false, true]) {
+        final run = open('<ruby>A<rtc><rt>x</rt><rt>y</rt></rtc></ruby>');
+        for (var event = 0; event < 5; event++) {
+          final step = run.cursor.advance(maxEvents: 1);
+          expect(step.hasOutput, isFalse);
+        }
+        if (foreignAdvance) {
+          run.flow.moveNext();
+          expect(
+            () => run.cursor.advance(maxEvents: 1),
+            throwsA(isA<ForumBodyRubyContentException>()),
+          );
+        } else {
+          run.cursor.close();
+          run.cursor.close();
+        }
+        expect(run.cursor.current, isNull);
+        expect(run.cursor.isClosed, isTrue);
+        expect(run.flow.isClosed, isFalse);
+      }
+    },
+  );
+
   for (final mode in ['normal', 'pre', 'pre-wrap', 'pre-line']) {
     test('annotation breaks join without changing base whitespace ($mode)', () {
       final run = open(
@@ -317,37 +485,38 @@ void main() {
     },
   );
 
-  test('consecutive orphan RTs keep separate empty-base columns', () {
-    final run = open('<ruby><rt>x</rt><rt>y</rt>A<rt>a</rt></ruby>');
-    final groups = drain(run.cursor);
-    expect(groups.map((group) => text(group.base)), ['', '', 'A']);
-    expect(groups.map((group) => text(group.annotations.single.parts)), [
-      'x',
-      'y',
-      'a',
-    ]);
-    expect(groups.map((group) => group.index), [0, 1, 2]);
-    expect(
-      groups.map(
-        (group) => texts(
-          group.annotations.single.parts,
-        ).single.projection.sourceAtUtf16(0).sourceRune,
-      ),
-      [0, 1, 3],
-    );
-    expect(run.cursor.groupCount, 3);
-    expect(run.cursor.inputCodeUnits, 4);
-    expect(run.cursor.textRunCount, 4);
-  });
+  test(
+    'consecutive orphan RTs keep every column in a complete base segment',
+    () {
+      final run = open('<ruby><rt>x</rt><rt>y</rt>A<rt>a</rt></ruby>');
+      final groups = drain(run.cursor);
+      expect(groups.map((group) => text(group.base)), ['', 'A']);
+      expect(groups.first.annotations.map((rt) => text(rt.parts)), ['x', 'y']);
+      expect(text(groups.last.annotations.single.parts), 'a');
+      expect(groups.map((group) => group.index), [0, 1]);
+      expect(
+        groups
+            .expand((group) => group.annotations)
+            .map(
+              (rt) =>
+                  texts(rt.parts).single.projection.sourceAtUtf16(0).sourceRune,
+            ),
+        [0, 1, 3],
+      );
+      expect(run.cursor.groupCount, 3);
+      expect(run.cursor.inputCodeUnits, 4);
+      expect(run.cursor.textRunCount, 4);
+    },
+  );
 
   test('orphan column boundaries retain ignored fallback and hidden gaps', () {
     final run = open(
       '<ruby><rt>x</rt> <rp>(</rp><span hidden>hidden</span> <rt>y</rt></ruby>',
     );
     final groups = drain(run.cursor);
-    expect(groups, hasLength(2));
+    expect(groups, hasLength(1));
     expect(groups.every((group) => group.base.isEmpty), isTrue);
-    final annotation = texts(groups.last.annotations.single.parts).single;
+    final annotation = texts(groups.last.annotations.last.parts).single;
     expect(annotation.projection.text, 'y');
     expect(annotation.projection.sourceAtUtf16(0).sourceRune, 10);
     expect(
@@ -361,9 +530,9 @@ void main() {
   });
 
   test(
-    'foreign advancement retires deferred orphan input without changing output',
+    'foreign advancement retires the next segment without changing complete orphan output',
     () {
-      final run = open('<ruby><rt>x</rt><rt>y</rt></ruby>');
+      final run = open('<ruby><rt>x</rt><rt>y</rt>A<rt>a</rt></ruby>');
       ForumBodyRubyGroupContent? first;
       for (var i = 0; i < 20 && first == null; i++) {
         final step = run.cursor.advance(maxEvents: 1);
@@ -371,8 +540,8 @@ void main() {
         if (step.hasOutput) first = run.cursor.current;
       }
       expect(first, isNotNull);
-      expect(text(first!.annotations.single.parts), 'x');
-      expect(run.flow.current!.phase, ForumBodyFlowPhase.open);
+      expect(first!.annotations.map((rt) => text(rt.parts)), ['x', 'y']);
+      expect(run.flow.current!.phase, ForumBodyFlowPhase.text);
       run.flow.moveNext();
       expect(
         () => run.cursor.advance(maxEvents: 1),
@@ -380,7 +549,7 @@ void main() {
       );
       expect(run.cursor.isClosed, isTrue);
       expect(run.flow.isClosed, isFalse);
-      expect(text(first.annotations.single.parts), 'x');
+      expect(first.annotations.map((rt) => text(rt.parts)), ['x', 'y']);
     },
   );
 
@@ -612,6 +781,11 @@ void main() {
       '<ruby><rb></rb><rb></rb><rb></rb></ruby>',
     ),
     (
+      const ForumBodyRubyContentLimits(maxStructureItems: 2),
+      ForumBodyRubyContentFailure.structureLimit,
+      '<ruby><rtc></rtc><rtc></rtc><rtc></rtc></ruby>',
+    ),
+    (
       const ForumBodyRubyContentLimits(maxGroups: 1),
       ForumBodyRubyContentFailure.groupLimit,
       '<ruby>A<rt>a</rt>B<rt>b</rt></ruby>',
@@ -721,6 +895,7 @@ void main() {
   for (final html in [
     '<ruby>A <ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby> B<rt>outer</rt><rt>second</rt> C<rt>c</rt></ruby>',
     '<ruby>pre<rb>A<ruby>漢<rt>kan</rt></ruby>B</rb> <rb> </rb><rb>C</rb><rt>one</rt><rt>two</rt> tail<rt>end</rt></ruby>',
+    '<ruby><rt>x</rt><rt>y</rt><rtc> pre <rt>u<ruby>B<rt>b</rt></ruby></rt> gap <rt>v</rt> </rtc> A<rtc>word</rtc></ruby>',
   ]) {
     test(
       'batch size changes scheduling without changing structure or source (explicit=${html.contains('<rb>')})',
@@ -752,6 +927,12 @@ void main() {
                     for (final annotation in group.annotations)
                       describeParts(annotation.parts),
                   ],
+              ]
+            else if (part is ForumBodyRubyAnnotationContent)
+              [
+                part is ForumBodyRubyAnnotationContainerContent,
+                part.path,
+                describeParts(part.parts),
               ],
         ];
         final values = <Object>[];

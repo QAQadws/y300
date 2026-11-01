@@ -9,7 +9,7 @@ import 'forum_body_ruby_content.dart';
 
 /// Resumable ruby grammar over the sole styled IR flow. No font is shaped and
 /// no HTML is sliced. Nested ruby stays structured, repeated RTs retain their
-/// actual base, orphan RTs form separate empty-base columns, and RP/annotation
+/// actual base, RTC retains annotation levels, and RP/annotation
 /// whitespace retain explicit source records.
 ///
 /// Borrows the cursor exclusively until complete/close. Style diagnostics stay
@@ -69,7 +69,7 @@ final class ForumBodyRubyContentCursor {
     }
   }
 
-  static const revision = 5;
+  static const revision = 6;
   ForumBodyStyledFlowCursor? _flow;
   ForumBodyStyledFlowEvent? _root;
   ForumBodyStyledFlowEvent? _last;
@@ -85,6 +85,7 @@ final class ForumBodyRubyContentCursor {
   _RubyParts? _base;
   _RubyParts? _explicitBase;
   _RubyParts? _annotation;
+  _RubyParts? _annotationContainer;
   final _annotations = <ForumBodyRubyAnnotationContent>[];
   final _ignored = <ForumBodyRubyIgnoredContent>[];
   List<ForumBodyStyledFlowEvent> _whitespace = [];
@@ -100,6 +101,7 @@ final class ForumBodyRubyContentCursor {
   int _groupCount = 0;
   int _structureItems = 0;
   int _localIndex = 0;
+  int _orphanColumns = 0;
   ForumBodyRubyGroupContent? _current;
 
   bool get isComplete => _complete;
@@ -264,25 +266,68 @@ final class ForumBodyRubyContentCursor {
         final annotation = _annotation!;
         annotation.flush(keepEmpty: true);
         _item();
-        _annotations.add(
-          ForumBodyRubyAnnotationContent(
-            path: node.path,
-            source: node.source,
-            style: annotation.root.style,
-            parts: annotation.parts,
-          ),
+        final value = ForumBodyRubyAnnotationContent(
+          path: node.path,
+          source: node.source,
+          style: annotation.root.style,
+          parts: annotation.parts,
         );
+        final container = _annotationContainer;
+        if (container == null) {
+          _annotations.add(value);
+          if (_base!.parts.isEmpty) {
+            // Keep the prior orphan-column limit even though publication now
+            // waits for all annotation levels of this segment to be known.
+            _charge(0, 0, 1);
+            _orphanColumns++;
+          }
+        } else {
+          container.parts.add(value);
+        }
         annotation.close();
         _annotation = null;
       }
+      if (_annotationContainer?.root.node.path == node.path) {
+        final container = _annotationContainer!;
+        container.flush();
+        _item();
+        _annotations.add(
+          ForumBodyRubyAnnotationContainerContent(
+            path: node.path,
+            source: node.source,
+            style: container.root.style,
+            parts: container.parts,
+          ),
+        );
+        container.close();
+        _annotationContainer = null;
+      }
       return false;
     }
-    if (direct &&
+    if (node is ForumBodyElement &&
+        node.kind == ForumBodyElementKind.rubyAnnotationContainer) {
+      if (!direct || _annotationContainer != null || _annotation != null) {
+        _fail(ForumBodyRubyContentFailure.structure);
+      }
+      _ignoreWhitespace();
+      _annotationMode = true;
+      if (event.style.hidden) {
+        _skip(node, ForumBodyRubyIgnoredReason.hidden);
+      } else {
+        _base!.flush();
+        _annotationContainer = _parts(event);
+      }
+      return false;
+    }
+    final annotationParent = _annotationContainer?.root.node.path ?? rootPath;
+    if (_parent(node.path) == annotationParent &&
         node is ForumBodyElement &&
         (node.kind == ForumBodyElementKind.rubyText ||
             node.kind == ForumBodyElementKind.rubyFallback)) {
-      _ignoreWhitespace();
-      _annotationMode = true;
+      if (direct) {
+        _ignoreWhitespace();
+        _annotationMode = true;
+      }
       if (node.kind == ForumBodyElementKind.rubyFallback ||
           event.style.hidden) {
         _skip(
@@ -292,15 +337,7 @@ final class ForumBodyRubyContentCursor {
               : ForumBodyRubyIgnoredReason.hidden,
         );
       } else {
-        if (_base!.parts.isEmpty && _annotations.isNotEmpty) {
-          // Consecutive orphan annotations each pair with an anonymous base.
-          // Replay this open event after publishing so work and group limits,
-          // source ownership and cancellation use the existing cursor path.
-          _deferred = event;
-          _publish();
-          return true;
-        }
-        _base!.flush();
+        (_annotationContainer ?? _base!).flush();
         _annotation = _parts(event);
       }
       return false;
@@ -333,14 +370,18 @@ final class ForumBodyRubyContentCursor {
     }
     if (node is ForumBodyElement &&
         node.kind == ForumBodyElementKind.rubyBase) {
-      if (!direct || _explicitBase != null || _annotation != null) {
+      if (!direct ||
+          _explicitBase != null ||
+          _annotation != null ||
+          _annotationContainer != null) {
         _fail(ForumBodyRubyContentFailure.structure);
       }
       _base!.flush();
       _explicitBase = _parts(event);
       return false;
     }
-    final target = _explicitBase ?? _annotation ?? _base!;
+    final target =
+        _explicitBase ?? _annotation ?? _annotationContainer ?? _base!;
     if (node is ForumBodyElement && node.kind == ForumBodyElementKind.ruby) {
       target.flush();
       _nested = _NestedRuby(
@@ -371,7 +412,7 @@ final class ForumBodyRubyContentCursor {
     final base = _base!;
     base.flush();
     if (base.parts.isEmpty && _annotations.isEmpty) return;
-    _charge(0, 0, 1, 1);
+    _charge(0, 0, _orphanColumns == 0 ? 1 : 0, 1);
     _current = ForumBodyRubyGroupContent(
       identity: identity,
       fontRevision: fontRevision,
@@ -385,6 +426,7 @@ final class ForumBodyRubyContentCursor {
     base.close();
     _base = _complete ? null : _parts(_root!);
     _annotations.clear();
+    _orphanColumns = 0;
   }
 
   void _ignoreWhitespace() {
@@ -449,10 +491,12 @@ final class ForumBodyRubyContentCursor {
     _base?.close();
     _explicitBase?.close();
     _annotation?.close();
+    _annotationContainer?.close();
     _nested?.cursor.close();
     _base = null;
     _explicitBase = null;
     _annotation = null;
+    _annotationContainer = null;
     _nested = null;
     _flow = null;
     _root = null;

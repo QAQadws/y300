@@ -295,6 +295,7 @@ final class ForumBodyParagraphContentBuilder {
           ForumBodyElementKind.ruby,
           ForumBodyElementKind.rubyBase,
           ForumBodyElementKind.rubyText,
+          ForumBodyElementKind.rubyAnnotationContainer,
         }.contains(node.kind) ||
         root.style.hidden ||
         root.style.display != ForumBodyDisplay.inline ||
@@ -314,7 +315,9 @@ final class ForumBodyParagraphContentBuilder {
         style: root.style,
         layoutMode: layoutMode,
         singleLineWhitespace: false,
-        suppressLineBreaks: node.kind == ForumBodyElementKind.rubyText,
+        suppressLineBreaks:
+            node.kind == ForumBodyElementKind.rubyText ||
+            node.kind == ForumBodyElementKind.rubyAnnotationContainer,
         preserveCollapsibleEdges: true,
         limits: this,
         emptySourceRune: node.source.runeStart,

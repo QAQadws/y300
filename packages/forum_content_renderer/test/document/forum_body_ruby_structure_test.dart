@@ -74,6 +74,8 @@ void main() {
     '<ruby><rb>A<ruby>B<rt>b</rt></ruby></rb><rt>x</rt></ruby>',
     '<ruby><rb></rb><rt></rt></ruby>',
     '<ruby>A<rtc><rt>x</rt><rt>y</rt></rtc></ruby>',
+    '<ruby>A<rtc>word</rtc></ruby>',
+    '<ruby><rt>x</rt><rt>y</rt><rtc><rt>u</rt></rtc></ruby>',
   ]) {
     test('leaf planning cannot flatten explicit structure: $html', () {
       final cache = ForumBodyParagraphCache(

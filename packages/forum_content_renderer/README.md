@@ -131,17 +131,25 @@ takeMetrics 时也不常驻子句柄。数值结果不替代可读 layout，取�
 
 `openInlineSequence` 只为专门格式处理者提供已打开行内根中的纯文字片段，显式保留折叠边缘空格；它不把 ruby/资源包装节点变成普通段落。括号回退、隐藏子树和注音间空白通过 `takeIgnored` 返回来源记录，这些记录不证明阅读 coverage。样式诊断继续由借用 flow 的 owner 按批次取走。
 
-RT 根内的纯文字投影按 [CSS Ruby 的强制换行合并](https://www.w3.org/TR/css-ruby-1/#anonymous-ruby)
+RT 及 RTC 内匿名文字片段的投影按 [CSS Ruby 的强制换行合并](https://www.w3.org/TR/css-ruby-1/#anonymous-ruby)
 规则，使用核心 `suppressLineBreaks` 将 BR、文本 CR/LF 及原生行/段分隔符合为单行
 空格，保留真实来源范围、样式所有权及原始字符/run 计费。它不使用编辑提示的宽泛
 singleLine 空白策略；pre/pre-wrap 的普通空格、Tab、NBSP 和全角空格继续保留。
-基字与外部正文的换行不受影响。该策略只作用于 RT 格式根，普通段落仍拒绝直接消费
+基字与外部正文的换行不受影响。该策略只作用于注音格式根，普通段落仍拒绝直接消费
 ruby。投影 revision 为 7；可见字形覆盖、语义锚点和已读资格仍由 Host 独立核对。
 
 parser revision 为 2；显式 `rb` 与 `rtc` 分别保存为 `rubyBase` 与
 `rubyAnnotationContainer`，保留原始 child-path 和来源范围。它们默认保持行内继承，
 RTC 不提前缩小字体，真正的 RT 继续由唯一 resolver 设置注音字号。普通文字收集器和
-叶子计划不得把这些结构当作透明未知标签吞并；RB 分组及逐列配对保留如下，显式注音范围和层级几何仍待完成。
+叶子计划不得把这些结构当作透明未知标签吞并；RB 分组及逐列配对保留如下，RTC 语法结构已保留，显式注音范围配对和层级几何仍待完成。
+
+`ForumBodyRubyAnnotationContent` 是区分真实 RT 与 RTC 的封闭类型：既有构造入口产生
+`ForumBodyRubyTextAnnotationContent`，`ForumBodyRubyAnnotationContainerContent` 保留
+真实 RTC 的 path、完整来源范围、实际继承样式及有序子部分。Group.annotations 按原始
+顺序保存根级 RT/RTC，容器 parts 内才是其 RT 子框；匿名文字、层内空白、嵌套 ruby、
+空 RT 和空 RTC 均不丢弃或提前拆成平面列。RTC 匿名片段保留其实际样式，不伪造 RT
+节点或在语法阶段猜测注音范围和最终字号。普通字形计划明确拒绝 RTC，即使它只有
+一个纯文字子项，也不能把整个容器当作一列注音；层级布局由后续组合层接入。
 
 `ForumBodyRubyBaseContent` 保留每个显式 RB 的 path、来源、实际样式及不可变子部分，
 普通隐式文字仍在原先位置保留。空 RB 和仅含空白的 RB 也保留为单独单位，不能在配对前
@@ -149,12 +157,14 @@ RTC 不提前缩小字体，真正的 RT 继续由唯一 resolver 设置注音�
 打开 RB 的文字，普通段落准入保持独立。每个单位及其空内容都计入结构预算，退出、失败
 与取消清理当前 RB 借用状态，不关闭调用方 flow 或修改已交付的组。
 
-`advance(maxEvents)` 同时限制实际读取及已缓冲空白的延后消费，返回二者区分的 `eventsRead/workDone`；在嵌套层累计核对文字、run、组、深度和结构条目上限。BR 同普通段落一样计一个原始字符和 run，不能在多个组间绕过总输入限制；空注音/回退元数据也计结构预算。隐藏同级节点不终止注音阶段，不把其相邻空白误分成新基字。关闭、错误或发现 flow 被其他消费者推进后，不发布半组，不关闭调用者的 flow；已交付的纯组不会被后续失败修改。分组 revision 为 5，不进行字体测量、DOM 切片、语义锚点迁移或页面发布。分层 ruby 几何仍待组合层完成，叶子计划和 App 页面经下述同一会话接入。
+`advance(maxEvents)` 同时限制实际读取及已缓冲空白的延后消费，返回二者区分的 `eventsRead/workDone`；在嵌套层累计核对文字、run、组、深度和结构条目上限。BR 同普通段落一样计一个原始字符和 run，不能在多个组间绕过总输入限制；空注音、空 RTC 和回退元数据也计结构预算。隐藏同级节点不终止注音阶段，不把其相邻空白误分成新基字。关闭、错误或发现 flow 被其他消费者推进后，不发布半组，不关闭调用者的 flow；已交付的纯组不会被后续失败修改。分组 revision 为 6，不进行字体测量、DOM 切片、语义锚点迁移或页面发布。分层 ruby 几何仍待组合层完成，叶子计划和 App 页面经下述同一会话接入。
 
 没有实际基字的连续 RT 按 [CSS Ruby 的匿名基字配对](https://www.w3.org/TR/css-ruby-1/#ruby-pairing)
-分别发布空基字列，各计一个 group，并保留实际 RT 及忽略来源；下一个 RT 的 open 事件经
-同一有界延后消费路径重放，不重复读取或收费，也不因取消修改已发布列。已有非空基字
-的多注音关联继续保留在 IR，由下述单层列计划处理；分层或 RB/RTC 仍未完成。
+保留全部实际注音和忽略来源；每个直接孤立 RT 仍计一个 group 预算，但到下一个真实
+基字段或 ruby 关闭才交付完整分段，避免后来的 RTC 层失去前面的列。返回组数和
+groupCount 预算计数因此不必相等。下一个基字事件仍经同一有界延后路径消费，不重复
+读取或收费，取消不改变已发布完整组。没有 RTC 的平面输入继续由下述单层列计划
+逐列使用匿名空基字；RTC 层级、显式范围和嵌套几何仍待完成。
 
 正式 `ForumBodyTextFlowCursor` 在同一次 styled 遍历中独占借用上述分组器，返回
 `ForumBodyTextFlowInline` 与不可变 `ForumBodyInlineFlowContent`。前后普通文字和所有

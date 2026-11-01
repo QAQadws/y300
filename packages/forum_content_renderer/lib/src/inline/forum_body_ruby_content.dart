@@ -41,8 +41,15 @@ final class ForumBodyRubyNestedContent extends ForumBodyRubyInlineContent {
   final List<ForumBodyRubyGroupContent> groups;
 }
 
-final class ForumBodyRubyAnnotationContent {
-  ForumBodyRubyAnnotationContent({
+sealed class ForumBodyRubyAnnotationContent extends ForumBodyRubyInlineContent {
+  factory ForumBodyRubyAnnotationContent({
+    required String path,
+    required HtmlSourceTextRange source,
+    required ForumBodyResolvedStyle style,
+    required List<ForumBodyRubyInlineContent> parts,
+  }) = ForumBodyRubyTextAnnotationContent;
+
+  ForumBodyRubyAnnotationContent._({
     required this.path,
     required this.source,
     required this.style,
@@ -52,6 +59,28 @@ final class ForumBodyRubyAnnotationContent {
   final HtmlSourceTextRange source;
   final ForumBodyResolvedStyle style;
   final List<ForumBodyRubyInlineContent> parts;
+}
+
+final class ForumBodyRubyTextAnnotationContent
+    extends ForumBodyRubyAnnotationContent {
+  ForumBodyRubyTextAnnotationContent({
+    required super.path,
+    required super.source,
+    required super.style,
+    required super.parts,
+  }) : super._();
+}
+
+/// One real RTC, not another annotation column. Its ordered parts retain RT
+/// boxes, anonymous text, whitespace and nested ruby until level pairing.
+final class ForumBodyRubyAnnotationContainerContent
+    extends ForumBodyRubyAnnotationContent {
+  ForumBodyRubyAnnotationContainerContent({
+    required super.path,
+    required super.source,
+    required super.style,
+    required super.parts,
+  }) : super._();
 }
 
 /// A stable base segment and all its associated annotations. Empty/unpaired
@@ -75,6 +104,9 @@ final class ForumBodyRubyGroupContent {
   final String rootPath;
   final int index;
   final List<ForumBodyRubyInlineContent> base;
+
+  /// Root-level RT and RTC entries in original order. RTC.parts owns its RT
+  /// children; neither the container nor those children are flattened here.
   final List<ForumBodyRubyAnnotationContent> annotations;
 }
 

@@ -64,6 +64,44 @@ String _signature(ForumBodyInlineFlowContent input) => input.parts
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'RTC remains a typed layer through the same mixed text-flow consumer',
+    () {
+      final cursor = _cursor('前<ruby>A<rtc><rt>x</rt><rt>y</rt></rtc></ruby>后');
+      final unit = _drain(cursor).whereType<ForumBodyTextFlowInline>().single;
+      final group = unit.content.parts
+          .whereType<ForumBodyInlineFlowRuby>()
+          .single
+          .group;
+      final level =
+          group.annotations.single as ForumBodyRubyAnnotationContainerContent;
+      expect(level.source.runeStart, 2);
+      expect(level.source.runeEnd, 4);
+      expect(
+        level.parts.cast<ForumBodyRubyTextAnnotationContent>().map(
+          (rt) => _text(rt.parts),
+        ),
+        ['x', 'y'],
+      );
+      expect(
+        (unit.content.parts.first as ForumBodyInlineFlowText)
+            .content
+            .projection
+            .text,
+        '前',
+      );
+      expect(
+        (unit.content.parts.last as ForumBodyInlineFlowText)
+            .content
+            .projection
+            .text,
+        '后',
+      );
+      cursor.close();
+      expect(level.parts, hasLength(2));
+    },
+  );
+
   test('prefix, ruby groups and suffix remain one source-bound context', () {
     final cursor = _cursor(
       '<p>前 <b>粗</b> <ruby>漢<rt>かん</rt>字<rt>じ</rt></ruby> 后</p>',

@@ -300,6 +300,9 @@ ForumBodyParagraphContent _anonymousBase(ForumBodyRubyGroupContent group) =>
 ForumBodyParagraphContent _annotationInput(
   ForumBodyRubyAnnotationContent annotation,
 ) {
+  if (annotation is ForumBodyRubyAnnotationContainerContent) {
+    _unsupported(annotation.path);
+  }
   final parts = annotation.parts;
   if (parts.length != 1 || parts.single is! ForumBodyRubyTextContent) {
     _unsupported(annotation.path);
