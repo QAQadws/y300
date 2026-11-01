@@ -131,6 +131,13 @@ takeMetrics 时也不常驻子句柄。数值结果不替代可读 layout，取�
 
 `openInlineSequence` 只为专门格式处理者提供已打开行内根中的纯文字片段，显式保留折叠边缘空格；它不把 ruby/资源包装节点变成普通段落。括号回退、隐藏子树和注音间空白通过 `takeIgnored` 返回来源记录，这些记录不证明阅读 coverage。样式诊断继续由借用 flow 的 owner 按批次取走。
 
+RT 根内的纯文字投影按 [CSS Ruby 的强制换行合并](https://www.w3.org/TR/css-ruby-1/#anonymous-ruby)
+规则，使用核心 `suppressLineBreaks` 将 BR、文本 CR/LF 及原生行/段分隔符合为单行
+空格，保留真实来源范围、样式所有权及原始字符/run 计费。它不使用编辑提示的宽泛
+singleLine 空白策略；pre/pre-wrap 的普通空格、Tab、NBSP 和全角空格继续保留。
+基字与外部正文的换行不受影响。该策略只作用于 RT 格式根，普通段落仍拒绝直接消费
+ruby。投影 revision 为 7；可见字形覆盖、语义锚点和已读资格仍由 Host 独立核对。
+
 parser revision 为 2；显式 `rb` 与 `rtc` 分别保存为 `rubyBase` 与
 `rubyAnnotationContainer`，保留原始 child-path 和来源范围。它们默认保持行内继承，
 RTC 不提前缩小字体，真正的 RT 继续由唯一 resolver 设置注音字号。普通文字收集器和

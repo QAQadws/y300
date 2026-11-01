@@ -314,6 +314,7 @@ final class ForumBodyParagraphContentBuilder {
         style: root.style,
         layoutMode: layoutMode,
         singleLineWhitespace: false,
+        suppressLineBreaks: node.kind == ForumBodyElementKind.rubyText,
         preserveCollapsibleEdges: true,
         limits: this,
         emptySourceRune: node.source.runeStart,
@@ -518,6 +519,7 @@ final class _ParagraphCollector {
     required this.limits,
     required this.emptySourceRune,
     this.preserveCollapsibleEdges = false,
+    this.suppressLineBreaks = false,
   });
   final ForumBodyIdentity identity;
   final String? path;
@@ -526,6 +528,7 @@ final class _ParagraphCollector {
   final ForumBodyResolvedStyle style;
   final ForumBodyParagraphLayoutMode layoutMode;
   final bool singleLineWhitespace;
+  final bool suppressLineBreaks;
   final ForumBodyParagraphContentBuilder limits;
   final int emptySourceRune;
   final bool preserveCollapsibleEdges;
@@ -545,6 +548,7 @@ final class _ParagraphCollector {
             : _inputs,
         maxOutputCodeUnits: limits.maxInputCodeUnits,
         preserveCollapsibleEdges: preserveEdges,
+        suppressLineBreaks: suppressLineBreaks,
       );
 
   void absorb(_ParagraphCollector other) {
@@ -552,6 +556,7 @@ final class _ParagraphCollector {
         path != other.path ||
         layoutMode != other.layoutMode ||
         singleLineWhitespace != other.singleLineWhitespace ||
+        suppressLineBreaks != other.suppressLineBreaks ||
         preserveCollapsibleEdges != other.preserveCollapsibleEdges ||
         !identical(style, other.style)) {
       throw ForumBodyParagraphInputException(

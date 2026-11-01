@@ -2,6 +2,84 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:test/test.dart';
 
 void main() {
+  for (final mode in HtmlDisplayWhiteSpace.values) {
+    test('forced-break suppression preserves source and styles ($mode)', () {
+      final runs = [
+        HtmlDisplayTextRun(text: 'A', sourceRuneStart: 0, whiteSpace: mode),
+        HtmlDisplayTextRun(
+          text: '\n',
+          sourceRuneStart: 1,
+          whiteSpace: mode,
+          hardBreak: true,
+        ),
+        HtmlDisplayTextRun(
+          text: '\n',
+          sourceRuneStart: 2,
+          whiteSpace: mode,
+          hardBreak: true,
+        ),
+        HtmlDisplayTextRun(text: 'B', sourceRuneStart: 3, whiteSpace: mode),
+      ];
+      final projection = HtmlDisplayTextProjection.build(
+        runs,
+        suppressLineBreaks: true,
+      );
+      expect(projection.text, 'A B');
+      expect(projection.parts.map((part) => part.runIndex), [0, 1, 3]);
+      expect(projection.sourceAtUtf16(1).sourceRune, 1);
+      expect(projection.sourceAtUtf16(2).sourceRune, 3);
+      expect(projection.sourceAtUtf16(3).sourceRune, 4);
+      if (mode != HtmlDisplayWhiteSpace.singleLine) {
+        expect(HtmlDisplayTextProjection.build(runs).text, 'A\n\nB');
+      }
+      expect(
+        () => HtmlDisplayTextProjection.build(
+          runs,
+          suppressLineBreaks: true,
+          maxOutputCodeUnits: 2,
+        ),
+        throwsA(isA<HtmlDisplayTextLimitException>()),
+      );
+    });
+  }
+
+  for (final mode in [
+    HtmlDisplayWhiteSpace.pre,
+    HtmlDisplayWhiteSpace.preWrap,
+  ]) {
+    test('break suppression keeps literal preformatted whitespace ($mode)', () {
+      final projection = HtmlDisplayTextProjection.build([
+        HtmlDisplayTextRun(
+          text: ' x  \n  y\t\u00a0\u3000 ',
+          sourceRuneStart: 10,
+          whiteSpace: mode,
+        ),
+      ], suppressLineBreaks: true);
+      expect(projection.text, ' x     y\t\u00a0\u3000 ');
+      expect(projection.sourceAtUtf16(0).sourceRune, 10);
+      expect(projection.sourceAtUtf16(projection.text.length).sourceRune, 22);
+    });
+  }
+
+  test('suppressed CRLF and Unicode breaks retain actual source gaps', () {
+    final projection = HtmlDisplayTextProjection.build(const [
+      HtmlDisplayTextRun(text: 'a\r', sourceRuneStart: 2),
+      HtmlDisplayTextRun(text: '\n\u2028\u2029\u0085', sourceRuneStart: 4),
+      HtmlDisplayTextRun(text: 'b', sourceRuneStart: 20),
+    ], suppressLineBreaks: true);
+    expect(projection.text, 'a b');
+    expect(projection.sourceAtUtf16(1).sourceRune, 3);
+    final before = projection.sourceAtUtf16(
+      2,
+      affinity: HtmlProjectionAffinity.upstream,
+    );
+    final after = projection.sourceAtUtf16(2);
+    expect(before.sourceRune, 8);
+    expect(after.sourceRune, 20);
+    expect(before.isExact, isFalse);
+    expect(after.isExact, isFalse);
+  });
+
   test(
     'inline fragments retain collapsed edge spaces with their source spans',
     () {

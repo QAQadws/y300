@@ -45,6 +45,7 @@ enum _BodySample {
   consecutiveRuby,
   explicitRuby,
   alignedRuby,
+  breakRuby,
 }
 
 void main() {
@@ -693,6 +694,10 @@ final class _Fixture {
           _BodySample.alignedRuby => (
             '<p><ruby><rb style="font-size:30px">A</rb><rb style="font-size:20px">B</rb><rt style="font-size:10px">xx</rt><rt style="font-size:15px">yy</rt></ruby></p>',
             'ABxxyy',
+          ),
+          _BodySample.breakRuby => (
+            '<p><ruby>A<rt>x<br>y</rt></ruby></p>',
+            'Ax\ny',
           ),
         };
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);

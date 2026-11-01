@@ -28,8 +28,14 @@ Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以�
 空格并修剪边缘；原始源码点边界、跨 run 的 CRLF 和折叠范围仍可显式查询。
 来源缺口处继续区分上下游边界；坐标投影不证明边界之间的全部内容已经可见。
 该策略不删除零宽连接符等非空白控制字符，不承担论坛格式识别或语义锚点迁移。
-`isSingleLineWhitespace` 供同一格式处理者判定外围空白。行内片段可显式使用
-`preserveCollapsibleEdges: true`，将两端可折叠空白保留为有真实来源范围的一个空格，
+`isSingleLineWhitespace` 供同一格式处理者判定外围空白。
+
+格式处理者也可显式使用
+`suppressLineBreaks: true`，只将 BR、CR/LF、NEL、Unicode 行/段分隔符合为有真实来源
+范围的 U+0020；连续换行合并，跨样式 CRLF 仍只占一次显示。原有 normal/pre-line 的
+空白折叠和 pre/pre-wrap 的普通空格、Tab、NBSP、全角空格保持各自规则。该策略不做
+语言启发式删除，不承担论坛格式识别。只修改显示投影，不改写来源或原始输入预算。
+行内片段可独立使用 `preserveCollapsibleEdges: true`，将两端可折叠空白保留为有真实来源范围的一个空格，
 交由父格式化上下文决定摆放或修剪；实际硬换行边缘仍不保留折叠空白。
 默认段落行为保持修剪边缘，预格式化、NBSP/全角空格和来源缺口规则不变。
 该选项不插入虚构字元，也不决定 ruby 分段、可见 coverage 或语义身份。
@@ -52,7 +58,7 @@ Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以�
 不额外常驻来源索引；增量消费者应合并新增窗口包络，避免反复扫描增长前缀。
 来源映射相等还需核对字素分段与边缘亲和性；只比较相同文字不足以复用来源映射。
 `displaySegmentationHash`/`hasSameDisplaySegmentation` 仅描述文字与独立字素边界，
-不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 6。
+不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 7。
 
 `HtmlInlineTextProjection` 为父排版引擎单独建立 UTF-16 坐标：每个显式原子范围仅在
 `engineText` 中占一个 U+FFFC，原来的 `display` 仍保存子文字、独立字素和真实来源。

@@ -75,6 +75,32 @@ String text(List<ForumBodyRubyInlineContent> parts) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final mode in ['normal', 'pre', 'pre-wrap', 'pre-line']) {
+    test('annotation breaks join without changing base whitespace ($mode)', () {
+      final run = open(
+        '<ruby>A<br>B<rt style="white-space:$mode">x<br><b>y</b></rt></ruby>',
+      );
+      final group = drain(run.cursor).single;
+      expect(text(group.base), 'A\nB');
+      final annotation = texts(group.annotations.single.parts).single;
+      expect(annotation.projection.text, 'x y');
+      expect(annotation.projection.sourceAtUtf16(0).sourceRune, 3);
+      expect(annotation.projection.sourceAtUtf16(2).sourceRune, 5);
+      expect(annotation.projection.sourceAtUtf16(3).sourceRune, 6);
+      expect(annotation.runs.last.style.textStyle.fontWeight, FontWeight.w700);
+      expect(run.cursor.inputCodeUnits, 6);
+      expect(run.cursor.textRunCount, 6);
+    });
+  }
+
+  test('annotation preformatted spaces remain literal around joined breaks', () {
+    final run = open(
+      '<ruby>A<rt style="white-space:pre-wrap"> x  \n  y\u00a0\u3000 </rt></ruby>',
+    );
+    final annotation = drain(run.cursor).single.annotations.single;
+    expect(text(annotation.parts), ' x     y\u00a0\u3000 ');
+  });
+
   test('explicit RB units retain boundaries, source and independent styles', () {
     final run = open(
       '<ruby>pre<rb>A</rb>mid<rb style="font-size:30px"><b>B</b></rb>tail<rt>x</rt><rt>y</rt></ruby>',

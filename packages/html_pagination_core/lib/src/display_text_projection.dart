@@ -74,7 +74,7 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
-  static const revision = 6;
+  static const revision = 7;
 
   /// Whitespace accepted by the explicit single-line projection policy. This
   /// predicate does not classify forum content or change normal HTML spacing.
@@ -111,15 +111,20 @@ final class HtmlDisplayTextProjection {
        _trailingAfterSource = trailingAfterSource,
        _sourceIsOrdered = sourceIsOrdered;
 
+  /// [suppressLineBreaks] joins forced breaks as collapsible U+0020, while
+  /// keeping each run's other whitespace rules. Consecutive breaks share one
+  /// actual source range; CRLF remains one break even across styled runs.
   factory HtmlDisplayTextProjection.build(
     List<HtmlDisplayTextRun> runs, {
     int maxOutputCodeUnits = 16384,
     bool preserveCollapsibleEdges = false,
+    bool suppressLineBreaks = false,
   }) {
     if (maxOutputCodeUnits < 0) throw ArgumentError.value(maxOutputCodeUnits);
     final builder = _ProjectionBuilder(
       maxOutputCodeUnits,
       preserveCollapsibleEdges,
+      suppressLineBreaks,
     );
     var previousEnd = 0;
     for (var i = 0; i < runs.length; i++) {
@@ -497,9 +502,14 @@ final class _ProjectedRune {
 }
 
 final class _ProjectionBuilder {
-  _ProjectionBuilder(this.limit, this.preserveCollapsibleEdges);
+  _ProjectionBuilder(
+    this.limit,
+    this.preserveCollapsibleEdges,
+    this.suppressLineBreaks,
+  );
   final int limit;
   final bool preserveCollapsibleEdges;
+  final bool suppressLineBreaks;
   final output = <_ProjectedRune>[];
   final utf16Starts = <int>[0];
   _ProjectedRune? pendingSpace;
@@ -531,15 +541,22 @@ final class _ProjectionBuilder {
         mode == HtmlDisplayWhiteSpace.preLine ||
         mode == HtmlDisplayWhiteSpace.singleLine;
     final singleLine = mode == HtmlDisplayWhiteSpace.singleLine;
+    // Format-level suppression affects only forced breaks. In particular it
+    // must not collapse preformatted tabs/spaces, NBSP or ideographic spaces.
+    final suppressedBreak =
+        suppressLineBreaks &&
+        (hardBreak || const {10, 0x85, 0x2028, 0x2029}.contains(value.rune));
     if (!singleLine &&
+        !suppressedBreak &&
         (hardBreak ||
             (mode != HtmlDisplayWhiteSpace.normal && value.rune == 10))) {
       pendingSpace = null;
       _emit(value);
-    } else if (collapse &&
-        (singleLine
-            ? HtmlDisplayTextProjection.isSingleLineWhitespace(value.rune)
-            : const {9, 10, 12, 32}.contains(value.rune))) {
+    } else if (suppressedBreak ||
+        (collapse &&
+            (singleLine
+                ? HtmlDisplayTextProjection.isSingleLineWhitespace(value.rune)
+                : const {9, 10, 12, 32}.contains(value.rune)))) {
       if (pendingSpace == null) {
         pendingSpace = _ProjectedRune(32, source, source + 1, runIndex);
       } else {

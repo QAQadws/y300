@@ -98,6 +98,37 @@ final class _Fixture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final mode in ['normal', 'pre', 'pre-wrap', 'pre-line']) {
+    test('actual annotation BR lays out once on one native line ($mode)', () {
+      final f = _Fixture(
+        '<ruby>A<rt style="white-space:$mode">x<br><b>y</b></rt></ruby>',
+        width: 60,
+        entries: 2,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(1));
+      expect(f.cache.pictureBuildCount, 0);
+      final builds = f.cache.layoutBuildCount;
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.projection.text, 'Ax y');
+        final x = fragment.glyphBoxes(1, 2).single;
+        final y = fragment.glyphBoxes(3, 4).single;
+        expect(x.top, closeTo(y.top, 1e-4));
+        final hit = fragment.view.sourceAt(
+          Offset(y.left + .1, (y.top + y.bottom) / 2),
+        );
+        expect(hit.sourceRune, 3);
+        expect(hit.isExact, isTrue);
+        expect(f.cache.layoutBuildCount, builds);
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+    });
+  }
+
   test('aligned native paint matches independent native row formatting', () async {
     final f = _Fixture(
       '<ruby><rb style="font-size:30px">A</rb><rb>B</rb><rt>xx</rt><rt style="font-size:15px">yy</rt></ruby>',
