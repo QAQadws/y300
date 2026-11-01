@@ -63,15 +63,15 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 原生文字流为 `editStatus`（`.pstatus`）选择该模式。默认使用读者字号的 0.88、斜体、读者颜色的 0.62 alpha 和下方 8 逻辑像素 padding；显式作者声明及对应角色的读者覆盖策略仍经过同一个样式解析器。文字和行内样式保留来源，内部 BR 与 Unicode 空白通过显式 singleLine 投影归一化。仅当其后直接同级节点出现 BR 时，才一起移除周边结构空白；不跨父容器删除换行，无 BR 的预格式化空白仍保留。该过程按原事件预算消费，不重写 IR 或 DOM 坐标。
 
-编辑提示目前接入文字及普通行内内容；其中的嵌套块或资源仍明确失败，不能以容器准入为由静默展开或丢弃。style、text-flow 和 block-flow revision 分别为 5、3、3，Host 须将其纳入布局身份。
+编辑提示目前接入文字及普通行内内容；其中的嵌套块或资源仍明确失败，不能以容器准入为由静默展开或丢弃。style、text-flow 和 block-flow revision 分别为 6、3、3，Host 须将其纳入布局身份。
 
 ## 原生 ruby 分组几何
 
-`ForumBodyRubyGroupLayout` 接收已分组、同文档/字体/样式版本的基字与注音 `intrinsicSingleLine` 内容，从阅读 owner 的 `ForumBodyParagraphCache` 借用两个实际布局。基字提供字母基线，注音居中置于上方，组宽为二者固有宽度的较大值；不缩小长注音，不把 rt 排入基字行。两侧保持独立的字素、双向文字、来源投影和非线性缩放输入，绘制、分侧选区框和命中共用同一组偏移。
+`ForumBodyRubyGroupLayout` 接收已分组、同文档/字体/样式版本的基字与注音 `intrinsicSingleLine` 内容，从阅读 owner 的 `ForumBodyParagraphCache` 借用两个实际布局。基字提供字母基线，注音按显式 side 居中置于上方或下方，组宽为二者固有宽度的较大值；不缩小长注音，不把 rt 排入基字行。两侧保持独立的字素、双向文字、来源投影和非线性缩放输入，绘制、分侧选区框和命中共用同一组偏移。
 
 `placeholderDimensions` 是已经缩放的直接 TextPainter 行内几何；父排版不得再次进行 inline Widget 自动缩放。gap 使用已解析的逻辑像素；改变 gap 或有效最大宽度可重组几何而复用原生字形。空注音不建立额外布局或保留空白上行。组宽超过显式最大值、无效几何、不同来源/字体或非固有单行内容均明确失败；失败与 `close` 仅释放本组 lease，owner 关闭使活跃组立即失效，不能晚访问已销毁的 native 布局。
 
-作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 3，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
+作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 4，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
 
 单个孤立 RT 的匿名空基字使用所在 ruby 根的正文样式和实际空字体基线，注音保持自己的
 半字号及逐字号缩放。父显示和来源只含实际 RT；空基字区域的命中指向该 RT 且标为近似，
@@ -82,13 +82,25 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 注音上下文对象和完整输入范围；相同文字的旧上下文不能替代当前内容。返回值仅含尺寸、
 基线、实际字体 ascent/descent、偏移和分侧命中分界，不保留内容/native/owner，也不证明绘制或可见 coverage。
 既有 `ForumBodyRubyGroupLayout.adopt` 复用唯一几何实现，继续接管句柄并要求图片已准备；
-批次字形可用于计划阶段，数值测量不能绕过可读交付门槛；几何 revision 为 3。
+批次字形可用于计划阶段，数值测量不能绕过可读交付门槛；几何 revision 为 4。
 
-`ForumBodyRubyLevelMetrics` 是同一实际 ruby 根、同一物理行内的纯数值层级并集，
+`ForumBodyRubyLevelMetrics` 是同一实际 ruby 根、同一物理行及同一注音侧的纯数值层级并集，
 包含基字/注音的最大 ascent/descent 和 gap。`alignedTo` 只用当前真实字体基线计算
 偏移，不排字、不再次缩放；目标必须包含该列的实际字体范围。可读 `adopt` 和
 `fromRequests` 接收同一可选层级目标，重新核对当前租约的实际几何，绘制、选区与命中
 共用对齐后的偏移。它不是可见 coverage 或已读证明，不能将不同 ruby 根合成一层。
+
+唯一 resolver 解析继承的 `ruby-position`，默认 `alternate`，同时保留 `over`、`under`、
+`alternate over`、`alternate under` 和 `inter-character`。非法组合整条回退到继承值并报告，
+角色级读者属性恢复不丢失该值。注音层配对决定实际 side：隐式层取 ruby 根，显式层取
+RTC；RT 自己的声明不会改变其父注音层的位置。`sideAfter` 保留相邻层上下交替的规则，
+当前单层首先解析为 over 或 under；完整多层堆叠仍待组合层完成。
+
+测量与可读准备通过同一不可变请求传递 side，重试替换 band 时也保持它。下方注音依据
+实际基字 descent 与注音 ascent 对齐，基字仍提供同一个字母基线；两侧的行级并集分开，
+不把上方/下方的字体框合成一层。绘制、选区、命中和匿名空基字近似区域共用偏移，
+不增加 native 排字或缓存预算。`inter-character` 保留解析值但当前横向组合明确拒绝，
+不能当作上方注音吞并；专项文字方向后端另行接入。
 
 计划阶段通过既有 `ForumBodyRubyGroupPreparation.forMetrics` 准备同一组请求：每次
 advance 仍在首次 native 排字后返回，cache-only 可使用未录图的字形，且两条路径均不
@@ -184,7 +196,7 @@ TextFlow、BlockFlow 的 `workDone` 包含零新事件的延后消费，maxEvent
 BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步传递 flowWorkDone，
 这种进展不会误判成停滞；Session 经下述格式计划器消费未测量结构，再进入同一 composer。
 
-样式解析只把 `rt` 及其后代标为注音角色，基字保留其正文/标题等上下文角色，正文级读者设置不会因此跳过基字。注音默认字号为继承字号的一半，行高为 1，参照 [CSS Ruby 的 UA 样式](https://www.w3.org/TR/css-ruby-1/)；显式作者声明及逐角色读者覆盖仍经过唯一 resolver，`line-height:inherit` 取真实父级值，非法声明保留注音默认值并报告。固有行内排字不重复应用所在块的首行缩进，普通 wrap/fit 的缩进准入没有因此放宽。当前 style 和 paragraph backend revision 均为 5。
+样式解析只把 `rt` 及其后代标为注音角色，基字保留其正文/标题等上下文角色，正文级读者设置不会因此跳过基字。注音默认字号为继承字号的一半，行高为 1，参照 [CSS Ruby 的 UA 样式](https://www.w3.org/TR/css-ruby-1/)；显式作者声明及逐角色读者覆盖仍经过唯一 resolver，`line-height:inherit` 取真实父级值，非法声明保留注音默认值并报告。固有行内排字不重复应用所在块的首行缩进，普通 wrap/fit 的缩进准入没有因此放宽。当前 style 和 paragraph backend revision 分别为 6、5。
 
 ## 混合行内排版输入
 
@@ -467,4 +479,4 @@ pre-wrap/NBSP 的字面空白不误折叠。sourceHint 使用实际来源包络�
 当前正式计划接入隐式文本与显式 RB 基字、直接 RT 列、单个 RTC 中的实际 RT 列及独立的非空孤立 RT 列；隐式纯空白基字、显式分层、嵌套及拟合混排
 仍明确失败，不丢弃或压平结构，不把隐式缩进空白当作显式 RB 的被标注空格。
 这些格式与长段、完整复杂正文性能门槛仍须完成，不能扩张预算或切回旧 renderer 绕过。
-Session.inlinePlanRevision 为 9，Host 指纹须纳入它及混排/批次/投影版本。
+Session.inlinePlanRevision 为 10，Host 指纹须纳入它及混排/批次/投影版本。

@@ -60,6 +60,7 @@ final class ForumBodyInlinePlanPreparation {
           cache: cache,
           base: request.base,
           annotation: request.annotation,
+          side: request.side,
           ensureOwner: _guard,
           textScaler: _textScaler!,
           gap: request.gap,

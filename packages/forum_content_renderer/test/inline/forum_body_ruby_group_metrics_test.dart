@@ -17,7 +17,7 @@ void main() {
     ForumBodyTextLease base,
     ForumBodyTextLease rt,
   })
-  measured(String baseText) {
+  measured(String baseText, {ForumBodyRubySide side = ForumBodyRubySide.over}) {
     final input = rubyPairInput(base: baseText, annotation: 'xx');
     final base = cache.acquire(content: input.base, width: 100);
     final rt = cache.acquire(content: input.annotation, width: 100);
@@ -29,11 +29,32 @@ void main() {
         baseLease: base,
         annotation: rt.content,
         annotationLease: rt,
+        side: side,
       ),
       base: base,
       rt: rt,
     );
   }
+
+  test(
+    'opposite annotation sides cannot share a numeric level or reshape glyphs',
+    () {
+      final over = measured('A');
+      final builds = cache.layoutBuildCount;
+      final under = measured('A', side: ForumBodyRubySide.under);
+      expect(cache.layoutBuildCount, builds);
+      final level = ForumBodyRubyLevelMetrics.single(over.metrics);
+      expect(
+        () => level.include(under.metrics),
+        throwsA(isA<ForumBodyRubyGroupException>()),
+      );
+      expect(
+        () => under.metrics.alignedTo(level),
+        throwsA(isA<ForumBodyRubyGroupException>()),
+      );
+      expect(over.base.isActive && under.rt.isActive, isTrue);
+    },
+  );
 
   test(
     'shared level uses actual font baselines without reshaping and is idempotent',

@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_layout.dart';
+import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_metrics.dart';
 
 enum _Phase {
@@ -36,9 +37,10 @@ final class ForumBodyRubyRowAlignment {
   final _dimensions = <PlaceholderDimensions>[];
   final List<ForumBodyRubyLevelMetrics?> _targets;
   final List<int> _atomRows;
-  final _globalLevels = <int, ForumBodyRubyLevelMetrics>{};
-  final _rowLevels = <(int, int), ForumBodyRubyLevelMetrics>{};
-  final _changedRows = <(int, int)>{};
+  final _globalLevels = <(int, ForumBodyRubySide), ForumBodyRubyLevelMetrics>{};
+  final _rowLevels =
+      <(int, int, ForumBodyRubySide), ForumBodyRubyLevelMetrics>{};
+  final _changedRows = <(int, int, ForumBodyRubySide)>{};
   List<ForumBodyParagraphLine>? _rows;
   var _phase = _Phase.globalUnion;
   var _cursor = 0;
@@ -69,7 +71,7 @@ final class ForumBodyRubyRowAlignment {
       switch (_phase) {
         case _Phase.globalUnion:
           final column = columns[_cursor];
-          final id = levelIds[_cursor];
+          final id = (levelIds[_cursor], column.side);
           _globalLevels[id] =
               _globalLevels[id]?.include(column) ??
               ForumBodyRubyLevelMetrics.single(column);
@@ -80,7 +82,7 @@ final class ForumBodyRubyRowAlignment {
           }
         case _Phase.globalCheck:
           if (columns[_cursor].needsLevelAlignment(
-            _globalLevels[levelIds[_cursor]]!,
+            _globalLevels[(levelIds[_cursor], columns[_cursor].side)]!,
           )) {
             _phase = _Phase.needsRows;
           } else if (++_cursor == columns.length) {
@@ -94,8 +96,8 @@ final class ForumBodyRubyRowAlignment {
             _row++;
           } else {
             if (offset < line.engineCoverageStartUtf16) _invalid();
-            final key = (_row, levelIds[_cursor]);
             final column = columns[_cursor];
+            final key = (_row, levelIds[_cursor], column.side);
             _atomRows[_cursor] = _row;
             _rowLevels[key] =
                 _rowLevels[key]?.include(column) ??
@@ -107,7 +109,11 @@ final class ForumBodyRubyRowAlignment {
             }
           }
         case _Phase.rowCheck:
-          final key = (_atomRows[_cursor], levelIds[_cursor]);
+          final key = (
+            _atomRows[_cursor],
+            levelIds[_cursor],
+            columns[_cursor].side,
+          );
           if (columns[_cursor].needsLevelAlignment(_rowLevels[key]!)) {
             _changedRows.add(key);
           }
@@ -116,7 +122,11 @@ final class ForumBodyRubyRowAlignment {
             _phase = _Phase.rowApply;
           }
         case _Phase.rowApply:
-          final key = (_atomRows[_cursor], levelIds[_cursor]);
+          final key = (
+            _atomRows[_cursor],
+            levelIds[_cursor],
+            columns[_cursor].side,
+          );
           if (_changedRows.contains(key)) {
             final target = _rowLevels[key]!;
             _targets[_cursor] = target;

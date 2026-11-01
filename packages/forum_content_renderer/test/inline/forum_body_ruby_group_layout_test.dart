@@ -33,6 +33,75 @@ void main() {
   });
 
   test(
+    'under annotation paint and hits share independently formatted native offsets',
+    () async {
+      final input = rubyPairInput();
+      final group = ForumBodyRubyGroupLayout.create(
+        cache: cache,
+        base: input.base,
+        annotation: input.annotation,
+        gap: 2,
+        side: ForumBodyRubySide.under,
+      );
+      final base = TextPainter(
+        text: input.base.textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final rt = TextPainter(
+        text: input.annotation.textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      try {
+        expect(group.size, const Size(40, 32));
+        expect(group.baseOffset, Offset.zero);
+        expect(group.annotationOffset, const Offset(10, 22));
+        expect(
+          group.baseline,
+          base.computeDistanceToActualBaseline(TextBaseline.alphabetic),
+        );
+        expect(group.sourceAt(const Offset(1, 5)).part, ForumBodyRubyPart.base);
+        final hit = group.sourceAt(const Offset(11, 23));
+        expect(hit.part, ForumBodyRubyPart.annotation);
+        expect(hit.position.sourceRune, 2);
+        final actual = ui.PictureRecorder();
+        group.paint(Canvas(actual), Offset.zero);
+        final actualPixels = await pixels(actual, group.size);
+        final expected = ui.PictureRecorder();
+        final canvas = Canvas(expected);
+        base.paint(canvas, Offset.zero);
+        rt.paint(canvas, const Offset(10, 22));
+        expect(actualPixels, await pixels(expected, group.size));
+      } finally {
+        base.dispose();
+        rt.dispose();
+        group.close();
+      }
+      expect(cache.activeLeases, 0);
+    },
+  );
+
+  test('under anonymous base area remains an approximate annotation hit', () {
+    final input = rubyPairInput(base: '');
+    final group = ForumBodyRubyGroupLayout.create(
+      cache: cache,
+      base: input.base,
+      annotation: input.annotation,
+      side: ForumBodyRubySide.under,
+    );
+    try {
+      final blank = group.sourceAt(const Offset(1, 1));
+      expect(blank.part, ForumBodyRubyPart.annotation);
+      expect(blank.position.isExact, isFalse);
+      final rt = group.sourceAt(const Offset(11, 25));
+      expect(rt.part, ForumBodyRubyPart.annotation);
+      expect(rt.position.sourceRune, 1);
+      expect(rt.position.isExact, isTrue);
+    } finally {
+      group.close();
+    }
+  });
+
+  test(
     'empty base borrows native font metrics and never becomes a text hit',
     () {
       final input = rubyPairInput(base: '');

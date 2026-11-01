@@ -22,7 +22,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 9;
+  static const revision = 10;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -38,6 +38,7 @@ final class ForumBodyInlinePlanInput {
           ({
             ForumBodyParagraphContent base,
             ForumBodyParagraphContent annotation,
+            ForumBodyRubySide side,
           })
         >[];
     final atoms = <({int startUtf16, int endUtf16})>[];
@@ -92,6 +93,7 @@ final class ForumBodyInlinePlanInput {
       List<int> baseIndices,
       List<int> annotationIndices,
       int levelId,
+      ForumBodyRubySide side,
     ) {
       if (base.projection.text.isEmpty && annotation.projection.text.isEmpty) {
         _unsupported(base.path ?? annotation.path);
@@ -100,7 +102,7 @@ final class ForumBodyInlinePlanInput {
       if (!base.isSourceFree) baseIndices.add(append(base));
       if (!annotation.isSourceFree) annotationIndices.add(append(annotation));
       atoms.add((startUtf16: start, endUtf16: offset));
-      pairs.add((base: base, annotation: annotation));
+      pairs.add((base: base, annotation: annotation, side: side));
       levelIds.add(levelId);
       previousCollapsibleSpace = false;
       atLineStart = false;
@@ -124,11 +126,11 @@ final class ForumBodyInlinePlanInput {
           }
           final bases = resolveForumBodyRubyBaseInputs(group);
           final annotationColumns = resolveForumBodyRubyAnnotationInputs(group);
-          if (bases.isEmpty && annotationColumns.isEmpty) {
+          if (bases.isEmpty && annotationColumns.columns.isEmpty) {
             _unsupported(group.rootPath);
           }
           final annotations = [
-            for (final annotation in annotationColumns)
+            for (final annotation in annotationColumns.columns)
               _annotationInput(annotation),
           ];
           final baseSources = [for (final _ in bases) <int>[]];
@@ -183,6 +185,7 @@ final class ForumBodyInlinePlanInput {
               sources,
               annotationIndices,
               levelId,
+              annotationColumns.side,
             );
             column++;
             if (trailing != null) {
@@ -200,6 +203,7 @@ final class ForumBodyInlinePlanInput {
               const [],
               annotationIndices,
               levelId,
+              annotationColumns.side,
             );
           }
           if (deferredTail != null) {
@@ -245,6 +249,7 @@ final class ForumBodyInlinePlanInput {
         for (final pair in pairs)
           ForumBodyRubyPairRequest(
             base: requests[pair.base]!,
+            side: pair.side,
             annotation:
                 requests[pair.annotation] ??
                 ForumBodyTextRequest.paragraph(pair.annotation),
@@ -283,6 +288,7 @@ final class ForumBodyInlinePlanInput {
       final pair = groups[i];
       groups[i] = ForumBodyRubyPairRequest(
         base: replace(pair.base),
+        side: pair.side,
         annotation: replace(pair.annotation),
         gap: pair.gap,
         maxWidth: pair.maxWidth,

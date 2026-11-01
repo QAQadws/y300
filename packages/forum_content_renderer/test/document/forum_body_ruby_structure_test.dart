@@ -75,6 +75,7 @@ void main() {
     '<ruby><rb></rb><rt></rt></ruby>',
     '<ruby>A<rtc><rt>x</rt></rtc><rtc><rt>y</rt></rtc></ruby>',
     '<ruby>A<rtc>word</rtc></ruby>',
+    '<ruby style="ruby-position:inter-character">A<rt>x</rt></ruby>',
     '<ruby>A<rtc> </rtc></ruby>',
     '<ruby>A<rtc>&nbsp;<rt>x</rt></rtc></ruby>',
     '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc></ruby>',

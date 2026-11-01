@@ -3,6 +3,7 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
+import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_layout.dart';
 import 'forum_body_ruby_group_metrics.dart';
 
@@ -63,6 +64,7 @@ final class ForumBodyRubyGroupPreparation {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubySide side = ForumBodyRubySide.over,
   }) => ForumBodyRubyGroupPreparation.fromRequests(
     cache: cache,
     base: ForumBodyTextRequest.paragraph(base),
@@ -71,6 +73,7 @@ final class ForumBodyRubyGroupPreparation {
     textScaler: textScaler,
     gap: gap,
     maxWidth: maxWidth,
+    side: side,
   );
 
   factory ForumBodyRubyGroupPreparation.fromRequests({
@@ -82,6 +85,7 @@ final class ForumBodyRubyGroupPreparation {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubySide side = ForumBodyRubySide.over,
     ForumBodyRubyLevelMetrics? level,
   }) => _open(
     cache: cache,
@@ -92,6 +96,7 @@ final class ForumBodyRubyGroupPreparation {
     textScaler: textScaler,
     gap: gap,
     maxWidth: maxWidth,
+    side: side,
     preparePaint: true,
     level: level,
   );
@@ -108,6 +113,7 @@ final class ForumBodyRubyGroupPreparation {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubySide side = ForumBodyRubySide.over,
   }) => _open(
     cache: cache,
     base: base,
@@ -117,6 +123,7 @@ final class ForumBodyRubyGroupPreparation {
     textScaler: textScaler,
     gap: gap,
     maxWidth: maxWidth,
+    side: side,
     preparePaint: false,
   );
 
@@ -130,6 +137,7 @@ final class ForumBodyRubyGroupPreparation {
     required TextScaler textScaler,
     required double gap,
     required double maxWidth,
+    required ForumBodyRubySide side,
     required bool preparePaint,
     ForumBodyRubyLevelMetrics? level,
   }) {
@@ -151,6 +159,7 @@ final class ForumBodyRubyGroupPreparation {
       maxWidth,
       annotation.content.projection.text.isEmpty ? 1 : 2,
       preparePaint,
+      side,
       level,
     );
   }
@@ -166,6 +175,7 @@ final class ForumBodyRubyGroupPreparation {
     this.maxWidth,
     this.expectedPartCount,
     this._preparePaint,
+    this.side,
     this._level,
   ) : _requests = [base, annotation];
 
@@ -177,6 +187,7 @@ final class ForumBodyRubyGroupPreparation {
   ForumBodyParagraphBudgetException? _lastBudgetRejection;
   final double gap;
   final double maxWidth;
+  final ForumBodyRubySide side;
   final int expectedPartCount;
   final bool _preparePaint;
   final ForumBodyRubyLevelMetrics? _level;
@@ -336,6 +347,7 @@ final class ForumBodyRubyGroupPreparation {
         annotation: _requests[1].content,
         annotationLease: expectedPartCount == 2 ? _leases[1] : null,
         gap: gap,
+        side: side,
         maxWidth: maxWidth,
         level: _level,
       );
@@ -354,6 +366,7 @@ final class ForumBodyRubyGroupPreparation {
         annotation: _requests[1].content,
         annotationLease: expectedPartCount == 2 ? _leases[1] : null,
         gap: gap,
+        side: side,
         maxWidth: maxWidth,
       );
       _guard();

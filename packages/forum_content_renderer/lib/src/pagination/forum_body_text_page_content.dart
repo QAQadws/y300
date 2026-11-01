@@ -6,6 +6,7 @@ import '../inline/forum_body_ruby_group_layout.dart';
 import '../inline/forum_body_ruby_group_metrics.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
+import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 
@@ -17,6 +18,7 @@ final class ForumBodyRubyPairRequest {
     required this.annotation,
     this.gap = 0,
     this.maxWidth = 16384,
+    this.side = ForumBodyRubySide.over,
   }) {
     ForumBodyRubyGroupLayout.validateInputs(
       base: base.content,
@@ -29,6 +31,7 @@ final class ForumBodyRubyPairRequest {
   final ForumBodyTextRequest annotation;
   final double gap;
   final double maxWidth;
+  final ForumBodyRubySide side;
   bool get hasAnnotation => annotation.content.projection.text.isNotEmpty;
   int get nativeHandleCount => hasAnnotation ? 2 : 1;
 }

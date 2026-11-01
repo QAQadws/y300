@@ -7,7 +7,7 @@ import 'forum_body_length.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 5;
+const forumBodyStyleRevision = 6;
 ForumBodyLineHeight forumBodyReaderHeight(ForumBodyReaderStyle reader) {
   final height = reader.textStyle.height;
   return height == null || height == kTextHeightNone
@@ -51,6 +51,7 @@ final class ForumBodyStyleBuilder {
     'text-align',
     'direction',
     'white-space',
+    'ruby-position',
     'text-indent',
     'display',
     'visibility',
@@ -430,12 +431,26 @@ final class ForumBodyStyleBuilder {
         _ => _unsupported(node, 'visibility', rawVisibility, visibilityHidden),
       };
     }
+    final rawRubyPosition = value('ruby-position');
+    final ForumBodyRubyPosition rubyPosition = switch (rawRubyPosition) {
+      null || 'inherit' || 'unset' => parent.rubyPosition,
+      'initial' => ForumBodyRubyPosition.alternate,
+      _ =>
+        ForumBodyRubyPosition.tryParse(rawRubyPosition) ??
+            _unsupported(
+              node,
+              'ruby-position',
+              rawRubyPosition,
+              parent.rubyPosition,
+            ),
+    };
     return ForumBodyResolvedStyle(
       textStyle: style,
       role: role,
       textAlign: alignment,
       textDirection: direction,
       whiteSpace: whiteSpace,
+      rubyPosition: rubyPosition,
       indent: indent,
       margin: _insets(node, 'margin', size, role, parent.margin),
       padding: _insets(node, 'padding', size, role, parent.padding),

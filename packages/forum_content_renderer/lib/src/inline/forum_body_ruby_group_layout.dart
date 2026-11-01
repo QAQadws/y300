@@ -3,6 +3,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 import 'forum_body_ruby_group_metrics.dart';
 
@@ -19,8 +20,8 @@ final class ForumBodyRubyHit {
 
 /// One indivisible horizontal ruby pair, borrowing its two native layouts from
 /// the reading owner's cache. The base supplies the alphabetic baseline; the
-/// annotation is centered above it. Each side keeps its own Unicode/source
-/// projection, styles and actual per-font-size TextScaler input.
+/// annotation is centered on its selected over/under side. Each side keeps its
+/// own Unicode/source projection, styles and per-font-size TextScaler input.
 ///
 /// This port consumes already-grouped content. It neither parses a ruby element
 /// nor flattens its annotation into ordinary text. The parent inline composer
@@ -46,6 +47,7 @@ final class ForumBodyRubyGroupLayout {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubySide side = ForumBodyRubySide.over,
   }) => _acquire(
     cache: cache,
     base: base,
@@ -53,6 +55,7 @@ final class ForumBodyRubyGroupLayout {
     textScaler: textScaler,
     gap: gap,
     maxWidth: maxWidth,
+    side: side,
     cachedOnly: false,
   )!;
 
@@ -65,6 +68,7 @@ final class ForumBodyRubyGroupLayout {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubySide side = ForumBodyRubySide.over,
   }) => _acquire(
     cache: cache,
     base: base,
@@ -72,6 +76,7 @@ final class ForumBodyRubyGroupLayout {
     textScaler: textScaler,
     gap: gap,
     maxWidth: maxWidth,
+    side: side,
     cachedOnly: true,
   );
 
@@ -95,6 +100,7 @@ final class ForumBodyRubyGroupLayout {
     required double gap,
     required double maxWidth,
     required bool cachedOnly,
+    required ForumBodyRubySide side,
   }) {
     validateInputs(
       base: base,
@@ -141,6 +147,7 @@ final class ForumBodyRubyGroupLayout {
         annotationLease: annotationLease,
         gap: gap,
         maxWidth: maxWidth,
+        side: side,
       );
     } catch (_) {
       annotationLease?.release();
@@ -160,6 +167,7 @@ final class ForumBodyRubyGroupLayout {
     double gap = 0,
     double maxWidth = 16384,
     ForumBodyRubyLevelMetrics? level,
+    ForumBodyRubySide side = ForumBodyRubySide.over,
   }) {
     try {
       final measured = ForumBodyRubyGroupMetrics.measure(
@@ -169,6 +177,7 @@ final class ForumBodyRubyGroupLayout {
         annotationLease: annotationLease,
         gap: gap,
         maxWidth: maxWidth,
+        side: side,
       );
       final metrics = level == null ? measured : measured.alignedTo(level);
       final baseLayout = baseLease.layout;
@@ -254,9 +263,10 @@ final class ForumBodyRubyGroupLayout {
     }
     final annotation = _annotation;
     final emptyBase = _base!.content.projection.text.isEmpty;
-    final useAnnotation =
-        annotation != null &&
-        (emptyBase || offset.dy < metrics.annotationHitBoundary);
+    final inAnnotationBand = metrics.side == ForumBodyRubySide.over
+        ? offset.dy < metrics.annotationHitBoundary
+        : offset.dy >= metrics.annotationHitBoundary;
+    final useAnnotation = annotation != null && (emptyBase || inAnnotationBand);
     final position = useAnnotation
         ? annotation.layout.sourceAt(offset - annotationOffset)
         : _base!.layout.sourceAt(offset - baseOffset);
@@ -264,7 +274,7 @@ final class ForumBodyRubyGroupLayout {
       part: useAnnotation
           ? ForumBodyRubyPart.annotation
           : ForumBodyRubyPart.base,
-      position: emptyBase && offset.dy >= metrics.annotationHitBoundary
+      position: emptyBase && !inAnnotationBand
           ? HtmlProjectedSourcePosition(
               sourceRune: position.sourceRune,
               displayUtf16: position.displayUtf16,

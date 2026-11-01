@@ -1,16 +1,18 @@
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../style/forum_body_style_options.dart';
 import 'forum_body_ruby_content.dart';
 
 /// Resolve actual RT columns of one annotation level. Container identity stays
 /// in the grammar; anonymous/spanning text, multiple levels and intra-level gaps
 /// require their own layout, never transparent-container text concatenation.
-List<ForumBodyRubyTextAnnotationContent> resolveForumBodyRubyAnnotationInputs(
-  ForumBodyRubyGroupContent group,
-) {
+({List<ForumBodyRubyTextAnnotationContent> columns, ForumBodyRubySide side})
+resolveForumBodyRubyAnnotationInputs(ForumBodyRubyGroupContent group) {
   final entries = group.annotations;
   if (entries.every((entry) => entry is ForumBodyRubyTextAnnotationContent)) {
-    return List.unmodifiable(
+    return _result(
       entries.cast<ForumBodyRubyTextAnnotationContent>(),
+      group.style.rubyPosition,
+      group.rootPath,
     );
   }
   if (entries.length != 1 ||
@@ -43,7 +45,18 @@ List<ForumBodyRubyTextAnnotationContent> resolveForumBodyRubyAnnotationInputs(
     // It is not the removable edge indentation around actual RT children.
     _unsupported(container.path);
   }
-  return List.unmodifiable(columns);
+  return _result(columns, container.style.rubyPosition, container.path);
+}
+
+({List<ForumBodyRubyTextAnnotationContent> columns, ForumBodyRubySide side})
+_result(
+  Iterable<ForumBodyRubyTextAnnotationContent> columns,
+  ForumBodyRubyPosition position,
+  String path,
+) {
+  final side = position.sideAfter(null);
+  if (side == null) _unsupported(path);
+  return (columns: List.unmodifiable(columns), side: side);
 }
 
 bool _space(int rune) => const {9, 10, 12, 13, 32}.contains(rune);

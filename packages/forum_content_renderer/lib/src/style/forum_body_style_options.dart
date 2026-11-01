@@ -2,7 +2,10 @@ import 'package:flutter/painting.dart';
 
 import 'forum_body_length.dart';
 import 'forum_body_box_style.dart';
+import 'forum_body_ruby_position.dart';
 import '../document/forum_body_document.dart';
+
+export 'forum_body_ruby_position.dart';
 
 enum ForumBodyStyleScope { asDefault, forceBody, forceAll }
 
@@ -98,6 +101,7 @@ final class ForumBodyResolvedStyle {
     required this.textAlign,
     required this.textDirection,
     this.whiteSpace = ForumBodyWhiteSpace.normal,
+    this.rubyPosition = ForumBodyRubyPosition.alternate,
     this.indent = ForumBodyLength.zero,
     this.margin = const ForumBodyInsets(),
     this.padding = const ForumBodyInsets(),
@@ -119,6 +123,7 @@ final class ForumBodyResolvedStyle {
   final TextAlign textAlign;
   final TextDirection textDirection;
   final ForumBodyWhiteSpace whiteSpace;
+  final ForumBodyRubyPosition rubyPosition;
   final ForumBodyLength indent;
   final ForumBodyInsets margin;
   final ForumBodyInsets padding;

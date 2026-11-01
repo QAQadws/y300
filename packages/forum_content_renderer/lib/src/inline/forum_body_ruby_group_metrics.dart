@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 
 /// Actual glyph geometry shared by planning and readable ruby groups. This
@@ -24,9 +25,10 @@ final class ForumBodyRubyGroupMetrics {
     required this.annotationAscent,
     required this.annotationDescent,
     required this.gap,
+    required this.side,
   });
 
-  static const revision = 3;
+  static const revision = 4;
   static const geometryTolerance = 1e-4;
 
   /// Borrows current same-owner glyph leases. Does not shape, prepare pictures,
@@ -38,6 +40,7 @@ final class ForumBodyRubyGroupMetrics {
     ForumBodyTextLease? annotationLease,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubySide side = ForumBodyRubySide.over,
   }) {
     if (!cache.ownsLease(baseLease) ||
         (annotationLease != null && !cache.ownsLease(annotationLease))) {
@@ -64,14 +67,20 @@ final class ForumBodyRubyGroupMetrics {
         ? Rect.zero
         : _textBounds(annotationLease);
     final width = math.max(baseBounds.width, annotationBounds.width);
-    final baseTop = annotationLease == null
+    final baseTop = annotationLease == null || side == ForumBodyRubySide.under
         ? 0.0
         : annotationBounds.height + gap;
+    final annotationTop =
+        annotationLease != null && side == ForumBodyRubySide.under
+        ? baseBounds.height + gap
+        : 0.0;
     final baseOffset = Offset(
       (width - baseBounds.width) / 2 - baseBounds.left,
       baseTop - baseBounds.top,
     );
-    final height = baseTop + baseBounds.height;
+    final height =
+        baseBounds.height +
+        (annotationLease == null ? 0 : annotationBounds.height + gap);
     final baseline = baseOffset.dy + baseLease.layout.alphabeticBaseline;
     if (width > maxWidth) {
       throw const ForumBodyRubyGroupException(
@@ -99,10 +108,14 @@ final class ForumBodyRubyGroupMetrics {
       baseOffset: baseOffset,
       annotationOffset: Offset(
         (width - annotationBounds.width) / 2 - annotationBounds.left,
-        -annotationBounds.top,
+        annotationTop - annotationBounds.top,
       ),
       hasAnnotation: annotationLease != null,
-      annotationHitBoundary: annotationBounds.height + gap / 2,
+      annotationHitBoundary:
+          (side == ForumBodyRubySide.over
+              ? annotationBounds.height
+              : baseBounds.height) +
+          gap / 2,
       baseFontBaseline: baseFontBaseline,
       annotationFontBaseline: annotationFontBaseline,
       baseAscent: baseFontBaseline - baseBounds.top,
@@ -114,6 +127,7 @@ final class ForumBodyRubyGroupMetrics {
           ? 0
           : annotationBounds.bottom - annotationFontBaseline,
       gap: gap,
+      side: side,
     );
   }
 
@@ -130,13 +144,16 @@ final class ForumBodyRubyGroupMetrics {
   final double annotationAscent;
   final double annotationDescent;
   final double gap;
+  final ForumBodyRubySide side;
 
   /// Only an actual annotation shift needs another parent layout. Padding a
   /// shorter unannotated column would not change its paint relative to baseline.
   bool needsLevelAlignment(ForumBodyRubyLevelMetrics level) =>
       hasAnnotation &&
       ((annotationFontBaseline + annotationOffset.dy - baseline) -
-                  (-level.baseAscent - level.gap - level.annotationDescent))
+                  (side == ForumBodyRubySide.over
+                      ? -level.baseAscent - level.gap - level.annotationDescent
+                      : level.baseDescent + level.gap + level.annotationAscent))
               .abs() >
           geometryTolerance;
 
@@ -148,8 +165,13 @@ final class ForumBodyRubyGroupMetrics {
       );
     }
     final annotationHeight = level.annotationAscent + level.annotationDescent;
-    final baseline = annotationHeight + level.gap + level.baseAscent;
-    final height = baseline + level.baseDescent;
+    final over = side == ForumBodyRubySide.over;
+    final baseline =
+        level.baseAscent + (over ? annotationHeight + level.gap : 0);
+    final height =
+        baseline +
+        level.baseDescent +
+        (over ? 0 : annotationHeight + level.gap);
     if (!height.isFinite ||
         height <= 0 ||
         height > 16384 ||
@@ -167,11 +189,15 @@ final class ForumBodyRubyGroupMetrics {
       annotationOffset: hasAnnotation
           ? Offset(
               annotationOffset.dx,
-              level.annotationAscent - annotationFontBaseline,
+              (over ? 0 : baseline + level.baseDescent + level.gap) +
+                  level.annotationAscent -
+                  annotationFontBaseline,
             )
           : Offset.zero,
       hasAnnotation: hasAnnotation,
-      annotationHitBoundary: annotationHeight + level.gap / 2,
+      annotationHitBoundary:
+          (over ? annotationHeight : level.baseAscent + level.baseDescent) +
+          level.gap / 2,
       baseFontBaseline: baseFontBaseline,
       annotationFontBaseline: annotationFontBaseline,
       baseAscent: baseAscent,
@@ -179,6 +205,7 @@ final class ForumBodyRubyGroupMetrics {
       annotationAscent: annotationAscent,
       annotationDescent: annotationDescent,
       gap: gap,
+      side: side,
     );
   }
 
@@ -209,6 +236,7 @@ final class ForumBodyRubyGroupMetrics {
 /// cheap alignment check, never the geometry used to publish a page.
 final class ForumBodyRubyLevelMetrics {
   const ForumBodyRubyLevelMetrics._({
+    required this.side,
     this.baseAscent = 0,
     this.baseDescent = 0,
     this.annotationAscent = 0,
@@ -217,7 +245,9 @@ final class ForumBodyRubyLevelMetrics {
   });
 
   factory ForumBodyRubyLevelMetrics.single(ForumBodyRubyGroupMetrics column) =>
-      const ForumBodyRubyLevelMetrics._().include(column);
+      ForumBodyRubyLevelMetrics._(side: column.side).include(column);
+
+  final ForumBodyRubySide side;
 
   final double baseAscent;
   final double baseDescent;
@@ -225,21 +255,26 @@ final class ForumBodyRubyLevelMetrics {
   final double annotationDescent;
   final double gap;
 
-  ForumBodyRubyLevelMetrics include(ForumBodyRubyGroupMetrics column) =>
-      ForumBodyRubyLevelMetrics._(
-        baseAscent: math.max(baseAscent, column.baseAscent),
-        baseDescent: math.max(baseDescent, column.baseDescent),
-        annotationAscent: math.max(annotationAscent, column.annotationAscent),
-        annotationDescent: math.max(
-          annotationDescent,
-          column.annotationDescent,
-        ),
-        gap: math.max(gap, column.hasAnnotation ? column.gap : 0),
+  ForumBodyRubyLevelMetrics include(ForumBodyRubyGroupMetrics column) {
+    if (side != column.side) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.geometry,
       );
+    }
+    return ForumBodyRubyLevelMetrics._(
+      side: side,
+      baseAscent: math.max(baseAscent, column.baseAscent),
+      baseDescent: math.max(baseDescent, column.baseDescent),
+      annotationAscent: math.max(annotationAscent, column.annotationAscent),
+      annotationDescent: math.max(annotationDescent, column.annotationDescent),
+      gap: math.max(gap, column.hasAnnotation ? column.gap : 0),
+    );
+  }
 
   bool contains(ForumBodyRubyGroupMetrics column) {
     const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
-    return column.baseAscent <= baseAscent + tolerance &&
+    return side == column.side &&
+        column.baseAscent <= baseAscent + tolerance &&
         column.baseDescent <= baseDescent + tolerance &&
         column.annotationAscent <= annotationAscent + tolerance &&
         column.annotationDescent <= annotationDescent + tolerance &&

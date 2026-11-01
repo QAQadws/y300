@@ -49,12 +49,17 @@ NovelReaderNativePageHintSearch _search(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  for (final edges in [false, true]) {
+  for (final (edges, under) in [
+    (false, false),
+    (true, false),
+    (false, true),
+    (true, true),
+  ]) {
     test(
-      'RTC visible anchor proof skips only structural edge whitespace ($edges)',
+      'RTC visible anchor proof skips only structural edge whitespace (edges=$edges, under=$under)',
       () async {
         final fixture = NativeReaderTestFixture(
-          '<p><ruby><rb>A</rb><rb>B</rb><rtc>${edges ? ' \n' : ''}<rt>x</rt><rt>y</rt>${edges ? '\n ' : ''}</rtc></ruby></p>',
+          '<p><ruby><rb>A</rb><rb>B</rb><rtc style="ruby-position:${under ? 'under' : 'over'}">${edges ? ' \n' : ''}<rt>x</rt><rt>y</rt>${edges ? '\n ' : ''}</rtc></ruby></p>',
         );
         final source = edges ? 5 : 3;
         final target = fixture.anchors.anchorAtSourceRune(

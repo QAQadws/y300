@@ -98,6 +98,65 @@ final class _Fixture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final (rootStyle, rtcStyle, rtStyle, under) in [
+    ('ruby-position:under', '', '', true),
+    ('', 'ruby-position:under', '', true),
+    ('ruby-position:alternate under', '', '', true),
+    ('ruby-position:under', 'ruby-position:initial', '', false),
+    ('', '', 'ruby-position:under', false),
+  ]) {
+    test(
+      'annotation position belongs to the actual level ($rootStyle/$rtcStyle/$rtStyle)',
+      () {
+        final f = _Fixture(
+          '<ruby style="$rootStyle">A<rtc style="$rtcStyle"><rt style="$rtStyle">xx</rt></rtc></ruby>',
+          width: 100,
+          height: 60,
+        );
+        f.finish();
+        final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          final base = fragment.glyphBoxes(0, 1).single;
+          final rt = fragment.glyphBoxes(1, 3).single;
+          expect(under ? rt.top >= base.bottom : rt.bottom <= base.top, isTrue);
+          final glyph = fragment.glyphBoxes(2, 3).single;
+          final hit = fragment.view.sourceAt(
+            Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+          );
+          expect(hit.sourceRune, 2);
+          expect(hit.isExact, isTrue);
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  test('over and under RTC segments do not share annotation-row extents', () {
+    final f = _Fixture(
+      '<ruby><rb style="font-size:30px">A</rb><rtc style="ruby-position:under"><rt>xx</rt></rtc><rb>B</rb><rtc style="ruby-position:over"><rt>yy</rt></rtc></ruby>',
+      width: 200,
+      height: 100,
+      entries: 2,
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(
+        fragment.glyphBoxes(1, 3).single.top,
+        greaterThanOrEqualTo(fragment.glyphBoxes(0, 1).single.bottom),
+      );
+      expect(
+        fragment.glyphBoxes(4, 6).single.bottom,
+        lessThanOrEqualTo(fragment.glyphBoxes(3, 4).single.top),
+      );
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
   for (final (html, expected, source, exact) in [
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt><rt>y</rt></rtc></ruby>',
@@ -346,18 +405,22 @@ void main() {
     expect(f.session.activeIssuedLeases, 0);
   });
 
-  for (final (baseSize, rtFirst, rtSecond, tight, nonlinear) in [
-    (30, 10, 10, false, false),
-    (20, 10, 15, false, false),
-    (30, 8, 15, false, true),
-    (30, 10, 15, true, false),
+  for (final (baseSize, rtFirst, rtSecond, tight, nonlinear, under) in [
+    (30, 10, 10, false, false, false),
+    (20, 10, 15, false, false, false),
+    (30, 8, 15, false, true, false),
+    (30, 10, 15, true, false, false),
+    (30, 10, 10, false, false, true),
+    (20, 10, 15, false, false, true),
+    (30, 8, 15, false, true, true),
+    (30, 10, 15, true, false, true),
   ]) {
     test(
-      'one ruby level aligns actual baselines (base=$baseSize, RT=$rtFirst/$rtSecond, tight=$tight, nonlinear=$nonlinear)',
+      'one ruby level aligns actual baselines (base=$baseSize, RT=$rtFirst/$rtSecond, tight=$tight, nonlinear=$nonlinear, under=$under)',
       () {
         final lineHeight = tight ? '.25' : '1';
         final f = _Fixture(
-          '<ruby><rb style="font-size:${baseSize}px;line-height:$lineHeight">A</rb><rb style="line-height:$lineHeight">B</rb><rt style="font-size:${rtFirst}px;line-height:$lineHeight">xx</rt><rt style="font-size:${rtSecond}px;line-height:$lineHeight">yy</rt></ruby>',
+          '<ruby style="ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:${baseSize}px;line-height:$lineHeight">A</rb><rb style="line-height:$lineHeight">B</rb><rt style="font-size:${rtFirst}px;line-height:$lineHeight">xx</rt><rt style="font-size:${rtSecond}px;line-height:$lineHeight">yy</rt></ruby>',
           width: 300,
           height: 200,
           entries: 2,
@@ -390,7 +453,14 @@ void main() {
           for (final annotation in [a, b]) {
             expect(annotation.top, greaterThanOrEqualTo(-1e-4));
             for (final base in bases) {
-              expect(annotation.bottom, lessThanOrEqualTo(base.top + 1e-4));
+              if (under) {
+                expect(
+                  annotation.top,
+                  greaterThanOrEqualTo(base.bottom - 1e-4),
+                );
+              } else {
+                expect(annotation.bottom, lessThanOrEqualTo(base.top + 1e-4));
+              }
             }
           }
           final glyph = fragment.glyphBoxes(5, 6).single;

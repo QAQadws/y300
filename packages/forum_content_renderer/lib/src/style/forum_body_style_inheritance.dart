@@ -46,6 +46,7 @@ final class ForumBodyStyleInheritance {
           : effective.alignmentFromReader,
       textDirection: effective.textDirection,
       whiteSpace: effective.whiteSpace,
+      rubyPosition: effective.rubyPosition,
       indent: restore(ForumBodyStyleProperty.textIndent)
           ? author.indent
           : effective.indent,
