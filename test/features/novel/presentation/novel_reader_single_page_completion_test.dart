@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,7 +58,135 @@ enum _BodySample {
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
+  setUpAll(() async {
+    await (FontLoader('packages/forum_content_renderer/ForumBodyInlineSpace')
+          ..addFont(
+            rootBundle.load(
+              'packages/forum_content_renderer/assets/fonts/inline_space.ttf',
+            ),
+          ))
+        .load();
+  });
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  for (final rtl in [false, true]) {
+    for (final root in [false, true]) {
+      for (final readOnly in [false, true]) {
+        testWidgets(
+          'breakable original gap completes at physical EOF (rtl=$rtl root=$root readOnly=$readOnly)',
+          (tester) async {
+            tester.view.physicalSize = const Size(360, 480);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            final fixture = (await tester.runAsync(
+              () => _Fixture.create(
+                rawBody: (
+                  '<p><ruby style="line-height:1"><rb style="font-size:200px">A</rb> <rb style="font-size:200px">B</rb><rb style="font-size:200px">C</rb>${root ? '' : '<rtc>'}<rt style="font-size:20px">xx</rt> <rt style="font-size:20px">yy</rt>${root ? '' : '</rtc>'}</ruby></p>',
+                  'A BCxx yy',
+                ),
+              ),
+            ))!;
+            try {
+              if (readOnly) {
+                await tester.runAsync(fixture.seedUnfinishedPosition);
+              }
+              final before = (await tester.runAsync(
+                () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+              ))!;
+              await tester.pumpWidget(
+                fixture.app(
+                  nativePagination: true,
+                  preferences: NovelReaderPreferences.defaults().copyWith(
+                    flowMode: rtl
+                        ? NovelReaderFlowMode.pagedRtl
+                        : NovelReaderFlowMode.pagedLtr,
+                  ),
+                ),
+              );
+              await _pumpNativePageReady(tester, page: readOnly ? 1 : 0);
+              final controller = tester
+                  .widget<NovelReaderNativePagedViewport>(
+                    find.byType(NovelReaderNativePagedViewport),
+                  )
+                  .controller;
+              expect(controller.snapshot!.length, 3);
+              await tester.pump(const Duration(milliseconds: 300));
+              expect(
+                (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+                isNot(true),
+              );
+              if (readOnly) {
+                expect(
+                  (await tester.runAsync(
+                    () =>
+                        fixture.db.query(AppDatabase.novelReadingProgressTable),
+                  ))!,
+                  before,
+                );
+              }
+              if (!readOnly) {
+                await tester.drag(
+                  find.byType(NovelReaderNativePagedViewport),
+                  Offset(rtl ? 280 : -280, 0),
+                );
+                await _pumpNativePageReady(tester, page: 1, animate: true);
+              }
+              // The original source ends with yy. Its EOF is physically visible
+              // before unannotated C; it cannot mark the chapter complete.
+              expect(
+                controller
+                    .viewForPage(1)!
+                    .coverage
+                    .points
+                    .any((p) => p.sourceRune == 9),
+                isTrue,
+              );
+              await tester.pump(const Duration(milliseconds: 300));
+              expect(
+                (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+                isNot(true),
+              );
+              await tester.drag(
+                find.byType(NovelReaderNativePagedViewport),
+                Offset(rtl ? 280 : -280, 0),
+              );
+              await _pumpNativePageReady(tester, page: 2, animate: true);
+              final last = controller.viewForPage(2)!;
+              expect(last.coverage.hasClippedGlyphs, isFalse);
+              expect(
+                last.coverage.points.every(
+                  (p) => p.sourceRune >= 3 && p.sourceRune <= 4,
+                ),
+                isTrue,
+              );
+              await tester.pump(const Duration(milliseconds: 249));
+              expect(
+                (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+                isNot(true),
+              );
+              await tester.pump(const Duration(milliseconds: 1));
+              final state = await fixture.load(tester);
+              expect(state.episodeStates[_chapter]?.isRead, isTrue);
+              final progress = state.progressByEpisode[_chapter]!;
+              expect(progress.pageIndex, 2);
+              expect(progress.anchorFormatVersion, 1);
+              expect(
+                progress.anchorTextOffset,
+                last.coverage.points.first.anchor.textOffset,
+              );
+              expect(
+                progress.anchorTextIdentity,
+                last.coverage.points.first.anchor.textIdentity,
+              );
+            } finally {
+              await fixture.close(tester);
+            }
+          },
+        );
+      }
+    }
+  }
 
   for (final rtl in [false, true]) {
     for (final under in [false, true]) {

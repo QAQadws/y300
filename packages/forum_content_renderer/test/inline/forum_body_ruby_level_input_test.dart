@@ -263,7 +263,7 @@ void main() {
   });
 
   for (final html in [
-    '<ruby>A<rtc><rt>x</rt> <rt>y</rt></rtc><rt>z</rt></ruby>',
+    '<ruby>A<rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc><rt>z</rt></ruby>',
     '<ruby>A<rtc><rt>x<ruby>B<rt>b</rt></ruby></rt></rtc><rt>z</rt></ruby>',
     '<ruby>A<rtc><rt>x</rt></rtc><rtc style="ruby-position:inter-character"><rt>y</rt></rtc></ruby>',
   ]) {

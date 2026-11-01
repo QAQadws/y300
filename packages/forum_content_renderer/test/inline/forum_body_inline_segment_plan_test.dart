@@ -1,4 +1,5 @@
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_input.dart';
@@ -34,6 +35,11 @@ ForumBodyInlinePlanInput _input(String html, {double width = 300}) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    await (FontLoader(
+      'packages/forum_content_renderer/ForumBodyInlineSpace',
+    )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
+  });
   test(
     'raw span is one original source-bound atom, alongside its actual column RTs',
     () {
@@ -276,12 +282,21 @@ void main() {
     test(
       'a gap does not fuse otherwise breakable columns even with an empty outer box: $outer',
       () {
-        expect(
-          () => _input(
-            '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc>$outer</ruby>',
-          ),
-          throwsA(isA<ForumBodyParagraphInputException>()),
+        final input = _input(
+          '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc>$outer</ruby>',
         );
+        expect(input.atoms.map((a) => a.runtimeType), [
+          ForumBodyRubyColumnAtomRequest,
+          ForumBodyRubySoftSpaceAtomRequest,
+          ForumBodyRubyColumnAtomRequest,
+        ]);
+        expect(input.content.projection.display.text, 'Ax By');
+        expect(input.rubyLevelIds, [0, 0, 0]);
+        final gap = (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
+        expect(gap.beforeColumn, 1);
+        expect(gap.members.single.annotationIndex, 0);
+        expect(gap.members.single.request.content.isSourceFree, isFalse);
+        expect(gap.sides.length, outer.isEmpty ? 1 : 2);
       },
     );
   }
@@ -289,12 +304,196 @@ void main() {
   test(
     'a direct RT gap does not silently disappear or fuse breakable columns',
     () {
+      final input = _input(
+        '<ruby><rb>A</rb><rb>B</rb><rt>x</rt> <rt>y</rt></ruby>',
+      );
+      final gap = (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
+      expect(gap.members.single.request.content.projection.text, ' ');
+      final band =
+          (gap.members.single.request as ForumBodyTextBandChildRequest).band;
+      expect(band.contexts.map((c) => c.projection.text), [
+        'A',
+        'B',
+        'x',
+        ' ',
+        'y',
+      ]);
+      final original = gap.members.single.request.content;
+      input.replaceBand(band, 123);
+      final rebound =
+          (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
       expect(
-        () => _input('<ruby><rb>A</rb><rb>B</rb><rt>x</rt> <rt>y</rt></ruby>'),
-        throwsA(isA<ForumBodyParagraphInputException>()),
+        (rebound.members.single.request as ForumBodyTextBandChildRequest)
+            .gutter,
+        123,
+      );
+      expect(rebound.members.single.request.content, same(original));
+      input.replaceBand(band, null);
+      expect(
+        (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest)
+            .value
+            .members
+            .single
+            .request,
+        isA<ForumBodyParagraphTextRequest>(),
       );
     },
   );
+
+  test(
+    'actual base and two ranked gaps retain source ordering through band retries',
+    () {
+      final input = _input(
+        '<ruby><rb>A</rb> <rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc><rtc style="ruby-position:under"><rt>u</rt> <rt>v</rt></rtc></ruby>',
+      );
+      final request =
+          (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
+      expect(request.members.map((m) => m.annotationIndex), [null, 0, 1]);
+      expect(request.sides, [ForumBodyRubySide.over, ForumBodyRubySide.under]);
+      expect(request.maxWidth, 16384);
+      final contexts = request.nativeRequests.map((r) => r.content).toList();
+      expect(
+        input.content.resolveAtomicContexts(1, contexts).map((w) => w.content),
+        orderedEquals(contexts),
+      );
+      final band =
+          (request.nativeRequests.first as ForumBodyTextBandChildRequest).band;
+      expect(band.contexts.map((c) => c.projection.text), [
+        'A',
+        ' ',
+        'B',
+        'x',
+        ' ',
+        'y',
+        'u',
+        ' ',
+        'v',
+      ]);
+      input.replaceBand(band, null);
+      final mapped =
+          (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
+      expect(
+        mapped.nativeRequests.every((r) => r is ForumBodyParagraphTextRequest),
+        isTrue,
+      );
+      expect(
+        mapped.nativeRequests.map((r) => r.content),
+        orderedEquals(contexts),
+      );
+    },
+  );
+
+  for (final repeat in [false, true]) {
+    test(
+      'actual gap band failure yields and rebinds only original sources repeat=$repeat',
+      () {
+        final input = _input(
+          '<ruby style="line-height:.25"><rb>A</rb><rb>B</rb><rtc style="line-height:.25"><rt>x</rt> <rt>y</rt></rtc></ruby>',
+        );
+        final original =
+            (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
+        final band =
+            (original.nativeRequests.single as ForumBodyTextBandChildRequest)
+                .band;
+        void rejectGap() {
+          input.atoms[1] = input.atoms[1].mapRequests(
+            (r) => ForumBodyTextRequest.bandChild(
+              band: band,
+              childIndex: (r as ForumBodyTextBandChildRequest).childIndex,
+              gutter: 1,
+            ),
+          );
+        }
+
+        rejectGap();
+        final cache = ForumBodyParagraphCache(
+          maxEntries: 4,
+          maxEstimatedBytes: 1 << 24,
+        );
+        addTearDown(cache.close);
+        final prep = ForumBodyInlinePlanPreparation(
+          input: input,
+          cache: cache,
+          textScaler: TextScaler.noScaling,
+          ensureOwner: () {},
+        );
+        addTearDown(prep.close);
+        var failed = false;
+        for (var i = 0; !failed && i < 1000; i++) {
+          final builds = cache.layoutBuildCount;
+          final step = prep.advance(maxParts: 1);
+          expect(cache.layoutBuildCount - builds, lessThanOrEqualTo(1));
+          expect(step.partsPrepared, lessThanOrEqualTo(1));
+          final current =
+              (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
+          failed =
+              (current.nativeRequests.single as ForumBodyTextBandChildRequest)
+                  .gutter! >
+              1;
+        }
+        expect(failed, isTrue);
+        expect(cache.activeLeases, 0);
+        if (repeat) {
+          rejectGap();
+          expect(prep.advance(maxParts: 1).partsPrepared, 1);
+          expect(
+            (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest)
+                .value
+                .nativeRequests
+                .single,
+            isA<ForumBodyParagraphTextRequest>(),
+          );
+        }
+        for (var i = 0; !prep.isReady && i < 1000; i++) {
+          final builds = cache.layoutBuildCount;
+          prep.advance(maxParts: 7);
+          expect(cache.layoutBuildCount - builds, lessThanOrEqualTo(1));
+        }
+        expect(prep.isReady, isTrue);
+        final result = prep.take();
+        result.lease.release();
+        expect(
+          (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest)
+              .value
+              .nativeRequests
+              .single
+              .content,
+          same(original.nativeRequests.single.content),
+        );
+        expect(cache.activeLeases, 0);
+      },
+    );
+  }
+
+  test('an empty LF edge does not renumber a later real original gap', () {
+    final input = _input(
+      '<ruby><rb>A</rb><rb>B</rb><rb>C</rb><rt>漢</rt>\n<rt>字</rt> <rt>語</rt></ruby>',
+    );
+    expect(input.atoms.map((a) => a.runtimeType), [
+      ForumBodyRubyColumnAtomRequest,
+      ForumBodyRubyColumnAtomRequest,
+      ForumBodyRubySoftSpaceAtomRequest,
+      ForumBodyRubyColumnAtomRequest,
+    ]);
+    final gap = (input.atoms[2] as ForumBodyRubySoftSpaceAtomRequest).value;
+    expect(gap.beforeColumn, 2);
+    expect(gap.nativeRequests.single.content.projection.text, ' ');
+    final fence = input.content.contexts.singleWhere(
+      (w) => !w.content.isSourceFree && w.content.projection.text.isEmpty,
+    );
+    expect(fence.startUtf16, fence.endUtf16);
+  });
+
+  for (final mode in ['pre', 'pre-wrap']) {
+    test('preserved $mode annotation gaps are not silently made trimmable', () {
+      expect(
+        () => _input(
+          '<ruby><rb>A</rb><rb>B</rb><rtc style="white-space:$mode"><rt>x</rt> <rt>y</rt></rtc></ruby>',
+        ),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+    });
+  }
 
   test(
     'implicit spanning base keeps real outer spaces and anonymous excess base',

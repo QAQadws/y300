@@ -370,10 +370,10 @@ void main() {
   );
 
   test(
-    'unlaid annotation gap preserves a published prefix without partial glyph admission',
+    'preserved annotation gap remains explicit failure after a published prefix',
     () {
       final f = _open(
-        '<p>prefix</p><p><ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc></ruby></p>',
+        '<p>prefix</p><p><ruby><rb>A</rb><rb>B</rb><rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc></ruby></p>',
         height: 20,
       );
       for (var i = 0; f.session.snapshot.isEmpty && i < 10000; i++) {

@@ -5,6 +5,7 @@ import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_column_request.dart';
 import 'forum_body_ruby_atom_request.dart';
 import 'forum_body_ruby_segment_request.dart';
+import 'forum_body_ruby_soft_space_request.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_span_content.dart';
 import 'forum_body_ruby_annotation_input.dart';
@@ -26,7 +27,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 16;
+  static const revision = 17;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -39,6 +40,7 @@ final class ForumBodyInlinePlanInput {
     final sourceOrder = <int>[];
     final requestsByAtom = <ForumBodyRubyAtomRequest>[];
     final atoms = <({int startUtf16, int endUtf16})>[];
+    Set<int>? softSpaceAtoms;
     final levelIds = <int>[];
     final roots = <String, int>{};
     var offset = 0;
@@ -177,11 +179,9 @@ final class ForumBodyInlinePlanInput {
           // Only a real visible spanning annotation already closes all current
           // columns. A whitespace edge by itself must remain breakable; its
           // parent trimming/break protocol is not implied by segment geometry.
-          bool? hasUnbrokenAnnotation;
-          for (final level in pairing.levels) {
-            for (final gap in level.gaps) {
-              if (gapContent(gap).projection.text.isEmpty) continue;
-              hasUnbrokenAnnotation ??= pairing.levels.any(
+          final hasUnbrokenAnnotation =
+              pairing.hasMultiColumnSpans &&
+              pairing.levels.any(
                 (l) => l.spans.any(
                   (span) =>
                       span.isMultiColumn &&
@@ -191,13 +191,7 @@ final class ForumBodyInlinePlanInput {
                       ).projection.text.isNotEmpty,
                 ),
               );
-              if (!hasUnbrokenAnnotation) {
-                _unsupported(gap.content.path ?? group.rootPath);
-              }
-              break;
-            }
-          }
-          if (pairing.hasMultiColumnSpans) {
+          if (hasUnbrokenAnnotation) {
             // Current anonymous-box pairing spans the complete original group.
             // Its interior column edges cannot become independent parent atoms.
             final segmentBases = <ForumBodyParagraphContent>[];
@@ -333,16 +327,91 @@ final class ForumBodyInlinePlanInput {
           final baseSources = [for (final _ in bases) <int>[]];
           final annotationIndices = [for (final _ in levels) <int>[]];
           Map<(int, int), List<ForumBodyParagraphContent>>? gapFences;
+          Set<int>? softEdges;
           for (final (rank, level) in levels.indexed) {
             for (final gap in level.gaps) {
               final content = gapContent(gap);
               if (content.projection.text.isNotEmpty) {
-                _unsupported(content.path);
+                if (!_isCollapsibleGap(content)) _unsupported(content.path);
+                (softEdges ??= {}).add(gap.beforeColumn);
               }
               ((gapFences ??= {})[(rank, gap.beforeColumn)] ??= []).add(
                 content,
               );
             }
+          }
+          Map<
+            int,
+            List<({ForumBodyParagraphContent content, List<int> source})>
+          >?
+          pendingBaseGaps;
+          void appendBaseSpace(
+            ForumBodyParagraphContent content,
+            List<int> sources,
+            int edge,
+          ) {
+            if (softEdges?.contains(edge) ?? false) {
+              if (content.projection.text.isNotEmpty &&
+                  !_isCollapsibleGap(content)) {
+                _unsupported(content.path);
+              }
+              ((pendingBaseGaps ??= {})[edge] ??= []).add((
+                content: content,
+                source: sources,
+              ));
+            } else {
+              sources.add(appendPlain(content));
+            }
+          }
+          var emittedEdges = 0;
+          void appendEdge(int edge) {
+            if (!(softEdges?.contains(edge) ?? false)) return;
+            final start = offset;
+            final members = <ForumBodyRubySoftSpaceMemberRequest>[];
+            for (final gap
+                in pendingBaseGaps?.remove(edge) ??
+                    const <
+                      ({ForumBodyParagraphContent content, List<int> source})
+                    >[]) {
+              gap.source.add(append(gap.content));
+              if (gap.content.projection.text.isNotEmpty) {
+                members.add((
+                  request: ForumBodyTextRequest.paragraph(gap.content),
+                  annotationIndex: null,
+                  gap: 0.0,
+                ));
+              }
+            }
+            for (var rank = 0; rank < levels.length; rank++) {
+              for (final content
+                  in gapFences?[(rank, edge)] ??
+                      const <ForumBodyParagraphContent>[]) {
+                // Empty transformed LF contexts remain original source fences,
+                // never another native member or an invented opposite font.
+                annotationIndices[rank].add(append(content));
+                if (content.projection.text.isNotEmpty) {
+                  members.add((
+                    request: ForumBodyTextRequest.paragraph(content),
+                    annotationIndex: rank,
+                    gap: 0.0,
+                  ));
+                }
+              }
+            }
+            (softSpaceAtoms ??= {}).add(atoms.length);
+            atoms.add((startUtf16: start, endUtf16: offset));
+            requestsByAtom.add(
+              ForumBodyRubyAtomRequest.softSpace(
+                ForumBodyRubySoftSpaceRequest(
+                  beforeColumn: edge,
+                  members: members,
+                  sides: [for (final level in levels) level.side],
+                  direction: group.style.textDirection,
+                ),
+              ),
+            );
+            levelIds.add(levelId);
+            emittedEdges++;
           }
           var column = 0;
           ForumBodyParagraphContent? anonymous;
@@ -364,11 +433,11 @@ final class ForumBodyInlinePlanInput {
               // Structural edge indentation is omitted; inter-base whitespace
               // uses the actual parent's text layout, without consuming an RT.
               final end = base.projection.text.length;
-              sources.add(
-                column == 0 || column == unitCount
-                    ? append(_window(base, end, end))
-                    : appendPlain(base),
-              );
+              if (column == 0 || column == unitCount) {
+                sources.add(append(_window(base, end, end)));
+              } else {
+                appendBaseSpace(base, sources, column);
+              }
               continue;
             }
             if (column >= annotationCount &&
@@ -384,7 +453,7 @@ final class ForumBodyInlinePlanInput {
                 _unsupported(group.rootPath);
               }
               if (_collapsibleEdge(base, leading: true)) {
-                sources.add(appendPlain(_window(base, 0, 1)));
+                appendBaseSpace(_window(base, 0, 1), sources, column);
                 base = _window(base, 1, base.projection.text.length);
               }
               if (_collapsibleEdge(base, leading: false)) {
@@ -393,6 +462,7 @@ final class ForumBodyInlinePlanInput {
                 base = _window(base, 0, end - 1);
               }
             }
+            appendEdge(column);
             appendColumn(
               base,
               annotationsAt(column),
@@ -400,18 +470,21 @@ final class ForumBodyInlinePlanInput {
               annotationIndices,
               levelId,
               columnIndex: column,
-              gapFences: gapFences,
+              gapFences: (softEdges?.contains(column) ?? false)
+                  ? null
+                  : gapFences,
             );
             column++;
             if (trailing != null) {
               if (column == unitCount) {
                 deferredTail = (content: trailing, source: sources);
               } else {
-                sources.add(appendPlain(trailing));
+                appendBaseSpace(trailing, sources, column);
               }
             }
           }
           for (; column < annotationCount; column++) {
+            appendEdge(column);
             appendColumn(
               anonymous ??= _anonymousBase(group),
               annotationsAt(column),
@@ -419,8 +492,14 @@ final class ForumBodyInlinePlanInput {
               annotationIndices,
               levelId,
               columnIndex: column,
-              gapFences: gapFences,
+              gapFences: (softEdges?.contains(column) ?? false)
+                  ? null
+                  : gapFences,
             );
+          }
+          if (emittedEdges != (softEdges?.length ?? 0) ||
+              (pendingBaseGaps?.isNotEmpty ?? false)) {
+            _unsupported(group.rootPath);
           }
           if (deferredTail != null) {
             deferredTail.source.add(appendPlain(deferredTail.content));
@@ -442,6 +521,7 @@ final class ForumBodyInlinePlanInput {
       style: input.style,
       contexts: contexts,
       atomicRanges: atoms,
+      softSpaceAtoms: softSpaceAtoms ?? const {},
       sourceOrder: sourceOrder,
     );
     final glyphContexts = Set<ForumBodyParagraphContent>.identity();
@@ -583,6 +663,15 @@ bool _collapsibleEdge(
       (mode == ForumBodyWhiteSpace.normal ||
           mode == ForumBodyWhiteSpace.preLine);
 }
+
+bool _isCollapsibleGap(ForumBodyParagraphContent context) =>
+    context.projection.text.isNotEmpty &&
+    context.projection.text.runes.every((r) => r == 9 || r == 32) &&
+    context.projection.parts.every((part) {
+      final mode = context.runs[part.runIndex].style.whiteSpace;
+      return mode == ForumBodyWhiteSpace.normal ||
+          mode == ForumBodyWhiteSpace.preLine;
+    });
 
 Never _unsupported(String? path) => throw ForumBodyParagraphInputException(
   ForumBodyParagraphInputFailure.structure,
