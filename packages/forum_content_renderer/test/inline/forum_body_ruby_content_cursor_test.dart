@@ -75,6 +75,105 @@ String text(List<ForumBodyRubyInlineContent> parts) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('explicit RB units retain boundaries, source and independent styles', () {
+    final run = open(
+      '<ruby>pre<rb>A</rb>mid<rb style="font-size:30px"><b>B</b></rb>tail<rt>x</rt><rt>y</rt></ruby>',
+    );
+    final group = drain(run.cursor).single;
+    expect(group.base, hasLength(5));
+    expect(text([group.base.first]), 'pre');
+    expect(text([group.base[2]]), 'mid');
+    expect(text([group.base.last]), 'tail');
+    final units = group.base.whereType<ForumBodyRubyBaseContent>().toList();
+    expect(units.map((unit) => text(unit.parts)), ['A', 'B']);
+    expect(units.map((unit) => (unit.source.runeStart, unit.source.runeEnd)), [
+      (3, 4),
+      (7, 8),
+    ]);
+    expect(units.last.style.textStyle.fontSize, 30);
+    final actual = texts(units.last.parts).single;
+    expect(actual.path, units.last.path);
+    expect(actual.projection.sourceAtUtf16(0).sourceRune, 7);
+    expect(actual.runs.single.style.textStyle.fontWeight, FontWeight.bold);
+    expect(group.annotations.map((annotation) => text(annotation.parts)), [
+      'x',
+      'y',
+    ]);
+    expect(() => units.last.parts.clear(), throwsUnsupportedError);
+  });
+
+  test('empty and annotated-space RB units are not omitted or coalesced', () {
+    final run = open('<ruby><rb></rb><rb> </rb><rb>A</rb><rt>x</rt></ruby>');
+    final group = drain(run.cursor).single;
+    final units = group.base.cast<ForumBodyRubyBaseContent>();
+    expect(units.map((unit) => text(unit.parts)), ['', ' ', 'A']);
+    expect(units.every((unit) => unit.parts.length == 1), isTrue);
+    expect(units.first.parts.single, isA<ForumBodyRubyTextContent>());
+    expect(run.cursor.inputCodeUnits, 3);
+    expect(run.cursor.textRunCount, 3);
+    expect(run.cursor.structureItemCount, 9);
+  });
+
+  test('nested ruby remains inside its explicit base unit', () {
+    final run = open(
+      '<ruby><rb>前<ruby>漢<rt>kan</rt></ruby>後</rb><rt>outer</rt></ruby>',
+    );
+    final unit =
+        drain(run.cursor).single.base.single as ForumBodyRubyBaseContent;
+    expect(unit.parts, hasLength(3));
+    expect(text([unit.parts.first]), '前');
+    expect(text([unit.parts.last]), '後');
+    final nested = unit.parts[1] as ForumBodyRubyNestedContent;
+    expect(text(nested.groups.single.base), '漢');
+    expect(text(nested.groups.single.annotations.single.parts), 'kan');
+    expect(run.cursor.groupCount, 2);
+    expect(() => unit.parts.clear(), throwsUnsupportedError);
+  });
+
+  test(
+    'hidden RB is omitted with its provenance without merging visible units',
+    () {
+      final run = open(
+        '<ruby><rb>A</rb><rb hidden>hidden</rb><rb>B</rb><rt>x</rt></ruby>',
+      );
+      final group = drain(run.cursor).single;
+      expect(
+        group.base.cast<ForumBodyRubyBaseContent>().map(
+          (unit) => text(unit.parts),
+        ),
+        ['A', 'B'],
+      );
+      expect(run.cursor.inputCodeUnits, 9);
+      expect(
+        run.cursor.takeIgnored().single.reason,
+        ForumBodyRubyIgnoredReason.hidden,
+      );
+    },
+  );
+
+  test(
+    'a pending explicit base releases its borrowed state on close or failure',
+    () {
+      final canceled = open('<ruby><rb>A</rb><rt>x</rt></ruby>');
+      canceled.cursor.advance(maxEvents: 1);
+      expect(
+        (canceled.flow.current!.node as ForumBodyElement).kind,
+        ForumBodyElementKind.rubyBase,
+      );
+      canceled.cursor.close();
+      expect(canceled.flow.isClosed, isFalse);
+      expect(canceled.cursor.current, isNull);
+      final failed = open('<ruby><rb>A<img src="x"></rb><rt>x</rt></ruby>');
+      expect(
+        () => drain(failed.cursor),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+      expect(failed.cursor.isClosed, isTrue);
+      expect(failed.flow.isClosed, isFalse);
+      expect(failed.cursor.current, isNull);
+    },
+  );
+
   test(
     'ruby base retains reader body inputs while inline geometry excludes block indentation',
     () {
@@ -477,6 +576,16 @@ void main() {
       '<ruby>A<rt>a</rt></ruby>',
     ),
     (
+      const ForumBodyRubyContentLimits(maxInputCodeUnits: 1),
+      ForumBodyRubyContentFailure.inputLimit,
+      '<ruby><rb>A</rb><rt>x</rt></ruby>',
+    ),
+    (
+      const ForumBodyRubyContentLimits(maxStructureItems: 3),
+      ForumBodyRubyContentFailure.structureLimit,
+      '<ruby><rb></rb><rb></rb><rb></rb></ruby>',
+    ),
+    (
       const ForumBodyRubyContentLimits(maxGroups: 1),
       ForumBodyRubyContentFailure.groupLimit,
       '<ruby>A<rt>a</rt>B<rt>b</rt></ruby>',
@@ -583,67 +692,77 @@ void main() {
     expect(() => first!.base.clear(), throwsUnsupportedError);
   });
 
-  test(
-    'batch size changes scheduling without changing nested groups or source data',
-    () {
-      const html =
-          '<ruby>A <ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby> B<rt>outer</rt><rt>second</rt> C<rt>c</rt></ruby>';
-      Object describeParts(List<ForumBodyRubyInlineContent> parts) => [
-        for (final part in parts)
-          if (part is ForumBodyRubyTextContent)
+  for (final html in [
+    '<ruby>A <ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby> B<rt>outer</rt><rt>second</rt> C<rt>c</rt></ruby>',
+    '<ruby>pre<rb>A<ruby>漢<rt>kan</rt></ruby>B</rb> <rb> </rb><rb>C</rb><rt>one</rt><rt>two</rt> tail<rt>end</rt></ruby>',
+  ]) {
+    test(
+      'batch size changes scheduling without changing structure or source (explicit=${html.contains('<rb>')})',
+      () {
+        Object describeParts(List<ForumBodyRubyInlineContent> parts) => [
+          for (final part in parts)
+            if (part is ForumBodyRubyTextContent)
+              [
+                part.content.path,
+                part.content.projection.text,
+                part.content.projection.sourceAtUtf16(0).sourceRune,
+                part.content.projection
+                    .sourceAtUtf16(part.content.projection.text.length)
+                    .sourceRune,
+              ]
+            else if (part is ForumBodyRubyBaseContent)
+              [
+                part.path,
+                part.source.runeStart,
+                part.source.runeEnd,
+                describeParts(part.parts),
+              ]
+            else if (part is ForumBodyRubyNestedContent)
+              [
+                part.path,
+                for (final group in part.groups)
+                  [
+                    describeParts(group.base),
+                    for (final annotation in group.annotations)
+                      describeParts(annotation.parts),
+                  ],
+              ],
+        ];
+        final values = <Object>[];
+        for (final budget in [1, 3, 128]) {
+          final run = open(html);
+          final groups = drain(run.cursor, budget: budget);
+          values.add([
+            for (final group in groups)
+              [
+                group.rootPath,
+                group.index,
+                describeParts(group.base),
+                for (final annotation in group.annotations)
+                  [annotation.path, describeParts(annotation.parts)],
+              ],
             [
-              part.content.path,
-              part.content.projection.text,
-              part.content.projection.sourceAtUtf16(0).sourceRune,
-              part.content.projection
-                  .sourceAtUtf16(part.content.projection.text.length)
-                  .sourceRune,
-            ]
-          else if (part is ForumBodyRubyNestedContent)
+              run.cursor.inputCodeUnits,
+              run.cursor.textRunCount,
+              run.cursor.groupCount,
+              run.cursor.structureItemCount,
+            ],
             [
-              part.path,
-              for (final group in part.groups)
+              for (final ignored in run.cursor.takeIgnored())
                 [
-                  describeParts(group.base),
-                  for (final annotation in group.annotations)
-                    describeParts(annotation.parts),
+                  ignored.path,
+                  ignored.reason,
+                  ignored.source.runeStart,
+                  ignored.source.runeEnd,
                 ],
             ],
-      ];
-      final values = <Object>[];
-      for (final budget in [1, 3, 128]) {
-        final run = open(html);
-        final groups = drain(run.cursor, budget: budget);
-        values.add([
-          for (final group in groups)
-            [
-              group.rootPath,
-              group.index,
-              describeParts(group.base),
-              for (final annotation in group.annotations)
-                [annotation.path, describeParts(annotation.parts)],
-            ],
-          [
-            run.cursor.inputCodeUnits,
-            run.cursor.textRunCount,
-            run.cursor.groupCount,
-            run.cursor.structureItemCount,
-          ],
-          [
-            for (final ignored in run.cursor.takeIgnored())
-              [
-                ignored.path,
-                ignored.reason,
-                ignored.source.runeStart,
-                ignored.source.runeEnd,
-              ],
-          ],
-        ]);
-      }
-      expect(values[1], values[0]);
-      expect(values[2], values[0]);
-    },
-  );
+          ]);
+        }
+        expect(values[1], values[0]);
+        expect(values[2], values[0]);
+      },
+    );
+  }
 
   test(
     'resources are not flattened and style diagnostics stay with the flow owner',

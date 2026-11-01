@@ -69,7 +69,7 @@ final class ForumBodyRubyContentCursor {
     }
   }
 
-  static const revision = 4;
+  static const revision = 5;
   ForumBodyStyledFlowCursor? _flow;
   ForumBodyStyledFlowEvent? _root;
   ForumBodyStyledFlowEvent? _last;
@@ -83,6 +83,7 @@ final class ForumBodyRubyContentCursor {
   late final HtmlSourceTextRange rootSource;
   late final ForumBodyResolvedStyle rootStyle;
   _RubyParts? _base;
+  _RubyParts? _explicitBase;
   _RubyParts? _annotation;
   final _annotations = <ForumBodyRubyAnnotationContent>[];
   final _ignored = <ForumBodyRubyIgnoredContent>[];
@@ -244,6 +245,21 @@ final class ForumBodyRubyContentCursor {
     }
     final direct = _parent(node.path) == rootPath;
     if (event.phase == ForumBodyFlowPhase.close) {
+      if (_explicitBase?.root.node.path == node.path) {
+        final base = _explicitBase!;
+        base.flush(keepEmpty: true);
+        _item();
+        _base!.parts.add(
+          ForumBodyRubyBaseContent(
+            path: node.path,
+            source: node.source,
+            style: base.root.style,
+            parts: base.parts,
+          ),
+        );
+        base.close();
+        _explicitBase = null;
+      }
       if (_annotation?.root.node.path == node.path) {
         final annotation = _annotation!;
         annotation.flush(keepEmpty: true);
@@ -315,7 +331,16 @@ final class ForumBodyRubyContentCursor {
       _publish();
       return _current != null;
     }
-    final target = _annotation ?? _base!;
+    if (node is ForumBodyElement &&
+        node.kind == ForumBodyElementKind.rubyBase) {
+      if (!direct || _explicitBase != null || _annotation != null) {
+        _fail(ForumBodyRubyContentFailure.structure);
+      }
+      _base!.flush();
+      _explicitBase = _parts(event);
+      return false;
+    }
+    final target = _explicitBase ?? _annotation ?? _base!;
     if (node is ForumBodyElement && node.kind == ForumBodyElementKind.ruby) {
       target.flush();
       _nested = _NestedRuby(
@@ -422,9 +447,11 @@ final class ForumBodyRubyContentCursor {
     if (_closed) return;
     _closed = true;
     _base?.close();
+    _explicitBase?.close();
     _annotation?.close();
     _nested?.cursor.close();
     _base = null;
+    _explicitBase = null;
     _annotation = null;
     _nested = null;
     _flow = null;

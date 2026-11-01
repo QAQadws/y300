@@ -13,6 +13,21 @@ final class ForumBodyRubyTextContent extends ForumBodyRubyInlineContent {
   final ForumBodyParagraphContent content;
 }
 
+/// One explicit RB unit. Its boundary, including an empty or whitespace-only
+/// unit, must survive until annotation pairing; it is not a transparent span.
+final class ForumBodyRubyBaseContent extends ForumBodyRubyInlineContent {
+  ForumBodyRubyBaseContent({
+    required this.path,
+    required this.source,
+    required this.style,
+    required List<ForumBodyRubyInlineContent> parts,
+  }) : parts = List.unmodifiable(parts);
+  final String path;
+  final HtmlSourceTextRange source;
+  final ForumBodyResolvedStyle style;
+  final List<ForumBodyRubyInlineContent> parts;
+}
+
 final class ForumBodyRubyNestedContent extends ForumBodyRubyInlineContent {
   ForumBodyRubyNestedContent({
     required this.path,

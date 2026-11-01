@@ -293,6 +293,7 @@ final class ForumBodyParagraphContentBuilder {
           ForumBodyElementKind.inline,
           ForumBodyElementKind.unknown,
           ForumBodyElementKind.ruby,
+          ForumBodyElementKind.rubyBase,
           ForumBodyElementKind.rubyText,
         }.contains(node.kind) ||
         root.style.hidden ||
