@@ -32,7 +32,10 @@ export 'src/inline/forum_body_ruby_group_metrics.dart'
         ForumBodyRubyAnnotationLevelMetrics,
         ForumBodyRubySegmentMetrics,
         ForumBodyRubyMeasuredSpan,
-        ForumBodyRubyPlacedSpan;
+        ForumBodyRubyPlacedSpan,
+        ForumBodyRubyAtomMetrics,
+        ForumBodyRubyColumnMetrics,
+        ForumBodyRubyComponentMetrics;
 export 'src/inline/forum_body_ruby_segment_layout.dart'
     show
         ForumBodyRubySegmentLayout,

@@ -62,11 +62,13 @@ final class ForumBodyRubySegmentMetrics {
     required List<double> columnLefts,
     required List<Offset> columnOffsets,
     required List<ForumBodyRubyPlacedSpan> spans,
-  }) : columns = List.unmodifiable(columns),
-       columnWidths = List.unmodifiable(columnWidths),
-       columnLefts = List.unmodifiable(columnLefts),
-       columnOffsets = List.unmodifiable(columnOffsets),
-       spans = List.unmodifiable(spans);
+    // Only the terminal positioning worker transfers its private buffers here.
+    // Reused horizontal vectors are already frozen. Publication never rescans N.
+  }) : columns = UnmodifiableListView(columns),
+       columnWidths = UnmodifiableListView(columnWidths),
+       columnLefts = UnmodifiableListView(columnLefts),
+       columnOffsets = UnmodifiableListView(columnOffsets),
+       spans = UnmodifiableListView(spans);
   static const revision = 2;
   final Size size;
   final double baseline;
@@ -77,6 +79,30 @@ final class ForumBodyRubySegmentMetrics {
   final List<double> columnLefts;
   final List<Offset> columnOffsets;
   final List<ForumBodyRubyPlacedSpan> spans;
+  String get alignmentSignature => columns.first.alignmentSignature;
+
+  bool needsLevelAlignment(ForumBodyRubyLevelMetrics target) {
+    final work = ForumBodyRubySegmentAlignment(segment: this, level: target);
+    while (!work.isComplete) {
+      work.advance(maxParts: 32);
+    }
+    return work.hasChanges;
+  }
+
+  /// Changes only vertical geometry; all allocated horizontal intervals remain
+  /// exactly those of this component, including RTL and overlapping ranks.
+  ForumBodyRubySegmentMetrics alignedTo(ForumBodyRubyLevelMetrics target) {
+    final work = ForumBodyRubySegmentAlignment(
+      segment: this,
+      level: target,
+      prepareResult: true,
+    );
+    while (!work.isComplete) {
+      work.advance(maxParts: 32);
+    }
+    return work.result;
+  }
+
   PlaceholderDimensions get placeholderDimensions => PlaceholderDimensions(
     size: size,
     alignment: PlaceholderAlignment.baseline,
@@ -92,9 +118,7 @@ enum _SegmentPhase {
   sum,
   spread,
   prefix,
-  levels,
-  align,
-  place,
+  position,
   ready,
   failed,
 }
@@ -127,16 +151,10 @@ final class ForumBodyRubySegmentComposition {
   final List<List<int>?> _buckets;
   final _widths = <double>[];
   final _prefix = <double>[0];
-  final _positions = <({double baseline, double top, double bottom})>[];
-  final _aligned = <ForumBodyRubyGroupMetrics>[];
-  final _lefts = <double>[];
-  final _offsets = <Offset>[];
-  final _placed = <ForumBodyRubyPlacedSpan>[];
   final _lastEnd = <int, int>{};
   ForumBodyRubyLevelMerge? _merge;
-  ForumBodyRubyColumnAlignment? _align;
+  _RubySegmentPositioning? _positioning;
   ForumBodyRubyLevelMetrics? _level;
-  _RubyStack? _stack;
   var _phase = _SegmentPhase.columns;
   var _column = 0;
   var _span = 0;
@@ -146,8 +164,6 @@ final class ForumBodyRubySegmentComposition {
   var _activeSpan = 0;
   double _sum = 0;
   double _extra = 0;
-  double _over = 0;
-  double _under = 0;
   ForumBodyRubySegmentMetrics? _result;
   bool get isComplete => _phase == _SegmentPhase.ready;
   ForumBodyRubySegmentMetrics get result {
@@ -268,10 +284,7 @@ final class ForumBodyRubySegmentComposition {
           work++;
         case _SegmentPhase.prefix:
           if (_prefix.length == _columns.length + 1) {
-            _stack = _RubyStack(_level!.baseAscent, _level!.baseDescent);
-            _over = _level!.baseAscent;
-            _under = _level!.baseDescent;
-            _phase = _SegmentPhase.levels;
+            _phase = _SegmentPhase.position;
             continue;
           }
           final sum = _prefix.last + _widths[_prefix.length - 1];
@@ -283,88 +296,22 @@ final class ForumBodyRubySegmentComposition {
           }
           _prefix.add(sum);
           work++;
-        case _SegmentPhase.levels:
-          if (_positions.length == _level!.annotations.length) {
-            final height = _over + _under;
-            if (!height.isFinite ||
-                height <= 0 ||
-                height > 16384 ||
-                !_over.isFinite ||
-                _over < 0 ||
-                _over > height) {
-              ForumBodyRubyGroupMetrics._invalid();
-            }
-            _phase = _SegmentPhase.align;
-            continue;
-          }
-          final position = _stack!.append(
-            _level!.annotations[_positions.length],
-          );
-          _positions.add(position);
-          _over = math.max(_over, -position.top);
-          _under = math.max(_under, position.bottom);
-          work++;
-        case _SegmentPhase.align:
-          if (_aligned.length == _columns.length) {
-            _phase = _SegmentPhase.place;
-            continue;
-          }
-          final index = _aligned.length;
-          final align = _align ??= ForumBodyRubyColumnAlignment(
-            column: _columns[index],
-            level: _level!,
-            prepareResult: true,
-          );
-          work += align.advance(maxParts: maxParts - work);
-          if (align.isComplete) {
-            final left = direction == TextDirection.ltr
-                ? _prefix[index]
-                : _prefix.last - _prefix[index + 1];
-            _aligned.add(align.result);
-            _lefts.add(left);
-            _offsets.add(
-              Offset(left + (_widths[index] - align.result.size.width) / 2, 0),
-            );
-            _align = null;
-          }
-        case _SegmentPhase.place:
-          if (_placed.length == _spans.length) {
-            _result = ForumBodyRubySegmentMetrics._(
+        case _SegmentPhase.position:
+          final positioning = _positioning ??= _RubySegmentPositioning(
+            _RubyComposedHorizontal(
+              columns: _columns,
+              widths: _widths,
+              prefix: _prefix,
+              spans: _spans,
               direction: direction,
-              size: Size(_prefix.last, _over + _under),
-              baseline: _over,
-              level: _level!,
-              columns: _aligned,
-              columnWidths: _widths,
-              columnLefts: _lefts,
-              columnOffsets: _offsets,
-              spans: _placed,
-            );
-            _phase = _SegmentPhase.ready;
-            work++;
-            continue;
-          }
-          final span = _spans[_placed.length];
-          final width = _prefix[span.endColumn] - _prefix[span.startColumn];
-          final left = direction == TextDirection.ltr
-              ? _prefix[span.startColumn]
-              : _prefix.last - _prefix[span.endColumn];
-          final position = _positions[span.annotationIndex];
-          _placed.add(
-            ForumBodyRubyPlacedSpan._(
-              span,
-              left,
-              width,
-              span.annotation._positioned(
-                width: width,
-                baseline: _over,
-                relativeBaseline: position.baseline,
-                top: position.top,
-                bottom: position.bottom,
-              ),
             ),
+            _level!,
           );
-          work++;
+          work += positioning.advance(maxParts: maxParts - work);
+          if (positioning.isComplete) {
+            _result = positioning.result;
+            _phase = _SegmentPhase.ready;
+          }
         case _SegmentPhase.ready || _SegmentPhase.failed:
           throw StateError('Ruby segment composition is not active');
       }

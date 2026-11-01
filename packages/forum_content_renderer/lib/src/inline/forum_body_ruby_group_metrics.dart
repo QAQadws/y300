@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
@@ -9,6 +10,8 @@ import 'forum_body_ruby_group_contract.dart';
 
 part 'forum_body_ruby_numeric_work.dart';
 part 'forum_body_ruby_segment_metrics.dart';
+part 'forum_body_ruby_segment_positioning.dart';
+part 'forum_body_ruby_atom_metrics.dart';
 
 /// Numeric geometry for one original annotation rank. Empty positions remain
 /// in the list; they neither borrow a glyph handle nor reserve a gap by itself.
@@ -288,20 +291,43 @@ final class ForumBodyRubyAnnotationLevelMetrics {
 
   ForumBodyRubyAnnotationLevelMetrics _include(
     ForumBodyRubyAnnotationMetrics item,
+  ) => _includeValues(item.hasAnnotation, item.ascent, item.descent, item.gap);
+
+  ForumBodyRubyAnnotationLevelMetrics _includeLevel(
+    ForumBodyRubyAnnotationLevelMetrics item,
+  ) => _includeValues(item.hasAnnotation, item.ascent, item.descent, item.gap);
+
+  ForumBodyRubyAnnotationLevelMetrics _includeValues(
+    bool present,
+    double otherAscent,
+    double otherDescent,
+    double otherGap,
   ) => ForumBodyRubyAnnotationLevelMetrics._(
     side: side,
-    hasAnnotation: hasAnnotation || item.hasAnnotation,
-    ascent: math.max(ascent, item.ascent),
-    descent: math.max(descent, item.descent),
-    gap: math.max(gap, item.hasAnnotation ? item.gap : 0),
+    hasAnnotation: hasAnnotation || present,
+    ascent: math.max(ascent, otherAscent),
+    descent: math.max(descent, otherDescent),
+    gap: math.max(gap, present ? otherGap : 0),
   );
 
-  bool _contains(ForumBodyRubyAnnotationMetrics item) {
+  bool _contains(ForumBodyRubyAnnotationMetrics item) =>
+      side == item.side &&
+      _containsValues(item.hasAnnotation, item.ascent, item.descent, item.gap);
+
+  bool _containsLevel(ForumBodyRubyAnnotationLevelMetrics item) =>
+      side == item.side &&
+      _containsValues(item.hasAnnotation, item.ascent, item.descent, item.gap);
+
+  bool _containsValues(
+    bool present,
+    double otherAscent,
+    double otherDescent,
+    double otherGap,
+  ) {
     const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
-    return side == item.side &&
-        item.ascent <= ascent + tolerance &&
-        item.descent <= descent + tolerance &&
-        (!item.hasAnnotation || (hasAnnotation && item.gap <= gap + tolerance));
+    return otherAscent <= ascent + tolerance &&
+        otherDescent <= descent + tolerance &&
+        (!present || (hasAnnotation && otherGap <= gap + tolerance));
   }
 }
 

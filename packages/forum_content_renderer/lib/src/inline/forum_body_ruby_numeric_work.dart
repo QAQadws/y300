@@ -16,14 +16,29 @@ final class ForumBodyRubyLevelUnion {
   ForumBodyRubyLevelMetrics? _snapshot;
 
   ForumBodyRubyLevelMerge merge(ForumBodyRubyGroupMetrics column) {
+    return _start(ForumBodyRubyLevelMerge._column(this, column));
+  }
+
+  /// A segment's level includes spanning glyphs absent from its base columns.
+  /// Merge those actual extents directly, without a synthetic base column.
+  ForumBodyRubyLevelMerge mergeLevel(ForumBodyRubyLevelMetrics level) {
+    return _start(ForumBodyRubyLevelMerge._level(this, level));
+  }
+
+  ForumBodyRubyLevelMerge mergeAtom(ForumBodyRubyAtomMetrics atom) =>
+      switch (atom) {
+        ForumBodyRubyColumnMetrics(:final value) => merge(value),
+        ForumBodyRubyComponentMetrics(:final value) => mergeLevel(value.level),
+      };
+
+  ForumBodyRubyLevelMerge _start(ForumBodyRubyLevelMerge work) {
     if (_merging) throw StateError('Ruby union merge is already active');
-    if (_annotations.isNotEmpty &&
-        _annotations.length != column.annotations.length) {
+    if (_annotations.isNotEmpty && _annotations.length != work._rankCount) {
       ForumBodyRubyGroupMetrics._invalid();
     }
     _snapshot = null;
     _merging = true;
-    return ForumBodyRubyLevelMerge._(this, column);
+    return work;
   }
 
   ForumBodyRubyLevelMetrics get value {
@@ -39,12 +54,25 @@ final class ForumBodyRubyLevelUnion {
 }
 
 final class ForumBodyRubyLevelMerge {
-  ForumBodyRubyLevelMerge._(this._union, this._column);
+  ForumBodyRubyLevelMerge._column(this._union, ForumBodyRubyGroupMetrics column)
+    : _baseAscent = column.baseAscent,
+      _baseDescent = column.baseDescent,
+      _columns = column.annotations,
+      _levels = null;
+  ForumBodyRubyLevelMerge._level(this._union, ForumBodyRubyLevelMetrics level)
+    : _baseAscent = level.baseAscent,
+      _baseDescent = level.baseDescent,
+      _columns = null,
+      _levels = level.annotations;
   final ForumBodyRubyLevelUnion _union;
-  final ForumBodyRubyGroupMetrics _column;
+  final double _baseAscent;
+  final double _baseDescent;
+  final List<ForumBodyRubyAnnotationMetrics>? _columns;
+  final List<ForumBodyRubyAnnotationLevelMetrics>? _levels;
+  int get _rankCount => _columns?.length ?? _levels!.length;
   bool _baseMerged = false;
   int _rank = 0;
-  bool get isComplete => _baseMerged && _rank == _column.annotations.length;
+  bool get isComplete => _baseMerged && _rank == _rankCount;
 
   int advance({required int maxParts}) {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
@@ -52,24 +80,29 @@ final class ForumBodyRubyLevelMerge {
     var parts = 0;
     if (!_baseMerged) {
       _union._baseAscent = _union._baseAscent == null
-          ? _column.baseAscent
-          : math.max(_union._baseAscent!, _column.baseAscent);
+          ? _baseAscent
+          : math.max(_union._baseAscent!, _baseAscent);
       _union._baseDescent = _union._baseDescent == null
-          ? _column.baseDescent
-          : math.max(_union._baseDescent!, _column.baseDescent);
+          ? _baseDescent
+          : math.max(_union._baseDescent!, _baseDescent);
       _baseMerged = true;
       parts++;
     }
-    while (_rank < _column.annotations.length && parts < maxParts) {
-      final item = _column.annotations[_rank];
+    while (_rank < _rankCount && parts < maxParts) {
+      final column = _columns?[_rank];
+      final level = _levels?[_rank];
       if (_rank == _union._annotations.length) {
         _union._annotations.add(
-          ForumBodyRubyAnnotationLevelMetrics._single(item),
+          level ?? ForumBodyRubyAnnotationLevelMetrics._single(column!),
         );
       } else {
         final old = _union._annotations[_rank];
-        if (old.side != item.side) ForumBodyRubyGroupMetrics._invalid();
-        _union._annotations[_rank] = old._include(item);
+        if (old.side != (column?.side ?? level!.side)) {
+          ForumBodyRubyGroupMetrics._invalid();
+        }
+        _union._annotations[_rank] = column != null
+            ? old._include(column)
+            : old._includeLevel(level!);
       }
       _rank++;
       parts++;

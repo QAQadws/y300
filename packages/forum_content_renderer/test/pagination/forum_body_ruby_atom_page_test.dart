@@ -3,6 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_annotation_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_annotation_pairing.dart';
+import 'package:forum_content_renderer/src/inline/forum_body_ruby_group_metrics.dart'
+    show ForumBodyRubyLevelUnion;
+import 'package:forum_content_renderer/src/inline/forum_body_ruby_row_alignment.dart';
 
 import '../inline/test_support/ruby_segment_fixture.dart';
 import 'test_support/ruby_atom_page_fixture.dart';
@@ -353,7 +356,7 @@ void main() {
     () {
       final document = const ForumBodyParser().parse(
         html:
-            '<p><ruby><rb>A</rb><rt>x</rt></ruby><ruby><rb>B</rb><rb>C</rb><rtc>xyz</rtc></ruby></p>',
+            '<p><ruby><rb style="font-size:30px">A</rb><rt>x</rt></ruby><ruby><rb>B</rb><rb>C</rb><rtc>xyz</rtc></ruby></p>',
         sourceId: 'mixed-atom-page',
         conversionIdentity: 'none',
       );
@@ -435,6 +438,31 @@ void main() {
         spanMeasure.advance(maxParts: 1);
       }
       final metrics = spanMeasure.takeMetrics();
+      final roots = groups.map((group) => group.rootPath).toSet().toList();
+      final atoms = [
+        ForumBodyRubyAtomMetrics.column(columnMetrics),
+        ForumBodyRubyAtomMetrics.segment(metrics),
+      ];
+      // Merging these actual fonts WOULD move annotation baselines. Distinct
+      // parsed roots must therefore stay isolated even on the same parent row.
+      final union = ForumBodyRubyLevelUnion();
+      for (final atom in atoms) {
+        final merge = union.mergeAtom(atom);
+        while (!merge.isComplete) {
+          merge.advance(maxParts: 1);
+        }
+      }
+      expect(metrics.needsLevelAlignment(union.value), isTrue);
+      final row = ForumBodyRubyRowAlignment.atoms(
+        atoms: atoms,
+        levelIds: [for (final group in groups) roots.indexOf(group.rootPath)],
+        atomOffsets: [0, 1],
+      );
+      while (!row.isComplete && !row.needsRows) {
+        expect(row.advance(maxParts: 1), 1);
+      }
+      expect(row.isComplete, isTrue);
+      expect(row.hasChanges, isFalse);
       final styles = const ForumBodyStyleResolver().resolve(document, reader);
       final content = ForumBodyInlineSpanContent.compose(
         identity: document.identity,
@@ -450,10 +478,7 @@ void main() {
       );
       final input = ForumBodyInlinePageContent.atoms(
         content: content,
-        dimensions: [
-          columnMetrics.placeholderDimensions,
-          metrics.placeholderDimensions,
-        ],
+        dimensions: row.dimensions,
         rubyAtoms: [
           ForumBodyRubyAtomPlan.column(request: column),
           ForumBodyRubyAtomPlan.segment(request: segment, metrics: metrics),
