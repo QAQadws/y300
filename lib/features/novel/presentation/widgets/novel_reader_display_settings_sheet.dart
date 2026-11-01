@@ -19,6 +19,7 @@ import 'novel_reader_font_weight_settings_panel.dart';
 import 'novel_reader_text_alignment_settings_panel.dart';
 import 'novel_reader_viewport_settings_panel.dart';
 import 'novel_reader_color_settings_panel.dart';
+import 'novel_reader_author_color_settings_panel.dart';
 import '../services/novel_reader_native_typography_adapter.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
@@ -291,6 +292,12 @@ class _NovelReaderDisplaySettingsSheetState
                   children: [
                     NovelReaderColorSettingsPanel(
                       preferences: _draft,
+                      enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
+                      onChanged: (next) =>
+                          _applyPreferences(_draft.copyWith(colors: next)),
+                    ),
+                    NovelReaderAuthorColorSettingsPanel(
+                      value: _draft.colors,
                       enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
                       onChanged: (next) =>
                           _applyPreferences(_draft.copyWith(colors: next)),

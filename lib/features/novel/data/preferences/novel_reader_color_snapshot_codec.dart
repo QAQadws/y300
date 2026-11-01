@@ -1,10 +1,12 @@
 import '../../domain/models/novel_reader_color_overrides.dart';
 import '../../domain/repositories/novel_reader_preferences_repository.dart';
+import 'novel_reader_style_scope_snapshot_codec.dart';
 
 /// Optional namespace; future spaces/versions are read-only to this writer.
 final class NovelReaderColorSnapshotCodec {
   const NovelReaderColorSnapshotCodec();
   static const schemaVersion = 1;
+  static const _policy = NovelReaderStyleScopeSnapshotCodec();
   static const _metadata = {'space', 'value', 'enabled'};
   NovelReaderColorOverrides normalize(NovelReaderColorOverrides value) {
     int? rgb(int? v) =>
@@ -12,6 +14,8 @@ final class NovelReaderColorSnapshotCodec {
     return NovelReaderColorOverrides(
       foreground: rgb(value.foreground),
       background: rgb(value.background),
+      foregroundScope: value.foregroundScope,
+      backgroundScope: value.backgroundScope,
     );
   }
 
@@ -37,6 +41,8 @@ final class NovelReaderColorSnapshotCodec {
     return NovelReaderColorOverrides(
       foreground: _decode(input['foreground']),
       background: _decode(input['background']),
+      foregroundScope: _policy.decode(input['foregroundScope']),
+      backgroundScope: _policy.decode(input['backgroundScope']),
     );
   }
 
@@ -67,6 +73,14 @@ final class NovelReaderColorSnapshotCodec {
     for (final entry in {
       'foreground': _encode(prior?['foreground'], normalized.foreground),
       'background': _encode(prior?['background'], normalized.background),
+      'foregroundScope': _policy.encode(
+        normalized.foregroundScope,
+        previous: prior?['foregroundScope'],
+      ),
+      'backgroundScope': _policy.encode(
+        normalized.backgroundScope,
+        previous: prior?['backgroundScope'],
+      ),
     }.entries) {
       if (entry.value == null) {
         result.remove(entry.key);

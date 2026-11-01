@@ -39,7 +39,7 @@ class NovelReaderThemeResolver {
     final base = _preset(preferences: preferences, theme: theme);
     final colors = preferences.colors;
     // Stored native requests survive a visit to the legacy scrolling reader.
-    if (colors.isEmpty ||
+    if (!colors.hasCustomColors ||
         preferences.flowMode == NovelReaderFlowMode.vertical) {
       return base;
     }

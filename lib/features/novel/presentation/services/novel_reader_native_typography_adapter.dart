@@ -39,6 +39,8 @@ resolveNovelReaderNativeTypography(
   final heightScope = preferences.typography.lineHeightScope;
   final weight = preferences.typography.fontWeight;
   final alignment = preferences.typography.textAlignment;
+  final foregroundScope = preferences.colors.foregroundScope;
+  final backgroundScope = preferences.colors.backgroundScope;
   return (
     textAlign: alignment == null
         ? null
@@ -67,10 +69,16 @@ resolveNovelReaderNativeTypography(
             sizeScope == null &&
             heightScope == null &&
             weight == null &&
-            alignment == null
+            alignment == null &&
+            foregroundScope == null &&
+            backgroundScope == null
         ? (base ?? ForumBodyStylePolicy())
         : ForumBodyStylePolicy({
             ...?base?.values,
+            if (foregroundScope != null)
+              ForumBodyStyleProperty.foreground: _scope(foregroundScope),
+            if (backgroundScope != null)
+              ForumBodyStyleProperty.background: _scope(backgroundScope),
             if (alignment != null)
               ForumBodyStyleProperty.textAlign: _scope(alignment.scope),
             if (weight != null)

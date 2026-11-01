@@ -9919,13 +9919,13 @@ abstract class AppLocalizations {
   /// No description provided for @novelColorHint.
   ///
   /// In zh, this message translates to:
-  /// **'自定义颜色叠加在所选主题上，重置可分别恢复。作者局部文字及高亮颜色仍保留。'**
+  /// **'自定义颜色叠加在所选主题上，重置可分别恢复。作者文字色与高亮背景可在下方分别设置覆盖范围。'**
   String get novelColorHint;
 
   /// No description provided for @novelColorLowContrast.
   ///
   /// In zh, this message translates to:
-  /// **'所选文字与背景的对比度较低，可能难以阅读。颜色会按你的选择保留；作者局部颜色仍保留。'**
+  /// **'所选文字与背景的对比度较低，可能难以阅读。颜色会按你的选择保留。'**
   String get novelColorLowContrast;
 
   /// No description provided for @novelColorUnavailable.
@@ -9933,6 +9933,96 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'自定义配色仅用于翻页阅读；滚动时保留设置，可在此重置。'**
   String get novelColorUnavailable;
+
+  /// No description provided for @novelAuthorForeground.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者文字颜色'**
+  String get novelAuthorForeground;
+
+  /// No description provided for @novelAuthorBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者高亮背景'**
+  String get novelAuthorBackground;
+
+  /// No description provided for @novelAuthorColorOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认规则'**
+  String get novelAuthorColorOriginal;
+
+  /// No description provided for @novelAuthorColorPreserve.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留作者'**
+  String get novelAuthorColorPreserve;
+
+  /// No description provided for @novelAuthorForegroundBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelAuthorForegroundBody;
+
+  /// No description provided for @novelAuthorForegroundAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一全部'**
+  String get novelAuthorForegroundAll;
+
+  /// No description provided for @novelAuthorBackgroundBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除正文'**
+  String get novelAuthorBackgroundBody;
+
+  /// No description provided for @novelAuthorBackgroundAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除全部'**
+  String get novelAuthorBackgroundAll;
+
+  /// No description provided for @novelAuthorForegroundHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留作者时仅补充缺省文字色；统一正文会保留标题、引用、代码、列表、注音及链接的颜色。'**
+  String get novelAuthorForegroundHint;
+
+  /// No description provided for @novelAuthorForegroundAllHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'按默认文字色统一标题、引用、代码、列表和注音，链接仍保留链接色或作者局部颜色。粗体等强调格式不变。'**
+  String get novelAuthorForegroundAllHint;
+
+  /// No description provided for @novelAuthorBackgroundHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除正文高亮会保留标题、引用、代码、列表和注音的作者背景，页面背景独立设置。'**
+  String get novelAuthorBackgroundHint;
+
+  /// No description provided for @novelAuthorBackgroundAllHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除所有支持角色的作者高亮及块背景，保留页面背景和主题本身的文字底色。'**
+  String get novelAuthorBackgroundAllHint;
+
+  /// No description provided for @novelAuthorColorUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者颜色策略仅用于翻页阅读；滚动时保留设置，可在此重置。'**
+  String get novelAuthorColorUnavailable;
+
+  /// No description provided for @novelAuthorForegroundReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认作者文字色策略'**
+  String get novelAuthorForegroundReset;
+
+  /// No description provided for @novelAuthorBackgroundReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认作者高亮策略'**
+  String get novelAuthorBackgroundReset;
 }
 
 class _AppLocalizationsDelegate

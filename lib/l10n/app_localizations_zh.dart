@@ -5894,14 +5894,62 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelColorHexInvalid => '请输入六位十六进制 RGB 颜色';
 
   @override
-  String get novelColorHint => '自定义颜色叠加在所选主题上，重置可分别恢复。作者局部文字及高亮颜色仍保留。';
+  String get novelColorHint => '自定义颜色叠加在所选主题上，重置可分别恢复。作者文字色与高亮背景可在下方分别设置覆盖范围。';
 
   @override
-  String get novelColorLowContrast =>
-      '所选文字与背景的对比度较低，可能难以阅读。颜色会按你的选择保留；作者局部颜色仍保留。';
+  String get novelColorLowContrast => '所选文字与背景的对比度较低，可能难以阅读。颜色会按你的选择保留。';
 
   @override
   String get novelColorUnavailable => '自定义配色仅用于翻页阅读；滚动时保留设置，可在此重置。';
+
+  @override
+  String get novelAuthorForeground => '作者文字颜色';
+
+  @override
+  String get novelAuthorBackground => '作者高亮背景';
+
+  @override
+  String get novelAuthorColorOriginal => '默认规则';
+
+  @override
+  String get novelAuthorColorPreserve => '保留作者';
+
+  @override
+  String get novelAuthorForegroundBody => '统一正文';
+
+  @override
+  String get novelAuthorForegroundAll => '统一全部';
+
+  @override
+  String get novelAuthorBackgroundBody => '清除正文';
+
+  @override
+  String get novelAuthorBackgroundAll => '清除全部';
+
+  @override
+  String get novelAuthorForegroundHint =>
+      '保留作者时仅补充缺省文字色；统一正文会保留标题、引用、代码、列表、注音及链接的颜色。';
+
+  @override
+  String get novelAuthorForegroundAllHint =>
+      '按默认文字色统一标题、引用、代码、列表和注音，链接仍保留链接色或作者局部颜色。粗体等强调格式不变。';
+
+  @override
+  String get novelAuthorBackgroundHint =>
+      '清除正文高亮会保留标题、引用、代码、列表和注音的作者背景，页面背景独立设置。';
+
+  @override
+  String get novelAuthorBackgroundAllHint =>
+      '清除所有支持角色的作者高亮及块背景，保留页面背景和主题本身的文字底色。';
+
+  @override
+  String get novelAuthorColorUnavailable => '作者颜色策略仅用于翻页阅读；滚动时保留设置，可在此重置。';
+
+  @override
+  String get novelAuthorForegroundReset => '恢复默认作者文字色策略';
+
+  @override
+  String get novelAuthorBackgroundReset => '恢复默认作者高亮策略';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -11795,12 +11843,60 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get novelColorHexInvalid => '請輸入六位十六進位 RGB 顏色';
 
   @override
-  String get novelColorHint => '自訂顏色疊加在所選主題上，重設可分別恢復。作者局部文字及醒目標示顏色仍保留。';
+  String get novelColorHint => '自訂顏色疊加在所選主題上，重設可分別恢復。作者文字色與醒目背景可在下方分別設定覆寫範圍。';
 
   @override
-  String get novelColorLowContrast =>
-      '所選文字與背景的對比度較低，可能難以閱讀。顏色會按你的選擇保留；作者局部顏色仍保留。';
+  String get novelColorLowContrast => '所選文字與背景的對比度較低，可能難以閱讀。顏色會按你的選擇保留。';
 
   @override
   String get novelColorUnavailable => '自訂配色僅用於翻頁閱讀；捲動時保留設定，可在此重設。';
+
+  @override
+  String get novelAuthorForeground => '作者文字顏色';
+
+  @override
+  String get novelAuthorBackground => '作者醒目背景';
+
+  @override
+  String get novelAuthorColorOriginal => '預設規則';
+
+  @override
+  String get novelAuthorColorPreserve => '保留作者';
+
+  @override
+  String get novelAuthorForegroundBody => '統一正文';
+
+  @override
+  String get novelAuthorForegroundAll => '統一全部';
+
+  @override
+  String get novelAuthorBackgroundBody => '清除正文';
+
+  @override
+  String get novelAuthorBackgroundAll => '清除全部';
+
+  @override
+  String get novelAuthorForegroundHint =>
+      '保留作者時僅補充預設文字色；統一正文會保留標題、引用、程式碼、清單、注音及連結的顏色。';
+
+  @override
+  String get novelAuthorForegroundAllHint =>
+      '按預設文字色統一標題、引用、程式碼、清單和注音，連結仍保留連結色或作者局部顏色。粗體等強調格式不變。';
+
+  @override
+  String get novelAuthorBackgroundHint =>
+      '清除正文醒目背景會保留標題、引用、程式碼、清單和注音的作者背景，頁面背景獨立設定。';
+
+  @override
+  String get novelAuthorBackgroundAllHint =>
+      '清除所有支援角色的作者醒目及區塊背景，保留頁面背景和主題本身的文字底色。';
+
+  @override
+  String get novelAuthorColorUnavailable => '作者顏色策略僅用於翻頁閱讀；捲動時保留設定，可在此重設。';
+
+  @override
+  String get novelAuthorForegroundReset => '恢復預設作者文字色策略';
+
+  @override
+  String get novelAuthorBackgroundReset => '恢復預設作者醒目背景策略';
 }

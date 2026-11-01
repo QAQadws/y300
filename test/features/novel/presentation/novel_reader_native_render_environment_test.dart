@@ -48,6 +48,133 @@ Future<NovelReaderNativeRenderEnvironment> _capture(
 }
 
 void main() {
+  for (final foreground in NovelReaderStyleScope.values) {
+    for (final background in NovelReaderStyleScope.values) {
+      testWidgets(
+        'independent author colors resolve native roles and link exceptions ($foreground/$background)',
+        (tester) async {
+          final environment = await _capture(
+            tester,
+            preferences: NovelReaderPreferences.defaults().copyWith(
+              colors: NovelReaderColorOverrides(
+                foreground: 0x203040,
+                background: 0xe8f0d8,
+                foregroundScope: foreground,
+                backgroundScope: background,
+              ),
+            ),
+            policy: ForumBodyStylePolicy({
+              ForumBodyStyleProperty.lineHeight: ForumBodyStyleScope.forceAll,
+            }),
+          );
+          expect(
+            environment.reader.policy.values[ForumBodyStyleProperty.lineHeight],
+            ForumBodyStyleScope.forceAll,
+          );
+          final document = const ForumBodyParser().parse(
+            html:
+                '<div style="color:#b22222">'
+                '<span id="body" style="background:#ffe000">body<strong id="strong">bold</strong></span>'
+                '<h2 id="heading" style="color:#b22222;background:#ffe000">title</h2>'
+                '<blockquote id="quote" style="color:#b22222;background:#ffe000">quote</blockquote>'
+                '<code id="code" style="color:#b22222;background:#ffe000">code</code>'
+                '<ul><li id="list" style="color:#b22222;background:#ffe000">list</li></ul>'
+                '<ruby id="base" style="background:#ffe000">base<rt id="rt" style="background:inherit">note</rt></ruby>'
+                '<a id="link" href="https://example.invalid" style="color:#008000;background:#ffe000">'
+                '<span id="linkchild" style="color:#0000ff">link</span></a></div>',
+            sourceId: 'author-color-policy',
+            conversionIdentity: 'none',
+          );
+          final styles = const ForumBodyStyleResolver().resolve(
+            document,
+            environment.reader,
+          );
+          ForumBodyResolvedStyle byId(String id) =>
+              styles.byPath[document.descendants
+                  .whereType<ForumBodyElement>()
+                  .firstWhere((e) => e.attributes['id'] == id)
+                  .path]!;
+          for (final id in [
+            'body',
+            'heading',
+            'quote',
+            'code',
+            'list',
+            'base',
+            'rt',
+          ]) {
+            final style = byId(id);
+            final body = style.role == ForumBodyTextRole.body;
+            final forceInk =
+                foreground == NovelReaderStyleScope.forceAll ||
+                (foreground == NovelReaderStyleScope.forceBody && body);
+            final forceBackground =
+                background == NovelReaderStyleScope.forceAll ||
+                (background == NovelReaderStyleScope.forceBody && body);
+            expect(
+              style.textStyle.color,
+              forceInk ? const Color(0xff203040) : const Color(0xffb22222),
+              reason: id,
+            );
+            if (forceBackground) {
+              expect(style.ownBackground, isNull, reason: id);
+              expect(style.boxBackground, isNull, reason: id);
+              expect(
+                style.textStyle.backgroundColor,
+                anyOf(isNull, const Color(0x00000000)),
+                reason: id,
+              );
+            } else {
+              expect(
+                style.ownBackground ??
+                    style.boxBackground ??
+                    style.textStyle.backgroundColor,
+                const Color(0xffffe000),
+                reason: id,
+              );
+            }
+          }
+          expect(byId('link').textStyle.color, const Color(0xff008000));
+          expect(byId('linkchild').textStyle.color, const Color(0xff0000ff));
+          expect(byId('strong').textStyle.fontWeight, FontWeight.w700);
+          expect(environment.backgroundColor, const Color(0xffe8f0d8));
+          expect(styles.issues, isEmpty);
+        },
+      );
+    }
+  }
+  testWidgets(
+    'absent author scopes inherit base policy and explicit preserve overrides it without changing preset',
+    (tester) async {
+      final policy = ForumBodyStylePolicy({
+        ForumBodyStyleProperty.foreground: ForumBodyStyleScope.forceAll,
+        ForumBodyStyleProperty.background: ForumBodyStyleScope.forceAll,
+      });
+      final baseline = await _capture(tester, policy: policy);
+      expect(baseline.reader.policy, same(policy));
+      final preserved = await _capture(
+        tester,
+        policy: policy,
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          colors: const NovelReaderColorOverrides(
+            foregroundScope: NovelReaderStyleScope.asDefault,
+            backgroundScope: NovelReaderStyleScope.asDefault,
+          ),
+        ),
+      );
+      expect(preserved.reader.textStyle, baseline.reader.textStyle);
+      expect(preserved.reader.linkColor, baseline.reader.linkColor);
+      expect(preserved.backgroundColor, baseline.backgroundColor);
+      expect(
+        preserved.reader.policy.values[ForumBodyStyleProperty.foreground],
+        ForumBodyStyleScope.asDefault,
+      );
+      expect(
+        preserved.reader.policy.values[ForumBodyStyleProperty.background],
+        ForumBodyStyleScope.asDefault,
+      );
+    },
+  );
   setUpAll(() async {
     await (FontLoader('packages/forum_content_renderer/ForumBodyInlineSpace')
           ..addFont(

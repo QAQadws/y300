@@ -59,7 +59,8 @@ void main() {
                 '<p>Body $i '
                 '<span style="color:#b22222;background-color:#ffe000">Author highlight</span> '
                 '<a href="https://example.invalid/synthetic">Link</a> '
-                '${mixed ? 'before <ruby>base<rt>note</rt></ruby> after ' : ''}'
+                '<strong>Bold</strong> '
+                '${mixed ? 'before <ruby style="color:#b22222;background:#ffe000">base<rt style="background:inherit">no te</rt></ruby> after ' : ''}'
                 'Synthetic custom color settings preserve reading position and actual native coverage.</p>',
           ).join(),
         );
@@ -177,6 +178,56 @@ void main() {
           await tester.pump();
         }
 
+        Future<void> chooseScope(String part, String label) async {
+          final target = find.descendant(
+            of: find.byKey(Key('novel-reader-author-$part-policy')),
+            matching: find.text(label),
+          );
+          await tester.ensureVisible(target);
+          await tester.tap(target);
+          await tester.pump();
+        }
+
+        Future<Set<int>> bodyPixels() async {
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(canvasKey),
+          );
+          final image = (await tester.runAsync(
+            () => boundary.toImage(pixelRatio: 1),
+          ))!;
+          try {
+            final pixels = (await tester.runAsync(
+              () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+            ))!;
+            final rgb = <int>{};
+            final body = tester.getRect(
+              find.byType(NovelReaderNativeLayoutHost),
+            );
+            final origin = tester.getTopLeft(find.byKey(canvasKey));
+            for (
+              var y = (body.top - origin.dy).ceil();
+              y < (body.bottom - origin.dy).floor();
+              y++
+            ) {
+              for (
+                var x = (body.left - origin.dx).ceil();
+                x < (body.right - origin.dx).floor();
+                x++
+              ) {
+                final i = (y * image.width + x) * 4;
+                rgb.add(
+                  (pixels.getUint8(i) << 16) |
+                      (pixels.getUint8(i + 1) << 8) |
+                      pixels.getUint8(i + 2),
+                );
+              }
+            }
+            return rgb;
+          } finally {
+            image.dispose();
+          }
+        }
+
         var popped = open();
         var observation = await wait((o) => o.ready && o.complete);
         observation.overlay!.onRightTap!();
@@ -225,18 +276,64 @@ void main() {
                   .view
                   .content
                   .runs,
+            // Ruby children paint from their actual borrowed native leases;
+            // they are not flattened into the parent's ordinary run list.
+            for (final element
+                in find.byType(ForumBodyInlineParagraphSurface).evaluate())
+              for (final lease
+                  in (element.widget as ForumBodyInlineParagraphSurface)
+                      .view
+                      .nativeLeases
+                      .whereType<ForumBodyTextLease>())
+                ...lease.content.runs,
           ];
           expect(
             runs.map((r) => r.style.textStyle.color),
             contains(palette.foreground),
           );
+          bool overrides(
+            NovelReaderStyleScope? scope,
+            ForumBodyTextRole role,
+          ) =>
+              scope == NovelReaderStyleScope.forceAll ||
+              (scope == NovelReaderStyleScope.forceBody &&
+                  role == ForumBodyTextRole.body);
+          for (final run in runs) {
+            if (overrides(expected.foregroundScope, run.style.role) &&
+                run.style.linkTarget == null) {
+              expect(run.style.textStyle.color, palette.foreground);
+            }
+            if (overrides(expected.backgroundScope, run.style.role)) {
+              expect(
+                run.style.textStyle.backgroundColor,
+                anyOf(isNull, const Color(0x00000000)),
+              );
+              expect(run.style.ownBackground, isNull);
+              expect(run.style.boxBackground, isNull);
+            }
+          }
+          bool retained(NovelReaderStyleScope? scope) =>
+              scope != NovelReaderStyleScope.forceAll &&
+              (scope != NovelReaderStyleScope.forceBody || mixed);
           expect(
-            runs.map((r) => r.style.textStyle.color),
-            contains(const Color(0xffb22222)),
+            runs.any((r) => r.style.textStyle.color == const Color(0xffb22222)),
+            retained(expected.foregroundScope),
           );
           expect(
-            runs.map((r) => r.style.textStyle.backgroundColor),
-            contains(const Color(0xffffe000)),
+            runs.any(
+              (r) =>
+                  r.style.textStyle.backgroundColor ==
+                      const Color(0xffffe000) ||
+                  r.style.ownBackground == const Color(0xffffe000) ||
+                  r.style.boxBackground == const Color(0xffffe000),
+            ),
+            retained(expected.backgroundScope),
+          );
+          expect(
+            runs
+                .where((r) => r.style.strong)
+                .map((r) => r.style.textStyle.fontWeight),
+            contains(FontWeight.w700),
           );
           expect(
             runs
@@ -247,6 +344,11 @@ void main() {
         }
 
         await settings();
+        final l10n = AppLocalizations.of(
+          tester.element(
+            find.byKey(const Key('novel-reader-display-settings-sheet')),
+          ),
+        );
         await choose('foreground', '#203040');
         await choose('background', '#E8F0D8');
         await closeSettings();
@@ -262,41 +364,10 @@ void main() {
         );
         accepted(observation, selected);
         // Validate actual raster paint, not just the palette/style metadata.
-        final boundary = tester.renderObject<RenderRepaintBoundary>(
-          find.byKey(canvasKey),
+        expect(
+          await bodyPixels(),
+          containsAll([0x203040, 0xe8f0d8, 0xb22222, 0xffe000]),
         );
-        final image = (await tester.runAsync(
-          () => boundary.toImage(pixelRatio: 1),
-        ))!;
-        try {
-          final pixels = (await tester.runAsync(
-            () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
-          ))!;
-          final rgb = <int>{};
-          final body = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
-          final origin = tester.getTopLeft(find.byKey(canvasKey));
-          for (
-            var y = (body.top - origin.dy).ceil();
-            y < (body.bottom - origin.dy).floor();
-            y++
-          ) {
-            for (
-              var x = (body.left - origin.dx).ceil();
-              x < (body.right - origin.dx).floor();
-              x++
-            ) {
-              final i = (y * image.width + x) * 4;
-              rgb.add(
-                (pixels.getUint8(i) << 16) |
-                    (pixels.getUint8(i + 1) << 8) |
-                    pixels.getUint8(i + 2),
-              );
-            }
-          }
-          expect(rgb, containsAll([0x203040, 0xe8f0d8, 0xb22222, 0xffe000]));
-        } finally {
-          image.dispose();
-        }
         await settings();
         await reset('foreground');
         await closeSettings();
@@ -318,6 +389,43 @@ void main() {
               state().persistedPreferences.colors == selected,
         );
         accepted(observation, selected);
+        final originalKey = observation.paginationKey;
+        await settings();
+        await chooseScope('foreground', l10n.novelAuthorForegroundBody);
+        await chooseScope('background', l10n.novelAuthorBackgroundBody);
+        await closeSettings();
+        final bodyPolicy = selected
+            .withForegroundScope(NovelReaderStyleScope.forceBody)
+            .withBackgroundScope(NovelReaderStyleScope.forceBody);
+        observation = await wait(
+          (o) =>
+              o.ready &&
+              o.complete &&
+              state().persistedPreferences.colors == bodyPolicy,
+        );
+        accepted(observation, bodyPolicy);
+        expect(observation.paginationKey, isNot(originalKey));
+        var rgb = await bodyPixels();
+        expect(rgb.contains(0xb22222), mixed);
+        expect(rgb.contains(0xffe000), mixed);
+        await settings();
+        await chooseScope('foreground', l10n.novelAuthorForegroundAll);
+        await chooseScope('background', l10n.novelAuthorBackgroundAll);
+        await closeSettings();
+        final allPolicy = selected
+            .withForegroundScope(NovelReaderStyleScope.forceAll)
+            .withBackgroundScope(NovelReaderStyleScope.forceAll);
+        observation = await wait(
+          (o) =>
+              o.ready &&
+              o.complete &&
+              state().persistedPreferences.colors == allPolicy,
+        );
+        accepted(observation, allPolicy);
+        rgb = await bodyPixels();
+        expect(rgb, containsAll([0x203040, 0xe8f0d8]));
+        expect(rgb, isNot(contains(0xb22222)));
+        expect(rgb, isNot(contains(0xffe000)));
         navigator.currentState!.pop();
         await tester.pumpAndSettle();
         await popped;
@@ -329,6 +437,30 @@ void main() {
         observation = await wait((o) => o.ready && o.complete);
         expect(observation.nativeOwner, isNot(same(firstOwner)));
         document = state().document;
+        accepted(observation, allPolicy);
+        await settings();
+        await reset('author-foreground');
+        await closeSettings();
+        final onlyBackgroundPolicy = allPolicy.withForegroundScope(null);
+        observation = await wait(
+          (o) =>
+              o.ready &&
+              o.complete &&
+              state().persistedPreferences.colors == onlyBackgroundPolicy,
+        );
+        accepted(observation, onlyBackgroundPolicy);
+        rgb = await bodyPixels();
+        expect(rgb, contains(0xb22222));
+        expect(rgb, isNot(contains(0xffe000)));
+        await settings();
+        await reset('author-background');
+        await closeSettings();
+        observation = await wait(
+          (o) =>
+              o.ready &&
+              o.complete &&
+              state().persistedPreferences.colors == selected,
+        );
         accepted(observation, selected);
         await settings();
         await reset('background');
