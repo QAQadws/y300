@@ -123,16 +123,21 @@ final class NovelReaderTypographyOverrides {
     this.paragraphSpacing,
     this.letterSpacing,
     this.wordSpacing,
+    this.fontSizeScope,
   });
   final NovelReaderFirstLineIndent? firstLineIndent;
   final NovelReaderParagraphSpacing? paragraphSpacing;
   final NovelReaderLetterSpacing? letterSpacing;
   final NovelReaderWordSpacing? wordSpacing;
+
+  /// Null inherits the preceding scope; asDefault explicitly keeps author sizes.
+  final NovelReaderStyleScope? fontSizeScope;
   bool get isEmpty =>
       firstLineIndent == null &&
       paragraphSpacing == null &&
       letterSpacing == null &&
-      wordSpacing == null;
+      wordSpacing == null &&
+      fontSizeScope == null;
 
   NovelReaderTypographyOverrides withFirstLineIndent(
     NovelReaderFirstLineIndent? value,
@@ -141,6 +146,7 @@ final class NovelReaderTypographyOverrides {
     paragraphSpacing: paragraphSpacing,
     letterSpacing: letterSpacing,
     wordSpacing: wordSpacing,
+    fontSizeScope: fontSizeScope,
   );
 
   NovelReaderTypographyOverrides withParagraphSpacing(
@@ -150,6 +156,7 @@ final class NovelReaderTypographyOverrides {
     paragraphSpacing: value,
     letterSpacing: letterSpacing,
     wordSpacing: wordSpacing,
+    fontSizeScope: fontSizeScope,
   );
 
   NovelReaderTypographyOverrides withLetterSpacing(
@@ -159,6 +166,7 @@ final class NovelReaderTypographyOverrides {
     paragraphSpacing: paragraphSpacing,
     letterSpacing: value,
     wordSpacing: wordSpacing,
+    fontSizeScope: fontSizeScope,
   );
 
   NovelReaderTypographyOverrides withWordSpacing(
@@ -168,6 +176,17 @@ final class NovelReaderTypographyOverrides {
     paragraphSpacing: paragraphSpacing,
     letterSpacing: letterSpacing,
     wordSpacing: value,
+    fontSizeScope: fontSizeScope,
+  );
+
+  NovelReaderTypographyOverrides withFontSizeScope(
+    NovelReaderStyleScope? value,
+  ) => NovelReaderTypographyOverrides(
+    firstLineIndent: firstLineIndent,
+    paragraphSpacing: paragraphSpacing,
+    letterSpacing: letterSpacing,
+    wordSpacing: wordSpacing,
+    fontSizeScope: value,
   );
 
   NovelReaderTypographyOverrides over(NovelReaderTypographyOverrides base) =>
@@ -176,6 +195,7 @@ final class NovelReaderTypographyOverrides {
         paragraphSpacing: paragraphSpacing ?? base.paragraphSpacing,
         letterSpacing: letterSpacing ?? base.letterSpacing,
         wordSpacing: wordSpacing ?? base.wordSpacing,
+        fontSizeScope: fontSizeScope ?? base.fontSizeScope,
       );
 
   @override
@@ -184,12 +204,14 @@ final class NovelReaderTypographyOverrides {
       other.firstLineIndent == firstLineIndent &&
       other.paragraphSpacing == paragraphSpacing &&
       other.letterSpacing == letterSpacing &&
-      other.wordSpacing == wordSpacing;
+      other.wordSpacing == wordSpacing &&
+      other.fontSizeScope == fontSizeScope;
   @override
   int get hashCode => Object.hash(
     firstLineIndent,
     paragraphSpacing,
     letterSpacing,
     wordSpacing,
+    fontSizeScope,
   );
 }

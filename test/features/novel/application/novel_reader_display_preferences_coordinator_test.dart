@@ -268,6 +268,7 @@ void main() {
             firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
             letterSpacing: NovelReaderLetterSpacing(logicalPixels: -1.25),
             wordSpacing: NovelReaderWordSpacing(logicalPixels: 7.5),
+            fontSizeScope: NovelReaderStyleScope.forceBody,
             paragraphSpacing: NovelReaderParagraphSpacing(
               before: 12,
               after: 31,

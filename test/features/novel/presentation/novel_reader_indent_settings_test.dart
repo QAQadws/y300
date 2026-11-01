@@ -8,6 +8,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_indent_set
 import 'package:y300/features/novel/presentation/widgets/novel_reader_paragraph_spacing_settings_panel.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_letter_spacing_settings_panel.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_word_spacing_settings_panel.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_font_size_policy_settings_panel.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
@@ -126,6 +127,7 @@ void main() {
       }
 
       await pump(false, NovelReaderFlowMode.pagedLtr);
+      expect(find.byType(NovelReaderFontSizePolicySettingsPanel), findsNothing);
       expect(find.byType(NovelReaderWordSpacingSettingsPanel), findsNothing);
       expect(find.byType(NovelReaderLetterSpacingSettingsPanel), findsNothing);
       expect(find.byType(NovelReaderIndentSettingsPanel), findsNothing);
@@ -134,6 +136,10 @@ void main() {
         findsNothing,
       );
       await pump(true, NovelReaderFlowMode.pagedLtr);
+      expect(
+        find.byType(NovelReaderFontSizePolicySettingsPanel),
+        findsOneWidget,
+      );
       expect(find.byType(NovelReaderWordSpacingSettingsPanel), findsOneWidget);
       expect(
         find.byType(NovelReaderLetterSpacingSettingsPanel),
@@ -153,6 +159,25 @@ void main() {
         isTrue,
       );
       await pump(true, NovelReaderFlowMode.vertical);
+      expect(
+        tester
+            .widget<NovelReaderFontSizePolicySettingsPanel>(
+              find.byType(NovelReaderFontSizePolicySettingsPanel),
+            )
+            .enabled,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<Slider>(
+              find.descendant(
+                of: find.byKey(const Key('novel-reader-font-size-slider')),
+                matching: find.byType(Slider),
+              ),
+            )
+            .onChanged,
+        isNotNull,
+      );
       expect(
         tester
             .widget<NovelReaderWordSpacingSettingsPanel>(

@@ -3612,6 +3612,60 @@ abstract class AppLocalizations {
   /// **'排版'**
   String get novelTypography;
 
+  /// No description provided for @novelFontSizePolicy.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者字号策略'**
+  String get novelFontSizePolicy;
+
+  /// No description provided for @novelFontSizePolicyOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认规则'**
+  String get novelFontSizePolicyOriginal;
+
+  /// No description provided for @novelFontSizePolicyAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留作者'**
+  String get novelFontSizePolicyAuthor;
+
+  /// No description provided for @novelFontSizePolicyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelFontSizePolicyBody;
+
+  /// No description provided for @novelFontSizePolicyAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部统一'**
+  String get novelFontSizePolicyAll;
+
+  /// No description provided for @novelFontSizePolicyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留作者字号时，滑杆只设置默认大小；统一正文会保留标题、代码与注音的字号规则。'**
+  String get novelFontSizePolicyHint;
+
+  /// No description provided for @novelFontSizePolicyAllHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部统一会将标题、代码和注音的字号也设为滑杆值。'**
+  String get novelFontSizePolicyAllHint;
+
+  /// No description provided for @novelFontSizePolicyUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者字号策略仅用于翻页阅读；当前模式仍可调整字号滑杆。'**
+  String get novelFontSizePolicyUnavailable;
+
+  /// No description provided for @novelFontSizePolicyReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置字号策略，保留已选字号'**
+  String get novelFontSizePolicyReset;
+
   /// No description provided for @novelFirstLineIndent.
   ///
   /// In zh, this message translates to:

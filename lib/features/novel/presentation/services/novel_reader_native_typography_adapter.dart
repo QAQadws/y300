@@ -32,6 +32,7 @@ resolveNovelReaderNativeTypography(
   if (words != null && !words.isValid) {
     throw ArgumentError('Invalid reader word spacing');
   }
+  final sizeScope = preferences.typography.fontSizeScope;
   return (
     wordSpacing: words?.logicalPixels,
     letterSpacing: letters?.logicalPixels,
@@ -44,10 +45,16 @@ resolveNovelReaderNativeTypography(
           : ForumBodyLengthUnit.px,
     ),
     policy:
-        request == null && spacing == null && letters == null && words == null
+        request == null &&
+            spacing == null &&
+            letters == null &&
+            words == null &&
+            sizeScope == null
         ? (base ?? ForumBodyStylePolicy())
         : ForumBodyStylePolicy({
             ...?base?.values,
+            if (sizeScope != null)
+              ForumBodyStyleProperty.fontSize: _scope(sizeScope),
             if (request != null)
               ForumBodyStyleProperty.textIndent: _scope(request.scope),
             if (spacing != null)

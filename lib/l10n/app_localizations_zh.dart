@@ -2199,6 +2199,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelTypography => '排版';
 
   @override
+  String get novelFontSizePolicy => '作者字号策略';
+
+  @override
+  String get novelFontSizePolicyOriginal => '默认规则';
+
+  @override
+  String get novelFontSizePolicyAuthor => '保留作者';
+
+  @override
+  String get novelFontSizePolicyBody => '统一正文';
+
+  @override
+  String get novelFontSizePolicyAll => '全部统一';
+
+  @override
+  String get novelFontSizePolicyHint =>
+      '保留作者字号时，滑杆只设置默认大小；统一正文会保留标题、代码与注音的字号规则。';
+
+  @override
+  String get novelFontSizePolicyAllHint => '全部统一会将标题、代码和注音的字号也设为滑杆值。';
+
+  @override
+  String get novelFontSizePolicyUnavailable => '作者字号策略仅用于翻页阅读；当前模式仍可调整字号滑杆。';
+
+  @override
+  String get novelFontSizePolicyReset => '重置字号策略，保留已选字号';
+
+  @override
   String get novelFirstLineIndent => '首行缩进';
 
   @override
@@ -7867,6 +7895,34 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelTypography => '排版';
+
+  @override
+  String get novelFontSizePolicy => '作者字級策略';
+
+  @override
+  String get novelFontSizePolicyOriginal => '預設規則';
+
+  @override
+  String get novelFontSizePolicyAuthor => '保留作者';
+
+  @override
+  String get novelFontSizePolicyBody => '統一正文';
+
+  @override
+  String get novelFontSizePolicyAll => '全部統一';
+
+  @override
+  String get novelFontSizePolicyHint =>
+      '保留作者字級時，滑桿只設定預設大小；統一正文會保留標題、程式碼與注音的字級規則。';
+
+  @override
+  String get novelFontSizePolicyAllHint => '全部統一會將標題、程式碼和注音的字級也設為滑桿值。';
+
+  @override
+  String get novelFontSizePolicyUnavailable => '作者字級策略僅用於翻頁閱讀；目前模式仍可調整字級滑桿。';
+
+  @override
+  String get novelFontSizePolicyReset => '重設字級策略，保留已選字級';
 
   @override
   String get novelFirstLineIndent => '首行縮排';

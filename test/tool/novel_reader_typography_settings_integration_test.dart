@@ -22,7 +22,9 @@ enum _Setting {
   letterSpacing('letter-spacing'),
   letterSpacingRuby('letter-spacing'),
   wordSpacing('word-spacing'),
-  wordSpacingRuby('word-spacing');
+  wordSpacingRuby('word-spacing'),
+  fontSizePolicy('font-size'),
+  fontSizePolicyRuby('font-size');
 
   const _Setting(this.keyPrefix);
   final String keyPrefix;
@@ -48,12 +50,16 @@ void _testSettings(_Setting setting) {
   final spacing = setting == _Setting.paragraphSpacing;
   final mixed =
       setting == _Setting.letterSpacingRuby ||
-      setting == _Setting.wordSpacingRuby;
+      setting == _Setting.wordSpacingRuby ||
+      setting == _Setting.fontSizePolicyRuby;
   final letters =
       setting == _Setting.letterSpacing ||
       setting == _Setting.letterSpacingRuby;
   final words =
       setting == _Setting.wordSpacing || setting == _Setting.wordSpacingRuby;
+  final sizePolicy =
+      setting == _Setting.fontSizePolicy ||
+      setting == _Setting.fontSizePolicyRuby;
   testWidgets(
     'settings reflow keeps coverage and persists across reader owners ($setting)',
     (tester) async {
@@ -65,7 +71,18 @@ void _testSettings(_Setting setting) {
           );
       await repository().save(
         profileReaderPreferences.copyWith(
-          typography: words
+          fontSize: sizePolicy ? 20 : profileReaderPreferences.fontSize,
+          typography: sizePolicy
+              ? const NovelReaderTypographyOverrides(
+                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
+                  paragraphSpacing: NovelReaderParagraphSpacing(
+                    before: 12,
+                    after: 31,
+                  ),
+                  letterSpacing: NovelReaderLetterSpacing(logicalPixels: -1.25),
+                  wordSpacing: NovelReaderWordSpacing(logicalPixels: 7.5),
+                )
+              : words
               ? const NovelReaderTypographyOverrides(
                   firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
                   paragraphSpacing: NovelReaderParagraphSpacing(
@@ -95,7 +112,7 @@ void _testSettings(_Setting setting) {
         List.generate(
           32,
           (i) =>
-              '<p style="text-indent:10px">Paragraph $i: '
+              '<p style="text-indent:10px${sizePolicy ? ';font-size:12px' : ''}">Paragraph $i: '
               '${mixed ? 'before <ruby>base<rt>note</rt></ruby> after. ' : ''}'
               'Synthetic text for checking actual native reading geometry.</p>',
         ).join(),
@@ -110,7 +127,7 @@ void _testSettings(_Setting setting) {
         data.scope(
           MaterialApp(
             navigatorKey: navigator,
-            theme: letters || words
+            theme: letters || words || sizePolicy
                 ? ThemeData.light().copyWith(
                     textTheme: const TextTheme(
                       bodyMedium: TextStyle(
@@ -196,7 +213,11 @@ void _testSettings(_Setting setting) {
         await tester.pumpAndSettle();
       }
 
-      void checkVisibleIndent(ProfileReaderObservation observation, double em) {
+      void checkVisibleIndent(
+        ProfileReaderObservation observation,
+        double em, {
+        double? fontSize,
+      }) {
         final target = observation.nativeController!.viewForPage(
           observation.page!,
         )!;
@@ -205,7 +226,7 @@ void _testSettings(_Setting setting) {
           if (element.widget
               case ForumBodyParagraphSurface(lease: final lease, startLine: 0)
               when lease.isActive) {
-            final expected = em * state().preferences.fontSize;
+            final expected = em * (fontSize ?? state().preferences.fontSize);
             // These are real source glyph boxes on the mounted delivery; the
             // invisible engine prefix must not become the selected character.
             expect(
@@ -219,7 +240,7 @@ void _testSettings(_Setting setting) {
               when view.isActive && view.startLine == 0) {
             expect(
               view.selectionBoxes(0, 1).single.left,
-              closeTo(em * state().preferences.fontSize, .001),
+              closeTo(em * (fontSize ?? state().preferences.fontSize), .001),
             );
             checked++;
           }
@@ -295,6 +316,7 @@ void _testSettings(_Setting setting) {
         double number, {
         double wordSpacing = 3.25,
         bool checkSpaces = false,
+        double? fontSize,
       }) {
         final target = observation.nativeController!.viewForPage(
           observation.page!,
@@ -307,10 +329,11 @@ void _testSettings(_Setting setting) {
         ) {
           expect(text, startsWith('Paragraph'));
           expect(style.wordSpacing, wordSpacing);
+          final resolvedSize = fontSize ?? state().preferences.fontSize;
           final character = boxes(0, 1).single;
           expect(
             character.right - character.left,
-            closeTo(state().preferences.fontSize + number, .001),
+            closeTo(resolvedSize + number, .001),
           );
           if (checkSpaces) {
             final index = text.indexOf(' ');
@@ -318,10 +341,7 @@ void _testSettings(_Setting setting) {
             final space = boxes(index, index + 1).single;
             expect(
               space.right - space.left,
-              closeTo(
-                state().preferences.fontSize + number + wordSpacing,
-                .001,
-              ),
+              closeTo(resolvedSize + number + wordSpacing, .001),
             );
           }
           checked++;
@@ -394,12 +414,23 @@ void _testSettings(_Setting setting) {
           _Setting.letterSpacingRuby => l10n.novelLetterSpacingBody,
           _Setting.wordSpacing ||
           _Setting.wordSpacingRuby => l10n.novelWordSpacingBody,
+          _Setting.fontSizePolicy ||
+          _Setting.fontSizePolicyRuby => l10n.novelFontSizePolicyBody,
         }),
       );
       await tester.ensureVisible(bodyChoice);
       await tester.tap(bodyChoice);
       await tester.pump();
-      if (words) {
+      if (sizePolicy) {
+        tester
+            .widget<Slider>(
+              find.descendant(
+                of: find.byKey(const Key('novel-reader-font-size-slider')),
+                matching: find.byType(Slider),
+              ),
+            )
+            .onChanged!(22);
+      } else if (words) {
         tester
             .widget<Slider>(
               find.byKey(const Key('novel-reader-word-spacing-slider')),
@@ -442,13 +473,19 @@ void _testSettings(_Setting setting) {
         _Setting.wordSpacingRuby => baseline.typography.withWordSpacing(
           const NovelReaderWordSpacing(logicalPixels: 7.5),
         ),
+        _Setting.fontSizePolicy ||
+        _Setting.fontSizePolicyRuby => baseline.typography.withFontSizeScope(
+          NovelReaderStyleScope.forceBody,
+        ),
       };
+      final selectedFontSize = sizePolicy ? 22.0 : baseline.fontSize;
       observation = await wait(
         (value) =>
             value.ready &&
             value.complete &&
             value.paginationKey != oldKey &&
-            state().persistedPreferences.typography == expectedTypography,
+            state().persistedPreferences.typography == expectedTypography &&
+            state().persistedPreferences.fontSize == selectedFontSize,
       );
       expect(state().document, same(document));
       // Layout page indices/percentages may change. The canonical text position
@@ -462,7 +499,9 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters || words) checkVisibleSpacing(observation, 31);
+      if (spacing || letters || words || sizePolicy) {
+        checkVisibleSpacing(observation, 31);
+      }
       if (letters) checkVisibleLetters(observation, -1.25);
       if (words) {
         checkVisibleLetters(
@@ -473,6 +512,15 @@ void _testSettings(_Setting setting) {
         );
       }
       final stored = await repository().load();
+      expect(stored.fontSize, selectedFontSize);
+      if (sizePolicy) {
+        checkVisibleLetters(
+          observation,
+          -1.25,
+          wordSpacing: 7.5,
+          checkSpaces: true,
+        );
+      }
       expect(stored.typography, expectedTypography);
       if (spacing) {
         expect(
@@ -509,7 +557,9 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters || words) checkVisibleSpacing(observation, 31);
+      if (spacing || letters || words || sizePolicy) {
+        checkVisibleSpacing(observation, 31);
+      }
       if (letters) checkVisibleLetters(observation, -1.25);
       if (words) {
         checkVisibleLetters(
@@ -519,7 +569,17 @@ void _testSettings(_Setting setting) {
           checkSpaces: true,
         );
       }
+      if (sizePolicy) {
+        expect(state().preferences.fontSize, 22);
+        checkVisibleLetters(
+          observation,
+          -1.25,
+          wordSpacing: 7.5,
+          checkSpaces: true,
+        );
+      }
       await settings();
+      final beforeResetKey = observation.paginationKey;
       final reset = find.byKey(Key('novel-reader-${setting.keyPrefix}-reset'));
       await tester.ensureVisible(reset);
       await tester.tap(reset);
@@ -528,9 +588,13 @@ void _testSettings(_Setting setting) {
         (value) =>
             value.ready &&
             value.complete &&
-            state().persistedPreferences.typography == baseline.typography,
+            state().persistedPreferences.typography == baseline.typography &&
+            (!sizePolicy || value.paginationKey != beforeResetKey),
       );
-      expect(await repository().load(), baseline);
+      expect(
+        await repository().load(),
+        baseline.copyWith(fontSize: selectedFontSize),
+      );
       if (spacing) {
         checkVisibleSpacing(observation, 10);
         checkVisibleIndent(observation, 1.5);
@@ -548,6 +612,18 @@ void _testSettings(_Setting setting) {
           -1.25,
           wordSpacing: 3.25,
           checkSpaces: true,
+        );
+      }
+      if (sizePolicy) {
+        expect(state().preferences.fontSize, 22);
+        checkVisibleIndent(observation, 1.5, fontSize: 12);
+        checkVisibleSpacing(observation, 31);
+        checkVisibleLetters(
+          observation,
+          -1.25,
+          wordSpacing: 7.5,
+          checkSpaces: true,
+          fontSize: 12,
         );
       }
       final secondOwner = observation.nativeOwner!;

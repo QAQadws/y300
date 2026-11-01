@@ -1,11 +1,13 @@
 import '../../domain/models/novel_reader_typography_overrides.dart';
 import '../../domain/repositories/novel_reader_preferences_repository.dart';
+import 'novel_reader_style_scope_snapshot_codec.dart';
 
 /// Optional versioned namespace in the existing snapshot. New fields are
 /// additive; older writers retain them as unknown extensions.
 final class NovelReaderTypographySnapshotCodec {
   const NovelReaderTypographySnapshotCodec();
   static const schemaVersion = 1;
+  static const _scopePolicy = NovelReaderStyleScopeSnapshotCodec();
   static const _indent = _NumericRequestCodec(
     unit: 'em',
     maximum: NovelReaderFirstLineIndent.maximumEm,
@@ -42,6 +44,7 @@ final class NovelReaderTypographySnapshotCodec {
         ? input.letterSpacing
         : null,
     wordSpacing: input.wordSpacing?.isValid == true ? input.wordSpacing : null,
+    fontSizeScope: input.fontSizeScope,
   );
 
   NovelReaderTypographyOverrides decode(Object? source) {
@@ -54,6 +57,7 @@ final class NovelReaderTypographySnapshotCodec {
     final letters = _letters.decode(source['letterSpacing']);
     final words = _words.decode(source['wordSpacing']);
     return NovelReaderTypographyOverrides(
+      fontSizeScope: _scopePolicy.decode(source['fontSizePolicy']),
       wordSpacing: words == null
           ? null
           : NovelReaderWordSpacing(
@@ -99,6 +103,10 @@ final class NovelReaderTypographySnapshotCodec {
     final words = normalized.wordSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
     final requests = {
+      'fontSizePolicy': _scopePolicy.encode(
+        normalized.fontSizeScope,
+        previous: prior?['fontSizePolicy'],
+      ),
       'wordSpacing': _words.encode(
         prior?['wordSpacing'],
         words == null
@@ -161,7 +169,7 @@ final class _NumericRequestCodec {
   bool _knownShape(Object? source) =>
       source is Map<String, dynamic> &&
       source['unit'] == unit &&
-      _scope(source['scope']) != null &&
+      NovelReaderStyleScopeSnapshotCodec.parseScope(source['scope']) != null &&
       (!source.containsKey('enabled') || source['enabled'] is bool);
 
   _NumericRequest? decode(Object? source, {bool includeDisabled = false}) {
@@ -179,7 +187,10 @@ final class _NumericRequestCodec {
       }
       values[field] = value.toDouble();
     }
-    return (scope: _scope(raw['scope'])!, values: values);
+    return (
+      scope: NovelReaderStyleScopeSnapshotCodec.parseScope(raw['scope'])!,
+      values: values,
+    );
   }
 
   Map<String, Object?>? encode(Object? previous, _NumericRequest? request) {
@@ -211,15 +222,13 @@ final class _NumericRequestCodec {
       ...?old?.values,
       if (old == null)
         for (final field in fields) field: 0.0,
-      'scope': (old?.scope ?? _scope(prior['scope'])!).name,
+      'scope':
+          (old?.scope ??
+                  NovelReaderStyleScopeSnapshotCodec.parseScope(
+                    prior['scope'],
+                  )!)
+              .name,
       'enabled': false,
     };
   }
-
-  NovelReaderStyleScope? _scope(Object? raw) => switch (raw) {
-    'asDefault' => NovelReaderStyleScope.asDefault,
-    'forceBody' => NovelReaderStyleScope.forceBody,
-    'forceAll' => NovelReaderStyleScope.forceAll,
-    _ => null,
-  };
 }
