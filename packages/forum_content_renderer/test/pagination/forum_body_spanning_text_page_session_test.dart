@@ -307,4 +307,31 @@ void main() {
       expect(f.cache.activeLeases, 0);
     },
   );
+
+  test(
+    'unlaid annotation gap preserves a published prefix without partial glyph admission',
+    () {
+      final f = _open(
+        '<p>prefix</p><p><ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc></ruby></p>',
+        height: 20,
+      );
+      for (var i = 0; f.session.snapshot.isEmpty && i < 10000; i++) {
+        f.session.advance(maxEvents: 1, maxLines: 1);
+      }
+      final prefix = f.session.snapshot.first;
+      final shapes = f.cache.layoutBuildCount;
+      expect(
+        () => _finish(f.session, f.cache),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+      expect(f.session.snapshot.first, same(prefix));
+      expect(f.cache.layoutBuildCount, shapes);
+      expect(f.cache.activeLeases, 0);
+      final fragments = _page(f.session, f.cache, 0, 1);
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
 }

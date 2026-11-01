@@ -231,4 +231,174 @@ void main() {
     ]);
     expect(pairing.levels.first.spans, isEmpty);
   });
+
+  test(
+    'real RTC gap keeps current source and adjacent RTs without joining columns',
+    () {
+      final group = _group(
+        '<ruby><rb>a\u0301</rb><rb>😀</rb><rtc><rt>x</rt> <rt>y</rt></rtc></ruby>',
+      );
+      final rtc =
+          group.annotations.single as ForumBodyRubyAnnotationContainerContent;
+      final original = (rtc.parts[1] as ForumBodyRubyTextContent).content;
+      final inputs = resolveForumBodyRubyAnnotationInputs(group);
+      expect(inputs.single.boxes.length, 2);
+      expect(inputs.single.gaps.single.beforeBox, 1);
+      expect(inputs.single.gaps.single.content, same(original));
+      final paired = ForumBodyRubyAnnotationPairing(
+        group: group,
+        baseColumnCount: 2,
+      );
+      expect(paired.columnCount, 2);
+      expect(paired.annotatedColumnCount, 2);
+      expect(paired.hasMultiColumnSpans, isFalse);
+      expect(paired.hasAnnotationGaps, isTrue);
+      expect(paired.columnRanges, [
+        (startColumn: 0, endColumn: 1),
+        (startColumn: 1, endColumn: 2),
+      ]);
+      final level = paired.levels.single;
+      final gap = level.gaps.single;
+      expect(gap.beforeColumn, 1);
+      expect(gap.content, same(original));
+      expect(gap.previous, same(level.spans[0]));
+      expect(gap.next, same(level.spans[1]));
+      expect(gap.content.projection.text, ' ');
+      // Combining code points and a supplementary character are not UTF-16
+      // units, nor may a column ordinal be used as a source coordinate.
+      expect(gap.content.projection.sourceAtUtf16(0).sourceRune, 4);
+      expect(() => level.gaps.clear(), throwsUnsupportedError);
+      expect(() => inputs.single.gaps.clear(), throwsUnsupportedError);
+      expect(() => paired.columnRanges.clear(), throwsUnsupportedError);
+    },
+  );
+
+  test(
+    'styled gap belongs to actual RTC and outer indentation does not enter pairing',
+    () {
+      final group = _group(
+        '<ruby><rb>A</rb><rb>B</rb><rtc style="font-size:30px;white-space:pre"> \t<rt style="font-size:12px">x</rt> \t <rt style="font-size:18px">y</rt>\t </rtc></ruby>',
+      );
+      final rtc =
+          group.annotations.single as ForumBodyRubyAnnotationContainerContent;
+      final paired = ForumBodyRubyAnnotationPairing(
+        group: group,
+        baseColumnCount: 2,
+      );
+      final gap = paired.levels.single.gaps.single;
+      expect(
+        gap.content,
+        same((rtc.parts[2] as ForumBodyRubyTextContent).content),
+      );
+      expect(gap.content.projection.text, ' \t ');
+      expect(gap.content.runs.single.style.role, ForumBodyTextRole.ruby);
+      expect(gap.content.runs.single.style.textStyle.fontSize, 30);
+      expect(gap.content.runs.single.style.whiteSpace, ForumBodyWhiteSpace.pre);
+      expect(
+        paired.levels.single.spans.map(
+          (s) => (s.box as ForumBodyRubyExplicitAnnotationInput)
+              .annotation
+              .style
+              .textStyle
+              .fontSize,
+        ),
+        [12, 18],
+      );
+      expect(paired.columnCount, 2);
+      expect(paired.levels.single.gaps.length, 1);
+    },
+  );
+
+  test(
+    'empty actual RTs and excess columns preserve gap edges and rank topology',
+    () {
+      final paired = ForumBodyRubyAnnotationPairing(
+        group: _group(
+          '<ruby style="ruby-position:alternate under">A<rtc></rtc><rtc><rt></rt> <rt>y</rt> <rt></rt></rtc></ruby>',
+        ),
+        baseColumnCount: 1,
+      );
+      expect(paired.columnCount, 3);
+      expect(paired.levels.map((l) => l.side), [
+        ForumBodyRubySide.under,
+        ForumBodyRubySide.over,
+      ]);
+      expect(paired.levels.first.gaps, isEmpty);
+      final level = paired.levels.last;
+      expect(level.spans.map((s) => (s.startColumn, s.endColumn)), [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+      ]);
+      expect(level.gaps.map((g) => g.beforeColumn), [1, 2]);
+      for (final gap in level.gaps) {
+        expect(gap.previous, same(level.spans[gap.beforeColumn - 1]));
+        expect(gap.next, same(level.spans[gap.beforeColumn]));
+      }
+      expect(paired.columnRanges.length, 3);
+    },
+  );
+
+  test(
+    'actual spanning annotation closes ranges while spaces never consume a unit',
+    () {
+      final paired = ForumBodyRubyAnnotationPairing(
+        group: _group(
+          '<ruby><rb>A</rb><rb>B</rb><rtc>pre<rt>x</rt> <rt>y</rt></rtc><rtc>all</rtc></ruby>',
+        ),
+        baseColumnCount: 2,
+      );
+      expect(paired.columnCount, 3);
+      expect(paired.levels.first.spans.length, 3);
+      expect(paired.levels.first.gaps.single.beforeColumn, 2);
+      expect(
+        paired.levels.first.gaps.single.previous,
+        same(paired.levels.first.spans[1]),
+      );
+      expect(
+        paired.levels.first.gaps.single.next,
+        same(paired.levels.first.spans[2]),
+      );
+      expect(paired.levels.last.gaps, isEmpty);
+      expect(paired.levels.last.spans.single.endColumn, 3);
+      expect(paired.columnRanges, [(startColumn: 0, endColumn: 3)]);
+    },
+  );
+
+  test('equal gap text at different levels keeps distinct original contexts', () {
+    final paired = ForumBodyRubyAnnotationPairing(
+      group: _group(
+        '<ruby><rb>A</rb><rb>B</rb><rb>C</rb><rtc><rt>x</rt> <rt>y</rt><rt>z</rt></rtc><rtc><rt>u</rt><rt>v</rt> <rt>w</rt></rtc></ruby>',
+      ),
+      baseColumnCount: 3,
+    );
+    final first = paired.levels.first.gaps.single;
+    final second = paired.levels.last.gaps.single;
+    expect(first.content.projection.text, second.content.projection.text);
+    expect(identical(first.content, second.content), isFalse);
+    expect(first.beforeColumn, 1);
+    expect(second.beforeColumn, 2);
+    expect(
+      first.content.projection.sourceAtUtf16(0).sourceRune,
+      lessThan(second.content.projection.sourceAtUtf16(0).sourceRune),
+    );
+    expect(paired.columnRanges.length, 3);
+  });
+
+  test(
+    'sole whitespace annotation stays an actual anonymous box rather than a gap',
+    () {
+      final paired = ForumBodyRubyAnnotationPairing(
+        group: _group('<ruby><rb>A</rb><rb>B</rb><rtc> </rtc></ruby>'),
+        baseColumnCount: 2,
+      );
+      expect(paired.hasAnnotationGaps, isFalse);
+      expect(
+        paired.levels.single.spans.single.box,
+        isA<ForumBodyRubyAnonymousAnnotationInput>(),
+      );
+      expect(paired.levels.single.spans.single.isMultiColumn, isTrue);
+      expect(paired.columnRanges, [(startColumn: 0, endColumn: 2)]);
+    },
+  );
 }

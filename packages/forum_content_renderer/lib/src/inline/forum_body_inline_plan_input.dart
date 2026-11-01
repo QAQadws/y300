@@ -148,6 +148,14 @@ final class ForumBodyInlinePlanInput {
             group: group,
             baseColumnCount: unitCount,
           );
+          // Source pairing keeps inter-annotation spaces, but a layout must
+          // account for their paired edge widths and legal line breaks before
+          // accepting them. Never omit them or fuse every column to get a fit.
+          for (final level in pairing.levels) {
+            if (level.gaps.isNotEmpty) {
+              _unsupported(level.gaps.first.content.path ?? group.rootPath);
+            }
+          }
           if (pairing.hasMultiColumnSpans) {
             // Current anonymous-box pairing spans the complete original group.
             // Its interior column edges cannot become independent parent atoms.

@@ -27,13 +27,22 @@ final class ForumBodyRubyAnonymousAnnotationInput
 
 typedef ForumBodyRubyAnnotationInput = ({
   List<ForumBodyRubyAnnotationBoxInput> boxes,
+  List<ForumBodyRubyAnnotationGapInput> gaps,
   ForumBodyRubySide side,
+});
+
+/// An original whitespace context between actual boxes, never another RT.
+/// beforeBox is a unit index, not a source-code-point or display offset.
+typedef ForumBodyRubyAnnotationGapInput = ({
+  int beforeBox,
+  ForumBodyParagraphContent content,
 });
 
 /// Consecutive direct RTs form one implicit level; every RTC owns another.
 /// Keep original level order (including empty RTCs) for pairing and position.
 /// Anonymous boxes retain their real type until explicit interval pairing.
-/// Interior gaps and nested boxes still require their own layout.
+/// Interior gaps retain their real context independently of RT unit pairing.
+/// This pure value does not prove that a consumer supports their layout.
 List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
   ForumBodyRubyGroupContent group,
 ) {
@@ -42,11 +51,16 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
   void append(
     List<ForumBodyRubyAnnotationBoxInput> boxes,
     ForumBodyRubyPosition position,
-    String path,
-  ) {
+    String path, [
+    List<ForumBodyRubyAnnotationGapInput> gaps = const [],
+  ]) {
     final side = position.sideAfter(levels.lastOrNull?.side);
     if (side == null) _unsupported(path);
-    levels.add((boxes: List.unmodifiable(boxes), side: side));
+    levels.add((
+      boxes: List.unmodifiable(boxes),
+      gaps: gaps.isEmpty ? const [] : List.unmodifiable(gaps),
+      side: side,
+    ));
   }
 
   void flush() {
@@ -61,7 +75,13 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
         implicit.add(ForumBodyRubyExplicitAnnotationInput(entry));
       case ForumBodyRubyAnnotationContainerContent():
         flush();
-        append(_columns(entry), entry.style.rubyPosition, entry.path);
+        final contents = _columns(entry);
+        append(
+          contents.boxes,
+          entry.style.rubyPosition,
+          entry.path,
+          contents.gaps,
+        );
     }
   }
   flush();
@@ -72,38 +92,46 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
   return List.unmodifiable(levels);
 }
 
-List<ForumBodyRubyAnnotationBoxInput> _columns(
-  ForumBodyRubyAnnotationContainerContent container,
-) {
+({
+  List<ForumBodyRubyAnnotationBoxInput> boxes,
+  List<ForumBodyRubyAnnotationGapInput> gaps,
+})
+_columns(ForumBodyRubyAnnotationContainerContent container) {
   final boxes = <ForumBodyRubyAnnotationBoxInput>[];
-  String? pendingGap;
-  for (final (index, part) in container.parts.indexed) {
+  final gaps = <ForumBodyRubyAnnotationGapInput>[];
+  final pending = <ForumBodyParagraphContent>[];
+  void append(ForumBodyRubyAnnotationBoxInput box) {
+    // A gap is interior only after a following real box arrives. Consecutive
+    // styled pieces keep separate identities; leading/trailing indentation
+    // never invents an annotation unit or shifts its neighbours.
+    for (final content in pending) {
+      gaps.add((beforeBox: boxes.length, content: content));
+    }
+    pending.clear();
+    boxes.add(box);
+  }
+
+  for (final part in container.parts) {
     switch (part) {
       case ForumBodyRubyTextAnnotationContent():
-        if (pendingGap != null) _unsupported(pendingGap);
-        boxes.add(ForumBodyRubyExplicitAnnotationInput(part));
+        append(ForumBodyRubyExplicitAnnotationInput(part));
       case ForumBodyRubyTextContent():
         final text = part.content.projection.text;
         if (!text.runes.every(_space)) {
-          if (pendingGap != null) _unsupported(pendingGap);
-          boxes.add(ForumBodyRubyAnonymousAnnotationInput(part.content));
+          append(ForumBodyRubyAnonymousAnnotationInput(part.content));
           continue;
         }
-        // RTC structural indentation is removed only at actual outer edges.
-        // An interior gap remains unsupported rather than shifting pairing or
-        // discarding a visible annotation-level space.
+        // A sole whitespace annotation is still an actual anonymous box.
         if (container.parts.length == 1) {
           boxes.add(ForumBodyRubyAnonymousAnnotationInput(part.content));
-        } else if (index != 0 &&
-            index != container.parts.length - 1 &&
-            text.isNotEmpty) {
-          pendingGap ??= part.content.path ?? container.path;
+        } else if (boxes.isNotEmpty && text.isNotEmpty) {
+          pending.add(part.content);
         }
       default:
         _unsupported(container.path);
     }
   }
-  return boxes;
+  return (boxes: boxes, gaps: gaps);
 }
 
 bool _space(int rune) => const {9, 10, 12, 13, 32}.contains(rune);
