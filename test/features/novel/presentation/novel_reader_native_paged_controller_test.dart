@@ -112,6 +112,61 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final format in [1, 37]) {
+    test(
+      'author language inputs keep actual ruby coverage and restore authority format=$format',
+      () async {
+        final fixture = NativeReaderTestFixture(
+          '<p lang="ja">A<ruby lang="zh-Hant">B<rt lang="ko">x</rt></ruby>'
+          '<span lang="">C</span><span lang="ar">D</span></p>',
+        );
+        final controller = _controller(
+          fixture,
+          position: _position(_anchor(fixture, 0))
+              .copyWith(anchorFormatVersion: format),
+        );
+        controller.start();
+        await _until(
+          () => controller.readyTarget != null || controller.error != null,
+        );
+        expect(controller.error, isNull);
+        final delivery = controller.readyTarget!;
+        final fragments = delivery.view.takeFragments();
+        expect(
+          fragments
+              .expand((fragment) => fragment.runs)
+              .map((run) => run.style.textStyle.locale)
+              .toSet(),
+          {
+            const Locale('ja'),
+            const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+            const Locale('ko'),
+            const Locale('und'),
+            const Locale('ar'),
+          },
+        );
+        expect(
+          fragments
+              .expand((fragment) => fragment.runs)
+              .every((run) => run.style.textDirection == TextDirection.ltr),
+          isTrue,
+        );
+        addTearDown(() {
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        });
+        expect(delivery.view.coverage.hasClippedGlyphs, isFalse);
+        final report = controller.confirmPreparedVisible(delivery, fragments)!;
+        expect(report.isWholeBodyVisible, isTrue);
+        expect(report.isReadOnlyCompatibilityRestore, format != 1);
+        expect(report.hasUserNavigated, isFalse);
+        expect(controller.visiblePageIndex, 0);
+        expect(fixture.session.takePendingIssues(), isEmpty);
+      },
+    );
+  }
+
   for (final (targetPage, retirement) in [
     (1, ''),
     (2, ''),

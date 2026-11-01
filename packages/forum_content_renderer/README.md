@@ -48,6 +48,22 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 在包目录执行 `flutter pub get`、`flutter analyze --no-pub`、`flutter test --no-pub`。`example/` 是独立 Flutter 工程，显式组装准备与渲染；在该目录执行相同命令可验证公开入口及折叠交互。当前与 App 统一固定 HTML 库 0.17.4；后续升级仍须核对真实段距、列表与字号几何，并同步 App 分页布局修订号，避免复用旧布局页码。尚不对外发布。
 
+## 原生文字语言
+
+原生样式解析的 revision 为 8。HTML `lang` 沿正文树继承，传到实际 TextStyle.locale；
+明确的空值使用 `und` 退役继承语言，不受 null-copyWith 的保留语义影响。语言、脚本与
+地区采用本地 Locale 端口能表示的 BCP 47 子标签并规范大小写，语言不推断文字方向。
+缺少 lang 使用父输入，HTML 中字面的非命名空间 xml:lang 不影响语言处理；约定依据
+[HTML language](https://html.spec.whatwg.org/multipage/dom.html#attr-lang) 与
+[Flutter Locale](https://api.flutter.dev/flutter/dart-ui/Locale/Locale.fromSubtags.html)。
+不能完整表示的 extlang、variant、extension、private-use/grandfathered 标签及非法拼写
+保留在 IR 原属性中并产生 lang 诊断，实际输入使用 und，不截断成猜测语言或继承旧语言。
+这不等于完整语言/断行能力或高级语言设置已经验收。
+
+有效 locale 随完整 span/style 进入现有缓存键与 App 布局指纹；来源投影不因语言变化改写。
+测试专用原创 locl 字体在普通排字、band 子项、缓存及分页中以不同字形宽度核对 native
+输入，不注册为生产字体；字体生成规则位于 test/fixtures/fonts/README.md。
+
 ## 原生段落的单行拟合
 
 `ForumBodyParagraphContentBuilder` 的 `build`、`openCurrent` 和 `openSequence` 接收 `layoutMode`，默认 `ForumBodyParagraphLayoutMode.wrap`。`fitSingleLine` 要求已经投影为完整逻辑单行的文字；硬换行会明确失败，不裁剪或省略尾部，也不承担 HTML 格式识别、空白改写或来源投影。格式处理者仍须独立核对内容结构和来源。

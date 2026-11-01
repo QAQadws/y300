@@ -4,10 +4,11 @@ import '../document/forum_body_document.dart';
 import '../helpers/discuz_font_size_policy.dart';
 import '../html_rendering/theme/css_author_color_parser.dart';
 import 'forum_body_length.dart';
+import 'forum_body_language.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 7;
+const forumBodyStyleRevision = 8;
 ForumBodyLineHeight forumBodyReaderHeight(ForumBodyReaderStyle reader) {
   final height = reader.textStyle.height;
   return height == null || height == kTextHeightNone
@@ -286,6 +287,11 @@ final class ForumBodyStyleBuilder {
     // Start from the Host font so a null system family can leave a code block.
     // Inherited author values are supplied explicitly, never via copyWith(null).
     style = reader.textStyle.copyWith(
+      locale: resolveForumBodyLanguage(
+        attributes: node.attributes,
+        inherited: parent.textStyle.locale,
+        onUnsupported: (value) => _issue(node, 'lang', value),
+      ),
       fontSize: size,
       fontWeight: weight,
       fontStyle: italic,
