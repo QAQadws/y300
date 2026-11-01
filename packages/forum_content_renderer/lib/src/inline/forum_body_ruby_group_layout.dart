@@ -12,6 +12,12 @@ export 'forum_body_ruby_group_contract.dart'
 
 enum ForumBodyRubyPart { base, annotation }
 
+typedef ForumBodyRubyGroupMemberSnapshot = ({
+  ForumBodyTextLease base,
+  List<({ForumBodyParagraphContent content, ForumBodyTextLease? lease})>
+  annotations,
+});
+
 final class ForumBodyRubyHit {
   const ForumBodyRubyHit({
     required this.part,
@@ -286,6 +292,16 @@ final class ForumBodyRubyGroupLayout {
   List<({ForumBodyParagraphContent content, ForumBodyTextLease? lease})>
   _annotations;
   final ForumBodyRubyGroupMetrics metrics;
+
+  /// Borrow immutable member identities without traversing every rank. This is
+  /// not an active-owner or paint proof: an assembling consumer checks each
+  /// member before adoption. Holding the snapshot does not extend ownership.
+  ForumBodyRubyGroupMemberSnapshot inspectMembers() {
+    final base = _base;
+    if (base == null) throw StateError('Ruby group layout is retired');
+    return (base: base, annotations: _annotations);
+  }
+
   Size get size => metrics.size;
   double get baseline => metrics.baseline;
   Offset get baseOffset => metrics.baseOffset;

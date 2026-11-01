@@ -6,6 +6,8 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import 'forum_body_ruby_group_layout.dart';
 import 'forum_body_ruby_group_metrics.dart';
 
+part 'forum_body_ruby_segment_assembly.dart';
+
 final class ForumBodyRubySegmentHit {
   const ForumBodyRubySegmentHit._({
     this.columnIndex,
@@ -28,11 +30,12 @@ typedef ForumBodyRubySegmentAnnotation = ({
 /// exactly one lease for each nonempty original spanning annotation. The
 /// existing reading cache owns all glyphs; this port adds no cache or shaper.
 final class ForumBodyRubySegmentLayout {
-  ForumBodyRubySegmentLayout._(this._columns, this._spans, this.metrics) {
-    for (final (index, span) in metrics.spans.indexed) {
-      (_spanRanks[span.input.annotationIndex] ??= []).add(index);
-    }
-  }
+  ForumBodyRubySegmentLayout._(
+    this._columns,
+    this._spans,
+    this.metrics,
+    this._spanRanks,
+  );
 
   /// Consumes ONLY these supplied handles on both success and failure. The
   /// numeric result cannot replace actual owner/content/paint/geometry checks.
@@ -44,53 +47,39 @@ final class ForumBodyRubySegmentLayout {
   }) {
     final inputs = List.of(columns);
     final annotations = List.of(spans);
+    ForumBodyRubySegmentAssembly? assembly;
     try {
-      if (inputs.isEmpty ||
-          inputs.length != metrics.columns.length ||
-          annotations.length != metrics.spans.length) {
-        _invalid();
+      assembly = ForumBodyRubySegmentAssembly(
+        cache: cache,
+        metrics: metrics,
+        columns: [
+          for (final column in inputs)
+            (
+              base: column.inspectMembers().base.content,
+              annotations: [
+                for (final item in column.inspectMembers().annotations)
+                  item.content,
+              ],
+            ),
+        ],
+        spans: [for (final item in annotations) item.content],
+      );
+      for (final column in inputs) {
+        assembly.addColumn(column);
+        while (assembly.hasPendingMember) {
+          assembly.advance(maxParts: 32);
+        }
       }
-      final handles = Set<ForumBodyNativeParagraphLease>.identity();
-      final scope = inputs.first.contentFor(ForumBodyRubyPart.base);
-      for (final (index, column) in inputs.indexed) {
-        if (!column.isOwnedBy(cache)) {
-          throw StateError('Ruby segment owner is retired');
-        }
-        final base = column.contentFor(ForumBodyRubyPart.base);
-        if (!_sameScope(scope, base)) _invalid(ForumBodyRubyGroupFailure.scope);
-        if (!_sameColumn(column.metrics, metrics.columns[index])) _invalid();
-        for (final handle in column.nativeLeases) {
-          if (!handles.add(handle)) _invalid(ForumBodyRubyGroupFailure.content);
+      for (final item in annotations) {
+        assembly.addSpan(item);
+        while (assembly.hasPendingMember) {
+          assembly.advance(maxParts: 32);
         }
       }
-      for (final (index, item) in annotations.indexed) {
-        if (!_sameScope(scope, item.content) ||
-            item.content.layoutMode !=
-                ForumBodyParagraphLayoutMode.intrinsicSingleLine) {
-          _invalid(ForumBodyRubyGroupFailure.scope);
-        }
-        final lease = item.lease;
-        if ((item.content.projection.text.isNotEmpty) != (lease != null) ||
-            (lease != null && !identical(lease.content, item.content))) {
-          _invalid(ForumBodyRubyGroupFailure.content);
-        }
-        if (lease != null &&
-            (!cache.ownsLease(lease) || !lease.layout.isPaintPrepared)) {
-          throw StateError('Ruby segment annotation is not readable');
-        }
-        if (lease != null && !handles.add(lease)) {
-          _invalid(ForumBodyRubyGroupFailure.content);
-        }
-        final expected = metrics.spans[index].input.annotation;
-        final actual = ForumBodyRubyAnnotationMetrics.measure(
-          cache: cache,
-          lease: lease,
-          side: expected.side,
-          gap: expected.gap,
-        );
-        if (!_sameAnnotation(actual, expected, positions: false)) _invalid();
+      while (!assembly.isReady) {
+        assembly.advance(maxParts: 32);
       }
-      return ForumBodyRubySegmentLayout._(inputs, annotations, metrics);
+      return assembly.takeLayout();
     } catch (_) {
       for (final column in inputs) {
         column.close();
@@ -99,12 +88,14 @@ final class ForumBodyRubySegmentLayout {
         item.lease?.release();
       }
       rethrow;
+    } finally {
+      assembly?.close();
     }
   }
 
   List<ForumBodyRubyGroupLayout> _columns;
   List<ForumBodyRubySegmentAnnotation> _spans;
-  final _spanRanks = <int, List<int>>{};
+  final Map<int, List<int>> _spanRanks;
   final ForumBodyRubySegmentMetrics metrics;
   bool _closed = false;
   Size get size => metrics.size;
@@ -316,7 +307,7 @@ final class ForumBodyRubySegmentLayout {
           (a.offset == b.offset &&
               _near(a.bandTop, b.bandTop) &&
               _near(a.bandBottom, b.bandBottom)));
-  static bool _sameColumn(
+  static bool _sameColumnHeader(
     ForumBodyRubyGroupMetrics a,
     ForumBodyRubyGroupMetrics b,
   ) =>
@@ -328,10 +319,7 @@ final class ForumBodyRubySegmentLayout {
       _near(a.baseFontBaseline, b.baseFontBaseline) &&
       _near(a.baseBandTop, b.baseBandTop) &&
       _near(a.baseBandBottom, b.baseBandBottom) &&
-      a.annotations.length == b.annotations.length &&
-      a.annotations.indexed.every(
-        (entry) => _sameAnnotation(entry.$2, b.annotations[entry.$1]),
-      );
+      a.annotations.length == b.annotations.length;
   static Never _invalid([
     ForumBodyRubyGroupFailure failure = ForumBodyRubyGroupFailure.geometry,
   ]) => throw ForumBodyRubyGroupException(failure);
