@@ -93,10 +93,11 @@ final class _RubyColumnBinding extends _RubyBinding {
 }
 
 final class _RubySegmentBinding extends _RubyBinding {
-  const _RubySegmentBinding(this.segment, this.columns, this.spans);
+  const _RubySegmentBinding(this.segment, this.columns, this.spans, this.gaps);
   final ForumBodyRubySegmentLayout segment;
   final List<_RubyColumnWindows> columns;
   final List<ForumBodyInlineContext?> spans;
+  final List<ForumBodyInlineContext> gaps;
   @override
   Size get size => segment.size;
   @override
@@ -111,7 +112,9 @@ final class _RubySegmentBinding extends _RubyBinding {
   @override
   _RubySourceHit sourceAt(Offset point) {
     final hit = segment.sourceAt(point);
-    final window = hit.spanIndex != null
+    final window = hit.gapIndex != null
+        ? gaps[hit.gapIndex!]
+        : hit.spanIndex != null
         ? spans[hit.spanIndex!]!
         : columns[hit.columnIndex!].forHit(hit.columnHit!);
     return (window: window, position: hit.position);
@@ -152,6 +155,17 @@ final class _RubySegmentBinding extends _RubyBinding {
         end,
         (from, to) => segment.selectionBoxesForSpan(
           spanIndex: index,
+          startUtf16: from,
+          endUtf16: to,
+        ),
+      ),
+    for (final (index, window) in gaps.indexed)
+      ..._selectRubyWindow(
+        window,
+        start,
+        end,
+        (from, to) => segment.selectionBoxesForGap(
+          gapIndex: index,
           startUtf16: from,
           endUtf16: to,
         ),

@@ -211,10 +211,23 @@ void main() {
     );
   }
 
-  test('internal physical gap is rejected instead of being discarded', () {
-    expect(
-      () => _input('<ruby><rb>A</rb> <rb>B</rb><rtc>wide</rtc></ruby>'),
-      throwsA(isA<ForumBodyParagraphInputException>()),
+  test('internal physical gap keeps its original source and base edge', () {
+    final input = _input('<ruby><rb>A</rb> <rb>B</rb><rtc>wide</rtc></ruby>');
+    expect(input.content.projection.display.text, 'A Bwide');
+    final request =
+        (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
+    expect(request.gaps.single.beforeColumn, 1);
+    expect(request.gaps.single.request.content.projection.text, ' ');
+    expect(request.bases.length, 2);
+    expect(request.nativeRequests.map((r) => r.content.projection.text), [
+      'A',
+      ' ',
+      'B',
+      'wide',
+    ]);
+    input.content.resolveAtomicContexts(
+      0,
+      request.nativeRequests.map((r) => r.content).toList(),
     );
   });
 

@@ -29,6 +29,26 @@ final class ForumBodyRubyPlacedSpan {
   Offset get offset => Offset(left, 0) + metrics.offset;
 }
 
+/// A real text member between base columns. The shared font-box/level numeric
+/// value is reused, but this member never consumes a base or annotation index.
+final class ForumBodyRubyMeasuredGap {
+  const ForumBodyRubyMeasuredGap({
+    required this.beforeColumn,
+    required this.font,
+  });
+  final int beforeColumn;
+  final ForumBodyRubyGroupMetrics font;
+}
+
+final class ForumBodyRubyPlacedGap {
+  const ForumBodyRubyPlacedGap._(this.input, this.left, this.font);
+  final ForumBodyRubyMeasuredGap input;
+  final double left;
+  final ForumBodyRubyGroupMetrics font;
+  double get width => font.size.width;
+  Offset get offset => Offset(left, 0);
+}
+
 /// One independently laid-out, unbroken ruby segment/component. Actual native
 /// members are still independent; this result retains only numbers and sides.
 final class ForumBodyRubySegmentMetrics {
@@ -37,12 +57,14 @@ final class ForumBodyRubySegmentMetrics {
   factory ForumBodyRubySegmentMetrics.compose({
     required List<ForumBodyRubyGroupMetrics> columns,
     required List<ForumBodyRubyMeasuredSpan> spans,
+    List<ForumBodyRubyMeasuredGap> gaps = const [],
     TextDirection direction = TextDirection.ltr,
     double maxWidth = 16384,
   }) {
     final work = ForumBodyRubySegmentComposition(
       columns: columns,
       spans: spans,
+      gaps: gaps,
       direction: direction,
       maxWidth: maxWidth,
     );
@@ -62,14 +84,16 @@ final class ForumBodyRubySegmentMetrics {
     required List<double> columnLefts,
     required List<Offset> columnOffsets,
     required List<ForumBodyRubyPlacedSpan> spans,
+    required List<ForumBodyRubyPlacedGap> gaps,
     // Only the terminal positioning worker transfers its private buffers here.
     // Reused horizontal vectors are already frozen. Publication never rescans N.
   }) : columns = UnmodifiableListView(columns),
        columnWidths = UnmodifiableListView(columnWidths),
        columnLefts = UnmodifiableListView(columnLefts),
        columnOffsets = UnmodifiableListView(columnOffsets),
-       spans = UnmodifiableListView(spans);
-  static const revision = 2;
+       spans = UnmodifiableListView(spans),
+       gaps = UnmodifiableListView(gaps);
+  static const revision = 3;
   final Size size;
   final double baseline;
   final ForumBodyRubyLevelMetrics level;
@@ -79,6 +103,7 @@ final class ForumBodyRubySegmentMetrics {
   final List<double> columnLefts;
   final List<Offset> columnOffsets;
   final List<ForumBodyRubyPlacedSpan> spans;
+  final List<ForumBodyRubyPlacedGap> gaps;
   String get alignmentSignature => columns.first.alignmentSignature;
 
   bool needsLevelAlignment(ForumBodyRubyLevelMetrics target) {
@@ -113,6 +138,7 @@ final class ForumBodyRubySegmentMetrics {
 
 enum _SegmentPhase {
   columns,
+  gaps,
   spans,
   widths,
   sum,
@@ -131,10 +157,13 @@ final class ForumBodyRubySegmentComposition {
   ForumBodyRubySegmentComposition({
     required List<ForumBodyRubyGroupMetrics> columns,
     required List<ForumBodyRubyMeasuredSpan> spans,
+    List<ForumBodyRubyMeasuredGap> gaps = const [],
     this.direction = TextDirection.ltr,
     this.maxWidth = 16384,
   }) : _columns = List.of(columns),
        _spans = List.of(spans),
+       _gaps = List.of(gaps),
+       _gapWidths = List.filled(columns.length, 0),
        _buckets = List.filled(columns.length + 1, null) {
     if (columns.isEmpty ||
         !maxWidth.isFinite ||
@@ -145,6 +174,9 @@ final class ForumBodyRubySegmentComposition {
   }
   final List<ForumBodyRubyGroupMetrics> _columns;
   final List<ForumBodyRubyMeasuredSpan> _spans;
+  final List<ForumBodyRubyMeasuredGap> _gaps;
+  final List<double> _gapWidths;
+  final _gapWithinEdge = <double>[];
   final TextDirection direction;
   final double maxWidth;
   final _union = ForumBodyRubyLevelUnion();
@@ -157,6 +189,8 @@ final class ForumBodyRubySegmentComposition {
   ForumBodyRubyLevelMetrics? _level;
   var _phase = _SegmentPhase.columns;
   var _column = 0;
+  var _gap = 0;
+  var _gapRank = 0;
   var _span = 0;
   int? _cursor;
   var _bucketWidth = 1;
@@ -190,7 +224,7 @@ final class ForumBodyRubySegmentComposition {
       switch (_phase) {
         case _SegmentPhase.columns:
           if (_column == _columns.length) {
-            _phase = _SegmentPhase.spans;
+            _phase = _SegmentPhase.gaps;
             continue;
           }
           final column = _columns[_column];
@@ -199,6 +233,35 @@ final class ForumBodyRubySegmentComposition {
           if (merge.isComplete) {
             _widths.add(column.size.width);
             _column++;
+            _merge = null;
+          }
+        case _SegmentPhase.gaps:
+          if (_gap == _gaps.length) {
+            _phase = _SegmentPhase.spans;
+            continue;
+          }
+          final gap = _gaps[_gap];
+          if (_gapRank == 0 && _merge == null) {
+            if (gap.beforeColumn <= 0 ||
+                gap.beforeColumn >= _columns.length ||
+                (_gap > 0 && gap.beforeColumn < _gaps[_gap - 1].beforeColumn)) {
+              ForumBodyRubyGroupMetrics._invalid();
+            }
+          }
+          if (_gapRank < gap.font.annotations.length) {
+            if (gap.font.annotations[_gapRank++].hasAnnotation) {
+              ForumBodyRubyGroupMetrics._invalid();
+            }
+            work++;
+            continue;
+          }
+          final merge = _merge ??= _union.merge(gap.font);
+          work += merge.advance(maxParts: maxParts - work);
+          if (merge.isComplete) {
+            _gapWithinEdge.add(_gapWidths[gap.beforeColumn]);
+            _gapWidths[gap.beforeColumn] += gap.font.size.width;
+            _gap++;
+            _gapRank = 0;
             _merge = null;
           }
         case _SegmentPhase.spans:
@@ -270,7 +333,9 @@ final class ForumBodyRubySegmentComposition {
             _phase = _SegmentPhase.spread;
             continue;
           }
-          _sum += _widths[_cursor!];
+          _sum +=
+              _widths[_cursor!] +
+              (_cursor! > span.startColumn ? _gapWidths[_cursor!] : 0);
           _cursor = _cursor! + 1;
           work++;
         case _SegmentPhase.spread:
@@ -287,7 +352,8 @@ final class ForumBodyRubySegmentComposition {
             _phase = _SegmentPhase.position;
             continue;
           }
-          final sum = _prefix.last + _widths[_prefix.length - 1];
+          final index = _prefix.length - 1;
+          final sum = _prefix.last + _gapWidths[index] + _widths[index];
           if (!sum.isFinite || sum < 0) ForumBodyRubyGroupMetrics._invalid();
           if (sum > maxWidth) {
             throw const ForumBodyRubyGroupException(
@@ -303,6 +369,9 @@ final class ForumBodyRubySegmentComposition {
               widths: _widths,
               prefix: _prefix,
               spans: _spans,
+              gaps: _gaps,
+              gapWidths: _gapWidths,
+              gapWithinEdge: _gapWithinEdge,
               direction: direction,
             ),
             _level!,

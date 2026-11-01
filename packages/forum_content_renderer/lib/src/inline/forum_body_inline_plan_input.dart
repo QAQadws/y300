@@ -25,7 +25,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 13;
+  static const revision = 14;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -154,6 +154,7 @@ final class ForumBodyInlinePlanInput {
             final segmentBases = <ForumBodyParagraphContent>[];
             final baseSources = [for (final _ in bases) <int>[]];
             final annotationSources = <int>[];
+            final gaps = <ForumBodyRubyGapRequest>[];
             ForumBodyParagraphContent? tail;
             List<int>? tailSource;
             var column = 0;
@@ -161,13 +162,9 @@ final class ForumBodyInlinePlanInput {
               final sources = baseSources[index];
               var base = unit.content;
               if (unit.kind == ForumBodyRubyBaseInputKind.gap) {
-                if (column != 0 &&
-                    column != unitCount &&
-                    base.projection.text.isNotEmpty) {
-                  // Internal gap geometry has its own renderer contract. Do not
-                  // silently delete a real space inside a spanning component.
-                  _unsupported(group.rootPath);
-                }
+                // Internal source windows are appended with their neighbouring
+                // bases below; edge indentation remains a structural omission.
+                if (column != 0 && column != unitCount) continue;
                 final end = base.projection.text.length;
                 sources.add(append(_window(base, end, end)));
                 continue;
@@ -195,7 +192,18 @@ final class ForumBodyInlinePlanInput {
             final start = offset;
             var sourceColumn = 0;
             for (final (index, unit) in bases.indexed) {
-              if (unit.kind == ForumBodyRubyBaseInputKind.gap) continue;
+              if (unit.kind == ForumBodyRubyBaseInputKind.gap) {
+                if (sourceColumn > 0 &&
+                    sourceColumn < unitCount &&
+                    unit.content.projection.text.isNotEmpty) {
+                  baseSources[index].add(append(unit.content));
+                  gaps.add((
+                    beforeColumn: sourceColumn,
+                    request: ForumBodyTextRequest.paragraph(unit.content),
+                  ));
+                }
+                continue;
+              }
               final base = segmentBases[sourceColumn++];
               if (!base.isSourceFree) baseSources[index].add(append(base));
             }
@@ -230,6 +238,7 @@ final class ForumBodyInlinePlanInput {
                   ],
                   sides: [for (final level in pairing.levels) level.side],
                   spans: spans,
+                  gaps: gaps,
                   direction: group.style.textDirection,
                   maxWidth: width,
                 ),

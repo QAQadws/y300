@@ -40,6 +40,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
   ForumBodyTextRequestPreparation? _span;
   ForumBodyRubySegmentComposition? _composition;
   final _columns = <ForumBodyRubyGroupMetrics>[];
+  final _gaps = <ForumBodyRubyMeasuredGap>[];
   final _measured = <ForumBodyRubyMeasuredSpan>[];
   ForumBodyRubySegmentMetrics? _result;
   ForumBodyTextRequest? _failedRequest;
@@ -51,6 +52,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
   var _preparedSpans = 0;
   int get preparedColumnCount => _preparedColumns;
   int get preparedSpanCount => _preparedSpans;
+  int get preparedGapCount => _gaps.length;
   ForumBodyRubySegmentMetricsPreparationState get state => _state;
   bool get isReady =>
       _state == ForumBodyRubySegmentMetricsPreparationState.ready;
@@ -60,6 +62,8 @@ final class ForumBodyRubySegmentMetricsPreparation {
       ? null
       : _columns.length < _request!.bases.length
       ? _request!.bases[_columns.length]
+      : _gaps.length < _request!.gaps.length
+      ? _request!.gaps[_gaps.length].request
       : _measured.length < _request!.spans.length
       ? _request!.spans[_measured.length].request
       : null;
@@ -100,10 +104,16 @@ final class ForumBodyRubySegmentMetricsPreparation {
     _cacheMiss = false;
     while (units < maxParts && !isReady) {
       if (cache.layoutBuildCount != builds) break;
-      if (_columns.length < request.bases.length) {
+      if (_columns.length < request.bases.length ||
+          _gaps.length < request.gaps.length) {
+        final isGap = _columns.length == request.bases.length;
+        // Reuse the actual font-box measurement without consuming a base index
+        // or inventing annotation glyphs for the original gap text.
         final base = _base ??= ForumBodyRubyGroupPreparation.forSegmentBase(
           cache: cache,
-          base: request.bases[_columns.length],
+          base: isGap
+              ? request.gaps[_gaps.length].request
+              : request.bases[_columns.length],
           sides: request.sides,
           ensureOwner: _guard,
           textScaler: _scaler!,
@@ -127,8 +137,18 @@ final class ForumBodyRubySegmentMetricsPreparation {
         _cacheMiss = base.cacheMiss;
         final complete = base.isReady;
         if (complete) {
-          _columns.add(base.takeMetrics());
-          _preparedColumns++;
+          final metrics = base.takeMetrics();
+          if (isGap) {
+            _gaps.add(
+              ForumBodyRubyMeasuredGap(
+                beforeColumn: request.gaps[_gaps.length].beforeColumn,
+                font: metrics,
+              ),
+            );
+          } else {
+            _columns.add(metrics);
+            _preparedColumns++;
+          }
           base.close();
           _base = null;
         }
@@ -186,6 +206,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
       } else {
         final composition = _composition ??= ForumBodyRubySegmentComposition(
           columns: _columns,
+          gaps: _gaps,
           spans: _measured,
           direction: request.direction,
           maxWidth: request.maxWidth,
@@ -289,6 +310,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
     _span = null;
     _composition = null;
     _columns.clear();
+    _gaps.clear();
     _measured.clear();
     _result = null;
     _dropOwner();

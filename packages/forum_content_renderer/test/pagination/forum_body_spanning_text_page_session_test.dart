@@ -92,23 +92,26 @@ List<ForumBodyPreparedTextFragment> _page(
   }
 }
 
-String _ruby({bool dense = false, String direction = 'ltr'}) {
+String _ruby({bool dense = false, String direction = 'ltr', String gap = ''}) {
   final annotations = dense
       ? List.generate(100, (r) => '<rtc style="font-size:1px">r$r</rtc>').join()
       : '<rtc><rt style="font-size:10px">xx</rt><rt style="font-size:15px">yy</rt></rtc><rtc style="font-size:10px">abcdefghij</rtc><rtc style="font-size:8px">outer</rtc>';
-  return '<ruby style="direction:$direction"><rb style="font-size:20px">A</rb><rb style="font-size:30px">B</rb>$annotations</ruby>';
+  return '<ruby style="direction:$direction"><rb style="font-size:20px">A</rb>$gap<rb style="font-size:30px">B</rb>$annotations</ruby>';
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final q in [1, 7, 32]) {
     for (final dense in [false, true]) {
-      for (final direction in ['ltr', 'rtl']) {
+      for (final (direction, gap) in [
+        for (final direction in ['ltr', 'rtl'])
+          for (final gap in ['', ' ']) (direction, gap),
+      ]) {
         test(
-          'PUBLIC Session raw spanning atom retains original members q=$q dense=$dense $direction',
+          'PUBLIC Session raw spanning atom retains original members q=$q dense=$dense $direction gap=${gap.isNotEmpty}',
           () {
             final f = _open(
-              '<p dir="$direction">${_ruby(dense: dense, direction: direction)}</p>',
+              '<p dir="$direction">${_ruby(dense: dense, direction: direction, gap: gap)}</p>',
               entries: dense ? 3 : 2,
             );
             _finish(f.session, f.cache);
@@ -118,8 +121,9 @@ void main() {
               final fragment =
                   fragments.single as ForumBodyPreparedInlineFragment;
               expect(fragment.view.atomIndices, [0]);
-              expect(fragment.nativeLeases.length, dense ? 103 : 7);
-              expect(f.cache.pictureBuildCount, dense ? 102 : 6);
+              final extra = gap.isEmpty ? 0 : 1;
+              expect(fragment.nativeLeases.length, (dense ? 103 : 7) + extra);
+              expect(f.cache.pictureBuildCount, (dense ? 102 : 6) + extra);
               for (final window in fragment.view.content.contexts) {
                 final text = window.content.projection.text;
                 if (text.isEmpty) continue;

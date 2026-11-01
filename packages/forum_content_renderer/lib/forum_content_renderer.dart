@@ -33,6 +33,8 @@ export 'src/inline/forum_body_ruby_group_metrics.dart'
         ForumBodyRubySegmentMetrics,
         ForumBodyRubyMeasuredSpan,
         ForumBodyRubyPlacedSpan,
+        ForumBodyRubyMeasuredGap,
+        ForumBodyRubyPlacedGap,
         ForumBodyRubyAtomMetrics,
         ForumBodyRubyColumnMetrics,
         ForumBodyRubyComponentMetrics;

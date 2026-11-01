@@ -9,6 +9,8 @@ sealed class _RubySegmentHorizontal {
   TextDirection get direction;
   double get width;
   int get spanCount;
+  int get gapCount;
+  ({ForumBodyRubyMeasuredGap input, double left}) gap(int index);
   double columnLeft(int index);
   ({ForumBodyRubyMeasuredSpan input, double left, double width}) span(
     int index,
@@ -21,6 +23,9 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
     required this.widths,
     required this.prefix,
     required this.spans,
+    required this.gaps,
+    required this.gapWidths,
+    required this.gapWithinEdge,
     required this.direction,
   });
   @override
@@ -29,6 +34,9 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
   final List<double> widths;
   final List<double> prefix;
   final List<ForumBodyRubyMeasuredSpan> spans;
+  final List<ForumBodyRubyMeasuredGap> gaps;
+  final List<double> gapWidths;
+  final List<double> gapWithinEdge;
   @override
   final TextDirection direction;
   @override
@@ -36,20 +44,36 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
   @override
   int get spanCount => spans.length;
   @override
+  int get gapCount => gaps.length;
+  @override
+  ({ForumBodyRubyMeasuredGap input, double left}) gap(int index) {
+    final input = gaps[index];
+    final start = prefix[input.beforeColumn] + gapWithinEdge[index];
+    return (
+      input: input,
+      left: direction == TextDirection.ltr
+          ? start
+          : prefix.last - start - input.font.size.width,
+    );
+  }
+
+  @override
   double columnLeft(int index) => direction == TextDirection.ltr
-      ? prefix[index]
+      ? prefix[index] + gapWidths[index]
       : prefix.last - prefix[index + 1];
   @override
   ({ForumBodyRubyMeasuredSpan input, double left, double width}) span(
     int index,
   ) {
     final input = spans[index];
+    final start = prefix[input.startColumn] + gapWidths[input.startColumn];
+    final width = prefix[input.endColumn] - start;
     return (
       input: input,
       left: direction == TextDirection.ltr
-          ? prefix[input.startColumn]
+          ? start
           : prefix.last - prefix[input.endColumn],
-      width: prefix[input.endColumn] - prefix[input.startColumn],
+      width: width,
     );
   }
 }
@@ -68,6 +92,11 @@ final class _RubyExistingHorizontal extends _RubySegmentHorizontal {
   @override
   int get spanCount => metrics.spans.length;
   @override
+  int get gapCount => metrics.gaps.length;
+  @override
+  ({ForumBodyRubyMeasuredGap input, double left}) gap(int index) =>
+      (input: metrics.gaps[index].input, left: metrics.gaps[index].left);
+  @override
   double columnLeft(int index) => metrics.columnLefts[index];
   @override
   ({ForumBodyRubyMeasuredSpan input, double left, double width}) span(
@@ -78,7 +107,7 @@ final class _RubyExistingHorizontal extends _RubySegmentHorizontal {
   }
 }
 
-enum _RubyPositionPhase { levels, columns, spans, publish, ready }
+enum _RubyPositionPhase { levels, columns, gaps, spans, publish, ready }
 
 /// Sole component positioning path for intrinsic composition and row targets.
 /// Each rank/member and final publication is charged; no glyph is re-measured.
@@ -97,6 +126,7 @@ final class _RubySegmentPositioning {
   final _lefts = <double>[];
   final _offsets = <Offset>[];
   final _spans = <ForumBodyRubyPlacedSpan>[];
+  final _gaps = <ForumBodyRubyPlacedGap>[];
   ForumBodyRubyColumnAlignment? _columnWork;
   var _phase = _RubyPositionPhase.levels;
   ForumBodyRubySegmentMetrics? _result;
@@ -133,7 +163,7 @@ final class _RubySegmentPositioning {
           work++;
         case _RubyPositionPhase.columns:
           if (_columns.length == horizontal.columns.length) {
-            _phase = _RubyPositionPhase.spans;
+            _phase = _RubyPositionPhase.gaps;
             continue;
           }
           final index = _columns.length;
@@ -154,6 +184,24 @@ final class _RubySegmentPositioning {
                         2,
                 0,
               ),
+            );
+            _columnWork = null;
+          }
+        case _RubyPositionPhase.gaps:
+          if (_gaps.length == horizontal.gapCount) {
+            _phase = _RubyPositionPhase.spans;
+            continue;
+          }
+          final item = horizontal.gap(_gaps.length);
+          final alignment = _columnWork ??= ForumBodyRubyColumnAlignment(
+            column: item.input.font,
+            level: level,
+            prepareResult: true,
+          );
+          work += alignment.advance(maxParts: maxParts - work);
+          if (alignment.isComplete) {
+            _gaps.add(
+              ForumBodyRubyPlacedGap._(item.input, item.left, alignment.result),
             );
             _columnWork = null;
           }
@@ -190,6 +238,7 @@ final class _RubySegmentPositioning {
             columnLefts: _lefts,
             columnOffsets: _offsets,
             spans: _spans,
+            gaps: _gaps,
           );
           _phase = _RubyPositionPhase.ready;
           work++;

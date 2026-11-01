@@ -38,7 +38,7 @@ final class NovelReaderNativeLayoutScope {
     required this.height,
     required this.paginationKey,
   });
-  static const fingerprintRevision = 3;
+  static const fingerprintRevision = 4;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -119,6 +119,7 @@ final class NovelReaderNativeLayoutScope {
       ForumBodyInlineParagraphLayout.revision,
       ForumBodyRubyContentCursor.revision,
       ForumBodyRubyGroupLayout.revision,
+      ForumBodyRubySegmentMetrics.revision,
       ForumBodyTextBandContent.revision,
       ForumBodyTextBandLayout.revision,
       HtmlDisplayTextProjection.revision,

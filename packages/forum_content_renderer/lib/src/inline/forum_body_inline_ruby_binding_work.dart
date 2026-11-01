@@ -24,6 +24,7 @@ final class _RubyBindingWork {
   List<ForumBodyInlineContext?> _annotations = [];
   List<_RubyColumnWindows> _columns = [];
   List<ForumBodyInlineContext?> _spans = [];
+  List<ForumBodyInlineContext> _gaps = [];
   _RubyBinding? _result;
   var _column = 0;
   var _rank = -1;
@@ -35,7 +36,14 @@ final class _RubyBindingWork {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     var work = 0;
     while (work < maxParts && !isComplete) {
-      if (_column < (_members?.columns.length ?? 1)) {
+      if (_members != null &&
+          _gaps.length < _members!.gaps.length &&
+          _segment!.metrics.gaps[_gaps.length].input.beforeColumn == _column &&
+          _rank < 0) {
+        final member = _members!.gaps[_gaps.length].inspectMembers().base;
+        _own!(member);
+        _gaps.add(_cursor!.resolve(member.content));
+      } else if (_column < (_members?.columns.length ?? 1)) {
         if (_rank < 0) {
           _current = (_members?.columns[_column] ?? _group!).inspectMembers();
           _own!(_current!.base);
@@ -70,6 +78,7 @@ final class _RubyBindingWork {
                 _segment!,
                 UnmodifiableListView(_columns),
                 UnmodifiableListView(_spans),
+                UnmodifiableListView(_gaps),
               );
       }
       work++;
@@ -99,6 +108,7 @@ final class _RubyBindingWork {
     _annotations = [];
     _columns = [];
     _spans = [];
+    _gaps = [];
     _result = null;
   }
 }

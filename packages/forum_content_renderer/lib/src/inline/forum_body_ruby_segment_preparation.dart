@@ -38,7 +38,10 @@ final class ForumBodyRubySegmentPreparation {
        _additionalOwned = additionalOwnedLeases,
        expectedPartCount = request.nativeHandleCount,
        _missing = [
-         for (final base in request.bases)
+         for (final base in [
+           ...request.bases,
+           for (final gap in request.gaps) gap.request,
+         ])
            ForumBodyParagraphContent.anonymousInline(
              identity: base.content.identity,
              fontRevision: base.content.fontRevision,
@@ -66,6 +69,16 @@ final class ForumBodyRubySegmentPreparation {
           ),
       ],
       spans: [for (final span in request.spans) span.request.content],
+      gaps: [
+        for (final (index, gap) in request.gaps.indexed)
+          (
+            base: gap.request.content,
+            annotations: [
+              for (final _ in request.sides)
+                _missing[request.bases.length + index],
+            ],
+          ),
+      ],
     );
   }
 
@@ -86,6 +99,7 @@ final class ForumBodyRubySegmentPreparation {
   final int expectedPartCount;
   var _state = ForumBodyRubySegmentPreparationState.active;
   var _columns = 0;
+  var _gaps = 0;
   var _spans = 0;
   var _preparedParts = 0;
   var _workCount = 0;
@@ -108,6 +122,8 @@ final class ForumBodyRubySegmentPreparation {
       ? null
       : _columns < _request!.bases.length
       ? _request!.bases[_columns]
+      : _gaps < _request!.gaps.length
+      ? _request!.gaps[_gaps].request
       : _spans < _request!.spans.length
       ? _request!.spans[_spans].request
       : null;
@@ -168,10 +184,12 @@ final class ForumBodyRubySegmentPreparation {
       final assembly = _assembly!;
       if (assembly.hasPendingMember ||
           (_columns == request.bases.length &&
+              _gaps == request.gaps.length &&
               _spans == request.spans.length)) {
         units += assembly.advance(maxParts: maxParts - units);
         _guard();
         _columns = assembly.preparedColumnCount;
+        _gaps = assembly.preparedGapCount;
         _spans = assembly.preparedSpanCount;
         if (assembly.isReady) {
           _request = null;
@@ -184,12 +202,21 @@ final class ForumBodyRubySegmentPreparation {
         continue;
       }
       final rejectedAt = cache.budgetRevision;
-      if (_columns < request.bases.length) {
+      if (_columns < request.bases.length || _gaps < request.gaps.length) {
+        final isGap = _columns == request.bases.length;
+        if (isGap &&
+            request.gaps[_gaps].beforeColumn !=
+                _metrics!.gaps[_gaps].input.beforeColumn) {
+          throw const ForumBodyRubyGroupException(
+            ForumBodyRubyGroupFailure.geometry,
+          );
+        }
         final base = _base ??= ForumBodyRubyGroupPreparation.forSegmentBase(
           cache: cache,
-          base: request.bases[_columns],
+          base: isGap ? request.gaps[_gaps].request : request.bases[_columns],
           sides: request.sides,
-          missingAnnotation: _missing[_columns],
+          missingAnnotation:
+              _missing[isGap ? request.bases.length + _gaps : _columns],
           preparePaint: true,
           level: _metrics!.level,
           maxWidth: request.maxWidth,
@@ -222,7 +249,11 @@ final class ForumBodyRubySegmentPreparation {
             column.close();
             rethrow;
           }
-          assembly.addColumn(column);
+          if (isGap) {
+            assembly.addGap(column);
+          } else {
+            assembly.addColumn(column);
+          }
         }
         if (_cacheMiss ||
             _waiting ||
