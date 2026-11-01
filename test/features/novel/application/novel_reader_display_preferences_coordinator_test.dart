@@ -267,6 +267,7 @@ void main() {
           typography: const NovelReaderTypographyOverrides(
             firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
             letterSpacing: NovelReaderLetterSpacing(logicalPixels: -1.25),
+            wordSpacing: NovelReaderWordSpacing(logicalPixels: 7.5),
             paragraphSpacing: NovelReaderParagraphSpacing(
               before: 12,
               after: 31,

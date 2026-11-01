@@ -66,6 +66,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.lineHeight != next.lineHeight ||
         previous.effectiveParagraphSpacing != next.effectiveParagraphSpacing ||
         previous.typography.letterSpacing != next.typography.letterSpacing ||
+        previous.typography.wordSpacing != next.typography.wordSpacing ||
         previous.pagePadding != next.pagePadding ||
         previous.fontFamily != next.fontFamily ||
         previous.contentMaxWidth != next.contentMaxWidth ||

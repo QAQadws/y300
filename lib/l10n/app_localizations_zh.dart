@@ -2205,6 +2205,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelLetterSpacing => '字距';
 
   @override
+  String get novelWordSpacing => '词距';
+
+  @override
+  String get novelWordSpacingScope => '应用范围';
+
+  @override
+  String get novelWordSpacingOriginal => '原始词距';
+
+  @override
+  String get novelWordSpacingMissing => '补充缺省';
+
+  @override
+  String get novelWordSpacingBody => '统一正文';
+
+  @override
+  String get novelWordSpacingAll => '全部文字';
+
+  @override
+  String get novelWordSpacingAmount => '额外词距';
+
+  @override
+  String novelWordSpacingValue(String value) {
+    return '$value 像素';
+  }
+
+  @override
+  String get novelWordSpacingHint => '只调整词间空白，汉字间距请用字距；“补充缺省”会保留作者指定的词距。';
+
+  @override
+  String get novelWordSpacingUnavailable => '词距设置仅用于翻页阅读，切换到翻页模式后可调整。';
+
+  @override
+  String get novelWordSpacingReset => '重置词距';
+
+  @override
   String get novelLetterSpacingScope => '应用范围';
 
   @override
@@ -7838,6 +7873,41 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelLetterSpacing => '字距';
+
+  @override
+  String get novelWordSpacing => '詞距';
+
+  @override
+  String get novelWordSpacingScope => '套用範圍';
+
+  @override
+  String get novelWordSpacingOriginal => '原始詞距';
+
+  @override
+  String get novelWordSpacingMissing => '補充預設';
+
+  @override
+  String get novelWordSpacingBody => '統一正文';
+
+  @override
+  String get novelWordSpacingAll => '全部文字';
+
+  @override
+  String get novelWordSpacingAmount => '額外詞距';
+
+  @override
+  String novelWordSpacingValue(String value) {
+    return '$value 像素';
+  }
+
+  @override
+  String get novelWordSpacingHint => '只調整詞間空白，漢字間距請用字距；「補充預設」會保留作者指定的詞距。';
+
+  @override
+  String get novelWordSpacingUnavailable => '詞距設定僅用於翻頁閱讀，切換至翻頁模式後即可調整。';
+
+  @override
+  String get novelWordSpacingReset => '重設詞距';
 
   @override
   String get novelLetterSpacingScope => '套用範圍';

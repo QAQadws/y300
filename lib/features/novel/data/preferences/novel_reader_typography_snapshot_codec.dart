@@ -22,6 +22,12 @@ final class NovelReaderTypographySnapshotCodec {
     maximum: NovelReaderLetterSpacing.maximum,
     fields: ['value'],
   );
+  static const _words = _NumericRequestCodec(
+    unit: 'logicalPixels',
+    minimum: NovelReaderWordSpacing.minimum,
+    maximum: NovelReaderWordSpacing.maximum,
+    fields: ['value'],
+  );
 
   NovelReaderTypographyOverrides normalize(
     NovelReaderTypographyOverrides input,
@@ -35,6 +41,7 @@ final class NovelReaderTypographySnapshotCodec {
     letterSpacing: input.letterSpacing?.isValid == true
         ? input.letterSpacing
         : null,
+    wordSpacing: input.wordSpacing?.isValid == true ? input.wordSpacing : null,
   );
 
   NovelReaderTypographyOverrides decode(Object? source) {
@@ -45,7 +52,14 @@ final class NovelReaderTypographySnapshotCodec {
     final indent = _indent.decode(source['firstLineIndent']);
     final spacing = _spacing.decode(source['paragraphSpacing']);
     final letters = _letters.decode(source['letterSpacing']);
+    final words = _words.decode(source['wordSpacing']);
     return NovelReaderTypographyOverrides(
+      wordSpacing: words == null
+          ? null
+          : NovelReaderWordSpacing(
+              logicalPixels: words.values['value']!,
+              scope: words.scope,
+            ),
       firstLineIndent: indent == null
           ? null
           : NovelReaderFirstLineIndent(
@@ -82,8 +96,15 @@ final class NovelReaderTypographySnapshotCodec {
     final indent = normalized.firstLineIndent;
     final spacing = normalized.paragraphSpacing;
     final letters = normalized.letterSpacing;
+    final words = normalized.wordSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
     final requests = {
+      'wordSpacing': _words.encode(
+        prior?['wordSpacing'],
+        words == null
+            ? null
+            : (scope: words.scope, values: {'value': words.logicalPixels}),
+      ),
       'letterSpacing': _letters.encode(
         prior?['letterSpacing'],
         letters == null

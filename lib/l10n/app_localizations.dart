@@ -3624,6 +3624,72 @@ abstract class AppLocalizations {
   /// **'字距'**
   String get novelLetterSpacing;
 
+  /// No description provided for @novelWordSpacing.
+  ///
+  /// In zh, this message translates to:
+  /// **'词距'**
+  String get novelWordSpacing;
+
+  /// No description provided for @novelWordSpacingScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用范围'**
+  String get novelWordSpacingScope;
+
+  /// No description provided for @novelWordSpacingOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始词距'**
+  String get novelWordSpacingOriginal;
+
+  /// No description provided for @novelWordSpacingMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'补充缺省'**
+  String get novelWordSpacingMissing;
+
+  /// No description provided for @novelWordSpacingBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelWordSpacingBody;
+
+  /// No description provided for @novelWordSpacingAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部文字'**
+  String get novelWordSpacingAll;
+
+  /// No description provided for @novelWordSpacingAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'额外词距'**
+  String get novelWordSpacingAmount;
+
+  /// No description provided for @novelWordSpacingValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value} 像素'**
+  String novelWordSpacingValue(String value);
+
+  /// No description provided for @novelWordSpacingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只调整词间空白，汉字间距请用字距；“补充缺省”会保留作者指定的词距。'**
+  String get novelWordSpacingHint;
+
+  /// No description provided for @novelWordSpacingUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'词距设置仅用于翻页阅读，切换到翻页模式后可调整。'**
+  String get novelWordSpacingUnavailable;
+
+  /// No description provided for @novelWordSpacingReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置词距'**
+  String get novelWordSpacingReset;
+
   /// No description provided for @novelLetterSpacingScope.
   ///
   /// In zh, this message translates to:

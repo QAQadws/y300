@@ -7,6 +7,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_display_se
 import 'package:y300/features/novel/presentation/widgets/novel_reader_indent_settings_panel.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_paragraph_spacing_settings_panel.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_letter_spacing_settings_panel.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_word_spacing_settings_panel.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
@@ -125,6 +126,7 @@ void main() {
       }
 
       await pump(false, NovelReaderFlowMode.pagedLtr);
+      expect(find.byType(NovelReaderWordSpacingSettingsPanel), findsNothing);
       expect(find.byType(NovelReaderLetterSpacingSettingsPanel), findsNothing);
       expect(find.byType(NovelReaderIndentSettingsPanel), findsNothing);
       expect(
@@ -132,6 +134,7 @@ void main() {
         findsNothing,
       );
       await pump(true, NovelReaderFlowMode.pagedLtr);
+      expect(find.byType(NovelReaderWordSpacingSettingsPanel), findsOneWidget);
       expect(
         find.byType(NovelReaderLetterSpacingSettingsPanel),
         findsOneWidget,
@@ -150,6 +153,14 @@ void main() {
         isTrue,
       );
       await pump(true, NovelReaderFlowMode.vertical);
+      expect(
+        tester
+            .widget<NovelReaderWordSpacingSettingsPanel>(
+              find.byType(NovelReaderWordSpacingSettingsPanel),
+            )
+            .enabled,
+        isFalse,
+      );
       expect(
         tester
             .widget<NovelReaderLetterSpacingSettingsPanel>(

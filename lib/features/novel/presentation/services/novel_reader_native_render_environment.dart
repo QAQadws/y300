@@ -51,6 +51,7 @@ final class NovelReaderNativeRenderEnvironment {
           inherit: false,
           locale: Localizations.maybeLocaleOf(context),
           letterSpacing: nativeTypography.letterSpacing,
+          wordSpacing: nativeTypography.wordSpacing,
         );
     return NovelReaderNativeRenderEnvironment._(
       ForumBodyReaderStyle(

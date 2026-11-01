@@ -12,6 +12,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'novel_reader_indent_settings_panel.dart';
 import 'novel_reader_paragraph_spacing_settings_panel.dart';
 import 'novel_reader_letter_spacing_settings_panel.dart';
+import 'novel_reader_word_spacing_settings_panel.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
   const NovelReaderDisplaySettingsSheet({
@@ -132,6 +133,18 @@ class _NovelReaderDisplaySettingsSheetState
                   title: l10n.novelLetterSpacing,
                   children: [
                     NovelReaderLetterSpacingSettingsPanel(
+                      value: _draft.typography,
+                      enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
+                      onChanged: (next) =>
+                          _applyPreferences(_draft.copyWith(typography: next)),
+                    ),
+                  ],
+                ),
+              if (widget.nativeTypography)
+                _SettingsSection(
+                  title: l10n.novelWordSpacing,
+                  children: [
+                    NovelReaderWordSpacingSettingsPanel(
                       value: _draft.typography,
                       enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
                       onChanged: (next) =>

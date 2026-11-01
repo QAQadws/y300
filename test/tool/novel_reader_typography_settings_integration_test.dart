@@ -20,7 +20,9 @@ enum _Setting {
   indent('indent'),
   paragraphSpacing('paragraph-spacing'),
   letterSpacing('letter-spacing'),
-  letterSpacingRuby('letter-spacing');
+  letterSpacingRuby('letter-spacing'),
+  wordSpacing('word-spacing'),
+  wordSpacingRuby('word-spacing');
 
   const _Setting(this.keyPrefix);
   final String keyPrefix;
@@ -44,8 +46,14 @@ void main() {
 
 void _testSettings(_Setting setting) {
   final spacing = setting == _Setting.paragraphSpacing;
-  final mixed = setting == _Setting.letterSpacingRuby;
-  final letters = setting == _Setting.letterSpacing || mixed;
+  final mixed =
+      setting == _Setting.letterSpacingRuby ||
+      setting == _Setting.wordSpacingRuby;
+  final letters =
+      setting == _Setting.letterSpacing ||
+      setting == _Setting.letterSpacingRuby;
+  final words =
+      setting == _Setting.wordSpacing || setting == _Setting.wordSpacingRuby;
   testWidgets(
     'settings reflow keeps coverage and persists across reader owners ($setting)',
     (tester) async {
@@ -57,7 +65,16 @@ void _testSettings(_Setting setting) {
           );
       await repository().save(
         profileReaderPreferences.copyWith(
-          typography: letters
+          typography: words
+              ? const NovelReaderTypographyOverrides(
+                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
+                  paragraphSpacing: NovelReaderParagraphSpacing(
+                    before: 12,
+                    after: 31,
+                  ),
+                  letterSpacing: NovelReaderLetterSpacing(logicalPixels: -1.25),
+                )
+              : letters
               ? const NovelReaderTypographyOverrides(
                   firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
                   paragraphSpacing: NovelReaderParagraphSpacing(
@@ -93,7 +110,7 @@ void _testSettings(_Setting setting) {
         data.scope(
           MaterialApp(
             navigatorKey: navigator,
-            theme: letters
+            theme: letters || words
                 ? ThemeData.light().copyWith(
                     textTheme: const TextTheme(
                       bodyMedium: TextStyle(
@@ -275,39 +292,59 @@ void _testSettings(_Setting setting) {
 
       void checkVisibleLetters(
         ProfileReaderObservation observation,
-        double number,
-      ) {
+        double number, {
+        double wordSpacing = 3.25,
+        bool checkSpaces = false,
+      }) {
         final target = observation.nativeController!.viewForPage(
           observation.page!,
         )!;
         var checked = 0;
+        void verify(
+          String text,
+          TextStyle style,
+          List<TextBox> Function(int, int) boxes,
+        ) {
+          expect(text, startsWith('Paragraph'));
+          expect(style.wordSpacing, wordSpacing);
+          final character = boxes(0, 1).single;
+          expect(
+            character.right - character.left,
+            closeTo(state().preferences.fontSize + number, .001),
+          );
+          if (checkSpaces) {
+            final index = text.indexOf(' ');
+            expect(index, greaterThan(0));
+            final space = boxes(index, index + 1).single;
+            expect(
+              space.right - space.left,
+              closeTo(
+                state().preferences.fontSize + number + wordSpacing,
+                .001,
+              ),
+            );
+          }
+          checked++;
+        }
+
         void collect(Element element) {
           if (element.widget
               case ForumBodyParagraphSurface(lease: final lease, startLine: 0)
               when lease.isActive) {
-            expect(lease.content.projection.text, startsWith('Paragraph'));
-            expect(lease.content.style.textStyle.wordSpacing, 3.25);
-            expect(
-              lease.layout.selectionBoxes(0, 1).single.right -
-                  lease.layout.selectionBoxes(0, 1).single.left,
-              closeTo(state().preferences.fontSize + number, .001),
+            verify(
+              lease.content.projection.text,
+              lease.content.style.textStyle,
+              lease.layout.selectionBoxes,
             );
-            checked++;
           }
           if (element.widget
               case ForumBodyInlineParagraphSurface(view: final view)
               when view.isActive && view.startLine == 0) {
-            expect(
+            verify(
               view.content.projection.display.text,
-              startsWith('Paragraph'),
+              view.content.style.textStyle,
+              view.selectionBoxes,
             );
-            expect(view.content.style.textStyle.wordSpacing, 3.25);
-            final box = view.selectionBoxes(0, 1).single;
-            expect(
-              box.right - box.left,
-              closeTo(state().preferences.fontSize + number, .001),
-            );
-            checked++;
           }
           element.visitChildElements(collect);
         }
@@ -355,12 +392,20 @@ void _testSettings(_Setting setting) {
           _Setting.paragraphSpacing => l10n.novelParagraphSpacingBody,
           _Setting.letterSpacing ||
           _Setting.letterSpacingRuby => l10n.novelLetterSpacingBody,
+          _Setting.wordSpacing ||
+          _Setting.wordSpacingRuby => l10n.novelWordSpacingBody,
         }),
       );
       await tester.ensureVisible(bodyChoice);
       await tester.tap(bodyChoice);
       await tester.pump();
-      if (letters) {
+      if (words) {
+        tester
+            .widget<Slider>(
+              find.byKey(const Key('novel-reader-word-spacing-slider')),
+            )
+            .onChanged!(7.5);
+      } else if (letters) {
         tester
             .widget<Slider>(
               find.byKey(const Key('novel-reader-letter-spacing-slider')),
@@ -393,6 +438,10 @@ void _testSettings(_Setting setting) {
         _Setting.letterSpacingRuby => baseline.typography.withLetterSpacing(
           const NovelReaderLetterSpacing(logicalPixels: -1.25),
         ),
+        _Setting.wordSpacing ||
+        _Setting.wordSpacingRuby => baseline.typography.withWordSpacing(
+          const NovelReaderWordSpacing(logicalPixels: 7.5),
+        ),
       };
       observation = await wait(
         (value) =>
@@ -413,8 +462,16 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters) checkVisibleSpacing(observation, 31);
+      if (spacing || letters || words) checkVisibleSpacing(observation, 31);
       if (letters) checkVisibleLetters(observation, -1.25);
+      if (words) {
+        checkVisibleLetters(
+          observation,
+          -1.25,
+          wordSpacing: 7.5,
+          checkSpaces: true,
+        );
+      }
       final stored = await repository().load();
       expect(stored.typography, expectedTypography);
       if (spacing) {
@@ -452,8 +509,16 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters) checkVisibleSpacing(observation, 31);
+      if (spacing || letters || words) checkVisibleSpacing(observation, 31);
       if (letters) checkVisibleLetters(observation, -1.25);
+      if (words) {
+        checkVisibleLetters(
+          observation,
+          -1.25,
+          wordSpacing: 7.5,
+          checkSpaces: true,
+        );
+      }
       await settings();
       final reset = find.byKey(Key('novel-reader-${setting.keyPrefix}-reset'));
       await tester.ensureVisible(reset);
@@ -474,6 +539,16 @@ void _testSettings(_Setting setting) {
         checkVisibleIndent(observation, 1.5);
         checkVisibleSpacing(observation, 31);
         checkVisibleLetters(observation, .5);
+      }
+      if (words) {
+        checkVisibleIndent(observation, 1.5);
+        checkVisibleSpacing(observation, 31);
+        checkVisibleLetters(
+          observation,
+          -1.25,
+          wordSpacing: 3.25,
+          checkSpaces: true,
+        );
       }
       final secondOwner = observation.nativeOwner!;
       navigator.currentState!.pop();
