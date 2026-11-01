@@ -56,6 +56,7 @@ final class ForumBodyRubySegmentMetrics {
     required this.size,
     required this.baseline,
     required this.level,
+    required this.direction,
     required List<ForumBodyRubyGroupMetrics> columns,
     required List<double> columnWidths,
     required List<double> columnLefts,
@@ -66,10 +67,11 @@ final class ForumBodyRubySegmentMetrics {
        columnLefts = List.unmodifiable(columnLefts),
        columnOffsets = List.unmodifiable(columnOffsets),
        spans = List.unmodifiable(spans);
-  static const revision = 1;
+  static const revision = 2;
   final Size size;
   final double baseline;
   final ForumBodyRubyLevelMetrics level;
+  final TextDirection direction;
   final List<ForumBodyRubyGroupMetrics> columns;
   final List<double> columnWidths;
   final List<double> columnLefts;
@@ -328,6 +330,7 @@ final class ForumBodyRubySegmentComposition {
         case _SegmentPhase.place:
           if (_placed.length == _spans.length) {
             _result = ForumBodyRubySegmentMetrics._(
+              direction: direction,
               size: Size(_prefix.last, _over + _under),
               baseline: _over,
               level: _level!,

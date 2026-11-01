@@ -67,15 +67,23 @@ final class ForumBodyRubyGroupPreparation {
     double maxWidth = 16384,
     bool preparePaint = false,
     ForumBodyRubyLevelMetrics? level,
+    ForumBodyParagraphContent? missingAnnotation,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) {
     final content = base.content;
-    final empty = ForumBodyParagraphContent.anonymousInline(
-      identity: content.identity,
-      fontRevision: content.fontRevision,
-      styleRevision: content.styleRevision,
-      style: content.style,
-    );
+    final empty =
+        missingAnnotation ??
+        ForumBodyParagraphContent.anonymousInline(
+          identity: content.identity,
+          fontRevision: content.fontRevision,
+          styleRevision: content.styleRevision,
+          style: content.style,
+        );
+    if (!empty.isSourceFree || empty.projection.text.isNotEmpty) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.content,
+      );
+    }
     return _open(
       cache: cache,
       base: base,

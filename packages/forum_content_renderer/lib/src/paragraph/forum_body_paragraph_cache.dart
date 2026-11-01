@@ -579,6 +579,16 @@ final class ForumBodyParagraphBudgetProbe {
   final _bytesByKey = <Object, int>{};
   int _bytes = 0;
 
+  /// Include a caller-owned prefix using its actual cache key and retained
+  /// bytes. Aliases deduplicate with later requests; no new lease is acquired.
+  void includeLease(ForumBodyNativeParagraphLease lease) {
+    final cache = _cache;
+    if (cache == null || !cache.ownsLease(lease)) {
+      throw StateError('Paragraph budget prefix is retired or foreign');
+    }
+    _include(cache, lease._entry.key, lease._entry.bytes);
+  }
+
   void include({
     required ForumBodyParagraphContent content,
     required double width,
