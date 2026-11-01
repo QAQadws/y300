@@ -16,26 +16,52 @@ void validateForumBodyRubyGroupInputs({
   required ForumBodyParagraphContent annotation,
   required double gap,
   required double maxWidth,
+}) => validateForumBodyRubyColumnInputs(
+  base: base,
+  annotations: [(content: annotation, gap: gap)],
+  maxWidth: maxWidth,
+);
+
+// Empty positions retain their rank. At least one position must contain text,
+// including columns whose only annotation belongs to an outer level.
+void validateForumBodyRubyColumnInputs({
+  required ForumBodyParagraphContent base,
+  required List<({ForumBodyParagraphContent content, double gap})> annotations,
+  required double maxWidth,
 }) {
-  if (base.identity != annotation.identity ||
-      base.fontRevision != annotation.fontRevision ||
-      base.styleRevision != annotation.styleRevision) {
-    throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.scope);
+  if (annotations.isEmpty ||
+      base.layoutMode != ForumBodyParagraphLayoutMode.intrinsicSingleLine) {
+    throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.content);
   }
-  if (base.layoutMode != ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
-      annotation.layoutMode !=
-          ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
-      (base.projection.text.isEmpty && annotation.projection.text.isEmpty)) {
+  var hasText = base.projection.text.isNotEmpty;
+  for (final annotation in annotations) {
+    final content = annotation.content;
+    if (base.identity != content.identity ||
+        base.fontRevision != content.fontRevision ||
+        base.styleRevision != content.styleRevision) {
+      throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.scope);
+    }
+    if (content.layoutMode !=
+        ForumBodyParagraphLayoutMode.intrinsicSingleLine) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.content,
+      );
+    }
+    hasText |= content.projection.text.isNotEmpty;
+    if (!annotation.gap.isFinite ||
+        annotation.gap < 0 ||
+        annotation.gap > 16384) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.geometry,
+      );
+    }
+  }
+  if (!hasText) {
     throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.content);
   }
   // Child geometry is already scaled into logical pixels. The parent must not
   // apply another TextScaler to the completed placeholder dimensions.
-  if (!gap.isFinite ||
-      gap < 0 ||
-      gap > 16384 ||
-      !maxWidth.isFinite ||
-      maxWidth <= 0 ||
-      maxWidth > 16384) {
+  if (!maxWidth.isFinite || maxWidth <= 0 || maxWidth > 16384) {
     throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.geometry);
   }
 }
