@@ -19,6 +19,45 @@ sealed class _RubyBinding {
   void close();
 }
 
+final class _RubySpaceBinding extends _RubyBinding {
+  const _RubySpaceBinding(this.space, this.windows);
+  final ForumBodyRubySoftSpaceLayout space;
+  final List<ForumBodyInlineContext> windows;
+  @override
+  Size get size => space.size;
+  @override
+  double get baseline => space.baseline;
+  @override
+  bool get isActive => space.isActive;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases =>
+      space.nativeLeases;
+  @override
+  void paint(Canvas canvas, Offset offset) => space.paint(canvas, offset);
+  @override
+  _RubySourceHit sourceAt(Offset point) {
+    final hit = space.sourceAt(point);
+    return (window: windows[hit.memberIndex], position: hit.position);
+  }
+
+  @override
+  List<TextBox> selectionBoxes(int start, int end) => [
+    for (final (index, window) in windows.indexed)
+      ..._selectRubyWindow(
+        window,
+        start,
+        end,
+        (from, to) => space.selectionBoxes(
+          memberIndex: index,
+          startUtf16: from,
+          endUtf16: to,
+        ),
+      ),
+  ];
+  @override
+  void close() => space.close();
+}
+
 final class _RubyColumnWindows {
   const _RubyColumnWindows(this.base, this.annotations);
   final ForumBodyInlineContext base;

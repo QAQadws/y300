@@ -11,6 +11,7 @@ import '../paragraph/forum_body_paragraph_layout.dart'
     show ForumBodyParagraphLine;
 import 'forum_body_ruby_group_layout.dart';
 import 'forum_body_ruby_segment_layout.dart';
+import 'forum_body_ruby_soft_space_layout.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
 part 'forum_body_inline_view_assembly.dart';
@@ -62,6 +63,7 @@ final class ForumBodyInlineParagraphView {
     required int endLine,
     Map<int, ForumBodyRubyGroupLayout> rubyGroups = const {},
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
+    Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
   }) {
     final assembly = ForumBodyInlineViewAssembly(
       cache: cache,
@@ -70,6 +72,7 @@ final class ForumBodyInlineParagraphView {
       endLine: endLine,
       rubyGroups: rubyGroups,
       rubySegments: rubySegments,
+      rubySpaces: rubySpaces,
     );
     try {
       while (!assembly.isReady) {

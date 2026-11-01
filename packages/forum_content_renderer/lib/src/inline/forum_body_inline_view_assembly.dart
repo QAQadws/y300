@@ -13,16 +13,19 @@ final class ForumBodyInlineViewAssembly {
     required this.endLine,
     Map<int, ForumBodyRubyGroupLayout> rubyGroups = const {},
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
+    Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
     void Function()? ensureOwner,
   }) : _cache = cache,
        _parent = parent,
        _groups = Map.of(rubyGroups),
        _segments = Map.of(rubySegments),
+       _spaces = Map.of(rubySpaces),
        _ensureOwner = ensureOwner;
   ForumBodyParagraphCache? _cache;
   ForumBodyInlineParagraphLease? _parent;
   Map<int, ForumBodyRubyGroupLayout> _groups;
   Map<int, ForumBodyRubySegmentLayout> _segments;
+  Map<int, ForumBodyRubySoftSpaceLayout> _spaces;
   void Function()? _ensureOwner;
   final int startLine;
   final int endLine;
@@ -44,6 +47,7 @@ final class ForumBodyInlineViewAssembly {
     ?_parent,
     for (final group in _groups.values) ...group.nativeLeases,
     for (final segment in _segments.values) ...segment.nativeLeases,
+    for (final space in _spaces.values) ...space.nativeLeases,
   ];
 
   int advance({required int maxParts}) {
@@ -63,7 +67,8 @@ final class ForumBodyInlineViewAssembly {
             if (startLine != 0 ||
                 endLine != 0 ||
                 _groups.isNotEmpty ||
-                _segments.isNotEmpty) {
+                _segments.isNotEmpty ||
+                _spaces.isNotEmpty) {
               _fail(ForumBodyInlineViewFailure.coverage);
             }
           } else {
@@ -88,17 +93,24 @@ final class ForumBodyInlineViewAssembly {
         } else if (_atom < _parent!.content.projection.atoms.length) {
           final atom = _parent!.content.projection.atoms[_atom++];
           if (atom.engineUtf16 >= _fragment!.engineCoverageStartUtf16 &&
-              atom.engineUtf16 < _fragment!.engineCoverageEndUtf16) {
+              atom.engineUtf16 < _fragment!.engineCoverageEndUtf16 &&
+              !_parent!.layout.isAtomTrimmed(atom.index)) {
             final group = _groups[atom.index];
             final segment = _segments[atom.index];
-            if (group != null && segment != null) {
+            final space = _spaces[atom.index];
+            if ((group != null ? 1 : 0) +
+                        (segment != null ? 1 : 0) +
+                        (space != null ? 1 : 0) >
+                    1 ||
+                atom.isSoftSpace != (space != null)) {
               _fail(ForumBodyInlineViewFailure.leases);
             }
-            if (group == null && segment == null) {
+            if (group == null && segment == null && space == null) {
               _fail(ForumBodyInlineViewFailure.coverage);
             }
-            final size = group?.size ?? segment!.size;
-            final baseline = group?.baseline ?? segment!.baseline;
+            final size = group?.size ?? segment?.size ?? space!.size;
+            final baseline =
+                group?.baseline ?? segment?.baseline ?? space!.baseline;
             final dimension = _parent!.layout.dimensions[atom.index];
             if ((dimension.size.width - size.width).abs() > 1e-4 ||
                 (dimension.size.height - size.height).abs() > 1e-4 ||
@@ -111,12 +123,14 @@ final class ForumBodyInlineViewAssembly {
               index: atom.index,
               group: group,
               segment: segment,
+              space: space,
               own: _own,
             );
           }
           work++;
         } else {
-          if (_bindings.length != _groups.length + _segments.length) {
+          if (_bindings.length !=
+              _groups.length + _segments.length + _spaces.length) {
             _fail(ForumBodyInlineViewFailure.coverage);
           }
           _state = _ViewAssemblyState.ready;
@@ -150,6 +164,7 @@ final class ForumBodyInlineViewAssembly {
     _parent = null;
     _groups = const {};
     _segments = const {};
+    _spaces = const {};
     _bindings = {};
     _state = _ViewAssemblyState.transferred;
     _dropOwner();
@@ -206,8 +221,12 @@ final class ForumBodyInlineViewAssembly {
     for (final segment in _segments.values) {
       segment.close();
     }
+    for (final space in _spaces.values) {
+      space.close();
+    }
     _groups = const {};
     _segments = const {};
+    _spaces = const {};
     _bindings = {};
     _parent?.release();
     _parent = null;

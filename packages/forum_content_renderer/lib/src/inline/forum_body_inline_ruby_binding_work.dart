@@ -8,15 +8,18 @@ final class _RubyBindingWork {
     required int index,
     ForumBodyRubyGroupLayout? group,
     ForumBodyRubySegmentLayout? segment,
+    ForumBodyRubySoftSpaceLayout? space,
     required void Function(ForumBodyTextLease) own,
   }) : _cursor = content.openAtomicContexts(index),
        _group = group,
        _segment = segment,
+       _space = space,
        _members = segment?.inspectMembers(),
        _own = own;
   ForumBodyInlineAtomicContextCursor? _cursor;
   ForumBodyRubyGroupLayout? _group;
   ForumBodyRubySegmentLayout? _segment;
+  ForumBodyRubySoftSpaceLayout? _space;
   ForumBodyRubySegmentMemberSnapshot? _members;
   void Function(ForumBodyTextLease)? _own;
   ForumBodyRubyGroupMemberSnapshot? _current;
@@ -26,6 +29,7 @@ final class _RubyBindingWork {
   List<ForumBodyInlineContext?> _spans = [];
   List<ForumBodyInlineContext> _gaps = [];
   List<ForumBodyInlineContext> _annotationGaps = [];
+  List<ForumBodyInlineContext> _spaceWindows = [];
   _RubyBinding? _result;
   var _column = 0;
   var _rank = -1;
@@ -37,7 +41,19 @@ final class _RubyBindingWork {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     var work = 0;
     while (work < maxParts && !isComplete) {
-      if (_members != null &&
+      if (_space != null) {
+        if (_spaceWindows.length < _space!.contents.length) {
+          final lease = _space!.memberAt(_spaceWindows.length);
+          _own!(lease);
+          _spaceWindows.add(_cursor!.resolve(lease.content));
+        } else {
+          _cursor!.finish();
+          _result = _RubySpaceBinding(
+            _space!,
+            UnmodifiableListView(_spaceWindows),
+          );
+        }
+      } else if (_members != null &&
           _gaps.length < _members!.gaps.length &&
           _segment!.metrics.gaps[_gaps.length].input.beforeColumn == _column &&
           _rank < 0) {
@@ -113,6 +129,7 @@ final class _RubyBindingWork {
     _cursor = null;
     _group = null;
     _segment = null;
+    _space = null;
     _members = null;
     _current = null;
     _own = null;
@@ -122,6 +139,7 @@ final class _RubyBindingWork {
     _spans = [];
     _gaps = [];
     _annotationGaps = [];
+    _spaceWindows = [];
     _result = null;
   }
 }

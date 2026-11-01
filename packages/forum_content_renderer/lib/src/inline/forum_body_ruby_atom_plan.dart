@@ -2,6 +2,8 @@ import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_column_request.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_segment_request.dart';
+import 'forum_body_ruby_soft_space_request.dart';
+import 'forum_body_ruby_soft_space_contract.dart';
 
 /// One actual parent placeholder's pure source requests and measured row target.
 /// No native lease, owner, scheduler or page lifecycle belongs to this value.
@@ -15,9 +17,32 @@ sealed class ForumBodyRubyAtomPlan {
     required ForumBodyRubySegmentRequest request,
     required ForumBodyRubySegmentMetrics metrics,
   }) = ForumBodyRubySegmentPlan;
+  factory ForumBodyRubyAtomPlan.softSpace({
+    required ForumBodyRubySoftSpaceRequest request,
+    required ForumBodyRubySoftSpaceMetrics metrics,
+  }) = ForumBodyRubySoftSpacePlan;
   List<ForumBodyTextRequest> get nativeRequests;
   double get maxWidth;
   int get nativeHandleCount => nativeRequests.length;
+}
+
+final class ForumBodyRubySoftSpacePlan extends ForumBodyRubyAtomPlan {
+  ForumBodyRubySoftSpacePlan({required this.request, required this.metrics})
+    : super._() {
+    validateForumBodyRubySoftSpaceTarget(request, metrics);
+    for (var rank = 0; rank < request.sides.length; rank++) {
+      validateForumBodyRubySoftSpaceRank(request, metrics, rank);
+    }
+    for (var i = 0; i < request.members.length; i++) {
+      validateForumBodyRubySoftSpaceMember(request, metrics, i);
+    }
+  }
+  final ForumBodyRubySoftSpaceRequest request;
+  final ForumBodyRubySoftSpaceMetrics metrics;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => request.nativeRequests;
+  @override
+  double get maxWidth => request.maxWidth;
 }
 
 final class ForumBodyRubyColumnPlan extends ForumBodyRubyAtomPlan {

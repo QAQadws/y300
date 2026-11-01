@@ -9,6 +9,7 @@ import '../inline/forum_body_ruby_group_layout.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
 import '../inline/forum_body_ruby_segment_layout.dart';
 import '../inline/forum_body_ruby_segment_preparation.dart';
+import '../inline/forum_body_ruby_soft_space_layout.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
@@ -44,9 +45,11 @@ final class ForumBodyInlinePagePreparation {
   List<int> _indices = const [];
   final _groups = <int, ForumBodyRubyGroupLayout>{};
   final _segments = <int, ForumBodyRubySegmentLayout>{};
+  final _spaces = <int, ForumBodyRubySoftSpaceLayout>{};
   int _nextGroup = 0;
   ForumBodyRubyGroupPreparation? _pair;
   ForumBodyRubySegmentPreparation? _component;
+  ForumBodyRubySoftSpacePreparation? _space;
   ForumBodyInlineViewAssembly? _binding;
   bool _validatingParent = false;
   var _parentAtom = 0;
@@ -61,8 +64,10 @@ final class ForumBodyInlinePagePreparation {
     ?_parent,
     for (final group in _groups.values) ...group.nativeLeases,
     for (final segment in _segments.values) ...segment.nativeLeases,
+    for (final space in _spaces.values) ...space.nativeLeases,
     if (_pair != null) ..._pair!.nativeLeases,
     if (_component != null) ..._component!.nativeLeases,
+    if (_space != null) ..._space!.nativeLeases,
     if (_binding != null) ..._binding!.nativeLeases,
   ];
 
@@ -124,6 +129,9 @@ final class ForumBodyInlinePagePreparation {
         if (atom is ForumBodyRubySegmentPlan) {
           return _advanceComponent(index, atom, cachedOnly, maxParts);
         }
+        if (atom is ForumBodyRubySoftSpacePlan) {
+          return _advanceSpace(index, atom, cachedOnly, maxParts);
+        }
         final column = atom as ForumBodyRubyColumnPlan;
         final request = column.request;
         final pair = _pair ??= ForumBodyRubyGroupPreparation.fromLayerRequests(
@@ -159,11 +167,13 @@ final class ForumBodyInlinePagePreparation {
         endLine: fragment.endLine,
         rubyGroups: _groups,
         rubySegments: _segments,
+        rubySpaces: _spaces,
         ensureOwner: _guard,
       );
       _parent = null;
       _groups.clear();
       _segments.clear();
+      _spaces.clear();
       return _advanceBinding(maxParts);
     } finally {
       _advancing = false;
@@ -201,6 +211,37 @@ final class ForumBodyInlinePagePreparation {
     return (cacheMiss: false, view: null);
   }
 
+  ({bool cacheMiss, ForumBodyInlineParagraphView? view}) _advanceSpace(
+    int index,
+    ForumBodyRubySoftSpacePlan atom,
+    bool cachedOnly,
+    int maxParts,
+  ) {
+    final job = _space ??= ForumBodyRubySoftSpacePreparation.fromRequests(
+      cache: _cache!,
+      request: atom.request,
+      metrics: atom.metrics,
+      ensureOwner: _guard,
+      textScaler: _textScaler!,
+      additionalOwnedLeases: _ownedPageLeases,
+    );
+    final before = job.workCount;
+    final ready = cachedOnly
+        ? job.tryPrepareCached(maxParts: maxParts)
+        : job.advance(maxParts: maxParts).isReady;
+    _guard();
+    _workCount += job.workCount - before;
+    if (!ready) {
+      final rejection = job.lastBudgetRejection;
+      if (rejection != null) throw rejection;
+      return (cacheMiss: cachedOnly && job.cacheMiss, view: null);
+    }
+    _spaces[index] = job.takeLayout();
+    _space = null;
+    _nextGroup++;
+    return (cacheMiss: false, view: null);
+  }
+
   void _validateParentAtoms(int maxParts) {
     final expected = _input!.content.projection.atoms;
     final actual = _parent!.layout.projection.atoms;
@@ -208,12 +249,19 @@ final class ForumBodyInlinePagePreparation {
     while (_parentAtom < expected.length && units < maxParts) {
       final atom = expected[_parentAtom];
       final native = actual[_parentAtom];
+      final trimmed = _input!.trimmedAtomIndices.contains(atom.index);
+      final nativeTrimmed = _parent!.layout.isAtomTrimmed(atom.index);
       final visible =
           atom.displayEndUtf16 > fragment.coverageStartUtf16 &&
-          atom.displayStartUtf16 < fragment.coverageEndUtf16;
+          atom.displayStartUtf16 < fragment.coverageEndUtf16 &&
+          !trimmed;
       final nativeVisible =
-          native.engineUtf16 >= _engineStart && native.engineUtf16 < _engineEnd;
+          native.engineUtf16 >= _engineStart &&
+          native.engineUtf16 < _engineEnd &&
+          !nativeTrimmed;
       if (native.index != atom.index ||
+          native.isSoftSpace != atom.isSoftSpace ||
+          trimmed != nativeTrimmed ||
           native.engineUtf16 != atom.engineUtf16 ||
           native.displayStartUtf16 != atom.displayStartUtf16 ||
           native.displayEndUtf16 != atom.displayEndUtf16 ||
@@ -337,6 +385,8 @@ final class ForumBodyInlinePagePreparation {
     _pair = null;
     _component?.close();
     _component = null;
+    _space?.close();
+    _space = null;
     for (final group in _groups.values) {
       group.close();
     }
@@ -345,6 +395,10 @@ final class ForumBodyInlinePagePreparation {
       segment.close();
     }
     _segments.clear();
+    for (final space in _spaces.values) {
+      space.close();
+    }
+    _spaces.clear();
     _parent?.release();
     _parent = null;
     _input = null;

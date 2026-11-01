@@ -32,6 +32,7 @@ sealed class ForumBodyTextPageContent {
     required ForumBodyInlineSpanContent content,
     required List<PlaceholderDimensions> dimensions,
     required List<ForumBodyRubyAtomPlan> rubyAtoms,
+    Set<int> trimmedAtomIndices,
     ForumBodyParagraphLayoutMode layoutMode,
   }) = ForumBodyInlinePageContent.atoms;
   int get textCodeUnits;
@@ -92,9 +93,11 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     required this.content,
     required List<PlaceholderDimensions> dimensions,
     required List<ForumBodyRubyAtomPlan> rubyAtoms,
+    Set<int> trimmedAtomIndices = const {},
     this.layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) : dimensions = List.unmodifiable(dimensions),
        rubyAtoms = List.unmodifiable(rubyAtoms),
+       trimmedAtomIndices = Set.unmodifiable(trimmedAtomIndices),
        super._() {
     content.validateDimensions(this.dimensions);
     if (rubyAtoms.length != content.projection.atoms.length ||
@@ -104,15 +107,38 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     final retained = Set<ForumBodyParagraphContent>.identity()
       ..addAll(content.contexts.map((item) => item.content));
     final checkedBands = Set<ForumBodyTextBandContent>.identity();
+    for (final index in trimmedAtomIndices) {
+      if (index < 0 ||
+          index >= rubyAtoms.length ||
+          !content.projection.atoms[index].isSoftSpace) {
+        throw ArgumentError('Invalid inline trimmed atom snapshot');
+      }
+    }
     for (final (index, plan) in rubyAtoms.indexed) {
-      if (plan is ForumBodyRubySegmentPlan) {
-        final target = plan.metrics;
+      if (content.projection.atoms[index].isSoftSpace !=
+          (plan is ForumBodyRubySoftSpacePlan)) {
+        throw ArgumentError(
+          'Soft native slots require actual soft-space plans',
+        );
+      }
+      final target = switch (plan) {
+        ForumBodyRubySegmentPlan(:final metrics) => (
+          size: metrics.size,
+          baseline: metrics.baseline,
+        ),
+        ForumBodyRubySoftSpacePlan(:final metrics) => (
+          size: metrics.size,
+          baseline: metrics.baseline,
+        ),
+        _ => null,
+      };
+      if (target != null) {
         final dimension = this.dimensions[index];
         if ((dimension.size.width - target.size.width).abs() > 1e-4 ||
             (dimension.size.height - target.size.height).abs() > 1e-4 ||
             (dimension.baselineOffset! - target.baseline).abs() > 1e-4) {
           throw ArgumentError(
-            'Ruby segment dimensions do not match numeric target',
+            'Ruby atom dimensions do not match numeric target',
           );
         }
       }
@@ -138,20 +164,21 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   final ForumBodyInlineSpanContent content;
   final List<PlaceholderDimensions> dimensions;
   final List<ForumBodyRubyAtomPlan> rubyAtoms;
+  final Set<int> trimmedAtomIndices;
   // Legacy column-only access remains explicit: never drop component members
   // or silently present its first column as the complete parent atom.
   late final List<ForumBodyRubyColumnRequest> rubyGroups = List.unmodifiable([
     for (final atom in rubyAtoms)
       atom is ForumBodyRubyColumnPlan
           ? atom.request
-          : throw StateError('Inline input contains segment atoms'),
+          : throw StateError('Inline input contains non-column atoms'),
   ]);
   late final List<ForumBodyRubyLevelMetrics?> rubyLevelMetrics =
       List.unmodifiable([
         for (final atom in rubyAtoms)
           atom is ForumBodyRubyColumnPlan
               ? atom.level
-              : throw StateError('Inline input contains segment atoms'),
+              : throw StateError('Inline input contains non-column atoms'),
       ]);
   final ForumBodyParagraphLayoutMode layoutMode;
   @override
@@ -193,7 +220,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
           ForumBodyTextPageSurfaceFailure.geometry,
         );
       }
-      result.add(atom.index);
+      if (!trimmedAtomIndices.contains(atom.index)) result.add(atom.index);
     }
     return List.unmodifiable(result);
   }

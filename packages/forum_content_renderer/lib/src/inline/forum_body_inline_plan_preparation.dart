@@ -9,6 +9,7 @@ import 'forum_body_ruby_atom_request.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
 import 'forum_body_ruby_segment_metrics_preparation.dart';
+import 'forum_body_ruby_soft_space_layout.dart';
 import 'forum_body_ruby_row_alignment.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_layout.dart';
@@ -40,6 +41,7 @@ final class ForumBodyInlinePlanPreparation {
   final _retriedBands = Set<ForumBodyTextBandContent>.identity();
   ForumBodyRubyGroupPreparation? _pair;
   ForumBodyRubySegmentMetricsPreparation? _segment;
+  ForumBodyRubySoftSpacePreparation? _space;
   ForumBodyInlineParagraphLease? _parent;
   ForumBodyInlineParagraphLease? _probe;
   Set<int> _finalTrimmedAtoms = const {};
@@ -84,6 +86,7 @@ final class ForumBodyInlinePlanPreparation {
           // finalization cannot throw a native band isolation exception.
           final count = _pair?.preparedPartCount;
           final failed =
+              _space?.failedRequest ??
               _segment?.failedRequest ??
               (count != null && count < request.nativeRequests.length
                   ? request.nativeRequests[count]
@@ -157,6 +160,19 @@ final class ForumBodyInlinePlanPreparation {
           _closeMetric();
         }
         return step;
+      case ForumBodyRubySoftSpaceAtomRequest(:final value):
+        final space = _space ??= ForumBodyRubySoftSpacePreparation.forMetrics(
+          cache: _cache!,
+          request: value,
+          ensureOwner: _guard,
+          textScaler: _textScaler!,
+        );
+        final step = space.advance(maxParts: maxParts);
+        if (step.isReady) {
+          _metrics.add(ForumBodyRubyAtomMetrics.softSpace(space.takeMetrics()));
+          _closeMetric();
+        }
+        return step;
     }
   }
 
@@ -165,6 +181,8 @@ final class ForumBodyInlinePlanPreparation {
     _pair = null;
     _segment?.close();
     _segment = null;
+    _space?.close();
+    _space = null;
   }
 
   ({int partsPrepared, bool waitingForLayoutBudget}) _advanceLayout({
@@ -294,6 +312,7 @@ final class ForumBodyInlinePlanPreparation {
     _result = ForumBodyInlinePageContent.atoms(
       content: _input!.content,
       dimensions: alignment.dimensions,
+      trimmedAtomIndices: _finalTrimmedAtoms,
       rubyAtoms: [
         for (final (index, request) in _input!.atoms.indexed)
           switch ((request, alignment.results[index])) {
@@ -310,6 +329,11 @@ final class ForumBodyInlinePlanPreparation {
               ForumBodyRubyComponentMetrics(value: final metrics),
             ) =>
               ForumBodyRubyAtomPlan.segment(request: value, metrics: metrics),
+            (
+              ForumBodyRubySoftSpaceAtomRequest(:final value),
+              ForumBodyRubySpaceMetrics(value: final metrics),
+            ) =>
+              ForumBodyRubyAtomPlan.softSpace(request: value, metrics: metrics),
             _ => throw StateError('Inline numeric/request atom kinds differ'),
           },
       ],

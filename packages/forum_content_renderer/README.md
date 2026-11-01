@@ -301,8 +301,28 @@ scope、独立来源对象、原生请求和重绑后的原始顺序。CSS 空�
 
 带间隙的临时父布局必须退役，不能因 `hasChanges=false` 作为最终结果复用；最终父布局
 恢复实际尺寸，并有界复核每个原子的物理行和实际裁边掩码。既有 PlanPreparation 遵循
-此协议，owner/预算等待/临时租约释放保持；原始 Gap AtomRequest、可见准备、实际
-Session/Reader 的来源和 EOF 接线仍未完成，正式非空间隙输入继续明确拒绝。
+此协议，owner/预算等待/临时租约释放保持。
+
+`ForumBodyRubyAtomRequest.softSpace`/`ForumBodyRubyAtomPlan.softSpace` 传递原始请求与行目标。
+同一 `ForumBodyRubySoftSpacePreparation` 的 `forMetrics` 和 `fromRequests` 复用既有单文字
+准备端口：测量逐成员释放 pin，既不录图也不借另一侧字体；可见准备保留且逐项核对当前
+来源对象、真实字体框/基线、rank/side/gap 与 paint-ready 状态，再交付实际间隙布局。
+原生 shape 或 picture 每次最多一项；纯工作按 rank/member/发布计量。外部压力沿同一
+请求等待，完整自身占用超限明确失败，预算探测包含真实共享 band 与所属页的前缀。
+错误保留精确失败请求供既有 band 隔离重试，取消只释放本次所有权，不退休其它别名。
+
+`ForumBodyRubySoftSpaceLayout` 只持有真实成员租约与数值目标。绘制、选区与命中共用每个
+成员偏移；空白填充、缺失另一侧和对齐留白中的命中保持近似，不伪造基字/注音来源。
+close 释放本次成员并清除来源引用。父 View/Assembly 接收独立 `rubySpaces`，要求它和
+列/跨度映射互斥、与原生软间隙类型相符，且恰好覆盖该行窗口的实际可见原子。来源 cursor
+按真实成员顺序消费当前窗口；临时零高度槽不能代替可读字形尺寸。
+
+纯 `ForumBodyInlinePageContent` 记录最终父布局给出的不可变 `trimmedAtomIndices`。
+预算、native handle 数量和可见准备排除这些原子；显示前逐原子复核真实父布局的类型、
+坐标窗口和裁边结果，包括隐藏原子。错误或省略的裁边快照不能交付页面。空 RT 来源围栏
+保留但没有字形/选区；逐页只持有实际可见列与间隙，暖缓存不重新排字或录图。
+这些能力已接入共同 Page/View 准备协议，原始 HTML Plan 的非空间隙生成及正式
+Session/Reader 的来源、EOF 与只读恢复联验仍未完成，正式入口继续明确拒绝该类输入。
 
 普通与混排原生对象统一归 `ForumBodyParagraphCache` 的一套条数/估算字节预算、LRU、
 pin、预算释放通知与 owner 关闭生命周期。`acquireInline` 返回 typed lease；
