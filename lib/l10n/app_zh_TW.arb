@@ -1943,5 +1943,17 @@
     "placeholders": {"enqueued": {"type": "int"}, "existing": {"type": "int"}, "failed": {"type": "int"}}
   },
   "threadFavoriteParseQueued": "收藏成功，已加入解析佇列",
-  "threadFavoriteParseQueueFailed": "收藏成功，但未能加入解析佇列，可在收藏頁手動解析"
+  "threadFavoriteParseQueueFailed": "收藏成功，但未能加入解析佇列，可在收藏頁手動解析",
+  "novelCustomColors": "自訂閱讀配色",
+  "novelColorForeground": "預設文字顏色",
+  "novelColorBackground": "頁面背景顏色",
+  "novelColorInherited": "跟隨主題",
+  "novelColorForegroundReset": "恢復主題文字顏色",
+  "novelColorBackgroundReset": "恢復主題背景顏色",
+  "novelColorHex": "顏色值",
+  "novelColorHexHint": "六位十六進位 RGB，例如 #F4EAD7",
+  "novelColorHexInvalid": "請輸入六位十六進位 RGB 顏色",
+  "novelColorHint": "自訂顏色疊加在所選主題上，重設可分別恢復。作者局部文字及醒目標示顏色仍保留。",
+  "novelColorLowContrast": "所選文字與背景的對比度較低，可能難以閱讀。顏色會按你的選擇保留；作者局部顏色仍保留。",
+  "novelColorUnavailable": "自訂配色僅用於翻頁閱讀；捲動時保留設定，可在此重設。"
 }

@@ -265,6 +265,80 @@ Future<List<int>> _canvasPixel(WidgetTester tester, {int? x, int? y}) async {
 
 void main() {
   testWidgets(
+    'color preference canvas reuses moving navigation but a concurrent font change relayouts',
+    (tester) async {
+      final reader = _Reader();
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      final theme = ThemeData.light().copyWith(
+        colorScheme: ThemeData.light().colorScheme.copyWith(
+          primary: const Color(0xff000000),
+        ),
+      );
+      final original = reader.preferences.copyWith(
+        colors: const NovelReaderColorOverrides(
+          foreground: 0,
+          background: 0xffffff,
+        ),
+      );
+      final changed = original.copyWith(
+        colors: original.colors.withBackground(0xfff0cc),
+      );
+      await _show(
+        tester,
+        reader,
+        theme: theme,
+        preferences: original,
+        height: 45,
+        navigation: navigation,
+        startsAtBeginning: true,
+      );
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final handle = reader.owner.acquireCache();
+      final builds = handle.cache.layoutBuildCount;
+      final pictures = handle.cache.pictureBuildCount;
+      final reports = reader.positions.length;
+      expect(navigation.turnNext(), true);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 40));
+      final pages = tester.widget<PageView>(find.byType(PageView)).controller!;
+      expect(pages.page, inExclusiveRange(0.0, 1.0));
+      final revision = controller.navigationRevision;
+      await _show(
+        tester,
+        reader,
+        theme: theme,
+        preferences: changed,
+        height: 45,
+        navigation: navigation,
+        startsAtBeginning: true,
+      );
+      expect(controller.navigationRevision, revision);
+      expect(reader.statuses.last.controller, same(controller));
+      await tester.pumpAndSettle();
+      expect(controller.visiblePageIndex, 1);
+      expect(reader.positions, hasLength(reports + 1));
+      expect(handle.cache.layoutBuildCount, builds);
+      expect(handle.cache.pictureBuildCount, pictures);
+      expect(await _canvasPixel(tester), [255, 240, 204, 255]);
+      await _show(
+        tester,
+        reader,
+        theme: theme,
+        preferences: original.copyWith(fontSize: 22),
+        height: 45,
+        navigation: navigation,
+        startsAtBeginning: true,
+      );
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.controller, isNot(same(controller)));
+      expect(handle.cache.layoutBuildCount, greaterThan(builds));
+      handle.release();
+      await _unmount(tester, reader);
+    },
+  );
+  testWidgets(
     'canvas context change preserves a moving tap through actual arrival',
     (tester) async {
       final reader = _Reader();

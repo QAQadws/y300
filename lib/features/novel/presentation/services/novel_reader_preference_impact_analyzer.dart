@@ -59,6 +59,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
       impacts.add(NovelReaderPreferenceImpact.flowModeSwitch);
     }
     if (previous.themePreset != next.themePreset ||
+        previous.colors != next.colors ||
         previous.showProgressIndicator != next.showProgressIndicator) {
       impacts.add(NovelReaderPreferenceImpact.repaintOnly);
     }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/novel/data/models/novel_models.dart';
 
+import 'novel_reader_color_contrast.dart';
+
 class NovelReaderPalette {
   const NovelReaderPalette({
     required this.brightness,
@@ -12,7 +14,8 @@ class NovelReaderPalette {
     required this.surface,
     required this.link,
     required this.quoteBackground,
-  });
+    Color? codeForeground,
+  }) : _codeForeground = codeForeground;
 
   final Brightness brightness;
   final Color background;
@@ -22,12 +25,57 @@ class NovelReaderPalette {
   final Color surface;
   final Color link;
   final Color quoteBackground;
+  final Color? _codeForeground;
+  Color get codeForeground => _codeForeground ?? foreground;
 }
 
 class NovelReaderThemeResolver {
   const NovelReaderThemeResolver();
 
   NovelReaderPalette resolve({
+    required NovelReaderPreferences preferences,
+    required ThemeData theme,
+  }) {
+    final base = _preset(preferences: preferences, theme: theme);
+    final colors = preferences.colors;
+    // Stored native requests survive a visit to the legacy scrolling reader.
+    if (colors.isEmpty ||
+        preferences.flowMode == NovelReaderFlowMode.vertical) {
+      return base;
+    }
+    if (!colors.isValid) throw ArgumentError('Invalid reader colors');
+    final background = colors.background == null
+        ? base.background
+        : Color(0xff000000 | colors.background!);
+    final foreground = colors.foreground == null
+        ? readableNovelReaderRole(base.foreground, [background])
+        : Color(0xff000000 | colors.foreground!);
+    final brightness = ThemeData.estimateBrightnessForColor(background);
+    // Keep generated surfaces on the same contrast side as the canvas. Around
+    // middle gray, shading across that boundary can leave no shared legible ink.
+    final ink = background.computeLuminance() >= .179
+        ? const Color(0xffffffff)
+        : const Color(0xff000000);
+    final surface = Color.alphaBlend(ink.withValues(alpha: .05), background);
+    final quote = Color.alphaBlend(ink.withValues(alpha: .08), background);
+    final roleBackgrounds = [background, surface, quote];
+    return NovelReaderPalette(
+      brightness: brightness,
+      background: background,
+      foreground: foreground,
+      muted: readableNovelReaderRole(
+        Color.lerp(foreground, background, .26)!,
+        roleBackgrounds,
+      ),
+      accent: readableNovelReaderRole(base.accent, roleBackgrounds),
+      surface: surface,
+      link: readableNovelReaderRole(base.link, roleBackgrounds),
+      quoteBackground: quote,
+      codeForeground: readableNovelReaderRole(foreground, [surface]),
+    );
+  }
+
+  NovelReaderPalette _preset({
     required NovelReaderPreferences preferences,
     required ThemeData theme,
   }) {

@@ -9861,6 +9861,78 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'收藏成功，但未能加入解析队列，可在收藏页手动解析'**
   String get threadFavoriteParseQueueFailed;
+
+  /// No description provided for @novelCustomColors.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义阅读配色'**
+  String get novelCustomColors;
+
+  /// No description provided for @novelColorForeground.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认文字颜色'**
+  String get novelColorForeground;
+
+  /// No description provided for @novelColorBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'页面背景颜色'**
+  String get novelColorBackground;
+
+  /// No description provided for @novelColorInherited.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随主题'**
+  String get novelColorInherited;
+
+  /// No description provided for @novelColorForegroundReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复主题文字颜色'**
+  String get novelColorForegroundReset;
+
+  /// No description provided for @novelColorBackgroundReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复主题背景颜色'**
+  String get novelColorBackgroundReset;
+
+  /// No description provided for @novelColorHex.
+  ///
+  /// In zh, this message translates to:
+  /// **'颜色值'**
+  String get novelColorHex;
+
+  /// No description provided for @novelColorHexHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'六位十六进制 RGB，例如 #F4EAD7'**
+  String get novelColorHexHint;
+
+  /// No description provided for @novelColorHexInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入六位十六进制 RGB 颜色'**
+  String get novelColorHexInvalid;
+
+  /// No description provided for @novelColorHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义颜色叠加在所选主题上，重置可分别恢复。作者局部文字及高亮颜色仍保留。'**
+  String get novelColorHint;
+
+  /// No description provided for @novelColorLowContrast.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选文字与背景的对比度较低，可能难以阅读。颜色会按你的选择保留；作者局部颜色仍保留。'**
+  String get novelColorLowContrast;
+
+  /// No description provided for @novelColorUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义配色仅用于翻页阅读；滚动时保留设置，可在此重置。'**
+  String get novelColorUnavailable;
 }
 
 class _AppLocalizationsDelegate

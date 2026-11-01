@@ -2,8 +2,10 @@ import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
 import 'novel_reader_typography_overrides.dart';
 import 'novel_reader_viewport_overrides.dart';
+import 'novel_reader_color_overrides.dart';
 export 'novel_reader_typography_overrides.dart';
 export 'novel_reader_viewport_overrides.dart';
+export 'novel_reader_color_overrides.dart';
 
 enum NovelReaderThemePreset { followApp, light, sepia, dark }
 
@@ -148,6 +150,7 @@ class NovelReaderPreferences {
     this.safeAreaEnabled = true,
     this.typography = const NovelReaderTypographyOverrides(),
     this.viewport = const NovelReaderViewportOverrides(),
+    this.colors = const NovelReaderColorOverrides(),
     String? themeMode,
   }) : themePreset = themeMode == null
            ? themePreset
@@ -170,6 +173,7 @@ class NovelReaderPreferences {
     required this.safeAreaEnabled,
     required this.typography,
     required this.viewport,
+    required this.colors,
   });
 
   factory NovelReaderPreferences.defaults() {
@@ -190,6 +194,7 @@ class NovelReaderPreferences {
       safeAreaEnabled: true,
       typography: NovelReaderTypographyOverrides(),
       viewport: NovelReaderViewportOverrides(),
+      colors: NovelReaderColorOverrides(),
     );
   }
 
@@ -214,6 +219,7 @@ class NovelReaderPreferences {
   final double firstLineIndent;
   final NovelReaderTypographyOverrides typography;
   final NovelReaderViewportOverrides viewport;
+  final NovelReaderColorOverrides colors;
 
   ({double before, double after, NovelReaderStyleScope scope})
   get effectiveParagraphSpacing {
@@ -269,7 +275,8 @@ class NovelReaderPreferences {
         other.conversionMode == conversionMode &&
         other.safeAreaEnabled == safeAreaEnabled &&
         other.typography == typography &&
-        other.viewport == viewport;
+        other.viewport == viewport &&
+        other.colors == colors;
   }
 
   @override
@@ -290,6 +297,7 @@ class NovelReaderPreferences {
     safeAreaEnabled,
     typography,
     viewport,
+    colors,
   );
 
   NovelReaderPreferences copyWith({
@@ -310,6 +318,7 @@ class NovelReaderPreferences {
     bool? safeAreaEnabled,
     NovelReaderTypographyOverrides? typography,
     NovelReaderViewportOverrides? viewport,
+    NovelReaderColorOverrides? colors,
   }) {
     return NovelReaderPreferences._(
       fontSize: fontSize ?? this.fontSize,
@@ -331,6 +340,7 @@ class NovelReaderPreferences {
       safeAreaEnabled: safeAreaEnabled ?? this.safeAreaEnabled,
       typography: typography ?? this.typography,
       viewport: viewport ?? this.viewport,
+      colors: colors ?? this.colors,
     );
   }
 }

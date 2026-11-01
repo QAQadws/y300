@@ -5865,6 +5865,43 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get threadFavoriteParseQueueFailed => '收藏成功，但未能加入解析队列，可在收藏页手动解析';
+
+  @override
+  String get novelCustomColors => '自定义阅读配色';
+
+  @override
+  String get novelColorForeground => '默认文字颜色';
+
+  @override
+  String get novelColorBackground => '页面背景颜色';
+
+  @override
+  String get novelColorInherited => '跟随主题';
+
+  @override
+  String get novelColorForegroundReset => '恢复主题文字颜色';
+
+  @override
+  String get novelColorBackgroundReset => '恢复主题背景颜色';
+
+  @override
+  String get novelColorHex => '颜色值';
+
+  @override
+  String get novelColorHexHint => '六位十六进制 RGB，例如 #F4EAD7';
+
+  @override
+  String get novelColorHexInvalid => '请输入六位十六进制 RGB 颜色';
+
+  @override
+  String get novelColorHint => '自定义颜色叠加在所选主题上，重置可分别恢复。作者局部文字及高亮颜色仍保留。';
+
+  @override
+  String get novelColorLowContrast =>
+      '所选文字与背景的对比度较低，可能难以阅读。颜色会按你的选择保留；作者局部颜色仍保留。';
+
+  @override
+  String get novelColorUnavailable => '自定义配色仅用于翻页阅读；滚动时保留设置，可在此重置。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -11729,4 +11766,41 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadFavoriteParseQueueFailed => '收藏成功，但未能加入解析佇列，可在收藏頁手動解析';
+
+  @override
+  String get novelCustomColors => '自訂閱讀配色';
+
+  @override
+  String get novelColorForeground => '預設文字顏色';
+
+  @override
+  String get novelColorBackground => '頁面背景顏色';
+
+  @override
+  String get novelColorInherited => '跟隨主題';
+
+  @override
+  String get novelColorForegroundReset => '恢復主題文字顏色';
+
+  @override
+  String get novelColorBackgroundReset => '恢復主題背景顏色';
+
+  @override
+  String get novelColorHex => '顏色值';
+
+  @override
+  String get novelColorHexHint => '六位十六進位 RGB，例如 #F4EAD7';
+
+  @override
+  String get novelColorHexInvalid => '請輸入六位十六進位 RGB 顏色';
+
+  @override
+  String get novelColorHint => '自訂顏色疊加在所選主題上，重設可分別恢復。作者局部文字及醒目標示顏色仍保留。';
+
+  @override
+  String get novelColorLowContrast =>
+      '所選文字與背景的對比度較低，可能難以閱讀。顏色會按你的選擇保留；作者局部顏色仍保留。';
+
+  @override
+  String get novelColorUnavailable => '自訂配色僅用於翻頁閱讀；捲動時保留設定，可在此重設。';
 }

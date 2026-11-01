@@ -16,7 +16,7 @@ final class NovelForumHtmlRenderThemeFactory {
       quoteSurface: palette.quoteBackground,
       quoteForeground: palette.muted,
       codeSurface: palette.surface,
-      codeForeground: palette.foreground,
+      codeForeground: palette.codeForeground,
     );
   }
 }
