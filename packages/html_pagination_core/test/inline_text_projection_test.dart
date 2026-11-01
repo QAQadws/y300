@@ -12,6 +12,260 @@ HtmlDisplayTextProjection project(String text, [int source = 0]) =>
 
 void main() {
   test(
+    'multi-unit mechanical prefix stays indivisible and is included in mapping identity',
+    () {
+      final display = project('AB', 50);
+      final map = HtmlInlineTextProjection.build(
+        display: display,
+        atomicRanges: [(startUtf16: 0, endUtf16: 1)],
+        enginePrefix: '\u00A0\u2060',
+      );
+      expect(map.engineText, '\u00A0\u2060\uFFFCB');
+      expect(map.atoms.single.engineUtf16, 2);
+      for (final offset in [0, 1]) {
+        expect(map.displayAtEngineUtf16(offset).displayUtf16, 0);
+        expect(map.sourceAtEngineUtf16(offset).isExact, isFalse);
+      }
+      expect(map.isLegalEngineBoundary(0), isTrue);
+      expect(map.isLegalEngineBoundary(1), isFalse);
+      expect(map.isLegalEngineBoundary(2), isTrue);
+      expect(map.sourceAtEngineUtf16(2).sourceRune, 50);
+      expect(map.sourceAtEngineUtf16(2).isExact, isTrue);
+      expect(map.displayRangeForEngineRange(startUtf16: 0, endUtf16: 2), (
+        startUtf16: 0,
+        endUtf16: 0,
+      ));
+      expect(
+        () => map.displayRangeForEngineRange(startUtf16: 1, endUtf16: 4),
+        throwsArgumentError,
+      );
+      final other = HtmlInlineTextProjection.build(
+        display: display,
+        atomicRanges: [(startUtf16: 0, endUtf16: 1)],
+        enginePrefix: '\uFFFD\u2060',
+      );
+      expect(map.hasSameMapping(other), isFalse);
+      expect(
+        () => HtmlInlineTextProjection.build(
+          display: display,
+          atomicRanges: const [],
+          enginePrefix: '\u00A0\u2060',
+          maxEngineCodeUnits: 3,
+        ),
+        throwsA(isA<HtmlInlineTextLimitException>()),
+      );
+    },
+  );
+
+  test(
+    'mechanical leading placeholder has engine bounds but no source caret',
+    () {
+      final display = project('A👩‍💻e\u0301Z', 10);
+      final map = HtmlInlineTextProjection.build(
+        display: display,
+        atomicRanges: const [],
+        enginePrefix: '\uFFFC',
+      );
+      expect(map.display, same(display));
+      expect(map.engineText, '\uFFFC${display.text}');
+      expect(map.atoms, isEmpty);
+      expect(map.enginePrefix, '\uFFFC');
+      expect(map.engineAtDisplayUtf16(0).engineUtf16, 1);
+      expect(map.displayAtEngineUtf16(0).displayUtf16, 0);
+      expect(map.displayAtEngineUtf16(0).isExact, isFalse);
+      expect(map.sourceAtEngineUtf16(0).sourceRune, 10);
+      expect(map.sourceAtEngineUtf16(0).isExact, isFalse);
+      expect(map.sourceAtEngineUtf16(1).sourceRune, 10);
+      expect(map.sourceAtEngineUtf16(1).isExact, isTrue);
+      final legal = {0, 1, 2, 7, 9, 10};
+      for (var offset = 0; offset <= map.engineText.length; offset++) {
+        expect(
+          map.isLegalEngineBoundary(offset),
+          legal.contains(offset),
+          reason: 'engine $offset',
+        );
+      }
+      expect(map.displayOffsetAtEngineUtf16(3), 2);
+      expect(
+        () => map.displayRangeForEngineRange(startUtf16: 0, endUtf16: 3),
+        throwsArgumentError,
+      );
+      expect(map.displayRangeForEngineRange(startUtf16: 0, endUtf16: 1), (
+        startUtf16: 0,
+        endUtf16: 0,
+      ));
+      expect(map.displayRangeForEngineRange(startUtf16: 0, endUtf16: 10), (
+        startUtf16: 0,
+        endUtf16: 9,
+      ));
+      expect(() => map.isLegalEngineBoundary(-1), throwsRangeError);
+      expect(() => map.isLegalEngineBoundary(11), throwsRangeError);
+    },
+  );
+
+  test(
+    'leading placeholder shifts real opaque and soft atoms without becoming a child',
+    () {
+      final map = HtmlInlineTextProjection.build(
+        display: project('AB CD', 50),
+        enginePrefix: '\uFFFC',
+        atomicRanges: [
+          (startUtf16: 0, endUtf16: 2),
+          (startUtf16: 2, endUtf16: 3),
+          (startUtf16: 3, endUtf16: 5),
+        ],
+        softSpaceAtoms: {1},
+      );
+      expect(map.engineText, '\uFFFC\uFFFC \uFFFC');
+      expect(map.atoms.map((atom) => atom.index), [0, 1, 2]);
+      expect(map.atoms.map((atom) => atom.engineUtf16), [1, 2, 3]);
+      expect(map.hasSoftSpaces, isTrue);
+      expect(map.sourceAtEngineUtf16(0).isExact, isFalse);
+      expect(map.sourceAtEngineUtf16(1).sourceRune, 50);
+      expect(map.sourceAtEngineUtf16(1).isExact, isTrue);
+      expect(map.sourceAtEngineUtf16(3).sourceRune, 53);
+      expect(map.displayRangeForEngineRange(startUtf16: 0, endUtf16: 4), (
+        startUtf16: 0,
+        endUtf16: 5,
+      ));
+    },
+  );
+
+  test('source UFFFC remains distinct from a mechanical prefix', () {
+    final map = HtmlInlineTextProjection.build(
+      display: project('\uFFFCX', 30),
+      atomicRanges: const [],
+      enginePrefix: '\uFFFC',
+    );
+    expect(map.engineText, '\uFFFC\uFFFCX');
+    expect(map.sourceAtEngineUtf16(0).isExact, isFalse);
+    expect(map.sourceAtEngineUtf16(1).sourceRune, 30);
+    expect(map.sourceAtEngineUtf16(1).isExact, isTrue);
+    expect(map.sourceAtEngineUtf16(2).sourceRune, 31);
+    expect(map.sourceAtEngineUtf16(2).isExact, isTrue);
+  });
+
+  test('mapping identity includes the mechanical prefix', () {
+    final display = project('AB');
+    final plain = HtmlInlineTextProjection.build(
+      display: display,
+      atomicRanges: const [],
+    );
+    final prefixed = HtmlInlineTextProjection.build(
+      display: display,
+      atomicRanges: const [],
+      enginePrefix: '\uFFFC',
+    );
+    final equal = HtmlInlineTextProjection.build(
+      display: project('AB'),
+      atomicRanges: const [],
+      enginePrefix: '\uFFFC',
+    );
+    expect(plain.hasSameMapping(prefixed), isFalse);
+    expect(prefixed.hasSameMapping(plain), isFalse);
+    expect(prefixed.hasSameMapping(equal), isTrue);
+    expect(prefixed.mappingHash, equal.mappingHash);
+  });
+
+  test('mechanical prefix consumes engine budget only', () {
+    final display = project('AB');
+    expect(
+      () => HtmlInlineTextProjection.build(
+        display: display,
+        atomicRanges: const [],
+        enginePrefix: '\uFFFC',
+        maxAtoms: 0,
+        maxDisplayCodeUnits: 2,
+        maxEngineCodeUnits: 2,
+      ),
+      throwsA(isA<HtmlInlineTextLimitException>()),
+    );
+    final map = HtmlInlineTextProjection.build(
+      display: display,
+      atomicRanges: const [],
+      enginePrefix: '\uFFFC',
+      maxAtoms: 0,
+      maxDisplayCodeUnits: 2,
+      maxEngineCodeUnits: 3,
+    );
+    expect(map.engineText.length, 3);
+    expect(map.display.text.length, 2);
+  });
+
+  test('mechanical-only input cannot manufacture exact source zero', () {
+    final map = HtmlInlineTextProjection.build(
+      display: HtmlDisplayTextProjection.build(const []),
+      atomicRanges: const [],
+      enginePrefix: '\uFFFC',
+    );
+    expect(map.engineText, '\uFFFC');
+    expect(map.isLegalEngineBoundary(0), isTrue);
+    expect(map.isLegalEngineBoundary(1), isTrue);
+    expect(map.sourceAtEngineUtf16(0).isExact, isFalse);
+    expect(map.sourceAtEngineUtf16(1).isExact, isFalse);
+    expect(map.displayRangeForEngineRange(startUtf16: 0, endUtf16: 1), (
+      startUtf16: 0,
+      endUtf16: 0,
+    ));
+  });
+
+  test(
+    'leading placeholder does not relax real atom or soft adjacency admission',
+    () {
+      expect(
+        () => HtmlInlineTextProjection.build(
+          display: project('AB'),
+          atomicRanges: [(startUtf16: 0, endUtf16: 0)],
+          enginePrefix: '\uFFFC',
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => HtmlInlineTextProjection.build(
+          display: project(' CD'),
+          atomicRanges: [
+            (startUtf16: 0, endUtf16: 1),
+            (startUtf16: 1, endUtf16: 3),
+          ],
+          softSpaceAtoms: {0},
+          enginePrefix: '\uFFFC',
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
+
+  test(
+    'prefix preserves explicit reordered source and both boundary affinities',
+    () {
+      final display = HtmlDisplayTextProjection.concatenate(
+        [
+          HtmlDisplayTextSegment(project('B', 20)),
+          HtmlDisplayTextSegment(project('A', 10)),
+        ],
+        sourceOrder: [1, 0],
+      );
+      final map = HtmlInlineTextProjection.build(
+        display: display,
+        atomicRanges: [(startUtf16: 0, endUtf16: 1)],
+        enginePrefix: '\uFFFC',
+      );
+      for (final affinity in HtmlProjectionAffinity.values) {
+        for (var offset = 0; offset <= display.text.length; offset++) {
+          final original = display.sourceAtUtf16(offset, affinity: affinity);
+          final actual = map.sourceAtEngineUtf16(
+            offset + 1,
+            affinity: affinity,
+          );
+          expect(actual.sourceRune, original.sourceRune);
+          expect(actual.isExact, original.isExact);
+          expect(actual.displayUtf16, original.displayUtf16);
+        }
+      }
+    },
+  );
+
+  test(
     'raw physical-row offsets keep code units without legalizing grapheme cuts',
     () {
       final map = HtmlInlineTextProjection.build(

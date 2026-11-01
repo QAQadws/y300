@@ -31,8 +31,8 @@ final class HtmlInlineTextPosition {
   final int engineUtf16;
   final int displayUtf16;
 
-  /// False when rounded to a grapheme or atomic boundary. Source gaps require
-  /// a separate source projection and can still make that result approximate.
+  /// False when rounded to a grapheme/atomic boundary or out of a mechanical
+  /// prefix. Source gaps still require a separate source projection.
   final bool isExact;
 }
 
@@ -42,6 +42,7 @@ final class HtmlInlineTextLimitException implements Exception {
 
 /// Pure parent-engine/display/source coordinates for opaque inline children.
 /// Each atom occupies one U+FFFC (or explicit soft SPACE) in the engine only.
+/// A mechanical prefix is a separate complete unit with no display/source text.
 /// Hit testing inside a child
 /// must use that child's layout, rather than interpolate through this atom.
 /// This map neither measures glyphs nor proves that a child has been painted.
@@ -51,13 +52,15 @@ final class HtmlInlineTextProjection {
     this.engineText,
     this.atoms,
     this.hasSoftSpaces,
+    this.enginePrefix,
   );
-  static const revision = 2;
+  static const revision = 3;
 
   factory HtmlInlineTextProjection.build({
     required HtmlDisplayTextProjection display,
     required List<({int startUtf16, int endUtf16})> atomicRanges,
     Set<int> softSpaceAtoms = const {},
+    String enginePrefix = '',
     int maxAtoms = 512,
     int maxDisplayCodeUnits = 16384,
     int maxEngineCodeUnits = 16384,
@@ -114,17 +117,19 @@ final class HtmlInlineTextProjection {
           atoms.length,
           range.startUtf16,
           range.endUtf16,
-          range.startUtf16 - removed,
+          range.startUtf16 - removed + enginePrefix.length,
           soft,
         ),
       );
       removed += range.endUtf16 - range.startUtf16 - 1;
       previousEnd = range.endUtf16;
     }
-    if (display.text.length - removed > maxEngineCodeUnits) {
+    if (display.text.length - removed + enginePrefix.length >
+        maxEngineCodeUnits) {
       throw const HtmlInlineTextLimitException();
     }
     final engine = StringBuffer();
+    engine.write(enginePrefix);
     previousEnd = 0;
     for (final atom in atoms) {
       engine.write(display.text.substring(previousEnd, atom.displayStartUtf16));
@@ -137,6 +142,7 @@ final class HtmlInlineTextProjection {
       engine.toString(),
       List.unmodifiable(atoms),
       softSpaceAtoms.isNotEmpty,
+      enginePrefix,
     );
   }
 
@@ -144,6 +150,11 @@ final class HtmlInlineTextProjection {
   final String engineText;
   final List<HtmlInlineTextAtom> atoms;
   final bool hasSoftSpaces;
+
+  /// One caller-owned mechanical engine unit before all source text/atoms. It
+  /// has no display range, run, child identity or exact source caret of its own.
+  /// Native layout must verify its geometry; this cannot prove glyph coverage.
+  final String enginePrefix;
 
   HtmlInlineTextPosition engineAtDisplayUtf16(
     int offset, {
@@ -154,7 +165,7 @@ final class HtmlInlineTextProjection {
     final index = _lastAtomAtOrBefore(value, engine: false);
     if (index < 0) {
       return HtmlInlineTextPosition._(
-        engineUtf16: value,
+        engineUtf16: value + enginePrefix.length,
         displayUtf16: value,
         isExact: value == offset,
       );
@@ -197,7 +208,9 @@ final class HtmlInlineTextProjection {
   int displayOffsetAtEngineUtf16(int offset) {
     RangeError.checkValueInInterval(offset, 0, engineText.length, 'offset');
     final index = _lastAtomAtOrBefore(offset, engine: true);
-    if (index < 0) return offset;
+    if (index < 0) {
+      return offset < enginePrefix.length ? 0 : offset - enginePrefix.length;
+    }
     final atom = atoms[index];
     return offset == atom.engineUtf16
         ? atom.displayStartUtf16
@@ -216,7 +229,10 @@ final class HtmlInlineTextProjection {
     return HtmlProjectedSourcePosition(
       sourceRune: source.sourceRune,
       displayUtf16: position.displayUtf16,
-      isExact: position.isExact && source.isExact,
+      isExact:
+          position.isExact &&
+          source.isExact &&
+          (enginePrefix.isEmpty || display.text.isNotEmpty),
     );
   }
 
@@ -229,16 +245,24 @@ final class HtmlInlineTextProjection {
     RangeError.checkValidRange(startUtf16, endUtf16, engineText.length);
     final start = displayAtEngineUtf16(startUtf16);
     final end = displayAtEngineUtf16(endUtf16);
-    if (!start.isExact || !end.isExact) {
+    if ((!start.isExact && !(enginePrefix.isNotEmpty && startUtf16 == 0)) ||
+        (!end.isExact && !(enginePrefix.isNotEmpty && endUtf16 == 0))) {
       throw ArgumentError('Engine range must contain complete inline units');
     }
     return (startUtf16: start.displayUtf16, endUtf16: end.displayUtf16);
   }
 
+  /// Complete engine-unit boundary, distinct from an exact source caret. The
+  /// start of a mechanical prefix can delimit a line but owns no source text.
+  bool isLegalEngineBoundary(int offset) =>
+      (enginePrefix.isNotEmpty && offset == 0) ||
+      displayAtEngineUtf16(offset).isExact;
+
   /// Process-local map identity only. Geometry/style/owner inputs remain the
   /// renderer's responsibility, and hash collisions require deep equality.
   late final int mappingHash = Object.hash(
     display.sourceMappingHash,
+    enginePrefix,
     Object.hashAll(
       atoms.map(
         (atom) => Object.hash(
@@ -253,6 +277,7 @@ final class HtmlInlineTextProjection {
   bool hasSameMapping(HtmlInlineTextProjection other) {
     if (identical(this, other)) return true;
     if (mappingHash != other.mappingHash ||
+        enginePrefix != other.enginePrefix ||
         !display.hasSameSourceMapping(other.display) ||
         atoms.length != other.atoms.length) {
       return false;
