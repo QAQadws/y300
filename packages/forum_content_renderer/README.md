@@ -78,9 +78,9 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 该描述不保存缩放值或 native 资源，不充当来源 coverage；显示切片与空白投影各自重新
 建立描述，不沿用旧文本的单行结论。几何与输入 revision 保持不变。
 
-## 原生普通正文首行缩进
+## 原生正文首行缩进
 
-普通 wrap 段落的非负首行缩进进入同一个 TextPainter，以无来源的 NBSP/WJ 机械前缀
+普通及 ruby 混排 wrap 段落的非负首行缩进进入同一个 TextPainter，以无来源的 NBSP/WJ 机械前缀
 参与真实断行。前缀不进入显示文字、语义身份、选区或精确来源命中；测量时核对真实
 advance 与零高度，不以空格数量估算。分页分片继续借用该布局，续页不重新插入前缀。
 Text-flow revision 4 保存源格式上下文的首行归属：BR 后的普通/混排片段不再次缩进，
@@ -92,9 +92,15 @@ Reader 的 em 保留相对单位，按本次根字号的实际 TextScaler 读数
 标题、代码和列表仍使用既有逐角色政策。实际 advance 进入缓存键及预算，机械前缀的
 有界开销不占真实文字输入额度，也不增加 native 句柄数。
 
-当前首行包含 ruby 等不透明子项的混排上下文仍明确拒绝非零缩进；BR 后的混排续行
-可以沿用源样式而不重复缩进。负/悬挂缩进、未计算 rem、fit 模式及缩进达到内容宽度
-仍明确失败，不自动改模式或静默裁小；这不是完整 R08 或设置界面验收。
+混排输入保留原始 display/source 投影，以 `projectionForLayout` 按源首行归属为 wrap
+派生有界、可复用的引擎前缀；intrinsic 子项不加前缀。实际 native 布局、计划原子偏移、
+软间隙行归属、可见子项与页面准备使用同一有效引擎坐标，来源和裁边掩码仍严格核对。
+不透明子项的编号、显示窗口、尺寸、字体缩放和 native 句柄预算保持原值，前缀不另建
+占位框。当前混排输入/父布局/Session.inlinePlanRevision 为 9/6/18。
+
+BR 后的混排续行可以沿用源样式而不重复缩进。负/悬挂缩进、未计算 rem、fit 模式、
+缩进达到内容宽度或剩余首行空间放不下第一个原子时仍明确失败；不能发布仅有机械前缀
+的空页，不自动改模式或静默裁小。这不是完整 R08 或设置界面验收。
 
 格式处理者可通过 `ForumBodyParagraphContent.anonymousInline` 创建无来源的空字体支撑框。
 它没有 DOM path、文字或 run；真实空 TextPainter 提供字体高度和字母基线，不伪造文字行、
@@ -259,7 +265,7 @@ BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步
 runIndexMap 共享父样式归属，只保留实际使用的 run，按对象身份去重，不合并相同样式
 的不同来源。原始流仍独立核对输入预算；窗口拆分不重复计费，也不提高 maxRuns。
 显示上下文重排必须显式传入完整的 sourceOrder，由纯坐标包核对实际来源范围；默认仍
-要求来源顺序。它不放宽原子绑定或子来源身份。组合输入 revision 为 7，父布局身份还
+要求来源顺序。它不放宽原子绑定或子来源身份。组合输入 revision 为 9，父布局身份还
 须纳入 projection、原子几何、完整样式和有效字体
 缩放；分层几何尚未完成，不能据此宣称完整复杂正文已通过原生阅读器验收。
 
@@ -284,7 +290,7 @@ native 段高舍入与实际占位框可能不同；外层画框保留占位框�
 选区分别返回普通字形框和实际子 display 窗口，不把矩形占位框冒充注音/基字选区。
 分片借用同一引擎，按合法行框裁剪并保持两套 coverage；`paintParent` 只绘制父文字，
 consumer 仍须准备、核对并绘制实际子布局，不能据此单独发布可读页。父布局只拥有自己
-的 native 对象，dispose 使其全部借用分片失效，不关闭子 owner。混排布局 revision 为 5；
+的 native 对象，dispose 使其全部借用分片失效，不关闭子 owner。混排布局 revision 为 6；
 正式 Session 使用同一父布局分页，不引入整段常驻子租约。
 
 显式软间隙原子通过 `textSpanWithDimensions` 消费已经测量、缩放的逻辑尺寸；父
@@ -305,7 +311,8 @@ tool/run_novel_pagination_profile.ps1 -Device <设备 ID> -MainPage -Backend nat
 ```
 
 启动检查不调用 FontLoader；十四组实际父布局覆盖双向、换行裁边、超大间隙、
-分数缩放和两端对齐，另四组普通段落核对双向及分数首行缩进、无缩进续行，
+分数缩放和两端对齐，另四组普通段落及四组实际 ruby 混排分页核对双向及分数首行缩进、
+无缩进续行、可见字形和实际页面绑定，
 同时核对 warm 不排字及 owner 释放。请求该检查后，缺少任一组
 都会使整套 suite 失败。系统字体的原生行高取整以同机对照核对，不固定为跨平台像素值。
 这项检查证明 bundle 启动与几何/生命周期；帧耗时仍由随后真实页面的 profile 窗口统计，
@@ -484,7 +491,7 @@ pending key 在完整事务内禁止重入，单次淘汰次数有界；clearUnp
 ## 可见混排文字分片
 
 `ForumBodyInlineSpanContent.contexts` 保留实际独立子上下文及其父显示窗口，输入 revision
-为 5。它们是有界纯值，不持有 DOM、Widget 或 native 资源；不得从相同文字、长度或
+为 9。它们是有界纯值，不持有 DOM、Widget 或 native 资源；不得从相同文字、长度或
 新偏好猜回旧子的来源。缓存仍只保存父 native 投影，绑定必须读取当前 lease.content。
 
 `ForumBodyInlineParagraphView.adopt` 接管一个已准备父租约和该合法行窗口内恰好的 ruby
@@ -652,4 +659,4 @@ pre-wrap/NBSP 的字面空白不误折叠。sourceHint 使用实际来源包络�
 当前正式计划接入隐式文本与显式 RB 基字、直接 RT 列、单个 RTC 中的实际 RT 列及独立的非空孤立 RT 列；隐式纯空白基字、显式分层、嵌套及拟合混排
 仍明确失败，不丢弃或压平结构，不把隐式缩进空白当作显式 RB 的被标注空格。
 这些格式与长段、完整复杂正文性能门槛仍须完成，不能扩张预算或切回旧 renderer 绕过。
-Session.inlinePlanRevision 为 17，Host 指纹须纳入它及混排/间隙/批次/投影版本。
+Session.inlinePlanRevision 为 18，Host 指纹须纳入它及混排/间隙/批次/投影版本。

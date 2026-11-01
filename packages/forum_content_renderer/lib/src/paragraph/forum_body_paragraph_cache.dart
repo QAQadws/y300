@@ -206,7 +206,7 @@ final class ForumBodyParagraphCache {
     final entry = _acquireEntry(
       key: key,
       allowBuild: allowBuild,
-      minimumBytes: _minimumInlineEstimatedBytes(content),
+      minimumBytes: _minimumInlineEstimatedBytes(content) + key.indentBytes,
       build: () => ForumBodyInlineParagraphLayout.create(
         content: content,
         width: width,
@@ -680,7 +680,9 @@ final class ForumBodyParagraphBudgetProbe {
     _include(
       cache,
       key,
-      _minimumInlineEstimatedBytes(content) + minimumLineCount * 96,
+      _minimumInlineEstimatedBytes(content) +
+          key.indentBytes +
+          minimumLineCount * 96,
     );
   }
 
@@ -940,7 +942,23 @@ final class _InlineLayoutKey {
     double requestWidth,
     Map<double, double> scales,
     List<PlaceholderDimensions> dimensions,
+    ForumBodyParagraphLayoutMode layoutMode,
+  ) : this._(
+        content,
+        requestWidth,
+        scales,
+        dimensions,
+        layoutMode,
+        content.resolveFirstLineIndent(requestWidth, scales, layoutMode),
+      );
+
+  _InlineLayoutKey._(
+    ForumBodyInlineSpanContent content,
+    double requestWidth,
+    Map<double, double> scales,
+    List<PlaceholderDimensions> dimensions,
     this.layoutMode,
+    this.indentAdvance,
   ) : width = layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
           ? 0
           : requestWidth,
@@ -953,9 +971,12 @@ final class _InlineLayoutKey {
       inputRevision = ForumBodyInlineSpanContent.revision,
       projectionRevision = HtmlDisplayTextProjection.revision,
       inlineRevision = HtmlInlineTextProjection.revision,
-      projection = content.projection,
-      span = content.projection.hasSoftSpaces
-          ? content.textSpanWithDimensions(dimensions)
+      projection = content.projectionForLayout(layoutMode),
+      span = content.projection.hasSoftSpaces || indentAdvance > 0
+          ? content.textSpanWithDimensions(
+              dimensions,
+              firstLineIndent: indentAdvance,
+            )
           : content.textSpan,
       align = content.style.textAlign,
       direction = content.style.textDirection,
@@ -982,6 +1003,10 @@ final class _InlineLayoutKey {
   final double width;
   final List<(double, double)> scales;
   final List<(double, double, double)> dimensions;
+  final double indentAdvance;
+  int get indentBytes => indentAdvance > 0
+      ? ForumBodyNativeSpaceSpan.nonBreakingText.length * 96
+      : 0;
 
   @override
   bool operator ==(Object other) =>
@@ -1001,6 +1026,7 @@ final class _InlineLayoutKey {
       align == other.align &&
       direction == other.direction &&
       width == other.width &&
+      indentAdvance == other.indentAdvance &&
       listEquals(scales, other.scales) &&
       listEquals(dimensions, other.dimensions);
 
@@ -1021,6 +1047,7 @@ final class _InlineLayoutKey {
     align,
     direction,
     width,
+    indentAdvance,
     Object.hashAll(scales),
     Object.hashAll(dimensions),
   );

@@ -11,6 +11,7 @@ import '../inline/forum_body_ruby_segment_layout.dart';
 import '../inline/forum_body_ruby_segment_preparation.dart';
 import '../inline/forum_body_ruby_soft_space_layout.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
+import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
 import 'forum_body_text_page_binding.dart';
@@ -243,7 +244,9 @@ final class ForumBodyInlinePagePreparation {
   }
 
   void _validateParentAtoms(int maxParts) {
-    final expected = _input!.content.projection.atoms;
+    final expected = _input!.content
+        .projectionForLayout(ForumBodyParagraphLayoutMode.wrap)
+        .atoms;
     final actual = _parent!.layout.projection.atoms;
     var units = 0;
     while (_parentAtom < expected.length && units < maxParts) {

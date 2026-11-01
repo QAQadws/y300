@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
@@ -97,6 +98,85 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    await (FontLoader(
+      'packages/forum_content_renderer/ForumBodyInlineSpace',
+    )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
+  });
+
+  for (final direction in ['ltr', 'rtl']) {
+    test(
+      'indented raw ruby gaps prepare every real page and BR continuation $direction',
+      () {
+        final f = _Fixture(
+          '<p dir="$direction" style="text-indent:20px">'
+          '<ruby>A<rt>x</rt></ruby> <ruby>B<rt>y</rt></ruby> '
+          '<ruby>C<rt>z</rt></ruby><br><ruby>D<rt>u</rt></ruby> '
+          '<ruby>E<rt>v</rt></ruby> <ruby>F<rt>w</rt></ruby></p>',
+          width: 60,
+          height: 30,
+        );
+        f.finish();
+        final seen = <String>[];
+        var continuedAfterBr = false;
+        for (var page = 0; page < f.session.snapshot.length; page++) {
+          final fragments = f.prepare(page);
+          try {
+            validateForumBodyPreparedTextPageBinding(
+              snapshot: f.session.snapshot,
+              pageIndex: page,
+              layoutId: 'formal-mixed',
+              fragments: fragments,
+            );
+            for (final prepared
+                in fragments.cast<ForumBodyPreparedInlineFragment>()) {
+              final parent =
+                  prepared.nativeLeases.first as ForumBodyInlineParagraphLease;
+              final ownsIndent = prepared.view.content.appliesFirstLineIndent;
+              expect(
+                parent.layout.projection.enginePrefix.length,
+                ownsIndent ? 2 : 0,
+              );
+              if (!ownsIndent) continuedAfterBr = true;
+              for (final letter in ['A', 'B', 'C', 'D', 'E', 'F']) {
+                final offset = prepared.projection.text.indexOf(letter);
+                if (offset < 0) continue;
+                final boxes = prepared.glyphBoxes(offset, offset + 1);
+                if (boxes.isEmpty) continue;
+                seen.add(letter);
+                final box = boxes.single;
+                if (letter == 'A') {
+                  final actual = direction == 'ltr' ? box.left : 60 - box.right;
+                  expect(actual, closeTo(20, .001));
+                } else if (letter == 'D') {
+                  // A neutral opaque row's leading edge is a row property,
+                  // not the visual position of one logical child in bidi.
+                  expect(parent.layout.lines.first.left, closeTo(0, .001));
+                  expect(parent.layout.lines.first.width, closeTo(60, .001));
+                }
+                final hit = prepared.view.sourceAt(
+                  Offset(box.left + .1, (box.top + box.bottom) / 2),
+                );
+                expect(hit.isExact, isTrue);
+                expect(
+                  hit.sourceRune,
+                  prepared.projection.sourceAtUtf16(offset).sourceRune,
+                );
+              }
+            }
+          } finally {
+            for (final fragment in fragments) {
+              fragment.close();
+            }
+          }
+          expect(f.cache.activeLeases, 0);
+          expect(f.session.activeIssuedLeases, 0);
+        }
+        expect(seen, ['A', 'B', 'C', 'D', 'E', 'F']);
+        expect(continuedAfterBr, isTrue);
+      },
+    );
+  }
 
   for (final (direction, position) in [
     ('ltr', 'alternate'),

@@ -89,7 +89,11 @@ final class ForumBodyParagraphLayout
       }
       final metrics = painter.computeLineMetrics();
       if (engine != null) {
-        _validateIndentAdvance(painter, engine.enginePrefix.length, indent);
+        validateForumBodyFirstLineIndentAdvance(
+          painter,
+          engine.enginePrefix.length,
+          indent,
+        );
       }
       if ((fitted || intrinsic) && metrics.length > 1) {
         throw const ForumBodyParagraphLayoutException(
@@ -287,37 +291,6 @@ final class ForumBodyParagraphLayout
     if (_disposed) return;
     _disposed = true;
     _painter.dispose();
-  }
-}
-
-void _validateIndentAdvance(
-  TextPainter painter,
-  int prefixLength,
-  double advance,
-) {
-  final boxes = painter.getBoxesForSelection(
-    TextSelection(baseOffset: 0, extentOffset: prefixLength),
-  );
-  var actual = 0.0;
-  for (final box in boxes) {
-    if (!box.left.isFinite ||
-        !box.right.isFinite ||
-        !box.top.isFinite ||
-        !box.bottom.isFinite ||
-        (box.bottom - box.top).abs() > 1e-3 ||
-        box.right < box.left) {
-      throw const ForumBodyParagraphLayoutException(
-        ForumBodyParagraphLayoutFailure.indent,
-      );
-    }
-    actual += box.right - box.left;
-  }
-  // Verify the bundled zero-ink font ABI instead of trusting a font name or
-  // allowing native fallback metrics to alter an otherwise readable page.
-  if (boxes.isEmpty || (actual - advance).abs() > 1e-3) {
-    throw const ForumBodyParagraphLayoutException(
-      ForumBodyParagraphLayoutFailure.indent,
-    );
   }
 }
 

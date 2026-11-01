@@ -4,9 +4,11 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_first_line_indent.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_native_paragraph_layout.dart';
 import '../style/forum_body_style_options.dart';
+import '../style/forum_body_length.dart';
 import 'forum_body_inline_span_content.dart';
 
 sealed class ForumBodyInlineHit {
@@ -75,7 +77,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 5;
+  static const revision = 6;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,
@@ -85,7 +87,7 @@ final class ForumBodyInlineParagraphLayout
     ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) {
     final snapshot = List<PlaceholderDimensions>.unmodifiable(dimensions);
-    validateInputs(
+    final scales = validateInputs(
       content: content,
       width: width,
       dimensions: snapshot,
@@ -94,10 +96,15 @@ final class ForumBodyInlineParagraphLayout
     );
     final intrinsic =
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
+    final indent = content.resolveFirstLineIndent(width, scales, layoutMode);
+    final projection = content.projectionForLayout(layoutMode);
     final painter =
         TextPainter(
-          text: content.projection.hasSoftSpaces
-              ? content.textSpanWithDimensions(snapshot)
+          text: projection.hasSoftSpaces || indent > 0
+              ? content.textSpanWithDimensions(
+                  snapshot,
+                  firstLineIndent: indent,
+                )
               : content.textSpan,
           textAlign: content.style.textAlign,
           textDirection: content.style.textDirection,
@@ -105,9 +112,9 @@ final class ForumBodyInlineParagraphLayout
           locale: content.style.textStyle.locale,
           textWidthBasis: TextWidthBasis.parent,
         )..setPlaceholderDimensions(
-          content.projection.hasSoftSpaces
+          projection.hasSoftSpaces
               ? [
-                  for (final (i, atom) in content.projection.atoms.indexed)
+                  for (final (i, atom) in projection.atoms.indexed)
                     if (!atom.isSoftSpace) snapshot[i],
                 ]
               : snapshot,
@@ -125,9 +132,21 @@ final class ForumBodyInlineParagraphLayout
       }
       final lines = forumBodyParagraphLines(
         painter: painter,
-        display: content.projection.display,
-        inline: content.projection,
+        display: projection.display,
+        inline: projection,
       );
+      if (indent > 0) {
+        validateForumBodyFirstLineIndentAdvance(
+          painter,
+          projection.enginePrefix.length,
+          indent,
+        );
+        if (lines.isNotEmpty && lines.first.coverageEndUtf16 == 0) {
+          throw const ForumBodyParagraphLayoutException(
+            ForumBodyParagraphLayoutFailure.indent,
+          );
+        }
+      }
       if (intrinsic && lines.length > 1) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.singleLine,
@@ -139,6 +158,7 @@ final class ForumBodyInlineParagraphLayout
       final slots = _inlineSlots(
         painter,
         content,
+        projection,
         snapshot,
         lines,
         nativeBoxes,
@@ -159,7 +179,7 @@ final class ForumBodyInlineParagraphLayout
       for (var i = 0; i < boxes.length; i++) {
         final box = boxes[i];
         final dimension = snapshot[i];
-        final atom = content.projection.atoms[i];
+        final atom = projection.atoms[i];
         while (lineIndex < lines.length &&
             lines[lineIndex].engineCoverageEndUtf16 <= atom.engineUtf16) {
           lineIndex++;
@@ -224,7 +244,7 @@ final class ForumBodyInlineParagraphLayout
         frameBottoms[i] = (maxBottom > logical ? maxBottom : logical) - top;
       }
       return ForumBodyInlineParagraphLayout._(
-        projection: content.projection,
+        projection: projection,
         painter: painter,
         width: layoutWidth,
         height: bottom - top,
@@ -271,7 +291,11 @@ final class ForumBodyInlineParagraphLayout
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
     if (!intrinsic &&
         content.appliesFirstLineIndent &&
-        content.style.indent.value != 0) {
+        content.style.indent.value != 0 &&
+        (!content.style.indent.value.isFinite ||
+            content.style.indent.value < 0 ||
+            content.style.indent.unit == ForumBodyLengthUnit.auto ||
+            content.style.indent.unit == ForumBodyLengthUnit.rem)) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.indent,
       );
@@ -310,6 +334,7 @@ final class ForumBodyInlineParagraphLayout
         );
       }
     }
+    content.resolveFirstLineIndent(width, scales, layoutMode);
     return scales;
   }
 
@@ -514,11 +539,11 @@ final class ForumBodyInlineParagraphLayout
 _inlineSlots(
   TextPainter painter,
   ForumBodyInlineSpanContent content,
+  HtmlInlineTextProjection projection,
   List<PlaceholderDimensions> dimensions,
   List<ForumBodyParagraphLine> lines,
   List<TextBox> nativeBoxes,
 ) {
-  final projection = content.projection;
   if (!projection.hasSoftSpaces) {
     return (boxes: nativeBoxes, trimmed: null, allocations: null);
   }

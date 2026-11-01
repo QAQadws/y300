@@ -81,6 +81,40 @@ void main() {
 
   for (final version in [1, 37]) {
     test(
+      'ruby indent preserves exact source and readonly version $version',
+      () async {
+        const body = 'ab<ruby>c<rt>x</rt></ruby>defghijklmnopqrstuvwx<br>yz';
+        final fixture = NativeReaderTestFixture(
+          '<p style="text-indent:20px">$body</p>',
+          width: 60,
+          height: 20,
+        );
+        final original = NativeReaderTestFixture(
+          '<p>$body</p>',
+          width: 60,
+          height: 20,
+        );
+        final anchor = _anchor(fixture, 10);
+        expect(anchor.textIdentity, _anchor(original, 10).textIdentity);
+        final saved = _position(anchor: anchor).copyWith(
+          anchorFormatVersion: version,
+          paginationKey: 'native-geometry',
+          pageIndex: 1,
+        );
+        final cursor = _cursor(fixture, saved);
+        cursor.observe(
+          snapshot: fixture.session.snapshot,
+          coverage: await _coverage(fixture, 1),
+        );
+        final result = cursor.resolve(fixture.session.snapshot)!;
+        expect(result.pageIndex, 1);
+        expect(result.isReadOnlyCompatibilityRestore, version != 1);
+        expect(saved.anchorFormatVersion, version);
+        expect(saved.anchorTextOffset, 10);
+        expect(fixture.session.activeIssuedLeases, 0);
+      },
+    );
+    test(
       'indented BR continuation restores version $version without source migration',
       () async {
         final fixture = NativeReaderTestFixture(

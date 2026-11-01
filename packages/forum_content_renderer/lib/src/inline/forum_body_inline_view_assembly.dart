@@ -90,8 +90,8 @@ final class ForumBodyInlineViewAssembly {
             _binding = null;
             _preparedAtoms++;
           }
-        } else if (_atom < _parent!.content.projection.atoms.length) {
-          final atom = _parent!.content.projection.atoms[_atom++];
+        } else if (_atom < _parent!.layout.projection.atoms.length) {
+          final atom = _parent!.layout.projection.atoms[_atom++];
           if (atom.engineUtf16 >= _fragment!.engineCoverageStartUtf16 &&
               atom.engineUtf16 < _fragment!.engineCoverageEndUtf16 &&
               !_parent!.layout.isAtomTrimmed(atom.index)) {

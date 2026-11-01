@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../tool/novel_inline_soft_space_profile.dart';
+import '../../tool/novel_mixed_first_line_indent_profile.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +49,26 @@ void main() {
     // A second run gets new owners; previous cleanup must not retire the engine
     // resource or accidentally provide the next run's cold native layout.
     expect(profileInlineSoftSpaces(), records);
+  });
+
+  test('mixed startup prepares real ruby, gaps and BR continuations', () {
+    final records = profileMixedFirstLineIndents();
+    expect(records.length, 4);
+    for (final record in records) {
+      expect(record['passed'], isTrue);
+      expect(
+        record['actualFirst'],
+        closeTo(record['advance']! as double, .001),
+      );
+      expect(record['pages']! as int, greaterThanOrEqualTo(2));
+      expect(record['baseGlyphs'], 7);
+      expect(record['brContinuation'], isTrue);
+      expect(record['warmBuilds'], 0);
+      expect(record['warmPictures'], 0);
+      expect(record['exitPins'], 0);
+      expect(record['exitBytes'], 0);
+      expect(utf8.encode(jsonEncode(record)).length, lessThanOrEqualTo(1000));
+    }
   });
 
   test(

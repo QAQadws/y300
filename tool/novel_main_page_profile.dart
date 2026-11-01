@@ -15,6 +15,7 @@ import 'novel_inline_soft_space_profile.dart';
 import 'novel_main_page_profile_data.dart';
 import 'novel_main_page_profile_observation.dart';
 import 'novel_main_page_profile_timings.dart';
+import 'novel_mixed_first_line_indent_profile.dart';
 import 'novel_pagination_profile_config.dart';
 import 'novel_pagination_profile_fixtures.dart';
 
@@ -206,6 +207,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     });
     var inlineSoftSpaceCases = 0;
     var firstLineIndentCases = 0;
+    var mixedFirstLineIndentCases = 0;
     try {
       if (_inlineSoftSpace) {
         for (final record in profileInlineSoftSpaces()) {
@@ -215,6 +217,10 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         for (final record in profileFirstLineIndents()) {
           _emit(record);
           firstLineIndentCases++;
+        }
+        for (final record in profileMixedFirstLineIndents(onFailure: _emit)) {
+          _emit(record);
+          mixedFirstLineIndentCases++;
         }
       }
       for (final native in [false, true]) {
@@ -309,7 +315,9 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         kProfileMode &&
         (!_inlineSoftSpace ||
             inlineSoftSpaceCases == profileInlineSoftSpaceCaseCount &&
-                firstLineIndentCases == profileFirstLineIndentCaseCount) &&
+                firstLineIndentCases == profileFirstLineIndentCaseCount &&
+                mixedFirstLineIndentCases ==
+                    profileMixedFirstLineIndentCaseCount) &&
         matrix.every((entry) => entry['samplingCompleted'] == true) &&
         _runtimeErrors.isEmpty &&
         !_frames.overflowed &&
@@ -323,6 +331,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'inlineSoftSpaceRequested': _inlineSoftSpace,
       'inlineSoftSpaceCases': inlineSoftSpaceCases,
       'firstLineIndentCases': firstLineIndentCases,
+      'mixedFirstLineIndentCases': mixedFirstLineIndentCases,
       'failedRuns': _runs.where((run) => run['passed'] != true).length,
       'runtimeErrorCount': _runtimeErrors.length,
       'runtimeErrorTypes': _runtimeErrors.toSet().take(10).toList(),

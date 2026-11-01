@@ -278,14 +278,6 @@ void main() {
           firstLineIndent: const ForumBodyLength(2, ForumBodyLengthUnit.em),
         ),
       );
-      expect(
-        () => ForumBodyInlineParagraphLayout.create(
-          content: input.content,
-          width: 100,
-          dimensions: [_dimension],
-        ),
-        throwsA(isA<ForumBodyParagraphLayoutException>()),
-      );
       final layout = ForumBodyInlineParagraphLayout.create(
         content: input.content,
         width: 10,

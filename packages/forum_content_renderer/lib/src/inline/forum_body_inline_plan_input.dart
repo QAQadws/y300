@@ -25,9 +25,12 @@ final class ForumBodyInlinePlanInput {
     List<int> levelIds,
   ) : rubyLevelIds = List.unmodifiable(levelIds),
       atomEngineOffsets = List.unmodifiable(
-        content.projection.atoms.map((atom) => atom.engineUtf16),
+        content
+            .projectionForLayout(ForumBodyParagraphLayoutMode.wrap)
+            .atoms
+            .map((atom) => atom.engineUtf16),
       );
-  static const revision = 17;
+  static const revision = 18;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,

@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../paragraph/forum_body_first_line_indent.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
@@ -38,7 +39,7 @@ final class ForumBodyInlineSpanContent {
   }) : contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  static const revision = 8;
+  static const revision = 9;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -162,6 +163,51 @@ final class ForumBodyInlineSpanContent {
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;
 
+  /// Display/source ownership stays fixed; only wrap's native coordinates gain
+  /// the mechanical prefix. Intrinsic child measurement leaves indent outside.
+  HtmlInlineTextProjection projectionForLayout(
+    ForumBodyParagraphLayoutMode layoutMode,
+  ) =>
+      forumBodyHasFirstLineIndent(
+        style: style,
+        displayText: projection.display.text,
+        appliesFirstLineIndent: appliesFirstLineIndent,
+        layoutMode: layoutMode,
+      )
+      ? _indentedProjection
+      : projection;
+
+  late final _indentedProjection = HtmlInlineTextProjection.build(
+    display: projection.display,
+    atomicRanges: [
+      for (final atom in projection.atoms)
+        (startUtf16: atom.displayStartUtf16, endUtf16: atom.displayEndUtf16),
+    ],
+    softSpaceAtoms: {
+      for (final atom in projection.atoms)
+        if (atom.isSoftSpace) atom.index,
+    },
+    enginePrefix: ForumBodyNativeSpaceSpan.nonBreakingText,
+    maxAtoms: projection.atoms.length,
+    maxDisplayCodeUnits: projection.display.text.length,
+    maxEngineCodeUnits:
+        projection.engineText.length +
+        ForumBodyNativeSpaceSpan.nonBreakingText.length,
+  );
+
+  double resolveFirstLineIndent(
+    double width,
+    Map<double, double> scales,
+    ForumBodyParagraphLayoutMode layoutMode,
+  ) => resolveForumBodyFirstLineIndentValue(
+    style: style,
+    displayText: projection.display.text,
+    appliesFirstLineIndent: appliesFirstLineIndent,
+    layoutMode: layoutMode,
+    width: width,
+    scales: scales,
+  );
+
   final _contextIndex =
       Map<ForumBodyParagraphContent, ForumBodyInlineContext?>.identity();
   var _indexedContexts = 0;
@@ -222,11 +268,25 @@ final class ForumBodyInlineSpanContent {
   /// Builds engine glue from all logical atom dimensions. A direct TextPainter
   /// consumer must pass only opaque-atom dimensions to setPlaceholderDimensions;
   /// ForumBodyInlineParagraphLayout handles that mapping and native validation.
-  TextSpan textSpanWithDimensions(List<PlaceholderDimensions> dimensions) {
+  /// firstLineIndent is an already resolved advance for projectionForLayout;
+  /// callers must keep the span and effective engine projection paired.
+  TextSpan textSpanWithDimensions(
+    List<PlaceholderDimensions> dimensions, {
+    double firstLineIndent = 0,
+  }) {
     validateDimensions(dimensions);
-    return projection.hasSoftSpaces
+    final span = projection.hasSoftSpaces
         ? _buildTextSpan(dimensions: dimensions).span
         : textSpan;
+    return firstLineIndent == 0
+        ? span
+        : TextSpan(
+            style: style.textStyle,
+            children: [
+              ForumBodyNativeSpaceSpan.nonBreaking(firstLineIndent),
+              ...span.children!,
+            ],
+          );
   }
 
   /// Only runs actually shaped by the parent. Atomic children retain their
