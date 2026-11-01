@@ -26,7 +26,12 @@ final class ForumBodyStyleCursor {
            ? ForumBodyStyleBuilder(reader, applyPolicy: false)
            : null,
        _inheritance = ForumBodyStyleInheritance(reader.policy) {
-    _frames.add((nodes: document.nodes.iterator, parent: root, author: root));
+    _frames.add((
+      nodes: document.nodes.iterator,
+      parent: root,
+      author: root,
+      parentKind: null,
+    ));
   }
   final ForumBodyIdentity identity;
   final String fontRevision;
@@ -40,6 +45,7 @@ final class ForumBodyStyleCursor {
           Iterator<ForumBodyNode> nodes,
           ForumBodyResolvedStyle parent,
           ForumBodyResolvedStyle author,
+          ForumBodyElementKind? parentKind,
         })
       >[];
   final _pendingIssues = <ForumBodyStyleIssue>[];
@@ -76,7 +82,12 @@ final class ForumBodyStyleCursor {
       final node = frame.nodes.current;
       if (node is ForumBodyElement) {
         final author =
-            _authorBuilder?.resolve(node, frame.author) ?? frame.author;
+            _authorBuilder?.resolve(
+              node,
+              frame.author,
+              parentKind: frame.parentKind,
+            ) ??
+            frame.author;
         final parent = _authorBuilder == null
             ? frame.parent
             : _inheritance.parentFor(
@@ -84,13 +95,18 @@ final class ForumBodyStyleCursor {
                 author: frame.author,
                 effective: frame.parent,
               );
-        final style = _builder.resolve(node, parent);
+        final style = _builder.resolve(
+          node,
+          parent,
+          parentKind: frame.parentKind,
+        );
         _currentNode = node;
         _currentStyle = style;
         _frames.add((
           nodes: node.children.iterator,
           parent: style,
           author: author,
+          parentKind: node.kind,
         ));
         _collectIssues();
       } else {

@@ -219,7 +219,7 @@ void main() {
           .style
           .textStyle
           .fontSize,
-      15,
+      30,
     );
     expect(input.groups.map((column) => column.nativeHandleCount), [2, 2]);
   });

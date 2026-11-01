@@ -63,7 +63,7 @@ void main() {
           expect(event.style.display, ForumBodyDisplay.inline);
           sizes[node.tag] = event.style.textStyle.fontSize;
         }
-        expect(sizes, {'ruby': 20, 'rb': 20, 'rtc': 20, 'rt': 10});
+        expect(sizes, {'ruby': 20, 'rb': 20, 'rtc': 10, 'rt': 10});
       } finally {
         flow.close();
       }

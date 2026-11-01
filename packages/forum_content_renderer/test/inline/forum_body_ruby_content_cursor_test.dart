@@ -94,7 +94,7 @@ void main() {
           .cast<ForumBodyRubyTextAnnotationContent>();
       expect(annotations.map((rt) => text(rt.parts)), ['x', 'y']);
       expect(annotations.map((rt) => rt.style.textStyle.fontSize), [10, 10]);
-      expect(first.style.textStyle.fontSize, 20);
+      expect(first.style.textStyle.fontSize, 10);
       expect(annotations.first.style.textStyle.color, const Color(0xffff0000));
       expect(
         texts(
@@ -182,7 +182,8 @@ void main() {
     expect(entries.first.source.runeStart, entries.first.source.runeEnd);
     final context = texts(entries.last.parts).single;
     expect(context.projection.text, ' word x y ');
-    expect(context.runs.first.style.textStyle.fontSize, 20);
+    expect(context.runs.first.style.textStyle.fontSize, 10);
+    expect(context.runs.first.style.role, ForumBodyTextRole.ruby);
     expect(context.runs[1].style.textStyle.fontWeight, FontWeight.w700);
   });
 

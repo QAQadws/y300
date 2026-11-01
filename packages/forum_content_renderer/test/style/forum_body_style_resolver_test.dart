@@ -51,6 +51,140 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test('RTC owns annotation defaults for actual RT and anonymous text', () {
+    final result = resolve(
+      '<ruby id="base">A<rt id="direct">a</rt>'
+      '<rtc id="level"><rt id="column">x<span id="child">y</span></rt></rtc>'
+      '<rtc id="anonymous">word<span id="anonymousChild">tail</span></rtc>'
+      '</ruby><h2><ruby>A<rtc id="headingLevel"><rt id="headingColumn">a</rt></rtc></ruby></h2>',
+    );
+    expect(byId(result, 'base').textStyle.fontSize, 20);
+    for (final id in [
+      'direct',
+      'level',
+      'column',
+      'child',
+      'anonymous',
+      'anonymousChild',
+    ]) {
+      final style = byId(result, id);
+      expect(style.role, ForumBodyTextRole.ruby);
+      expect(style.textStyle.fontSize, 10);
+      expect(style.textStyle.height, 1);
+      expect(style.textStyle.fontFamily, 'ReaderFont');
+    }
+    expect(byId(result, 'headingLevel').textStyle.fontSize, 15);
+    expect(byId(result, 'headingColumn').textStyle.fontSize, 15);
+  });
+
+  test(
+    'explicit RTC font is inherited once and RT declarations use that parent',
+    () {
+      final result = resolve(
+        '<ruby style="font-size:40px;line-height:3">A'
+        '<rtc id="level" style="font-size:30px;line-height:2">'
+        '<span id="anonymous">word</span>'
+        '<rt id="plain">x</rt>'
+        '<rt id="inherit" style="font-size:inherit;line-height:inherit">y</rt>'
+        '<rt id="relative" style="font-size:150%">z</rt>'
+        '<rt id="invalid" style="font-size:invalid">w</rt>'
+        '<rt id="absolute" style="font-size:12px">u</rt>'
+        '</rtc></ruby>',
+      );
+      for (final id in ['level', 'anonymous', 'plain', 'inherit', 'invalid']) {
+        expect(byId(result, id).textStyle.fontSize, 30);
+      }
+      expect(byId(result, 'relative').textStyle.fontSize, 45);
+      expect(byId(result, 'absolute').textStyle.fontSize, 12);
+      expect(byId(result, 'anonymous').textStyle.height, 2);
+      expect(byId(result, 'plain').textStyle.height, 1);
+      expect(byId(result, 'inherit').textStyle.height, 2);
+      expect(result.styles.issues.map((issue) => issue.property), [
+        'font-size',
+      ]);
+    },
+  );
+
+  for (final scope in [
+    ForumBodyStyleScope.forceBody,
+    ForumBodyStyleScope.forceAll,
+  ]) {
+    test(
+      'RTC role boundary preserves reader policy and author inheritance: $scope',
+      () {
+        final result = resolve(
+          '<div style="font-size:30px;color:red;line-height:3">'
+          '<ruby id="base">A<rtc id="level">word<span id="anonymous">tail</span>'
+          '<rt id="column">x</rt></rtc></ruby></div>',
+          options: reader(
+            policy: ForumBodyStylePolicy({
+              ForumBodyStyleProperty.fontSize: scope,
+              ForumBodyStyleProperty.foreground: scope,
+              ForumBodyStyleProperty.lineHeight: scope,
+            }),
+          ),
+        );
+        expect(byId(result, 'base').textStyle.fontSize, 20);
+        for (final id in ['level', 'anonymous', 'column']) {
+          final style = byId(result, id);
+          expect(style.role, ForumBodyTextRole.ruby);
+          expect(
+            style.textStyle.fontSize,
+            scope == ForumBodyStyleScope.forceBody ? 15 : 20,
+          );
+          expect(
+            style.textStyle.height,
+            scope == ForumBodyStyleScope.forceBody ? 1 : 1.6,
+          );
+          expect(
+            style.textStyle.color,
+            scope == ForumBodyStyleScope.forceBody
+                ? const Color(0xffff0000)
+                : const Color(0xff202020),
+          );
+        }
+      },
+    );
+  }
+
+  test(
+    'parent kind follows real RTC ancestry and retires at sibling boundaries',
+    () {
+      final result = resolve(
+        '<ruby>A<rtc id="level"><rt id="outer">x<ruby id="nestedBase">B'
+        '<rt id="nestedDirect">b</rt><rtc id="nestedLevel"><rt id="nestedColumn">c</rt></rtc>'
+        '</ruby></rt></rtc><rt id="after">z</rt></ruby><rt id="outside">q</rt>',
+      );
+      for (final id in ['level', 'outer', 'nestedBase', 'after', 'outside']) {
+        expect(byId(result, id).textStyle.fontSize, 10);
+      }
+      for (final id in ['nestedDirect', 'nestedLevel', 'nestedColumn']) {
+        expect(byId(result, id).textStyle.fontSize, 5);
+      }
+    },
+  );
+
+  test('RTC font reset keywords and invalid values keep actual parent semantics', () {
+    final result = resolve(
+      '<ruby style="font-size:30px">A'
+      '<rtc id="invalid" style="font-size:bad"><rt id="invalidChild" style="font-size:bad">x</rt></rtc>'
+      '<rtc id="inherit" style="font-size:inherit"><rt id="inheritChild">y</rt></rtc>'
+      '<rtc id="initial" style="font-size:initial"><rt id="initialChild">z</rt></rtc>'
+      '<rtc id="unset" style="font-size:unset"><rt id="unsetChild">u</rt></rtc>'
+      '</ruby>',
+    );
+    for (final id in ['invalid', 'invalidChild']) {
+      expect(byId(result, id).textStyle.fontSize, 15);
+    }
+    for (final id in ['inherit', 'inheritChild', 'unset', 'unsetChild']) {
+      expect(byId(result, id).textStyle.fontSize, 30);
+    }
+    for (final id in ['initial', 'initialChild']) {
+      expect(byId(result, id).textStyle.fontSize, 20);
+    }
+    expect(result.styles.issues, hasLength(2));
+  });
+
   test(
     'ruby base retains its containing role while only RT gets annotation defaults',
     () {

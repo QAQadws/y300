@@ -436,8 +436,11 @@ void main() {
         final leases = fragment.nativeLeases.toList();
         final first = leases[2] as ForumBodyTextLease;
         final second = leases[4] as ForumBodyTextLease;
-        expect(first.content.runs.single.style.textStyle.fontSize, 15);
+        expect(first.content.runs.single.style.textStyle.fontSize, 30);
         expect(second.content.runs.single.style.textStyle.fontSize, 12);
+        expect(first.layout.width, 30);
+        expect(first.layout.height, 30);
+        expect(fragment.view.height, 50);
         double baseline(ForumBodyTextLease lease, int display) {
           final local = lease.layout.selectionBoxes(0, 1).single;
           final visible = fragment.glyphBoxes(display, display + 1).single;

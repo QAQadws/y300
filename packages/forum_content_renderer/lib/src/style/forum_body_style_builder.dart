@@ -7,7 +7,7 @@ import 'forum_body_length.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 6;
+const forumBodyStyleRevision = 7;
 ForumBodyLineHeight forumBodyReaderHeight(ForumBodyReaderStyle reader) {
   final height = reader.textStyle.height;
   return height == null || height == kTextHeightNone
@@ -73,8 +73,9 @@ final class ForumBodyStyleBuilder {
 
   ForumBodyResolvedStyle resolve(
     ForumBodyElement node,
-    ForumBodyResolvedStyle parent,
-  ) {
+    ForumBodyResolvedStyle parent, {
+    ForumBodyElementKind? parentKind,
+  }) {
     final role = _role(node.kind, parent.role);
     final declarations = node.style;
     if (!declarations.isValid) {
@@ -96,7 +97,11 @@ final class ForumBodyStyleBuilder {
       size *= .85;
     } else if (node.kind == ForumBodyElementKind.editStatus) {
       size = baseSize * .88;
-    } else if (node.kind == ForumBodyElementKind.rubyText) {
+    } else if (node.kind == ForumBodyElementKind.rubyAnnotationContainer ||
+        (node.kind == ForumBodyElementKind.rubyText &&
+            parentKind != ForumBodyElementKind.rubyAnnotationContainer)) {
+      // The level owns the UA half-size. A real RT inside RTC inherits it,
+      // as does anonymous annotation text; neither is reduced a second time.
       size *= .5;
     }
     String? value(String property) =>
@@ -156,7 +161,9 @@ final class ForumBodyStyleBuilder {
       };
     }
 
-    var height = node.kind == ForumBodyElementKind.rubyText
+    var height =
+        node.kind == ForumBodyElementKind.rubyText ||
+            node.kind == ForumBodyElementKind.rubyAnnotationContainer
         ? const ForumBodyLineHeight.factor(1)
         : parent.lineHeight;
     final rawHeight = value('line-height');
@@ -509,7 +516,8 @@ final class ForumBodyStyleBuilder {
     ForumBodyElementKind.listItem => ForumBodyTextRole.list,
     ForumBodyElementKind.table ||
     ForumBodyElementKind.tableCell => ForumBodyTextRole.table,
-    ForumBodyElementKind.rubyText => ForumBodyTextRole.ruby,
+    ForumBodyElementKind.rubyText ||
+    ForumBodyElementKind.rubyAnnotationContainer => ForumBodyTextRole.ruby,
     ForumBodyElementKind.editStatus ||
     ForumBodyElementKind.locked => ForumBodyTextRole.notice,
     _ => parent,
