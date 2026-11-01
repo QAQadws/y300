@@ -80,12 +80,20 @@ final class ForumBodyInlineParagraphView {
       for (final index in indices) {
         final group = rubyGroups[index]!;
         final base = group.contentFor(ForumBodyRubyPart.base);
-        final annotation = group.contentFor(ForumBodyRubyPart.annotation);
+        final annotations = List<ForumBodyInlineContext?>.filled(
+          group.annotationCount,
+          null,
+        );
         final List<ForumBodyInlineContext> windows;
         try {
           windows = content.resolveAtomicContexts(index, [
             base,
-            if (group.hasAnnotation) annotation,
+            for (var rank = 0; rank < group.annotationCount; rank++)
+              if (group.metrics.annotations[rank].hasAnnotation)
+                group.contentFor(
+                  ForumBodyRubyPart.annotation,
+                  annotationIndex: rank,
+                ),
           ]);
         } on ForumBodyParagraphInputException catch (error) {
           _fail(
@@ -100,10 +108,16 @@ final class ForumBodyInlineParagraphView {
             (dimension.baselineOffset! - group.baseline).abs() > 1e-4) {
           _fail(ForumBodyInlineViewFailure.geometry);
         }
+        var window = 1;
+        for (var rank = 0; rank < group.annotationCount; rank++) {
+          if (group.metrics.annotations[rank].hasAnnotation) {
+            annotations[rank] = windows[window++];
+          }
+        }
         bindings[index] = _RubyBinding(
           group,
           windows.first,
-          group.hasAnnotation ? windows.last : null,
+          List.unmodifiable(annotations),
         );
       }
       return ForumBodyInlineParagraphView._(
@@ -207,9 +221,18 @@ final class ForumBodyInlineParagraphView {
       final binding = _children[hit.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
       final child = binding.group.sourceAt(hit.offset);
-      final window = child.part == ForumBodyRubyPart.base
-          ? binding.base
-          : binding.annotation!;
+      final ForumBodyInlineContext window;
+      if (child.part == ForumBodyRubyPart.base) {
+        window = binding.base;
+      } else {
+        final rank = child.annotationIndex;
+        if (rank == null ||
+            rank >= binding.annotations.length ||
+            binding.annotations[rank] == null) {
+          _fail(ForumBodyInlineViewFailure.coverage);
+        }
+        window = binding.annotations[rank]!;
+      }
       final parentDisplay = window.startUtf16 + child.position.displayUtf16;
       final parent = display.sourceAtUtf16(parentDisplay);
       position = HtmlProjectedSourcePosition(
@@ -284,25 +307,32 @@ final class ForumBodyInlineParagraphView {
     for (final atom in selected.atoms) {
       final binding = _children[atom.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
-      for (final part in ForumBodyRubyPart.values) {
-        final window = part == ForumBodyRubyPart.base
-            ? binding.base
-            : binding.annotation;
-        if (window == null) continue;
+      void select(
+        ForumBodyInlineContext? window,
+        ForumBodyRubyPart part, {
+        int? annotationIndex,
+      }) {
+        if (window == null) return;
         final from =
             atom.startUtf16.clamp(window.startUtf16, window.endUtf16) -
             window.startUtf16;
         final to =
             atom.endUtf16.clamp(window.startUtf16, window.endUtf16) -
             window.startUtf16;
-        if (from >= to) continue;
+        if (from >= to) return;
         for (final box in binding.group.selectionBoxes(
           part: part,
+          annotationIndex: annotationIndex,
           startUtf16: from,
           endUtf16: to,
         )) {
           add(box, _origin(atom.index));
         }
+      }
+
+      select(binding.base, ForumBodyRubyPart.base);
+      for (final (rank, window) in binding.annotations.indexed) {
+        select(window, ForumBodyRubyPart.annotation, annotationIndex: rank);
       }
     }
     return List.unmodifiable(result);
@@ -328,8 +358,8 @@ final class ForumBodyInlineParagraphView {
 }
 
 final class _RubyBinding {
-  const _RubyBinding(this.group, this.base, this.annotation);
+  const _RubyBinding(this.group, this.base, this.annotations);
   final ForumBodyRubyGroupLayout group;
   final ForumBodyInlineContext base;
-  final ForumBodyInlineContext? annotation;
+  final List<ForumBodyInlineContext?> annotations;
 }

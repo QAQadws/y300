@@ -13,32 +13,40 @@ export 'forum_body_ruby_group_contract.dart'
 enum ForumBodyRubyPart { base, annotation }
 
 final class ForumBodyRubyHit {
-  const ForumBodyRubyHit({required this.part, required this.position});
+  const ForumBodyRubyHit({
+    required this.part,
+    required this.position,
+    required this.annotationIndex,
+  }) : assert(
+         (part == ForumBodyRubyPart.annotation) == (annotationIndex != null),
+       ),
+       assert(annotationIndex == null || annotationIndex >= 0);
   final ForumBodyRubyPart part;
   final HtmlProjectedSourcePosition position;
+
+  /// Original annotation rank, including missing inner positions. Null for base.
+  final int? annotationIndex;
 }
 
-/// One indivisible horizontal ruby pair, borrowing its two native layouts from
-/// the reading owner's cache. The base supplies the alphabetic baseline; the
-/// annotation is centered on its selected over/under side. Each side keeps its
-/// own Unicode/source projection, styles and per-font-size TextScaler input.
+/// One indivisible horizontal column, borrowing one base and each nonempty
+/// annotation's native layout from the reading owner's existing cache. Each
+/// rank keeps its own source projection, styles and per-size TextScaler input.
 ///
-/// This port consumes already-grouped content. It neither parses a ruby element
-/// nor flattens its annotation into ordinary text. The parent inline composer
-/// owns group/source ordering, legal page boundaries and placeholder placement.
+/// This port consumes already-grouped content. It neither parses ruby nor
+/// flattens its annotations into ordinary text. The parent composer owns source
+/// ordering, legal page boundaries and placeholder placement.
 final class ForumBodyRubyGroupLayout {
-  /// Parent inline/layout identities include this geometry contract separately
-  /// from the underlying paragraph shaping backend revision.
   static const revision = ForumBodyRubyGroupMetrics.revision;
 
   ForumBodyRubyGroupLayout._({
     required ForumBodyTextLease base,
-    required ForumBodyTextLease? annotation,
-    required ForumBodyParagraphContent annotationContent,
+    required List<
+      ({ForumBodyParagraphContent content, ForumBodyTextLease? lease})
+    >
+    annotations,
     required this.metrics,
   }) : _base = base,
-       _annotation = annotation,
-       _annotationContent = annotationContent;
+       _annotations = List.unmodifiable(annotations);
 
   factory ForumBodyRubyGroupLayout.create({
     required ForumBodyParagraphCache cache,
@@ -48,19 +56,34 @@ final class ForumBodyRubyGroupLayout {
     double gap = 0,
     double maxWidth = 16384,
     ForumBodyRubySide side = ForumBodyRubySide.over,
-  }) => _acquire(
+  }) => ForumBodyRubyGroupLayout.createLayers(
     cache: cache,
     base: base,
-    annotation: annotation,
+    annotations: [(content: annotation, gap: gap, side: side)],
     textScaler: textScaler,
-    gap: gap,
     maxWidth: maxWidth,
-    side: side,
+  );
+
+  factory ForumBodyRubyGroupLayout.createLayers({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyParagraphContent base,
+    required List<
+      ({ForumBodyParagraphContent content, double gap, ForumBodyRubySide side})
+    >
+    annotations,
+    TextScaler textScaler = TextScaler.noScaling,
+    double maxWidth = 16384,
+  }) => _acquireLayers(
+    cache: cache,
+    base: base,
+    annotations: annotations,
+    textScaler: textScaler,
+    maxWidth: maxWidth,
     cachedOnly: false,
   )!;
 
-  /// No native construction on a miss. A partial hit is released immediately;
-  /// the caller prepares missing child inputs outside the visible paint path.
+  /// No native construction on a miss. Partial hits are released immediately;
+  /// the caller prepares missing inputs outside the visible paint path.
   static ForumBodyRubyGroupLayout? tryCreateCached({
     required ForumBodyParagraphCache cache,
     required ForumBodyParagraphContent base,
@@ -69,14 +92,29 @@ final class ForumBodyRubyGroupLayout {
     double gap = 0,
     double maxWidth = 16384,
     ForumBodyRubySide side = ForumBodyRubySide.over,
-  }) => _acquire(
+  }) => tryCreateCachedLayers(
     cache: cache,
     base: base,
-    annotation: annotation,
+    annotations: [(content: annotation, gap: gap, side: side)],
     textScaler: textScaler,
-    gap: gap,
     maxWidth: maxWidth,
-    side: side,
+  );
+
+  static ForumBodyRubyGroupLayout? tryCreateCachedLayers({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyParagraphContent base,
+    required List<
+      ({ForumBodyParagraphContent content, double gap, ForumBodyRubySide side})
+    >
+    annotations,
+    TextScaler textScaler = TextScaler.noScaling,
+    double maxWidth = 16384,
+  }) => _acquireLayers(
+    cache: cache,
+    base: base,
+    annotations: annotations,
+    textScaler: textScaler,
+    maxWidth: maxWidth,
     cachedOnly: true,
   );
 
@@ -92,73 +130,82 @@ final class ForumBodyRubyGroupLayout {
     maxWidth: maxWidth,
   );
 
-  static ForumBodyRubyGroupLayout? _acquire({
+  static ForumBodyRubyGroupLayout? _acquireLayers({
     required ForumBodyParagraphCache cache,
     required ForumBodyParagraphContent base,
-    required ForumBodyParagraphContent annotation,
+    required List<
+      ({ForumBodyParagraphContent content, double gap, ForumBodyRubySide side})
+    >
+    annotations,
     required TextScaler textScaler,
-    required double gap,
     required double maxWidth,
     required bool cachedOnly,
-    required ForumBodyRubySide side,
   }) {
-    validateInputs(
+    // TextScaler may call user code while acquiring. Snapshot rank identity
+    // before the first callback, so mutation cannot change adopted ownership.
+    final inputs = List.of(annotations);
+    validateForumBodyRubyColumnInputs(
       base: base,
-      annotation: annotation,
-      gap: gap,
+      annotations: [
+        for (final item in inputs) (content: item.content, gap: item.gap),
+      ],
       maxWidth: maxWidth,
     );
+    ForumBodyParagraphLease? acquire(ForumBodyParagraphContent content) =>
+        cachedOnly
+        ? cache.tryAcquireCached(
+            content: content,
+            width: maxWidth,
+            textScaler: textScaler,
+          )
+        : cache.acquire(
+            content: content,
+            width: maxWidth,
+            textScaler: textScaler,
+          );
     ForumBodyParagraphLease? baseLease;
-    ForumBodyParagraphLease? annotationLease;
+    final leases = <ForumBodyParagraphLease?>[];
+    var transferred = false;
     try {
-      baseLease = cachedOnly
-          ? cache.tryAcquireCached(
-              content: base,
-              width: maxWidth,
-              textScaler: textScaler,
-            )
-          : cache.acquire(
-              content: base,
-              width: maxWidth,
-              textScaler: textScaler,
-            );
+      baseLease = acquire(base);
       if (baseLease == null) return null;
-      if (annotation.projection.text.isNotEmpty) {
-        annotationLease = cachedOnly
-            ? cache.tryAcquireCached(
-                content: annotation,
-                width: maxWidth,
-                textScaler: textScaler,
-              )
-            : cache.acquire(
-                content: annotation,
-                width: maxWidth,
-                textScaler: textScaler,
-              );
-        if (annotationLease == null) {
-          baseLease.release();
+      for (final item in inputs) {
+        final lease = item.content.projection.text.isEmpty
+            ? null
+            : acquire(item.content);
+        leases.add(lease);
+        if (lease == null && item.content.projection.text.isNotEmpty) {
           return null;
         }
       }
-      return ForumBodyRubyGroupLayout.adopt(
+      final group = ForumBodyRubyGroupLayout.adoptLayers(
         cache: cache,
         baseLease: baseLease,
-        annotation: annotation,
-        annotationLease: annotationLease,
-        gap: gap,
+        annotations: [
+          for (final (index, item) in inputs.indexed)
+            (
+              content: item.content,
+              lease: leases[index],
+              gap: item.gap,
+              side: item.side,
+            ),
+        ],
         maxWidth: maxWidth,
-        side: side,
       );
-    } catch (_) {
-      annotationLease?.release();
-      baseLease?.release();
-      rethrow;
+      transferred = true;
+      return group;
+    } finally {
+      if (!transferred) {
+        for (final lease in leases) {
+          lease?.release();
+        }
+        baseLease?.release();
+      }
     }
   }
 
-  /// Takes ownership of exactly these handles on success AND failure, never
-  /// their owner or another alias. Preparation can transfer already pinned
-  /// children without lookup, scaling callbacks or another native build.
+  /// Consumes exactly these handles on success AND failure, never their owner
+  /// or another alias. No lookup, scaling callback or native build is needed.
   factory ForumBodyRubyGroupLayout.adopt({
     required ForumBodyParagraphCache cache,
     required ForumBodyTextLease baseLease,
@@ -168,92 +215,144 @@ final class ForumBodyRubyGroupLayout {
     double maxWidth = 16384,
     ForumBodyRubyLevelMetrics? level,
     ForumBodyRubySide side = ForumBodyRubySide.over,
+  }) => ForumBodyRubyGroupLayout.adoptLayers(
+    cache: cache,
+    baseLease: baseLease,
+    annotations: [
+      (content: annotation, lease: annotationLease, gap: gap, side: side),
+    ],
+    maxWidth: maxWidth,
+    level: level,
+  );
+
+  factory ForumBodyRubyGroupLayout.adoptLayers({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextLease baseLease,
+    required List<
+      ({
+        ForumBodyParagraphContent content,
+        ForumBodyTextLease? lease,
+        double gap,
+        ForumBodyRubySide side,
+      })
+    >
+    annotations,
+    double maxWidth = 16384,
+    ForumBodyRubyLevelMetrics? level,
   }) {
+    final inputs = List.of(annotations);
     try {
-      final measured = ForumBodyRubyGroupMetrics.measure(
+      final handles = Set<ForumBodyTextLease>.identity()..add(baseLease);
+      for (final item in inputs) {
+        if (item.lease != null && !handles.add(item.lease!)) {
+          throw StateError(
+            'Each ruby position must transfer a distinct handle',
+          );
+        }
+      }
+      final measured = ForumBodyRubyGroupMetrics.measureLayers(
         cache: cache,
         baseLease: baseLease,
-        annotation: annotation,
-        annotationLease: annotationLease,
-        gap: gap,
+        annotations: inputs,
         maxWidth: maxWidth,
-        side: side,
       );
       final metrics = level == null ? measured : measured.alignedTo(level);
-      final baseLayout = baseLease.layout;
-      if (!baseLayout.isPaintPrepared ||
-          (annotationLease != null &&
-              !annotationLease.layout.isPaintPrepared)) {
+      if (handles.any((lease) => !lease.layout.isPaintPrepared)) {
         throw StateError('Ruby child paint is not prepared');
       }
       return ForumBodyRubyGroupLayout._(
         base: baseLease,
-        annotation: annotationLease,
-        annotationContent: annotation,
+        annotations: [
+          for (final item in inputs) (content: item.content, lease: item.lease),
+        ],
         metrics: metrics,
       );
     } catch (_) {
-      annotationLease?.release();
+      for (final item in inputs) {
+        item.lease?.release();
+      }
       baseLease.release();
       rethrow;
     }
   }
 
   ForumBodyTextLease? _base;
-  ForumBodyTextLease? _annotation;
-  ForumBodyParagraphContent? _annotationContent;
+  List<({ForumBodyParagraphContent content, ForumBodyTextLease? lease})>
+  _annotations;
   final ForumBodyRubyGroupMetrics metrics;
   Size get size => metrics.size;
   double get baseline => metrics.baseline;
   Offset get baseOffset => metrics.baseOffset;
   Offset get annotationOffset => metrics.annotationOffset;
   bool get hasAnnotation => metrics.hasAnnotation;
+  int get annotationCount => metrics.annotations.length;
 
   bool get isActive =>
       _base?.isActive == true &&
       _base!.layout.isPaintPrepared &&
-      (_annotation == null ||
-          (_annotation!.isActive && _annotation!.layout.isPaintPrepared));
+      _annotations.every(
+        (item) =>
+            item.lease == null ||
+            (item.lease!.isActive && item.lease!.layout.isPaintPrepared),
+      );
 
-  /// Proves a prepared group's child handles use the same reading budget as
-  /// its parent, without acquiring aliases or retaining another cache owner.
   bool isOwnedBy(ForumBodyParagraphCache cache) =>
       isActive &&
       cache.ownsLease(_base!) &&
-      (_annotation == null || cache.ownsLease(_annotation!));
+      _annotations.every(
+        (item) => item.lease == null || cache.ownsLease(item.lease!),
+      );
 
-  /// Borrowed handles for aggregate page admission. Does not acquire aliases;
-  /// only close/adoption transfers their lifetime, including retired owners.
+  /// Borrowed handles in base/rank order, omitting empty ranks. Only close or
+  /// adoption transfers lifetime, including when the reading owner retires.
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_base,
-    ?_annotation,
+    for (final item in _annotations) ?item.lease,
   ];
 
-  ForumBodyParagraphContent contentFor(ForumBodyRubyPart part) {
+  /// Omit annotationIndex only for a single-level group. Base has no rank.
+  ForumBodyParagraphContent contentFor(
+    ForumBodyRubyPart part, {
+    int? annotationIndex,
+  }) {
     _ensureActive();
-    return part == ForumBodyRubyPart.base
-        ? _base!.content
-        : _annotationContent!;
+    if (part == ForumBodyRubyPart.base) {
+      if (annotationIndex != null) throw ArgumentError.value(annotationIndex);
+      return _base!.content;
+    }
+    return _annotations[_rank(annotationIndex)].content;
   }
 
-  /// Already scaled geometry for a direct TextPainter placeholder. A Widget
-  /// host must not apply an additional inline-widget scale to this native box.
+  int _rank(int? index) {
+    if (index == null) {
+      if (_annotations.length != 1) {
+        throw StateError('Multi-level ruby requires an annotation index');
+      }
+      return 0;
+    }
+    RangeError.checkValidIndex(index, _annotations, 'annotationIndex');
+    return index;
+  }
+
   PlaceholderDimensions get placeholderDimensions {
     _ensureActive();
     return metrics.placeholderDimensions;
   }
 
-  HtmlDisplayTextProjection projectionFor(ForumBodyRubyPart part) {
-    _ensureActive();
-    return part == ForumBodyRubyPart.base
-        ? _base!.content.projection
-        : _annotationContent!.projection;
-  }
+  HtmlDisplayTextProjection projectionFor(
+    ForumBodyRubyPart part, {
+    int? annotationIndex,
+  }) => contentFor(part, annotationIndex: annotationIndex).projection;
 
   void paint(Canvas canvas, Offset offset) {
     _ensureActive();
     _base!.layout.paint(canvas, offset + baseOffset);
-    _annotation?.layout.paint(canvas, offset + annotationOffset);
+    for (final (index, item) in _annotations.indexed) {
+      item.lease?.layout.paint(
+        canvas,
+        offset + metrics.annotations[index].offset,
+      );
+    }
   }
 
   ForumBodyRubyHit sourceAt(Offset offset) {
@@ -261,20 +360,51 @@ final class ForumBodyRubyGroupLayout {
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
     }
-    final annotation = _annotation;
-    final emptyBase = _base!.content.projection.text.isEmpty;
-    final inAnnotationBand = metrics.side == ForumBodyRubySide.over
-        ? offset.dy < metrics.annotationHitBoundary
-        : offset.dy >= metrics.annotationHitBoundary;
-    final useAnnotation = annotation != null && (emptyBase || inAnnotationBand);
-    final position = useAnnotation
-        ? annotation.layout.sourceAt(offset - annotationOffset)
-        : _base!.layout.sourceAt(offset - baseOffset);
+    double distance(double top, double bottom) => offset.dy < top
+        ? top - offset.dy
+        : offset.dy > bottom
+        ? offset.dy - bottom
+        : 0;
+    var selected = -1;
+    var bestTop = metrics.baseBandTop;
+    var bestDistance = distance(metrics.baseBandTop, metrics.baseBandBottom);
+    var nearest = -1;
+    var nearestDistance = double.infinity;
+    var nearestTop = double.negativeInfinity;
+    for (final (index, item) in _annotations.indexed) {
+      if (item.lease == null) continue;
+      final band = metrics.annotations[index];
+      final delta = distance(band.bandTop, band.bandBottom);
+      // At an exact midpoint choose the physically lower band, matching the
+      // original over/under boundary convention without sorting source ranks.
+      if (delta < nearestDistance ||
+          (delta == nearestDistance && band.bandTop > nearestTop)) {
+        nearestDistance = delta;
+        nearestTop = band.bandTop;
+        nearest = index;
+      }
+      if (delta < bestDistance ||
+          (delta == bestDistance && band.bandTop > bestTop)) {
+        bestDistance = delta;
+        bestTop = band.bandTop;
+        selected = index;
+      }
+    }
+    final forcedAnnotation =
+        selected < 0 && _base!.content.projection.text.isEmpty;
+    if (forcedAnnotation) selected = nearest;
+    final useAnnotation = selected >= 0;
+    final lease = useAnnotation ? _annotations[selected].lease! : _base!;
+    final origin = useAnnotation
+        ? metrics.annotations[selected].offset
+        : baseOffset;
+    final position = lease.layout.sourceAt(offset - origin);
     return ForumBodyRubyHit(
       part: useAnnotation
           ? ForumBodyRubyPart.annotation
           : ForumBodyRubyPart.base,
-      position: emptyBase && !inAnnotationBand
+      annotationIndex: useAnnotation ? selected : null,
+      position: forcedAnnotation
           ? HtmlProjectedSourcePosition(
               sourceRune: position.sourceRune,
               displayUtf16: position.displayUtf16,
@@ -288,15 +418,15 @@ final class ForumBodyRubyGroupLayout {
     required ForumBodyRubyPart part,
     required int startUtf16,
     required int endUtf16,
+    int? annotationIndex,
   }) {
     _ensureActive();
-    final projection = projectionFor(part);
+    final projection = projectionFor(part, annotationIndex: annotationIndex);
     RangeError.checkValidRange(startUtf16, endUtf16, projection.text.length);
-    final lease = part == ForumBodyRubyPart.base ? _base : _annotation;
+    final rank = part == ForumBodyRubyPart.base ? null : _rank(annotationIndex);
+    final lease = rank == null ? _base : _annotations[rank].lease;
     if (lease == null) return const [];
-    final offset = part == ForumBodyRubyPart.base
-        ? baseOffset
-        : annotationOffset;
+    final offset = rank == null ? baseOffset : metrics.annotations[rank].offset;
     return List.unmodifiable([
       for (final box in lease.layout.selectionBoxes(startUtf16, endUtf16))
         TextBox.fromLTRBD(
@@ -313,14 +443,14 @@ final class ForumBodyRubyGroupLayout {
     if (!isActive) throw StateError('Ruby group layout is retired');
   }
 
-  /// Releases only this group's borrowed leases, never its reading owner.
   void close() {
     final base = _base;
-    final annotation = _annotation;
+    final annotations = _annotations;
     _base = null;
-    _annotation = null;
-    _annotationContent = null;
-    annotation?.release();
+    _annotations = const [];
+    for (final item in annotations) {
+      item.lease?.release();
+    }
     base?.release();
   }
 }

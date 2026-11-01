@@ -65,6 +65,8 @@ final class ForumBodyRubyGroupMetrics {
     required this.size,
     required this.baseline,
     required this.baseOffset,
+    required this.baseBandTop,
+    required this.baseBandBottom,
     required this.baseFontBaseline,
     required this.baseAscent,
     required this.baseDescent,
@@ -72,7 +74,7 @@ final class ForumBodyRubyGroupMetrics {
   }) : annotations = List.unmodifiable(annotations),
        alignmentSignature = annotations.map((item) => item.side.index).join();
 
-  static const revision = 5;
+  static const revision = 6;
   static const geometryTolerance = 1e-4;
 
   /// Borrows current same-owner glyph leases. Does not shape, prepare pictures,
@@ -164,6 +166,8 @@ final class ForumBodyRubyGroupMetrics {
         (width - baseBounds.width) / 2 - baseBounds.left,
         -baseBounds.top,
       ),
+      baseBandTop: 0,
+      baseBandBottom: baseBounds.height,
       baseFontBaseline: baseFontBaseline,
       baseAscent: baseFontBaseline - baseBounds.top,
       baseDescent: baseBounds.bottom - baseFontBaseline,
@@ -175,6 +179,11 @@ final class ForumBodyRubyGroupMetrics {
   final Size size;
   final double baseline;
   final Offset baseOffset;
+
+  /// Allocated row envelope used to partition hits between base and layers.
+  /// A smaller base's own glyph bounds must not move a shared level boundary.
+  final double baseBandTop;
+  final double baseBandBottom;
   final double baseFontBaseline;
   final double baseAscent;
   final double baseDescent;
@@ -244,6 +253,8 @@ final class ForumBodyRubyGroupMetrics {
       size: Size(size.width, height),
       baseline: over,
       baseOffset: Offset(baseOffset.dx, over - baseFontBaseline),
+      baseBandTop: over - level.baseAscent,
+      baseBandBottom: over + level.baseDescent,
       baseFontBaseline: baseFontBaseline,
       baseAscent: baseAscent,
       baseDescent: baseDescent,
