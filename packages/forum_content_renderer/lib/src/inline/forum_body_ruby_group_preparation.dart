@@ -56,6 +56,46 @@ final class ForumBodyRubyGroupPreparationStep {
 /// inspection and final layer positioning share the caller's bounded quantum.
 /// No scheduler, timer, DOM or persistent reading position is owned here.
 final class ForumBodyRubyGroupPreparation {
+  /// A segment member can be an empty native font strut under an annotation
+  /// spanning several bases. Missing annotation slots own no glyph or source.
+  factory ForumBodyRubyGroupPreparation.forSegmentBase({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextRequest base,
+    required List<ForumBodyRubySide> sides,
+    required void Function() ensureOwner,
+    TextScaler textScaler = TextScaler.noScaling,
+    double maxWidth = 16384,
+    bool preparePaint = false,
+    ForumBodyRubyLevelMetrics? level,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
+  }) {
+    final content = base.content;
+    final empty = ForumBodyParagraphContent.anonymousInline(
+      identity: content.identity,
+      fontRevision: content.fontRevision,
+      styleRevision: content.styleRevision,
+      style: content.style,
+    );
+    return _open(
+      cache: cache,
+      base: base,
+      annotations: [
+        for (final side in sides)
+          (
+            request: ForumBodyTextRequest.paragraph(empty),
+            gap: 0.0,
+            side: side,
+          ),
+      ],
+      ensureOwner: ensureOwner,
+      textScaler: textScaler,
+      maxWidth: maxWidth,
+      preparePaint: preparePaint,
+      level: level,
+      additionalOwnedLeases: additionalOwnedLeases,
+      allowEmptyBase: true,
+    );
+  }
   factory ForumBodyRubyGroupPreparation({
     required ForumBodyParagraphCache cache,
     required ForumBodyParagraphContent base,
@@ -178,6 +218,7 @@ final class ForumBodyRubyGroupPreparation {
     required double maxWidth,
     required bool preparePaint,
     ForumBodyRubyLevelMetrics? level,
+    bool allowEmptyBase = false,
   }) {
     if (cache.isClosed) throw StateError('Ruby preparation owner is retired');
     final inputs = List.of(annotations);
@@ -191,6 +232,7 @@ final class ForumBodyRubyGroupPreparation {
       maxWidth: maxWidth,
       level: level,
       preparePaint: preparePaint,
+      allowEmptyBase: allowEmptyBase,
     );
     return ForumBodyRubyGroupPreparation._(
       cache,

@@ -34,6 +34,8 @@ export 'src/inline/forum_body_ruby_segment_layout.dart'
         ForumBodyRubySegmentHit,
         ForumBodyRubySegmentAnnotation;
 export 'src/inline/forum_body_ruby_group_preparation.dart';
+export 'src/inline/forum_body_ruby_segment_request.dart';
+export 'src/inline/forum_body_ruby_segment_metrics_preparation.dart';
 export 'src/inline/forum_body_text_band_content.dart'
     show ForumBodyTextBandContent;
 export 'src/inline/forum_body_text_band_layout.dart';

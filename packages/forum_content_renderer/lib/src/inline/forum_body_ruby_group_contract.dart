@@ -28,6 +28,7 @@ void validateForumBodyRubyColumnInputs({
   required ForumBodyParagraphContent base,
   required List<({ForumBodyParagraphContent content, double gap})> annotations,
   required double maxWidth,
+  bool allowEmptyBase = false,
 }) {
   if (annotations.isEmpty ||
       base.layoutMode != ForumBodyParagraphLayoutMode.intrinsicSingleLine) {
@@ -56,7 +57,7 @@ void validateForumBodyRubyColumnInputs({
       );
     }
   }
-  if (!hasText) {
+  if (!hasText && !allowEmptyBase) {
     throw const ForumBodyRubyGroupException(ForumBodyRubyGroupFailure.content);
   }
   // Child geometry is already scaled into logical pixels. The parent must not

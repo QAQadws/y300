@@ -87,6 +87,10 @@ final class RubySegmentFixture {
         ),
       );
       for (var i = 0; i < band.contexts.length; i++) {
+        _requests[band.contexts[i]] = ForumBodyTextRequest.bandChild(
+          band: band,
+          childIndex: i,
+        );
         _leases[band.contexts[i]] = cache.acquireBandChild(
           content: band,
           childIndex: i,
@@ -143,9 +147,40 @@ final class RubySegmentFixture {
   late final List<ForumBodyRubyMeasuredSpan> measured;
   final _leases =
       Map<ForumBodyParagraphContent, ForumBodyTextBandChildLease>.identity();
+  final _requests =
+      Map<ForumBodyParagraphContent, ForumBodyTextRequest>.identity();
   final _layouts = <ForumBodyRubySegmentLayout>[];
   ForumBodyTextBandChildLease lease(ForumBodyParagraphContent content) =>
       _leases[content]!;
+
+  ForumBodyRubySegmentRequest request({bool individual = false}) {
+    ForumBodyTextRequest get(ForumBodyParagraphContent content) => individual
+        ? ForumBodyTextRequest.paragraph(content)
+        : _requests[content]!;
+    return ForumBodyRubySegmentRequest(
+      bases: [for (final base in bases) get(base)],
+      sides: sides,
+      spans: [
+        for (var i = 0; i < measured.length; i++)
+          (
+            request: get(annotations[i]),
+            startColumn: measured[i].startColumn,
+            endColumn: measured[i].endColumn,
+            annotationIndex: measured[i].annotationIndex,
+            gap: measured[i].annotation.gap,
+          ),
+      ],
+      direction: direction,
+    );
+  }
+
+  void releaseGlyphs({bool clear = true}) {
+    for (final lease in _leases.values) {
+      lease.release();
+    }
+    if (clear) cache.clearUnpinned();
+  }
+
   ForumBodyRubySegmentComposition work({
     List<ForumBodyRubyMeasuredSpan>? spans,
     double maxWidth = 16384,

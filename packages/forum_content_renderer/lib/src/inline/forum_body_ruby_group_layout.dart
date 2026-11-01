@@ -491,6 +491,7 @@ final class ForumBodyRubyGroupAssembly {
     double maxWidth = 16384,
     ForumBodyRubyLevelMetrics? level,
     this.preparePaint = true,
+    bool allowEmptyBase = false,
   }) : _cache = cache,
        _contents = [for (final item in annotations) item.content],
        _measurement = ForumBodyRubyGroupMeasurement(
@@ -498,6 +499,7 @@ final class ForumBodyRubyGroupAssembly {
          annotations: annotations,
          maxWidth: maxWidth,
          level: level,
+         allowEmptyBase: allowEmptyBase,
        );
   ForumBodyParagraphCache? _cache;
   List<ForumBodyParagraphContent> _contents;

@@ -370,6 +370,7 @@ final class ForumBodyRubyGroupMeasurement {
     annotations,
     this.maxWidth = 16384,
     this.level,
+    bool allowEmptyBase = false,
   }) : _baseContent = base,
        _inputs = List.of(annotations) {
     validateForumBodyRubyColumnInputs(
@@ -378,6 +379,7 @@ final class ForumBodyRubyGroupMeasurement {
         for (final item in _inputs) (content: item.content, gap: item.gap),
       ],
       maxWidth: maxWidth,
+      allowEmptyBase: allowEmptyBase,
     );
     if (level != null && level!.annotations.length != _inputs.length) {
       ForumBodyRubyGroupMetrics._invalid();
