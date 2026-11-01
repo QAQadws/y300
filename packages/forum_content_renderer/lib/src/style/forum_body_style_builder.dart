@@ -8,7 +8,7 @@ import 'forum_body_language.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 10;
+const forumBodyStyleRevision = 11;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -277,7 +277,10 @@ final class ForumBodyStyleBuilder {
         ),
       };
       ownBackground = color;
-      if (node.kind == ForumBodyElementKind.inline) {
+      // RT owns an inline text context. Its highlight must reach native text
+      // paint rather than remaining on metadata for an unpainted block box.
+      if (node.kind == ForumBodyElementKind.inline ||
+          node.kind == ForumBodyElementKind.rubyText) {
         inlineBackground = color == null
             ? inlineBackground
             : Color.alphaBlend(
