@@ -39,7 +39,11 @@ export 'src/inline/forum_body_ruby_group_metrics.dart'
         ForumBodyRubyPlacedAnnotationGap,
         ForumBodyRubyAtomMetrics,
         ForumBodyRubyColumnMetrics,
-        ForumBodyRubyComponentMetrics;
+        ForumBodyRubyComponentMetrics,
+        ForumBodyRubySoftSpaceMetrics,
+        ForumBodyRubySoftSpaceMeasuredMember,
+        ForumBodyRubySoftSpacePlacedMember;
+export 'src/inline/forum_body_ruby_soft_space_request.dart';
 export 'src/inline/forum_body_ruby_segment_layout.dart'
     show
         ForumBodyRubySegmentLayout,

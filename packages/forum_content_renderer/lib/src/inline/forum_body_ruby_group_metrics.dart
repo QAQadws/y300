@@ -12,6 +12,7 @@ part 'forum_body_ruby_numeric_work.dart';
 part 'forum_body_ruby_segment_metrics.dart';
 part 'forum_body_ruby_segment_positioning.dart';
 part 'forum_body_ruby_atom_metrics.dart';
+part 'forum_body_ruby_soft_space_metrics.dart';
 
 /// Numeric geometry for one original annotation rank. Empty positions remain
 /// in the list; they neither borrow a glyph handle nor reserve a gap by itself.
@@ -335,6 +336,13 @@ final class ForumBodyRubyAnnotationLevelMetrics {
 /// glyphs, input, owner or coverage proof. Unions before wrapping are only a
 /// cheap alignment check, never the geometry used to publish a page.
 final class ForumBodyRubyLevelMetrics {
+  // Numeric workers seal this private buffer after their final rank merge.
+  ForumBodyRubyLevelMetrics._owned({
+    required this.baseAscent,
+    required this.baseDescent,
+    required List<ForumBodyRubyAnnotationLevelMetrics> annotations,
+  }) : annotations = UnmodifiableListView(annotations);
+
   ForumBodyRubyLevelMetrics._({
     required this.baseAscent,
     required this.baseDescent,
