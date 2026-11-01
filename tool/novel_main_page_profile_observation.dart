@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_overlay_scaffold.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_page_work.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
@@ -28,6 +29,8 @@ final class ProfileReaderObservation {
   NovelReaderController? businessController;
   ReaderOverlayScaffold? overlay;
   bool Function()? legacyCachesReleased;
+  NovelReaderNativePageWork? nativeWork;
+  NovelReaderNativePagedController? nativeController;
 }
 
 bool profileVisiblePageAccepted({
@@ -133,7 +136,11 @@ ProfileReaderObservation observeProfileReader(
   final nativeController = native;
   bool pending = scrolling || state.transition != null;
   if (nativeController != null) {
+    observation.nativeController = nativeController;
     observation.page = nativeController.visiblePageIndex;
+    if (observation.page case final page?) {
+      observation.nativeWork = nativeController.viewForPage(page)?.work;
+    }
     observation.count = nativeController.snapshot?.length ?? 0;
     observation.complete = nativeController.snapshot?.isComplete ?? false;
     observation.paginationKey = nativeController.paginationKey;

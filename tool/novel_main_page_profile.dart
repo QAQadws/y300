@@ -391,6 +391,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         (value) => value.ready && value.businessConfirmed,
       );
       run['firstReadableUs'] = clock.elapsedMicroseconds;
+      if (native) _emitPageWork(id, 'first', latest);
       run['firstReadableWasPartial'] = !latest.complete;
       end();
       if (!latest.complete) {
@@ -422,6 +423,8 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         if (command == null) {
           throw StateError('Reader chrome command unavailable');
         }
+        final targetPrepared =
+            latest.nativeController?.viewForPage(next.page) != null;
         begin('turn-$i');
         final turnClock = Stopwatch()..start();
         command();
@@ -432,6 +435,14 @@ class _MainPageProfileState extends State<_MainPageProfile> {
               value.ready && value.businessConfirmed && value.page == next.page,
         );
         turnUs.add(turnClock.elapsedMicroseconds);
+        if (native) {
+          _emitPageWork(
+            id,
+            'turn-$i',
+            latest,
+            targetPreparedBeforeCommand: targetPrepared,
+          );
+        }
         end();
         run['completedTurns'] = i + 1;
       }
@@ -449,6 +460,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
           (value) => value.ready && value.paginationKey != oldKey,
         );
         run['reflowReadableUs'] = reflowClock.elapsedMicroseconds;
+        if (native) _emitPageWork(id, 'reflow', latest);
         end();
       }
       run['passed'] = true;
@@ -488,6 +500,36 @@ class _MainPageProfileState extends State<_MainPageProfile> {
 
   @override
   Widget build(BuildContext context) => const Scaffold(body: SizedBox.expand());
+
+  void _emitPageWork(
+    int run,
+    String phase,
+    ProfileReaderObservation observation, {
+    bool? targetPreparedBeforeCommand,
+  }) {
+    final work = observation.nativeWork;
+    if (work == null) {
+      throw StateError('Visible native delivery has no work record');
+    }
+    _emit({
+      'event': 'page_work',
+      'run': run,
+      'phase': phase,
+      'page': observation.page,
+      'targetPreparedBeforeCommand': ?targetPreparedBeforeCommand,
+      'preparationUs': work.preparationUs,
+      'coverageUs': work.coverageUs,
+      'preparationAdvanceUs': work.preparationAdvanceUs,
+      'coverageAdvanceUs': work.coverageAdvanceUs,
+      'preparationFrames': work.preparationFrames,
+      'coverageFrames': work.coverageFrames,
+      'preparationSteps': work.preparationSteps,
+      'coverageSteps': work.coverageSteps,
+      'layoutsBuilt': work.layoutsBuilt,
+      'picturesBuilt': work.picturesBuilt,
+      'checkedGraphemes': work.checkedGraphemes,
+    });
+  }
 
   @override
   void dispose() {

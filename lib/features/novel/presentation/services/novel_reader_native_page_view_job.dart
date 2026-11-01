@@ -4,6 +4,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../models/novel_reader_native_anchor_map.dart';
 import '../models/novel_reader_native_page_view.dart';
+import '../models/novel_reader_native_page_work.dart';
 import 'novel_reader_native_page_coverage_cursor.dart';
 import 'novel_reader_native_work_scheduler.dart';
 import 'novel_reader_pagination_cancellation.dart';
@@ -180,6 +181,13 @@ final class NovelReaderNativePageViewJob {
   }
 
   Future<NovelReaderNativePageView> _drive() async {
+    final elapsed = Stopwatch()..start();
+    var preparationAdvanceUs = 0;
+    var coverageAdvanceUs = 0;
+    var preparationSteps = 0;
+    var coverageSteps = 0;
+    var layoutsBuilt = 0;
+    var picturesBuilt = 0;
     try {
       await _yieldFrame();
       // The previous origin loses keepAlive when arrival is confirmed. Let
@@ -190,9 +198,14 @@ final class NovelReaderNativePageViewJob {
       _guard();
       while (!preparation.isReady) {
         await _beforeStep();
+        final start = elapsed.elapsedMicroseconds;
         final step = preparation.advance(
           maxFragments: limits.preparationFragments,
         );
+        preparationAdvanceUs += elapsed.elapsedMicroseconds - start;
+        preparationSteps++;
+        layoutsBuilt += step.layoutsBuilt;
+        picturesBuilt += step.picturesBuilt;
         _guard();
         if (step.waitingForLayoutBudget) {
           if (!_waitForLayoutBudget) {
@@ -216,6 +229,8 @@ final class NovelReaderNativePageViewJob {
       }
       _fragments = preparation.takeFragments();
       _guard();
+      final preparationUs = elapsed.elapsedMicroseconds;
+      final preparationFrames = _frames;
       final coverage = NovelReaderNativePageCoverageCursor.prepared(
         anchors: _anchors!,
         snapshot: preparation.snapshot,
@@ -228,10 +243,13 @@ final class NovelReaderNativePageViewJob {
       _state = NovelReaderNativeViewJobState.checkingCoverage;
       while (coverage.state == NovelReaderNativeCoverageState.active) {
         await _beforeStep();
+        final start = elapsed.elapsedMicroseconds;
         coverage.advance(
           maxGraphemes: limits.coverageGraphemes,
           maxFragments: limits.coverageFragments,
         );
+        coverageAdvanceUs += elapsed.elapsedMicroseconds - start;
+        coverageSteps++;
         _guard();
       }
       final view = NovelReaderNativePageView.ownPrepared(
@@ -240,6 +258,19 @@ final class NovelReaderNativePageViewJob {
         fragments: _fragments,
         coverage: coverage.result,
         parent: _parent!,
+        work: NovelReaderNativePageWork(
+          preparationUs: preparationUs,
+          coverageUs: elapsed.elapsedMicroseconds - preparationUs,
+          preparationAdvanceUs: preparationAdvanceUs,
+          coverageAdvanceUs: coverageAdvanceUs,
+          preparationFrames: preparationFrames,
+          coverageFrames: _frames - preparationFrames,
+          preparationSteps: preparationSteps,
+          coverageSteps: coverageSteps,
+          layoutsBuilt: layoutsBuilt,
+          picturesBuilt: picturesBuilt,
+          checkedGraphemes: coverage.checkedGraphemes,
+        ),
       );
       try {
         _guard();
@@ -262,6 +293,7 @@ final class NovelReaderNativePageViewJob {
       }
       rethrow;
     } finally {
+      elapsed.stop();
       _cleanup();
       _running = null;
     }

@@ -4,6 +4,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../services/novel_reader_pagination_cancellation.dart';
 import 'novel_reader_native_page_coverage.dart';
+import 'novel_reader_native_page_work.dart';
 
 enum NovelReaderNativePageViewState { owned, transferred, closed }
 
@@ -51,6 +52,7 @@ final class NovelReaderNativePageView {
     required List<ForumBodyPreparedTextFragment> fragments,
     required NovelReaderNativePageCoverage coverage,
     required NovelReaderPaginationCancellationToken parent,
+    NovelReaderNativePageWork? work,
   }) {
     parent.throwIfCancelled();
     if (session.isClosed || session.isLayoutOwnerRetired) {
@@ -75,6 +77,7 @@ final class NovelReaderNativePageView {
       pageIndex,
       List.unmodifiable(fragments),
       coverage,
+      work,
     );
     view._bind(session, parent);
     return view;
@@ -85,10 +88,12 @@ final class NovelReaderNativePageView {
     this.pageIndex,
     this._fragments,
     this.coverage,
+    this.work,
   );
   final ForumBodyTextPageSnapshot snapshot;
   final int pageIndex;
   final NovelReaderNativePageCoverage coverage;
+  final NovelReaderNativePageWork? work;
   List<ForumBodyPreparedTextFragment> _fragments;
   NovelReaderNativePageViewState _state = NovelReaderNativePageViewState.owned;
   void Function()? _removeParent;

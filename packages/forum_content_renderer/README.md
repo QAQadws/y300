@@ -283,6 +283,12 @@ tool/run_novel_pagination_profile.ps1 -Device <设备 ID> -MainPage -Backend bot
 不能把预期超限混进成功矩阵，也不能扩大预算使它通过。机器记录包含 corpus 名称，
 缺少任一样本或未完成翻页均不能通过 suite。
 
+真实页面任务随已完成交付附带不可变 `NovelReaderNativePageWork` 数值记录。它只记录
+准备/覆盖阶段的 wall 时间、同步 advance 时间、主动等待下一帧次数与原生排字/录图次数，不持有
+内容、Context、owner 或租约，也不参与覆盖证明、恢复和布局 identity。同步调用耗时
+不是线程 CPU 时间；最终 view adoption 和绘制在该区间之外。profile 在原有真实可见
+条件成立后输出 `page_work`，用于区分冷目标准备与覆盖核对；不以计量替代可见验收。
+
 软间隙只有在两侧原子同属实际原生行时保留。换行后的间隙不提供可见原子、选区或
 页面高度，即使其原宽高超过行框也不生成空行。保留时核对原生 advance、零字体度量
 与实际行基线；两端对齐扩展的是分配区，真实间隙框仍按原宽居中。额外数值掩码与

@@ -267,6 +267,15 @@ void main() {
         var observation = await wait((value) => value.ready && value.complete);
         expect(observation.count, greaterThan(1));
         expect(observation.businessConfirmed, isTrue);
+        if (native) {
+          expect(observation.nativeWork, isNotNull);
+          expect(observation.nativeController, isNotNull);
+          expect(
+            observation.nativeController!.viewForPage(observation.page!)!.work,
+            same(observation.nativeWork),
+          );
+          expect(observation.nativeWork!.preparationFrames, greaterThan(0));
+        }
         final originalKey = observation.paginationKey;
         observation.businessController!.previewPreferences(
           profileReaderPreferences.copyWith(fontSize: 22),

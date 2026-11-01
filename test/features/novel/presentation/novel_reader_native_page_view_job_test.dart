@@ -69,6 +69,57 @@ Matcher get _cancelled => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('work records describe the actual cold and warm delivery without owning its leases', () async {
+    final fixture = NativeReaderTestFixture('<p><ruby>A<rt>x</rt></ruby></p>');
+    for (final warm in [false, true]) {
+      final frames = _Frames();
+      final job = _job(
+        fixture,
+        frames,
+        limits: const NovelReaderNativeViewJobLimits(
+          frameBudget: Duration(days: 1),
+          maxStepsPerFrame: 1,
+        ),
+      );
+      final layouts = fixture.cache.layoutBuildCount;
+      final pictures = fixture.cache.pictureBuildCount;
+      final running = job.run();
+      await frames.until(
+        () => job.state == NovelReaderNativeViewJobState.complete,
+      );
+      final view = await running;
+      final work = view.work!;
+      expect(work.preparationFrames + work.coverageFrames, job.framesWaited);
+      expect(work.preparationFrames, greaterThan(0));
+      expect(work.coverageFrames, greaterThan(0));
+      expect(work.preparationSteps, greaterThan(0));
+      expect(work.coverageSteps, greaterThan(0));
+      expect(work.checkedGraphemes, 2);
+      expect(work.layoutsBuilt, fixture.cache.layoutBuildCount - layouts);
+      expect(work.picturesBuilt, fixture.cache.pictureBuildCount - pictures);
+      expect(
+        work.preparationAdvanceUs,
+        inInclusiveRange(0, work.preparationUs),
+      );
+      expect(work.coverageAdvanceUs, inInclusiveRange(0, work.coverageUs));
+      if (warm) {
+        expect(work.layoutsBuilt, 0);
+        expect(work.picturesBuilt, 0);
+      } else {
+        expect(work.picturesBuilt, 2);
+      }
+      final fragments = view.takeFragments();
+      view.close();
+      expect(view.work, same(work));
+      expect(fragments.every((f) => f.isActive), isTrue);
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+      expect(fixture.session.activeIssuedLeases, 0);
+      job.close();
+    }
+  });
+
   test('the existing first frame lets former view handles retire before reservation', () async {
     final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 1);
     final preparation = fixture.session.openPagePreparation(0);
