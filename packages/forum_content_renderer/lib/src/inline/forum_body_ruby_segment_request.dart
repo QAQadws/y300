@@ -18,6 +18,12 @@ typedef ForumBodyRubyGapRequest = ({
   ForumBodyTextRequest request,
 });
 
+typedef ForumBodyRubyAnnotationGapRequest = ({
+  int beforeSpanIndex,
+  ForumBodyTextRequest request,
+  double gap,
+});
+
 /// Immutable original base/annotation requests for one unbroken component.
 /// Native slots count empty base font struts, but never empty annotation glyphs.
 /// Parent/source-window and complete-band retention remain page admission work.
@@ -27,13 +33,17 @@ final class ForumBodyRubySegmentRequest {
     required List<ForumBodyRubySide> sides,
     required List<ForumBodyRubySpanRequest> spans,
     List<ForumBodyRubyGapRequest> gaps = const [],
+    List<ForumBodyRubyAnnotationGapRequest> annotationGaps = const [],
     this.direction = TextDirection.ltr,
     this.maxWidth = 16384,
   }) : bases = List.unmodifiable(bases),
        sides = List.unmodifiable(sides),
        spans = List.unmodifiable(spans),
        gaps = List.unmodifiable(gaps),
-       nativeRequests = List.unmodifiable(_nativeRequests(bases, gaps, spans)) {
+       annotationGaps = List.unmodifiable(annotationGaps),
+       nativeRequests = List.unmodifiable(
+         _nativeRequests(bases, gaps, spans, annotationGaps),
+       ) {
     if (bases.isEmpty ||
         sides.isEmpty ||
         !maxWidth.isFinite ||
@@ -77,7 +87,10 @@ final class ForumBodyRubySegmentRequest {
       check(gap.request.content);
     }
     final lastEnd = <int, int>{};
-    for (final span in spans) {
+    final adjacent = annotationGaps.isEmpty
+        ? const <bool>[]
+        : List.filled(spans.length, false);
+    for (final (index, span) in spans.indexed) {
       if (span.startColumn < 0 ||
           span.endColumn > bases.length ||
           span.startColumn >= span.endColumn ||
@@ -89,8 +102,30 @@ final class ForumBodyRubySegmentRequest {
           span.gap > 16384) {
         _invalid(ForumBodyRubyGroupFailure.geometry);
       }
+      if (annotationGaps.isNotEmpty) {
+        adjacent[index] = lastEnd[span.annotationIndex] == span.startColumn;
+      }
       lastEnd[span.annotationIndex] = span.endColumn;
       check(span.request.content);
+    }
+    var previousSpan = -1;
+    for (final gap in annotationGaps) {
+      if (gap.beforeSpanIndex < 0 ||
+          gap.beforeSpanIndex >= spans.length ||
+          gap.beforeSpanIndex < previousSpan ||
+          !adjacent[gap.beforeSpanIndex] ||
+          gap.request.content.projection.text.isEmpty ||
+          gap.request.content.isSourceFree ||
+          !gap.request.content.projection.text.runes.every(
+            (r) => r == 9 || r == 32,
+          ) ||
+          !gap.gap.isFinite ||
+          gap.gap < 0 ||
+          gap.gap > 16384) {
+        _invalid(ForumBodyRubyGroupFailure.content);
+      }
+      previousSpan = gap.beforeSpanIndex;
+      check(gap.request.content);
     }
     if (!hasText) _invalid(ForumBodyRubyGroupFailure.content);
   }
@@ -98,6 +133,7 @@ final class ForumBodyRubySegmentRequest {
   final List<ForumBodyRubySide> sides;
   final List<ForumBodyRubySpanRequest> spans;
   final List<ForumBodyRubyGapRequest> gaps;
+  final List<ForumBodyRubyAnnotationGapRequest> annotationGaps;
   final List<ForumBodyTextRequest> nativeRequests;
   final TextDirection direction;
   final double maxWidth;
@@ -110,6 +146,14 @@ final class ForumBodyRubySegmentRequest {
     gaps: [
       for (final gap in gaps)
         (beforeColumn: gap.beforeColumn, request: map(gap.request)),
+    ],
+    annotationGaps: [
+      for (final gap in annotationGaps)
+        (
+          beforeSpanIndex: gap.beforeSpanIndex,
+          request: map(gap.request),
+          gap: gap.gap,
+        ),
     ],
     sides: sides,
     spans: [
@@ -133,6 +177,7 @@ Iterable<ForumBodyTextRequest> _nativeRequests(
   List<ForumBodyTextRequest> bases,
   List<ForumBodyRubyGapRequest> gaps,
   List<ForumBodyRubySpanRequest> spans,
+  List<ForumBodyRubyAnnotationGapRequest> annotationGaps,
 ) sync* {
   var gap = 0;
   for (var column = 0; column < bases.length; column++) {
@@ -141,7 +186,12 @@ Iterable<ForumBodyTextRequest> _nativeRequests(
     }
     yield bases[column];
   }
-  for (final span in spans) {
+  var annotationGap = 0;
+  for (final (index, span) in spans.indexed) {
+    while (annotationGap < annotationGaps.length &&
+        annotationGaps[annotationGap].beforeSpanIndex == index) {
+      yield annotationGaps[annotationGap++].request;
+    }
     if (span.request.content.projection.text.isNotEmpty) yield span.request;
   }
 }

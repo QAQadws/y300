@@ -92,10 +92,20 @@ List<ForumBodyPreparedTextFragment> _page(
   }
 }
 
-String _ruby({bool dense = false, String direction = 'ltr', String gap = ''}) {
+String _ruby({
+  bool dense = false,
+  String direction = 'ltr',
+  String gap = '',
+  bool annotationGap = false,
+}) {
   final annotations = dense
-      ? List.generate(100, (r) => '<rtc style="font-size:1px">r$r</rtc>').join()
-      : '<rtc><rt style="font-size:10px">xx</rt><rt style="font-size:15px">yy</rt></rtc><rtc style="font-size:10px">abcdefghij</rtc><rtc style="font-size:8px">outer</rtc>';
+      ? annotationGap
+            ? '${List.generate(60, (r) => '<rtc style="font-size:1px"><rt>x$r</rt> <rt>y$r</rt></rtc>').join()}<rtc style="font-size:1px">all</rtc>'
+            : List.generate(
+                100,
+                (r) => '<rtc style="font-size:1px">r$r</rtc>',
+              ).join()
+      : '<rtc><rt style="font-size:10px">xx</rt>${annotationGap ? ' ' : ''}<rt style="font-size:15px">yy</rt></rtc><rtc style="font-size:10px">abcdefghij</rtc><rtc style="font-size:8px">outer</rtc>';
   return '<ruby style="direction:$direction"><rb style="font-size:20px">A</rb>$gap<rb style="font-size:30px">B</rb>$annotations</ruby>';
 }
 
@@ -103,16 +113,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final q in [1, 7, 32]) {
     for (final dense in [false, true]) {
-      for (final (direction, gap) in [
+      for (final (direction, gap, annotationGap) in [
         for (final direction in ['ltr', 'rtl'])
-          for (final gap in ['', ' ']) (direction, gap),
+          for (final gap in ['', ' '])
+            for (final annotationGap in [false, true])
+              (direction, gap, annotationGap),
       ]) {
         test(
-          'PUBLIC Session raw spanning atom retains original members q=$q dense=$dense $direction gap=${gap.isNotEmpty}',
+          'PUBLIC Session raw spanning atom retains original members q=$q dense=$dense $direction gap=${gap.isNotEmpty} annotationGap=$annotationGap',
           () {
             final f = _open(
-              '<p dir="$direction">${_ruby(dense: dense, direction: direction, gap: gap)}</p>',
-              entries: dense ? 3 : 2,
+              '<p dir="$direction">${_ruby(dense: dense, direction: direction, gap: gap, annotationGap: annotationGap)}</p>',
+              entries: dense ? (annotationGap ? 4 : 3) : 2,
             );
             _finish(f.session, f.cache);
             expect(f.session.snapshot.length, 1);
@@ -122,8 +134,11 @@ void main() {
                   fragments.single as ForumBodyPreparedInlineFragment;
               expect(fragment.view.atomIndices, [0]);
               final extra = gap.isEmpty ? 0 : 1;
-              expect(fragment.nativeLeases.length, (dense ? 103 : 7) + extra);
-              expect(f.cache.pictureBuildCount, (dense ? 102 : 6) + extra);
+              final handles = dense
+                  ? (annotationGap ? 184 : 103)
+                  : (annotationGap ? 8 : 7);
+              expect(fragment.nativeLeases.length, handles + extra);
+              expect(f.cache.pictureBuildCount, handles - 1 + extra);
               for (final window in fragment.view.content.contexts) {
                 final text = window.content.projection.text;
                 if (text.isEmpty) continue;
@@ -135,11 +150,17 @@ void main() {
                     )
                     .first;
                 final hit = fragment.view.sourceAt(
-                  Offset(box.left + .001, (box.top + box.bottom) / 2),
+                  Offset(
+                    box.direction == TextDirection.rtl
+                        ? box.right - .001
+                        : box.left + .001,
+                    (box.top + box.bottom) / 2,
+                  ),
                 );
                 expect(
                   hit.sourceRune,
                   window.content.projection.sourceAtUtf16(from).sourceRune,
+                  reason: 'text=$text from=$from box=$box',
                 );
                 expect(hit.isExact, isTrue);
               }

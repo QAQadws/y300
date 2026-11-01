@@ -49,6 +49,34 @@ final class ForumBodyRubyPlacedGap {
   Offset get offset => Offset(left, 0);
 }
 
+/// Actual whitespace in one annotation level at a logical base edge. It has
+/// its own glyph metrics; it does not enlarge the base font envelope.
+final class ForumBodyRubyMeasuredAnnotationGap {
+  const ForumBodyRubyMeasuredAnnotationGap({
+    required this.beforeColumn,
+    required this.annotationIndex,
+    required this.annotation,
+  });
+  final int beforeColumn;
+  final int annotationIndex;
+  final ForumBodyRubyAnnotationMetrics annotation;
+}
+
+final class ForumBodyRubyPlacedAnnotationGap {
+  const ForumBodyRubyPlacedAnnotationGap._(
+    this.input,
+    this.left,
+    this.metrics,
+    this.beforeSpanIndex,
+  );
+  final ForumBodyRubyMeasuredAnnotationGap input;
+  final double left;
+  final ForumBodyRubyAnnotationMetrics metrics;
+  final int beforeSpanIndex;
+  double get width => metrics.bounds.width;
+  Offset get offset => Offset(left, 0) + metrics.offset;
+}
+
 /// One independently laid-out, unbroken ruby segment/component. Actual native
 /// members are still independent; this result retains only numbers and sides.
 final class ForumBodyRubySegmentMetrics {
@@ -58,6 +86,7 @@ final class ForumBodyRubySegmentMetrics {
     required List<ForumBodyRubyGroupMetrics> columns,
     required List<ForumBodyRubyMeasuredSpan> spans,
     List<ForumBodyRubyMeasuredGap> gaps = const [],
+    List<ForumBodyRubyMeasuredAnnotationGap> annotationGaps = const [],
     TextDirection direction = TextDirection.ltr,
     double maxWidth = 16384,
   }) {
@@ -65,6 +94,7 @@ final class ForumBodyRubySegmentMetrics {
       columns: columns,
       spans: spans,
       gaps: gaps,
+      annotationGaps: annotationGaps,
       direction: direction,
       maxWidth: maxWidth,
     );
@@ -85,6 +115,8 @@ final class ForumBodyRubySegmentMetrics {
     required List<Offset> columnOffsets,
     required List<ForumBodyRubyPlacedSpan> spans,
     required List<ForumBodyRubyPlacedGap> gaps,
+    required List<ForumBodyRubyPlacedAnnotationGap> annotationGaps,
+    required List<double> edgeWidths,
     // Only the terminal positioning worker transfers its private buffers here.
     // Reused horizontal vectors are already frozen. Publication never rescans N.
   }) : columns = UnmodifiableListView(columns),
@@ -92,8 +124,10 @@ final class ForumBodyRubySegmentMetrics {
        columnLefts = UnmodifiableListView(columnLefts),
        columnOffsets = UnmodifiableListView(columnOffsets),
        spans = UnmodifiableListView(spans),
-       gaps = UnmodifiableListView(gaps);
-  static const revision = 3;
+       gaps = UnmodifiableListView(gaps),
+       annotationGaps = UnmodifiableListView(annotationGaps),
+       edgeWidths = UnmodifiableListView(edgeWidths);
+  static const revision = 4;
   final Size size;
   final double baseline;
   final ForumBodyRubyLevelMetrics level;
@@ -104,6 +138,8 @@ final class ForumBodyRubySegmentMetrics {
   final List<Offset> columnOffsets;
   final List<ForumBodyRubyPlacedSpan> spans;
   final List<ForumBodyRubyPlacedGap> gaps;
+  final List<ForumBodyRubyPlacedAnnotationGap> annotationGaps;
+  final List<double> edgeWidths;
   String get alignmentSignature => columns.first.alignmentSignature;
 
   bool needsLevelAlignment(ForumBodyRubyLevelMetrics target) {
@@ -139,7 +175,9 @@ final class ForumBodyRubySegmentMetrics {
 enum _SegmentPhase {
   columns,
   gaps,
+  annotationGaps,
   spans,
+  gapCoverage,
   widths,
   sum,
   spread,
@@ -158,11 +196,13 @@ final class ForumBodyRubySegmentComposition {
     required List<ForumBodyRubyGroupMetrics> columns,
     required List<ForumBodyRubyMeasuredSpan> spans,
     List<ForumBodyRubyMeasuredGap> gaps = const [],
+    List<ForumBodyRubyMeasuredAnnotationGap> annotationGaps = const [],
     this.direction = TextDirection.ltr,
     this.maxWidth = 16384,
   }) : _columns = List.of(columns),
        _spans = List.of(spans),
        _gaps = List.of(gaps),
+       _annotationGaps = List.of(annotationGaps),
        _gapWidths = List.filled(columns.length, 0),
        _buckets = List.filled(columns.length + 1, null) {
     if (columns.isEmpty ||
@@ -175,8 +215,19 @@ final class ForumBodyRubySegmentComposition {
   final List<ForumBodyRubyGroupMetrics> _columns;
   final List<ForumBodyRubyMeasuredSpan> _spans;
   final List<ForumBodyRubyMeasuredGap> _gaps;
+  final List<ForumBodyRubyMeasuredAnnotationGap> _annotationGaps;
   final List<double> _gapWidths;
+  late final List<double> _baseGapWidths = _annotationGaps.isEmpty
+      ? _gapWidths
+      : List.filled(_columns.length, 0);
   final _gapWithinEdge = <double>[];
+  final _annotationGapWithinEdge = <double>[];
+  final _annotationGapWidths = <(int, int), double>{};
+  final _annotationGapEdges = <int, Set<int>>{};
+  final _spanStarts = <int, Set<int>>{};
+  final _spanEnds = <int, Set<int>>{};
+  final _spanStartIndices = <(int, int), int>{};
+  final _annotationGapBeforeSpans = <int>[];
   final TextDirection direction;
   final double maxWidth;
   final _union = ForumBodyRubyLevelUnion();
@@ -191,6 +242,8 @@ final class ForumBodyRubySegmentComposition {
   var _column = 0;
   var _gap = 0;
   var _gapRank = 0;
+  var _annotationGap = 0;
+  var _gapCoverage = 0;
   var _span = 0;
   int? _cursor;
   var _bucketWidth = 1;
@@ -237,7 +290,7 @@ final class ForumBodyRubySegmentComposition {
           }
         case _SegmentPhase.gaps:
           if (_gap == _gaps.length) {
-            _phase = _SegmentPhase.spans;
+            _phase = _SegmentPhase.annotationGaps;
             continue;
           }
           final gap = _gaps[_gap];
@@ -258,16 +311,55 @@ final class ForumBodyRubySegmentComposition {
           final merge = _merge ??= _union.merge(gap.font);
           work += merge.advance(maxParts: maxParts - work);
           if (merge.isComplete) {
-            _gapWithinEdge.add(_gapWidths[gap.beforeColumn]);
-            _gapWidths[gap.beforeColumn] += gap.font.size.width;
+            _gapWithinEdge.add(_baseGapWidths[gap.beforeColumn]);
+            _baseGapWidths[gap.beforeColumn] += gap.font.size.width;
+            _gapWidths[gap.beforeColumn] = _baseGapWidths[gap.beforeColumn];
             _gap++;
             _gapRank = 0;
             _merge = null;
           }
+        case _SegmentPhase.annotationGaps:
+          if (_annotationGap == _annotationGaps.length) {
+            _phase = _SegmentPhase.spans;
+            continue;
+          }
+          final gap = _annotationGaps[_annotationGap];
+          final rank = gap.annotationIndex;
+          if (gap.beforeColumn <= 0 ||
+              gap.beforeColumn >= _columns.length ||
+              rank < 0 ||
+              rank >= _union._annotations.length ||
+              gap.annotation.side != _union._annotations[rank].side ||
+              !gap.annotation.hasAnnotation ||
+              (_annotationGap > 0 &&
+                  (rank < _annotationGaps[_annotationGap - 1].annotationIndex ||
+                      (rank ==
+                              _annotationGaps[_annotationGap - 1]
+                                  .annotationIndex &&
+                          gap.beforeColumn <
+                              _annotationGaps[_annotationGap - 1]
+                                  .beforeColumn)))) {
+            ForumBodyRubyGroupMetrics._invalid();
+          }
+          final key = (rank, gap.beforeColumn);
+          final oldWidth = _annotationGapWidths[key] ?? 0;
+          final width = oldWidth + gap.annotation.bounds.width;
+          _annotationGapWithinEdge.add(oldWidth);
+          _annotationGapWidths[key] = width;
+          _gapWidths[gap.beforeColumn] = math.max(
+            _gapWidths[gap.beforeColumn],
+            width,
+          );
+          (_annotationGapEdges[rank] ??= {}).add(gap.beforeColumn);
+          _union._annotations[rank] = _union._annotations[rank]._include(
+            gap.annotation,
+          );
+          _union._snapshot = null;
+          _annotationGap++;
+          work++;
         case _SegmentPhase.spans:
           if (_span == _spans.length) {
-            _level = _union.value;
-            _phase = _SegmentPhase.widths;
+            _phase = _SegmentPhase.gapCoverage;
             continue;
           }
           final span = _spans[_span];
@@ -283,10 +375,21 @@ final class ForumBodyRubySegmentComposition {
               ForumBodyRubyGroupMetrics._invalid();
             }
             _cursor = span.startColumn;
+            if (_annotationGaps.isNotEmpty) {
+              (_spanStarts[span.annotationIndex] ??= {}).add(span.startColumn);
+              (_spanEnds[span.annotationIndex] ??= {}).add(span.endColumn);
+              _spanStartIndices[(span.annotationIndex, span.startColumn)] =
+                  _span;
+            }
             work++;
             continue;
           }
           if (_cursor! < span.endColumn) {
+            if (_cursor! > span.startColumn &&
+                (_annotationGapEdges[span.annotationIndex]?.contains(_cursor) ??
+                    false)) {
+              ForumBodyRubyGroupMetrics._invalid();
+            }
             if (_columns[_cursor!]
                 .annotations[span.annotationIndex]
                 .hasAnnotation) {
@@ -306,6 +409,27 @@ final class ForumBodyRubySegmentComposition {
           (_buckets[length] ??= []).add(_span);
           _span++;
           _cursor = null;
+          work++;
+        case _SegmentPhase.gapCoverage:
+          if (_gapCoverage == _annotationGaps.length) {
+            _level = _union.value;
+            _phase = _SegmentPhase.widths;
+            continue;
+          }
+          final gap = _annotationGaps[_gapCoverage++];
+          if (!(_spanStarts[gap.annotationIndex]?.contains(gap.beforeColumn) ??
+                  false) ||
+              !(_spanEnds[gap.annotationIndex]?.contains(gap.beforeColumn) ??
+                  false)) {
+            ForumBodyRubyGroupMetrics._invalid();
+          }
+          final next =
+              _spanStartIndices[(gap.annotationIndex, gap.beforeColumn)]!;
+          if (_annotationGapBeforeSpans.isNotEmpty &&
+              next < _annotationGapBeforeSpans.last) {
+            ForumBodyRubyGroupMetrics._invalid();
+          }
+          _annotationGapBeforeSpans.add(next);
           work++;
         case _SegmentPhase.widths:
           if (_bucketWidth == _buckets.length) {
@@ -371,7 +495,12 @@ final class ForumBodyRubySegmentComposition {
               spans: _spans,
               gaps: _gaps,
               gapWidths: _gapWidths,
+              baseGapWidths: _baseGapWidths,
               gapWithinEdge: _gapWithinEdge,
+              annotationGaps: _annotationGaps,
+              annotationGapWidths: _annotationGapWidths,
+              annotationGapWithinEdge: _annotationGapWithinEdge,
+              annotationGapBeforeSpans: _annotationGapBeforeSpans,
               direction: direction,
             ),
             _level!,

@@ -6,10 +6,14 @@ sealed class _RubySegmentHorizontal {
   const _RubySegmentHorizontal();
   List<ForumBodyRubyGroupMetrics> get columns;
   List<double> get widths;
+  List<double> get edgeWidths;
   TextDirection get direction;
   double get width;
   int get spanCount;
   int get gapCount;
+  int get annotationGapCount;
+  ({ForumBodyRubyMeasuredAnnotationGap input, double left, int beforeSpanIndex})
+  annotationGap(int index);
   ({ForumBodyRubyMeasuredGap input, double left}) gap(int index);
   double columnLeft(int index);
   ({ForumBodyRubyMeasuredSpan input, double left, double width}) span(
@@ -25,7 +29,12 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
     required this.spans,
     required this.gaps,
     required this.gapWidths,
+    required this.baseGapWidths,
     required this.gapWithinEdge,
+    required this.annotationGaps,
+    required this.annotationGapWidths,
+    required this.annotationGapWithinEdge,
+    required this.annotationGapBeforeSpans,
     required this.direction,
   });
   @override
@@ -36,7 +45,14 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
   final List<ForumBodyRubyMeasuredSpan> spans;
   final List<ForumBodyRubyMeasuredGap> gaps;
   final List<double> gapWidths;
+  final List<double> baseGapWidths;
   final List<double> gapWithinEdge;
+  final List<ForumBodyRubyMeasuredAnnotationGap> annotationGaps;
+  final Map<(int, int), double> annotationGapWidths;
+  final List<double> annotationGapWithinEdge;
+  final List<int> annotationGapBeforeSpans;
+  @override
+  List<double> get edgeWidths => gapWidths;
   @override
   final TextDirection direction;
   @override
@@ -46,9 +62,33 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
   @override
   int get gapCount => gaps.length;
   @override
+  int get annotationGapCount => annotationGaps.length;
+  @override
+  ({ForumBodyRubyMeasuredAnnotationGap input, double left, int beforeSpanIndex})
+  annotationGap(int index) {
+    final input = annotationGaps[index];
+    final key = (input.annotationIndex, input.beforeColumn);
+    final start =
+        prefix[input.beforeColumn] +
+        (gapWidths[input.beforeColumn] - annotationGapWidths[key]!) / 2 +
+        annotationGapWithinEdge[index];
+    return (
+      input: input,
+      beforeSpanIndex: annotationGapBeforeSpans[index],
+      left: direction == TextDirection.ltr
+          ? start
+          : prefix.last - start - input.annotation.bounds.width,
+    );
+  }
+
+  @override
   ({ForumBodyRubyMeasuredGap input, double left}) gap(int index) {
     final input = gaps[index];
-    final start = prefix[input.beforeColumn] + gapWithinEdge[index];
+    final start =
+        prefix[input.beforeColumn] +
+        (gapWidths[input.beforeColumn] - baseGapWidths[input.beforeColumn]) /
+            2 +
+        gapWithinEdge[index];
     return (
       input: input,
       left: direction == TextDirection.ltr
@@ -86,6 +126,8 @@ final class _RubyExistingHorizontal extends _RubySegmentHorizontal {
   @override
   List<double> get widths => metrics.columnWidths;
   @override
+  List<double> get edgeWidths => metrics.edgeWidths;
+  @override
   TextDirection get direction => metrics.direction;
   @override
   double get width => metrics.size.width;
@@ -93,6 +135,15 @@ final class _RubyExistingHorizontal extends _RubySegmentHorizontal {
   int get spanCount => metrics.spans.length;
   @override
   int get gapCount => metrics.gaps.length;
+  @override
+  int get annotationGapCount => metrics.annotationGaps.length;
+  @override
+  ({ForumBodyRubyMeasuredAnnotationGap input, double left, int beforeSpanIndex})
+  annotationGap(int index) => (
+    input: metrics.annotationGaps[index].input,
+    left: metrics.annotationGaps[index].left,
+    beforeSpanIndex: metrics.annotationGaps[index].beforeSpanIndex,
+  );
   @override
   ({ForumBodyRubyMeasuredGap input, double left}) gap(int index) =>
       (input: metrics.gaps[index].input, left: metrics.gaps[index].left);
@@ -107,7 +158,15 @@ final class _RubyExistingHorizontal extends _RubySegmentHorizontal {
   }
 }
 
-enum _RubyPositionPhase { levels, columns, gaps, spans, publish, ready }
+enum _RubyPositionPhase {
+  levels,
+  columns,
+  gaps,
+  spans,
+  annotationGaps,
+  publish,
+  ready,
+}
 
 /// Sole component positioning path for intrinsic composition and row targets.
 /// Each rank/member and final publication is charged; no glyph is re-measured.
@@ -127,6 +186,7 @@ final class _RubySegmentPositioning {
   final _offsets = <Offset>[];
   final _spans = <ForumBodyRubyPlacedSpan>[];
   final _gaps = <ForumBodyRubyPlacedGap>[];
+  final _annotationGaps = <ForumBodyRubyPlacedAnnotationGap>[];
   ForumBodyRubyColumnAlignment? _columnWork;
   var _phase = _RubyPositionPhase.levels;
   ForumBodyRubySegmentMetrics? _result;
@@ -207,7 +267,7 @@ final class _RubySegmentPositioning {
           }
         case _RubyPositionPhase.spans:
           if (_spans.length == horizontal.spanCount) {
-            _phase = _RubyPositionPhase.publish;
+            _phase = _RubyPositionPhase.annotationGaps;
             continue;
           }
           final item = horizontal.span(_spans.length);
@@ -227,6 +287,28 @@ final class _RubySegmentPositioning {
             ),
           );
           work++;
+        case _RubyPositionPhase.annotationGaps:
+          if (_annotationGaps.length == horizontal.annotationGapCount) {
+            _phase = _RubyPositionPhase.publish;
+            continue;
+          }
+          final item = horizontal.annotationGap(_annotationGaps.length);
+          final position = _positions[item.input.annotationIndex];
+          _annotationGaps.add(
+            ForumBodyRubyPlacedAnnotationGap._(
+              item.input,
+              item.left,
+              item.input.annotation._positioned(
+                width: item.input.annotation.bounds.width,
+                baseline: _over,
+                relativeBaseline: position.baseline,
+                top: position.top,
+                bottom: position.bottom,
+              ),
+              item.beforeSpanIndex,
+            ),
+          );
+          work++;
         case _RubyPositionPhase.publish:
           _result = ForumBodyRubySegmentMetrics._(
             direction: horizontal.direction,
@@ -239,6 +321,8 @@ final class _RubySegmentPositioning {
             columnOffsets: _offsets,
             spans: _spans,
             gaps: _gaps,
+            annotationGaps: _annotationGaps,
+            edgeWidths: horizontal.edgeWidths,
           );
           _phase = _RubyPositionPhase.ready;
           work++;

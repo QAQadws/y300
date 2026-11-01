@@ -42,6 +42,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
   final _columns = <ForumBodyRubyGroupMetrics>[];
   final _gaps = <ForumBodyRubyMeasuredGap>[];
   final _measured = <ForumBodyRubyMeasuredSpan>[];
+  final _annotationGaps = <ForumBodyRubyMeasuredAnnotationGap>[];
   ForumBodyRubySegmentMetrics? _result;
   ForumBodyTextRequest? _failedRequest;
   var _state = ForumBodyRubySegmentMetricsPreparationState.active;
@@ -66,6 +67,8 @@ final class ForumBodyRubySegmentMetricsPreparation {
       ? _request!.gaps[_gaps.length].request
       : _measured.length < _request!.spans.length
       ? _request!.spans[_measured.length].request
+      : _annotationGaps.length < _request!.annotationGaps.length
+      ? _request!.annotationGaps[_annotationGaps.length].request
       : null;
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     if (_base != null) ..._base!.nativeLeases,
@@ -153,13 +156,21 @@ final class ForumBodyRubySegmentMetricsPreparation {
           _base = null;
         }
         if (_waiting || _cacheMiss || (!complete && used == 0)) break;
-      } else if (_measured.length < request.spans.length) {
-        final input = request.spans[_measured.length];
-        final hasText = input.request.content.projection.text.isNotEmpty;
+      } else if (_measured.length < request.spans.length ||
+          _annotationGaps.length < request.annotationGaps.length) {
+        final isGap = _measured.length == request.spans.length;
+        final input = isGap ? null : request.spans[_measured.length];
+        final gap = isGap
+            ? request.annotationGaps[_annotationGaps.length]
+            : null;
+        final target = input ?? request.spans[gap!.beforeSpanIndex];
+        final textRequest = gap?.request ?? input!.request;
+        final verticalGap = gap?.gap ?? input!.gap;
+        final hasText = textRequest.content.projection.text.isNotEmpty;
         if (hasText) {
           final member = _span ??= ForumBodyTextRequestPreparation(
             cache: cache,
-            request: input.request,
+            request: textRequest,
             ensureOwner: _guard,
             preparePaint: false,
             textScaler: _scaler!,
@@ -182,8 +193,8 @@ final class ForumBodyRubySegmentMetricsPreparation {
               ForumBodyRubyAnnotationMetrics.measure(
                 cache: cache,
                 lease: lease,
-                side: request.sides[input.annotationIndex],
-                gap: input.gap,
+                side: request.sides[target.annotationIndex],
+                gap: verticalGap,
               ),
             );
           } finally {
@@ -196,8 +207,8 @@ final class ForumBodyRubySegmentMetricsPreparation {
             ForumBodyRubyAnnotationMetrics.measure(
               cache: cache,
               lease: null,
-              side: request.sides[input.annotationIndex],
-              gap: input.gap,
+              side: request.sides[target.annotationIndex],
+              gap: verticalGap,
             ),
           );
           units++;
@@ -208,6 +219,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
           columns: _columns,
           gaps: _gaps,
           spans: _measured,
+          annotationGaps: _annotationGaps,
           direction: request.direction,
           maxWidth: request.maxWidth,
         );
@@ -222,6 +234,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
           _scaler = null;
           _columns.clear();
           _measured.clear();
+          _annotationGaps.clear();
           _state = ForumBodyRubySegmentMetricsPreparationState.ready;
           units++;
         }
@@ -239,10 +252,22 @@ final class ForumBodyRubySegmentMetricsPreparation {
   }
 
   void _measure(
-    ForumBodyRubySpanRequest input,
+    ForumBodyRubySpanRequest? input,
     ForumBodyRubyAnnotationMetrics value,
   ) {
     _guard();
+    if (input == null) {
+      final gap = _request!.annotationGaps[_annotationGaps.length];
+      final next = _request!.spans[gap.beforeSpanIndex];
+      _annotationGaps.add(
+        ForumBodyRubyMeasuredAnnotationGap(
+          beforeColumn: next.startColumn,
+          annotationIndex: next.annotationIndex,
+          annotation: value,
+        ),
+      );
+      return;
+    }
     _measured.add(
       ForumBodyRubyMeasuredSpan(
         startColumn: input.startColumn,
@@ -312,6 +337,7 @@ final class ForumBodyRubySegmentMetricsPreparation {
     _columns.clear();
     _gaps.clear();
     _measured.clear();
+    _annotationGaps.clear();
     _result = null;
     _dropOwner();
   }

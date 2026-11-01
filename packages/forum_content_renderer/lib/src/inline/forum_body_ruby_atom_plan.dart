@@ -46,6 +46,7 @@ final class ForumBodyRubySegmentPlan extends ForumBodyRubyAtomPlan {
         request.bases.length != metrics.columns.length ||
         request.spans.length != metrics.spans.length ||
         request.gaps.length != metrics.gaps.length ||
+        request.annotationGaps.length != metrics.annotationGaps.length ||
         request.sides.length != metrics.level.annotations.length) {
       throw ArgumentError(
         'Ruby segment target does not match original request',
@@ -61,6 +62,19 @@ final class ForumBodyRubySegmentPlan extends ForumBodyRubyAtomPlan {
     for (final (index, gap) in request.gaps.indexed) {
       if (gap.beforeColumn != metrics.gaps[index].input.beforeColumn) {
         throw ArgumentError('Ruby segment target does not match original gap');
+      }
+    }
+    for (final (index, gap) in request.annotationGaps.indexed) {
+      final target = metrics.annotationGaps[index];
+      final next = request.spans[gap.beforeSpanIndex];
+      if (gap.beforeSpanIndex != target.beforeSpanIndex ||
+          next.startColumn != target.input.beforeColumn ||
+          next.annotationIndex != target.input.annotationIndex ||
+          request.sides[next.annotationIndex] != target.input.annotation.side ||
+          gap.gap != target.input.annotation.gap) {
+        throw ArgumentError(
+          'Ruby segment target does not match original annotation gap',
+        );
       }
     }
     for (final (index, span) in request.spans.indexed) {

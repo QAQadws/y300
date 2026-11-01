@@ -69,6 +69,9 @@ final class ForumBodyRubySegmentPreparation {
           ),
       ],
       spans: [for (final span in request.spans) span.request.content],
+      annotationGaps: [
+        for (final gap in request.annotationGaps) gap.request.content,
+      ],
       gaps: [
         for (final (index, gap) in request.gaps.indexed)
           (
@@ -101,6 +104,7 @@ final class ForumBodyRubySegmentPreparation {
   var _columns = 0;
   var _gaps = 0;
   var _spans = 0;
+  var _annotationGaps = 0;
   var _preparedParts = 0;
   var _workCount = 0;
   var _probeCursor = 0;
@@ -126,6 +130,8 @@ final class ForumBodyRubySegmentPreparation {
       ? _request!.gaps[_gaps].request
       : _spans < _request!.spans.length
       ? _request!.spans[_spans].request
+      : _annotationGaps < _request!.annotationGaps.length
+      ? _request!.annotationGaps[_annotationGaps].request
       : null;
   ForumBodyParagraphBudgetException? get lastBudgetRejection =>
       _waiting ? _rejection : null;
@@ -185,12 +191,14 @@ final class ForumBodyRubySegmentPreparation {
       if (assembly.hasPendingMember ||
           (_columns == request.bases.length &&
               _gaps == request.gaps.length &&
-              _spans == request.spans.length)) {
+              _spans == request.spans.length &&
+              _annotationGaps == request.annotationGaps.length)) {
         units += assembly.advance(maxParts: maxParts - units);
         _guard();
         _columns = assembly.preparedColumnCount;
         _gaps = assembly.preparedGapCount;
         _spans = assembly.preparedSpanCount;
+        _annotationGaps = assembly.preparedAnnotationGapCount;
         if (assembly.isReady) {
           _request = null;
           _metrics = null;
@@ -261,15 +269,33 @@ final class ForumBodyRubySegmentPreparation {
           break;
         }
       } else {
-        final span = request.spans[_spans];
-        _checkSpan(span);
-        if (span.request.content.projection.text.isEmpty) {
-          assembly.addSpan((content: span.request.content, lease: null));
+        final isGap = _spans == request.spans.length;
+        final gap = isGap ? request.annotationGaps[_annotationGaps] : null;
+        final span = isGap ? null : request.spans[_spans];
+        final textRequest = gap?.request ?? span!.request;
+        if (gap != null) {
+          final target = _metrics!.annotationGaps[_annotationGaps];
+          final next = request.spans[gap.beforeSpanIndex];
+          if (target.beforeSpanIndex != gap.beforeSpanIndex ||
+              target.input.beforeColumn != next.startColumn ||
+              target.input.annotationIndex != next.annotationIndex ||
+              target.input.annotation.side !=
+                  request.sides[next.annotationIndex] ||
+              target.input.annotation.gap != gap.gap) {
+            throw const ForumBodyRubyGroupException(
+              ForumBodyRubyGroupFailure.geometry,
+            );
+          }
+        } else {
+          _checkSpan(span!);
+        }
+        if (textRequest.content.projection.text.isEmpty) {
+          assembly.addSpan((content: textRequest.content, lease: null));
           units++;
         } else {
           final member = _span ??= ForumBodyTextRequestPreparation(
             cache: cache,
-            request: span.request,
+            request: textRequest,
             ensureOwner: _guard,
             preparePaint: true,
             textScaler: _scaler!,
@@ -290,7 +316,14 @@ final class ForumBodyRubySegmentPreparation {
               lease.release();
               rethrow;
             }
-            assembly.addSpan((content: span.request.content, lease: lease));
+            if (isGap) {
+              assembly.addAnnotationGap((
+                content: textRequest.content,
+                lease: lease,
+              ));
+            } else {
+              assembly.addSpan((content: textRequest.content, lease: lease));
+            }
             _preparedParts++;
           } else if (_cacheMiss ||
               _waiting ||

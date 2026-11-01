@@ -61,12 +61,14 @@ void main() {
 
   for (final rtl in [false, true]) {
     for (final under in [false, true]) {
-      for (final (readOnlyRestore, gap) in [
+      for (final (readOnlyRestore, gap, annotationGap) in [
         for (final readOnly in [false, true])
-          for (final gap in ['', ' ']) (readOnly, gap),
+          for (final gap in ['', ' '])
+            for (final annotationGap in [false, true])
+              (readOnly, gap, annotationGap),
       ]) {
         testWidgets(
-          'original spanning component completes only at physical EOF (rtl=$rtl, under=$under, readOnly=$readOnlyRestore, gap=${gap.isNotEmpty})',
+          'original spanning component completes only at physical EOF (rtl=$rtl, under=$under, readOnly=$readOnlyRestore, gap=${gap.isNotEmpty}, annotationGap=$annotationGap)',
           (tester) async {
             tester.view.physicalSize = const Size(360, 480);
             tester.view.devicePixelRatio = 1;
@@ -75,8 +77,8 @@ void main() {
             final fixture = (await tester.runAsync(
               () => _Fixture.create(
                 rawBody: (
-                  '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:40px">A</rb>$gap<rb style="font-size:40px">B</rb><rtc style="font-size:20px">word</rtc><rb style="font-size:200px">C</rb><rb style="font-size:200px">D</rb><rt style="font-size:100px">zz</rt></ruby></p>',
-                  'A${gap}BwordCDzz',
+                  '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:40px">A</rb>$gap<rb style="font-size:40px">B</rb>${annotationGap ? '<rtc style="font-size:10px"><rt>x</rt> <rt>y</rt></rtc>' : ''}<rtc style="font-size:20px">word</rtc><rb style="font-size:200px">C</rb><rb style="font-size:200px">D</rb><rt style="font-size:${annotationGap ? 80 : 100}px">zz</rt>${annotationGap ? '<rtc style="font-size:20px"><rt>tt</rt></rtc>' : ''}</ruby></p>',
+                  'A${gap}B${annotationGap ? 'x y' : ''}wordCDzz${annotationGap ? 'tt' : ''}',
                 ),
               ),
             ))!;
@@ -111,7 +113,11 @@ void main() {
                     .viewForPage(0)!
                     .coverage
                     .points
-                    .any((p) => p.sourceRune == 10 + gap.length),
+                    .any(
+                      (p) =>
+                          p.sourceRune ==
+                          10 + gap.length + (annotationGap ? 5 : 0),
+                    ),
                 isTrue,
               );
               await tester.pump(const Duration(milliseconds: 300));
@@ -139,8 +145,9 @@ void main() {
               expect(
                 last.coverage.points.every(
                   (p) =>
-                      p.sourceRune >= 7 + gap.length &&
-                      p.sourceRune <= 8 + gap.length,
+                      p.sourceRune >=
+                          7 + gap.length + (annotationGap ? 3 : 0) &&
+                      p.sourceRune <= 8 + gap.length + (annotationGap ? 3 : 0),
                 ),
                 isTrue,
               );
@@ -157,7 +164,7 @@ void main() {
               expect(progress.anchorFormatVersion, 1);
               // Existing semantic parsing omits whitespace-only runs. The real
               // gap advances source runes, not the format1 semantic coordinate.
-              expect(progress.anchorTextOffset, 7);
+              expect(progress.anchorTextOffset, 7 + (annotationGap ? 2 : 0));
               expect(
                 progress.anchorTextIdentity,
                 last.coverage.points.first.anchor.textIdentity,

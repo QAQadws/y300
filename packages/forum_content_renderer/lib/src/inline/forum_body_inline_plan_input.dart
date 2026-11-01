@@ -25,7 +25,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 14;
+  static const revision = 15;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -148,12 +148,25 @@ final class ForumBodyInlinePlanInput {
             group: group,
             baseColumnCount: unitCount,
           );
-          // Source pairing keeps inter-annotation spaces, but a layout must
-          // account for their paired edge widths and legal line breaks before
-          // accepting them. Never omit them or fuse every column to get a fit.
+          // Only a real visible spanning annotation already closes all current
+          // columns. A whitespace edge by itself must remain breakable; its
+          // parent trimming/break protocol is not implied by segment geometry.
+          bool? hasUnbrokenAnnotation;
           for (final level in pairing.levels) {
             if (level.gaps.isNotEmpty) {
-              _unsupported(level.gaps.first.content.path ?? group.rootPath);
+              hasUnbrokenAnnotation ??= pairing.levels.any(
+                (l) => l.spans.any(
+                  (span) =>
+                      span.isMultiColumn &&
+                      _annotationInput(
+                        group,
+                        span.box,
+                      ).projection.text.isNotEmpty,
+                ),
+              );
+              if (!hasUnbrokenAnnotation) {
+                _unsupported(level.gaps.first.content.path ?? group.rootPath);
+              }
             }
           }
           if (pairing.hasMultiColumnSpans) {
@@ -163,6 +176,7 @@ final class ForumBodyInlinePlanInput {
             final baseSources = [for (final _ in bases) <int>[]];
             final annotationSources = <int>[];
             final gaps = <ForumBodyRubyGapRequest>[];
+            final annotationGaps = <ForumBodyRubyAnnotationGapRequest>[];
             ForumBodyParagraphContent? tail;
             List<int>? tailSource;
             var column = 0;
@@ -217,7 +231,18 @@ final class ForumBodyInlinePlanInput {
             }
             final spans = <ForumBodyRubySpanRequest>[];
             for (final (rank, level) in pairing.levels.indexed) {
+              var gapIndex = 0;
               for (final span in level.spans) {
+                while (gapIndex < level.gaps.length &&
+                    identical(level.gaps[gapIndex].next, span)) {
+                  final gap = level.gaps[gapIndex++];
+                  annotationSources.add(append(gap.content));
+                  annotationGaps.add((
+                    beforeSpanIndex: spans.length,
+                    request: ForumBodyTextRequest.paragraph(gap.content),
+                    gap: 0.0,
+                  ));
+                }
                 if (span.isMultiColumn &&
                     (span.startColumn != 0 ||
                         span.endColumn != pairing.columnCount)) {
@@ -247,6 +272,7 @@ final class ForumBodyInlinePlanInput {
                   sides: [for (final level in pairing.levels) level.side],
                   spans: spans,
                   gaps: gaps,
+                  annotationGaps: annotationGaps,
                   direction: group.style.textDirection,
                   maxWidth: width,
                 ),

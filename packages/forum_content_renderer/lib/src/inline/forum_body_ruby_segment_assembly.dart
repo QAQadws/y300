@@ -18,6 +18,7 @@ final class ForumBodyRubySegmentAssembly {
     required List<ForumBodyRubySegmentColumnInput> columns,
     required List<ForumBodyParagraphContent> spans,
     List<ForumBodyRubySegmentColumnInput> gaps = const [],
+    List<ForumBodyParagraphContent> annotationGaps = const [],
     void Function()? ensureOwner,
   }) : _cache = cache,
        _metrics = metrics,
@@ -30,6 +31,7 @@ final class ForumBodyRubySegmentAssembly {
            ),
        ],
        _spanInputs = List.of(spans) {
+    _annotationGapInputs = List.of(annotationGaps);
     _gapInputs = [
       for (final gap in gaps)
         (base: gap.base, annotations: List.unmodifiable(gap.annotations)),
@@ -40,17 +42,23 @@ final class ForumBodyRubySegmentAssembly {
         gaps.length != metrics.gaps.length) {
       ForumBodyRubySegmentLayout._invalid();
     }
+    if (annotationGaps.length != metrics.annotationGaps.length) {
+      ForumBodyRubySegmentLayout._invalid();
+    }
   }
   ForumBodyParagraphCache? _cache;
   ForumBodyRubySegmentMetrics? _metrics;
   void Function()? _ensureOwner;
   List<ForumBodyRubySegmentColumnInput> _columnInputs;
   List<ForumBodyParagraphContent> _spanInputs;
+  List<ForumBodyParagraphContent> _annotationGapInputs = [];
   List<ForumBodyRubySegmentColumnInput> _gapInputs = [];
   List<ForumBodyRubyGroupLayout> _columns = [];
   List<ForumBodyRubySegmentAnnotation> _spans = [];
+  List<ForumBodyRubySegmentAnnotation> _annotationGaps = [];
   List<ForumBodyRubyGroupLayout> _gaps = [];
   Map<int, List<int>> _spanRanks = {};
+  Map<int, List<int>> _annotationGapRanks = {};
   final _handles = Set<ForumBodyTextLease>.identity();
   ForumBodyRubyGroupLayout? _pendingColumn;
   ForumBodyRubyGroupMemberSnapshot? _members;
@@ -58,6 +66,7 @@ final class ForumBodyRubySegmentAssembly {
   var _rank = 0;
   var _headerChecked = false;
   var _pendingGap = false;
+  var _pendingAnnotationGap = false;
   var _state = _SegmentAssemblyState.active;
   var _operating = false;
   bool get isReady => _state == _SegmentAssemblyState.ready;
@@ -65,11 +74,13 @@ final class ForumBodyRubySegmentAssembly {
   int get preparedColumnCount => _columns.length;
   int get preparedSpanCount => _spans.length;
   int get preparedGapCount => _gaps.length;
+  int get preparedAnnotationGapCount => _annotationGaps.length;
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     for (final column in _columns) ...column.nativeLeases,
     for (final gap in _gaps) ...gap.nativeLeases,
     if (_pendingColumn != null) ..._pendingColumn!.nativeLeases,
     for (final span in _spans) ?span.lease,
+    for (final gap in _annotationGaps) ?gap.lease,
     ?_pendingSpan?.lease,
   ];
 
@@ -130,9 +141,31 @@ final class ForumBodyRubySegmentAssembly {
           throw StateError('Ruby segment cannot accept an annotation');
         }
         _pendingSpan = span;
+        _pendingAnnotationGap = false;
       });
     } catch (_) {
       span.lease?.release();
+      rethrow;
+    }
+  }
+
+  void addAnnotationGap(ForumBodyRubySegmentAnnotation gap) {
+    try {
+      _operate(() {
+        _guard();
+        if (_state != _SegmentAssemblyState.active ||
+            hasPendingMember ||
+            _columns.length != _columnInputs.length ||
+            _gaps.length != _gapInputs.length ||
+            _spans.length != _spanInputs.length ||
+            _annotationGaps.length >= _annotationGapInputs.length) {
+          throw StateError('Ruby segment cannot accept an annotation gap');
+        }
+        _pendingSpan = gap;
+        _pendingAnnotationGap = true;
+      });
+    } catch (_) {
+      gap.lease?.release();
       rethrow;
     }
   }
@@ -158,6 +191,7 @@ final class ForumBodyRubySegmentAssembly {
           _columns.length == _columnInputs.length &&
           _gaps.length == _gapInputs.length &&
           _spans.length == _spanInputs.length &&
+          _annotationGaps.length == _annotationGapInputs.length &&
           work < maxParts) {
         // Publication is a real unit even when the previous quantum ended
         // exactly on its final member. No member/glyph is measured here.
@@ -224,10 +258,19 @@ final class ForumBodyRubySegmentAssembly {
 
   void _advanceSpan() {
     final item = _pendingSpan!;
-    final index = _spans.length;
-    final expected = _metrics!.spans[index].input.annotation;
+    final index = _pendingAnnotationGap
+        ? _annotationGaps.length
+        : _spans.length;
+    final expected = _pendingAnnotationGap
+        ? _metrics!.annotationGaps[index].input.annotation
+        : _metrics!.spans[index].input.annotation;
     final scope = _columnInputs.first.base;
-    if (!identical(item.content, _spanInputs[index]) ||
+    if (!identical(
+          item.content,
+          _pendingAnnotationGap
+              ? _annotationGapInputs[index]
+              : _spanInputs[index],
+        ) ||
         item.content.projection.text.isNotEmpty != (item.lease != null) ||
         (item.lease != null && !identical(item.lease!.content, item.content))) {
       ForumBodyRubySegmentLayout._invalid(ForumBodyRubyGroupFailure.content);
@@ -251,10 +294,20 @@ final class ForumBodyRubySegmentAssembly {
     )) {
       ForumBodyRubySegmentLayout._invalid();
     }
-    (_spanRanks[_metrics!.spans[index].input.annotationIndex] ??= []).add(
-      index,
-    );
-    _spans.add(item);
+    if (_pendingAnnotationGap) {
+      (_annotationGapRanks[_metrics!
+                  .annotationGaps[index]
+                  .input
+                  .annotationIndex] ??=
+              [])
+          .add(index);
+      _annotationGaps.add(item);
+    } else {
+      (_spanRanks[_metrics!.spans[index].input.annotationIndex] ??= []).add(
+        index,
+      );
+      _spans.add(item);
+    }
     _pendingSpan = null;
   }
 
@@ -283,11 +336,15 @@ final class ForumBodyRubySegmentAssembly {
       _metrics!,
       _spanRanks,
       _gaps,
+      _annotationGaps,
+      _annotationGapRanks,
     );
     _columns = [];
     _gaps = [];
+    _annotationGaps = [];
     _spans = [];
     _spanRanks = {};
+    _annotationGapRanks = {};
     _state = _SegmentAssemblyState.transferred;
     _dropOwner();
     return result;
@@ -340,10 +397,15 @@ final class ForumBodyRubySegmentAssembly {
     for (final span in _spans) {
       span.lease?.release();
     }
+    for (final gap in _annotationGaps) {
+      gap.lease?.release();
+    }
     _columns = [];
     _gaps = [];
+    _annotationGaps = [];
     _spans = [];
     _spanRanks.clear();
+    _annotationGapRanks.clear();
     _dropOwner();
   }
 
@@ -355,6 +417,7 @@ final class ForumBodyRubySegmentAssembly {
     _columnInputs = const [];
     _gapInputs = const [];
     _spanInputs = const [];
+    _annotationGapInputs = const [];
     _handles.clear();
   }
 

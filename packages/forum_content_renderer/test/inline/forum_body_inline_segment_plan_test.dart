@@ -232,6 +232,61 @@ void main() {
   });
 
   test(
+    'annotation gap keeps actual neighbouring span index inside a true spanning closure',
+    () {
+      final input = _input(
+        '<ruby><rb>A</rb> <rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc><rtc>whole</rtc></ruby>',
+      );
+      final request =
+          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
+      expect(request.annotationGaps.single.beforeSpanIndex, 1);
+      expect(request.nativeRequests.map((r) => r.content.projection.text), [
+        'A',
+        ' ',
+        'B',
+        'x',
+        ' ',
+        'y',
+        'whole',
+      ]);
+      expect(request.bases.length, 2);
+      expect(request.spans.length, 3);
+      input.content.resolveAtomicContexts(
+        0,
+        request.nativeRequests.map((r) => r.content).toList(),
+      );
+      final band = (request.bases.first as ForumBodyTextBandChildRequest).band;
+      input.replaceBand(band, 123);
+      final mapped =
+          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
+      expect(
+        (mapped.annotationGaps.single.request as ForumBodyTextBandChildRequest)
+            .gutter,
+        123,
+      );
+      expect(
+        mapped.annotationGaps.single.request.content,
+        same(request.annotationGaps.single.request.content),
+      );
+      expect(mapped.annotationGaps.single.beforeSpanIndex, 1);
+    },
+  );
+
+  for (final outer in ['', '<rtc> </rtc>']) {
+    test(
+      'a gap does not fuse otherwise breakable columns even with an empty outer box: $outer',
+      () {
+        expect(
+          () => _input(
+            '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc>$outer</ruby>',
+          ),
+          throwsA(isA<ForumBodyParagraphInputException>()),
+        );
+      },
+    );
+  }
+
+  test(
     'implicit spanning base keeps real outer spaces and anonymous excess base',
     () {
       final input = _input(
