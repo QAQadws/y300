@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -24,6 +26,13 @@ final class ForumBodyRubySegmentHit {
 typedef ForumBodyRubySegmentAnnotation = ({
   ForumBodyParagraphContent content,
   ForumBodyTextLease? lease,
+});
+
+/// Borrowed immutable member vectors. This snapshot neither proves readability
+/// nor extends ownership; consumers still verify the actual cache and lifetime.
+typedef ForumBodyRubySegmentMemberSnapshot = ({
+  List<ForumBodyRubyGroupLayout> columns,
+  List<ForumBodyRubySegmentAnnotation> spans,
 });
 
 /// An unbroken span component, consuming already-prepared column groups and
@@ -97,6 +106,11 @@ final class ForumBodyRubySegmentLayout {
   List<ForumBodyRubySegmentAnnotation> _spans;
   final Map<int, List<int>> _spanRanks;
   final ForumBodyRubySegmentMetrics metrics;
+  late final ForumBodyRubySegmentMemberSnapshot _members = (
+    columns: UnmodifiableListView(_columns),
+    spans: UnmodifiableListView(_spans),
+  );
+  ForumBodyRubySegmentMemberSnapshot inspectMembers() => _members;
   bool _closed = false;
   Size get size => metrics.size;
   double get baseline => metrics.baseline;

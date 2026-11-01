@@ -1,0 +1,221 @@
+part of 'forum_body_inline_paragraph_view.dart';
+
+typedef _RubySourceHit = ({
+  ForumBodyInlineContext window,
+  HtmlProjectedSourcePosition position,
+});
+
+/// Source windows bind current members, never equal text or cached snapshots.
+/// These adapters borrow already-transferred visible ownership and do not shape.
+sealed class _RubyBinding {
+  const _RubyBinding();
+  Size get size;
+  double get baseline;
+  bool get isActive;
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases;
+  void paint(Canvas canvas, Offset offset);
+  _RubySourceHit sourceAt(Offset point);
+  List<TextBox> selectionBoxes(int start, int end);
+  void close();
+}
+
+final class _RubyColumnWindows {
+  const _RubyColumnWindows(this.base, this.annotations);
+  final ForumBodyInlineContext base;
+  final List<ForumBodyInlineContext?> annotations;
+  ForumBodyInlineContext forHit(ForumBodyRubyHit hit) =>
+      hit.part == ForumBodyRubyPart.base
+      ? base
+      : annotations[hit.annotationIndex!]!;
+}
+
+({List<_RubyColumnWindows> columns, List<ForumBodyInlineContext?> spans})
+_rubyWindows(
+  ForumBodyInlineSpanContent content,
+  int index,
+  List<ForumBodyRubyGroupMemberSnapshot> columns,
+  List<ForumBodyRubySegmentAnnotation> spans,
+) {
+  final windows = content.resolveAtomicContexts(index, [
+    for (final column in columns) ...[
+      column.base.content,
+      for (final annotation in column.annotations)
+        if (annotation.lease != null) annotation.content,
+    ],
+    for (final span in spans)
+      if (span.lease != null) span.content,
+  ]);
+  var cursor = 0;
+  final columnWindows = <_RubyColumnWindows>[];
+  for (final column in columns) {
+    final base = windows[cursor++];
+    columnWindows.add(
+      _RubyColumnWindows(
+        base,
+        List.unmodifiable([
+          for (final annotation in column.annotations)
+            annotation.lease == null ? null : windows[cursor++],
+        ]),
+      ),
+    );
+  }
+  return (
+    columns: List.unmodifiable(columnWindows),
+    spans: List.unmodifiable([
+      for (final span in spans) span.lease == null ? null : windows[cursor++],
+    ]),
+  );
+}
+
+List<TextBox> _selectRubyWindow(
+  ForumBodyInlineContext? window,
+  int start,
+  int end,
+  List<TextBox> Function(int from, int to) select,
+) {
+  if (window == null) return const [];
+  final from =
+      start.clamp(window.startUtf16, window.endUtf16) - window.startUtf16;
+  final to = end.clamp(window.startUtf16, window.endUtf16) - window.startUtf16;
+  return from < to ? select(from, to) : const [];
+}
+
+final class _RubyColumnBinding extends _RubyBinding {
+  const _RubyColumnBinding(this.group, this.windows);
+  factory _RubyColumnBinding.bind(
+    ForumBodyInlineSpanContent content,
+    int index,
+    ForumBodyRubyGroupLayout group,
+  ) => _RubyColumnBinding(
+    group,
+    _rubyWindows(content, index, [
+      group.inspectMembers(),
+    ], const []).columns.single,
+  );
+  final ForumBodyRubyGroupLayout group;
+  final _RubyColumnWindows windows;
+  @override
+  Size get size => group.size;
+  @override
+  double get baseline => group.baseline;
+  @override
+  bool get isActive => group.isActive;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases =>
+      group.nativeLeases;
+  @override
+  void paint(Canvas canvas, Offset offset) => group.paint(canvas, offset);
+  @override
+  _RubySourceHit sourceAt(Offset point) {
+    final hit = group.sourceAt(point);
+    return (window: windows.forHit(hit), position: hit.position);
+  }
+
+  @override
+  List<TextBox> selectionBoxes(int start, int end) => [
+    ..._selectRubyWindow(
+      windows.base,
+      start,
+      end,
+      (from, to) => group.selectionBoxes(
+        part: ForumBodyRubyPart.base,
+        startUtf16: from,
+        endUtf16: to,
+      ),
+    ),
+    for (final (rank, window) in windows.annotations.indexed)
+      ..._selectRubyWindow(
+        window,
+        start,
+        end,
+        (from, to) => group.selectionBoxes(
+          part: ForumBodyRubyPart.annotation,
+          annotationIndex: rank,
+          startUtf16: from,
+          endUtf16: to,
+        ),
+      ),
+  ];
+  @override
+  void close() => group.close();
+}
+
+final class _RubySegmentBinding extends _RubyBinding {
+  const _RubySegmentBinding(this.segment, this.columns, this.spans);
+  factory _RubySegmentBinding.bind(
+    ForumBodyInlineSpanContent content,
+    int index,
+    ForumBodyRubySegmentLayout segment,
+  ) {
+    final members = segment.inspectMembers();
+    final windows = _rubyWindows(content, index, [
+      for (final column in members.columns) column.inspectMembers(),
+    ], members.spans);
+    return _RubySegmentBinding(segment, windows.columns, windows.spans);
+  }
+  final ForumBodyRubySegmentLayout segment;
+  final List<_RubyColumnWindows> columns;
+  final List<ForumBodyInlineContext?> spans;
+  @override
+  Size get size => segment.size;
+  @override
+  double get baseline => segment.baseline;
+  @override
+  bool get isActive => segment.isActive;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases =>
+      segment.nativeLeases;
+  @override
+  void paint(Canvas canvas, Offset offset) => segment.paint(canvas, offset);
+  @override
+  _RubySourceHit sourceAt(Offset point) {
+    final hit = segment.sourceAt(point);
+    final window = hit.spanIndex != null
+        ? spans[hit.spanIndex!]!
+        : columns[hit.columnIndex!].forHit(hit.columnHit!);
+    return (window: window, position: hit.position);
+  }
+
+  @override
+  List<TextBox> selectionBoxes(int start, int end) => [
+    for (final (index, column) in columns.indexed) ...[
+      ..._selectRubyWindow(
+        column.base,
+        start,
+        end,
+        (from, to) => segment.selectionBoxesForColumn(
+          columnIndex: index,
+          part: ForumBodyRubyPart.base,
+          startUtf16: from,
+          endUtf16: to,
+        ),
+      ),
+      for (final (rank, window) in column.annotations.indexed)
+        ..._selectRubyWindow(
+          window,
+          start,
+          end,
+          (from, to) => segment.selectionBoxesForColumn(
+            columnIndex: index,
+            part: ForumBodyRubyPart.annotation,
+            annotationIndex: rank,
+            startUtf16: from,
+            endUtf16: to,
+          ),
+        ),
+    ],
+    for (final (index, window) in spans.indexed)
+      ..._selectRubyWindow(
+        window,
+        start,
+        end,
+        (from, to) => segment.selectionBoxesForSpan(
+          spanIndex: index,
+          startUtf16: from,
+          endUtf16: to,
+        ),
+      ),
+  ];
+  @override
+  void close() => segment.close();
+}

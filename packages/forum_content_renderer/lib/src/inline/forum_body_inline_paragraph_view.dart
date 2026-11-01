@@ -8,6 +8,9 @@ import 'forum_body_inline_span_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart'
     show ForumBodyParagraphLine;
 import 'forum_body_ruby_group_layout.dart';
+import 'forum_body_ruby_segment_layout.dart';
+
+part 'forum_body_inline_ruby_binding.dart';
 
 enum ForumBodyInlineViewFailure { leases, coverage, identity, geometry }
 
@@ -45,56 +48,60 @@ final class ForumBodyInlineParagraphView {
       coverageStartUtf16 = 0,
       coverageEndUtf16 = 0;
 
-  /// Consumes these handles on success AND failure. Non-visible groups are
-  /// rejected, so one view cannot silently pin an entire long paragraph.
+  /// Consumes these handles on success AND failure. Column and segment indices
+  /// must be disjoint and cover exactly the visible atoms; hidden children
+  /// cannot silently pin an entire long paragraph.
   factory ForumBodyInlineParagraphView.adopt({
     required ForumBodyParagraphCache cache,
     required ForumBodyInlineParagraphLease parent,
     required int startLine,
     required int endLine,
-    required Map<int, ForumBodyRubyGroupLayout> rubyGroups,
+    Map<int, ForumBodyRubyGroupLayout> rubyGroups = const {},
+    Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
   }) {
+    final groups = Map<int, ForumBodyRubyGroupLayout>.of(rubyGroups);
+    final segments = Map<int, ForumBodyRubySegmentLayout>.of(rubySegments);
     try {
+      final members = [
+        for (final group in groups.values) ...group.nativeLeases,
+        for (final segment in segments.values) ...segment.nativeLeases,
+      ];
       if (!cache.ownsLease(parent) ||
           parent.layout.isDisposed ||
-          rubyGroups.values.any((group) => !group.isOwnedBy(cache)) ||
-          (Set<ForumBodyRubyGroupLayout>.identity()..addAll(rubyGroups.values))
+          groups.values.any((group) => !group.isOwnedBy(cache)) ||
+          segments.values.any((segment) => !segment.isOwnedBy(cache)) ||
+          groups.keys.any(segments.containsKey) ||
+          (Set<ForumBodyNativeParagraphLease>.identity()..addAll(members))
                   .length !=
-              rubyGroups.length) {
+              members.length) {
         _fail(ForumBodyInlineViewFailure.leases);
       }
       if (parent.layout.lines.isEmpty) {
-        if (startLine != 0 || endLine != 0 || rubyGroups.isNotEmpty) {
+        if (startLine != 0 ||
+            endLine != 0 ||
+            groups.isNotEmpty ||
+            segments.isNotEmpty) {
           _fail(ForumBodyInlineViewFailure.coverage);
         }
         return ForumBodyInlineParagraphView._empty(parent);
       }
       final fragment = parent.layout.fragment(startLine, endLine);
       final indices = fragment.atomIndices.toList(growable: false);
-      if (indices.length != rubyGroups.length ||
-          indices.any((index) => !rubyGroups.containsKey(index))) {
+      if (indices.length != groups.length + segments.length ||
+          indices.any(
+            (index) =>
+                !groups.containsKey(index) && !segments.containsKey(index),
+          )) {
         _fail(ForumBodyInlineViewFailure.coverage);
       }
       final bindings = <int, _RubyBinding>{};
       final content = parent.content;
       for (final index in indices) {
-        final group = rubyGroups[index]!;
-        final base = group.contentFor(ForumBodyRubyPart.base);
-        final annotations = List<ForumBodyInlineContext?>.filled(
-          group.annotationCount,
-          null,
-        );
-        final List<ForumBodyInlineContext> windows;
+        final _RubyBinding binding;
         try {
-          windows = content.resolveAtomicContexts(index, [
-            base,
-            for (var rank = 0; rank < group.annotationCount; rank++)
-              if (group.metrics.annotations[rank].hasAnnotation)
-                group.contentFor(
-                  ForumBodyRubyPart.annotation,
-                  annotationIndex: rank,
-                ),
-          ]);
+          binding = groups.containsKey(index)
+              ? _RubyColumnBinding.bind(content, index, groups[index]!)
+              : _RubySegmentBinding.bind(content, index, segments[index]!);
         } on ForumBodyParagraphInputException catch (error) {
           _fail(
             error.failure == ForumBodyParagraphInputFailure.identity
@@ -103,22 +110,12 @@ final class ForumBodyInlineParagraphView {
           );
         }
         final dimension = parent.layout.dimensions[index];
-        if ((dimension.size.width - group.size.width).abs() > 1e-4 ||
-            (dimension.size.height - group.size.height).abs() > 1e-4 ||
-            (dimension.baselineOffset! - group.baseline).abs() > 1e-4) {
+        if ((dimension.size.width - binding.size.width).abs() > 1e-4 ||
+            (dimension.size.height - binding.size.height).abs() > 1e-4 ||
+            (dimension.baselineOffset! - binding.baseline).abs() > 1e-4) {
           _fail(ForumBodyInlineViewFailure.geometry);
         }
-        var window = 1;
-        for (var rank = 0; rank < group.annotationCount; rank++) {
-          if (group.metrics.annotations[rank].hasAnnotation) {
-            annotations[rank] = windows[window++];
-          }
-        }
-        bindings[index] = _RubyBinding(
-          group,
-          windows.first,
-          List.unmodifiable(annotations),
-        );
+        bindings[index] = binding;
       }
       return ForumBodyInlineParagraphView._(
         parent,
@@ -126,8 +123,11 @@ final class ForumBodyInlineParagraphView {
         Map.unmodifiable(bindings),
       );
     } catch (_) {
-      for (final group in rubyGroups.values) {
+      for (final group in groups.values) {
         group.close();
+      }
+      for (final segment in segments.values) {
+        segment.close();
       }
       parent.release();
       rethrow;
@@ -140,7 +140,7 @@ final class ForumBodyInlineParagraphView {
   bool get isActive =>
       _parent?.isActive == true &&
       !_parent!.layout.isDisposed &&
-      _children.values.every((binding) => binding.group.isActive);
+      _children.values.every((binding) => binding.isActive);
   final double width;
   final double height;
   final int startLine;
@@ -168,7 +168,7 @@ final class ForumBodyInlineParagraphView {
 
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_parent,
-    for (final binding in _children.values) ...binding.group.nativeLeases,
+    for (final binding in _children.values) ...binding.nativeLeases,
   ];
 
   void paint(Canvas canvas, Offset offset) {
@@ -181,7 +181,7 @@ final class ForumBodyInlineParagraphView {
       canvas.clipRect(offset & Size(width, height), doAntiAlias: false);
       _fragment!.paintParent(canvas, offset);
       for (final entry in _children.entries) {
-        entry.value.group.paint(canvas, offset + _origin(entry.key));
+        entry.value.paint(canvas, offset + _origin(entry.key));
       }
     } finally {
       canvas.restore();
@@ -220,19 +220,8 @@ final class ForumBodyInlineParagraphView {
     if (hit is ForumBodyInlineAtomHit) {
       final binding = _children[hit.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
-      final child = binding.group.sourceAt(hit.offset);
-      final ForumBodyInlineContext window;
-      if (child.part == ForumBodyRubyPart.base) {
-        window = binding.base;
-      } else {
-        final rank = child.annotationIndex;
-        if (rank == null ||
-            rank >= binding.annotations.length ||
-            binding.annotations[rank] == null) {
-          _fail(ForumBodyInlineViewFailure.coverage);
-        }
-        window = binding.annotations[rank]!;
-      }
+      final child = binding.sourceAt(hit.offset);
+      final window = child.window;
       final parentDisplay = window.startUtf16 + child.position.displayUtf16;
       final parent = display.sourceAtUtf16(parentDisplay);
       position = HtmlProjectedSourcePosition(
@@ -307,32 +296,11 @@ final class ForumBodyInlineParagraphView {
     for (final atom in selected.atoms) {
       final binding = _children[atom.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
-      void select(
-        ForumBodyInlineContext? window,
-        ForumBodyRubyPart part, {
-        int? annotationIndex,
-      }) {
-        if (window == null) return;
-        final from =
-            atom.startUtf16.clamp(window.startUtf16, window.endUtf16) -
-            window.startUtf16;
-        final to =
-            atom.endUtf16.clamp(window.startUtf16, window.endUtf16) -
-            window.startUtf16;
-        if (from >= to) return;
-        for (final box in binding.group.selectionBoxes(
-          part: part,
-          annotationIndex: annotationIndex,
-          startUtf16: from,
-          endUtf16: to,
-        )) {
-          add(box, _origin(atom.index));
-        }
-      }
-
-      select(binding.base, ForumBodyRubyPart.base);
-      for (final (rank, window) in binding.annotations.indexed) {
-        select(window, ForumBodyRubyPart.annotation, annotationIndex: rank);
+      for (final box in binding.selectionBoxes(
+        atom.startUtf16,
+        atom.endUtf16,
+      )) {
+        add(box, _origin(atom.index));
       }
     }
     return List.unmodifiable(result);
@@ -349,17 +317,10 @@ final class ForumBodyInlineParagraphView {
     if (parent == null) return;
     _parent = null;
     for (final binding in _children.values) {
-      binding.group.close();
+      binding.close();
     }
     _children = const {};
     _fragment = null;
     parent.release();
   }
-}
-
-final class _RubyBinding {
-  const _RubyBinding(this.group, this.base, this.annotations);
-  final ForumBodyRubyGroupLayout group;
-  final ForumBodyInlineContext base;
-  final List<ForumBodyInlineContext?> annotations;
 }

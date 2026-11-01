@@ -14,25 +14,28 @@ final class RubySegmentFixture {
     String position = 'alternate',
     double lineHeight = 1,
     this.textScaler = TextScaler.noScaling,
+    this.prefix = '',
+    this.suffix = '',
+    String firstBase = 'A',
+    String secondBase = 'B',
+    String outerText = 'abcdefghij',
   }) {
-    final doc = const ForumBodyParser().parse(
+    final doc = _document = const ForumBodyParser().parse(
       html:
-          '<p dir="${direction.name}"><ruby style="ruby-position:$position">'
-          '<rb style="font-size:20px;line-height:$lineHeight">A</rb>'
-          '<rb style="font-size:30px;line-height:$lineHeight">B</rb>'
-          '${dense ? List.generate(100, (i) => '<rtc style="font-size:1px;line-height:$lineHeight">r$i</rtc>').join() : '<rtc><rt style="font-size:10px;line-height:$lineHeight">xx</rt><rt style="font-size:15px;line-height:$lineHeight">yy</rt></rtc><rtc style="font-size:10px;line-height:$lineHeight">abcdefghij</rtc><rtc style="font-size:8px;line-height:$lineHeight">outer</rtc>'}'
-          '</ruby></p>',
+          '<p dir="${direction.name}">${_hasPlain ? '<span>$prefix</span>' : ''}<ruby style="ruby-position:$position">'
+          '<rb style="font-size:20px;line-height:$lineHeight">$firstBase</rb>'
+          '<rb style="font-size:30px;line-height:$lineHeight">$secondBase</rb>'
+          '${dense ? List.generate(100, (i) => '<rtc style="font-size:1px;line-height:$lineHeight">r$i</rtc>').join() : '<rtc><rt style="font-size:10px;line-height:$lineHeight">xx</rt><rt style="font-size:15px;line-height:$lineHeight">yy</rt></rtc><rtc style="font-size:10px;line-height:$lineHeight">$outerText</rtc><rtc style="font-size:8px;line-height:$lineHeight">outer</rtc>'}'
+          '</ruby>${_hasPlain ? '<span>$suffix</span>' : ''}</p>',
       sourceId: 'actual-ruby-segment',
       conversionIdentity: 'none',
     );
-    final flow = ForumBodyStyledFlowCursor(
-      document: doc,
-      reader: ForumBodyReaderStyle(
-        textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
-        fontRevision: 'ahem',
-        linkColor: const Color(0xff0000ff),
-      ),
+    final reader = _reader = ForumBodyReaderStyle(
+      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
+      fontRevision: 'ahem',
+      linkColor: const Color(0xff0000ff),
     );
+    final flow = ForumBodyStyledFlowCursor(document: doc, reader: reader);
     ForumBodyRubyGroupContent? source;
     try {
       while (flow.moveNext()) {
@@ -139,6 +142,12 @@ final class RubySegmentFixture {
   );
   final TextDirection direction;
   final TextScaler textScaler;
+  final String prefix;
+  final String suffix;
+  bool get _hasPlain => prefix.isNotEmpty || suffix.isNotEmpty;
+  late final ForumBodyDocument _document;
+  late final ForumBodyReaderStyle _reader;
+  late final ForumBodyInlineSpanContent inlineContent = _buildInlineContent();
   late final List<ForumBodyParagraphContent> bases;
   late final List<ForumBodyParagraphContent> annotations;
   late final List<ForumBodyRubySide> sides;
@@ -150,6 +159,44 @@ final class RubySegmentFixture {
   final _requests =
       Map<ForumBodyParagraphContent, ForumBodyTextRequest>.identity();
   final _layouts = <ForumBodyRubySegmentLayout>[];
+
+  ForumBodyInlineSpanContent _buildInlineContent() {
+    final styles = const ForumBodyStyleResolver().resolve(_document, _reader);
+    ForumBodyParagraphContent plain(String path) =>
+        const ForumBodyParagraphContentBuilder().build(
+          document: _document,
+          styles: styles,
+          path: path,
+          layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+        );
+    final before = _hasPlain ? plain('0/0') : null;
+    final start = before?.projection.text.length ?? 0;
+    return ForumBodyInlineSpanContent.compose(
+      identity: _document.identity,
+      path: '0',
+      fontRevision: styles.fontRevision,
+      styleRevision: styles.resolverRevision,
+      style: styles.byPath['0']!,
+      contexts: [
+        ?before,
+        ...bases,
+        ...annotations,
+        if (_hasPlain) plain('0/2'),
+      ],
+      atomicRanges: [
+        (
+          startUtf16: start,
+          endUtf16:
+              start +
+              [...bases, ...annotations].fold<int>(
+                0,
+                (sum, member) => sum + member.projection.text.length,
+              ),
+        ),
+      ],
+    );
+  }
+
   ForumBodyTextBandChildLease lease(ForumBodyParagraphContent content) =>
       _leases[content]!;
 
