@@ -64,7 +64,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
     }
     if (previous.fontSize != next.fontSize ||
         previous.lineHeight != next.lineHeight ||
-        previous.paragraphSpacing != next.paragraphSpacing ||
+        previous.effectiveParagraphSpacing != next.effectiveParagraphSpacing ||
         previous.pagePadding != next.pagePadding ||
         previous.fontFamily != next.fontFamily ||
         previous.contentMaxWidth != next.contentMaxWidth ||

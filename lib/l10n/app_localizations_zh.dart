@@ -2202,6 +2202,44 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelFirstLineIndent => '首行缩进';
 
   @override
+  String get novelParagraphSpacing => '段落间距';
+
+  @override
+  String get novelParagraphSpacingScope => '应用范围';
+
+  @override
+  String get novelParagraphSpacingOriginal => '原始段距';
+
+  @override
+  String get novelParagraphSpacingMissing => '补充缺省';
+
+  @override
+  String get novelParagraphSpacingBody => '统一正文';
+
+  @override
+  String get novelParagraphSpacingAll => '全部段落';
+
+  @override
+  String get novelParagraphBefore => '段前间距';
+
+  @override
+  String get novelParagraphAfter => '段后间距';
+
+  @override
+  String novelParagraphSpacingValue(String value) {
+    return '$value 像素';
+  }
+
+  @override
+  String get novelParagraphSpacingHint => '相邻段距会合并，换行不增加段距。重置后恢复原始段距。';
+
+  @override
+  String get novelParagraphSpacingUnavailable => '段距设置仅用于翻页阅读，切换到翻页模式后可调整。';
+
+  @override
+  String get novelParagraphSpacingReset => '重置段落间距';
+
+  @override
   String get novelIndentScope => '应用范围';
 
   @override
@@ -7762,6 +7800,44 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelFirstLineIndent => '首行縮排';
+
+  @override
+  String get novelParagraphSpacing => '段落間距';
+
+  @override
+  String get novelParagraphSpacingScope => '套用範圍';
+
+  @override
+  String get novelParagraphSpacingOriginal => '原始段距';
+
+  @override
+  String get novelParagraphSpacingMissing => '補充預設';
+
+  @override
+  String get novelParagraphSpacingBody => '統一正文';
+
+  @override
+  String get novelParagraphSpacingAll => '全部段落';
+
+  @override
+  String get novelParagraphBefore => '段前間距';
+
+  @override
+  String get novelParagraphAfter => '段後間距';
+
+  @override
+  String novelParagraphSpacingValue(String value) {
+    return '$value 像素';
+  }
+
+  @override
+  String get novelParagraphSpacingHint => '相鄰段距會合併，換行不增加段距。重設後恢復原始段距。';
+
+  @override
+  String get novelParagraphSpacingUnavailable => '段距設定僅用於翻頁閱讀，切換至翻頁模式後即可調整。';
+
+  @override
+  String get novelParagraphSpacingReset => '重設段落間距';
 
   @override
   String get novelIndentScope => '套用範圍';

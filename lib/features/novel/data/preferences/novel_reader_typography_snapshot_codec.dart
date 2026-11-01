@@ -1,43 +1,54 @@
 import '../../domain/models/novel_reader_typography_overrides.dart';
 import '../../domain/repositories/novel_reader_preferences_repository.dart';
 
-/// Optional versioned namespace inside the existing snapshot. Old writers keep
-/// it as extension data; no extra store, eager migration or implicit setting.
+/// Optional versioned namespace in the existing snapshot. New fields are
+/// additive; older writers retain them as unknown extensions.
 final class NovelReaderTypographySnapshotCodec {
   const NovelReaderTypographySnapshotCodec();
   static const schemaVersion = 1;
-  static const _indentKeys = {'unit', 'value', 'scope', 'enabled'};
+  static const _indent = _NumericRequestCodec(
+    unit: 'em',
+    maximum: NovelReaderFirstLineIndent.maximumEm,
+    fields: ['value'],
+  );
+  static const _spacing = _NumericRequestCodec(
+    unit: 'logicalPixels',
+    maximum: NovelReaderParagraphSpacing.maximum,
+    fields: ['before', 'after'],
+  );
 
   NovelReaderTypographyOverrides normalize(
     NovelReaderTypographyOverrides input,
-  ) => input.firstLineIndent?.isValid == true
-      ? input
-      : const NovelReaderTypographyOverrides();
+  ) => NovelReaderTypographyOverrides(
+    firstLineIndent: input.firstLineIndent?.isValid == true
+        ? input.firstLineIndent
+        : null,
+    paragraphSpacing: input.paragraphSpacing?.isValid == true
+        ? input.paragraphSpacing
+        : null,
+  );
 
   NovelReaderTypographyOverrides decode(Object? source) {
     if (source is! Map<String, dynamic> ||
         source['schemaVersion'] != schemaVersion) {
       return const NovelReaderTypographyOverrides();
     }
-    final value = source['firstLineIndent'];
-    if (value is! Map<String, dynamic> ||
-        value['unit'] != 'em' ||
-        value['enabled'] == false ||
-        (value.containsKey('enabled') && value['enabled'] is! bool)) {
-      return const NovelReaderTypographyOverrides();
-    }
-    final scope = _scope(value['scope']);
-    final amount = value['value'];
-    if (scope == null || amount is! num) {
-      return const NovelReaderTypographyOverrides();
-    }
-    return normalize(
-      NovelReaderTypographyOverrides(
-        firstLineIndent: NovelReaderFirstLineIndent(
-          em: amount.toDouble(),
-          scope: scope,
-        ),
-      ),
+    final indent = _indent.decode(source['firstLineIndent']);
+    final spacing = _spacing.decode(source['paragraphSpacing']);
+    return NovelReaderTypographyOverrides(
+      firstLineIndent: indent == null
+          ? null
+          : NovelReaderFirstLineIndent(
+              em: indent.values['value']!,
+              scope: indent.scope,
+            ),
+      paragraphSpacing: spacing == null
+          ? null
+          : NovelReaderParagraphSpacing(
+              before: spacing.values['before']!,
+              after: spacing.values['after']!,
+              scope: spacing.scope,
+            ),
     );
   }
 
@@ -45,57 +56,115 @@ final class NovelReaderTypographySnapshotCodec {
     NovelReaderTypographyOverrides input, {
     Object? previous,
   }) {
-    _requireEditable(previous);
+    if (previous != null &&
+        (previous is! Map<String, dynamic> ||
+            previous['schemaVersion'] != schemaVersion)) {
+      throw const NovelReaderPreferencesUnsupportedSnapshot();
+    }
     final prior = previous as Map<String, dynamic>?;
-    final oldIndent = prior?['firstLineIndent'] as Map<String, dynamic>?;
-    final request = normalize(input).firstLineIndent;
+    final normalized = normalize(input);
+    final indent = normalized.firstLineIndent;
+    final spacing = normalized.paragraphSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
-    if (request != null) {
-      result['firstLineIndent'] = <String, Object?>{
-        ...?oldIndent,
-        'unit': 'em',
-        'value': request.em,
-        'scope': request.scope.name,
-        'enabled': true,
-      };
-    } else if (oldIndent != null &&
-        oldIndent.keys.any((key) => !_indentKeys.contains(key))) {
-      // Reset known behavior while retaining unknown extension data. Disabled
-      // values are inert in schema1; future semantic changes need a new schema.
-      final amount = oldIndent['value'];
-      final old = amount is num
-          ? NovelReaderFirstLineIndent(
-              em: amount.toDouble(),
-              scope: _scope(oldIndent['scope'])!,
-            )
-          : null;
-      result['firstLineIndent'] = <String, Object?>{
-        ...oldIndent,
-        'unit': 'em',
-        'value': old?.isValid == true ? old!.em : 0,
-        'scope': (old?.scope ?? NovelReaderStyleScope.asDefault).name,
-        'enabled': false,
-      };
-    } else {
-      result.remove('firstLineIndent');
+    final requests = {
+      'firstLineIndent': _indent.encode(
+        prior?['firstLineIndent'],
+        indent == null
+            ? null
+            : (scope: indent.scope, values: {'value': indent.em}),
+      ),
+      'paragraphSpacing': _spacing.encode(
+        prior?['paragraphSpacing'],
+        spacing == null
+            ? null
+            : (
+                scope: spacing.scope,
+                values: {'before': spacing.before, 'after': spacing.after},
+              ),
+      ),
+    };
+    for (final entry in requests.entries) {
+      if (entry.value == null) {
+        result.remove(entry.key);
+      } else {
+        result[entry.key] = entry.value;
+      }
     }
     return result.length == 1 ? null : result;
   }
+}
 
-  void _requireEditable(Object? source) {
-    if (source == null) return;
-    if (source is! Map<String, dynamic> ||
-        source['schemaVersion'] != schemaVersion) {
+typedef _NumericRequest = ({
+  NovelReaderStyleScope scope,
+  Map<String, double> values,
+});
+
+/// Shared compatibility mechanics for bounded numeric fields. Inactive known
+/// values retain extensions and remain stable over unrelated saves and resets.
+final class _NumericRequestCodec {
+  const _NumericRequestCodec({
+    required this.unit,
+    required this.maximum,
+    required this.fields,
+  });
+  final String unit;
+  final double maximum;
+  final List<String> fields;
+  static const _metadata = {'unit', 'scope', 'enabled'};
+
+  bool _knownShape(Object? source) =>
+      source is Map<String, dynamic> &&
+      source['unit'] == unit &&
+      _scope(source['scope']) != null &&
+      (!source.containsKey('enabled') || source['enabled'] is bool);
+
+  _NumericRequest? decode(Object? source, {bool includeDisabled = false}) {
+    if (!_knownShape(source)) return null;
+    final raw = source as Map<String, dynamic>;
+    if (!includeDisabled && raw['enabled'] == false) return null;
+    final values = <String, double>{};
+    for (final field in fields) {
+      final value = raw[field];
+      if (value is! num || !value.isFinite || value < 0 || value > maximum) {
+        return null;
+      }
+      values[field] = value.toDouble();
+    }
+    return (scope: _scope(raw['scope'])!, values: values);
+  }
+
+  Map<String, Object?>? encode(Object? previous, _NumericRequest? request) {
+    if (previous != null && !_knownShape(previous)) {
       throw const NovelReaderPreferencesUnsupportedSnapshot();
     }
-    final indent = source['firstLineIndent'];
-    if (indent != null &&
-        (indent is! Map<String, dynamic> ||
-            indent['unit'] != 'em' ||
-            _scope(indent['scope']) == null ||
-            (indent.containsKey('enabled') && indent['enabled'] is! bool))) {
-      throw const NovelReaderPreferencesUnsupportedSnapshot();
+    final prior = previous as Map<String, dynamic>?;
+    if (request != null) {
+      return {
+        ...?prior,
+        'unit': unit,
+        ...request.values,
+        'scope': request.scope.name,
+        'enabled': true,
+      };
     }
+    if (prior == null ||
+        prior.keys.every(
+          (key) => _metadata.contains(key) || fields.contains(key),
+        )) {
+      return null;
+    }
+    // Retain extensions while disabling known behavior. Future semantic
+    // changes must advance the namespace version, not reinterpret extensions.
+    final old = decode(prior, includeDisabled: true);
+    return {
+      ...prior,
+      'unit': unit,
+      ...?old?.values,
+      if (old == null)
+        for (final field in fields) field: 0.0,
+      'scope': (old?.scope ?? _scope(prior['scope'])!).name,
+      'enabled': false,
+    };
   }
 
   NovelReaderStyleScope? _scope(Object? raw) => switch (raw) {

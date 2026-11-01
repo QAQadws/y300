@@ -35,26 +35,73 @@ final class NovelReaderFirstLineIndent {
   int get hashCode => Object.hash(em, scope);
 }
 
+/// Logical pixel margins, collapsed by the renderer rather than added together.
+final class NovelReaderParagraphSpacing {
+  const NovelReaderParagraphSpacing({
+    required this.before,
+    required this.after,
+    this.scope = NovelReaderStyleScope.forceBody,
+  });
+  static const minimum = 0.0;
+  static const maximum = 64.0;
+  static const step = 1.0;
+  final double before;
+  final double after;
+  final NovelReaderStyleScope scope;
+  bool get isValid =>
+      before.isFinite &&
+      before >= minimum &&
+      before <= maximum &&
+      after.isFinite &&
+      after >= minimum &&
+      after <= maximum;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NovelReaderParagraphSpacing &&
+      other.before == before &&
+      other.after == after &&
+      other.scope == scope;
+  @override
+  int get hashCode => Object.hash(before, after, scope);
+}
+
 /// Sparse requests. Absence inherits the preceding scope; explicit author/zero
 /// values remain distinct so a later work override can undo a global setting.
 final class NovelReaderTypographyOverrides {
-  const NovelReaderTypographyOverrides({this.firstLineIndent});
+  const NovelReaderTypographyOverrides({
+    this.firstLineIndent,
+    this.paragraphSpacing,
+  });
   final NovelReaderFirstLineIndent? firstLineIndent;
-  bool get isEmpty => firstLineIndent == null;
+  final NovelReaderParagraphSpacing? paragraphSpacing;
+  bool get isEmpty => firstLineIndent == null && paragraphSpacing == null;
 
   NovelReaderTypographyOverrides withFirstLineIndent(
     NovelReaderFirstLineIndent? value,
-  ) => NovelReaderTypographyOverrides(firstLineIndent: value);
+  ) => NovelReaderTypographyOverrides(
+    firstLineIndent: value,
+    paragraphSpacing: paragraphSpacing,
+  );
+
+  NovelReaderTypographyOverrides withParagraphSpacing(
+    NovelReaderParagraphSpacing? value,
+  ) => NovelReaderTypographyOverrides(
+    firstLineIndent: firstLineIndent,
+    paragraphSpacing: value,
+  );
 
   NovelReaderTypographyOverrides over(NovelReaderTypographyOverrides base) =>
       NovelReaderTypographyOverrides(
         firstLineIndent: firstLineIndent ?? base.firstLineIndent,
+        paragraphSpacing: paragraphSpacing ?? base.paragraphSpacing,
       );
 
   @override
   bool operator ==(Object other) =>
       other is NovelReaderTypographyOverrides &&
-      other.firstLineIndent == firstLineIndent;
+      other.firstLineIndent == firstLineIndent &&
+      other.paragraphSpacing == paragraphSpacing;
   @override
-  int get hashCode => firstLineIndent.hashCode;
+  int get hashCode => Object.hash(firstLineIndent, paragraphSpacing);
 }

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_indent_settings_panel.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_paragraph_spacing_settings_panel.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
@@ -124,8 +125,16 @@ void main() {
 
       await pump(false, NovelReaderFlowMode.pagedLtr);
       expect(find.byType(NovelReaderIndentSettingsPanel), findsNothing);
+      expect(
+        find.byType(NovelReaderParagraphSpacingSettingsPanel),
+        findsNothing,
+      );
       await pump(true, NovelReaderFlowMode.pagedLtr);
       expect(find.byType(NovelReaderIndentSettingsPanel), findsOneWidget);
+      expect(
+        find.byType(NovelReaderParagraphSpacingSettingsPanel),
+        findsOneWidget,
+      );
       expect(
         tester
             .widget<NovelReaderIndentSettingsPanel>(
@@ -135,6 +144,14 @@ void main() {
         isTrue,
       );
       await pump(true, NovelReaderFlowMode.vertical);
+      expect(
+        tester
+            .widget<NovelReaderParagraphSpacingSettingsPanel>(
+              find.byType(NovelReaderParagraphSpacingSettingsPanel),
+            )
+            .enabled,
+        isFalse,
+      );
       expect(
         tester
             .widget<NovelReaderIndentSettingsPanel>(

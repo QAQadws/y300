@@ -188,6 +188,8 @@ class NovelReaderPreferences {
 
   final double fontSize;
   final double lineHeight;
+
+  /// Legacy transient logical pixels, applied only after a paragraph.
   final double paragraphSpacing;
   final double pagePadding;
 
@@ -200,6 +202,16 @@ class NovelReaderPreferences {
   /// Legacy transient logical pixels. Persisted em requests live in typography.
   final double firstLineIndent;
   final NovelReaderTypographyOverrides typography;
+
+  ({double before, double after, NovelReaderStyleScope scope})
+  get effectiveParagraphSpacing {
+    final request = typography.paragraphSpacing;
+    return (
+      before: request?.before ?? 0,
+      after: request?.after ?? paragraphSpacing,
+      scope: request?.scope ?? NovelReaderStyleScope.asDefault,
+    );
+  }
 
   NovelReaderEffectiveIndent get effectiveFirstLineIndent {
     final request = typography.firstLineIndent;

@@ -3618,6 +3618,78 @@ abstract class AppLocalizations {
   /// **'首行缩进'**
   String get novelFirstLineIndent;
 
+  /// No description provided for @novelParagraphSpacing.
+  ///
+  /// In zh, this message translates to:
+  /// **'段落间距'**
+  String get novelParagraphSpacing;
+
+  /// No description provided for @novelParagraphSpacingScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用范围'**
+  String get novelParagraphSpacingScope;
+
+  /// No description provided for @novelParagraphSpacingOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始段距'**
+  String get novelParagraphSpacingOriginal;
+
+  /// No description provided for @novelParagraphSpacingMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'补充缺省'**
+  String get novelParagraphSpacingMissing;
+
+  /// No description provided for @novelParagraphSpacingBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelParagraphSpacingBody;
+
+  /// No description provided for @novelParagraphSpacingAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部段落'**
+  String get novelParagraphSpacingAll;
+
+  /// No description provided for @novelParagraphBefore.
+  ///
+  /// In zh, this message translates to:
+  /// **'段前间距'**
+  String get novelParagraphBefore;
+
+  /// No description provided for @novelParagraphAfter.
+  ///
+  /// In zh, this message translates to:
+  /// **'段后间距'**
+  String get novelParagraphAfter;
+
+  /// No description provided for @novelParagraphSpacingValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value} 像素'**
+  String novelParagraphSpacingValue(String value);
+
+  /// No description provided for @novelParagraphSpacingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'相邻段距会合并，换行不增加段距。重置后恢复原始段距。'**
+  String get novelParagraphSpacingHint;
+
+  /// No description provided for @novelParagraphSpacingUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'段距设置仅用于翻页阅读，切换到翻页模式后可调整。'**
+  String get novelParagraphSpacingUnavailable;
+
+  /// No description provided for @novelParagraphSpacingReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置段落间距'**
+  String get novelParagraphSpacingReset;
+
   /// No description provided for @novelIndentScope.
   ///
   /// In zh, this message translates to:

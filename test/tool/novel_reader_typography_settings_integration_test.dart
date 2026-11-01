@@ -27,8 +27,14 @@ void main() {
         .load();
   });
 
+  for (final spacing in [false, true]) {
+    _testSettings(spacing: spacing);
+  }
+}
+
+void _testSettings({required bool spacing}) {
   testWidgets(
-    'settings reflow keeps coverage and persists across reader owners',
+    'settings reflow keeps coverage and persists across reader owners (spacing=$spacing)',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       SharedPreferencesNovelReaderPreferencesRepository repository() =>
@@ -36,7 +42,15 @@ void main() {
             preferencesStore: SharedPreferencesStore(),
             legacySource: const _NoLegacy(),
           );
-      await repository().save(profileReaderPreferences);
+      await repository().save(
+        profileReaderPreferences.copyWith(
+          typography: spacing
+              ? const NovelReaderTypographyOverrides(
+                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
+                )
+              : const NovelReaderTypographyOverrides(),
+        ),
+      );
       final baseline = await repository().load();
       final data = NovelMainPageProfileData();
       final source = data.add(
@@ -161,6 +175,42 @@ void main() {
         expect(checked, greaterThan(0));
       }
 
+      void checkVisibleSpacing(
+        ProfileReaderObservation observation,
+        double gap,
+      ) {
+        final target = observation.nativeController!.viewForPage(
+          observation.page!,
+        )!;
+        final rectangles = <Rect>[];
+        void collect(Element element) {
+          if (element.widget case ForumBodyParagraphSurface(lease: final lease)
+              when lease.isActive) {
+            rectangles.add(tester.getRect(find.byWidget(element.widget)));
+          }
+          element.visitChildElements(collect);
+        }
+
+        void visit(Element element) {
+          if (element.widget.key case ObjectKey(value: final value)
+              when identical(value, target)) {
+            collect(element);
+          } else {
+            element.visitChildElements(visit);
+          }
+        }
+
+        key.currentContext!.visitChildElements(visit);
+        rectangles.sort((a, b) => a.top.compareTo(b.top));
+        expect(rectangles.length, greaterThan(1));
+        for (var i = 1; i < rectangles.length; i++) {
+          expect(
+            rectangles[i].top - rectangles[i - 1].bottom,
+            closeTo(gap, .001),
+          );
+        }
+      }
+
       await mount();
       var popped = open();
       var observation = await wait((value) => value.ready && value.complete);
@@ -181,19 +231,48 @@ void main() {
       expect(anchor.hasCanonicalTextOffset, isTrue);
       final oldKey = observation.paginationKey;
       final l10n = await settings();
-      await tester.ensureVisible(find.text(l10n.novelIndentBody));
-      await tester.tap(find.text(l10n.novelIndentBody));
+      final policy = find.byKey(
+        Key(
+          spacing
+              ? 'novel-reader-paragraph-spacing-policy'
+              : 'novel-reader-indent-policy',
+        ),
+      );
+      final bodyChoice = find.descendant(
+        of: policy,
+        matching: find.text(
+          spacing ? l10n.novelParagraphSpacingBody : l10n.novelIndentBody,
+        ),
+      );
+      await tester.ensureVisible(bodyChoice);
+      await tester.tap(bodyChoice);
       await tester.pump();
-      tester
-          .widget<Slider>(find.byKey(const Key('novel-reader-indent-slider')))
-          .onChanged!(1.5);
+      if (spacing) {
+        Slider slider(String key) => tester.widget<Slider>(
+          find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.byType(Slider),
+          ),
+        );
+        slider('novel-reader-paragraph-before').onChanged!(12);
+        await tester.pump();
+        slider('novel-reader-paragraph-after').onChanged!(31);
+      } else {
+        tester
+            .widget<Slider>(find.byKey(const Key('novel-reader-indent-slider')))
+            .onChanged!(1.5);
+      }
       await closeSettings();
       observation = await wait(
         (value) =>
             value.ready &&
             value.complete &&
             value.paginationKey != oldKey &&
-            state().persistedPreferences.typography.firstLineIndent?.em == 1.5,
+            (spacing
+                ? state().persistedPreferences.typography.paragraphSpacing ==
+                      const NovelReaderParagraphSpacing(before: 12, after: 31)
+                : state().persistedPreferences.typography.firstLineIndent?.em ==
+                      1.5),
       );
       expect(state().document, same(document));
       // Layout page indices/percentages may change. The canonical text position
@@ -207,7 +286,14 @@ void main() {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
+      if (spacing) checkVisibleSpacing(observation, 31);
       final stored = await repository().load();
+      if (spacing) {
+        expect(
+          stored.typography.paragraphSpacing,
+          const NovelReaderParagraphSpacing(before: 12, after: 31),
+        );
+      }
       expect(
         stored.typography.firstLineIndent,
         const NovelReaderFirstLineIndent(em: 1.5),
@@ -237,19 +323,32 @@ void main() {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
+      if (spacing) checkVisibleSpacing(observation, 31);
       await settings();
-      await tester.ensureVisible(
-        find.byKey(const Key('novel-reader-indent-reset')),
+      final reset = find.byKey(
+        Key(
+          spacing
+              ? 'novel-reader-paragraph-spacing-reset'
+              : 'novel-reader-indent-reset',
+        ),
       );
-      await tester.tap(find.byKey(const Key('novel-reader-indent-reset')));
+      await tester.ensureVisible(reset);
+      await tester.tap(reset);
       await closeSettings();
       observation = await wait(
         (value) =>
             value.ready &&
             value.complete &&
-            state().persistedPreferences.typography.isEmpty,
+            (spacing
+                ? state().persistedPreferences.typography.paragraphSpacing ==
+                      null
+                : state().persistedPreferences.typography.isEmpty),
       );
       expect(await repository().load(), baseline);
+      if (spacing) {
+        checkVisibleSpacing(observation, 10);
+        checkVisibleIndent(observation, 1.5);
+      }
       final secondOwner = observation.nativeOwner!;
       navigator.currentState!.pop();
       await tester.pumpAndSettle();

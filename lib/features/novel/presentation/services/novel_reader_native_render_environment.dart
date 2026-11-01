@@ -44,7 +44,10 @@ final class NovelReaderNativeRenderEnvironment {
     final textStyle = (theme.textTheme.bodyMedium ?? const TextStyle())
         .merge(typography.body)
         .copyWith(inherit: false, locale: Localizations.maybeLocaleOf(context));
-    final indent = resolveNovelReaderNativeIndent(preferences, policy);
+    final nativeTypography = resolveNovelReaderNativeTypography(
+      preferences,
+      policy,
+    );
     return NovelReaderNativeRenderEnvironment._(
       ForumBodyReaderStyle(
         textStyle: textStyle,
@@ -52,9 +55,10 @@ final class NovelReaderNativeRenderEnvironment {
         linkColor: palette.link,
         textAlign: typography.textAlign,
         textDirection: Directionality.of(context),
-        paragraphAfter: preferences.paragraphSpacing,
-        firstLineIndent: indent.indent,
-        policy: indent.policy,
+        paragraphBefore: nativeTypography.paragraphBefore,
+        paragraphAfter: nativeTypography.paragraphAfter,
+        firstLineIndent: nativeTypography.indent,
+        policy: nativeTypography.policy,
       ),
       // Unlike the old fwfh compatibility path, native paragraphs use scale()
       // at every effective author/reader font size. Do not flatten to one factor.

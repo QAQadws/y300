@@ -266,6 +266,10 @@ void main() {
           fontSize: 24,
           typography: const NovelReaderTypographyOverrides(
             firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
+            paragraphSpacing: NovelReaderParagraphSpacing(
+              before: 12,
+              after: 31,
+            ),
           ),
         );
         fixture.coordinator.commitImmediately(accepted);

@@ -10,6 +10,7 @@ import 'package:y300/features/novel/presentation/controllers/novel_chapter_inter
 import 'package:y300/l10n/app_localizations.dart';
 
 import 'novel_reader_indent_settings_panel.dart';
+import 'novel_reader_paragraph_spacing_settings_panel.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
   const NovelReaderDisplaySettingsSheet({
@@ -119,6 +120,19 @@ class _NovelReaderDisplaySettingsSheetState
                   children: [
                     NovelReaderIndentSettingsPanel(
                       value: _draft.typography,
+                      enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
+                      onChanged: (next) =>
+                          _applyPreferences(_draft.copyWith(typography: next)),
+                    ),
+                  ],
+                ),
+              if (widget.nativeTypography)
+                _SettingsSection(
+                  title: l10n.novelParagraphSpacing,
+                  children: [
+                    NovelReaderParagraphSpacingSettingsPanel(
+                      value: _draft.typography,
+                      legacyAfter: _draft.paragraphSpacing,
                       enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
                       onChanged: (next) =>
                           _applyPreferences(_draft.copyWith(typography: next)),

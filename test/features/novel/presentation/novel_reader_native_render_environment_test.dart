@@ -137,6 +137,124 @@ void main() {
       }
     },
   );
+  for (final scope in NovelReaderStyleScope.values) {
+    testWidgets(
+      'spacing scope preserves author roles and horizontal margins $scope',
+      (tester) async {
+        final environment = await _capture(
+          tester,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            typography: NovelReaderTypographyOverrides(
+              firstLineIndent: const NovelReaderFirstLineIndent(em: 1.5),
+              paragraphSpacing: NovelReaderParagraphSpacing(
+                before: 12,
+                after: 31,
+                scope: scope,
+              ),
+            ),
+          ),
+        );
+        expect(
+          environment.reader.firstLineIndent,
+          const ForumBodyLength(1.5, ForumBodyLengthUnit.em),
+        );
+        for (final tag in ['p', 'h1']) {
+          final document = const ForumBodyParser().parse(
+            html: '<$tag style="margin:1px 2px 3px 4px">text</$tag>',
+            sourceId: 'spacing-scope',
+            conversionIdentity: 'none',
+          );
+          final style = const ForumBodyStyleResolver()
+              .resolve(document, environment.reader)
+              .byPath['0']!;
+          final forced =
+              scope == NovelReaderStyleScope.forceAll ||
+              (scope == NovelReaderStyleScope.forceBody && tag == 'p');
+          expect(style.margin.top, ForumBodyLength(forced ? 12 : 1));
+          expect(style.margin.bottom, ForumBodyLength(forced ? 31 : 3));
+          expect(style.margin.left, const ForumBodyLength(4));
+          expect(style.margin.right, const ForumBodyLength(2));
+        }
+      },
+    );
+  }
+  for (final pageHeight in [250.0, 90.0]) {
+    testWidgets(
+      'spacing reaches real page geometry, not BR or page edges ($pageHeight)',
+      (tester) async {
+        final environment = await _capture(
+          tester,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            fontSize: 20,
+            lineHeight: 1,
+            typography: const NovelReaderTypographyOverrides(
+              paragraphSpacing: NovelReaderParagraphSpacing(
+                before: 12,
+                after: 31,
+              ),
+            ),
+          ),
+          theme: ThemeData.light().copyWith(
+            textTheme: const TextTheme(
+              bodyMedium: TextStyle(fontFamily: 'Ahem'),
+            ),
+          ),
+        );
+        final document = const ForumBodyParser().parse(
+          html: '<p>a<br>b</p><p>c</p>',
+          sourceId: 'spacing-native',
+          conversionIdentity: 'none',
+        );
+        final cache = ForumBodyParagraphCache(
+          maxEntries: 8,
+          maxEstimatedBytes: 1 << 20,
+        );
+        final session = ForumBodyTextPageSession(
+          document: document,
+          reader: environment.reader,
+          cache: cache,
+          limits: const ForumBodyTextPageSessionLimits(
+            maxPages: 100,
+            maxFragments: 100,
+            maxParagraphs: 100,
+            maxTextCodeUnits: 10000,
+            maxRuns: 1000,
+            maxIssuedLeases: 20,
+          ),
+          layoutId: 'spacing-native',
+          width: 200,
+          height: pageHeight,
+        );
+        addTearDown(() {
+          session.close();
+          cache.close();
+        });
+        for (var i = 0; !session.isComplete && i < 1000; i++) {
+          session.advance(maxEvents: 1, maxLines: 1);
+        }
+        expect(session.isComplete, isTrue);
+        if (pageHeight == 250) {
+          expect(session.snapshot.single.fragments.map((f) => f.top).toList(), [
+            0,
+            20,
+            71,
+          ]);
+          expect(session.snapshot.single.usedHeight, 91);
+        } else {
+          expect(
+            session.snapshot
+                .map((p) => p.fragments.map((f) => f.top).toList())
+                .toList(),
+            [
+              [0, 20],
+              [0],
+            ],
+          );
+          expect(session.snapshot.map((p) => p.usedHeight).toList(), [40, 20]);
+        }
+      },
+    );
+  }
   testWidgets('current reading preferences become unscaled native inputs', (
     tester,
   ) async {
