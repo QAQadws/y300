@@ -9,6 +9,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_paragraph_
 import 'package:y300/features/novel/presentation/widgets/novel_reader_letter_spacing_settings_panel.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_word_spacing_settings_panel.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_font_size_policy_settings_panel.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_line_height_policy_settings_panel.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
@@ -127,6 +128,10 @@ void main() {
       }
 
       await pump(false, NovelReaderFlowMode.pagedLtr);
+      expect(
+        find.byType(NovelReaderLineHeightPolicySettingsPanel),
+        findsNothing,
+      );
       expect(find.byType(NovelReaderFontSizePolicySettingsPanel), findsNothing);
       expect(find.byType(NovelReaderWordSpacingSettingsPanel), findsNothing);
       expect(find.byType(NovelReaderLetterSpacingSettingsPanel), findsNothing);
@@ -136,6 +141,10 @@ void main() {
         findsNothing,
       );
       await pump(true, NovelReaderFlowMode.pagedLtr);
+      expect(
+        find.byType(NovelReaderLineHeightPolicySettingsPanel),
+        findsOneWidget,
+      );
       expect(
         find.byType(NovelReaderFontSizePolicySettingsPanel),
         findsOneWidget,
@@ -159,6 +168,25 @@ void main() {
         isTrue,
       );
       await pump(true, NovelReaderFlowMode.vertical);
+      expect(
+        tester
+            .widget<NovelReaderLineHeightPolicySettingsPanel>(
+              find.byType(NovelReaderLineHeightPolicySettingsPanel),
+            )
+            .enabled,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<Slider>(
+              find.descendant(
+                of: find.byKey(const Key('novel-reader-line-height-slider')),
+                matching: find.byType(Slider),
+              ),
+            )
+            .onChanged,
+        isNotNull,
+      );
       expect(
         tester
             .widget<NovelReaderFontSizePolicySettingsPanel>(

@@ -24,7 +24,9 @@ enum _Setting {
   wordSpacing('word-spacing'),
   wordSpacingRuby('word-spacing'),
   fontSizePolicy('font-size'),
-  fontSizePolicyRuby('font-size');
+  fontSizePolicyRuby('font-size'),
+  lineHeightPolicy('line-height'),
+  lineHeightPolicyRuby('line-height');
 
   const _Setting(this.keyPrefix);
   final String keyPrefix;
@@ -51,7 +53,8 @@ void _testSettings(_Setting setting) {
   final mixed =
       setting == _Setting.letterSpacingRuby ||
       setting == _Setting.wordSpacingRuby ||
-      setting == _Setting.fontSizePolicyRuby;
+      setting == _Setting.fontSizePolicyRuby ||
+      setting == _Setting.lineHeightPolicyRuby;
   final letters =
       setting == _Setting.letterSpacing ||
       setting == _Setting.letterSpacingRuby;
@@ -60,6 +63,9 @@ void _testSettings(_Setting setting) {
   final sizePolicy =
       setting == _Setting.fontSizePolicy ||
       setting == _Setting.fontSizePolicyRuby;
+  final heightPolicy =
+      setting == _Setting.lineHeightPolicy ||
+      setting == _Setting.lineHeightPolicyRuby;
   testWidgets(
     'settings reflow keeps coverage and persists across reader owners ($setting)',
     (tester) async {
@@ -71,39 +77,26 @@ void _testSettings(_Setting setting) {
           );
       await repository().save(
         profileReaderPreferences.copyWith(
-          fontSize: sizePolicy ? 20 : profileReaderPreferences.fontSize,
-          typography: sizePolicy
-              ? const NovelReaderTypographyOverrides(
-                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
-                  paragraphSpacing: NovelReaderParagraphSpacing(
-                    before: 12,
-                    after: 31,
-                  ),
-                  letterSpacing: NovelReaderLetterSpacing(logicalPixels: -1.25),
-                  wordSpacing: NovelReaderWordSpacing(logicalPixels: 7.5),
-                )
-              : words
-              ? const NovelReaderTypographyOverrides(
-                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
-                  paragraphSpacing: NovelReaderParagraphSpacing(
-                    before: 12,
-                    after: 31,
-                  ),
-                  letterSpacing: NovelReaderLetterSpacing(logicalPixels: -1.25),
-                )
-              : letters
-              ? const NovelReaderTypographyOverrides(
-                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
-                  paragraphSpacing: NovelReaderParagraphSpacing(
-                    before: 12,
-                    after: 31,
-                  ),
-                )
-              : spacing
-              ? const NovelReaderTypographyOverrides(
-                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
-                )
-              : const NovelReaderTypographyOverrides(),
+          fontSize: sizePolicy || heightPolicy
+              ? 20
+              : profileReaderPreferences.fontSize,
+          typography: NovelReaderTypographyOverrides(
+            firstLineIndent: setting != _Setting.indent
+                ? const NovelReaderFirstLineIndent(em: 1.5)
+                : null,
+            paragraphSpacing: letters || words || sizePolicy || heightPolicy
+                ? const NovelReaderParagraphSpacing(before: 12, after: 31)
+                : null,
+            letterSpacing: words || sizePolicy || heightPolicy
+                ? const NovelReaderLetterSpacing(logicalPixels: -1.25)
+                : null,
+            wordSpacing: sizePolicy || heightPolicy
+                ? const NovelReaderWordSpacing(logicalPixels: 7.5)
+                : null,
+            fontSizeScope: heightPolicy
+                ? NovelReaderStyleScope.forceBody
+                : null,
+          ),
         ),
       );
       final baseline = await repository().load();
@@ -112,7 +105,11 @@ void _testSettings(_Setting setting) {
         List.generate(
           32,
           (i) =>
-              '<p style="text-indent:10px${sizePolicy ? ';font-size:12px' : ''}">Paragraph $i: '
+              '<p style="text-indent:10px${heightPolicy
+                  ? ';font-size:12px;line-height:28px'
+                  : sizePolicy
+                  ? ';font-size:12px'
+                  : ''}">Paragraph $i: '
               '${mixed ? 'before <ruby>base<rt>note</rt></ruby> after. ' : ''}'
               'Synthetic text for checking actual native reading geometry.</p>',
         ).join(),
@@ -127,7 +124,7 @@ void _testSettings(_Setting setting) {
         data.scope(
           MaterialApp(
             navigatorKey: navigator,
-            theme: letters || words || sizePolicy
+            theme: letters || words || sizePolicy || heightPolicy
                 ? ThemeData.light().copyWith(
                     textTheme: const TextTheme(
                       bodyMedium: TextStyle(
@@ -382,6 +379,114 @@ void _testSettings(_Setting setting) {
         expect(checked, greaterThan(0));
       }
 
+      void checkVisibleLineHeight(
+        ProfileReaderObservation observation,
+        double stride,
+      ) {
+        final target = observation.nativeController!.viewForPage(
+          observation.page!,
+        )!;
+        void verifyVerticalCoverage(
+          ForumBodyPreparedTextFragment prepared,
+          String? path,
+          int startLine,
+        ) {
+          final fragment = target.snapshot[target.pageIndex].fragments
+              .firstWhere((f) => f.path == path && f.startLine == startLine);
+          final top = (-fragment.top).clamp(0.0, fragment.height);
+          final bottom = (target.snapshot.height - fragment.top).clamp(
+            0.0,
+            fragment.height,
+          );
+          // Prove line-height fit with actual vertical glyph bounds. The page
+          // coverage flag also includes the independent horizontal edge bounds.
+          for (final range in prepared.projection.graphemeRanges(
+            startUtf16: fragment.coverageStartUtf16,
+            endUtf16: fragment.coverageEndUtf16,
+          )) {
+            for (final box in prepared.glyphBoxes(
+              range.startUtf16,
+              range.endUtf16,
+            )) {
+              expect(box.top, greaterThanOrEqualTo(top - .001));
+              expect(box.bottom, lessThanOrEqualTo(bottom + .001));
+            }
+          }
+        }
+
+        var gaps = 0;
+        void verify(List<ForumBodyParagraphLine> rows) {
+          for (var i = 1; i < rows.length; i++) {
+            final actual = rows[i].baseline - rows[i - 1].baseline;
+            // Ruby may reserve additional annotation height. It must not shrink
+            // the reader's requested row spacing to fit the original page.
+            expect(
+              actual,
+              mixed
+                  ? greaterThanOrEqualTo(stride - .001)
+                  : closeTo(stride, .001),
+            );
+            gaps++;
+          }
+        }
+
+        void collect(Element element) {
+          if (element.widget
+              case ForumBodyParagraphSurface(
+                lease: final lease,
+                startLine: final start,
+                endLine: final end,
+              )
+              when lease.isActive) {
+            verifyVerticalCoverage(
+              ForumBodyPreparedTextFragment.paragraph(
+                lease: lease,
+                startLine: start,
+                endLine: end ?? lease.layout.lines.length,
+              ),
+              lease.content.path,
+              start,
+            );
+            verify(lease.layout.lines);
+          }
+          if (element.widget
+              case ForumBodyInlineParagraphSurface(view: final view)
+              when view.isActive) {
+            verifyVerticalCoverage(
+              ForumBodyPreparedTextFragment.inline(view),
+              view.content.path,
+              view.startLine,
+            );
+            verify(
+              view.nativeLeases
+                  .whereType<ForumBodyInlineParagraphLease>()
+                  .single
+                  .layout
+                  .lines,
+            );
+          }
+          element.visitChildElements(collect);
+        }
+
+        void visit(Element element) {
+          if (element.widget.key case ObjectKey(value: final value)
+              when identical(value, target)) {
+            collect(element);
+          } else {
+            element.visitChildElements(visit);
+          }
+        }
+
+        key.currentContext!.visitChildElements(visit);
+        expect(gaps, greaterThan(0));
+        checkVisibleLetters(
+          observation,
+          baseline.typography.letterSpacing!.logicalPixels,
+          wordSpacing: 7.5,
+          checkSpaces: true,
+        );
+      }
+
       await mount();
       var popped = open();
       var observation = await wait((value) => value.ready && value.complete);
@@ -416,12 +521,23 @@ void _testSettings(_Setting setting) {
           _Setting.wordSpacingRuby => l10n.novelWordSpacingBody,
           _Setting.fontSizePolicy ||
           _Setting.fontSizePolicyRuby => l10n.novelFontSizePolicyBody,
+          _Setting.lineHeightPolicy ||
+          _Setting.lineHeightPolicyRuby => l10n.novelLineHeightPolicyBody,
         }),
       );
       await tester.ensureVisible(bodyChoice);
       await tester.tap(bodyChoice);
       await tester.pump();
-      if (sizePolicy) {
+      if (heightPolicy) {
+        tester
+            .widget<Slider>(
+              find.descendant(
+                of: find.byKey(const Key('novel-reader-line-height-slider')),
+                matching: find.byType(Slider),
+              ),
+            )
+            .onChanged!(2.0);
+      } else if (sizePolicy) {
         tester
             .widget<Slider>(
               find.descendant(
@@ -477,15 +593,21 @@ void _testSettings(_Setting setting) {
         _Setting.fontSizePolicyRuby => baseline.typography.withFontSizeScope(
           NovelReaderStyleScope.forceBody,
         ),
+        _Setting.lineHeightPolicy || _Setting.lineHeightPolicyRuby =>
+          baseline.typography.withLineHeightScope(
+            NovelReaderStyleScope.forceBody,
+          ),
       };
       final selectedFontSize = sizePolicy ? 22.0 : baseline.fontSize;
+      final selectedLineHeight = heightPolicy ? 2.0 : baseline.lineHeight;
       observation = await wait(
         (value) =>
             value.ready &&
             value.complete &&
             value.paginationKey != oldKey &&
             state().persistedPreferences.typography == expectedTypography &&
-            state().persistedPreferences.fontSize == selectedFontSize,
+            state().persistedPreferences.fontSize == selectedFontSize &&
+            state().persistedPreferences.lineHeight == selectedLineHeight,
       );
       expect(state().document, same(document));
       // Layout page indices/percentages may change. The canonical text position
@@ -499,9 +621,10 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters || words || sizePolicy) {
+      if (spacing || letters || words || sizePolicy || heightPolicy) {
         checkVisibleSpacing(observation, 31);
       }
+      if (heightPolicy) checkVisibleLineHeight(observation, 40);
       if (letters) checkVisibleLetters(observation, -1.25);
       if (words) {
         checkVisibleLetters(
@@ -513,6 +636,7 @@ void _testSettings(_Setting setting) {
       }
       final stored = await repository().load();
       expect(stored.fontSize, selectedFontSize);
+      expect(stored.lineHeight, selectedLineHeight);
       if (sizePolicy) {
         checkVisibleLetters(
           observation,
@@ -557,9 +681,10 @@ void _testSettings(_Setting setting) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing || letters || words || sizePolicy) {
+      if (spacing || letters || words || sizePolicy || heightPolicy) {
         checkVisibleSpacing(observation, 31);
       }
+      if (heightPolicy) checkVisibleLineHeight(observation, 40);
       if (letters) checkVisibleLetters(observation, -1.25);
       if (words) {
         checkVisibleLetters(
@@ -589,12 +714,30 @@ void _testSettings(_Setting setting) {
             value.ready &&
             value.complete &&
             state().persistedPreferences.typography == baseline.typography &&
-            (!sizePolicy || value.paginationKey != beforeResetKey),
+            (!(sizePolicy || heightPolicy) ||
+                value.paginationKey != beforeResetKey),
       );
       expect(
         await repository().load(),
-        baseline.copyWith(fontSize: selectedFontSize),
+        baseline.copyWith(
+          fontSize: selectedFontSize,
+          lineHeight: selectedLineHeight,
+        ),
       );
+      if (heightPolicy) {
+        expect(state().preferences.lineHeight, 2.0);
+        expect(position(), savedPosition);
+        expect(
+          observation.nativeController!
+              .viewForPage(observation.page!)!
+              .coverage
+              .locate(anchor),
+          isNotNull,
+        );
+        checkVisibleIndent(observation, 1.5);
+        checkVisibleSpacing(observation, 31);
+        checkVisibleLineHeight(observation, 28);
+      }
       if (spacing) {
         checkVisibleSpacing(observation, 10);
         checkVisibleIndent(observation, 1.5);

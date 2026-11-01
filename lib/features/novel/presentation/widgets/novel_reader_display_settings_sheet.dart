@@ -14,6 +14,7 @@ import 'novel_reader_paragraph_spacing_settings_panel.dart';
 import 'novel_reader_letter_spacing_settings_panel.dart';
 import 'novel_reader_word_spacing_settings_panel.dart';
 import 'novel_reader_font_size_policy_settings_panel.dart';
+import 'novel_reader_line_height_policy_settings_panel.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
   const NovelReaderDisplaySettingsSheet({
@@ -122,6 +123,13 @@ class _NovelReaderDisplaySettingsSheetState
                       _draft.copyWith(lineHeight: _snap(value, 0.05)),
                     ),
                   ),
+                  if (widget.nativeTypography)
+                    NovelReaderLineHeightPolicySettingsPanel(
+                      value: _draft.typography,
+                      enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
+                      onChanged: (next) =>
+                          _applyPreferences(_draft.copyWith(typography: next)),
+                    ),
                 ],
               ),
               if (widget.nativeTypography)

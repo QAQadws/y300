@@ -3612,6 +3612,60 @@ abstract class AppLocalizations {
   /// **'排版'**
   String get novelTypography;
 
+  /// No description provided for @novelLineHeightPolicy.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者行高策略'**
+  String get novelLineHeightPolicy;
+
+  /// No description provided for @novelLineHeightPolicyOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认规则'**
+  String get novelLineHeightPolicyOriginal;
+
+  /// No description provided for @novelLineHeightPolicyAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留作者'**
+  String get novelLineHeightPolicyAuthor;
+
+  /// No description provided for @novelLineHeightPolicyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelLineHeightPolicyBody;
+
+  /// No description provided for @novelLineHeightPolicyAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部统一'**
+  String get novelLineHeightPolicyAll;
+
+  /// No description provided for @novelLineHeightPolicyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留作者行高时，滑杆只设置默认倍数；统一正文会保留标题、代码与注音的行高规则。'**
+  String get novelLineHeightPolicyHint;
+
+  /// No description provided for @novelLineHeightPolicyAllHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部统一也会将标题、代码和注音的行高改为滑杆倍数。'**
+  String get novelLineHeightPolicyAllHint;
+
+  /// No description provided for @novelLineHeightPolicyUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者行高策略仅用于翻页阅读；当前模式仍可调整行高滑杆。'**
+  String get novelLineHeightPolicyUnavailable;
+
+  /// No description provided for @novelLineHeightPolicyReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置行高策略，保留已选行高'**
+  String get novelLineHeightPolicyReset;
+
   /// No description provided for @novelFontSizePolicy.
   ///
   /// In zh, this message translates to:

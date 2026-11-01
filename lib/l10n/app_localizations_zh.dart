@@ -2199,6 +2199,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelTypography => '排版';
 
   @override
+  String get novelLineHeightPolicy => '作者行高策略';
+
+  @override
+  String get novelLineHeightPolicyOriginal => '默认规则';
+
+  @override
+  String get novelLineHeightPolicyAuthor => '保留作者';
+
+  @override
+  String get novelLineHeightPolicyBody => '统一正文';
+
+  @override
+  String get novelLineHeightPolicyAll => '全部统一';
+
+  @override
+  String get novelLineHeightPolicyHint =>
+      '保留作者行高时，滑杆只设置默认倍数；统一正文会保留标题、代码与注音的行高规则。';
+
+  @override
+  String get novelLineHeightPolicyAllHint => '全部统一也会将标题、代码和注音的行高改为滑杆倍数。';
+
+  @override
+  String get novelLineHeightPolicyUnavailable => '作者行高策略仅用于翻页阅读；当前模式仍可调整行高滑杆。';
+
+  @override
+  String get novelLineHeightPolicyReset => '重置行高策略，保留已选行高';
+
+  @override
   String get novelFontSizePolicy => '作者字号策略';
 
   @override
@@ -7895,6 +7923,34 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelTypography => '排版';
+
+  @override
+  String get novelLineHeightPolicy => '作者行高策略';
+
+  @override
+  String get novelLineHeightPolicyOriginal => '預設規則';
+
+  @override
+  String get novelLineHeightPolicyAuthor => '保留作者';
+
+  @override
+  String get novelLineHeightPolicyBody => '統一正文';
+
+  @override
+  String get novelLineHeightPolicyAll => '全部統一';
+
+  @override
+  String get novelLineHeightPolicyHint =>
+      '保留作者行高時，滑桿只設定預設倍數；統一正文會保留標題、程式碼與注音的行高規則。';
+
+  @override
+  String get novelLineHeightPolicyAllHint => '全部統一也會將標題、程式碼和注音的行高改為滑桿倍數。';
+
+  @override
+  String get novelLineHeightPolicyUnavailable => '作者行高策略僅用於翻頁閱讀；目前模式仍可調整行高滑桿。';
+
+  @override
+  String get novelLineHeightPolicyReset => '重設行高策略，保留已選行高';
 
   @override
   String get novelFontSizePolicy => '作者字級策略';

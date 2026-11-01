@@ -45,6 +45,7 @@ final class NovelReaderTypographySnapshotCodec {
         : null,
     wordSpacing: input.wordSpacing?.isValid == true ? input.wordSpacing : null,
     fontSizeScope: input.fontSizeScope,
+    lineHeightScope: input.lineHeightScope,
   );
 
   NovelReaderTypographyOverrides decode(Object? source) {
@@ -58,6 +59,7 @@ final class NovelReaderTypographySnapshotCodec {
     final words = _words.decode(source['wordSpacing']);
     return NovelReaderTypographyOverrides(
       fontSizeScope: _scopePolicy.decode(source['fontSizePolicy']),
+      lineHeightScope: _scopePolicy.decode(source['lineHeightPolicy']),
       wordSpacing: words == null
           ? null
           : NovelReaderWordSpacing(
@@ -103,6 +105,10 @@ final class NovelReaderTypographySnapshotCodec {
     final words = normalized.wordSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
     final requests = {
+      'lineHeightPolicy': _scopePolicy.encode(
+        normalized.lineHeightScope,
+        previous: prior?['lineHeightPolicy'],
+      ),
       'fontSizePolicy': _scopePolicy.encode(
         normalized.fontSizeScope,
         previous: prior?['fontSizePolicy'],
