@@ -8,6 +8,7 @@ import '../style/forum_body_length.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_input_admission.dart';
+import 'forum_body_horizontal_text_frame.dart';
 
 enum ForumBodyParagraphInputFailure {
   identity,
@@ -88,6 +89,13 @@ final class ForumBodyParagraphContent {
 
   /// BR partitions keep source/style but do not start a new formatting context.
   final bool appliesFirstLineIndent;
+
+  // Frozen style work is shared by cold layouts and warm-cache admission.
+  late final horizontalInset =
+      projection.text.isEmpty ||
+          layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
+      ? 0.0
+      : forumBodyHorizontalTextInset([style, ...runs.map((run) => run.style)]);
 
   ForumBodyParagraphContent withFirstLineIndent(bool applies) =>
       applies == appliesFirstLineIndent

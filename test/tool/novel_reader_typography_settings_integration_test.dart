@@ -223,7 +223,9 @@ void _testSettings(_Setting setting) {
           if (element.widget
               case ForumBodyParagraphSurface(lease: final lease, startLine: 0)
               when lease.isActive) {
-            final expected = em * (fontSize ?? state().preferences.fontSize);
+            final expected =
+                em * (fontSize ?? state().preferences.fontSize) +
+                lease.layout.horizontalInset;
             // These are real source glyph boxes on the mounted delivery; the
             // invisible engine prefix must not become the selected character.
             expect(
@@ -237,7 +239,15 @@ void _testSettings(_Setting setting) {
               when view.isActive && view.startLine == 0) {
             expect(
               view.selectionBoxes(0, 1).single.left,
-              closeTo(em * (fontSize ?? state().preferences.fontSize), .001),
+              closeTo(
+                em * (fontSize ?? state().preferences.fontSize) +
+                    view.nativeLeases
+                        .whereType<ForumBodyInlineParagraphLease>()
+                        .single
+                        .layout
+                        .horizontalInset,
+                .001,
+              ),
             );
             checked++;
           }
@@ -386,6 +396,7 @@ void _testSettings(_Setting setting) {
         final target = observation.nativeController!.viewForPage(
           observation.page!,
         )!;
+        expect(target.coverage.hasClippedGlyphs, isFalse);
         void verifyVerticalCoverage(
           ForumBodyPreparedTextFragment prepared,
           String? path,

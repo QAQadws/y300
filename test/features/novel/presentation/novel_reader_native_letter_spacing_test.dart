@@ -158,11 +158,13 @@ void main() {
               width: 600,
             );
             addTearDown(layout.dispose);
+            final inset = number < 0 ? -number : 0.0;
+            expect(layout.horizontalInset, inset);
             final control = TextPainter(
               text: TextSpan(text: text, style: content.style.textStyle),
               textAlign: content.style.textAlign,
               textDirection: direction,
-            )..layout(minWidth: 600, maxWidth: 600);
+            )..layout(minWidth: 600 - 2 * inset, maxWidth: 600 - 2 * inset);
             addTearDown(control.dispose);
             expect(content.projection.text, text);
             for (final range in content.projection.graphemeRanges(
@@ -181,7 +183,9 @@ void main() {
               );
               expect(
                 actual.map((box) => box.toRect()).toList(),
-                expected.map((box) => box.toRect()).toList(),
+                expected
+                    .map((box) => box.toRect().shift(Offset(inset, 0)))
+                    .toList(),
               );
             }
           }

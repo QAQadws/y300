@@ -5,6 +5,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_indent_layout.dart';
+import '../paragraph/forum_body_horizontal_text_frame.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_native_paragraph_layout.dart';
 import '../style/forum_body_style_options.dart';
@@ -78,7 +79,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 7;
+  static const revision = 8;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
 
   factory ForumBodyInlineParagraphLayout.create({
@@ -98,7 +99,15 @@ final class ForumBodyInlineParagraphLayout
     );
     final intrinsic =
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
-    final indent = content.resolveFirstLineIndent(width, scales, layoutMode);
+    final inset = intrinsic ? 0.0 : content.horizontalInset;
+    final innerWidth = intrinsic
+        ? width
+        : forumBodyInnerTextWidth(width, inset);
+    final indent = content.resolveFirstLineIndent(
+      innerWidth,
+      scales,
+      layoutMode,
+    );
     final projection = content.projectionForLayout(layoutMode);
     final painter =
         TextPainter(
@@ -127,14 +136,14 @@ final class ForumBodyInlineParagraphLayout
                   ? content.textSpanWithDimensions(snapshot)
                   : content.textSpan,
               projection: projection,
-              width: width,
+              width: innerWidth,
               requestedAdvance: indent,
               canReduce: content.style.indentFromReader,
             );
       if (indent == 0) {
         painter.layout(
-          minWidth: intrinsic ? 0 : width,
-          maxWidth: intrinsic ? double.infinity : width,
+          minWidth: intrinsic ? 0 : innerWidth,
+          maxWidth: intrinsic ? double.infinity : innerWidth,
         );
       }
       final layoutWidth = intrinsic ? painter.width : width;
@@ -235,7 +244,7 @@ final class ForumBodyInlineParagraphLayout
         final childBottom = box.top + snapshot[i].size.height;
         if (childBottom > bottom) bottom = childBottom;
       }
-      final paintOffset = Offset(0, -top);
+      final paintOffset = Offset(inset, -top);
       // Adjacent native row intervals can overlap at fractional slot edges.
       // Monotone envelopes contain every owned child in O(1) per fragment;
       // baselines and full-paragraph geometry are never rounded or summed.
@@ -270,7 +279,11 @@ final class ForumBodyInlineParagraphLayout
         frameTops: frameTops,
         frameBottoms: frameBottoms,
         trimmedAtoms: slots.trimmed,
-        spaceAllocations: slots.allocations,
+        spaceAllocations: slots.allocations == null || inset == 0
+            ? slots.allocations
+            : Float64List.fromList([
+                for (final x in slots.allocations!) x + inset,
+              ]),
       );
     } catch (_) {
       painter.dispose();
@@ -298,6 +311,9 @@ final class ForumBodyInlineParagraphLayout
     }
     final intrinsic =
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
+    final innerWidth = intrinsic
+        ? width
+        : forumBodyInnerTextWidth(width, content.horizontalInset);
     if (!intrinsic &&
         content.appliesFirstLineIndent &&
         content.style.indent.value != 0 &&
@@ -314,7 +330,7 @@ final class ForumBodyInlineParagraphLayout
         dimensions.indexed.any(
           (item) =>
               !content.projection.atoms[item.$1].isSoftSpace &&
-              item.$2.size.width > width,
+              item.$2.size.width > innerWidth,
         )) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.width,
@@ -343,7 +359,7 @@ final class ForumBodyInlineParagraphLayout
         );
       }
     }
-    content.resolveFirstLineIndent(width, scales, layoutMode);
+    content.resolveFirstLineIndent(innerWidth, scales, layoutMode);
     return scales;
   }
 
@@ -352,6 +368,9 @@ final class ForumBodyInlineParagraphLayout
   final HtmlInlineTextProjection projection;
   final TextPainter _painter;
   final Offset _paintOffset;
+
+  /// Physical edge reserve, independent of the first-line indent request.
+  double get horizontalInset => _paintOffset.dx;
   final Float64List _frameTops;
   final Float64List _frameBottoms;
   final Uint8List? _trimmedAtoms;

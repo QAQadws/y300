@@ -5,6 +5,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_first_line_indent.dart';
+import '../paragraph/forum_body_horizontal_text_frame.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
@@ -162,6 +163,12 @@ final class ForumBodyInlineSpanContent {
   final HtmlInlineTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;
+
+  // Only the enclosing constrained paragraph reserves an edge. Atomic child
+  // fonts participate too; their intrinsic layouts keep their native origins.
+  late final horizontalInset = projection.display.text.isEmpty
+      ? 0.0
+      : forumBodyHorizontalTextInset([style, ...runs.map((run) => run.style)]);
 
   /// Display/source ownership stays fixed; only wrap's native coordinates gain
   /// the mechanical prefix. Intrinsic child measurement leaves indent outside.

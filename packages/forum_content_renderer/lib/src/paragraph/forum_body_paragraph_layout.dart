@@ -4,6 +4,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../document/forum_body_document.dart';
 import 'forum_body_first_line_indent.dart';
 import 'forum_body_indent_layout.dart';
+import 'forum_body_horizontal_text_frame.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
 import 'forum_body_native_paragraph_layout.dart';
@@ -28,6 +29,7 @@ final class ForumBodyParagraphLayout
     this.width,
     this.height,
     this._paintScale,
+    this.horizontalInset,
     this._engineProjection,
     this.firstLineIndent,
     List<ForumBodyParagraphLine> lines,
@@ -46,12 +48,16 @@ final class ForumBodyParagraphLayout
       width: width,
       textScaler: textScaler,
     );
-    final indent = resolveForumBodyFirstLineIndent(content, width, scales);
-    final engine = indent > 0 ? content.indentedProjection : null;
     final fitted =
         content.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine;
     final intrinsic =
         content.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
+    final inset = content.horizontalInset;
+    final innerWidth = intrinsic
+        ? width
+        : forumBodyInnerTextWidth(width, inset);
+    final indent = resolveForumBodyFirstLineIndent(content, innerWidth, scales);
+    final engine = indent > 0 ? content.indentedProjection : null;
     final painter = TextPainter(
       text: content.textSpan,
       textAlign: content.style.textAlign,
@@ -69,24 +75,25 @@ final class ForumBodyParagraphLayout
               painter: painter,
               body: content.textSpan,
               projection: engine,
-              width: width,
+              width: innerWidth,
               requestedAdvance: indent,
               canReduce: content.style.indentFromReader,
             );
       if (engine == null) {
         painter.layout(
-          minWidth: intrinsic ? 0 : width,
-          maxWidth: fitted || intrinsic ? double.infinity : width,
+          minWidth: intrinsic ? 0 : innerWidth,
+          maxWidth: fitted || intrinsic ? double.infinity : innerWidth,
         );
       }
-      final layoutWidth = intrinsic ? painter.width : width;
+      final nativeWidth = painter.width + 2 * inset;
+      final layoutWidth = intrinsic ? nativeWidth : width;
       if (!layoutWidth.isFinite || layoutWidth < 0 || layoutWidth > 16384) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.width,
         );
       }
-      final paintScale = fitted && painter.width > width
-          ? width / painter.width
+      final paintScale = fitted && nativeWidth > width
+          ? width / nativeWidth
           : 1.0;
       if (!paintScale.isFinite || paintScale <= 0) {
         throw const ForumBodyParagraphLayoutException(
@@ -99,12 +106,19 @@ final class ForumBodyParagraphLayout
           ForumBodyParagraphLayoutFailure.singleLine,
         );
       }
-      final lines = forumBodyParagraphLines(
+      final nativeLines = forumBodyParagraphLines(
         painter: painter,
         display: content.projection,
         paintScale: paintScale,
         inline: engine,
       );
+      final horizontalInset = inset * paintScale;
+      final lines = horizontalInset == 0
+          ? nativeLines
+          : [
+              for (final line in nativeLines)
+                line.shift(Offset(horizontalInset, 0)),
+            ];
       if (engine != null &&
           lines.isNotEmpty &&
           lines.first.coverageEndUtf16 == 0) {
@@ -118,6 +132,7 @@ final class ForumBodyParagraphLayout
         layoutWidth,
         painter.height * paintScale,
         paintScale,
+        horizontalInset,
         engine,
         indentGeometry,
         lines,
@@ -141,11 +156,18 @@ final class ForumBodyParagraphLayout
     }
     final scales = <double, double>{};
     content.layoutInput.resolveScalesInto(scales, textScaler: textScaler);
-    resolveForumBodyFirstLineIndent(content, width, scales);
+    final innerWidth =
+        content.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
+        ? width
+        : forumBodyInnerTextWidth(width, content.horizontalInset);
+    resolveForumBodyFirstLineIndent(content, innerWidth, scales);
     return scales;
   }
 
-  static const backendRevision = 7;
+  static const backendRevision = 8;
+
+  /// Physical edge reserve shared by paint, hit testing, lines and boxes.
+  final double horizontalInset;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
   final ForumBodyIdentity identity;
   final String? path;
@@ -186,12 +208,12 @@ final class ForumBodyParagraphLayout
   void paint(Canvas canvas, Offset offset) {
     _ensureOpen();
     if (_paintScale == 1) {
-      _painter.paint(canvas, offset);
+      _painter.paint(canvas, offset + Offset(horizontalInset, 0));
       return;
     }
     canvas.save();
     try {
-      canvas.translate(offset.dx, offset.dy);
+      canvas.translate(offset.dx + horizontalInset, offset.dy);
       canvas.scale(_paintScale, _paintScale);
       _painter.paint(canvas, Offset.zero);
     } finally {
@@ -202,7 +224,9 @@ final class ForumBodyParagraphLayout
   @override
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
-    final position = _painter.getPositionForOffset(offset / _paintScale);
+    final position = _painter.getPositionForOffset(
+      (offset - Offset(horizontalInset, 0)) / _paintScale,
+    );
     final affinity = position.affinity == TextAffinity.upstream
         ? HtmlProjectionAffinity.upstream
         : HtmlProjectionAffinity.downstream;
@@ -239,13 +263,13 @@ final class ForumBodyParagraphLayout
     );
     return List.unmodifiable([
       for (final box in boxes)
-        if (_paintScale == 1)
+        if (_paintScale == 1 && horizontalInset == 0)
           box
         else
           TextBox.fromLTRBD(
-            box.left * _paintScale,
+            box.left * _paintScale + horizontalInset,
             box.top * _paintScale,
-            box.right * _paintScale,
+            box.right * _paintScale + horizontalInset,
             box.bottom * _paintScale,
             box.direction,
           ),
