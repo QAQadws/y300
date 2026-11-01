@@ -50,6 +50,56 @@ ForumBodyRubyGroupContent _group(String html) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('root whitespace belongs only to its original implicit level', () {
+    final group = _group(
+      '<ruby><rb>A</rb><rb>B</rb><rtc>whole</rtc><rt>x</rt> <rt>y</rt></ruby>',
+    );
+    expect(group.annotationGaps.single.beforeAnnotationIndex, 2);
+    final paired = ForumBodyRubyAnnotationPairing(
+      group: group,
+      baseColumnCount: 2,
+    );
+    expect(paired.levels.length, 2);
+    expect(paired.levels.first.gaps, isEmpty);
+    final level = paired.levels.last;
+    final gap = level.gaps.single;
+    expect(gap.content, same(group.annotationGaps.single.content));
+    expect(gap.beforeColumn, 1);
+    expect(gap.previous, same(level.spans[0]));
+    expect(gap.next, same(level.spans[1]));
+    expect(gap.content.style.textStyle.fontSize, 20);
+    expect(paired.columnRanges, [(startColumn: 0, endColumn: 2)]);
+  });
+
+  test(
+    'root gap cannot target RTC, a first RT or a missing original entry',
+    () {
+      final original = _group(
+        '<ruby>A<rt>x</rt> <rt>y</rt><rtc>all</rtc></ruby>',
+      );
+      final gap = original.annotationGaps.single;
+      for (final index in [-1, 0, 2, 3]) {
+        final group = ForumBodyRubyGroupContent(
+          identity: original.identity,
+          fontRevision: original.fontRevision,
+          styleRevision: original.styleRevision,
+          style: original.style,
+          rootPath: original.rootPath,
+          index: original.index,
+          base: original.base,
+          annotations: original.annotations,
+          annotationGaps: [
+            (beforeAnnotationIndex: index, content: gap.content),
+          ],
+        );
+        expect(
+          () =>
+              ForumBodyRubyAnnotationPairing(group: group, baseColumnCount: 1),
+          throwsA(isA<ForumBodyParagraphInputException>()),
+        );
+      }
+    },
+  );
   for (final (html, bases, columns, annotated, intervals) in [
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc>word</rtc></ruby>',

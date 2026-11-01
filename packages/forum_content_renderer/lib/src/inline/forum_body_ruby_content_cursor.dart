@@ -69,7 +69,7 @@ final class ForumBodyRubyContentCursor {
     }
   }
 
-  static const revision = 6;
+  static const revision = 7;
   ForumBodyStyledFlowCursor? _flow;
   ForumBodyStyledFlowEvent? _root;
   ForumBodyStyledFlowEvent? _last;
@@ -87,6 +87,8 @@ final class ForumBodyRubyContentCursor {
   _RubyParts? _annotation;
   _RubyParts? _annotationContainer;
   final _annotations = <ForumBodyRubyAnnotationContent>[];
+  final _annotationGaps = <ForumBodyRubyRootAnnotationGap>[];
+  ForumBodyParagraphSequence? _annotationGap;
   final _ignored = <ForumBodyRubyIgnoredContent>[];
   List<ForumBodyStyledFlowEvent> _whitespace = [];
   Iterator<ForumBodyStyledFlowEvent>? _carryWhitespace;
@@ -184,9 +186,30 @@ final class ForumBodyRubyContentCursor {
         final carry = _carryWhitespace;
         if (carry != null) {
           if (carry.moveNext()) {
+            final gap = _annotationGap;
+            if (gap != null) {
+              gap.appendEvent(carry.current);
+              work++;
+              continue;
+            }
             event = carry.current;
           } else {
             _carryWhitespace = null;
+            final gap = _annotationGap;
+            if (gap != null) {
+              _annotationGap = null;
+              try {
+                _item();
+                _annotationGaps.add((
+                  beforeAnnotationIndex: _annotations.length,
+                  content: gap.finish(),
+                ));
+              } finally {
+                gap.close();
+              }
+              work++;
+              continue;
+            }
           }
         }
         if (event == null) {
@@ -309,11 +332,11 @@ final class ForumBodyRubyContentCursor {
       if (!direct || _annotationContainer != null || _annotation != null) {
         _fail(ForumBodyRubyContentFailure.structure);
       }
-      _ignoreWhitespace();
       _annotationMode = true;
       if (event.style.hidden) {
         _skip(node, ForumBodyRubyIgnoredReason.hidden);
       } else {
+        _ignoreWhitespace();
         _base!.flush();
         _annotationContainer = _parts(event);
       }
@@ -325,8 +348,22 @@ final class ForumBodyRubyContentCursor {
         (node.kind == ForumBodyElementKind.rubyText ||
             node.kind == ForumBodyElementKind.rubyFallback)) {
       if (direct) {
-        _ignoreWhitespace();
         _annotationMode = true;
+        if (node.kind == ForumBodyElementKind.rubyText && !event.style.hidden) {
+          if (_whitespace.isNotEmpty &&
+              _annotations.lastOrNull is ForumBodyRubyTextAnnotationContent) {
+            _annotationGap = paragraphBuilder.openInlineSequence(
+              _flow!,
+              root: _root!,
+              suppressLineBreaks: true,
+            );
+            _carryWhitespace = _whitespace.iterator;
+            _whitespace = [];
+            _deferred = event;
+            return false;
+          }
+          _ignoreWhitespace();
+        }
       }
       if (node.kind == ForumBodyElementKind.rubyFallback ||
           event.style.hidden) {
@@ -422,10 +459,12 @@ final class ForumBodyRubyContentCursor {
       index: _localIndex++,
       base: base.parts,
       annotations: _annotations,
+      annotationGaps: _annotationGaps,
     );
     base.close();
     _base = _complete ? null : _parts(_root!);
     _annotations.clear();
+    _annotationGaps.clear();
     _orphanColumns = 0;
   }
 
@@ -492,11 +531,13 @@ final class ForumBodyRubyContentCursor {
     _explicitBase?.close();
     _annotation?.close();
     _annotationContainer?.close();
+    _annotationGap?.close();
     _nested?.cursor.close();
     _base = null;
     _explicitBase = null;
     _annotation = null;
     _annotationContainer = null;
+    _annotationGap = null;
     _nested = null;
     _flow = null;
     _root = null;
@@ -506,6 +547,7 @@ final class ForumBodyRubyContentCursor {
     _carryWhitespace = null;
     _deferred = null;
     _annotations.clear();
+    _annotationGaps.clear();
     _ignored.clear();
     _whitespace.clear();
   }

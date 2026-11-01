@@ -97,7 +97,10 @@ String _ruby({
   String direction = 'ltr',
   String gap = '',
   bool annotationGap = false,
+  bool rootAnnotationGap = false,
 }) {
+  final firstLevel =
+      '<rt style="font-size:10px">xx</rt>${annotationGap ? ' ' : ''}<rt style="font-size:15px">yy</rt>';
   final annotations = dense
       ? annotationGap
             ? '${List.generate(60, (r) => '<rtc style="font-size:1px"><rt>x$r</rt> <rt>y$r</rt></rtc>').join()}<rtc style="font-size:1px">all</rtc>'
@@ -105,7 +108,7 @@ String _ruby({
                 100,
                 (r) => '<rtc style="font-size:1px">r$r</rtc>',
               ).join()
-      : '<rtc><rt style="font-size:10px">xx</rt>${annotationGap ? ' ' : ''}<rt style="font-size:15px">yy</rt></rtc><rtc style="font-size:10px">abcdefghij</rtc><rtc style="font-size:8px">outer</rtc>';
+      : '${rootAnnotationGap ? firstLevel : '<rtc>$firstLevel</rtc>'}<rtc style="font-size:10px">abcdefghij</rtc><rtc style="font-size:8px">outer</rtc>';
   return '<ruby style="direction:$direction"><rb style="font-size:20px">A</rb>$gap<rb style="font-size:30px">B</rb>$annotations</ruby>';
 }
 
@@ -113,17 +116,19 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final q in [1, 7, 32]) {
     for (final dense in [false, true]) {
-      for (final (direction, gap, annotationGap) in [
+      for (final (direction, gap, annotationGap, rootAnnotationGap) in [
         for (final direction in ['ltr', 'rtl'])
           for (final gap in ['', ' '])
             for (final annotationGap in [false, true])
-              (direction, gap, annotationGap),
+              for (final root
+                  in dense || !annotationGap ? [false] : [false, true])
+                (direction, gap, annotationGap, root),
       ]) {
         test(
-          'PUBLIC Session raw spanning atom retains original members q=$q dense=$dense $direction gap=${gap.isNotEmpty} annotationGap=$annotationGap',
+          'PUBLIC Session raw spanning atom retains original members q=$q dense=$dense $direction gap=${gap.isNotEmpty} annotationGap=$annotationGap root=$rootAnnotationGap',
           () {
             final f = _open(
-              '<p dir="$direction">${_ruby(dense: dense, direction: direction, gap: gap, annotationGap: annotationGap)}</p>',
+              '<p dir="$direction">${_ruby(dense: dense, direction: direction, gap: gap, annotationGap: annotationGap, rootAnnotationGap: rootAnnotationGap)}</p>',
               entries: dense ? (annotationGap ? 4 : 3) : 2,
             );
             _finish(f.session, f.cache);
@@ -231,6 +236,41 @@ void main() {
       expect(atomicPages, 1);
     },
   );
+
+  for (final (left, right) in [('', 'y'), ('x', ''), ('', '')]) {
+    test(
+      'actual root gap preserves empty RT slots without invented glyphs ($left,$right)',
+      () {
+        final f = _open(
+          '<ruby><rt>$left</rt> <rt>$right</rt><rtc>all</rtc></ruby>',
+        );
+        _finish(f.session, f.cache);
+        final fragments = _page(f.session, f.cache, 0, 1);
+        final fragment = fragments.single as ForumBodyPreparedInlineFragment;
+        try {
+          final nonempty = (left.isEmpty ? 0 : 1) + (right.isEmpty ? 0 : 1);
+          expect(fragment.nativeLeases.length, 5 + nonempty);
+          expect(f.cache.pictureBuildCount, 2 + nonempty);
+          final window = fragment.view.content.contexts.singleWhere(
+            (w) => w.content.projection.text == ' ',
+          );
+          final box = fragment
+              .glyphBoxes(window.startUtf16, window.endUtf16)
+              .single;
+          final hit = fragment.view.sourceAt(
+            Offset(box.left + .001, (box.top + box.bottom) / 2),
+          );
+          expect(hit.isExact, isTrue);
+          expect(hit.sourceRune, left.length);
+        } finally {
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
 
   test(
     'raw orphan bases preserve separate font strut handles without invented source',

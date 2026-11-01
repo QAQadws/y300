@@ -287,6 +287,16 @@ void main() {
   }
 
   test(
+    'a direct RT gap does not silently disappear or fuse breakable columns',
+    () {
+      expect(
+        () => _input('<ruby><rb>A</rb><rb>B</rb><rt>x</rt> <rt>y</rt></ruby>'),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+    },
+  );
+
+  test(
     'implicit spanning base keeps real outer spaces and anonymous excess base',
     () {
       final input = _input(

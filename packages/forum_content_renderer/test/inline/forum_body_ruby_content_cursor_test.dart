@@ -520,12 +520,13 @@ void main() {
     final annotation = texts(groups.last.annotations.last.parts).single;
     expect(annotation.projection.text, 'y');
     expect(annotation.projection.sourceAtUtf16(0).sourceRune, 10);
+    expect(groups.single.annotationGaps.single.beforeAnnotationIndex, 1);
+    expect(groups.single.annotationGaps.single.content.projection.text, ' ');
     expect(
       run.cursor.takeIgnored().map((item) => item.reason),
       containsAll([
         ForumBodyRubyIgnoredReason.fallback,
         ForumBodyRubyIgnoredReason.hidden,
-        ForumBodyRubyIgnoredReason.annotationWhitespace,
       ]),
     );
   });
@@ -598,7 +599,7 @@ void main() {
   });
 
   test(
-    'fallback and inter-annotation whitespace remain explicit ignored source ranges',
+    'fallback and structural indentation remain ignored while RT gaps retain source',
     () {
       final run = open(
         '<ruby>漢<rp>(</rp> \n<rt>kan</rt> \t<rp>)</rp> <rt>han</rt>  </ruby>',
@@ -621,7 +622,14 @@ void main() {
           (value) =>
               value.reason == ForumBodyRubyIgnoredReason.annotationWhitespace,
         ),
-        hasLength(4),
+        hasLength(2),
+      );
+      final gap = groups.single.annotationGaps.single;
+      expect(gap.beforeAnnotationIndex, 1);
+      expect(gap.content.projection.text, ' ');
+      expect(
+        () => groups.single.annotationGaps.clear(),
+        throwsUnsupportedError,
       );
       expect(
         ignored.every((value) => value.source.runeEnd > value.source.runeStart),
@@ -757,6 +765,113 @@ void main() {
       }
       expect(sawReplay, isTrue);
       expect(groups.map((group) => text(group.base)), ['A', ' B']);
+    },
+  );
+
+  for (final budget in [1, 2, 17]) {
+    test(
+      'root annotation whitespace replay and publication are bounded q=$budget',
+      () {
+        final run = open(
+          '<ruby style="font-size:24px;white-space:pre-wrap">á🦊<rt style="font-size:10px">x</rt> \t\n <!--1--> <!--2--> <rt style="font-size:18px">y</rt></ruby>',
+        );
+        final groups = drain(run.cursor, budget: budget);
+        final group = groups.single;
+        expect(group.annotations.length, 2);
+        expect(text(group.base), 'á🦊');
+        final gap = group.annotationGaps.single;
+        expect(gap.beforeAnnotationIndex, 1);
+        expect(gap.content.projection.text, ' \t    ');
+        expect(gap.content.projection.sourceAtUtf16(0).sourceRune, 4);
+        expect(
+          gap.content.runs.every((r) => r.style.textStyle.fontSize == 24),
+          isTrue,
+        );
+        expect(gap.content.style.role, ForumBodyTextRole.body);
+        expect(gap.content.style.whiteSpace, ForumBodyWhiteSpace.preWrap);
+        expect(
+          texts(group.annotations.first.parts).single.style.textStyle.fontSize,
+          10,
+        );
+        expect(
+          texts(group.annotations.last.parts).single.style.textStyle.fontSize,
+          18,
+        );
+        expect(run.cursor.inputCodeUnits, 12);
+        expect(run.cursor.textRunCount, 6);
+        expect(run.cursor.groupCount, 1);
+        expect(run.cursor.takeIgnored(), isEmpty);
+      },
+    );
+  }
+
+  test('RT gaps never cross a visible RTC or a new base segment', () {
+    final run = open(
+      '<ruby>A<rt>a</rt> <rt>b</rt> <rtc>level</rtc> <rt>c</rt> B<rt>d</rt> <rt>e</rt></ruby>',
+    );
+    final groups = drain(run.cursor);
+    expect(groups.length, 2);
+    expect(groups.map((g) => g.annotationGaps.single.beforeAnnotationIndex), [
+      1,
+      1,
+    ]);
+    expect(groups.map((g) => text(g.base)), ['A', ' B']);
+    expect(groups.first.annotations.length, 4);
+    expect(run.cursor.takeIgnored().length, 2);
+  });
+
+  test('fallback and hidden RT/RTC do not consume an implicit gap boundary', () {
+    final run = open(
+      '<ruby>A<rt>x</rt> <rp>(</rp> <rt hidden>hidden</rt> <rtc hidden>level</rtc> <rt>y</rt></ruby>',
+    );
+    final group = drain(run.cursor).single;
+    expect(group.annotations.length, 2);
+    expect(group.annotationGaps.single.beforeAnnotationIndex, 1);
+    expect(group.annotationGaps.single.content.projection.text, ' ');
+    final ignored = run.cursor.takeIgnored();
+    expect(ignored.map((i) => i.reason), [
+      ForumBodyRubyIgnoredReason.fallback,
+      ForumBodyRubyIgnoredReason.hidden,
+      ForumBodyRubyIgnoredReason.hidden,
+    ]);
+  });
+
+  test('root gap publication cannot bypass structure limits', () {
+    final run = open(
+      '<ruby>A<rt>x</rt> <rt>y</rt></ruby>',
+      limits: const ForumBodyRubyContentLimits(maxStructureItems: 3),
+    );
+    expect(
+      () => drain(run.cursor),
+      throwsA(
+        isA<ForumBodyRubyContentException>().having(
+          (e) => e.failure,
+          'failure',
+          ForumBodyRubyContentFailure.structureLimit,
+        ),
+      ),
+    );
+    expect(run.cursor.inputCodeUnits, 3);
+    expect(run.cursor.isClosed, isTrue);
+    expect(run.cursor.current, isNull);
+  });
+
+  test(
+    'foreign flow advancement during actual gap replay retires pending source',
+    () {
+      final run = open('<ruby>A<rt>x</rt> <!--1--> <rt>y</rt></ruby>');
+      while (true) {
+        final step = run.cursor.advance(maxEvents: 1);
+        expect(step.hasOutput, isFalse);
+        if (step.eventsRead == 0) break;
+      }
+      expect(run.flow.moveNext(), isTrue);
+      expect(
+        () => run.cursor.advance(maxEvents: 1),
+        throwsA(isA<ForumBodyRubyContentException>()),
+      );
+      expect(run.cursor.isClosed, isTrue);
+      expect(run.cursor.current, isNull);
     },
   );
 

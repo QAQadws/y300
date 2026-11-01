@@ -277,6 +277,9 @@ final class ForumBodyParagraphContentBuilder {
     required ForumBodyStyledFlowEvent root,
     ForumBodyParagraphLayoutMode layoutMode =
         ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+    // Anonymous annotation whitespace inherits the real ruby root style, so
+    // break suppression must not require a synthetic RT or changed text role.
+    bool suppressLineBreaks = false,
   }) {
     if (flow.isClosed) throw StateError('Styled flow cursor is closed');
     final node = root.node;
@@ -316,6 +319,7 @@ final class ForumBodyParagraphContentBuilder {
         layoutMode: layoutMode,
         singleLineWhitespace: false,
         suppressLineBreaks:
+            suppressLineBreaks ||
             node.kind == ForumBodyElementKind.rubyText ||
             node.kind == ForumBodyElementKind.rubyAnnotationContainer,
         preserveCollapsibleEdges: true,

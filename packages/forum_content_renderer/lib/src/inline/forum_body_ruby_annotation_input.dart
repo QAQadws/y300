@@ -48,6 +48,7 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
 ) {
   final levels = <ForumBodyRubyAnnotationInput>[];
   var implicit = <ForumBodyRubyAnnotationBoxInput>[];
+  List<ForumBodyRubyAnnotationGapInput>? implicitGaps;
   void append(
     List<ForumBodyRubyAnnotationBoxInput> boxes,
     ForumBodyRubyPosition position,
@@ -65,11 +66,29 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
 
   void flush() {
     if (implicit.isEmpty) return;
-    append(implicit, group.style.rubyPosition, group.rootPath);
+    append(
+      implicit,
+      group.style.rubyPosition,
+      group.rootPath,
+      implicitGaps ?? const [],
+    );
     implicit = [];
+    implicitGaps = null;
   }
 
-  for (final entry in group.annotations) {
+  var gapIndex = 0;
+  for (final (index, entry) in group.annotations.indexed) {
+    while (gapIndex < group.annotationGaps.length &&
+        group.annotationGaps[gapIndex].beforeAnnotationIndex == index) {
+      final gap = group.annotationGaps[gapIndex++];
+      if (implicit.isEmpty || entry is! ForumBodyRubyTextAnnotationContent) {
+        _unsupported(gap.content.path ?? group.rootPath);
+      }
+      (implicitGaps ??= []).add((
+        beforeBox: implicit.length,
+        content: gap.content,
+      ));
+    }
     switch (entry) {
       case ForumBodyRubyTextAnnotationContent():
         implicit.add(ForumBodyRubyExplicitAnnotationInput(entry));
@@ -84,6 +103,7 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
         );
     }
   }
+  if (gapIndex != group.annotationGaps.length) _unsupported(group.rootPath);
   flush();
   if (levels.isEmpty) {
     // Preserve the existing base-only column contract without inventing RTs.

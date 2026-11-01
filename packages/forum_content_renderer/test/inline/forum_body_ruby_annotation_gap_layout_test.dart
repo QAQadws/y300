@@ -268,15 +268,19 @@ void main() {
 
   for (final direction in TextDirection.values) {
     for (final tight in [false, true]) {
-      for (final baseGap in [false, true]) {
+      for (final (baseGap, root) in [
+        for (final baseGap in [false, true])
+          for (final root in [false, true]) (baseGap, root),
+      ]) {
         test(
-          'original annotation gap has its own level font/edge/source and exact RGBA $direction tight=$tight base=$baseGap',
+          'original annotation gap has its own level font/edge/source and exact RGBA $direction tight=$tight base=$baseGap root=$root',
           () async {
             final f = RubyGapFixture(
               direction: direction,
               includeBaseGap: baseGap,
               gapSize: 20,
               annotationGapSize: 40,
+              rootAnnotationGap: root,
               tight: tight,
               scaler: tight ? TextScaler.linear(1.27) : TextScaler.noScaling,
             );

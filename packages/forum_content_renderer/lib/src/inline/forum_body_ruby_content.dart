@@ -83,6 +83,12 @@ final class ForumBodyRubyAnnotationContainerContent
   }) : super._();
 }
 
+/// An original root-level whitespace context preceding an actual RT entry.
+typedef ForumBodyRubyRootAnnotationGap = ({
+  int beforeAnnotationIndex,
+  ForumBodyParagraphContent content,
+});
+
 /// A stable base segment and all its associated annotations. Empty/unpaired
 /// segments remain explicit; unsupported display must never discard their text.
 final class ForumBodyRubyGroupContent {
@@ -95,8 +101,12 @@ final class ForumBodyRubyGroupContent {
     required this.index,
     required List<ForumBodyRubyInlineContent> base,
     required List<ForumBodyRubyAnnotationContent> annotations,
+    List<ForumBodyRubyRootAnnotationGap> annotationGaps = const [],
   }) : base = List.unmodifiable(base),
-       annotations = List.unmodifiable(annotations);
+       annotations = List.unmodifiable(annotations),
+       annotationGaps = annotationGaps.isEmpty
+           ? const []
+           : List.unmodifiable(annotationGaps);
   final ForumBodyIdentity identity;
   final String fontRevision;
   final int styleRevision;
@@ -108,6 +118,10 @@ final class ForumBodyRubyGroupContent {
   /// Root-level RT and RTC entries in original order. RTC.parts owns its RT
   /// children; neither the container nor those children are flattened here.
   final List<ForumBodyRubyAnnotationContent> annotations;
+
+  /// Real text between consecutive root RTs. The index identifies the original
+  /// following annotation entry, including RTC entries; it is not a column.
+  final List<ForumBodyRubyRootAnnotationGap> annotationGaps;
 }
 
 enum ForumBodyRubyIgnoredReason { fallback, annotationWhitespace, hidden }

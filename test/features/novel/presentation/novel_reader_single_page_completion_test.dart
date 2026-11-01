@@ -61,14 +61,20 @@ void main() {
 
   for (final rtl in [false, true]) {
     for (final under in [false, true]) {
-      for (final (readOnlyRestore, gap, annotationGap) in [
+      for (final (readOnlyRestore, gap, annotationKind) in [
         for (final readOnly in [false, true])
           for (final gap in ['', ' '])
-            for (final annotationGap in [false, true])
-              (readOnly, gap, annotationGap),
+            for (final annotationKind in [0, 1, 2])
+              (readOnly, gap, annotationKind),
       ]) {
+        final annotationGap = annotationKind != 0;
+        final annotation = switch (annotationKind) {
+          1 => '<rtc style="font-size:10px"><rt>x</rt> <rt>y</rt></rtc>',
+          2 => '<rt style="font-size:10px">x</rt> <rt style="font-size:10px">y</rt>',
+          _ => '',
+        };
         testWidgets(
-          'original spanning component completes only at physical EOF (rtl=$rtl, under=$under, readOnly=$readOnlyRestore, gap=${gap.isNotEmpty}, annotationGap=$annotationGap)',
+          'original spanning component completes only at physical EOF (rtl=$rtl, under=$under, readOnly=$readOnlyRestore, gap=${gap.isNotEmpty}, annotationKind=$annotationKind)',
           (tester) async {
             tester.view.physicalSize = const Size(360, 480);
             tester.view.devicePixelRatio = 1;
@@ -77,7 +83,7 @@ void main() {
             final fixture = (await tester.runAsync(
               () => _Fixture.create(
                 rawBody: (
-                  '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:40px">A</rb>$gap<rb style="font-size:40px">B</rb>${annotationGap ? '<rtc style="font-size:10px"><rt>x</rt> <rt>y</rt></rtc>' : ''}<rtc style="font-size:20px">word</rtc><rb style="font-size:200px">C</rb><rb style="font-size:200px">D</rb><rt style="font-size:${annotationGap ? 80 : 100}px">zz</rt>${annotationGap ? '<rtc style="font-size:20px"><rt>tt</rt></rtc>' : ''}</ruby></p>',
+                  '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:40px">A</rb>$gap<rb style="font-size:40px">B</rb>$annotation<rtc style="font-size:20px">word</rtc><rb style="font-size:200px">C</rb><rb style="font-size:200px">D</rb><rt style="font-size:${annotationGap ? 80 : 100}px">zz</rt>${annotationGap ? '<rtc style="font-size:20px"><rt>tt</rt></rtc>' : ''}</ruby></p>',
                   'A${gap}B${annotationGap ? 'x y' : ''}wordCDzz${annotationGap ? 'tt' : ''}',
                 ),
               ),
