@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'novel_reader_typography_snapshot_codec.dart';
+import 'novel_reader_viewport_snapshot_codec.dart';
 
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
@@ -11,6 +12,7 @@ final class NovelReaderPreferencesSnapshotCodec {
 
   static const int schemaVersion = 1;
   static const _typography = NovelReaderTypographySnapshotCodec();
+  static const _viewport = NovelReaderViewportSnapshotCodec();
   static const NovelReaderFlowMode _legacyFlowModeFallback =
       NovelReaderFlowMode.vertical;
   static const double minimumFontSize = 14;
@@ -40,6 +42,15 @@ final class NovelReaderPreferencesSnapshotCodec {
       result.remove('typography');
     } else {
       result['typography'] = typography;
+    }
+    final viewport = _viewport.encode(
+      normalized.viewport,
+      previous: previous?['viewport'],
+    );
+    if (viewport == null) {
+      result.remove('viewport');
+    } else {
+      result['viewport'] = viewport;
     }
     return jsonEncode(result);
   }
@@ -73,6 +84,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       }
       return defaults.copyWith(
         typography: _typography.decode(decoded['typography']),
+        viewport: _viewport.decode(decoded['viewport']),
         fontSize: _validDouble(
           decoded['fontSize'],
           min: minimumFontSize,
@@ -109,6 +121,7 @@ final class NovelReaderPreferencesSnapshotCodec {
     final defaults = NovelReaderPreferences.defaults();
     return defaults.copyWith(
       typography: _typography.normalize(preferences.typography),
+      viewport: _viewport.normalize(preferences.viewport),
       fontSize: _validDouble(
         preferences.fontSize,
         min: minimumFontSize,

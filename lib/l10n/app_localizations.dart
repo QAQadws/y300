@@ -9490,6 +9490,96 @@ abstract class AppLocalizations {
   /// **'精华'**
   String get forumThreadBadgeDigest;
 
+  /// No description provided for @novelViewport.
+  ///
+  /// In zh, this message translates to:
+  /// **'页面边距与宽度'**
+  String get novelViewport;
+
+  /// No description provided for @novelViewportLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左边距'**
+  String get novelViewportLeft;
+
+  /// No description provided for @novelViewportTop.
+  ///
+  /// In zh, this message translates to:
+  /// **'上边距'**
+  String get novelViewportTop;
+
+  /// No description provided for @novelViewportRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右边距'**
+  String get novelViewportRight;
+
+  /// No description provided for @novelViewportBottom.
+  ///
+  /// In zh, this message translates to:
+  /// **'下边距'**
+  String get novelViewportBottom;
+
+  /// No description provided for @novelViewportWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文最大宽度'**
+  String get novelViewportWidth;
+
+  /// No description provided for @novelViewportWidthOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始规则'**
+  String get novelViewportWidthOriginal;
+
+  /// No description provided for @novelViewportWidthLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'限制宽度'**
+  String get novelViewportWidthLimited;
+
+  /// No description provided for @novelViewportWidthAvailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用可用宽度'**
+  String get novelViewportWidthAvailable;
+
+  /// No description provided for @novelViewportWidthReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置最大宽度'**
+  String get novelViewportWidthReset;
+
+  /// No description provided for @novelViewportPixels.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value} px'**
+  String novelViewportPixels(String value);
+
+  /// No description provided for @novelViewportInheritedPixels.
+  ///
+  /// In zh, this message translates to:
+  /// **'沿用默认：{value} px'**
+  String novelViewportInheritedPixels(String value);
+
+  /// No description provided for @novelViewportResetMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置{edge}'**
+  String novelViewportResetMargin(String edge);
+
+  /// No description provided for @novelViewportHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'四个边距分别作用于左、上、右、下，正文在剩余宽度内居中。安全区和底部控件另行预留。使用可用宽度会保留已选的限制值；窄窗口以实际可用空间为准。'**
+  String get novelViewportHint;
+
+  /// No description provided for @novelViewportUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设置目前用于原生翻页阅读。已保存的边距与宽度会保留，也可以单独重置。'**
+  String get novelViewportUnavailable;
+
   /// No description provided for @novelTextAlignment.
   ///
   /// In zh, this message translates to:

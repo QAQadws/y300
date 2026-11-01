@@ -5666,6 +5666,58 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumThreadBadgeDigest => '精华';
 
   @override
+  String get novelViewport => '页面边距与宽度';
+
+  @override
+  String get novelViewportLeft => '左边距';
+
+  @override
+  String get novelViewportTop => '上边距';
+
+  @override
+  String get novelViewportRight => '右边距';
+
+  @override
+  String get novelViewportBottom => '下边距';
+
+  @override
+  String get novelViewportWidth => '正文最大宽度';
+
+  @override
+  String get novelViewportWidthOriginal => '原始规则';
+
+  @override
+  String get novelViewportWidthLimited => '限制宽度';
+
+  @override
+  String get novelViewportWidthAvailable => '使用可用宽度';
+
+  @override
+  String get novelViewportWidthReset => '重置最大宽度';
+
+  @override
+  String novelViewportPixels(String value) {
+    return '$value px';
+  }
+
+  @override
+  String novelViewportInheritedPixels(String value) {
+    return '沿用默认：$value px';
+  }
+
+  @override
+  String novelViewportResetMargin(String edge) {
+    return '重置$edge';
+  }
+
+  @override
+  String get novelViewportHint =>
+      '四个边距分别作用于左、上、右、下，正文在剩余宽度内居中。安全区和底部控件另行预留。使用可用宽度会保留已选的限制值；窄窗口以实际可用空间为准。';
+
+  @override
+  String get novelViewportUnavailable => '此设置目前用于原生翻页阅读。已保存的边距与宽度会保留，也可以单独重置。';
+
+  @override
   String get novelTextAlignment => '正文对齐';
 
   @override
@@ -11476,6 +11528,58 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get forumThreadBadgeDigest => '精華';
+
+  @override
+  String get novelViewport => '頁面邊距與寬度';
+
+  @override
+  String get novelViewportLeft => '左邊距';
+
+  @override
+  String get novelViewportTop => '上邊距';
+
+  @override
+  String get novelViewportRight => '右邊距';
+
+  @override
+  String get novelViewportBottom => '下邊距';
+
+  @override
+  String get novelViewportWidth => '正文最大寬度';
+
+  @override
+  String get novelViewportWidthOriginal => '原始規則';
+
+  @override
+  String get novelViewportWidthLimited => '限制寬度';
+
+  @override
+  String get novelViewportWidthAvailable => '使用可用寬度';
+
+  @override
+  String get novelViewportWidthReset => '重設最大寬度';
+
+  @override
+  String novelViewportPixels(String value) {
+    return '$value px';
+  }
+
+  @override
+  String novelViewportInheritedPixels(String value) {
+    return '沿用預設：$value px';
+  }
+
+  @override
+  String novelViewportResetMargin(String edge) {
+    return '重設$edge';
+  }
+
+  @override
+  String get novelViewportHint =>
+      '四個邊距分別作用於左、上、右、下，正文在剩餘寬度內置中。安全區和底部控制項另行預留。使用可用寬度會保留已選的限制值；窄視窗以實際可用空間為準。';
+
+  @override
+  String get novelViewportUnavailable => '此設定目前用於原生翻頁閱讀。已儲存的邊距與寬度會保留，也可以單獨重設。';
 
   @override
   String get novelTextAlignment => '正文對齊';

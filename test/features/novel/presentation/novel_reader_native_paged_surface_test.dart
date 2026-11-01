@@ -517,6 +517,166 @@ void main() {
     },
   );
 
+  for (final size in [
+    const Size(400, 600),
+    const Size(700, 350),
+    const Size(210, 450),
+  ]) {
+    for (final full in [false, true]) {
+      testWidgets(
+        'independent physical edges and width agree with actual native body $size/full=$full',
+        (tester) async {
+          final reader = _Reader();
+          const insets = ReaderChromeInsets(
+            top: 12,
+            safeAreaTop: 30,
+            bottom: 14,
+            safeAreaBottom: 20,
+          );
+          final preferences = reader.preferences.copyWith(
+            viewport: NovelReaderViewportOverrides(
+              left: 10,
+              top: 20,
+              right: 30,
+              bottom: 40,
+              contentWidth: full
+                  ? const NovelReaderContentWidth.available(logicalPixels: 200)
+                  : const NovelReaderContentWidth.limited(200),
+            ),
+          );
+          await _show(
+            tester,
+            reader,
+            width: size.width,
+            height: size.height,
+            insets: insets,
+            preferences: preferences,
+          );
+          await tester.pumpAndSettle();
+          final body = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+          final footer = tester.getRect(
+            find.byKey(const Key('novel-reader-native-footer')),
+          );
+          final available = size.width - 40;
+          final width = full || available < 200 ? available : 200.0;
+          expect(
+            body,
+            Rect.fromLTWH(
+              10 + (available - width) / 2,
+              62,
+              width,
+              size.height - 184,
+            ),
+          );
+          expect(footer.top, body.bottom);
+          expect(footer.height, 48);
+          final snapshot = reader.statuses.last.controller!.snapshot!;
+          expect((snapshot.width, snapshot.height), (body.width, body.height));
+          expect(reader.scrollChoices, 0);
+          await _unmount(tester, reader);
+        },
+      );
+    }
+  }
+  testWidgets(
+    'viewport origin-only changes reuse the actual controller and keep physical RTL edges',
+    (tester) async {
+      final reader = _Reader();
+      final preferences = reader.preferences.copyWith(
+        viewport: const NovelReaderViewportOverrides(
+          left: 10,
+          top: 20,
+          right: 30,
+          bottom: 40,
+          contentWidth: NovelReaderContentWidth.available(logicalPixels: 200),
+        ),
+      );
+      await _show(tester, reader, preferences: preferences);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller;
+      final before = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+      final reports = reader.positions.length;
+      await _show(
+        tester,
+        reader,
+        preferences: preferences.copyWith(
+          flowMode: NovelReaderFlowMode.pagedRtl,
+          viewport: const NovelReaderViewportOverrides(
+            left: 30,
+            top: 25,
+            right: 10,
+            bottom: 35,
+            contentWidth: NovelReaderContentWidth.available(logicalPixels: 200),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final after = tester.getRect(find.byType(NovelReaderNativeLayoutHost));
+      expect(after, before.shift(const Offset(20, 5)));
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.positions.length, reports);
+      expect(reader.service.calls, 1);
+      await _unmount(tester, reader);
+    },
+  );
+  testWidgets(
+    'invalid viewport input reports geometry once without opening a native session',
+    (tester) async {
+      final reader = _Reader();
+      final bad = reader.preferences.copyWith(
+        viewport: const NovelReaderViewportOverrides(left: -1),
+      );
+      await _show(tester, reader, preferences: bad);
+      await tester.pumpAndSettle();
+      expect(reader.terminal, 1);
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.failed);
+      expect(reader.owner.activeCacheHandles, 0);
+      await _show(tester, reader, preferences: bad);
+      await tester.pumpAndSettle();
+      expect(reader.terminal, 1);
+      expect(tester.takeException(), isNull);
+      await _unmount(tester, reader);
+    },
+  );
+  testWidgets(
+    'a valid request exceeding the current window fails without changing preferences or mode',
+    (tester) async {
+      final reader = _Reader();
+      final preferences = reader.preferences.copyWith(
+        viewport: const NovelReaderViewportOverrides(
+          left: 96,
+          top: 96,
+          right: 96,
+          bottom: 96,
+          contentWidth: NovelReaderContentWidth.available(logicalPixels: 240),
+        ),
+      );
+      await _show(
+        tester,
+        reader,
+        width: 150,
+        height: 180,
+        preferences: preferences,
+      );
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.failed);
+      expect(reader.statuses.last.pageCount, 0);
+      expect(reader.statuses.last.hasVisiblePage, false);
+      expect(reader.positions, isEmpty);
+      expect(reader.scrollChoices, 0);
+      expect(reader.owner.activeCacheHandles, 0);
+      expect(
+        tester
+            .widget<NovelReaderNativePagedSurface>(
+              find.byType(NovelReaderNativePagedSurface),
+            )
+            .preferences,
+        preferences,
+      );
+      expect(tester.takeException(), isNull);
+      await _unmount(tester, reader);
+    },
+  );
   testWidgets(
     'scaled footer stays outside reflowed native text and retains its canonical point',
     (tester) async {

@@ -24,6 +24,7 @@ import '../services/novel_reader_display_resolvers.dart';
 import '../services/novel_reader_native_owner.dart';
 import '../services/novel_reader_native_layout_scope.dart';
 import '../services/novel_reader_native_preparation_service.dart';
+import '../services/novel_reader_native_viewport_adapter.dart';
 import '../services/novel_reader_pagination_performance_policy.dart';
 import '../services/novel_reader_pagination_demand.dart';
 import 'novel_reader_native_layout_host.dart';
@@ -225,7 +226,19 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
             : 0,
       ),
     );
-    final padding = widget.preferences.pagePadding.clamp(0.0, 96.0).toDouble();
+    if (!widget.preferences.viewport.isValid) {
+      _reportInvalidWindow();
+      return ColoredBox(
+        color: palette.background,
+        child: Center(
+          child: Text(
+            l10n.novelPagedWindowUnavailable,
+            style: TextStyle(color: palette.foreground),
+          ),
+        ),
+      );
+    }
+    final viewport = resolveNovelReaderNativeViewport(widget.preferences);
     final position = _position;
     final page = position?.pageIndex;
     final count = _status?.pageCount ?? _position?.pageCount ?? 0;
@@ -315,10 +328,10 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
         child: Padding(
           key: const Key('novel-reader-native-paged-surface'),
           padding: EdgeInsets.fromLTRB(
-            padding,
-            padding + widget.chromeInsets.topInset,
-            padding,
-            padding + widget.chromeInsets.persistentBottomInset,
+            viewport.left,
+            viewport.top + widget.chromeInsets.topInset,
+            viewport.right,
+            viewport.bottom + widget.chromeInsets.persistentBottomInset,
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -338,7 +351,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                 0.0,
                 math.min(
                   constraints.maxWidth,
-                  math.max(160.0, widget.preferences.contentMaxWidth),
+                  viewport.maximumWidth ?? constraints.maxWidth,
                 ),
               );
               final footer = math.min(footerHeight, constraints.maxHeight);

@@ -63,6 +63,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
       impacts.add(NovelReaderPreferenceImpact.repaintOnly);
     }
     if (previous.fontSize != next.fontSize ||
+        previous.viewport != next.viewport ||
         previous.lineHeight != next.lineHeight ||
         previous.effectiveParagraphSpacing != next.effectiveParagraphSpacing ||
         previous.typography.letterSpacing != next.typography.letterSpacing ||

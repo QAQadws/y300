@@ -17,6 +17,7 @@ import 'novel_reader_font_size_policy_settings_panel.dart';
 import 'novel_reader_line_height_policy_settings_panel.dart';
 import 'novel_reader_font_weight_settings_panel.dart';
 import 'novel_reader_text_alignment_settings_panel.dart';
+import 'novel_reader_viewport_settings_panel.dart';
 import '../services/novel_reader_native_typography_adapter.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
@@ -205,6 +206,20 @@ class _NovelReaderDisplaySettingsSheetState
                       enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
                       onChanged: (next) =>
                           _applyPreferences(_draft.copyWith(typography: next)),
+                    ),
+                  ],
+                ),
+              if (widget.nativeTypography)
+                _SettingsSection(
+                  title: l10n.novelViewport,
+                  children: [
+                    NovelReaderViewportSettingsPanel(
+                      value: _draft.viewport,
+                      legacyPadding: _draft.pagePadding,
+                      legacyMaximumWidth: _draft.contentMaxWidth,
+                      enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
+                      onChanged: (next) =>
+                          _applyPreferences(_draft.copyWith(viewport: next)),
                     ),
                   ],
                 ),

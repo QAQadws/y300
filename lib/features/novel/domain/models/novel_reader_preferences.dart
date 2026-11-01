@@ -1,7 +1,9 @@
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
 import 'novel_reader_typography_overrides.dart';
+import 'novel_reader_viewport_overrides.dart';
 export 'novel_reader_typography_overrides.dart';
+export 'novel_reader_viewport_overrides.dart';
 
 enum NovelReaderThemePreset { followApp, light, sepia, dark }
 
@@ -145,6 +147,7 @@ class NovelReaderPreferences {
     this.conversionMode = NovelReaderConversionMode.none,
     this.safeAreaEnabled = true,
     this.typography = const NovelReaderTypographyOverrides(),
+    this.viewport = const NovelReaderViewportOverrides(),
     String? themeMode,
   }) : themePreset = themeMode == null
            ? themePreset
@@ -166,6 +169,7 @@ class NovelReaderPreferences {
     required this.conversionMode,
     required this.safeAreaEnabled,
     required this.typography,
+    required this.viewport,
   });
 
   factory NovelReaderPreferences.defaults() {
@@ -185,6 +189,7 @@ class NovelReaderPreferences {
       conversionMode: NovelReaderConversionMode.none,
       safeAreaEnabled: true,
       typography: NovelReaderTypographyOverrides(),
+      viewport: NovelReaderViewportOverrides(),
     );
   }
 
@@ -193,17 +198,22 @@ class NovelReaderPreferences {
 
   /// Legacy transient logical pixels, applied only after a paragraph.
   final double paragraphSpacing;
+
+  /// Legacy transient uniform margin; native per-edge requests live in viewport.
   final double pagePadding;
 
   /// Persisted choice: `system` or a font content ID, never an engine family.
   final String fontFamily;
   final NovelReaderFlowMode flowMode;
   final NovelReaderThemePreset themePreset;
+
+  /// Legacy transient limit; native width requests live in viewport.
   final double contentMaxWidth;
 
   /// Legacy transient logical pixels. Persisted em requests live in typography.
   final double firstLineIndent;
   final NovelReaderTypographyOverrides typography;
+  final NovelReaderViewportOverrides viewport;
 
   ({double before, double after, NovelReaderStyleScope scope})
   get effectiveParagraphSpacing {
@@ -258,7 +268,8 @@ class NovelReaderPreferences {
         other.showProgressIndicator == showProgressIndicator &&
         other.conversionMode == conversionMode &&
         other.safeAreaEnabled == safeAreaEnabled &&
-        other.typography == typography;
+        other.typography == typography &&
+        other.viewport == viewport;
   }
 
   @override
@@ -278,6 +289,7 @@ class NovelReaderPreferences {
     conversionMode,
     safeAreaEnabled,
     typography,
+    viewport,
   );
 
   NovelReaderPreferences copyWith({
@@ -297,6 +309,7 @@ class NovelReaderPreferences {
     NovelReaderConversionMode? conversionMode,
     bool? safeAreaEnabled,
     NovelReaderTypographyOverrides? typography,
+    NovelReaderViewportOverrides? viewport,
   }) {
     return NovelReaderPreferences._(
       fontSize: fontSize ?? this.fontSize,
@@ -317,6 +330,7 @@ class NovelReaderPreferences {
       conversionMode: conversionMode ?? this.conversionMode,
       safeAreaEnabled: safeAreaEnabled ?? this.safeAreaEnabled,
       typography: typography ?? this.typography,
+      viewport: viewport ?? this.viewport,
     );
   }
 }
