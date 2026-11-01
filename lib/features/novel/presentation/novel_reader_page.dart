@@ -2630,6 +2630,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         context: context,
         constraints: BoxConstraints(maxHeight: maxSheetHeight),
         builder: (context) => NovelReaderDisplaySettingsSheet(
+          nativeTypography: widget.nativePagination,
           initialPreferences: viewState.editablePreferences,
           onPreferencesChanged: coordinator.change,
           fontPreviewStyle: _typographyResolver

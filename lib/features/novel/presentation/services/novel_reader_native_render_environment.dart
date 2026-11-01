@@ -4,6 +4,7 @@ import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 
 import 'novel_reader_display_resolvers.dart';
+import 'novel_reader_native_typography_adapter.dart';
 
 /// One native layout input captured from a coherent, loaded font snapshot.
 /// No Context, Theme, provider or native layout survives in this value.
@@ -43,6 +44,7 @@ final class NovelReaderNativeRenderEnvironment {
     final textStyle = (theme.textTheme.bodyMedium ?? const TextStyle())
         .merge(typography.body)
         .copyWith(inherit: false, locale: Localizations.maybeLocaleOf(context));
+    final indent = resolveNovelReaderNativeIndent(preferences, policy);
     return NovelReaderNativeRenderEnvironment._(
       ForumBodyReaderStyle(
         textStyle: textStyle,
@@ -51,8 +53,8 @@ final class NovelReaderNativeRenderEnvironment {
         textAlign: typography.textAlign,
         textDirection: Directionality.of(context),
         paragraphAfter: preferences.paragraphSpacing,
-        firstLineIndent: ForumBodyLength(typography.firstLineIndent),
-        policy: policy,
+        firstLineIndent: indent.indent,
+        policy: indent.policy,
       ),
       // Unlike the old fwfh compatibility path, native paragraphs use scale()
       // at every effective author/reader font size. Do not flatten to one factor.

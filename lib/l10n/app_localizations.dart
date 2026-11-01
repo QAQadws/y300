@@ -3612,6 +3612,72 @@ abstract class AppLocalizations {
   /// **'排版'**
   String get novelTypography;
 
+  /// No description provided for @novelFirstLineIndent.
+  ///
+  /// In zh, this message translates to:
+  /// **'首行缩进'**
+  String get novelFirstLineIndent;
+
+  /// No description provided for @novelIndentScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用范围'**
+  String get novelIndentScope;
+
+  /// No description provided for @novelIndentAuthor.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随作者'**
+  String get novelIndentAuthor;
+
+  /// No description provided for @novelIndentMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'补充缺省'**
+  String get novelIndentMissing;
+
+  /// No description provided for @novelIndentBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelIndentBody;
+
+  /// No description provided for @novelIndentAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部段落'**
+  String get novelIndentAll;
+
+  /// No description provided for @novelIndentAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'缩进宽度'**
+  String get novelIndentAmount;
+
+  /// No description provided for @novelIndentEmValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value} 倍字号'**
+  String novelIndentEmValue(String value);
+
+  /// No description provided for @novelIndentAdaptiveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间不足时会临时缩小读者缩进，设置值不变；原有空白缩进会保留。'**
+  String get novelIndentAdaptiveHint;
+
+  /// No description provided for @novelIndentUnavailableMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'此设置仅用于翻页阅读，切换到翻页模式后可调整。'**
+  String get novelIndentUnavailableMode;
+
+  /// No description provided for @novelIndentReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置首行缩进'**
+  String get novelIndentReset;
+
   /// No description provided for @novelFontSize.
   ///
   /// In zh, this message translates to:

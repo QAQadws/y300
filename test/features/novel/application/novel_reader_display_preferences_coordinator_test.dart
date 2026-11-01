@@ -262,7 +262,12 @@ void main() {
           fontSize: 20,
           fontFamily: 'a' * 64,
         );
-        final draft = accepted.copyWith(fontSize: 24);
+        final draft = accepted.copyWith(
+          fontSize: 24,
+          typography: const NovelReaderTypographyOverrides(
+            firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
+          ),
+        );
         fixture.coordinator.commitImmediately(accepted);
         clock.flushMicrotasks();
         fixture.coordinator.change(draft);

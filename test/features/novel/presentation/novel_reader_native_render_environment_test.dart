@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart';
@@ -47,6 +48,95 @@ Future<NovelReaderNativeRenderEnvironment> _capture(
 }
 
 void main() {
+  setUpAll(() async {
+    await (FontLoader('packages/forum_content_renderer/ForumBodyInlineSpace')
+          ..addFont(
+            rootBundle.load(
+              'packages/forum_content_renderer/assets/fonts/inline_space.ttf',
+            ),
+          ))
+        .load();
+  });
+  for (final scope in NovelReaderStyleScope.values) {
+    testWidgets('persistable em request applies actual role geometry $scope', (
+      tester,
+    ) async {
+      final environment = await _capture(
+        tester,
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          fontSize: 20,
+          typography: NovelReaderTypographyOverrides(
+            firstLineIndent: NovelReaderFirstLineIndent(em: 2, scope: scope),
+          ),
+        ),
+        theme: ThemeData.light().copyWith(
+          textTheme: const TextTheme(bodyMedium: TextStyle(fontFamily: 'Ahem')),
+        ),
+        policy: ForumBodyStylePolicy({
+          ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.asDefault,
+        }),
+      );
+      expect(
+        environment.reader.firstLineIndent,
+        const ForumBodyLength(2, ForumBodyLengthUnit.em),
+      );
+      expect(
+        environment.reader.policy.values[ForumBodyStyleProperty.fontSize],
+        ForumBodyStyleScope.asDefault,
+      );
+      for (final tag in ['p', 'h1']) {
+        final doc = const ForumBodyParser().parse(
+          html: '<$tag style="font-size:20px;text-indent:10px">abcd</$tag>',
+          sourceId: 'indent-ui',
+          conversionIdentity: 'none',
+        );
+        final input = const ForumBodyParagraphContentBuilder().build(
+          document: doc,
+          styles: const ForumBodyStyleResolver().resolve(
+            doc,
+            environment.reader,
+          ),
+          path: '0',
+        );
+        final layout = ForumBodyParagraphLayout.create(
+          content: input,
+          width: 200,
+        );
+        addTearDown(layout.dispose);
+        final forced =
+            scope == NovelReaderStyleScope.forceAll ||
+            (scope == NovelReaderStyleScope.forceBody && tag == 'p');
+        expect(
+          layout.selectionBoxes(0, 1).single.left,
+          closeTo(forced ? 40 : 10, .001),
+        );
+      }
+    });
+  }
+
+  testWidgets(
+    'explicit author-zero and absent request share effective native inputs',
+    (tester) async {
+      final initial = await _capture(tester);
+      final author = await _capture(
+        tester,
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          typography: const NovelReaderTypographyOverrides(
+            firstLineIndent: NovelReaderFirstLineIndent.followAuthor(),
+          ),
+        ),
+      );
+      expect(author.reader.firstLineIndent, initial.reader.firstLineIndent);
+      for (final property in ForumBodyStyleProperty.values) {
+        expect(
+          author.reader.policy.values[property] ??
+              ForumBodyStyleScope.asDefault,
+          initial.reader.policy.values[property] ??
+              ForumBodyStyleScope.asDefault,
+        );
+      }
+    },
+  );
   testWidgets('current reading preferences become unscaled native inputs', (
     tester,
   ) async {

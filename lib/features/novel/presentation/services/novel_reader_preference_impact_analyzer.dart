@@ -68,7 +68,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.pagePadding != next.pagePadding ||
         previous.fontFamily != next.fontFamily ||
         previous.contentMaxWidth != next.contentMaxWidth ||
-        previous.firstLineIndent != next.firstLineIndent ||
+        previous.effectiveFirstLineIndent != next.effectiveFirstLineIndent ||
         previous.fontWeight != next.fontWeight ||
         previous.textAlign != next.textAlign ||
         previous.safeAreaEnabled != next.safeAreaEnabled) {

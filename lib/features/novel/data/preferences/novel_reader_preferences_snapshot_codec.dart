@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'novel_reader_typography_snapshot_codec.dart';
+
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
@@ -8,6 +10,7 @@ final class NovelReaderPreferencesSnapshotCodec {
   const NovelReaderPreferencesSnapshotCodec();
 
   static const int schemaVersion = 1;
+  static const _typography = NovelReaderTypographySnapshotCodec();
   static const NovelReaderFlowMode _legacyFlowModeFallback =
       NovelReaderFlowMode.vertical;
   static const double minimumFontSize = 14;
@@ -18,7 +21,7 @@ final class NovelReaderPreferencesSnapshotCodec {
   String encode(NovelReaderPreferences preferences, {String? previousSource}) {
     final previous = _editableSnapshot(previousSource);
     final normalized = normalize(preferences);
-    return jsonEncode(<String, Object?>{
+    final result = <String, Object?>{
       ...?previous,
       'schemaVersion': schemaVersion,
       'fontSize': normalized.fontSize,
@@ -28,7 +31,17 @@ final class NovelReaderPreferencesSnapshotCodec {
       'themePreset': normalized.themePreset.storageValue,
       'conversionMode': normalized.conversionMode.storageValue,
       'safeAreaEnabled': normalized.safeAreaEnabled,
-    });
+    };
+    final typography = _typography.encode(
+      normalized.typography,
+      previous: previous?['typography'],
+    );
+    if (typography == null) {
+      result.remove('typography');
+    } else {
+      result['typography'] = typography;
+    }
+    return jsonEncode(result);
   }
 
   Map<String, dynamic>? _editableSnapshot(String? source) {
@@ -59,6 +72,7 @@ final class NovelReaderPreferencesSnapshotCodec {
         return defaults;
       }
       return defaults.copyWith(
+        typography: _typography.decode(decoded['typography']),
         fontSize: _validDouble(
           decoded['fontSize'],
           min: minimumFontSize,
@@ -94,6 +108,7 @@ final class NovelReaderPreferencesSnapshotCodec {
   NovelReaderPreferences normalize(NovelReaderPreferences preferences) {
     final defaults = NovelReaderPreferences.defaults();
     return defaults.copyWith(
+      typography: _typography.normalize(preferences.typography),
       fontSize: _validDouble(
         preferences.fontSize,
         min: minimumFontSize,

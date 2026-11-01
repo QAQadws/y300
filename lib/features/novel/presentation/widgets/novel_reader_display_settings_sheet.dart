@@ -9,17 +9,23 @@ import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
+import 'novel_reader_indent_settings_panel.dart';
+
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
   const NovelReaderDisplaySettingsSheet({
     super.key,
     required this.initialPreferences,
     required this.onPreferencesChanged,
     this.fontPreviewStyle,
+    this.nativeTypography = false,
   });
 
   final NovelReaderPreferences initialPreferences;
   final ValueChanged<NovelReaderPreferences> onPreferencesChanged;
   final TextStyle? fontPreviewStyle;
+
+  /// Controlled native entry only; old rendering modes do not advertise this.
+  final bool nativeTypography;
 
   @override
   State<NovelReaderDisplaySettingsSheet> createState() =>
@@ -107,6 +113,18 @@ class _NovelReaderDisplaySettingsSheetState
                   ),
                 ],
               ),
+              if (widget.nativeTypography)
+                _SettingsSection(
+                  title: l10n.novelFirstLineIndent,
+                  children: [
+                    NovelReaderIndentSettingsPanel(
+                      value: _draft.typography,
+                      enabled: _draft.flowMode != NovelReaderFlowMode.vertical,
+                      onChanged: (next) =>
+                          _applyPreferences(_draft.copyWith(typography: next)),
+                    ),
+                  ],
+                ),
               _SettingsSection(
                 title: l10n.novelTheme,
                 children: [

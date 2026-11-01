@@ -50,10 +50,15 @@ final class NovelMainPageProfileData
     _states.remove(id);
   }
 
-  Widget scope(Widget child) => ProviderScope(
+  Widget scope(
+    Widget child, {
+    NovelReaderPreferencesRepository? preferences,
+  }) => ProviderScope(
     overrides: [
       novelRepositoryProvider.overrideWithValue(this),
-      novelReaderPreferencesRepositoryProvider.overrideWithValue(_preferences),
+      novelReaderPreferencesRepositoryProvider.overrideWithValue(
+        preferences ?? _preferences,
+      ),
       novelChapterInteractionsDockPreferencesRepositoryProvider
           .overrideWithValue(_DisabledDock()),
       libraryStateRepositoryProvider.overrideWithValue(_UnusedLibraryState()),

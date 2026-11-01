@@ -2199,6 +2199,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelTypography => '排版';
 
   @override
+  String get novelFirstLineIndent => '首行缩进';
+
+  @override
+  String get novelIndentScope => '应用范围';
+
+  @override
+  String get novelIndentAuthor => '跟随作者';
+
+  @override
+  String get novelIndentMissing => '补充缺省';
+
+  @override
+  String get novelIndentBody => '统一正文';
+
+  @override
+  String get novelIndentAll => '全部段落';
+
+  @override
+  String get novelIndentAmount => '缩进宽度';
+
+  @override
+  String novelIndentEmValue(String value) {
+    return '$value 倍字号';
+  }
+
+  @override
+  String get novelIndentAdaptiveHint => '空间不足时会临时缩小读者缩进，设置值不变；原有空白缩进会保留。';
+
+  @override
+  String get novelIndentUnavailableMode => '此设置仅用于翻页阅读，切换到翻页模式后可调整。';
+
+  @override
+  String get novelIndentReset => '重置首行缩进';
+
+  @override
   String get novelFontSize => '字号';
 
   @override
@@ -7724,6 +7759,41 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelTypography => '排版';
+
+  @override
+  String get novelFirstLineIndent => '首行縮排';
+
+  @override
+  String get novelIndentScope => '套用範圍';
+
+  @override
+  String get novelIndentAuthor => '跟隨作者';
+
+  @override
+  String get novelIndentMissing => '補充預設';
+
+  @override
+  String get novelIndentBody => '統一正文';
+
+  @override
+  String get novelIndentAll => '全部段落';
+
+  @override
+  String get novelIndentAmount => '縮排寬度';
+
+  @override
+  String novelIndentEmValue(String value) {
+    return '$value 倍字級';
+  }
+
+  @override
+  String get novelIndentAdaptiveHint => '空間不足時會暫時縮小閱讀者縮排，設定值不變；保留原有空白縮排。';
+
+  @override
+  String get novelIndentUnavailableMode => '此設定僅用於翻頁閱讀，切換至翻頁模式後即可調整。';
+
+  @override
+  String get novelIndentReset => '重設首行縮排';
 
   @override
   String get novelFontSize => '字號';

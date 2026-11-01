@@ -1,5 +1,8 @@
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
+import 'novel_reader_typography_overrides.dart';
+export 'novel_reader_typography_overrides.dart';
+
 enum NovelReaderThemePreset { followApp, light, sepia, dark }
 
 enum NovelReaderFlowMode { vertical, pagedLtr, pagedRtl }
@@ -139,6 +142,7 @@ class NovelReaderPreferences {
     this.showProgressIndicator = true,
     this.conversionMode = NovelReaderConversionMode.none,
     this.safeAreaEnabled = true,
+    this.typography = const NovelReaderTypographyOverrides(),
     String? themeMode,
   }) : themePreset = themeMode == null
            ? themePreset
@@ -159,6 +163,7 @@ class NovelReaderPreferences {
     required this.showProgressIndicator,
     required this.conversionMode,
     required this.safeAreaEnabled,
+    required this.typography,
   });
 
   factory NovelReaderPreferences.defaults() {
@@ -177,6 +182,7 @@ class NovelReaderPreferences {
       showProgressIndicator: true,
       conversionMode: NovelReaderConversionMode.none,
       safeAreaEnabled: true,
+      typography: NovelReaderTypographyOverrides(),
     );
   }
 
@@ -190,7 +196,23 @@ class NovelReaderPreferences {
   final NovelReaderFlowMode flowMode;
   final NovelReaderThemePreset themePreset;
   final double contentMaxWidth;
+
+  /// Legacy transient logical pixels. Persisted em requests live in typography.
   final double firstLineIndent;
+  final NovelReaderTypographyOverrides typography;
+
+  NovelReaderEffectiveIndent get effectiveFirstLineIndent {
+    final request = typography.firstLineIndent;
+    final value = request?.em ?? firstLineIndent;
+    return (
+      value: value,
+      unit: request == null || value == 0
+          ? NovelReaderIndentUnit.logicalPixels
+          : NovelReaderIndentUnit.em,
+      scope: request?.scope ?? NovelReaderStyleScope.asDefault,
+    );
+  }
+
   final int fontWeight;
   final NovelReaderTextAlignMode textAlign;
   final bool showProgressIndicator;
@@ -218,7 +240,8 @@ class NovelReaderPreferences {
         other.textAlign == textAlign &&
         other.showProgressIndicator == showProgressIndicator &&
         other.conversionMode == conversionMode &&
-        other.safeAreaEnabled == safeAreaEnabled;
+        other.safeAreaEnabled == safeAreaEnabled &&
+        other.typography == typography;
   }
 
   @override
@@ -237,6 +260,7 @@ class NovelReaderPreferences {
     showProgressIndicator,
     conversionMode,
     safeAreaEnabled,
+    typography,
   );
 
   NovelReaderPreferences copyWith({
@@ -255,6 +279,7 @@ class NovelReaderPreferences {
     bool? showProgressIndicator,
     NovelReaderConversionMode? conversionMode,
     bool? safeAreaEnabled,
+    NovelReaderTypographyOverrides? typography,
   }) {
     return NovelReaderPreferences._(
       fontSize: fontSize ?? this.fontSize,
@@ -274,6 +299,7 @@ class NovelReaderPreferences {
           showProgressIndicator ?? this.showProgressIndicator,
       conversionMode: conversionMode ?? this.conversionMode,
       safeAreaEnabled: safeAreaEnabled ?? this.safeAreaEnabled,
+      typography: typography ?? this.typography,
     );
   }
 }
