@@ -1,7 +1,7 @@
 import 'package:flutter/painting.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-const profileMixedFirstLineIndentCaseCount = 4;
+const profileMixedFirstLineIndentCaseCount = 8;
 
 /// Real typed page preparation outside timing windows. No FontLoader or second
 /// renderer: the actual production session must consume the bundled font ABI.
@@ -10,14 +10,17 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
 }) {
   final records = <Map<String, Object>>[];
   for (final direction in TextDirection.values) {
-    for (final advance in [20.0, 12.571334838867188]) {
-      const width = 80.0;
+    for (final (advance, readerFit) in [
+      for (final fit in [false, true])
+        for (final value in [20.0, 12.571334838867188]) (value, fit),
+    ]) {
+      final width = readerFit && advance < 20 ? 100.0 : 80.0;
       // Android's actual system-font ruby frame is about35.16px at20px text;
       // keep one whole row per page without relying on Tester font metrics.
-      const height = 40.0;
+      final height = readerFit ? 70.0 : 40.0;
       final document = const ForumBodyParser().parse(
         html:
-            '<p dir="${direction.name}" style="text-indent:${advance}px">'
+            '<p dir="${direction.name}" style="${readerFit ? '' : 'text-indent:${advance}px'}">'
             '<ruby>AA<rt>xx</rt></ruby> <ruby>B<rt>y</rt></ruby> '
             '<ruby>C<rt>z</rt></ruby><br><ruby>D<rt>u</rt></ruby> '
             '<ruby>E<rt>v</rt></ruby> <ruby>F<rt>w</rt></ruby></p>',
@@ -35,6 +38,9 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
           fontRevision: 'profile-system20',
           linkColor: const Color(0xff0000ff),
           paragraphAfter: 0,
+          firstLineIndent: readerFit
+              ? const ForumBodyLength(4, ForumBodyLengthUnit.em)
+              : ForumBodyLength.zero,
         ),
         cache: cache,
         limits: const ForumBodyTextPageSessionLimits(
@@ -48,6 +54,9 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
         layoutId: 'profile-mixed-indent',
         width: width,
         height: height,
+        textScaler: readerFit
+            ? const TextScaler.linear(1.6)
+            : TextScaler.noScaling,
       );
       late Map<String, Object> record;
       try {
@@ -58,6 +67,7 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
         var glyphs = 0;
         var sawContinuation = false;
         double? firstAdvance;
+        ForumBodyFirstLineIndentGeometry? indentGeometry;
         for (var page = 0; page < session.snapshot.length; page++) {
           final fragments = _prepare(session, page);
           try {
@@ -80,6 +90,7 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
               }
               if (!owns) sawContinuation = true;
               if (page == 0 && firstAdvance == null) {
+                indentGeometry = layout.firstLineIndent;
                 final row = layout.lines.first;
                 final boxes = [
                   for (final atom in layout.projection.atoms)
@@ -95,7 +106,16 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
                           boxes
                               .map((b) => b.right)
                               .reduce((a, b) => a > b ? a : b);
-                if ((firstAdvance - advance).abs() > .001) {
+                if ((firstAdvance -
+                                (readerFit
+                                    ? indentGeometry.appliedAdvance
+                                    : advance))
+                            .abs() >
+                        .001 ||
+                    (readerFit &&
+                        (!indentGeometry.isReduced ||
+                            indentGeometry.requestedAdvance != 128 ||
+                            indentGeometry.layoutPasses > 3))) {
                   throw StateError('Mixed native first-line advance differs');
                 }
               }
@@ -132,7 +152,10 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
         record = {
           'event': 'mixed_first_line_indent',
           'direction': direction.name,
-          'advance': advance,
+          'advance': indentGeometry!.requestedAdvance,
+          'applied': indentGeometry.appliedAdvance,
+          'passes': indentGeometry.layoutPasses,
+          'readerFit': readerFit,
           'actualFirst': firstAdvance,
           'pages': session.snapshot.length,
           'baseGlyphs': glyphs,
@@ -145,7 +168,8 @@ List<Map<String, Object>> profileMixedFirstLineIndents({
           'event': 'mixed_indent_failure',
           'reason': error.failure.name,
           'direction': direction.name,
-          'advance': advance,
+          'advance': readerFit ? 128.0 : advance,
+          'readerFit': readerFit,
           'height': height,
           'sourceComplete': session.isComplete,
           'pages': session.snapshot.length,

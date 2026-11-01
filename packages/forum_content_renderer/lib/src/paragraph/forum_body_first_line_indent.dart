@@ -70,7 +70,9 @@ double resolveForumBodyFirstLineIndentValue({
   );
   // A requested nonzero prefix must remain present in the native span. Treat
   // numeric underflow as unrepresentable instead of shifting only its map.
-  if (!advance.isFinite || advance <= 0 || advance >= width) {
+  if (!advance.isFinite ||
+      advance <= 0 ||
+      (!style.indentFromReader && advance >= width)) {
     throw const ForumBodyParagraphLayoutException(
       ForumBodyParagraphLayoutFailure.indent,
     );
@@ -102,7 +104,7 @@ void validateForumBodyFirstLineIndentAdvance(
   }
   // Verify the bundled zero-ink font ABI instead of trusting a font name or
   // allowing native fallback metrics to alter an otherwise readable page.
-  if (boxes.isEmpty || (actual - advance).abs() > 1e-3) {
+  if ((boxes.isEmpty && advance != 0) || (actual - advance).abs() > 1e-3) {
     throw const ForumBodyParagraphLayoutException(
       ForumBodyParagraphLayoutFailure.indent,
     );

@@ -15,6 +15,7 @@ final class NativeReaderTestFixture {
     double width = 100,
     double height = 100,
     TextScaler textScaler = TextScaler.noScaling,
+    ForumBodyReaderStyle? reader,
     bool complete = true,
     String layoutId = 'generation-a',
     ForumBodyParagraphCache? cacheOwner,
@@ -41,7 +42,7 @@ final class NativeReaderTestFixture {
         );
     session = ForumBodyTextPageSession(
       document: body,
-      reader: _reader(),
+      reader: reader ?? _reader(),
       cache: cache,
       limits: ForumBodyTextPageSessionLimits(
         maxPages: 100,

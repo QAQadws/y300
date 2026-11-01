@@ -4,7 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_content.dart';
-import '../paragraph/forum_body_first_line_indent.dart';
+import '../paragraph/forum_body_indent_layout.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_native_paragraph_layout.dart';
 import '../style/forum_body_style_options.dart';
@@ -66,6 +66,7 @@ final class ForumBodyInlineParagraphLayout
     required this.lines,
     required this.atomBoxes,
     required this.dimensions,
+    required this.firstLineIndent,
     required Offset paintOffset,
     required Float64List frameTops,
     required Float64List frameBottoms,
@@ -77,7 +78,8 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 6;
+  static const revision = 7;
+  final ForumBodyFirstLineIndentGeometry firstLineIndent;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,
@@ -100,11 +102,8 @@ final class ForumBodyInlineParagraphLayout
     final projection = content.projectionForLayout(layoutMode);
     final painter =
         TextPainter(
-          text: projection.hasSoftSpaces || indent > 0
-              ? content.textSpanWithDimensions(
-                  snapshot,
-                  firstLineIndent: indent,
-                )
+          text: projection.hasSoftSpaces
+              ? content.textSpanWithDimensions(snapshot)
               : content.textSpan,
           textAlign: content.style.textAlign,
           textDirection: content.style.textDirection,
@@ -120,10 +119,24 @@ final class ForumBodyInlineParagraphLayout
               : snapshot,
         );
     try {
-      painter.layout(
-        minWidth: intrinsic ? 0 : width,
-        maxWidth: intrinsic ? double.infinity : width,
-      );
+      final indentGeometry = indent == 0
+          ? const ForumBodyFirstLineIndentGeometry.none()
+          : layoutForumBodyFirstLineIndent(
+              painter: painter,
+              body: projection.hasSoftSpaces
+                  ? content.textSpanWithDimensions(snapshot)
+                  : content.textSpan,
+              projection: projection,
+              width: width,
+              requestedAdvance: indent,
+              canReduce: content.style.indentFromReader,
+            );
+      if (indent == 0) {
+        painter.layout(
+          minWidth: intrinsic ? 0 : width,
+          maxWidth: intrinsic ? double.infinity : width,
+        );
+      }
       final layoutWidth = intrinsic ? painter.width : width;
       if (!layoutWidth.isFinite || layoutWidth < 0 || layoutWidth > 16384) {
         throw const ForumBodyParagraphLayoutException(
@@ -136,11 +149,6 @@ final class ForumBodyInlineParagraphLayout
         inline: projection,
       );
       if (indent > 0) {
-        validateForumBodyFirstLineIndentAdvance(
-          painter,
-          projection.enginePrefix.length,
-          indent,
-        );
         if (lines.isNotEmpty && lines.first.coverageEndUtf16 == 0) {
           throw const ForumBodyParagraphLayoutException(
             ForumBodyParagraphLayoutFailure.indent,
@@ -257,6 +265,7 @@ final class ForumBodyInlineParagraphLayout
                 boxes.map((box) => _shiftBox(box, paintOffset)),
               ),
         dimensions: snapshot,
+        firstLineIndent: indentGeometry,
         paintOffset: paintOffset,
         frameTops: frameTops,
         frameBottoms: frameBottoms,

@@ -53,16 +53,21 @@ void main() {
 
   test('mixed startup prepares real ruby, gaps and BR continuations', () {
     final records = profileMixedFirstLineIndents();
-    expect(records.length, 4);
+    expect(records.length, 8);
+    expect(records.where((r) => r['readerFit'] == true).length, 4);
     for (final record in records) {
       expect(record['passed'], isTrue);
       expect(
         record['actualFirst'],
-        closeTo(record['advance']! as double, .001),
+        closeTo(record['applied']! as double, .001),
       );
       expect(record['pages']! as int, greaterThanOrEqualTo(2));
       expect(record['baseGlyphs'], 7);
       expect(record['brContinuation'], isTrue);
+      if (record['readerFit'] == true) {
+        expect(record['advance'], 128);
+        expect(record['passes'], inInclusiveRange(2, 3));
+      }
       expect(record['warmBuilds'], 0);
       expect(record['warmPictures'], 0);
       expect(record['exitPins'], 0);
@@ -75,17 +80,22 @@ void main() {
     'bundled indent checks native first/continuation rows and owner release',
     () {
       final records = profileFirstLineIndents();
-      expect(records.length, 4);
+      expect(records.length, 8);
+      expect(records.where((r) => r['readerFit'] == true).length, 4);
       expect(records.map((r) => r['direction']).toSet(), {'ltr', 'rtl'});
       for (final record in records) {
         expect(record['passed'], isTrue);
         expect(
           record['actualFirst'],
-          closeTo(record['advance']! as double, .001),
+          closeTo(record['applied']! as double, .001),
         );
         expect(record['actualContinuation'], closeTo(0, .001));
         expect(record['rows']! as int, greaterThan(1));
         expect(record['coldBuilds'], 1);
+        if (record['readerFit'] == true) {
+          expect(record['advance'], 128);
+          expect(record['passes'], inInclusiveRange(2, 3));
+        }
         expect(record['exitPins'], 0);
         expect(record['exitBytes'], 0);
         expect(utf8.encode(jsonEncode(record)).length, lessThanOrEqualTo(1000));

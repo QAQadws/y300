@@ -5,7 +5,7 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 /// never calls FontLoader: the newly launched engine must load its own bundle.
 /// These geometry/lifetime checks are not frame-time or throughput measurements.
 const profileInlineSoftSpaceCaseCount = 14;
-const profileFirstLineIndentCaseCount = 4;
+const profileFirstLineIndentCaseCount = 8;
 
 List<Map<String, Object>> profileInlineSoftSpaces() {
   final records = <Map<String, Object>>[];
@@ -173,12 +173,18 @@ List<Map<String, Object>> profileInlineSoftSpaces() {
 List<Map<String, Object>> profileFirstLineIndents() {
   final records = <Map<String, Object>>[];
   for (final direction in TextDirection.values) {
-    for (final advance in [20.0, 12.571334838867188]) {
+    for (final (advance, readerFit) in [
+      for (final fit in [false, true])
+        for (final value in [20.0, 12.571334838867188]) (value, fit),
+    ]) {
       const text = 'ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWX';
-      const width = 80.0;
+      final width = readerFit ? (advance == 20 ? 40.0 : 60.0) : 80.0;
+      final scaler = readerFit
+          ? const TextScaler.linear(1.6)
+          : TextScaler.noScaling;
       final document = const ForumBodyParser().parse(
         html:
-            '<p dir="${direction.name}" style="text-indent:${advance}px">'
+            '<p dir="${direction.name}" style="${readerFit ? '' : 'text-indent:${advance}px'}">'
             '$text</p>',
         sourceId: 'profile-bundled-indent',
         conversionIdentity: 'none',
@@ -189,6 +195,9 @@ List<Map<String, Object>> profileFirstLineIndents() {
           textStyle: const TextStyle(fontSize: 20, height: 1),
           fontRevision: 'profile-system20',
           linkColor: const Color(0xff0000ff),
+          firstLineIndent: readerFit
+              ? const ForumBodyLength(4, ForumBodyLengthUnit.em)
+              : ForumBodyLength.zero,
         ),
       );
       final content = const ForumBodyParagraphContentBuilder().build(
@@ -202,7 +211,11 @@ List<Map<String, Object>> profileFirstLineIndents() {
       );
       late Map<String, Object> record;
       try {
-        final lease = cache.acquire(content: content, width: width);
+        final lease = cache.acquire(
+          content: content,
+          width: width,
+          textScaler: scaler,
+        );
         try {
           final layout = lease.layout;
           if (layout.lines.length < 2 ||
@@ -226,11 +239,22 @@ List<Map<String, Object>> profileFirstLineIndents() {
 
           final first = edge(0);
           final next = edge(1);
-          if ((first - advance).abs() > .001 || next.abs() > .001) {
+          final geometry = layout.firstLineIndent;
+          if ((first - (readerFit ? geometry.appliedAdvance : advance)).abs() >
+                  .001 ||
+              next.abs() > .001 ||
+              (readerFit &&
+                  (!geometry.isReduced ||
+                      geometry.requestedAdvance != 128 ||
+                      geometry.layoutPasses > 3))) {
             throw StateError('Bundled indent or continuation advance differs');
           }
           lease.release();
-          final warm = cache.tryAcquireCached(content: content, width: width);
+          final warm = cache.tryAcquireCached(
+            content: content,
+            width: width,
+            textScaler: scaler,
+          );
           if (warm == null) {
             throw StateError('Bundled indent warm lookup missed');
           }
@@ -245,7 +269,10 @@ List<Map<String, Object>> profileFirstLineIndents() {
           record = {
             'event': 'first_line_indent',
             'direction': direction.name,
-            'advance': advance,
+            'advance': geometry.requestedAdvance,
+            'applied': geometry.appliedAdvance,
+            'passes': geometry.layoutPasses,
+            'readerFit': readerFit,
             'actualFirst': first,
             'actualContinuation': next,
             'rows': layout.lines.length,

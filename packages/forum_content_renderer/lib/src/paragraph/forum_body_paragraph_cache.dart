@@ -975,7 +975,9 @@ final class _InlineLayoutKey {
       span = content.projection.hasSoftSpaces || indentAdvance > 0
           ? content.textSpanWithDimensions(
               dimensions,
-              firstLineIndent: indentAdvance,
+              firstLineIndent: indentAdvance > requestWidth
+                  ? requestWidth
+                  : indentAdvance,
             )
           : content.textSpan,
       align = content.style.textAlign,

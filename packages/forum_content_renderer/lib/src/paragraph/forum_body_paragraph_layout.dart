@@ -2,8 +2,8 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
-import '../inline/forum_body_native_space_span.dart';
 import 'forum_body_first_line_indent.dart';
+import 'forum_body_indent_layout.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
 import 'forum_body_native_paragraph_layout.dart';
@@ -14,6 +14,7 @@ export 'forum_body_paragraph_geometry.dart'
         ForumBodyParagraphLayoutFailure,
         ForumBodyParagraphLayoutException,
         ForumBodyParagraphWindow,
+        ForumBodyFirstLineIndentGeometry,
         ForumBodyParagraphLine;
 
 /// Owns one TextPainter layout, shared by geometry, paint, hit-test and boxes.
@@ -28,6 +29,7 @@ final class ForumBodyParagraphLayout
     this.height,
     this._paintScale,
     this._engineProjection,
+    this.firstLineIndent,
     List<ForumBodyParagraphLine> lines,
   ) : lines = List.unmodifiable(lines),
       identity = content.identity,
@@ -51,15 +53,7 @@ final class ForumBodyParagraphLayout
     final intrinsic =
         content.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
     final painter = TextPainter(
-      text: engine == null
-          ? content.textSpan
-          : TextSpan(
-              style: content.style.textStyle,
-              children: [
-                ForumBodyNativeSpaceSpan.nonBreaking(indent),
-                ...content.textSpan.children!,
-              ],
-            ),
+      text: content.textSpan,
       textAlign: content.style.textAlign,
       textDirection: content.style.textDirection,
       textScaler: textScaler,
@@ -69,10 +63,22 @@ final class ForumBodyParagraphLayout
     try {
       // Shape at the selected font/scaler first. Fitting transforms that same
       // layout, rather than measuring repeatedly at guessed smaller font sizes.
-      painter.layout(
-        minWidth: intrinsic ? 0 : width,
-        maxWidth: fitted || intrinsic ? double.infinity : width,
-      );
+      final indentGeometry = engine == null
+          ? const ForumBodyFirstLineIndentGeometry.none()
+          : layoutForumBodyFirstLineIndent(
+              painter: painter,
+              body: content.textSpan,
+              projection: engine,
+              width: width,
+              requestedAdvance: indent,
+              canReduce: content.style.indentFromReader,
+            );
+      if (engine == null) {
+        painter.layout(
+          minWidth: intrinsic ? 0 : width,
+          maxWidth: fitted || intrinsic ? double.infinity : width,
+        );
+      }
       final layoutWidth = intrinsic ? painter.width : width;
       if (!layoutWidth.isFinite || layoutWidth < 0 || layoutWidth > 16384) {
         throw const ForumBodyParagraphLayoutException(
@@ -88,13 +94,6 @@ final class ForumBodyParagraphLayout
         );
       }
       final metrics = painter.computeLineMetrics();
-      if (engine != null) {
-        validateForumBodyFirstLineIndentAdvance(
-          painter,
-          engine.enginePrefix.length,
-          indent,
-        );
-      }
       if ((fitted || intrinsic) && metrics.length > 1) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.singleLine,
@@ -120,6 +119,7 @@ final class ForumBodyParagraphLayout
         painter.height * paintScale,
         paintScale,
         engine,
+        indentGeometry,
         lines,
       );
     } catch (_) {
@@ -145,7 +145,8 @@ final class ForumBodyParagraphLayout
     return scales;
   }
 
-  static const backendRevision = 6;
+  static const backendRevision = 7;
+  final ForumBodyFirstLineIndentGeometry firstLineIndent;
   final ForumBodyIdentity identity;
   final String? path;
   @override

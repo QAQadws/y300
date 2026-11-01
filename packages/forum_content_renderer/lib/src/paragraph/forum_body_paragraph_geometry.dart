@@ -17,6 +17,27 @@ enum ForumBodyParagraphWindow {
   terminalEmptyLine,
 }
 
+/// Actual first-line geometry after source policy and width fitting. This is
+/// layout output, never a replacement for the reader's stored request.
+final class ForumBodyFirstLineIndentGeometry {
+  const ForumBodyFirstLineIndentGeometry({
+    required this.requestedAdvance,
+    required this.appliedAdvance,
+    required this.layoutPasses,
+  });
+  const ForumBodyFirstLineIndentGeometry.none()
+    : requestedAdvance = 0,
+      appliedAdvance = 0,
+      layoutPasses = 1;
+
+  final double requestedAdvance;
+  final double appliedAdvance;
+
+  /// Passes used to build this layout; a warm lease does not repeat them.
+  final int layoutPasses;
+  bool get isReduced => appliedAdvance < requestedAdvance;
+}
+
 final class ForumBodyParagraphLayoutException implements Exception {
   const ForumBodyParagraphLayoutException(this.failure);
   final ForumBodyParagraphLayoutFailure failure;

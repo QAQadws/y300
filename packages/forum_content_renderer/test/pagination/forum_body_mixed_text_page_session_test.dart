@@ -106,6 +106,73 @@ void main() {
 
   for (final direction in ['ltr', 'rtl']) {
     test(
+      'full-width ruby reduces reader indent without changing actual page binding $direction',
+      () {
+        final options = ForumBodyReaderStyle(
+          textStyle: const TextStyle(
+            fontFamily: 'Ahem',
+            fontSize: 20,
+            height: 1,
+          ),
+          fontRevision: 'reader-fit',
+          linkColor: const Color(0xff0000ff),
+          paragraphAfter: 0,
+          firstLineIndent: const ForumBodyLength(4, ForumBodyLengthUnit.em),
+        );
+        final f = _Fixture(
+          '<p dir="$direction"><ruby>AB<rt>xy</rt></ruby> '
+          '<ruby>C<rt>z</rt></ruby><br><ruby>D<rt>u</rt></ruby></p>',
+          width: 40,
+          height: 30,
+          reader: options,
+        );
+        f.finish();
+        final seen = <String>[];
+        var sawReduced = false;
+        var sawContinuation = false;
+        for (var page = 0; page < f.session.snapshot.length; page++) {
+          final fragments = f.prepare(page);
+          try {
+            validateForumBodyPreparedTextPageBinding(
+              snapshot: f.session.snapshot,
+              pageIndex: page,
+              layoutId: 'formal-mixed',
+              fragments: fragments,
+            );
+            for (final prepared
+                in fragments.cast<ForumBodyPreparedInlineFragment>()) {
+              final parent =
+                  prepared.nativeLeases.first as ForumBodyInlineParagraphLease;
+              if (prepared.view.content.appliesFirstLineIndent) {
+                expect(parent.layout.projection.enginePrefix.length, 2);
+                expect(parent.layout.firstLineIndent.requestedAdvance, 80);
+                expect(parent.layout.firstLineIndent.appliedAdvance, 0);
+                sawReduced = true;
+              } else {
+                expect(parent.layout.projection.enginePrefix, isEmpty);
+                sawContinuation = true;
+              }
+              for (final letter in ['A', 'B', 'C', 'D']) {
+                final start = prepared.projection.text.indexOf(letter);
+                if (start >= 0 &&
+                    prepared.glyphBoxes(start, start + 1).isNotEmpty) {
+                  seen.add(letter);
+                }
+              }
+            }
+          } finally {
+            for (final fragment in fragments) {
+              fragment.close();
+            }
+          }
+          expect(f.cache.activeLeases, 0);
+        }
+        expect(seen, ['A', 'B', 'C', 'D']);
+        expect(sawReduced && sawContinuation, isTrue);
+        expect(options.firstLineIndent.value, 4);
+      },
+    );
+    test(
       'indented raw ruby gaps prepare every real page and BR continuation $direction',
       () {
         final f = _Fixture(

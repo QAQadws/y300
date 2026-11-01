@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -80,6 +82,45 @@ void main() {
   });
 
   for (final version in [1, 37]) {
+    test(
+      'zero fitted indent keeps canonical/read-only restore version $version',
+      () async {
+        final options = ForumBodyReaderStyle(
+          textStyle: const TextStyle(
+            fontFamily: 'Ahem',
+            fontSize: 10,
+            height: 1,
+          ),
+          fontRevision: 'reader-fit',
+          linkColor: const Color(0xff0000ff),
+          paragraphAfter: 0,
+          firstLineIndent: const ForumBodyLength(4, ForumBodyLengthUnit.em),
+        );
+        final fixture = NativeReaderTestFixture(
+          '<p>abcdefgh</p>',
+          width: 10,
+          height: 10,
+          reader: options,
+        );
+        final saved = _position(anchor: _anchor(fixture, 3)).copyWith(
+          anchorFormatVersion: version,
+          paginationKey: 'native-geometry',
+          pageIndex: 3,
+        );
+        final cursor = _cursor(fixture, saved);
+        cursor.observe(
+          snapshot: fixture.session.snapshot,
+          coverage: await _coverage(fixture, 3),
+        );
+        final result = cursor.resolve(fixture.session.snapshot)!;
+        expect(result.pageIndex, 3);
+        expect(result.isReadOnlyCompatibilityRestore, version != 1);
+        expect(saved.anchorTextOffset, 3);
+        expect(saved.anchorFormatVersion, version);
+        expect(options.firstLineIndent.value, 4);
+        expect(fixture.session.activeIssuedLeases, 0);
+      },
+    );
     test(
       'ruby indent preserves exact source and readonly version $version',
       () async {
