@@ -52,6 +52,114 @@ void main() {
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  for (final rtl in [false, true]) {
+    for (final readOnlyRestore in [false, true]) {
+      testWidgets(
+        'reordered ruby completes only at its actual final page (rtl=$rtl, readOnly=$readOnlyRestore)',
+        (tester) async {
+          tester.view.physicalSize = const Size(360, 480);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final fixture = (await tester.runAsync(
+            () => _Fixture.create(
+              rawBody: (
+                '<p><ruby style="line-height:1"><rb style="font-size:200px">A</rb><rb style="font-size:200px">B</rb><rt style="font-size:100px">xx</rt></ruby></p>',
+                'ABxx',
+              ),
+            ),
+          ))!;
+          try {
+            if (readOnlyRestore) {
+              await tester.runAsync(fixture.seedUnfinishedPosition);
+            }
+            final before = (await tester.runAsync(
+              () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+            ))!;
+            await tester.pumpWidget(
+              fixture.app(
+                nativePagination: true,
+                preferences: NovelReaderPreferences.defaults().copyWith(
+                  flowMode: rtl
+                      ? NovelReaderFlowMode.pagedRtl
+                      : NovelReaderFlowMode.pagedLtr,
+                ),
+              ),
+            );
+            await _pumpNativePageReady(tester, page: 0);
+            final controller = tester
+                .widget<NovelReaderNativePagedViewport>(
+                  find.byType(NovelReaderNativePagedViewport),
+                )
+                .controller;
+            expect(controller.snapshot!.length, 2);
+            // DOM ABxx becomes two physical pages, Axx then B. The semantic
+            // end is already visible on page zero, before actual body EOF.
+            final semanticEnd = controller
+                .viewForPage(0)!
+                .coverage
+                .points
+                .firstWhere((point) => point.sourceRune == 4);
+            expect(semanticEnd.anchor.textOffset, 4);
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(
+              (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+              isNot(true),
+            );
+            if (readOnlyRestore) {
+              expect(
+                (await tester.runAsync(
+                  () => fixture.db.query(AppDatabase.novelReadingProgressTable),
+                ))!,
+                before,
+              );
+            }
+            await tester.drag(
+              find.byType(NovelReaderNativePagedViewport),
+              Offset(rtl ? 280 : -280, 0),
+            );
+            await _pumpNativePageReady(tester, page: 1, animate: true);
+            final last = controller.viewForPage(1)!;
+            expect(last.coverage.hasClippedGlyphs, isFalse);
+            expect(last.coverage.points, isNotEmpty);
+            expect(
+              last.coverage.points.every(
+                (point) => point.sourceRune >= 1 && point.sourceRune <= 2,
+              ),
+              isTrue,
+            );
+            expect(
+              (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+              isNot(true),
+            );
+            await tester.pump(const Duration(milliseconds: 249));
+            expect(
+              (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
+              isNot(true),
+            );
+            await tester.pump(const Duration(milliseconds: 1));
+            final state = await fixture.load(tester);
+            expect(state.episodeStates[_chapter]?.isRead, isTrue);
+            final progress = state.progressByEpisode[_chapter]!;
+            expect(progress.pageIndex, 1);
+            expect(progress.anchorFormatVersion, 1);
+            expect(progress.anchorTextOffset, 1);
+            expect(
+              progress.anchorTextOffset,
+              last.coverage.points.first.anchor.textOffset,
+            );
+            expect(
+              progress.anchorTextIdentity,
+              last.coverage.points.first.anchor.textIdentity,
+            );
+          } finally {
+            await fixture.close(tester);
+          }
+        },
+      );
+    }
+  }
+
   for (final body in _BodySample.values) {
     for (final readOnlyRestore in [false, true]) {
       testWidgets(
@@ -450,6 +558,36 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() ready) async {
   fail('The asynchronous reading-state boundary did not become ready');
 }
 
+Future<void> _pumpNativePageReady(
+  WidgetTester tester, {
+  required int page,
+  bool animate = false,
+}) async {
+  for (var frame = 0; frame < 250; frame++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 2)),
+    );
+    await tester.pump(
+      animate ? const Duration(milliseconds: 16) : Duration.zero,
+    );
+    final viewport = find.byType(NovelReaderNativePagedViewport);
+    if (viewport.evaluate().isEmpty) continue;
+    final controller = tester
+        .widget<NovelReaderNativePagedViewport>(viewport)
+        .controller;
+    if (!controller.isSuspended &&
+        controller.snapshot?.isComplete == true &&
+        controller.visiblePageIndex == page &&
+        !controller.hasPendingNavigation) {
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      return;
+    }
+  }
+  fail('The final native page did not become readable');
+}
+
 Future<void> _pumpSinglePageReady(
   WidgetTester tester, {
   String episode = _chapter,
@@ -536,30 +674,33 @@ final class _Fixture {
 
   static Future<_Fixture> create({
     _BodySample body = _BodySample.paragraphs,
+    (String, String)? rawBody,
   }) async {
-    final (rawHtml, plainText) = switch (body) {
-      _BodySample.paragraphs => ('', ''),
-      _BodySample.rubyPair => ('<p><ruby>A <rt>x</rt></ruby></p>', 'A x'),
-      _BodySample.orphanRuby => ('<p><ruby><rt>x</rt></ruby></p>', 'x'),
-      _BodySample.consecutiveRuby => (
-        '<p><ruby>A <rt>x</rt><rt>y</rt></ruby></p>',
-        'A xy',
-      ),
-      _BodySample.explicitRuby => (
-        '<p><ruby><rb>A</rb><rb> </rb><rb>B</rb><rt>x</rt><rt>·</rt><rt>y</rt></ruby></p>',
-        'A Bx·y',
-      ),
-      _BodySample.alignedRuby => (
-        '<p><ruby><rb style="font-size:30px">A</rb><rb style="font-size:20px">B</rb><rt style="font-size:10px">xx</rt><rt style="font-size:15px">yy</rt></ruby></p>',
-        'ABxxyy',
-      ),
-    };
+    final (rawHtml, plainText) =
+        rawBody ??
+        switch (body) {
+          _BodySample.paragraphs => ('', ''),
+          _BodySample.rubyPair => ('<p><ruby>A <rt>x</rt></ruby></p>', 'A x'),
+          _BodySample.orphanRuby => ('<p><ruby><rt>x</rt></ruby></p>', 'x'),
+          _BodySample.consecutiveRuby => (
+            '<p><ruby>A <rt>x</rt><rt>y</rt></ruby></p>',
+            'A xy',
+          ),
+          _BodySample.explicitRuby => (
+            '<p><ruby><rb>A</rb><rb> </rb><rb>B</rb><rt>x</rt><rt>·</rt><rt>y</rt></ruby></p>',
+            'A Bx·y',
+          ),
+          _BodySample.alignedRuby => (
+            '<p><ruby><rb style="font-size:30px">A</rb><rb style="font-size:20px">B</rb><rt style="font-size:10px">xx</rt><rt style="font-size:15px">yy</rt></ruby></p>',
+            'ABxxyy',
+          ),
+        };
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
     await seedNovelRepository(
       db,
       seed: const NovelSourceSeed(fid: '49', tid: '100'),
       coverImageUrl: null,
-      episodes: body != _BodySample.paragraphs
+      episodes: rawBody != null || body != _BodySample.paragraphs
           ? [
               NovelEpisodeDraft(
                 episodeId: _chapter,
