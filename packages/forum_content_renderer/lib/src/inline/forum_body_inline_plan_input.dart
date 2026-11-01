@@ -22,7 +22,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 10;
+  static const revision = 11;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -33,12 +33,12 @@ final class ForumBodyInlinePlanInput {
     }
     final contexts = <ForumBodyParagraphContent>[];
     final sourceOrder = <int>[];
-    final pairs =
+    final columns =
         <
           ({
             ForumBodyParagraphContent base,
-            ForumBodyParagraphContent annotation,
-            ForumBodyRubySide side,
+            List<({ForumBodyParagraphContent content, ForumBodyRubySide side})>
+            annotations,
           })
         >[];
     final atoms = <({int startUtf16, int endUtf16})>[];
@@ -89,20 +89,25 @@ final class ForumBodyInlinePlanInput {
 
     void appendColumn(
       ForumBodyParagraphContent base,
-      ForumBodyParagraphContent annotation,
+      List<({ForumBodyParagraphContent content, ForumBodyRubySide side})>
+      annotations,
       List<int> baseIndices,
-      List<int> annotationIndices,
+      List<List<int>> annotationIndices,
       int levelId,
-      ForumBodyRubySide side,
     ) {
-      if (base.projection.text.isEmpty && annotation.projection.text.isEmpty) {
-        _unsupported(base.path ?? annotation.path);
+      if (base.projection.text.isEmpty &&
+          annotations.every((item) => item.content.projection.text.isEmpty)) {
+        _unsupported(base.path);
       }
       final start = offset;
       if (!base.isSourceFree) baseIndices.add(append(base));
-      if (!annotation.isSourceFree) annotationIndices.add(append(annotation));
+      for (final (rank, annotation) in annotations.indexed) {
+        if (!annotation.content.isSourceFree) {
+          annotationIndices[rank].add(append(annotation.content));
+        }
+      }
       atoms.add((startUtf16: start, endUtf16: offset));
-      pairs.add((base: base, annotation: annotation, side: side));
+      columns.add((base: base, annotations: annotations));
       levelIds.add(levelId);
       previousCollapsibleSpace = false;
       atLineStart = false;
@@ -125,21 +130,39 @@ final class ForumBodyInlinePlanInput {
             );
           }
           final bases = resolveForumBodyRubyBaseInputs(group);
-          final annotationColumns = resolveForumBodyRubyAnnotationInputs(group);
-          if (bases.isEmpty && annotationColumns.columns.isEmpty) {
+          final levels = resolveForumBodyRubyAnnotationInputs(group);
+          final annotationCount = levels.fold(
+            0,
+            (count, level) =>
+                count > level.columns.length ? count : level.columns.length,
+          );
+          if (bases.isEmpty && annotationCount == 0) {
             _unsupported(group.rootPath);
           }
           final annotations = [
-            for (final annotation in annotationColumns.columns)
-              _annotationInput(annotation),
+            for (final level in levels)
+              [
+                for (final annotation in level.columns)
+                  _annotationInput(group, annotation),
+              ],
           ];
           final baseSources = [for (final _ in bases) <int>[]];
-          final annotationIndices = <int>[];
+          final annotationIndices = [for (final _ in levels) <int>[]];
           final unitCount = bases
               .where((base) => base.kind != ForumBodyRubyBaseInputKind.gap)
               .length;
           var column = 0;
           ForumBodyParagraphContent? anonymous;
+          List<({ForumBodyParagraphContent content, ForumBodyRubySide side})>
+          annotationsAt(int column) => [
+            for (final (rank, level) in levels.indexed)
+              (
+                content: column < annotations[rank].length
+                    ? annotations[rank][column]
+                    : (anonymous ??= _anonymousBase(group)),
+                side: level.side,
+              ),
+          ];
           ({ForumBodyParagraphContent content, List<int> source})? deferredTail;
           for (final (index, unit) in bases.indexed) {
             final sources = baseSources[index];
@@ -155,7 +178,7 @@ final class ForumBodyInlinePlanInput {
               );
               continue;
             }
-            if (column >= annotations.length &&
+            if (column >= annotationCount &&
                 unit.kind == ForumBodyRubyBaseInputKind.implicit) {
               sources.add(appendPlain(base));
               column++;
@@ -179,13 +202,10 @@ final class ForumBodyInlinePlanInput {
             }
             appendColumn(
               base,
-              column < annotations.length
-                  ? annotations[column]
-                  : (anonymous ??= _anonymousBase(group)),
+              annotationsAt(column),
               sources,
               annotationIndices,
               levelId,
-              annotationColumns.side,
             );
             column++;
             if (trailing != null) {
@@ -196,23 +216,22 @@ final class ForumBodyInlinePlanInput {
               }
             }
           }
-          for (; column < annotations.length; column++) {
+          for (; column < annotationCount; column++) {
             appendColumn(
               anonymous ??= _anonymousBase(group),
-              annotations[column],
+              annotationsAt(column),
               const [],
               annotationIndices,
               levelId,
-              annotationColumns.side,
             );
           }
           if (deferredTail != null) {
             deferredTail.source.add(appendPlain(deferredTail.content));
           }
-          // Columns display base/RT pairs, but original bases (and gaps) all
-          // precede RTs. Preserve that explicit order without rewriting source.
+          // Display is column-major; source is bases/gaps followed by each
+          // original level's RTs. Never sort, rebase or flatten these ranges.
           sourceOrder.addAll(baseSources.expand((sources) => sources));
-          sourceOrder.addAll(annotationIndices);
+          sourceOrder.addAll(annotationIndices.expand((indices) => indices));
       }
     }
     // Empty trailing source contexts must not keep a previous collapsed space
@@ -229,10 +248,12 @@ final class ForumBodyInlinePlanInput {
       sourceOrder: sourceOrder,
     );
     final glyphContexts = Set<ForumBodyParagraphContent>.identity();
-    for (final pair in pairs) {
-      glyphContexts.add(pair.base);
-      if (pair.annotation.projection.text.isNotEmpty) {
-        glyphContexts.add(pair.annotation);
+    for (final column in columns) {
+      glyphContexts.add(column.base);
+      for (final item in column.annotations) {
+        if (item.content.projection.text.isNotEmpty) {
+          glyphContexts.add(item.content);
+        }
       }
     }
     final requests = _requests([
@@ -240,19 +261,25 @@ final class ForumBodyInlinePlanInput {
       // projection, not their reordered display columns. Never sort or rebase.
       for (final index in sourceOrder)
         if (glyphContexts.contains(contexts[index])) contexts[index],
-      for (final pair in pairs)
-        if (pair.base.isSourceFree) pair.base,
+      for (final column in columns)
+        if (column.base.isSourceFree) column.base,
     ]);
     return ForumBodyInlinePlanInput._(
       content,
       [
-        for (final pair in pairs)
-          ForumBodyRubyColumnRequest(
-            base: requests[pair.base]!,
-            side: pair.side,
-            annotation:
-                requests[pair.annotation] ??
-                ForumBodyTextRequest.paragraph(pair.annotation),
+        for (final column in columns)
+          ForumBodyRubyColumnRequest.layers(
+            base: requests[column.base]!,
+            annotations: [
+              for (final item in column.annotations)
+                (
+                  request:
+                      requests[item.content] ??
+                      ForumBodyTextRequest.paragraph(item.content),
+                  gap: 0.0,
+                  side: item.side,
+                ),
+            ],
             maxWidth: width,
           ),
       ],
@@ -307,9 +334,18 @@ ForumBodyParagraphContent _anonymousBase(ForumBodyRubyGroupContent group) =>
     );
 
 ForumBodyParagraphContent _annotationInput(
+  ForumBodyRubyGroupContent group,
   ForumBodyRubyTextAnnotationContent annotation,
 ) {
   final parts = annotation.parts;
+  if (parts.isEmpty) {
+    return ForumBodyParagraphContent.anonymousInline(
+      identity: group.identity,
+      fontRevision: group.fontRevision,
+      styleRevision: group.styleRevision,
+      style: annotation.style,
+    );
+  }
   if (parts.length != 1 || parts.single is! ForumBodyRubyTextContent) {
     _unsupported(annotation.path);
   }

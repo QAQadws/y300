@@ -48,6 +48,8 @@ enum _BodySample {
   breakRuby,
   rtcRuby,
   underRuby,
+  layeredRuby,
+  mixedRuby,
 }
 
 void main() {
@@ -55,19 +57,19 @@ void main() {
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  for (final (rtl, rtc, under) in [
-    (false, false, false),
-    (true, false, false),
-    (false, true, false),
-    (true, true, false),
-    (false, false, true),
-    (true, false, true),
-    (false, true, true),
-    (true, true, true),
+  for (final (rtl, rtc, under, levelCount) in [
+    for (final rtl in [false, true])
+      for (final rtc in [false, true])
+        for (final under in [false, true]) (rtl, rtc, under, 1),
+    for (final rtl in [false, true])
+      for (final under in [false, true]) ...[
+        (rtl, true, under, 2),
+        (rtl, false, under, 3),
+      ],
   ]) {
     for (final readOnlyRestore in [false, true]) {
       testWidgets(
-        'reordered ruby completes only at its actual final page (rtl=$rtl, RTC=$rtc, under=$under, readOnly=$readOnlyRestore)',
+        'reordered ruby completes only at its actual final page (rtl=$rtl, RTC=$rtc, under=$under, levels=$levelCount, readOnly=$readOnlyRestore)',
         (tester) async {
           tester.view.physicalSize = const Size(360, 480);
           tester.view.devicePixelRatio = 1;
@@ -76,8 +78,8 @@ void main() {
           final fixture = (await tester.runAsync(
             () => _Fixture.create(
               rawBody: (
-                '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:200px">A</rb><rb style="font-size:200px">B</rb>${rtc ? '<rtc>' : ''}<rt style="font-size:100px">xx</rt>${rtc ? '</rtc>' : ''}</ruby></p>',
-                'ABxx',
+                '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:200px">A</rb><rb style="font-size:200px">B</rb>${rtc ? '<rtc>' : ''}<rt style="font-size:${levelCount == 1 ? 100 : 70}px">xx</rt>${rtc ? '</rtc>' : ''}${levelCount >= 2 ? '<rtc><rt style="font-size:20px">uu</rt></rtc>' : ''}${levelCount >= 3 ? '<rt style="font-size:10px">zz</rt>' : ''}</ruby></p>',
+                'ABxx${levelCount >= 2 ? 'uu' : ''}${levelCount >= 3 ? 'zz' : ''}',
               ),
             ),
           ))!;
@@ -105,14 +107,15 @@ void main() {
                 )
                 .controller;
             expect(controller.snapshot!.length, 2);
-            // DOM ABxx becomes two physical pages, Axx then B. The semantic
-            // end is already visible on page zero, before actual body EOF.
+            // All annotation levels belong to A. Their semantic end is visible
+            // on page zero, before the actual terminal page containing only B.
+            final sourceEnd = 2 + levelCount * 2;
             final semanticEnd = controller
                 .viewForPage(0)!
                 .coverage
                 .points
-                .firstWhere((point) => point.sourceRune == 4);
-            expect(semanticEnd.anchor.textOffset, 4);
+                .firstWhere((point) => point.sourceRune == sourceEnd);
+            expect(semanticEnd.anchor.textOffset, sourceEnd);
             await tester.pump(const Duration(milliseconds: 300));
             expect(
               (await fixture.load(tester)).episodeStates[_chapter]?.isRead,
@@ -717,6 +720,14 @@ final class _Fixture {
           _BodySample.underRuby => (
             '<p><ruby><rb>A</rb><rb>B</rb><rtc style="ruby-position:under"><rt>xx</rt><rt>yy</rt></rtc></ruby></p>',
             'ABxxyy',
+          ),
+          _BodySample.layeredRuby => (
+            '<p><ruby><rb>A</rb><rb>B</rb><rtc><rt>xx</rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby></p>',
+            'ABxxyyuu',
+          ),
+          _BodySample.mixedRuby => (
+            '<p><ruby>A<rt>xx</rt><rtc><rt>u<br>v</rt></rtc><rt>zz</rt></ruby></p>',
+            'Axxu\nvzz',
           ),
         };
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);

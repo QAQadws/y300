@@ -98,6 +98,222 @@ final class _Fixture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final (direction, position) in [
+    ('ltr', 'alternate'),
+    ('rtl', 'alternate under'),
+    ('ltr', 'over'),
+    ('rtl', 'under'),
+  ]) {
+    test(
+      'raw mixed RT/RTC keeps real baselines and sources: $direction/$position',
+      () {
+        final f = _Fixture(
+          '<p dir="$direction"><ruby style="ruby-position:$position"><rb style="font-size:30px">A</rb><rb>B</rb><rt>xx</rt><rt>yy</rt><rtc><rt style="font-size:15px">uu</rt><rt style="font-size:8px">vv</rt></rtc><rt>zz</rt><rt>ww</rt></ruby></p>',
+          width: 200,
+          height: 100,
+        );
+        f.finish();
+        expect(f.cache.pictureBuildCount, 0);
+        final builds = f.cache.layoutBuildCount;
+        final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.projection.text, 'AxxuuzzByyvvww');
+          final leases = fragment.nativeLeases
+              .skip(1)
+              .cast<ForumBodyTextLease>()
+              .toList();
+          expect(leases.map((lease) => lease.content.projection.text), [
+            'A',
+            'xx',
+            'uu',
+            'zz',
+            'B',
+            'yy',
+            'vv',
+            'ww',
+          ]);
+          final starts = [0, 1, 3, 5, 7, 8, 10, 12];
+          final boxes = [
+            for (var i = 0; i < starts.length; i++)
+              fragment.glyphBoxes(starts[i], starts[i] + 1).single,
+          ];
+          double baseline(int i) =>
+              boxes[i].top -
+              leases[i].layout.selectionBoxes(0, 1).single.top +
+              leases[i].layout.alphabeticBaseline;
+          for (var rank = 0; rank < 4; rank++) {
+            expect(baseline(rank), closeTo(baseline(rank + 4), 1e-4));
+          }
+          final sides = [
+            position == 'under' || position == 'alternate under',
+            position == 'under' || position == 'alternate',
+            position == 'under' || position == 'alternate under',
+          ];
+          for (var rank = 0; rank < 3; rank++) {
+            expect(
+              sides[rank]
+                  ? boxes[rank + 1].top >= boxes[0].bottom
+                  : boxes[rank + 1].bottom <= boxes[0].top,
+              isTrue,
+            );
+            final start = starts[rank + 1] + 1;
+            final box = fragment.glyphBoxes(start, start + 1).single;
+            final hit = fragment.view.sourceAt(
+              Offset(box.left + .1, (box.top + box.bottom) / 2),
+            );
+            expect(hit.isExact, isTrue);
+            expect(
+              hit.sourceRune,
+              leases[rank + 1].content.projection.sourceAtUtf16(1).sourceRune,
+            );
+          }
+          if (position == 'over') {
+            expect(boxes[2].bottom, lessThanOrEqualTo(boxes[1].top));
+            expect(boxes[3].bottom, lessThanOrEqualTo(boxes[2].top));
+          }
+          if (position == 'under') {
+            expect(boxes[2].top, greaterThanOrEqualTo(boxes[1].bottom));
+            expect(boxes[3].top, greaterThanOrEqualTo(boxes[2].bottom));
+          }
+          expect(f.cache.layoutBuildCount, builds);
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+        expect(f.session.activeIssuedLeases, 0);
+      },
+    );
+  }
+
+  test('raw multi-level wrapping keeps independent physical rows', () {
+    final f = _Fixture(
+      '<ruby><rb style="font-size:30px">A</rb><rb>B</rb><rtc><rt>xx</rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby>',
+      width: 30,
+      height: 50,
+    );
+    f.finish();
+    expect(f.session.snapshot, hasLength(2));
+    final heights = <double>[];
+    for (var page = 0; page < 2; page++) {
+      final fragment =
+          f.prepare(page).single as ForumBodyPreparedInlineFragment;
+      try {
+        heights.add(fragment.view.height);
+        expect(fragment.view.atomIndices, [page]);
+        expect(fragment.nativeLeases.length, page == 0 ? 4 : 3);
+      } finally {
+        fragment.close();
+      }
+    }
+    expect(heights, [50, 30]);
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'raw 100 RTC levels use bounded preparation and current source identity',
+    () {
+      final f = _Fixture(
+        '<ruby><rb style="font-size:30px">A</rb><rb>B</rb>${List.generate(100, (i) => '<rtc><rt style="font-size:1px">x$i</rt><rt style="font-size:2px">y$i</rt></rtc>').join()}</ruby>',
+        width: 100,
+        height: 400,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(1));
+      expect(f.cache.pictureBuildCount, 0);
+      final builds = f.cache.layoutBuildCount;
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.nativeLeases.length, 203);
+        expect(f.cache.pictureBuildCount, 202);
+        final last = fragment.projection.text.lastIndexOf('y99');
+        final box = fragment.glyphBoxes(last + 1, last + 2).single;
+        final hit = fragment.view.sourceAt(
+          Offset(box.left + .01, (box.top + box.bottom) / 2),
+        );
+        expect(hit.isExact, isTrue);
+        expect(hit.sourceRune, 580);
+        expect(f.cache.layoutBuildCount, builds);
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+      f.close();
+      expect(f.cache.estimatedRetainedBytes, 0);
+    },
+  );
+
+  for (final (html, display, handles) in [
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc><rt></rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby>',
+      'AuuByy',
+      5,
+    ),
+    (
+      '<ruby><rt>xx</rt><rt>yy</rt><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>',
+      'xxuuyyvv',
+      7,
+    ),
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc><rt>xx</rt></rtc><rtc><rt>uu</rt><rt>vv</rt><rt>ww</rt></rtc></ruby>',
+      'AxxuuBvvww',
+      8,
+    ),
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc></rtc><rtc><rt>xx</rt><rt>yy</rt></rtc></ruby>',
+      'AxxByy',
+      5,
+    ),
+    ('<ruby>A<rt>x<br>y</rt><rtc><rt>u<br>v</rt></rtc></ruby>', 'Ax yu v', 4),
+    (
+      '<ruby> A <rtc><rt>xx</rt></rtc><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>Z',
+      'Axxuuvv Z',
+      6,
+    ),
+  ]) {
+    test('raw sparse/missing/break levels preserve native slots: $html', () {
+      final f = _Fixture(html, width: 300, height: 100);
+      f.finish();
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.projection.text, display);
+        expect(fragment.nativeLeases.length, handles);
+        for (final context in fragment.view.content.contexts) {
+          if (context.content.projection.text.isEmpty) continue;
+          final boxes = fragment.glyphBoxes(
+            context.startUtf16,
+            context.endUtf16,
+          );
+          expect(boxes, isNotEmpty);
+          for (final box in boxes) {
+            expect(box.top, greaterThanOrEqualTo(-1e-4));
+            expect(box.bottom, lessThanOrEqualTo(fragment.view.height + 1e-4));
+          }
+        }
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+    });
+  }
+
+  test('canceling raw dense level planning releases all current glyph work', () {
+    final f = _Fixture(
+      '<ruby>A${List.generate(100, (i) => '<rtc><rt>x$i</rt></rtc>').join()}</ruby>',
+      width: 100,
+      height: 2000,
+    );
+    while (f.cache.layoutBuildCount < 1) {
+      f.advance();
+    }
+    expect(f.session.snapshot, isEmpty);
+    f.close();
+    expect(f.session.state, ForumBodyTextPageSessionState.closed);
+    expect(f.cache.activeLeases, 0);
+    expect(f.cache.estimatedRetainedBytes, 0);
+  });
+
   for (final (rootStyle, rtcStyle, rtStyle, under) in [
     ('ruby-position:under', '', '', true),
     ('', 'ruby-position:under', '', true),
