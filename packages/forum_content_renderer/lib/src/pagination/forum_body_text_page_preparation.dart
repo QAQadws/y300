@@ -370,14 +370,8 @@ final class ForumBodyTextPagePreparation {
           yield true;
           for (final atom in input.visibleAtoms(fragment)) {
             final request = input.rubyGroups[atom];
-            request.base.includeBudget(
-              probe,
-              width: request.maxWidth,
-              textScaler: _textScaler!,
-            );
-            yield false;
-            if (request.hasAnnotation) {
-              request.annotation.includeBudget(
+            for (final child in request.nativeRequests) {
+              child.includeBudget(
                 probe,
                 width: request.maxWidth,
                 textScaler: _textScaler!,

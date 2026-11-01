@@ -247,7 +247,7 @@ final class ForumBodyInlinePlanInput {
       content,
       [
         for (final pair in pairs)
-          ForumBodyRubyPairRequest(
+          ForumBodyRubyColumnRequest(
             base: requests[pair.base]!,
             side: pair.side,
             annotation:
@@ -267,7 +267,7 @@ final class ForumBodyInlinePlanInput {
   final List<int> atomEngineOffsets;
   // Rebound only before publication when native isolation supplies a new
   // request. Published PageContent freezes its own copy of this pure list.
-  final List<ForumBodyRubyPairRequest> groups;
+  final List<ForumBodyRubyColumnRequest> groups;
 
   void replaceBand(ForumBodyTextBandContent band, double? gutter) {
     ForumBodyTextRequest replace(ForumBodyTextRequest request) {
@@ -286,11 +286,12 @@ final class ForumBodyInlinePlanInput {
 
     for (var i = 0; i < groups.length; i++) {
       final pair = groups[i];
-      groups[i] = ForumBodyRubyPairRequest(
+      groups[i] = ForumBodyRubyColumnRequest.layers(
         base: replace(pair.base),
-        side: pair.side,
-        annotation: replace(pair.annotation),
-        gap: pair.gap,
+        annotations: [
+          for (final item in pair.annotations)
+            (request: replace(item.request), gap: item.gap, side: item.side),
+        ],
         maxWidth: pair.maxWidth,
       );
     }

@@ -56,14 +56,12 @@ final class ForumBodyInlinePlanPreparation {
       var waiting = false;
       while (_metrics.length < _input!.groups.length && parts < maxParts) {
         final request = _input!.groups[_metrics.length];
-        final pair = _pair ??= ForumBodyRubyGroupPreparation.forMetrics(
+        final pair = _pair ??= ForumBodyRubyGroupPreparation.forLayerMetrics(
           cache: cache,
           base: request.base,
-          annotation: request.annotation,
-          side: request.side,
+          annotations: request.annotations,
           ensureOwner: _guard,
           textScaler: _textScaler!,
-          gap: request.gap,
           maxWidth: request.maxWidth,
         );
         try {
@@ -90,9 +88,10 @@ final class ForumBodyInlinePlanPreparation {
           if (waiting || cache.layoutBuildCount != before) break;
         } on ForumBodyTextBandLayoutException catch (error) {
           _guard();
-          final failed = pair.preparedPartCount == 0
-              ? request.base
-              : request.annotation;
+          // Native child counts omit empty ranks, just like admission. Numeric
+          // finalization cannot throw a native band isolation exception.
+          if (pair.preparedPartCount >= request.nativeRequests.length) rethrow;
+          final failed = request.nativeRequests[pair.preparedPartCount];
           if (failed is! ForumBodyTextBandChildRequest) rethrow;
           pair.close();
           _pair = null;

@@ -99,13 +99,11 @@ final class ForumBodyInlinePagePreparation {
       if (_nextGroup < _indices.length) {
         final index = _indices[_nextGroup];
         final request = input.rubyGroups[index];
-        final pair = _pair ??= ForumBodyRubyGroupPreparation.fromRequests(
+        final pair = _pair ??= ForumBodyRubyGroupPreparation.fromLayerRequests(
           cache: cache,
           base: request.base,
-          annotation: request.annotation,
-          side: request.side,
+          annotations: request.annotations,
           level: input.rubyLevelMetrics[index],
-          gap: request.gap,
           maxWidth: request.maxWidth,
           textScaler: _textScaler!,
           ensureOwner: _guard,
