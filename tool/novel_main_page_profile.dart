@@ -11,6 +11,7 @@ import 'package:y300/features/novel/presentation/controllers/novel_reader_contro
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
+import 'novel_inline_soft_space_profile.dart';
 import 'novel_main_page_profile_data.dart';
 import 'novel_main_page_profile_observation.dart';
 import 'novel_main_page_profile_timings.dart';
@@ -18,6 +19,7 @@ import 'novel_pagination_profile_config.dart';
 import 'novel_pagination_profile_fixtures.dart';
 
 const _baseline = bool.fromEnvironment('PROFILE_BASELINE');
+const _inlineSoftSpace = bool.fromEnvironment('PROFILE_INLINE_SOFT_SPACE');
 const _backend = String.fromEnvironment(
   'PROFILE_BACKEND',
   defaultValue: 'both',
@@ -191,8 +193,16 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'synthetic': true,
       'baseline': _baseline,
       'sampleConfig': _config.toJson(),
+      'inlineSoftSpaceRequested': _inlineSoftSpace,
     });
+    var inlineSoftSpaceCases = 0;
     try {
+      if (_inlineSoftSpace) {
+        for (final record in profileInlineSoftSpaces()) {
+          _emit(record);
+          inlineSoftSpaceCases++;
+        }
+      }
       for (final native in [false, true]) {
         if (_backend != 'both' && _backend != (native ? 'native' : 'legacy')) {
           continue;
@@ -283,6 +293,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     }
     final passed =
         kProfileMode &&
+        (!_inlineSoftSpace || inlineSoftSpaceCases == 10) &&
         matrix.every((entry) => entry['samplingCompleted'] == true) &&
         _runtimeErrors.isEmpty &&
         !_frames.overflowed &&
@@ -293,6 +304,8 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'target': 'NovelReaderPage',
       'suitePassed': passed,
       'runs': _runs.length,
+      'inlineSoftSpaceRequested': _inlineSoftSpace,
+      'inlineSoftSpaceCases': inlineSoftSpaceCases,
       'failedRuns': _runs.where((run) => run['passed'] != true).length,
       'runtimeErrorCount': _runtimeErrors.length,
       'runtimeErrorTypes': _runtimeErrors.toSet().take(10).toList(),

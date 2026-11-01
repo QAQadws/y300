@@ -4,6 +4,7 @@ param(
     [string]$Device,
     [switch]$Baseline,
     [switch]$MainPage,
+    [switch]$InlineSoftSpace,
     [ValidateSet('native', 'legacy', 'both')]
     [string]$Backend = 'both',
     [switch]$PrepareOnly
@@ -20,6 +21,9 @@ if (-not $profileRoot.StartsWith($repoRoot + [IO.Path]::DirectorySeparatorChar, 
 }
 if (-not $PrepareOnly -and [string]::IsNullOrWhiteSpace($Device)) {
     throw 'Provide -Device (the Flutter device ID).'
+}
+if ($InlineSoftSpace -and -not $MainPage) {
+    throw '-InlineSoftSpace requires -MainPage.'
 }
 
 function Read-Utf8([string]$Path) {
@@ -135,6 +139,7 @@ flutter:
             '--dart-define=PROFILE_AUTO_EXIT=true')
         if ($Baseline) { $runArguments += '--dart-define=PROFILE_BASELINE=true' }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_BACKEND=$Backend" }
+        if ($InlineSoftSpace) { $runArguments += '--dart-define=PROFILE_INLINE_SOFT_SPACE=true' }
         $script:profileSuiteResult = $null
         & flutter @runArguments 2>&1 | ForEach-Object {
             $line = $_.ToString()
