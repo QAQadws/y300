@@ -519,6 +519,7 @@ final class ForumBodyInlinePlanInput {
       fontRevision: input.fontRevision,
       styleRevision: input.styleRevision,
       style: input.style,
+      appliesFirstLineIndent: input.appliesFirstLineIndent,
       contexts: contexts,
       atomicRanges: atoms,
       softSpaceAtoms: softSpaceAtoms ?? const {},

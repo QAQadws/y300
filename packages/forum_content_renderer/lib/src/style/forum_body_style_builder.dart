@@ -8,7 +8,16 @@ import 'forum_body_language.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 
-const forumBodyStyleRevision = 8;
+const forumBodyStyleRevision = 9;
+ForumBodyLength forumBodyReaderIndent(
+  ForumBodyReaderStyle reader,
+  double size,
+) => reader.firstLineIndent.unit == ForumBodyLengthUnit.em
+    ? reader.firstLineIndent
+    : reader.firstLineIndent.computed(
+        fontSize: size,
+        rootFontSize: reader.textStyle.fontSize!,
+      );
 ForumBodyLineHeight forumBodyReaderHeight(ForumBodyReaderStyle reader) {
   final height = reader.textStyle.height;
   return height == null || height == kTextHeightNone
@@ -392,7 +401,7 @@ final class ForumBodyStyleBuilder {
       }
     }
     if (_force(ForumBodyStyleProperty.textIndent, role)) {
-      indent = _computedLength(reader.firstLineIndent, size);
+      indent = forumBodyReaderIndent(reader, size);
       indentFromReader = true;
     }
     var display = switch (node.kind) {
@@ -528,9 +537,6 @@ final class ForumBodyStyleBuilder {
     ForumBodyElementKind.locked => ForumBodyTextRole.notice,
     _ => parent,
   };
-
-  ForumBodyLength _computedLength(ForumBodyLength length, double size) =>
-      length.computed(fontSize: size, rootFontSize: reader.textStyle.fontSize!);
 
   double? _fontSize(ForumBodyElement node, String value, double parent) {
     if (value == 'inherit' || value == 'unset') return parent;

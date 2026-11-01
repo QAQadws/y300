@@ -2,11 +2,15 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 
-/// Engine-only collapsible glue: its advance is already measured/scaled.
-/// The private blank font has one-unit SPACE and zero ascent/descent/ink. Actual
-/// base/annotation glyphs keep their original fonts, sources and native owners.
+/// Engine-only advance, already measured/scaled. SPACE remains collapsible;
+/// NBSP plus WORD JOINER keeps first-line indentation attached to text.
+/// The private font has no ascent/descent/ink. Real base/annotation glyphs keep
+/// their original fonts, sources and native owners.
 final class ForumBodyNativeSpaceSpan extends TextSpan {
-  ForumBodyNativeSpaceSpan(this.advance) : super(text: ' ') {
+  ForumBodyNativeSpaceSpan(double advance) : this._(advance, ' ');
+  ForumBodyNativeSpaceSpan.nonBreaking(double advance)
+    : this._(advance, nonBreakingText);
+  ForumBodyNativeSpaceSpan._(this.advance, String text) : super(text: text) {
     if (!advance.isFinite || advance < 0 || advance > 16384) {
       throw ArgumentError.value(advance, 'advance');
     }
@@ -15,20 +19,25 @@ final class ForumBodyNativeSpaceSpan extends TextSpan {
   static const fontFamily =
       'packages/forum_content_renderer/ForumBodyInlineSpace';
   static const unitsPerEm = 1024;
+  static const nonBreakingText = '\u00A0\u2060';
   final double advance;
 
   @override
   RenderComparison compareTo(InlineSpan other) =>
-      other is ForumBodyNativeSpaceSpan && other.advance == advance
+      other is ForumBodyNativeSpaceSpan &&
+          other.advance == advance &&
+          other.text == text
       ? RenderComparison.identical
       : RenderComparison.layout;
 
   @override
   bool operator ==(Object other) =>
-      other is ForumBodyNativeSpaceSpan && other.advance == advance;
+      other is ForumBodyNativeSpaceSpan &&
+      other.advance == advance &&
+      other.text == text;
 
   @override
-  int get hashCode => Object.hash(runtimeType, advance);
+  int get hashCode => Object.hash(runtimeType, advance, text);
 
   @override
   void build(
@@ -56,7 +65,7 @@ final class ForumBodyNativeSpaceSpan extends TextSpan {
         fontVariations: const [],
       ),
     );
-    builder.addText(' ');
+    builder.addText(text!);
     builder.pop();
   }
 }

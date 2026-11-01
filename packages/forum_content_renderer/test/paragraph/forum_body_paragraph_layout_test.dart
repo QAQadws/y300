@@ -149,7 +149,7 @@ void main() {
     final scaler = _AdmissionScaler((size) => fail('Preflight must run first'));
     for (final (html, mode, failure) in [
       (
-        '<p style="text-indent:2em">a</p>',
+        '<p style="text-indent:-2em">a</p>',
         ForumBodyParagraphLayoutMode.wrap,
         ForumBodyParagraphLayoutFailure.indent,
       ),
@@ -283,10 +283,7 @@ void main() {
       expect(inline.width, 60);
       expect(inline.lines.single.left, 0);
       expect(inline.selectionBoxes(0, 1).single.left, 0);
-      for (final mode in [
-        ForumBodyParagraphLayoutMode.wrap,
-        ForumBodyParagraphLayoutMode.fitSingleLine,
-      ]) {
+      for (final mode in [ForumBodyParagraphLayoutMode.fitSingleLine]) {
         expect(
           () => ForumBodyParagraphLayout.create(
             content: content(
@@ -818,7 +815,7 @@ void main() {
   test('unsupported constraints are explicit rather than silently ignored', () {
     for (final (html, reason) in [
       (
-        '<p style="text-indent:2em">text</p>',
+        '<p style="text-indent:-2em">text</p>',
         ForumBodyParagraphLayoutFailure.indent,
       ),
       (

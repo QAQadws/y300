@@ -31,6 +31,7 @@ final class ForumBodyTextFlowSequence {
     required this.builder,
     required this.layoutMode,
     required this.rubyLimits,
+    this.appliesFirstLineIndent = true,
   }) : _flow = flow,
        identity = flow.identity,
        fontRevision = flow.fontRevision,
@@ -44,6 +45,7 @@ final class ForumBodyTextFlowSequence {
   final ForumBodyParagraphContentBuilder builder;
   final ForumBodyParagraphLayoutMode layoutMode;
   final ForumBodyRubyContentLimits rubyLimits;
+  final bool appliesFirstLineIndent;
   final ForumBodyIdentity identity;
   final String fontRevision;
   final int styleRevision;
@@ -185,7 +187,11 @@ final class ForumBodyTextFlowSequence {
     _ensureOpen();
     try {
       if (!_mixed) {
-        return ForumBodyPlainSequenceContent(_plain!.finish(issues: issues));
+        return ForumBodyPlainSequenceContent(
+          _plain!
+              .finish(issues: issues)
+              .withFirstLineIndent(appliesFirstLineIndent),
+        );
       }
       _flushPlain();
       return ForumBodyInlineSequenceContent(
@@ -196,6 +202,7 @@ final class ForumBodyTextFlowSequence {
           styleRevision: styleRevision,
           style: style,
           layoutMode: layoutMode,
+          appliesFirstLineIndent: appliesFirstLineIndent,
           parts: _parts,
           ignored: _ignored,
           issues: issues,

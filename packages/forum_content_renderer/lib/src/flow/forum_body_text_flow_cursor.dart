@@ -65,7 +65,7 @@ final class ForumBodyTextFlowCursor {
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 3;
+  static const revision = 4;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
@@ -218,7 +218,7 @@ final class ForumBodyTextFlowCursor {
           }
           if (_break != null) {
             final content = _confirmBreak();
-            _before = _after ?? _newSequence();
+            _before = _after ?? _newSequence(continuation: true);
             _after = null;
             _break = event;
             _breakIssues = issues;
@@ -234,7 +234,7 @@ final class ForumBodyTextFlowCursor {
         } else {
           final target = _break == null
               ? (_before ??= _newSequence())
-              : (_after ??= _newSequence());
+              : (_after ??= _newSequence(continuation: true));
           target.issues.addAll(issues);
           if (event.node is ForumBodyElement &&
               (event.node as ForumBodyElement).kind ==
@@ -341,15 +341,17 @@ final class ForumBodyTextFlowCursor {
     return content;
   }
 
-  ForumBodyTextFlowSequence _newSequence() => ForumBodyTextFlowSequence(
-    flow: _flow,
-    block: _blocks.isEmpty ? null : _blocks.last,
-    builder: paragraphBuilder,
-    rubyLimits: rubyLimits,
-    layoutMode: _insideEditStatus
-        ? ForumBodyParagraphLayoutMode.fitSingleLine
-        : ForumBodyParagraphLayoutMode.wrap,
-  );
+  ForumBodyTextFlowSequence _newSequence({bool continuation = false}) =>
+      ForumBodyTextFlowSequence(
+        flow: _flow,
+        block: _blocks.isEmpty ? null : _blocks.last,
+        builder: paragraphBuilder,
+        rubyLimits: rubyLimits,
+        appliesFirstLineIndent: !continuation,
+        layoutMode: _insideEditStatus
+            ? ForumBodyParagraphLayoutMode.fitSingleLine
+            : ForumBodyParagraphLayoutMode.wrap,
+      );
 
   void _paragraph(
     ForumBodyTextFlowSequenceContent content,

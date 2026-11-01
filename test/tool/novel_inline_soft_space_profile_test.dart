@@ -49,4 +49,27 @@ void main() {
     // resource or accidentally provide the next run's cold native layout.
     expect(profileInlineSoftSpaces(), records);
   });
+
+  test(
+    'bundled indent checks native first/continuation rows and owner release',
+    () {
+      final records = profileFirstLineIndents();
+      expect(records.length, 4);
+      expect(records.map((r) => r['direction']).toSet(), {'ltr', 'rtl'});
+      for (final record in records) {
+        expect(record['passed'], isTrue);
+        expect(
+          record['actualFirst'],
+          closeTo(record['advance']! as double, .001),
+        );
+        expect(record['actualContinuation'], closeTo(0, .001));
+        expect(record['rows']! as int, greaterThan(1));
+        expect(record['coldBuilds'], 1);
+        expect(record['exitPins'], 0);
+        expect(record['exitBytes'], 0);
+        expect(utf8.encode(jsonEncode(record)).length, lessThanOrEqualTo(1000));
+      }
+      expect(profileFirstLineIndents(), records);
+    },
+  );
 }

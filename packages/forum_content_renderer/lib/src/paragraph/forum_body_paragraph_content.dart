@@ -3,6 +3,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_styled_flow_cursor.dart';
+import '../inline/forum_body_native_space_span.dart';
 import '../style/forum_body_length.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
@@ -48,6 +49,7 @@ final class ForumBodyParagraphContent {
     required List<ForumBodyParagraphRun> runs,
     required List<ForumBodyStyleIssue> issues,
     this.isSourceFree = false,
+    this.appliesFirstLineIndent = true,
   }) : runs = List.unmodifiable(runs),
        issues = List.unmodifiable(issues);
 
@@ -70,6 +72,7 @@ final class ForumBodyParagraphContent {
     runs: const [],
     issues: const [],
     isSourceFree: true,
+    appliesFirstLineIndent: false,
   );
 
   final ForumBodyIdentity identity;
@@ -83,6 +86,38 @@ final class ForumBodyParagraphContent {
   final List<ForumBodyStyleIssue> issues;
   final bool isSourceFree;
 
+  /// BR partitions keep source/style but do not start a new formatting context.
+  final bool appliesFirstLineIndent;
+
+  ForumBodyParagraphContent withFirstLineIndent(bool applies) =>
+      applies == appliesFirstLineIndent
+      ? this
+      : ForumBodyParagraphContent._(
+          identity: identity,
+          path: path,
+          fontRevision: fontRevision,
+          styleRevision: styleRevision,
+          style: style,
+          layoutMode: layoutMode,
+          projection: projection,
+          runs: runs,
+          issues: issues,
+          isSourceFree: isSourceFree,
+          appliesFirstLineIndent: applies,
+        );
+
+  late final indentedProjection = HtmlInlineTextProjection.build(
+    display: projection,
+    atomicRanges: const [],
+    enginePrefix: ForumBodyNativeSpaceSpan.nonBreakingText,
+    // Source limits were already admitted; account explicitly for the bounded
+    // mechanical overhead without increasing the real-text input budget.
+    maxDisplayCodeUnits: projection.text.length,
+    maxEngineCodeUnits:
+        projection.text.length +
+        ForumBodyNativeSpaceSpan.nonBreakingText.length,
+  );
+
   // Pure immutable work only; width and actual TextScaler values remain
   // request inputs. Slices/whitespace projections each own a new admission.
   late final layoutInput = ForumBodyParagraphInputAdmission(
@@ -92,6 +127,7 @@ final class ForumBodyParagraphContent {
     wraps: layoutMode == ForumBodyParagraphLayoutMode.wrap,
     allowsIndent:
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+    appliesFirstLineIndent: appliesFirstLineIndent,
   );
 
   /// An explicit window of this display projection, retaining original source
@@ -110,6 +146,7 @@ final class ForumBodyParagraphContent {
     runs: runs,
     issues: issues,
     isSourceFree: isSourceFree,
+    appliesFirstLineIndent: appliesFirstLineIndent,
   );
 
   /// Resolve one actual whitespace context without changing source/run owners.
@@ -136,6 +173,7 @@ final class ForumBodyParagraphContent {
       runs: runs,
       issues: issues,
       isSourceFree: isSourceFree,
+      appliesFirstLineIndent: appliesFirstLineIndent,
     );
   }
 

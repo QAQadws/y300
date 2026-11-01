@@ -205,11 +205,16 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'corpus': _corpus,
     });
     var inlineSoftSpaceCases = 0;
+    var firstLineIndentCases = 0;
     try {
       if (_inlineSoftSpace) {
         for (final record in profileInlineSoftSpaces()) {
           _emit(record);
           inlineSoftSpaceCases++;
+        }
+        for (final record in profileFirstLineIndents()) {
+          _emit(record);
+          firstLineIndentCases++;
         }
       }
       for (final native in [false, true]) {
@@ -303,7 +308,8 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     final passed =
         kProfileMode &&
         (!_inlineSoftSpace ||
-            inlineSoftSpaceCases == profileInlineSoftSpaceCaseCount) &&
+            inlineSoftSpaceCases == profileInlineSoftSpaceCaseCount &&
+                firstLineIndentCases == profileFirstLineIndentCaseCount) &&
         matrix.every((entry) => entry['samplingCompleted'] == true) &&
         _runtimeErrors.isEmpty &&
         !_frames.overflowed &&
@@ -316,6 +322,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'runs': _runs.length,
       'inlineSoftSpaceRequested': _inlineSoftSpace,
       'inlineSoftSpaceCases': inlineSoftSpaceCases,
+      'firstLineIndentCases': firstLineIndentCases,
       'failedRuns': _runs.where((run) => run['passed'] != true).length,
       'runtimeErrorCount': _runtimeErrors.length,
       'runtimeErrorTypes': _runtimeErrors.toSet().take(10).toList(),

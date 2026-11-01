@@ -29,6 +29,7 @@ final class ForumBodyInlineFlowContent {
     required this.styleRevision,
     required this.style,
     required this.layoutMode,
+    this.appliesFirstLineIndent = true,
     required List<ForumBodyInlineFlowPart> parts,
     required List<ForumBodyRubyIgnoredContent> ignored,
     required List<ForumBodyStyleIssue> issues,
@@ -42,6 +43,7 @@ final class ForumBodyInlineFlowContent {
   final int styleRevision;
   final ForumBodyResolvedStyle style;
   final ForumBodyParagraphLayoutMode layoutMode;
+  final bool appliesFirstLineIndent;
   final List<ForumBodyInlineFlowPart> parts;
 
   /// Omissions retain their actual source but do not prove visible coverage.

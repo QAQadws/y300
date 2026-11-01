@@ -269,7 +269,9 @@ final class ForumBodyInlineParagraphLayout
     }
     final intrinsic =
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
-    if (!intrinsic && content.style.indent.value != 0) {
+    if (!intrinsic &&
+        content.appliesFirstLineIndent &&
+        content.style.indent.value != 0) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.indent,
       );

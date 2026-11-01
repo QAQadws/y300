@@ -5,6 +5,7 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 /// never calls FontLoader: the newly launched engine must load its own bundle.
 /// These geometry/lifetime checks are not frame-time or throughput measurements.
 const profileInlineSoftSpaceCaseCount = 14;
+const profileFirstLineIndentCaseCount = 4;
 
 List<Map<String, Object>> profileInlineSoftSpaces() {
   final records = <Map<String, Object>>[];
@@ -165,4 +166,104 @@ List<Map<String, Object>> profileInlineSoftSpaces() {
     records.add(record);
   }
   return List.unmodifiable(records.map(Map<String, Object>.unmodifiable));
+}
+
+/// The same bundled font ABI also owns nonbreaking, source-free indentation.
+/// Run outside timed page windows; this proves native geometry, not throughput.
+List<Map<String, Object>> profileFirstLineIndents() {
+  final records = <Map<String, Object>>[];
+  for (final direction in TextDirection.values) {
+    for (final advance in [20.0, 12.571334838867188]) {
+      const text = 'ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWX';
+      const width = 80.0;
+      final document = const ForumBodyParser().parse(
+        html:
+            '<p dir="${direction.name}" style="text-indent:${advance}px">'
+            '$text</p>',
+        sourceId: 'profile-bundled-indent',
+        conversionIdentity: 'none',
+      );
+      final styles = const ForumBodyStyleResolver().resolve(
+        document,
+        ForumBodyReaderStyle(
+          textStyle: const TextStyle(fontSize: 20, height: 1),
+          fontRevision: 'profile-system20',
+          linkColor: const Color(0xff0000ff),
+        ),
+      );
+      final content = const ForumBodyParagraphContentBuilder().build(
+        document: document,
+        styles: styles,
+        path: '0',
+      );
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 2,
+        maxEstimatedBytes: 1 << 20,
+      );
+      late Map<String, Object> record;
+      try {
+        final lease = cache.acquire(content: content, width: width);
+        try {
+          final layout = lease.layout;
+          if (layout.lines.length < 2 ||
+              layout.projection.text != text ||
+              layout.lines.last.coverageEndUtf16 != text.length) {
+            throw StateError('Bundled indent changed real source coverage');
+          }
+          double edge(int row) {
+            final line = layout.lines[row];
+            final boxes = layout.selectionBoxes(
+              line.coverageStartUtf16,
+              line.coverageEndUtf16,
+            );
+            return direction == TextDirection.ltr
+                ? boxes.map((box) => box.left).reduce((a, b) => a < b ? a : b)
+                : width -
+                      boxes
+                          .map((box) => box.right)
+                          .reduce((a, b) => a > b ? a : b);
+          }
+
+          final first = edge(0);
+          final next = edge(1);
+          if ((first - advance).abs() > .001 || next.abs() > .001) {
+            throw StateError('Bundled indent or continuation advance differs');
+          }
+          lease.release();
+          final warm = cache.tryAcquireCached(content: content, width: width);
+          if (warm == null) {
+            throw StateError('Bundled indent warm lookup missed');
+          }
+          try {
+            if (!identical(warm.layout, layout) ||
+                cache.layoutBuildCount != 1) {
+              throw StateError('Bundled indent warm lookup reshaped');
+            }
+          } finally {
+            warm.release();
+          }
+          record = {
+            'event': 'first_line_indent',
+            'direction': direction.name,
+            'advance': advance,
+            'actualFirst': first,
+            'actualContinuation': next,
+            'rows': layout.lines.length,
+            'coldBuilds': cache.layoutBuildCount,
+            'sourceCodeUnits': text.length,
+          };
+        } finally {
+          lease.release();
+        }
+      } finally {
+        cache.close();
+      }
+      if (cache.activeLeases != 0 || cache.estimatedRetainedBytes != 0) {
+        throw StateError('Bundled indent retained its native owner');
+      }
+      record.addAll({'exitPins': 0, 'exitBytes': 0, 'passed': true});
+      records.add(Map.unmodifiable(record));
+    }
+  }
+  return List.unmodifiable(records);
 }

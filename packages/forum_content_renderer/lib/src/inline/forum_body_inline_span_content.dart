@@ -34,10 +34,11 @@ final class ForumBodyInlineSpanContent {
     required this.projection,
     required List<ForumBodyInlineContext> contexts,
     required List<ForumBodyParagraphRun> runs,
+    required this.appliesFirstLineIndent,
   }) : contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  static const revision = 7;
+  static const revision = 8;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -48,6 +49,7 @@ final class ForumBodyInlineSpanContent {
     required List<ForumBodyParagraphContent> contexts,
     required List<({int startUtf16, int endUtf16})> atomicRanges,
     Set<int> softSpaceAtoms = const {},
+    bool appliesFirstLineIndent = true,
     // Complete original-source ordering of the display contexts, when their
     // visual placement differs. The pure projection validates every range.
     List<int>? sourceOrder,
@@ -136,6 +138,7 @@ final class ForumBodyInlineSpanContent {
       fontRevision: fontRevision,
       styleRevision: styleRevision,
       style: style,
+      appliesFirstLineIndent: appliesFirstLineIndent,
       contexts: retainedContexts,
       projection: HtmlInlineTextProjection.build(
         display: display,
@@ -154,6 +157,7 @@ final class ForumBodyInlineSpanContent {
   final String fontRevision;
   final int styleRevision;
   final ForumBodyResolvedStyle style;
+  final bool appliesFirstLineIndent;
   final HtmlInlineTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;

@@ -490,7 +490,7 @@ void main() {
     normal.release();
     expect(
       () => cache.acquire(
-        content: content('<p style="text-indent:2em">abc</p>'),
+        content: content('<p style="text-indent:-2em">abc</p>'),
         width: 200,
       ),
       throwsA(isA<ForumBodyParagraphLayoutException>()),

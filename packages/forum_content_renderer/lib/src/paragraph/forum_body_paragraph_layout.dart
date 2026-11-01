@@ -2,6 +2,8 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../inline/forum_body_native_space_span.dart';
+import 'forum_body_first_line_indent.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
 import 'forum_body_native_paragraph_layout.dart';
@@ -25,6 +27,7 @@ final class ForumBodyParagraphLayout
     this.width,
     this.height,
     this._paintScale,
+    this._engineProjection,
     List<ForumBodyParagraphLine> lines,
   ) : lines = List.unmodifiable(lines),
       identity = content.identity,
@@ -36,13 +39,27 @@ final class ForumBodyParagraphLayout
     required double width,
     TextScaler textScaler = TextScaler.noScaling,
   }) {
-    validateInputs(content: content, width: width, textScaler: textScaler);
+    final scales = validateInputs(
+      content: content,
+      width: width,
+      textScaler: textScaler,
+    );
+    final indent = resolveForumBodyFirstLineIndent(content, width, scales);
+    final engine = indent > 0 ? content.indentedProjection : null;
     final fitted =
         content.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine;
     final intrinsic =
         content.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
     final painter = TextPainter(
-      text: content.textSpan,
+      text: engine == null
+          ? content.textSpan
+          : TextSpan(
+              style: content.style.textStyle,
+              children: [
+                ForumBodyNativeSpaceSpan.nonBreaking(indent),
+                ...content.textSpan.children!,
+              ],
+            ),
       textAlign: content.style.textAlign,
       textDirection: content.style.textDirection,
       textScaler: textScaler,
@@ -71,6 +88,9 @@ final class ForumBodyParagraphLayout
         );
       }
       final metrics = painter.computeLineMetrics();
+      if (engine != null) {
+        _validateIndentAdvance(painter, engine.enginePrefix.length, indent);
+      }
       if ((fitted || intrinsic) && metrics.length > 1) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.singleLine,
@@ -80,13 +100,22 @@ final class ForumBodyParagraphLayout
         painter: painter,
         display: content.projection,
         paintScale: paintScale,
+        inline: engine,
       );
+      if (engine != null &&
+          lines.isNotEmpty &&
+          lines.first.coverageEndUtf16 == 0) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.indent,
+        );
+      }
       return ForumBodyParagraphLayout._(
         content,
         painter,
         layoutWidth,
         painter.height * paintScale,
         paintScale,
+        engine,
         lines,
       );
     } catch (_) {
@@ -108,10 +137,11 @@ final class ForumBodyParagraphLayout
     }
     final scales = <double, double>{};
     content.layoutInput.resolveScalesInto(scales, textScaler: textScaler);
+    resolveForumBodyFirstLineIndent(content, width, scales);
     return scales;
   }
 
-  static const backendRevision = 5;
+  static const backendRevision = 6;
   final ForumBodyIdentity identity;
   final String? path;
   @override
@@ -122,6 +152,7 @@ final class ForumBodyParagraphLayout
   @override
   final double height;
   final double _paintScale;
+  final HtmlInlineTextProjection? _engineProjection;
   final List<ForumBodyParagraphLine> lines;
   @override
   int get lineCount => lines.length;
@@ -167,12 +198,15 @@ final class ForumBodyParagraphLayout
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
     final position = _painter.getPositionForOffset(offset / _paintScale);
-    final source = projection.sourceAtUtf16(
-      position.offset,
-      affinity: position.affinity == TextAffinity.upstream
-          ? HtmlProjectionAffinity.upstream
-          : HtmlProjectionAffinity.downstream,
-    );
+    final affinity = position.affinity == TextAffinity.upstream
+        ? HtmlProjectionAffinity.upstream
+        : HtmlProjectionAffinity.downstream;
+    final source =
+        _engineProjection?.sourceAtEngineUtf16(
+          position.offset,
+          affinity: affinity,
+        ) ??
+        projection.sourceAtUtf16(position.offset, affinity: affinity);
     return projection.text.isEmpty
         ? HtmlProjectedSourcePosition(
             sourceRune: source.sourceRune,
@@ -191,7 +225,12 @@ final class ForumBodyParagraphLayout
         .displayUtf16;
     final end = projection.sourceAtUtf16(endUtf16).displayUtf16;
     final boxes = _painter.getBoxesForSelection(
-      TextSelection(baseOffset: start, extentOffset: end),
+      TextSelection(
+        baseOffset:
+            _engineProjection?.engineAtDisplayUtf16(start).engineUtf16 ?? start,
+        extentOffset:
+            _engineProjection?.engineAtDisplayUtf16(end).engineUtf16 ?? end,
+      ),
     );
     return List.unmodifiable([
       for (final box in boxes)
@@ -238,7 +277,7 @@ final class ForumBodyParagraphLayout
     return forumBodyParagraphLineWindow(
       lines: lines,
       displayText: projection.text,
-      engineText: projection.text,
+      engineText: _engineProjection?.engineText ?? projection.text,
       window: window,
     );
   }
@@ -248,6 +287,37 @@ final class ForumBodyParagraphLayout
     if (_disposed) return;
     _disposed = true;
     _painter.dispose();
+  }
+}
+
+void _validateIndentAdvance(
+  TextPainter painter,
+  int prefixLength,
+  double advance,
+) {
+  final boxes = painter.getBoxesForSelection(
+    TextSelection(baseOffset: 0, extentOffset: prefixLength),
+  );
+  var actual = 0.0;
+  for (final box in boxes) {
+    if (!box.left.isFinite ||
+        !box.right.isFinite ||
+        !box.top.isFinite ||
+        !box.bottom.isFinite ||
+        (box.bottom - box.top).abs() > 1e-3 ||
+        box.right < box.left) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.indent,
+      );
+    }
+    actual += box.right - box.left;
+  }
+  // Verify the bundled zero-ink font ABI instead of trusting a font name or
+  // allowing native fallback metrics to alter an otherwise readable page.
+  if (boxes.isEmpty || (actual - advance).abs() > 1e-3) {
+    throw const ForumBodyParagraphLayoutException(
+      ForumBodyParagraphLayoutFailure.indent,
+    );
   }
 }
 

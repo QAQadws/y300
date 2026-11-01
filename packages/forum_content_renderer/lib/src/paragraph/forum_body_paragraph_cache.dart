@@ -12,6 +12,8 @@ import '../inline/forum_body_text_band_layout.dart';
 import 'forum_body_native_paragraph_layout.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
+import 'forum_body_first_line_indent.dart';
+import '../inline/forum_body_native_space_span.dart';
 import 'forum_body_text_band_cache_key.dart';
 import 'forum_body_text_layout.dart';
 
@@ -138,7 +140,7 @@ final class ForumBodyParagraphCache {
     final entry = _acquireEntry(
       key: key,
       allowBuild: allowBuild,
-      minimumBytes: _minimumEstimatedBytes(content),
+      minimumBytes: _minimumEstimatedBytes(content) + key.indentBytes,
       build: () => ForumBodyParagraphLayout.create(
         content: content,
         width: width,
@@ -646,7 +648,7 @@ final class ForumBodyParagraphBudgetProbe {
     _include(
       cache,
       key,
-      _minimumEstimatedBytes(content) + minimumLineCount * 96,
+      _minimumEstimatedBytes(content) + key.indentBytes + minimumLineCount * 96,
     );
   }
 
@@ -872,6 +874,11 @@ final class _LayoutKey {
       layoutMode = content.layoutMode,
       align = content.style.textAlign,
       direction = content.style.textDirection,
+      indentAdvance = resolveForumBodyFirstLineIndent(
+        content,
+        requestWidth,
+        scales,
+      ),
       scales = _sortedScales(scales);
   final ForumBodyIdentity identity;
   final String? path;
@@ -885,6 +892,10 @@ final class _LayoutKey {
   final TextAlign align;
   final TextDirection direction;
   final double width;
+  final double indentAdvance;
+  int get indentBytes => indentAdvance > 0
+      ? ForumBodyNativeSpaceSpan.nonBreakingText.length * 96
+      : 0;
   final List<(double, double)> scales;
 
   @override
@@ -902,6 +913,7 @@ final class _LayoutKey {
       align == other.align &&
       direction == other.direction &&
       width == other.width &&
+      indentAdvance == other.indentAdvance &&
       listEquals(scales, other.scales);
   @override
   int get hashCode => Object.hash(
@@ -917,6 +929,7 @@ final class _LayoutKey {
     align,
     direction,
     width,
+    indentAdvance,
     Object.hashAll(scales),
   );
 }

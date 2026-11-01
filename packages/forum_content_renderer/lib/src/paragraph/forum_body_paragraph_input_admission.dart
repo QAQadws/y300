@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 
 import '../style/forum_body_style_options.dart';
+import '../style/forum_body_length.dart';
 import 'forum_body_paragraph_geometry.dart';
 
 /// Immutable validation work, retained by the exact paragraph input. Actual
@@ -15,9 +16,17 @@ final class ForumBodyParagraphInputAdmission {
     required String displayText,
     required bool wraps,
     required bool allowsIndent,
+    required bool appliesFirstLineIndent,
   }) {
     // Intrinsic children leave inherited indentation to their containing block.
-    if (!allowsIndent && style.indent.value != 0) {
+    if (!allowsIndent &&
+        appliesFirstLineIndent &&
+        style.indent.value != 0 &&
+        (!wraps ||
+            !style.indent.value.isFinite ||
+            style.indent.value < 0 ||
+            style.indent.unit == ForumBodyLengthUnit.auto ||
+            style.indent.unit == ForumBodyLengthUnit.rem)) {
       return ForumBodyParagraphInputAdmission._(
         const [],
         ForumBodyParagraphLayoutFailure.indent,

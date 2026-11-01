@@ -137,7 +137,7 @@ List<ForumBodyParagraphLine> forumBodyParagraphLines({
   int displayOffset(int engine) =>
       inline?.displayOffsetAtEngineUtf16(engine) ?? engine;
   bool legal(int engine) =>
-      inline?.displayAtEngineUtf16(engine).isExact ??
+      inline?.isLegalEngineBoundary(engine) ??
       (display.sourceAtUtf16(engine).displayUtf16 == engine);
   final metrics = painter.computeLineMetrics();
   final lines = <ForumBodyParagraphLine>[];

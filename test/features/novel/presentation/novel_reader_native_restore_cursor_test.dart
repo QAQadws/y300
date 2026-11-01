@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -68,6 +69,52 @@ Future<NovelReaderNativePageCoverage> _coverage(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    await (FontLoader('packages/forum_content_renderer/ForumBodyInlineSpace')
+          ..addFont(
+            rootBundle.load(
+              'packages/forum_content_renderer/assets/fonts/inline_space.ttf',
+            ),
+          ))
+        .load();
+  });
+
+  for (final version in [1, 37]) {
+    test(
+      'indented BR continuation restores version $version without source migration',
+      () async {
+        final fixture = NativeReaderTestFixture(
+          '<p style="text-indent:20px">abcdefgh<br>ijklmnop</p>',
+          width: 60,
+          height: 10,
+        );
+        final original = NativeReaderTestFixture(
+          '<p>abcdefgh<br>ijklmnop</p>',
+          width: 60,
+          height: 10,
+        );
+        final anchor = _anchor(fixture, 6);
+        expect(anchor.textIdentity, _anchor(original, 6).textIdentity);
+        final saved = _position(anchor: anchor).copyWith(
+          anchorFormatVersion: version,
+          paginationKey: 'native-geometry',
+          pageIndex: 1,
+        );
+        final cursor = _cursor(fixture, saved);
+        cursor.observe(
+          snapshot: fixture.session.snapshot,
+          coverage: await _coverage(fixture, 1),
+        );
+        final result = cursor.resolve(fixture.session.snapshot)!;
+        expect(result.pageIndex, 1);
+        expect(result.isReadOnlyCompatibilityRestore, version != 1);
+        expect(saved.anchorFormatVersion, version);
+        expect(saved.anchorTextOffset, 6);
+        expect(cursor.resolve(fixture.session.snapshot), same(result));
+        expect(fixture.session.activeIssuedLeases, 0);
+      },
+    );
+  }
 
   test(
     'partial exact coverage wins and later EOF cannot jump by old percentage',

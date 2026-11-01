@@ -50,7 +50,7 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 ## 原生文字语言
 
-原生样式解析的 revision 为 8。HTML `lang` 沿正文树继承，传到实际 TextStyle.locale；
+原生样式解析的 revision 为 9。HTML `lang` 沿正文树继承，传到实际 TextStyle.locale；
 明确的空值使用 `und` 退役继承语言，不受 null-copyWith 的保留语义影响。语言、脚本与
 地区采用本地 Locale 端口能表示的 BCP 47 子标签并规范大小写，语言不推断文字方向。
 缺少 lang 使用父输入，HTML 中字面的非命名空间 xml:lang 不影响语言处理；约定依据
@@ -68,7 +68,7 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 `ForumBodyParagraphContentBuilder` 的 `build`、`openCurrent` 和 `openSequence` 接收 `layoutMode`，默认 `ForumBodyParagraphLayoutMode.wrap`。`fitSingleLine` 要求已经投影为完整逻辑单行的文字；硬换行会明确失败，不裁剪或省略尾部，也不承担 HTML 格式识别、空白改写或来源投影。格式处理者仍须独立核对内容结构和来源。
 
-拟合先按实际字体、行高及每个字号的 `TextScaler` 完成同一个 TextPainter 布局，超过可用宽度才等比缩小；短行不放大。行高、baseline、行矩形、完整及分片绘制、选区框和命中坐标共用这次变换，不能另用较小字号重新排版来猜高度。缓存键包含模式及实际缩放输入；普通换行与单行模式即使暂时尺寸相同也不共享布局条目。原生 backend revision 为 5，布局指纹和页绑定须使用公开 revision。
+拟合先按实际字体、行高及每个字号的 `TextScaler` 完成同一个 TextPainter 布局，超过可用宽度才等比缩小；短行不放大。行高、baseline、行矩形、完整及分片绘制、选区框和命中坐标共用这次变换，不能另用较小字号重新排版来猜高度。缓存键包含模式及实际缩放输入；普通换行与单行模式即使暂时尺寸相同也不共享布局条目。原生 backend revision 为 6，布局指纹和页绑定须使用公开 revision。
 
 `intrinsicSingleLine` 提供 ruby 等行内布局所需的真实固有单行宽度，保留全部字形、行高、非线性系统缩放、预格式化空格及来源投影，不按请求宽度缩小或补足空白。请求宽度仍须通过准入，但不影响该模式的原生几何，缓存可跨有效请求宽度复用；与 wrap/fit 缓存保持隔离。硬换行及超过 16384 逻辑像素的固有宽度明确失败。它是排字端口，不识别 ruby、分组注音或自行启用格式支持。
 
@@ -77,6 +77,24 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 保留此前缩放调用及错误顺序。band 的各上下文仍独立读数并检查同字号一致性。
 该描述不保存缩放值或 native 资源，不充当来源 coverage；显示切片与空白投影各自重新
 建立描述，不沿用旧文本的单行结论。几何与输入 revision 保持不变。
+
+## 原生普通正文首行缩进
+
+普通 wrap 段落的非负首行缩进进入同一个 TextPainter，以无来源的 NBSP/WJ 机械前缀
+参与真实断行。前缀不进入显示文字、语义身份、选区或精确来源命中；测量时核对真实
+advance 与零高度，不以空格数量估算。分页分片继续借用该布局，续页不重新插入前缀。
+Text-flow revision 4 保存源格式上下文的首行归属：BR 后的普通/混排片段不再次缩进，
+新块重新取得归属。该状态独立于 DOM path 和继承样式，不能靠页码或节点相同推断。
+
+Reader 的 em 保留相对单位，按本次根字号的实际 TextScaler 读数解析一次；作者相对长度
+仍在唯一样式解析器计算后继承。百分比按本次内容宽度解析。Reader 缩进遇到显示投影
+开头保留的水平空白时不叠加，原文字节和来源不改写；显式作者缩进保留其独立意图。
+标题、代码和列表仍使用既有逐角色政策。实际 advance 进入缓存键及预算，机械前缀的
+有界开销不占真实文字输入额度，也不增加 native 句柄数。
+
+当前首行包含 ruby 等不透明子项的混排上下文仍明确拒绝非零缩进；BR 后的混排续行
+可以沿用源样式而不重复缩进。负/悬挂缩进、未计算 rem、fit 模式及缩进达到内容宽度
+仍明确失败，不自动改模式或静默裁小；这不是完整 R08 或设置界面验收。
 
 格式处理者可通过 `ForumBodyParagraphContent.anonymousInline` 创建无来源的空字体支撑框。
 它没有 DOM path、文字或 run；真实空 TextPainter 提供字体高度和字母基线，不伪造文字行、
@@ -270,9 +288,9 @@ consumer 仍须准备、核对并绘制实际子布局，不能据此单独发�
 正式 Session 使用同一父布局分页，不引入整段常驻子租约。
 
 显式软间隙原子通过 `textSpanWithDimensions` 消费已经测量、缩放的逻辑尺寸；父
-TextPainter 只接收真正不透明占位框的尺寸。引擎 SPACE 使用包内 1004 字节的
-`ForumBodyInlineSpace` 布局资源：仅含空白字形，1024 units/em 中的一个单位 advance，
-零垂直度量和零墨迹。内部字号为已测逻辑宽度乘 1024，以保留 Android 原生字号量化
+TextPainter 只接收真正不透明占位框的尺寸。引擎 SPACE 使用包内 1092 字节、版本 3 的
+`ForumBodyInlineSpace` 布局资源：SPACE/NBSP 的 advance 为 1024 units/em 中的一个单位，
+WJ 的 advance 为零，全部零垂直度量和零墨迹。内部字号为已测逻辑宽度乘 1024，以保留 Android 原生字号量化
 之前的细分系统字体宽度；这是资源单位换算，不再应用读者缩放。最大逻辑宽度仍为
 16384，严格原生 advance/零字体框/coverage 误差标准保持不变。
 它不进入用户字体列表，也不代替基字/注音的真实字体；既有字体解析和缩放保持。
@@ -287,7 +305,8 @@ tool/run_novel_pagination_profile.ps1 -Device <设备 ID> -MainPage -Backend nat
 ```
 
 启动检查不调用 FontLoader；十四组实际父布局覆盖双向、换行裁边、超大间隙、
-分数缩放和两端对齐，并核对 warm 不排字及 owner 释放。请求该检查后，缺少任一组
+分数缩放和两端对齐，另四组普通段落核对双向及分数首行缩进、无缩进续行，
+同时核对 warm 不排字及 owner 释放。请求该检查后，缺少任一组
 都会使整套 suite 失败。系统字体的原生行高取整以同机对照核对，不固定为跨平台像素值。
 这项检查证明 bundle 启动与几何/生命周期；帧耗时仍由随后真实页面的 profile 窗口统计，
 不能据此宣称整套格式、真机或 native heap/GPU 已验收。

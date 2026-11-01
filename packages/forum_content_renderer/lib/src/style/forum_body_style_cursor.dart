@@ -17,7 +17,7 @@ final class ForumBodyStyleCursor {
          role: ForumBodyTextRole.body,
          textAlign: reader.textAlign,
          textDirection: reader.textDirection,
-         indent: reader.firstLineIndent,
+         indent: forumBodyReaderIndent(reader, reader.textStyle.fontSize!),
          lineHeight: forumBodyReaderHeight(reader),
        ),
        _builder = ForumBodyStyleBuilder(reader),
