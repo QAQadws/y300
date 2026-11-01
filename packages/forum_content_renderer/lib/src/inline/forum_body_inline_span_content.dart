@@ -37,7 +37,7 @@ final class ForumBodyInlineSpanContent {
   }) : contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  static const revision = 6;
+  static const revision = 7;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -235,8 +235,20 @@ final class ForumBodyInlineSpanContent {
     if (dimensions.length != projection.atoms.length) {
       throw ArgumentError('Native inline dimensions do not match atoms');
     }
-    for (final dimension in dimensions) {
-      _validateDimension(dimension);
+    if (!projection.hasSoftSpaces) {
+      for (final dimension in dimensions) {
+        _validateDimension(dimension);
+      }
+      return;
+    }
+    for (final (index, dimension) in dimensions.indexed) {
+      // Only the mechanical SPACE may be width-only during native row
+      // discovery. Opaque children still require a positive actual envelope;
+      // visible gap delivery must recheck its own measured glyph dimensions.
+      _validateDimension(
+        dimension,
+        allowZeroHeight: projection.atoms[index].isSoftSpace,
+      );
     }
   }
 
@@ -420,13 +432,17 @@ final class _NativeInlinePlaceholder extends PlaceholderSpan {
   bool debugAssertIsValid() => true;
 }
 
-void _validateDimension(PlaceholderDimensions dimension) {
+void _validateDimension(
+  PlaceholderDimensions dimension, {
+  bool allowZeroHeight = false,
+}) {
   if (dimension.alignment != ui.PlaceholderAlignment.baseline ||
       dimension.baseline != TextBaseline.alphabetic ||
       !dimension.size.width.isFinite ||
       !dimension.size.height.isFinite ||
       dimension.size.width < 0 ||
-      dimension.size.height <= 0 ||
+      dimension.size.height < 0 ||
+      (!allowZeroHeight && dimension.size.height == 0) ||
       dimension.size.width > 16384 ||
       dimension.size.height > 16384 ||
       dimension.baselineOffset == null ||

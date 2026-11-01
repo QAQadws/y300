@@ -54,7 +54,11 @@ final class ForumBodyRubySoftSpaceMetrics {
     required this.direction,
     required this.alignmentSignature,
     required List<ForumBodyRubySoftSpacePlacedMember> members,
-  }) : members = UnmodifiableListView(members);
+    required List<ForumBodyRubySoftSpaceMeasuredMember> inputs,
+    required List<ForumBodyRubySide> sides,
+  }) : members = UnmodifiableListView(members),
+       _inputs = UnmodifiableListView(inputs),
+       _sides = UnmodifiableListView(sides);
   static const revision = 1;
   final Size size;
   final double baseline;
@@ -62,6 +66,8 @@ final class ForumBodyRubySoftSpaceMetrics {
   final TextDirection direction;
   final String alignmentSignature;
   final List<ForumBodyRubySoftSpacePlacedMember> members;
+  final List<ForumBodyRubySoftSpaceMeasuredMember> _inputs;
+  final List<ForumBodyRubySide> _sides;
   PlaceholderDimensions get placeholderDimensions => PlaceholderDimensions(
     size: size,
     alignment: PlaceholderAlignment.baseline,
@@ -84,6 +90,17 @@ enum _SoftSpacePhase {
 /// vertical stack as columns/segments; it never shapes text or records pictures.
 /// Optional row targets only change vertical coordinates, not widths or order.
 final class ForumBodyRubySoftSpaceComposition {
+  // Existing immutable numeric inputs are borrowed, not rescanned/copied at
+  // the start of a bounded alignment unit. No source or native lease is held.
+  ForumBodyRubySoftSpaceComposition._aligned(
+    ForumBodyRubySoftSpaceMetrics source,
+    ForumBodyRubyLevelMetrics target,
+  ) : _members = source._inputs,
+      _sides = source._sides,
+      direction = source.direction,
+      maxWidth = 16384,
+      level = target;
+
   ForumBodyRubySoftSpaceComposition({
     required List<ForumBodyRubySoftSpaceMeasuredMember> members,
     required List<ForumBodyRubySide> sides,
@@ -267,6 +284,8 @@ final class ForumBodyRubySoftSpaceComposition {
             direction: direction,
             alignmentSignature: _signature.toString(),
             members: _placed,
+            inputs: _members,
+            sides: _sides,
           );
           parts++;
           _phase = _SoftSpacePhase.ready;
@@ -276,5 +295,91 @@ final class ForumBodyRubySoftSpaceComposition {
       }
     }
     return parts;
+  }
+}
+
+/// The existing composer is the only positioning path. Check all original ranks
+/// before preparing a result; a shifted early rank cannot hide a bad later one.
+final class ForumBodyRubySoftSpaceAlignment {
+  ForumBodyRubySoftSpaceAlignment({
+    required this.softSpace,
+    required this.level,
+    this.prepareResult = false,
+  }) : _source = _RubyStack(
+         softSpace.level.baseAscent,
+         softSpace.level.baseDescent,
+       ),
+       _target = _RubyStack(level.baseAscent, level.baseDescent) {
+    const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
+    if (softSpace.level.annotations.length != level.annotations.length ||
+        softSpace.level.baseAscent > level.baseAscent + tolerance ||
+        softSpace.level.baseDescent > level.baseDescent + tolerance) {
+      ForumBodyRubyGroupMetrics._invalid();
+    }
+  }
+  final ForumBodyRubySoftSpaceMetrics softSpace;
+  final ForumBodyRubyLevelMetrics level;
+  final bool prepareResult;
+  final _RubyStack _source;
+  final _RubyStack _target;
+  var _rank = 0;
+  var _changed = false;
+  var _failed = false;
+  ForumBodyRubySoftSpaceComposition? _positioning;
+  bool get isComplete =>
+      !_failed &&
+      _rank == level.annotations.length &&
+      (!prepareResult || (_positioning?.isComplete ?? false));
+  bool get hasChanges {
+    if (!isComplete) {
+      throw StateError('Ruby soft-space alignment is incomplete');
+    }
+    return _changed;
+  }
+
+  ForumBodyRubySoftSpaceMetrics get result {
+    if (!isComplete || !prepareResult) {
+      throw StateError('Ruby soft-space alignment result is incomplete');
+    }
+    return _positioning!.result;
+  }
+
+  int advance({required int maxParts}) {
+    if (maxParts <= 0) throw ArgumentError.value(maxParts);
+    if (isComplete || _failed) {
+      throw StateError('Ruby soft-space alignment is not active');
+    }
+    try {
+      var parts = 0;
+      while (_rank < level.annotations.length && parts < maxParts) {
+        final source = softSpace.level.annotations[_rank];
+        final target = level.annotations[_rank];
+        if (!target._containsLevel(source)) {
+          ForumBodyRubyGroupMetrics._invalid();
+        }
+        final before = _source.append(source);
+        final after = _target.append(target);
+        const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
+        if ((source.hasAnnotation &&
+                (before.baseline - after.baseline).abs() > tolerance) ||
+            (_source.over - _target.over).abs() > tolerance ||
+            (_source.under - _target.under).abs() > tolerance) {
+          _changed = true;
+        }
+        _rank++;
+        parts++;
+      }
+      if (_rank == level.annotations.length &&
+          prepareResult &&
+          parts < maxParts) {
+        final positioning = _positioning ??=
+            ForumBodyRubySoftSpaceComposition._aligned(softSpace, level);
+        parts += positioning.advance(maxParts: maxParts - parts);
+      }
+      return parts;
+    } catch (_) {
+      _failed = true;
+      rethrow;
+    }
   }
 }

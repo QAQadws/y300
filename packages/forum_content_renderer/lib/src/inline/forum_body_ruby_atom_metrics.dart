@@ -1,6 +1,6 @@
 part of 'forum_body_ruby_group_metrics.dart';
 
-/// Numeric counterpart of an indivisible parent placeholder. It carries no
+/// Numeric counterpart of one logical parent atom. It carries no
 /// source association, native lease or owner; those remain in the atom plan.
 sealed class ForumBodyRubyAtomMetrics {
   const ForumBodyRubyAtomMetrics();
@@ -10,10 +10,27 @@ sealed class ForumBodyRubyAtomMetrics {
   const factory ForumBodyRubyAtomMetrics.segment(
     ForumBodyRubySegmentMetrics value,
   ) = ForumBodyRubyComponentMetrics;
+  const factory ForumBodyRubyAtomMetrics.softSpace(
+    ForumBodyRubySoftSpaceMetrics value,
+  ) = ForumBodyRubySpaceMetrics;
   Size get size;
   double get baseline;
   String get alignmentSignature;
   PlaceholderDimensions get placeholderDimensions;
+}
+
+final class ForumBodyRubySpaceMetrics extends ForumBodyRubyAtomMetrics {
+  const ForumBodyRubySpaceMetrics(this.value);
+  final ForumBodyRubySoftSpaceMetrics value;
+  @override
+  Size get size => value.size;
+  @override
+  double get baseline => value.baseline;
+  @override
+  String get alignmentSignature => value.alignmentSignature;
+  @override
+  PlaceholderDimensions get placeholderDimensions =>
+      value.placeholderDimensions;
 }
 
 final class ForumBodyRubyColumnMetrics extends ForumBodyRubyAtomMetrics {
@@ -44,7 +61,7 @@ final class ForumBodyRubyComponentMetrics extends ForumBodyRubyAtomMetrics {
       value.placeholderDimensions;
 }
 
-/// Internal dispatch only; both variants use their existing bounded workers.
+/// Internal dispatch only; each variant uses its existing bounded worker.
 final class ForumBodyRubyAtomAlignment {
   ForumBodyRubyAtomAlignment({
     required ForumBodyRubyAtomMetrics atom,
@@ -67,15 +84,31 @@ final class ForumBodyRubyAtomAlignment {
              prepareResult: prepareResult,
            ),
          _ => null,
+       },
+       _space = switch (atom) {
+         ForumBodyRubySpaceMetrics(:final value) =>
+           ForumBodyRubySoftSpaceAlignment(
+             softSpace: value,
+             level: level,
+             prepareResult: prepareResult,
+           ),
+         _ => null,
        };
   final ForumBodyRubyColumnAlignment? _column;
   final ForumBodyRubySegmentAlignment? _segment;
-  bool get isComplete => _column?.isComplete ?? _segment!.isComplete;
-  bool get hasChanges => _column?.hasChanges ?? _segment!.hasChanges;
+  final ForumBodyRubySoftSpaceAlignment? _space;
+  bool get isComplete =>
+      _column?.isComplete ?? _segment?.isComplete ?? _space!.isComplete;
+  bool get hasChanges =>
+      _column?.hasChanges ?? _segment?.hasChanges ?? _space!.hasChanges;
   ForumBodyRubyAtomMetrics get result => _column != null
       ? ForumBodyRubyColumnMetrics(_column!.result)
-      : ForumBodyRubyComponentMetrics(_segment!.result);
+      : _segment != null
+      ? ForumBodyRubyComponentMetrics(_segment.result)
+      : ForumBodyRubySpaceMetrics(_space!.result);
   int advance({required int maxParts}) => _column != null
       ? _column!.advance(maxParts: maxParts)
-      : _segment!.advance(maxParts: maxParts);
+      : _segment != null
+      ? _segment.advance(maxParts: maxParts)
+      : _space!.advance(maxParts: maxParts);
 }

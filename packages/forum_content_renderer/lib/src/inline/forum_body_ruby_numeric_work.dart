@@ -29,6 +29,7 @@ final class ForumBodyRubyLevelUnion {
       switch (atom) {
         ForumBodyRubyColumnMetrics(:final value) => merge(value),
         ForumBodyRubyComponentMetrics(:final value) => mergeLevel(value.level),
+        ForumBodyRubySpaceMetrics(:final value) => mergeLevel(value.level),
       };
 
   ForumBodyRubyLevelMerge _start(ForumBodyRubyLevelMerge work) {

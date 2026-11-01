@@ -42,6 +42,7 @@ final class ForumBodyInlinePlanPreparation {
   ForumBodyRubySegmentMetricsPreparation? _segment;
   ForumBodyInlineParagraphLease? _parent;
   ForumBodyInlineParagraphLease? _probe;
+  Set<int> _finalTrimmedAtoms = const {};
   ForumBodyInlinePageContent? _result;
   var _state = _State.active;
   var _operating = false;
@@ -192,7 +193,7 @@ final class ForumBodyInlinePlanPreparation {
     if (!alignment.isComplete) {
       return (partsPrepared: parts, waitingForLayoutBudget: false);
     }
-    if (!alignment.hasChanges) {
+    if (!alignment.requiresFinalParent) {
       if (_probe != null) {
         _parent = _probe;
         _probe = null;
@@ -223,6 +224,7 @@ final class ForumBodyInlinePlanPreparation {
     parts += alignment.verifyRows(
       _parent!.layout.lines,
       maxParts: maxParts - parts,
+      trimmedAtomIndices: _finalTrimmedAtoms,
     );
     _guard();
     if (alignment.isVerified) _makeReady(alignment);
@@ -237,7 +239,10 @@ final class ForumBodyInlinePlanPreparation {
     final rejectedAt = cache.budgetRevision;
     ForumBodyInlineParagraphLease? parent;
     void release() {
-      if (identical(_parent, parent)) _parent = null;
+      if (identical(_parent, parent)) {
+        _parent = null;
+        _finalTrimmedAtoms = const {};
+      }
       if (identical(_probe, parent)) _probe = null;
       if (provisional) {
         parent?.releaseProvisional();
@@ -250,16 +255,26 @@ final class ForumBodyInlinePlanPreparation {
       parent = cache.acquireInline(
         content: _input!.content,
         width: width,
-        dimensions: alignment.dimensions,
+        dimensions: provisional
+            ? alignment.provisionalDimensions
+            : alignment.dimensions,
         textScaler: _textScaler!,
       );
       _guard();
       if (provisional) {
         _probe = parent;
-        alignment.attachRows(parent.layout.lines);
+        alignment.attachRows(
+          parent.layout.lines,
+          trimmedAtomIndices: alignment.hasSoftSpaces
+              ? parent.layout.trimmedAtomIndices.toSet()
+              : const {},
+        );
       } else {
         _parent = parent;
-        if (!alignment.hasChanges) _makeReady(alignment);
+        _finalTrimmedAtoms = alignment.hasSoftSpaces
+            ? parent.layout.trimmedAtomIndices.toSet()
+            : const {};
+        if (!alignment.requiresFinalParent) _makeReady(alignment);
       }
       return (partsPrepared: 1, waitingForLayoutBudget: false);
     } on ForumBodyParagraphBudgetException catch (error) {
@@ -346,6 +361,7 @@ final class ForumBodyInlinePlanPreparation {
     _closeMetric();
     _parent?.release();
     _parent = null;
+    _finalTrimmedAtoms = const {};
     _probe?.releaseProvisional();
     _probe = null;
     _input = null;
