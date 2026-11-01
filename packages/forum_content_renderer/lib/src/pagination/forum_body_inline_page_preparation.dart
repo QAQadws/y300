@@ -169,6 +169,7 @@ final class ForumBodyInlinePagePreparation {
         rubyGroups: _groups,
         rubySegments: _segments,
         rubySpaces: _spaces,
+        containerBackgrounds: input.containerBackgrounds,
         ensureOwner: _guard,
       );
       _parent = null;

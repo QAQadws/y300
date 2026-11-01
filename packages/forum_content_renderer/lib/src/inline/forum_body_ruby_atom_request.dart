@@ -2,6 +2,7 @@ import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_column_request.dart';
 import 'forum_body_ruby_segment_request.dart';
 import 'forum_body_ruby_soft_space_request.dart';
+import 'forum_body_ruby_container_background.dart';
 
 /// Internal pre-measurement variant of an actual parent atom. It borrows the
 /// existing immutable requests; numeric targets only enter the later AtomPlan.
@@ -17,6 +18,7 @@ sealed class ForumBodyRubyAtomRequest {
     ForumBodyRubySoftSpaceRequest value,
   ) = ForumBodyRubySoftSpaceAtomRequest;
   List<ForumBodyTextRequest> get nativeRequests;
+  ForumBodyRubyContainerBackground? get background;
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   );
@@ -28,6 +30,8 @@ final class ForumBodyRubySoftSpaceAtomRequest extends ForumBodyRubyAtomRequest {
   @override
   List<ForumBodyTextRequest> get nativeRequests => value.nativeRequests;
   @override
+  ForumBodyRubyContainerBackground? get background => value.background;
+  @override
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   ) => ForumBodyRubySoftSpaceAtomRequest(value.mapRequests(map));
@@ -38,6 +42,8 @@ final class ForumBodyRubyColumnAtomRequest extends ForumBodyRubyAtomRequest {
   final ForumBodyRubyColumnRequest value;
   @override
   List<ForumBodyTextRequest> get nativeRequests => value.nativeRequests;
+  @override
+  ForumBodyRubyContainerBackground? get background => value.background;
   @override
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
@@ -59,6 +65,8 @@ final class ForumBodyRubySegmentAtomRequest extends ForumBodyRubyAtomRequest {
   final ForumBodyRubySegmentRequest value;
   @override
   List<ForumBodyTextRequest> get nativeRequests => value.nativeRequests;
+  @override
+  ForumBodyRubyContainerBackground? get background => value.background;
   @override
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,

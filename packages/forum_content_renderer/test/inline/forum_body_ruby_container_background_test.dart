@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_input.dart';
+import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_preparation.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_atom_request.dart';
 
 ForumBodyInlinePlanInput _input(
@@ -48,6 +49,88 @@ const _segment = '<rb>A</rb><rb>B</rb><rtc><rt>x</rt></rtc><rtc>word</rtc>';
 const _space = '<rb>A</rb> <rb>B</rb><rt>x</rt> <rt>y</rt>';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'container font admission waits for foreign pins and releases its own temporary lease',
+    () {
+      final input = _input(_column);
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 1,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final foreign = cache.acquire(
+        content: input.groups.single.base.content,
+        width: 300,
+      );
+      final job = ForumBodyInlinePlanPreparation(
+        input: input,
+        cache: cache,
+        textScaler: TextScaler.noScaling,
+        ensureOwner: () {},
+      );
+      addTearDown(job.close);
+      final builds = cache.layoutBuildCount;
+      final blocked = job.advance(maxParts: 1);
+      expect(blocked.waitingForLayoutBudget, true);
+      expect(blocked.partsPrepared, 0);
+      expect(cache.layoutBuildCount, builds);
+      expect(foreign.isActive, true);
+      foreign.release();
+      final captured = job.advance(maxParts: 1);
+      expect(captured.waitingForLayoutBudget, false);
+      expect(captured.partsPrepared, 1);
+      expect(cache.layoutBuildCount, builds + 1);
+      expect(cache.activeLeases, 0);
+      expect(cache.pictureBuildCount, 0);
+      job.close();
+      expect(job.isReady, false);
+      expect(() => job.take(), throwsStateError);
+      cache.clearUnpinned();
+      expect(cache.estimatedRetainedBytes, 0);
+    },
+  );
+  for (final warm in [false, true]) {
+    test(
+      'owner retirement during root font capture cannot retain or publish a late lease, warm=$warm',
+      () {
+        final input = _input(_column);
+        final cache = ForumBodyParagraphCache(
+          maxEntries: 4,
+          maxEstimatedBytes: 1 << 20,
+        );
+        addTearDown(cache.close);
+        late ForumBodyInlinePlanPreparation job;
+        var retire = false;
+        final scaler = _RetiringScaler(() {
+          if (retire) job.close();
+        });
+        if (warm) {
+          cache
+              .acquire(
+                content: input.atoms.single.background!.fontStrut,
+                width: 300,
+                textScaler: scaler,
+              )
+              .release();
+        }
+        job = ForumBodyInlinePlanPreparation(
+          input: input,
+          cache: cache,
+          textScaler: scaler,
+          ensureOwner: () {},
+        );
+        addTearDown(job.close);
+        retire = true;
+        expect(() => job.advance(maxParts: 1), throwsStateError);
+        expect(job.isReady, false);
+        expect(() => job.take(), throwsStateError);
+        expect(cache.activeLeases, 0);
+        expect(cache.pictureBuildCount, 0);
+        cache.clearUnpinned();
+        expect(cache.estimatedRetainedBytes, 0);
+      },
+    );
+  }
   test(
     'actual columns, spanning segments and soft spaces retain the same pure root paint input',
     () {
@@ -237,4 +320,17 @@ void main() {
       );
     },
   );
+}
+
+final class _RetiringScaler extends TextScaler {
+  const _RetiringScaler(this.onScale);
+  final void Function() onScale;
+  @override
+  double scale(double fontSize) {
+    onScale();
+    return fontSize;
+  }
+
+  @override
+  double get textScaleFactor => 1;
 }

@@ -13,6 +13,7 @@ import 'forum_body_ruby_soft_space_layout.dart';
 import 'forum_body_ruby_row_alignment.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_layout.dart';
+import 'forum_body_ruby_container_background.dart';
 
 enum _State { active, ready, transferred, closed }
 
@@ -37,6 +38,8 @@ final class ForumBodyInlinePlanPreparation {
   void Function()? _ensureOwner;
   final double width;
   final _metrics = <ForumBodyRubyAtomMetrics>[];
+  final _backgroundFonts =
+      <ForumBodyRubyContainerBackground, ForumBodyRubyContainerFontBox>{};
   ForumBodyRubyRowAlignment? _alignment;
   final _retriedBands = Set<ForumBodyTextBandContent>.identity();
   ForumBodyRubyGroupPreparation? _pair;
@@ -63,6 +66,18 @@ final class ForumBodyInlinePlanPreparation {
       var waiting = false;
       while (_metrics.length < _input!.atoms.length && parts < maxParts) {
         final request = _input!.atoms[_metrics.length];
+        final background = request.background;
+        if (background != null && !_backgroundFonts.containsKey(background)) {
+          final step = _prepareBackgroundFont(background);
+          parts += step.partsPrepared;
+          waiting = step.waitingForLayoutBudget;
+          if (waiting ||
+              cache.layoutBuildCount != before ||
+              parts == maxParts) {
+            break;
+          }
+          continue;
+        }
         try {
           final revisionBefore = cache.budgetRevision;
           final step = _advanceMetric(request, maxParts - parts);
@@ -173,6 +188,39 @@ final class ForumBodyInlinePlanPreparation {
           _closeMetric();
         }
         return step;
+    }
+  }
+
+  ({int partsPrepared, bool waitingForLayoutBudget}) _prepareBackgroundFont(
+    ForumBodyRubyContainerBackground background,
+  ) {
+    final cache = _cache!;
+    final rejectedAt = cache.budgetRevision;
+    ForumBodyParagraphLease? lease;
+    try {
+      // Use the same admission and single-shape quantum as glyph metrics.
+      // This auxiliary strut is never issued as visible/source text.
+      lease = cache.acquire(
+        content: background.fontStrut,
+        width: width,
+        textScaler: _textScaler!,
+      );
+      _guard();
+      final box = ForumBodyRubyContainerFontBox(
+        background: background,
+        height: lease.layout.height,
+        alphabeticBaseline: lease.layout.alphabeticBaseline,
+      );
+      _guard();
+      _backgroundFonts[background] = box;
+      return (partsPrepared: 1, waitingForLayoutBudget: false);
+    } on ForumBodyParagraphBudgetException catch (error) {
+      _guard();
+      if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
+      final waiting = cache.budgetRevision == rejectedAt;
+      return (partsPrepared: waiting ? 0 : 1, waitingForLayoutBudget: waiting);
+    } finally {
+      lease?.release();
     }
   }
 
@@ -313,6 +361,11 @@ final class ForumBodyInlinePlanPreparation {
       content: _input!.content,
       dimensions: alignment.dimensions,
       trimmedAtomIndices: _finalTrimmedAtoms,
+      containerBackgrounds: {
+        for (final (index, request) in _input!.atoms.indexed)
+          if (request.background case final background?)
+            index: _backgroundFonts[background]!,
+      },
       rubyAtoms: [
         for (final (index, request) in _input!.atoms.indexed)
           switch ((request, alignment.results[index])) {
@@ -391,6 +444,7 @@ final class ForumBodyInlinePlanPreparation {
     _input = null;
     _result = null;
     _metrics.clear();
+    _backgroundFonts.clear();
     _alignment = null;
     _retriedBands.clear();
     _cache = null;

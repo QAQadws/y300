@@ -62,6 +62,22 @@ final class ForumBodyRubyContainerBackground {
   }
 }
 
+/// Qualified numeric font geometry. No lease, cache or owner survives capture.
+final class ForumBodyRubyContainerFontBox {
+  ForumBodyRubyContainerFontBox({
+    required this.background,
+    required this.height,
+    required this.alphabeticBaseline,
+  }) {
+    if (!height.isFinite || height < 0 || !alphabeticBaseline.isFinite) {
+      throw ArgumentError('Invalid ruby container font geometry');
+    }
+  }
+  final ForumBodyRubyContainerBackground background;
+  final double height;
+  final double alphabeticBaseline;
+}
+
 Color _snapshotColor(Color color) {
   final alpha = color.a, red = color.r, green = color.g, blue = color.b;
   if (!alpha.isFinite || !red.isFinite || !green.isFinite || !blue.isFinite) {

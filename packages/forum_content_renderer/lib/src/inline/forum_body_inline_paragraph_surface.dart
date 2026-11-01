@@ -14,13 +14,19 @@ final class ForumBodyInlineParagraphSurface extends LeafRenderObjectWidget {
     required this.view,
     this.onSourceTap,
     this.interactionIdentity,
+    this.paintBackgrounds = true,
   });
   final ForumBodyInlineParagraphView view;
   final void Function(HtmlProjectedSourcePosition)? onSourceTap;
   final Object? interactionIdentity;
+  final bool paintBackgrounds;
   @override
-  RenderBox createRenderObject(BuildContext context) =>
-      _InlineSurfaceBox(view, onSourceTap, interactionIdentity);
+  RenderBox createRenderObject(BuildContext context) => _InlineSurfaceBox(
+    view,
+    onSourceTap,
+    interactionIdentity,
+    paintBackgrounds,
+  );
   @override
   void updateRenderObject(
     BuildContext context,
@@ -29,18 +35,28 @@ final class ForumBodyInlineParagraphSurface extends LeafRenderObjectWidget {
     view,
     onSourceTap,
     interactionIdentity,
+    paintBackgrounds,
   );
 }
 
 final class _InlineSurfaceBox extends ForumBodyTextSurfaceBox {
-  _InlineSurfaceBox(this._view, super.onTap, super.interactionIdentity);
+  _InlineSurfaceBox(
+    this._view,
+    super.onTap,
+    super.interactionIdentity,
+    this._paintBackgrounds,
+  );
   ForumBodyInlineParagraphView _view;
+  bool _paintBackgrounds;
   void configure(
     ForumBodyInlineParagraphView view,
     void Function(HtmlProjectedSourcePosition)? onTap,
     Object? interactionIdentity,
+    bool paintBackgrounds,
   ) {
     final changed = !identical(view, _view);
+    if (_paintBackgrounds != paintBackgrounds) markNeedsPaint();
+    _paintBackgrounds = paintBackgrounds;
     if (changed) {
       _view.close();
       _view = view;
@@ -55,6 +71,10 @@ final class _InlineSurfaceBox extends ForumBodyTextSurfaceBox {
   @override
   bool get isContentActive => _view.isActive;
   @override
+  Rect get paintBounds => isContentActive && _paintBackgrounds
+      ? _view.paintBounds
+      : super.paintBounds;
+  @override
   Size get contentSize =>
       isContentActive ? Size(_view.width, _view.height) : Size.zero;
   @override
@@ -62,7 +82,7 @@ final class _InlineSurfaceBox extends ForumBodyTextSurfaceBox {
       _view.sourceAt(position);
   @override
   void paintContent(Canvas canvas, Offset offset) =>
-      _view.paint(canvas, offset);
+      _view.paint(canvas, offset, paintBackgrounds: _paintBackgrounds);
   @override
   void describeContentSemantics(SemanticsConfiguration config) {
     final content = _view.content;

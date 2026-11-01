@@ -137,6 +137,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       ),
       ForumBodyPreparedInlineFragment() => ForumBodyInlineParagraphSurface(
         view: binding.view,
+        paintBackgrounds: false,
         interactionIdentity: interaction,
         onSourceTap: tap,
       ),
@@ -156,6 +157,19 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
+            if (_bindings.any(
+              (binding) =>
+                  binding is ForumBodyPreparedInlineFragment &&
+                  binding.view.isActive &&
+                  binding.view.containerBackgrounds.isNotEmpty,
+            ))
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _RubyPageBackgroundPainter(_page, _bindings),
+                  ),
+                ),
+              ),
             for (final (index, fragment) in _page.fragments.indexed)
               Positioned(
                 key: ObjectKey(_bindingKey(_bindings[index])),
@@ -170,4 +184,37 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       );
     },
   );
+}
+
+/// One page background plane keeps natural font-box overflow clipped to the
+/// actual content box and underneath every paragraph/annotation glyph.
+final class _RubyPageBackgroundPainter extends CustomPainter {
+  const _RubyPageBackgroundPainter(this.page, this.bindings);
+  final ForumBodyTextPage page;
+  final List<ForumBodyPreparedTextFragment> bindings;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    try {
+      // Stack need not clip paint overflow when its children's layout fits.
+      canvas.clipRect(Offset.zero & size, doAntiAlias: false);
+      for (final (index, binding) in bindings.indexed) {
+        if (binding is ForumBodyPreparedInlineFragment &&
+            binding.view.isActive) {
+          final fragment = page.fragments[index];
+          binding.view.paintContainerBackgrounds(
+            canvas,
+            Offset(fragment.left, fragment.top),
+          );
+        }
+      }
+    } finally {
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RubyPageBackgroundPainter oldDelegate) =>
+      !identical(page, oldDelegate.page) ||
+      !identical(bindings, oldDelegate.bindings);
 }

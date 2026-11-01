@@ -14,18 +14,22 @@ final class ForumBodyInlineViewAssembly {
     Map<int, ForumBodyRubyGroupLayout> rubyGroups = const {},
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
     Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
+    Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
     void Function()? ensureOwner,
   }) : _cache = cache,
        _parent = parent,
        _groups = Map.of(rubyGroups),
        _segments = Map.of(rubySegments),
        _spaces = Map.of(rubySpaces),
+       _backgroundFonts = Map.of(containerBackgrounds),
        _ensureOwner = ensureOwner;
   ForumBodyParagraphCache? _cache;
   ForumBodyInlineParagraphLease? _parent;
   Map<int, ForumBodyRubyGroupLayout> _groups;
   Map<int, ForumBodyRubySegmentLayout> _segments;
   Map<int, ForumBodyRubySoftSpaceLayout> _spaces;
+  Map<int, ForumBodyRubyContainerFontBox> _backgroundFonts;
+  final _backgroundRegions = _RubyBackgroundRegions();
   void Function()? _ensureOwner;
   final int startLine;
   final int endLine;
@@ -87,6 +91,7 @@ final class ForumBodyInlineViewAssembly {
           work += _binding!.advance(maxParts: maxParts - work);
           if (_binding!.isComplete) {
             _bindings[_bindingIndex] = _binding!.takeBinding();
+            _appendBackground(_bindingIndex, _bindings[_bindingIndex]!);
             _binding = null;
             _preparedAtoms++;
           }
@@ -143,6 +148,45 @@ final class ForumBodyInlineViewAssembly {
     });
   }
 
+  void _appendBackground(int index, _RubyBinding binding) {
+    final font = _backgroundFonts[index];
+    if (font == null) return;
+    final parent = _parent!.content;
+    final strut = font.background.fontStrut;
+    if (strut.identity != parent.identity ||
+        strut.fontRevision != parent.fontRevision ||
+        strut.styleRevision != parent.styleRevision) {
+      _fail(ForumBodyInlineViewFailure.identity);
+    }
+    final layout = _parent!.layout;
+    final engineOffset = layout.projection.atoms[index].engineUtf16;
+    var low = startLine, high = endLine;
+    while (low < high) {
+      final middle = (low + high) ~/ 2;
+      if (layout.lines[middle].engineCoverageEndUtf16 <= engineOffset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    if (low >= endLine ||
+        layout.lines[low].engineCoverageStartUtf16 > engineOffset) {
+      _fail(ForumBodyInlineViewFailure.coverage);
+    }
+    final origin =
+        layout.atomBoxes[index].toRect().topLeft - Offset(0, _fragment!.top);
+    _backgroundRegions.add(
+      font,
+      low,
+      Rect.fromLTWH(
+        origin.dx,
+        origin.dy + binding.baseline - font.alphabeticBaseline,
+        binding.size.width,
+        font.height,
+      ),
+    );
+  }
+
   void _own(ForumBodyTextLease lease) {
     if (!_cache!.ownsLease(lease) ||
         !lease.layout.isPaintPrepared ||
@@ -160,6 +204,7 @@ final class ForumBodyInlineViewAssembly {
             _parent!,
             _fragment!,
             UnmodifiableMapView(_bindings),
+            _backgroundRegions.take(),
           );
     _parent = null;
     _groups = const {};
@@ -238,6 +283,8 @@ final class ForumBodyInlineViewAssembly {
     _fragment = null;
     _ensureOwner = null;
     _checked.clear();
+    _backgroundFonts = const {};
+    _backgroundRegions.clear();
   }
 
   void close() => _retire(_ViewAssemblyState.closed);

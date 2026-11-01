@@ -12,10 +12,12 @@ import '../paragraph/forum_body_paragraph_layout.dart'
 import 'forum_body_ruby_group_layout.dart';
 import 'forum_body_ruby_segment_layout.dart';
 import 'forum_body_ruby_soft_space_layout.dart';
+import 'forum_body_ruby_container_background.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
 part 'forum_body_inline_view_assembly.dart';
 part 'forum_body_inline_ruby_binding_work.dart';
+part 'forum_body_inline_background_regions.dart';
 
 enum ForumBodyInlineViewFailure { leases, coverage, identity, geometry }
 
@@ -34,6 +36,7 @@ final class ForumBodyInlineParagraphView {
     this._parent,
     ForumBodyInlineParagraphFragment fragment,
     this._children,
+    this._backgrounds,
   ) : _fragment = fragment,
       width = fragment.layout.width,
       height = fragment.height,
@@ -46,6 +49,7 @@ final class ForumBodyInlineParagraphView {
     : _parent = parent,
       _fragment = null,
       _children = const {},
+      _backgrounds = const [],
       width = parent.layout.width,
       height = parent.layout.height,
       startLine = 0,
@@ -64,6 +68,7 @@ final class ForumBodyInlineParagraphView {
     Map<int, ForumBodyRubyGroupLayout> rubyGroups = const {},
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
     Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
+    Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
   }) {
     final assembly = ForumBodyInlineViewAssembly(
       cache: cache,
@@ -73,6 +78,7 @@ final class ForumBodyInlineParagraphView {
       rubyGroups: rubyGroups,
       rubySegments: rubySegments,
       rubySpaces: rubySpaces,
+      containerBackgrounds: containerBackgrounds,
     );
     try {
       while (!assembly.isReady) {
@@ -87,6 +93,16 @@ final class ForumBodyInlineParagraphView {
   ForumBodyInlineParagraphLease? _parent;
   ForumBodyInlineParagraphFragment? _fragment;
   Map<int, _RubyBinding> _children;
+  List<({Rect rect, Color color})> _backgrounds;
+  List<({Rect rect, Color color})> get containerBackgrounds {
+    _ensureActive();
+    return _backgrounds;
+  }
+
+  late final Rect paintBounds = _backgrounds.fold(
+    Offset.zero & Size(width, height),
+    (bounds, region) => bounds.expandToInclude(region.rect),
+  );
   bool get isActive =>
       _parent?.isActive == true &&
       !_parent!.layout.isDisposed &&
@@ -121,9 +137,17 @@ final class ForumBodyInlineParagraphView {
     for (final binding in _children.values) ...binding.nativeLeases,
   ];
 
-  void paint(Canvas canvas, Offset offset) {
+  void paintContainerBackgrounds(Canvas canvas, Offset offset) {
+    _ensureActive();
+    for (final region in _backgrounds) {
+      canvas.drawRect(region.rect.shift(offset), Paint()..color = region.color);
+    }
+  }
+
+  void paint(Canvas canvas, Offset offset, {bool paintBackgrounds = true}) {
     _ensureActive();
     if (_fragment == null) return;
+    if (paintBackgrounds) paintContainerBackgrounds(canvas, offset);
     canvas.save();
     try {
       // Child pictures already contain their native edge coverage. A second
@@ -295,6 +319,7 @@ final class ForumBodyInlineParagraphView {
       binding.close();
     }
     _children = const {};
+    _backgrounds = const [];
     _fragment = null;
     parent.release();
   }

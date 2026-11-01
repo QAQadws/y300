@@ -1,0 +1,42 @@
+part of 'forum_body_inline_paragraph_view.dart';
+
+/// Merge one source root once per actual native row, before any glyph paint.
+/// Building is charged with each already-bounded visible atom binding.
+final class _RubyBackgroundRegions {
+  var _rects = <({Rect rect, Color color})>[];
+  final _indices =
+      <(String, int), ({int index, ForumBodyRubyContainerFontBox font})>{};
+  void add(ForumBodyRubyContainerFontBox font, int row, Rect rect) {
+    if (rect.isEmpty) return;
+    final key = (font.background.rootPath, row);
+    final old = _indices[key];
+    if (old == null) {
+      _indices[key] = (index: _rects.length, font: font);
+      _rects.add((rect: rect, color: font.background.color));
+    } else {
+      if (old.font.background.color != font.background.color ||
+          old.font.background.fontStrut.style.textStyle !=
+              font.background.fontStrut.style.textStyle ||
+          old.font.height != font.height ||
+          old.font.alphabeticBaseline != font.alphabeticBaseline) {
+        ForumBodyInlineParagraphView._fail(ForumBodyInlineViewFailure.identity);
+      }
+      _rects[old.index] = (
+        rect: _rects[old.index].rect.expandToInclude(rect),
+        color: font.background.color,
+      );
+    }
+  }
+
+  List<({Rect rect, Color color})> take() {
+    final result = UnmodifiableListView(_rects);
+    _rects = [];
+    _indices.clear();
+    return result;
+  }
+
+  void clear() {
+    _rects.clear();
+    _indices.clear();
+  }
+}

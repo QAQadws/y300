@@ -60,7 +60,7 @@ void main() {
                 '<span style="color:#b22222;background-color:#ffe000">Author highlight</span> '
                 '<a href="https://example.invalid/synthetic">Link</a> '
                 '<strong>Bold</strong> '
-                '${mixed ? 'before <ruby style="color:#b22222;background:#ffe000"><rb style="background:#ffbb00">ba se</rb><rt style="background:inherit">no te</rt></ruby> after ' : ''}'
+                '${mixed ? 'before <ruby style="color:#b22222;background:#ffe000"><rb style="background:#ffbb00">ba se</rb><rt style="background:inherit">no te</rt></ruby> <ruby style="background:#44bb88"><rb style="background:transparent">ro ot</rb><rt style="background:transparent">no te</rt></ruby> after ' : ''}'
                 'Synthetic custom color settings preserve reading position and actual native coverage.</p>',
           ).join(),
         );
@@ -335,6 +335,25 @@ void main() {
                 .map((r) => r.style.textStyle.fontWeight),
             contains(FontWeight.w700),
           );
+          // This green belongs only to the root box: neither child glyph
+          // background can satisfy the rendered-root assertion below.
+          expect(
+            find
+                .byType(ForumBodyInlineParagraphSurface)
+                .evaluate()
+                .any(
+                  (element) =>
+                      (element.widget as ForumBodyInlineParagraphSurface)
+                          .view
+                          .containerBackgrounds
+                          .any(
+                            (region) => region.color == const Color(0xff44bb88),
+                          ),
+                ),
+            mixed &&
+                expected.backgroundScope != NovelReaderStyleScope.forceBody &&
+                expected.backgroundScope != NovelReaderStyleScope.forceAll,
+          );
           expect(
             runs.any(
               (r) =>
@@ -378,6 +397,7 @@ void main() {
           containsAll([0x203040, 0xe8f0d8, 0xb22222, 0xffe000]),
         );
         expect((await bodyPixels()).contains(0xffbb00), mixed);
+        expect((await bodyPixels()).contains(0x44bb88), mixed);
         await settings();
         await reset('foreground');
         await closeSettings();
@@ -419,6 +439,7 @@ void main() {
         expect(rgb.contains(0xb22222), mixed);
         expect(rgb.contains(0xffe000), mixed);
         expect(rgb, isNot(contains(0xffbb00)));
+        expect(rgb, isNot(contains(0x44bb88)));
         await settings();
         await chooseScope('foreground', l10n.novelAuthorForegroundAll);
         await chooseScope('background', l10n.novelAuthorBackgroundAll);
@@ -437,6 +458,7 @@ void main() {
         expect(rgb, containsAll([0x203040, 0xe8f0d8]));
         expect(rgb, isNot(contains(0xb22222)));
         expect(rgb, isNot(contains(0xffe000)));
+        expect(rgb, isNot(contains(0x44bb88)));
         navigator.currentState!.pop();
         await tester.pumpAndSettle();
         await popped;
@@ -473,6 +495,7 @@ void main() {
               state().persistedPreferences.colors == selected,
         );
         accepted(observation, selected);
+        expect((await bodyPixels()).contains(0x44bb88), mixed);
         await settings();
         await reset('background');
         await closeSettings();
