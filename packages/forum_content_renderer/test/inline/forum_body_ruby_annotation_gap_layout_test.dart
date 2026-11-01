@@ -46,13 +46,15 @@ Future<List<int>> _reference(RubyGapFixture f) async {
     final a = index(r.bases[0]);
     final b = index(r.bases[1]);
     final bg = r.gaps.isEmpty ? null : index(r.gaps.single.request);
-    final ag = index(r.annotationGaps.single.request);
+    final ag = r.annotationGaps.isEmpty
+        ? null
+        : index(r.annotationGaps.single.request);
     final x = index(r.spans[0].request);
     final y = index(r.spans[1].request);
     final outer = index(r.spans[2].request);
     final edge = math.max(
       bg == null ? 0.0 : bounds[bg].width,
-      bounds[ag].width,
+      ag == null ? 0.0 : bounds[ag].width,
     );
     final widths = [
       math.max(bounds[a].width, bounds[x].width),
@@ -72,12 +74,12 @@ Future<List<int>> _reference(RubyGapFixture f) async {
         .reduce(math.max);
     final overAscent = [
       x,
-      ag,
+      ?ag,
       y,
     ].map((i) => baseline[i] - bounds[i].top).reduce(math.max);
     final overDescent = [
       x,
-      ag,
+      ?ag,
       y,
     ].map((i) => bounds[i].bottom - baseline[i]).reduce(math.max);
     final common = ascent + overAscent + overDescent;
@@ -91,7 +93,7 @@ Future<List<int>> _reference(RubyGapFixture f) async {
         width: widths[1],
         relative: -ascent - overDescent,
       ),
-      ag: (left: widths[0], width: edge, relative: -ascent - overDescent),
+      ?ag: (left: widths[0], width: edge, relative: -ascent - overDescent),
       outer: (
         left: 0,
         width: total,
@@ -123,6 +125,50 @@ Future<List<int>> _reference(RubyGapFixture f) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final direction in TextDirection.values) {
+    for (final root in [false, true]) {
+      for (final baseGap in [false, true]) {
+        test(
+          'CJK segment origin has no phantom gap font or pixels $direction root=$root base=$baseGap',
+          () async {
+            final f = RubyGapFixture(
+              direction: direction,
+              rootAnnotationGap: root,
+              annotationGapSize: 40,
+              annotationGapText: '\n',
+              firstAnnotation: '漢',
+              secondAnnotation: '字',
+              includeBaseGap: baseGap,
+              gapSize: 20,
+              tight: true,
+              scaler: const TextScaler.linear(1.27),
+            );
+            addTearDown(f.close);
+            expect(f.request.annotationGaps, isEmpty);
+            final fence = f.input.content.contexts.singleWhere(
+              (w) => w.content.projection.text.isEmpty,
+            );
+            expect(fence.startUtf16, fence.endUtf16);
+            expect(fence.content.isSourceFree, isFalse);
+            expect(fence.content.projection.sourceAtUtf16(0).isExact, isFalse);
+            final metrics = f.measure(1);
+            expect(metrics.annotationGaps, isEmpty);
+            final layout = f.prepare(metrics, 1);
+            try {
+              expect(layout.nativeLeases.length, baseGap ? 6 : 5);
+              final actual = await rubyGapPixels(
+                (c) => layout.paint(c, const Offset(20, 20)),
+              );
+              expect(actual, await _reference(f));
+            } finally {
+              layout.close();
+            }
+            expect(f.cache.activeLeases, 0);
+          },
+        );
+      }
+    }
+  }
   test(
     'annotation gaps require original adjacent spans and unique whitespace',
     () {

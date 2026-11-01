@@ -11,6 +11,7 @@ import 'forum_body_ruby_annotation_input.dart';
 import 'forum_body_ruby_annotation_pairing.dart';
 import 'forum_body_ruby_base_input.dart';
 import 'forum_body_ruby_content.dart';
+import 'forum_body_ruby_whitespace.dart';
 import 'forum_body_text_band_content.dart';
 
 /// Pure source-bound parent input and child requests for the session's pending
@@ -25,7 +26,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 15;
+  static const revision = 16;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -89,8 +90,10 @@ final class ForumBodyInlinePlanInput {
       annotations,
       List<int> baseIndices,
       List<List<int>> annotationIndices,
-      int levelId,
-    ) {
+      int levelId, {
+      int columnIndex = 0,
+      Map<(int, int), List<ForumBodyParagraphContent>>? gapFences,
+    }) {
       if (base.projection.text.isEmpty &&
           annotations.every((item) => item.content.projection.text.isEmpty)) {
         _unsupported(base.path);
@@ -98,6 +101,11 @@ final class ForumBodyInlinePlanInput {
       final start = offset;
       if (!base.isSourceFree) baseIndices.add(append(base));
       for (final (rank, annotation) in annotations.indexed) {
+        for (final fence
+            in gapFences?[(rank, columnIndex)] ??
+                const <ForumBodyParagraphContent>[]) {
+          annotationIndices[rank].add(append(fence));
+        }
         if (!annotation.content.isSourceFree) {
           annotationIndices[rank].add(append(annotation.content));
         }
@@ -148,12 +156,31 @@ final class ForumBodyInlinePlanInput {
             group: group,
             baseColumnCount: unitCount,
           );
+          Map<ForumBodyParagraphContent, ForumBodyParagraphContent>?
+          resolvedGaps;
+          for (final level in pairing.levels) {
+            for (final gap in level.gaps) {
+              if (!gap.content.projection.hasCollapsibleSegmentBreaks) continue;
+              final resolved = resolveForumBodyRubyGapWhitespace(
+                gap: gap.content,
+                previous: _annotationInput(group, gap.previous.box),
+                next: _annotationInput(group, gap.next.box),
+              );
+              if (!identical(resolved, gap.content)) {
+                (resolvedGaps ??= Map.identity())[gap.content] = resolved;
+              }
+            }
+          }
+          ForumBodyParagraphContent gapContent(
+            ForumBodyRubyPairedAnnotationGap gap,
+          ) => resolvedGaps?[gap.content] ?? gap.content;
           // Only a real visible spanning annotation already closes all current
           // columns. A whitespace edge by itself must remain breakable; its
           // parent trimming/break protocol is not implied by segment geometry.
           bool? hasUnbrokenAnnotation;
           for (final level in pairing.levels) {
-            if (level.gaps.isNotEmpty) {
+            for (final gap in level.gaps) {
+              if (gapContent(gap).projection.text.isEmpty) continue;
               hasUnbrokenAnnotation ??= pairing.levels.any(
                 (l) => l.spans.any(
                   (span) =>
@@ -165,8 +192,9 @@ final class ForumBodyInlinePlanInput {
                 ),
               );
               if (!hasUnbrokenAnnotation) {
-                _unsupported(level.gaps.first.content.path ?? group.rootPath);
+                _unsupported(gap.content.path ?? group.rootPath);
               }
+              break;
             }
           }
           if (pairing.hasMultiColumnSpans) {
@@ -236,12 +264,15 @@ final class ForumBodyInlinePlanInput {
                 while (gapIndex < level.gaps.length &&
                     identical(level.gaps[gapIndex].next, span)) {
                   final gap = level.gaps[gapIndex++];
-                  annotationSources.add(append(gap.content));
-                  annotationGaps.add((
-                    beforeSpanIndex: spans.length,
-                    request: ForumBodyTextRequest.paragraph(gap.content),
-                    gap: 0.0,
-                  ));
+                  final content = gapContent(gap);
+                  annotationSources.add(append(content));
+                  if (content.projection.text.isNotEmpty) {
+                    annotationGaps.add((
+                      beforeSpanIndex: spans.length,
+                      request: ForumBodyTextRequest.paragraph(content),
+                      gap: 0.0,
+                    ));
+                  }
                 }
                 if (span.isMultiColumn &&
                     (span.startColumn != 0 ||
@@ -301,6 +332,18 @@ final class ForumBodyInlinePlanInput {
           ];
           final baseSources = [for (final _ in bases) <int>[]];
           final annotationIndices = [for (final _ in levels) <int>[]];
+          Map<(int, int), List<ForumBodyParagraphContent>>? gapFences;
+          for (final (rank, level) in levels.indexed) {
+            for (final gap in level.gaps) {
+              final content = gapContent(gap);
+              if (content.projection.text.isNotEmpty) {
+                _unsupported(content.path);
+              }
+              ((gapFences ??= {})[(rank, gap.beforeColumn)] ??= []).add(
+                content,
+              );
+            }
+          }
           var column = 0;
           ForumBodyParagraphContent? anonymous;
           List<({ForumBodyParagraphContent content, ForumBodyRubySide side})>
@@ -356,6 +399,8 @@ final class ForumBodyInlinePlanInput {
               sources,
               annotationIndices,
               levelId,
+              columnIndex: column,
+              gapFences: gapFences,
             );
             column++;
             if (trailing != null) {
@@ -373,6 +418,8 @@ final class ForumBodyInlinePlanInput {
               const [],
               annotationIndices,
               levelId,
+              columnIndex: column,
+              gapFences: gapFences,
             );
           }
           if (deferredTail != null) {

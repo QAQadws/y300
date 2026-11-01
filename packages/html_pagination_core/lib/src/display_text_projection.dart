@@ -74,7 +74,7 @@ final class HtmlDisplayTextLimitException implements Exception {
 /// NBSP and ideographic spaces remain literal. Only collapsible edge whitespace
 /// is discarded, and preformatted whitespace is never trimmed.
 final class HtmlDisplayTextProjection {
-  static const revision = 7;
+  static const revision = 8;
 
   /// Whitespace accepted by the explicit single-line projection policy. This
   /// predicate does not classify forum content or change normal HTML spacing.
@@ -107,9 +107,11 @@ final class HtmlDisplayTextProjection {
     int? leadingBeforeSource,
     int? trailingAfterSource,
     bool sourceIsOrdered = true,
+    List<int> collapsibleSegmentBreakOffsets = const [],
   }) : _leadingBeforeSource = leadingBeforeSource,
        _trailingAfterSource = trailingAfterSource,
-       _sourceIsOrdered = sourceIsOrdered;
+       _sourceIsOrdered = sourceIsOrdered,
+       _collapsibleSegmentBreakOffsets = collapsibleSegmentBreakOffsets;
 
   /// [suppressLineBreaks] joins forced breaks as collapsible U+0020, while
   /// keeping each run's other whitespace rules. Consecutive breaks share one
@@ -176,6 +178,7 @@ final class HtmlDisplayTextProjection {
     final boundaries = <int>[0];
     var length = 0;
     var sourceIsOrdered = true;
+    List<int>? segmentBreakOffsets;
     int? previousRuneEnd;
     for (final segment in segments) {
       final projection = segment.projection;
@@ -220,6 +223,13 @@ final class HtmlDisplayTextProjection {
       utf16Starts.addAll(
         projection._utf16Starts.skip(1).map((offset) => offset + length),
       );
+      if (projection._collapsibleSegmentBreakOffsets.isNotEmpty) {
+        (segmentBreakOffsets ??= []).addAll(
+          projection._collapsibleSegmentBreakOffsets.map(
+            (offset) => offset + length,
+          ),
+        );
+      }
       boundaries.addAll(
         projection._graphemeBoundaries.skip(1).map((offset) => offset + length),
       );
@@ -239,6 +249,9 @@ final class HtmlDisplayTextProjection {
           ? 0
           : segments.last.projection._trailingAfter,
       sourceIsOrdered: sourceIsOrdered,
+      collapsibleSegmentBreakOffsets: segmentBreakOffsets == null
+          ? const []
+          : List.unmodifiable(segmentBreakOffsets),
     );
   }
 
@@ -251,6 +264,75 @@ final class HtmlDisplayTextProjection {
   final int? _leadingBeforeSource;
   final int? _trailingAfterSource;
   final bool _sourceIsOrdered;
+  final List<int> _collapsibleSegmentBreakOffsets;
+
+  /// Actual collapse origins, not an inference from the resulting space text.
+  /// Preserved spaces, tabs, NBSP and hard line feeds never enter this list.
+  bool get hasCollapsibleSegmentBreaks =>
+      _collapsibleSegmentBreakOffsets.isNotEmpty;
+
+  String? get firstGrapheme =>
+      text.isEmpty ? null : text.substring(0, _graphemeBoundaries[1]);
+  String? get lastGrapheme => text.isEmpty
+      ? null
+      : text.substring(_graphemeBoundaries[_graphemeBoundaries.length - 2]);
+
+  /// Resolve a whitespace-only context with explicit formatting-context edges.
+  /// The caller supplies its text/language policy; this port owns complete
+  /// graphemes, original run indices and source affinity, never semantic offsets.
+  /// A collapsed space joined to a mark cannot be removed in part.
+  HtmlDisplayTextProjection resolveWhitespaceSegmentBreaks({
+    required bool Function(String? before, String? after) shouldRemove,
+    String? precedingGrapheme,
+    String? followingGrapheme,
+  }) {
+    for (final edge in [precedingGrapheme, followingGrapheme]) {
+      if (edge != null && edge.characters.length != 1) {
+        throw ArgumentError('Segment-break context must be one whole grapheme');
+      }
+    }
+    if (_runes.any((rune) => !isSingleLineWhitespace(rune.rune))) {
+      throw ArgumentError('Segment-break gap must contain only whitespace');
+    }
+    List<int>? removed;
+    for (final offset in _collapsibleSegmentBreakOffsets) {
+      final index = _lowerBound(_graphemeBoundaries, offset);
+      if (_graphemeBoundaries[index] != offset ||
+          _graphemeBoundaries[index + 1] != offset + 1) {
+        continue;
+      }
+      final before = index == 0
+          ? precedingGrapheme
+          : text.substring(_graphemeBoundaries[index - 1], offset);
+      final after = index + 2 == _graphemeBoundaries.length
+          ? followingGrapheme
+          : text.substring(offset + 1, _graphemeBoundaries[index + 2]);
+      if (shouldRemove(before, after)) (removed ??= []).add(offset);
+    }
+    if (removed == null) return this;
+    final builder = _ProjectionBuilder(text.length, true, false);
+    var removal = 0;
+    var origin = 0;
+    for (var i = 0; i < _runes.length; i++) {
+      final offset = _utf16Starts[i];
+      final isBreak =
+          origin < _collapsibleSegmentBreakOffsets.length &&
+          _collapsibleSegmentBreakOffsets[origin] == offset;
+      if (isBreak) origin++;
+      if (removal < removed.length && removed[removal] == offset) {
+        removal++;
+      } else {
+        builder._emit(_runes[i], segmentBreak: isBreak);
+      }
+    }
+    return builder.finish(
+      _emptySource,
+      leadingBeforeSource: _leadingBefore,
+      trailingAfterSource: _trailingAfter,
+      sourceIsOrdered: _sourceIsOrdered,
+    );
+  }
+
   int get _leadingBefore =>
       _leadingBeforeSource ??
       (_runes.isEmpty ? _emptySource : _runes.first.start);
@@ -332,7 +414,22 @@ final class HtmlDisplayTextProjection {
       ).sourceRune,
       trailingAfterSource: sourceAtUtf16(endUtf16).sourceRune,
       sourceIsOrdered: _sourceIsOrdered,
+      collapsibleSegmentBreakOffsets: _sliceSegmentBreakOffsets(
+        startUtf16,
+        endUtf16,
+      ),
     );
+  }
+
+  List<int> _sliceSegmentBreakOffsets(int start, int end) {
+    final first = _lowerBound(_collapsibleSegmentBreakOffsets, start);
+    final last = _lowerBound(_collapsibleSegmentBreakOffsets, end);
+    return first == last
+        ? const []
+        : List.unmodifiable([
+            for (var i = first; i < last; i++)
+              _collapsibleSegmentBreakOffsets[i] - start,
+          ]);
   }
 
   /// Envelope of actual source ranges in a complete display window. Interior
@@ -514,6 +611,8 @@ final class _ProjectionBuilder {
   final utf16Starts = <int>[0];
   _ProjectedRune? pendingSpace;
   _ProjectedRune? previousCarriageReturn;
+  bool pendingSpaceHasSegmentBreak = false;
+  List<int>? _segmentBreakOffsets;
 
   void add(
     int rune,
@@ -551,6 +650,7 @@ final class _ProjectionBuilder {
         (hardBreak ||
             (mode != HtmlDisplayWhiteSpace.normal && value.rune == 10))) {
       pendingSpace = null;
+      pendingSpaceHasSegmentBreak = false;
       _emit(value);
     } else if (suppressedBreak ||
         (collapse &&
@@ -559,9 +659,11 @@ final class _ProjectionBuilder {
                 : const {9, 10, 12, 32}.contains(value.rune)))) {
       if (pendingSpace == null) {
         pendingSpace = _ProjectedRune(32, source, source + 1, runIndex);
+        pendingSpaceHasSegmentBreak = false;
       } else {
         pendingSpace!.end = source + 1;
       }
+      pendingSpaceHasSegmentBreak |= suppressedBreak || value.rune == 10;
       if (rune == 13) previousCarriageReturn = pendingSpace;
       return;
     } else {
@@ -570,22 +672,29 @@ final class _ProjectionBuilder {
           (output.isEmpty
               ? preserveCollapsibleEdges
               : output.last.rune != 10)) {
-        _emit(space);
+        _emit(space, segmentBreak: pendingSpaceHasSegmentBreak);
       }
       pendingSpace = null;
+      pendingSpaceHasSegmentBreak = false;
       _emit(value);
     }
     if (rune == 13) previousCarriageReturn = value;
   }
 
-  void _emit(_ProjectedRune rune) {
+  void _emit(_ProjectedRune rune, {bool segmentBreak = false}) {
     final next = utf16Starts.last + (rune.rune > 0xffff ? 2 : 1);
     if (next > limit) throw const HtmlDisplayTextLimitException();
+    if (segmentBreak) (_segmentBreakOffsets ??= []).add(utf16Starts.last);
     output.add(rune);
     utf16Starts.add(next);
   }
 
-  HtmlDisplayTextProjection finish(int emptySource) {
+  HtmlDisplayTextProjection finish(
+    int emptySource, {
+    int? leadingBeforeSource,
+    int? trailingAfterSource,
+    bool sourceIsOrdered = true,
+  }) {
     // An inline fragment does not own the surrounding formatting context.
     // Preserve one collapsed edge space for its parent to place or trim, while
     // actual hard-line edges retain the ordinary whitespace rules.
@@ -593,7 +702,7 @@ final class _ProjectionBuilder {
     if (preserveCollapsibleEdges &&
         space != null &&
         (output.isEmpty || output.last.rune != 10)) {
-      _emit(space);
+      _emit(space, segmentBreak: pendingSpaceHasSegmentBreak);
     }
     final parts = <HtmlDisplayTextPart>[];
     final text = StringBuffer();
@@ -621,6 +730,12 @@ final class _ProjectionBuilder {
       List.unmodifiable(utf16Starts),
       List.unmodifiable(boundaries),
       emptySource,
+      leadingBeforeSource: leadingBeforeSource,
+      trailingAfterSource: trailingAfterSource,
+      sourceIsOrdered: sourceIsOrdered,
+      collapsibleSegmentBreakOffsets: _segmentBreakOffsets == null
+          ? const []
+          : List.unmodifiable(_segmentBreakOffsets!),
     );
   }
 }

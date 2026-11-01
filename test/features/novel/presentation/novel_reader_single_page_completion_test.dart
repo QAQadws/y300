@@ -64,13 +64,15 @@ void main() {
       for (final (readOnlyRestore, gap, annotationKind) in [
         for (final readOnly in [false, true])
           for (final gap in ['', ' '])
-            for (final annotationKind in [0, 1, 2])
+            for (final annotationKind in [0, 1, 2, 3, 4])
               (readOnly, gap, annotationKind),
       ]) {
         final annotationGap = annotationKind != 0;
         final annotation = switch (annotationKind) {
           1 => '<rtc style="font-size:10px"><rt>x</rt> <rt>y</rt></rtc>',
           2 => '<rt style="font-size:10px">x</rt> <rt style="font-size:10px">y</rt>',
+          3 => '<rt style="font-size:10px">漢</rt>\n<rt style="font-size:10px">字</rt>',
+          4 => '<rtc style="font-size:10px"><rt>漢</rt>\n<rt>字</rt></rtc>',
           _ => '',
         };
         testWidgets(
@@ -84,7 +86,11 @@ void main() {
               () => _Fixture.create(
                 rawBody: (
                   '<p><ruby style="line-height:1;ruby-position:${under ? 'under' : 'over'}"><rb style="font-size:40px">A</rb>$gap<rb style="font-size:40px">B</rb>$annotation<rtc style="font-size:20px">word</rtc><rb style="font-size:200px">C</rb><rb style="font-size:200px">D</rb><rt style="font-size:${annotationGap ? 80 : 100}px">zz</rt>${annotationGap ? '<rtc style="font-size:20px"><rt>tt</rt></rtc>' : ''}</ruby></p>',
-                  'A${gap}B${annotationGap ? 'x y' : ''}wordCDzz${annotationGap ? 'tt' : ''}',
+                  'A${gap}B${annotationKind >= 3
+                      ? '漢\n字'
+                      : annotationGap
+                      ? 'x y'
+                      : ''}wordCDzz${annotationGap ? 'tt' : ''}',
                 ),
               ),
             ))!;

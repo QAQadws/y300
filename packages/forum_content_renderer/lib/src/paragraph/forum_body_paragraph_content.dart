@@ -100,6 +100,33 @@ final class ForumBodyParagraphContent {
     isSourceFree: isSourceFree,
   );
 
+  /// Resolve one actual whitespace context without changing source/run owners.
+  /// Text/language decisions belong to its formatting consumer, not this port.
+  ForumBodyParagraphContent resolveWhitespaceSegmentBreaks({
+    required bool Function(String? before, String? after) shouldRemove,
+    String? precedingGrapheme,
+    String? followingGrapheme,
+  }) {
+    final resolved = projection.resolveWhitespaceSegmentBreaks(
+      shouldRemove: shouldRemove,
+      precedingGrapheme: precedingGrapheme,
+      followingGrapheme: followingGrapheme,
+    );
+    if (identical(resolved, projection)) return this;
+    return ForumBodyParagraphContent._(
+      identity: identity,
+      path: path,
+      fontRevision: fontRevision,
+      styleRevision: styleRevision,
+      style: style,
+      layoutMode: layoutMode,
+      projection: resolved,
+      runs: runs,
+      issues: issues,
+      isSourceFree: isSourceFree,
+    );
+  }
+
   /// No recognizers are retained; interaction uses the same layout coordinates.
   late final TextSpan textSpan = TextSpan(
     style: style.textStyle,

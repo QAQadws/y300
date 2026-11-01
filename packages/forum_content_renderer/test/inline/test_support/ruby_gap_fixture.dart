@@ -14,6 +14,9 @@ final class RubyGapFixture {
     double gapSize = 40,
     double? annotationGapSize,
     bool rootAnnotationGap = false,
+    String annotationGapText = ' ',
+    String firstAnnotation = 'x',
+    String secondAnnotation = 'y',
     bool includeBaseGap = true,
     String position = 'alternate',
   }) {
@@ -24,10 +27,10 @@ final class RubyGapFixture {
     final annotationGap = annotationGapSize == null
         ? ''
         : rootAnnotationGap
-        ? ' '
-        : '<span style="font-size:${annotationGapSize}px;line-height:$h;text-decoration:underline"> </span>';
+        ? annotationGapText
+        : '<span style="font-size:${annotationGapSize}px;line-height:$h;text-decoration:underline">$annotationGapText</span>';
     final annotation =
-        '<rt style="font-size:10px;line-height:$h">x</rt>$annotationGap<rt style="font-size:15px;line-height:$h">y</rt>';
+        '<rt style="font-size:10px;line-height:$h">$firstAnnotation</rt>$annotationGap<rt style="font-size:15px;line-height:$h">$secondAnnotation</rt>';
     final doc = const ForumBodyParser().parse(
       html:
           '<p dir="${direction.name}"><ruby style="ruby-position:$position;${rootAnnotationGap ? 'font-size:${annotationGapSize}px;line-height:$h' : ''}"><rb style="font-size:20px;line-height:$h">A</rb>$baseGap<rb style="font-size:30px;line-height:$h">B</rb>${rootAnnotationGap ? annotation : '<rtc>$annotation</rtc>'}<rtc style="font-size:10px;line-height:$h">abcdefghij</rtc></ruby></p>',
