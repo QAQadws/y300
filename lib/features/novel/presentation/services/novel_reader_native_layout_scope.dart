@@ -38,16 +38,23 @@ final class NovelReaderNativeLayoutScope {
     required this.height,
     required this.paginationKey,
     required this.maxNativeHandlesPerPage,
-  });
-  static const fingerprintRevision = 6;
+    required int fontCollectionGeneration,
+    required String paragraphInputs,
+  }) : _fontCollectionGeneration = fontCollectionGeneration,
+       _paragraphInputs = paragraphInputs;
+  static const fingerprintRevision = 7;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
+
+  /// Canvas paint only; native text and inline backgrounds stay in the key.
   final Color backgroundColor;
   final double width;
   final double height;
   final String paginationKey;
   final int maxNativeHandlesPerPage;
+  final int _fontCollectionGeneration;
+  final String _paragraphInputs;
 
   static Future<NovelReaderNativeLayoutScope> prepare({
     required NovelReaderNativePreparedChapter chapter,
@@ -75,18 +82,7 @@ final class NovelReaderNativeLayoutScope {
     if (fontCollectionGeneration < 0) {
       throw ArgumentError.value(fontCollectionGeneration);
     }
-    final original = environment.reader;
-    final reader = ForumBodyReaderStyle(
-      textStyle: _freezeStyle(original.textStyle),
-      fontRevision: original.fontRevision,
-      linkColor: _freezeColor(original.linkColor)!,
-      textAlign: original.textAlign,
-      textDirection: original.textDirection,
-      paragraphBefore: original.paragraphBefore,
-      paragraphAfter: original.paragraphAfter,
-      firstLineIndent: original.firstLineIndent,
-      policy: ForumBodyStylePolicy(original.policy.values),
-    );
+    final reader = _freezeReader(environment.reader);
     final document = chapter.document;
     final sizes = await cancellation.waitFor(
       NovelReaderBackgroundWork.run(
@@ -109,44 +105,18 @@ final class NovelReaderNativeLayoutScope {
       scales[size] = scaled;
     }
     final background = _freezeColor(environment.backgroundColor)!;
+    final revisions = _nativeRevisions();
+    final readerValues = _readerValues(reader, fontCollectionGeneration);
     final payload = <Object?>[
-      fingerprintRevision,
+      ...revisions,
       chapter.episodeId,
       document.identity.cacheIdentity,
-      ForumBodyStyleResolver.revision,
-      ForumBodyTextFlowCursor.revision,
-      ForumBodyBlockFlowCursor.revision,
-      ForumBodyParagraphLayout.backendRevision,
-      ForumBodyTextPageComposer.revision,
-      ForumBodyTextPageSession.inlinePlanRevision,
-      ForumBodyInlineSpanContent.revision,
-      ForumBodyInlineParagraphLayout.revision,
-      ForumBodyRubyContentCursor.revision,
-      ForumBodyRubyGroupLayout.revision,
-      ForumBodyRubySegmentMetrics.revision,
-      ForumBodyRubySoftSpaceMetrics.revision,
-      ForumBodyTextBandContent.revision,
-      ForumBodyTextBandLayout.revision,
-      HtmlDisplayTextProjection.revision,
-      HtmlInlineTextProjection.revision,
-      HtmlTextBandProjection.revision,
-      NovelReaderSourceProvenance.revision,
       width,
       height,
       pageHandleLimit,
-      reader.fontRevision,
-      fontCollectionGeneration,
-      _styleValue(reader.textStyle),
-      _colorValue(reader.linkColor),
-      _colorValue(background),
-      reader.textAlign.name,
-      reader.textDirection.name,
-      reader.paragraphBefore,
-      reader.paragraphAfter,
-      reader.firstLineIndent.value,
-      reader.firstLineIndent.unit.name,
-      for (final property in ForumBodyStyleProperty.values)
-        (reader.policy.values[property] ?? ForumBodyStyleScope.asDefault).name,
+      ...readerValues,
+      // The canvas is painted outside native paragraphs. Text/inline colors
+      // above remain part of this signature and still replace painted inputs.
       for (final entry in scales.entries) [entry.key, entry.value],
     ];
     return NovelReaderNativeLayoutScope._(
@@ -157,8 +127,56 @@ final class NovelReaderNativeLayoutScope {
       width: width,
       height: height,
       maxNativeHandlesPerPage: pageHandleLimit,
+      fontCollectionGeneration: fontCollectionGeneration,
+      paragraphInputs: jsonEncode([...revisions, ...readerValues]),
       paginationKey:
           'native-$fingerprintRevision-${sha256.convert(utf8.encode(jsonEncode(payload)))}',
+    );
+  }
+
+  /// Recheck existing immutable inputs without a document/style traversal.
+  /// The caller must still own this chapter/box; no callback is retained.
+  /// Custom scalers are caller code, so retirement is checked on each sample.
+  NovelReaderNativeLayoutScope? tryUpdateCanvas({
+    required NovelReaderNativeRenderEnvironment environment,
+    required double width,
+    required double height,
+    required int fontCollectionGeneration,
+    required bool Function() isCurrent,
+  }) {
+    if (!isCurrent() ||
+        width != this.width ||
+        height != this.height ||
+        fontCollectionGeneration != _fontCollectionGeneration) {
+      return null;
+    }
+    final candidate = _freezeReader(environment.reader);
+    if (!isCurrent() ||
+        jsonEncode([
+              ..._nativeRevisions(),
+              ..._readerValues(candidate, fontCollectionGeneration),
+            ]) !=
+            _paragraphInputs) {
+      return null;
+    }
+    for (final entry in (textScaler as _CapturedTextScaler).sizes.entries) {
+      if (!isCurrent()) return null;
+      final scaled = environment.textScaler.scale(entry.key);
+      if (!isCurrent() || scaled != entry.value) return null;
+    }
+    final background = _freezeColor(environment.backgroundColor)!;
+    if (!isCurrent()) return null;
+    return NovelReaderNativeLayoutScope._(
+      chapter: chapter,
+      reader: reader,
+      textScaler: textScaler,
+      backgroundColor: background,
+      width: width,
+      height: height,
+      maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+      fontCollectionGeneration: fontCollectionGeneration,
+      paragraphInputs: _paragraphInputs,
+      paginationKey: paginationKey,
     );
   }
 
@@ -191,6 +209,59 @@ final class NovelReaderNativeLayoutScope {
     );
   }
 }
+
+ForumBodyReaderStyle _freezeReader(ForumBodyReaderStyle original) =>
+    ForumBodyReaderStyle(
+      textStyle: _freezeStyle(original.textStyle),
+      fontRevision: original.fontRevision,
+      linkColor: _freezeColor(original.linkColor)!,
+      textAlign: original.textAlign,
+      textDirection: original.textDirection,
+      paragraphBefore: original.paragraphBefore,
+      paragraphAfter: original.paragraphAfter,
+      firstLineIndent: original.firstLineIndent,
+      policy: ForumBodyStylePolicy(original.policy.values),
+    );
+
+List<int> _nativeRevisions() => [
+  NovelReaderNativeLayoutScope.fingerprintRevision,
+  ForumBodyStyleResolver.revision,
+  ForumBodyTextFlowCursor.revision,
+  ForumBodyBlockFlowCursor.revision,
+  ForumBodyParagraphLayout.backendRevision,
+  ForumBodyTextPageComposer.revision,
+  ForumBodyTextPageSession.inlinePlanRevision,
+  ForumBodyInlineSpanContent.revision,
+  ForumBodyInlineParagraphLayout.revision,
+  ForumBodyRubyContentCursor.revision,
+  ForumBodyRubyGroupLayout.revision,
+  ForumBodyRubySegmentMetrics.revision,
+  ForumBodyRubySoftSpaceMetrics.revision,
+  ForumBodyTextBandContent.revision,
+  ForumBodyTextBandLayout.revision,
+  HtmlDisplayTextProjection.revision,
+  HtmlInlineTextProjection.revision,
+  HtmlTextBandProjection.revision,
+  NovelReaderSourceProvenance.revision,
+];
+
+/// Shared by the full fingerprint and the paint-only check. No native text
+/// or policy input may bypass invalidation just because geometry looks equal.
+List<Object?> _readerValues(ForumBodyReaderStyle reader, int fontGeneration) =>
+    [
+      reader.fontRevision,
+      fontGeneration,
+      _styleValue(reader.textStyle),
+      _colorValue(reader.linkColor),
+      reader.textAlign.name,
+      reader.textDirection.name,
+      reader.paragraphBefore,
+      reader.paragraphAfter,
+      reader.firstLineIndent.value,
+      reader.firstLineIndent.unit.name,
+      for (final property in ForumBodyStyleProperty.values)
+        (reader.policy.values[property] ?? ForumBodyStyleScope.asDefault).name,
+    ];
 
 int _pageHandleLimit(int issued) {
   if (issued <= 0) throw ArgumentError.value(issued, 'maxIssuedLeases');
@@ -234,15 +305,23 @@ final class _CapturedTextScaler extends TextScaler {
   double get textScaleFactor => scale(rootSize) / rootSize;
 }
 
-Color? _freezeColor(Color? color) => color == null
-    ? null
-    : Color.from(
-        alpha: color.a,
-        red: color.r,
-        green: color.g,
-        blue: color.b,
-        colorSpace: color.colorSpace,
-      );
+Color? _freezeColor(Color? color) {
+  if (color == null) return null;
+  final alpha = color.a, red = color.r, green = color.g, blue = color.b;
+  if (!alpha.isFinite || !red.isFinite || !green.isFinite || !blue.isFinite) {
+    throw const NovelReaderNativeLayoutInputException(
+      NovelReaderNativeLayoutInputFailure.opaquePaint,
+    );
+  }
+  // Preserve finite extended-gamut components; do not quantize to ARGB32.
+  return Color.from(
+    alpha: alpha,
+    red: red,
+    green: green,
+    blue: blue,
+    colorSpace: color.colorSpace,
+  );
+}
 
 TextStyle _freezeStyle(TextStyle style) {
   // Paint may hold mutable shaders/filters that have no stable value encoding.

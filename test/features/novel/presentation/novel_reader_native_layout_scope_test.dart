@@ -333,10 +333,6 @@ void main() {
         ),
         await _scope(
           chapter,
-          await _environment(tester, background: Colors.green),
-        ),
-        await _scope(
-          chapter,
           await _environment(tester, foreground: Colors.red),
         ),
         await _scope(
@@ -369,6 +365,174 @@ void main() {
     },
   );
 
+  testWidgets(
+    'canvas colors preserve paragraph identity and full paint precision',
+    (tester) async {
+      final chapter = await _chapter();
+      final base = await _scope(chapter, await _environment(tester));
+      const colors = [
+        Colors.green,
+        Colors.blue,
+        Color.from(alpha: 1, red: .5001, green: .2, blue: .3),
+        Color.from(alpha: 1, red: .5002, green: .2, blue: .3),
+      ];
+      for (final color in colors) {
+        final environment = await _environment(tester, background: color);
+        final scope = await _scope(chapter, environment);
+        expect(scope.paginationKey, base.paginationKey);
+        expect(
+          scope.backgroundColor,
+          Color.from(
+            alpha: color.a,
+            red: color.r,
+            green: color.g,
+            blue: color.b,
+            colorSpace: color.colorSpace,
+          ),
+        );
+        expect(scope.reader.textStyle, base.reader.textStyle);
+        final canvas = base.tryUpdateCanvas(
+          environment: environment,
+          width: base.width,
+          height: base.height,
+          fontCollectionGeneration: 0,
+          isCurrent: () => true,
+        )!;
+        expect(canvas.paginationKey, base.paginationKey);
+        expect(canvas.reader, same(base.reader));
+        expect(canvas.textScaler, same(base.textScaler));
+        expect(canvas.backgroundColor, scope.backgroundColor);
+      }
+      final inlineBackground = await _scope(
+        chapter,
+        await _environment(
+          tester,
+          style: const TextStyle(
+            fontFamily: 'Ahem',
+            letterSpacing: 0,
+            wordSpacing: 0,
+            backgroundColor: Colors.green,
+          ),
+        ),
+      );
+      expect(inlineBackground.paginationKey, isNot(base.paginationKey));
+      final textColor = await _scope(
+        chapter,
+        await _environment(tester, foreground: Colors.green),
+      );
+      expect(textColor.paginationKey, isNot(base.paginationKey));
+    },
+  );
+  testWidgets(
+    'canvas check rejects different inputs, nonlinear samples and retirement',
+    (tester) async {
+      final chapter = await _chapter();
+      final scaler = _BranchScaler(1);
+      final base = await _scope(
+        chapter,
+        await _environment(tester, scaler: scaler),
+      );
+      NovelReaderNativeLayoutScope? update(
+        NovelReaderNativeRenderEnvironment environment, {
+        double? width,
+        double? height,
+        int generation = 0,
+        bool Function()? current,
+      }) => base.tryUpdateCanvas(
+        environment: environment,
+        width: width ?? base.width,
+        height: height ?? base.height,
+        fontCollectionGeneration: generation,
+        isCurrent: current ?? () => true,
+      );
+      final canvas = await _environment(
+        tester,
+        scaler: scaler,
+        background: Colors.blue,
+      );
+      expect(update(canvas), isNotNull);
+      expect(update(canvas, width: base.width + 1), isNull);
+      expect(update(canvas, height: base.height + 1), isNull);
+      expect(update(canvas, generation: 1), isNull);
+      expect(update(canvas, current: () => false), isNull);
+      for (final candidate in [
+        await _environment(tester, scaler: scaler, foreground: Colors.red),
+        await _environment(
+          tester,
+          scaler: scaler,
+          direction: TextDirection.rtl,
+        ),
+        await _environment(tester, scaler: scaler, locale: const Locale('ja')),
+        await _environment(
+          tester,
+          scaler: scaler,
+          preferences: NovelReaderPreferences.defaults().copyWith(fontSize: 25),
+        ),
+        await _environment(
+          tester,
+          scaler: scaler,
+          policy: ForumBodyStylePolicy({
+            ForumBodyStyleProperty.foreground: ForumBodyStyleScope.forceAll,
+          }),
+        ),
+      ]) {
+        expect(update(candidate), isNull);
+      }
+      scaler.ratio = 2;
+      expect(
+        update(canvas),
+        isNull,
+        reason: 'Same scaler object/root factor, changed author size40',
+      );
+      scaler.ratio = double.nan;
+      expect(update(canvas), isNull);
+      scaler.ratio = 1;
+      final token = NovelReaderPaginationCancellationToken();
+      final retiring = await _environment(
+        tester,
+        scaler: _RetiringScaler(token),
+      );
+      expect(update(retiring, current: () => !token.isCancelled), isNull);
+      expect(token.isCancelled, true);
+      final opaque = await _environment(
+        tester,
+        style: TextStyle(background: Paint()),
+      );
+      expect(
+        () => update(opaque),
+        throwsA(isA<NovelReaderNativeLayoutInputException>()),
+      );
+    },
+  );
+  testWidgets(
+    'non-finite canvas values fail both full and paint-only admission',
+    (tester) async {
+      final chapter = await _chapter();
+      final base = await _scope(chapter, await _environment(tester));
+      for (final color in [
+        const Color.from(alpha: double.nan, red: 0, green: 0, blue: 0),
+        const Color.from(alpha: 1, red: double.infinity, green: 0, blue: 0),
+      ]) {
+        final environment = await _environment(tester, background: color);
+        final failure = isA<NovelReaderNativeLayoutInputException>().having(
+          (e) => e.failure,
+          'failure',
+          NovelReaderNativeLayoutInputFailure.opaquePaint,
+        );
+        await expectLater(_scope(chapter, environment), throwsA(failure));
+        expect(
+          () => base.tryUpdateCanvas(
+            environment: environment,
+            width: base.width,
+            height: base.height,
+            fontCollectionGeneration: 0,
+            isCurrent: () => true,
+          ),
+          throwsA(failure),
+        );
+      }
+    },
+  );
   testWidgets(
     'float color precision and caller style lists are snapshotted rather than rounded or retained',
     (tester) async {

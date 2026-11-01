@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -30,6 +32,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import '../test_support/native_reader_activity_signal.dart';
 
 Future<void> _idle() async {}
+const _canvasKey = Key('native-host-canvas');
 
 class _Preparation implements NovelReaderNativePreparationService {
   int calls = 0;
@@ -166,63 +169,66 @@ Future<void> _show(
             child: SizedBox(
               width: width,
               height: height,
-              child: NovelReaderNativeLayoutHost(
-                key: const Key('host'),
-                owner: reader.owner,
-                sourceId: reader.episodeId,
-                rawHtml: rawHtml ?? reader.rawHtml,
-                semanticDocument: semantic ?? reader.semantic,
-                preferences: preferences ?? reader.preferences,
-                resolvedFont: ResolvedFont.system,
-                progressSnapshot: snapshot ?? reader.snapshot,
-                readingAuthorityIdentity: authority ?? reader.authority,
-                active: active,
-                activity: activitySignal,
-                navigationController: navigation,
-                onTurnToAdjacentChapter: onChapter,
-                previousChapterTitle: previousTitle,
-                nextChapterTitle: nextTitle,
-                chapterTurnIsInFlight: chapterInFlight,
-                chapterTurnPolicy: chapterPolicy,
-                onChapterTurnHintChanged: reader.chapterHints.add,
-                pageSeekRequest: seek,
-                navigationRequest: anchorNavigation,
-                startsAtBeginning: startsAtBeginning,
-                chapterEntryRequest: entry,
-                onChapterEntryApplied: (request) {
-                  reader.appliedEntries.add(request);
-                  reader.onEntryApplied?.call();
-                },
-                onChapterEntryRetired: reader.retiredEntries.add,
-                onNavigationFinished: (request, outcome) =>
-                    reader.anchorResults.add((request, outcome)),
-                onPageSeekFinished: (request, outcome) =>
-                    reader.seekResults.add((request, outcome)),
-                preparationService: reader.service,
-                onPositionChanged: (position) {
-                  reader.positions.add(position);
-                  reader.onPosition?.call(position);
-                },
-                onStatusChanged: reader.statuses.add,
-                onContentReady: () => reader.ready++,
-                onContentTerminal: () => reader.terminal++,
-                onScrollActivityChanged: reader.activity.add,
-                retryRevision: retry,
-                scheduler: scheduler,
-                sessionLimits:
-                    limits ??
-                    const ForumBodyTextPageSessionLimits(
-                      maxPages: 10000,
-                      maxFragments: 100000,
-                      maxParagraphs: 16384,
-                      maxTextCodeUnits: 1024 * 1024,
-                      maxRuns: 100000,
-                      maxIssuedLeases: 512,
-                    ),
-                idleScheduler: _idle,
-                performance: performance,
-                placeholderBuilder: (context, status) =>
-                    SizedBox(key: ValueKey(status.phase)),
+              child: RepaintBoundary(
+                key: _canvasKey,
+                child: NovelReaderNativeLayoutHost(
+                  key: const Key('host'),
+                  owner: reader.owner,
+                  sourceId: reader.episodeId,
+                  rawHtml: rawHtml ?? reader.rawHtml,
+                  semanticDocument: semantic ?? reader.semantic,
+                  preferences: preferences ?? reader.preferences,
+                  resolvedFont: ResolvedFont.system,
+                  progressSnapshot: snapshot ?? reader.snapshot,
+                  readingAuthorityIdentity: authority ?? reader.authority,
+                  active: active,
+                  activity: activitySignal,
+                  navigationController: navigation,
+                  onTurnToAdjacentChapter: onChapter,
+                  previousChapterTitle: previousTitle,
+                  nextChapterTitle: nextTitle,
+                  chapterTurnIsInFlight: chapterInFlight,
+                  chapterTurnPolicy: chapterPolicy,
+                  onChapterTurnHintChanged: reader.chapterHints.add,
+                  pageSeekRequest: seek,
+                  navigationRequest: anchorNavigation,
+                  startsAtBeginning: startsAtBeginning,
+                  chapterEntryRequest: entry,
+                  onChapterEntryApplied: (request) {
+                    reader.appliedEntries.add(request);
+                    reader.onEntryApplied?.call();
+                  },
+                  onChapterEntryRetired: reader.retiredEntries.add,
+                  onNavigationFinished: (request, outcome) =>
+                      reader.anchorResults.add((request, outcome)),
+                  onPageSeekFinished: (request, outcome) =>
+                      reader.seekResults.add((request, outcome)),
+                  preparationService: reader.service,
+                  onPositionChanged: (position) {
+                    reader.positions.add(position);
+                    reader.onPosition?.call(position);
+                  },
+                  onStatusChanged: reader.statuses.add,
+                  onContentReady: () => reader.ready++,
+                  onContentTerminal: () => reader.terminal++,
+                  onScrollActivityChanged: reader.activity.add,
+                  retryRevision: retry,
+                  scheduler: scheduler,
+                  sessionLimits:
+                      limits ??
+                      const ForumBodyTextPageSessionLimits(
+                        maxPages: 10000,
+                        maxFragments: 100000,
+                        maxParagraphs: 16384,
+                        maxTextCodeUnits: 1024 * 1024,
+                        maxRuns: 100000,
+                        maxIssuedLeases: 512,
+                      ),
+                  idleScheduler: _idle,
+                  performance: performance,
+                  placeholderBuilder: (context, status) =>
+                      SizedBox(key: ValueKey(status.phase)),
+                ),
               ),
             ),
           ),
@@ -239,7 +245,352 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
   expect(tester.takeException(), isNull);
 }
 
+Future<List<int>> _canvasPixel(WidgetTester tester, {int? x, int? y}) async {
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(_canvasKey),
+  );
+  final image = (await tester.runAsync(() => boundary.toImage(pixelRatio: 1)))!;
+  try {
+    final bytes = (await tester.runAsync(
+      () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+    ))!;
+    // A one-row fixture leaves this corner outside all text glyphs.
+    final offset =
+        ((y ?? image.height - 1) * image.width + (x ?? image.width - 1)) * 4;
+    return bytes.buffer.asUint8List(bytes.offsetInBytes + offset, 4).toList();
+  } finally {
+    image.dispose();
+  }
+}
+
 void main() {
+  testWidgets(
+    'canvas context change preserves a moving tap through actual arrival',
+    (tester) async {
+      final reader = _Reader();
+      final navigation = NovelReaderPagedNavigationController();
+      addTearDown(navigation.dispose);
+      final theme = ThemeData.light().copyWith(
+        scaffoldBackgroundColor: const Color(0xff00ff00),
+      );
+      await _show(
+        tester,
+        reader,
+        theme: theme,
+        navigation: navigation,
+        startsAtBeginning: true,
+      );
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final reports = reader.positions.length;
+      expect(navigation.turnNext(), true);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 40));
+      final pages = tester.widget<PageView>(find.byType(PageView)).controller!;
+      final before = pages.page!;
+      expect(before, inExclusiveRange(0.0, 1.0));
+      final revision = controller.navigationRevision;
+      await _show(
+        tester,
+        reader,
+        theme: theme.copyWith(scaffoldBackgroundColor: const Color(0xff0000ff)),
+        navigation: navigation,
+        startsAtBeginning: true,
+      );
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.navigationRevision, revision);
+      expect(controller.hasPendingNavigation, true);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(pages.page!, greaterThan(before));
+      expect(pages.page!, lessThan(1));
+      await tester.pumpAndSettle();
+      expect(controller.visiblePageIndex, 1);
+      expect(reader.positions, hasLength(reports + 1));
+      expect(reader.positions.last.pageIndex, 1);
+      await _unmount(tester, reader);
+    },
+  );
+  testWidgets(
+    'canvas context change preserves an outstanding semantic navigation request',
+    (tester) async {
+      final reader = _Reader();
+      var held = false;
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      final theme = ThemeData.light().copyWith(
+        scaffoldBackgroundColor: const Color(0xff00ff00),
+      );
+      await _show(tester, reader, theme: theme, scheduler: scheduler);
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final actual = reader.positions.last;
+      final reports = reader.positions.length;
+      held = true;
+      final request = NovelReaderAnchorNavigationRequest(
+        requestId: 1,
+        anchor: actual.anchor.copyWith(textOffset: 325),
+      );
+      await _show(
+        tester,
+        reader,
+        theme: theme,
+        scheduler: scheduler,
+        anchorNavigation: request,
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(controller.hasPendingNavigation, true);
+      final revision = controller.navigationRevision;
+      await _show(
+        tester,
+        reader,
+        theme: theme.copyWith(scaffoldBackgroundColor: const Color(0xff0000ff)),
+        scheduler: scheduler,
+        anchorNavigation: request,
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(reader.statuses.last.controller, same(controller));
+      expect(controller.navigationRevision, revision);
+      expect(controller.hasPendingNavigation, true);
+      expect(reader.positions, hasLength(reports));
+      expect(reader.positions.last, same(actual));
+      expect(reader.anchorResults, isEmpty);
+      held = false;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(controller.visiblePageIndex, 8);
+      expect(reader.positions.last.pageIndex, 8);
+      expect(reader.anchorResults, [
+        (request, NovelReaderNavigationOutcome.arrived),
+      ]);
+      await _unmount(tester, reader);
+    },
+  );
+  for (final suspended in [false, true]) {
+    // Canvas paint never changes the normal activity/resume qualification.
+    testWidgets(
+      'accepted canvas paint reuses pages and native resources (suspended=$suspended)',
+      (tester) async {
+        final reader = _Reader(
+          html: '<p><span style="background-color:#ffff00">a b</span></p>',
+        );
+        final theme = ThemeData.light().copyWith(
+          scaffoldBackgroundColor: const Color(0xff00ff00),
+        );
+        final nextTheme = theme.copyWith(
+          scaffoldBackgroundColor: const Color(0xff0000ff),
+        );
+        await _show(tester, reader, theme: theme, startsAtBeginning: true);
+        await tester.pumpAndSettle();
+        final controller = reader.statuses.last.controller!;
+        final page = controller.visiblePageIndex!;
+        final view = controller.viewForPage(page);
+        final reports = reader.positions.length;
+        final surface = tester.renderObject(
+          find.byType(ForumBodyParagraphSurface).first,
+        );
+        final handle = reader.owner.acquireCache();
+        final builds = handle.cache.layoutBuildCount;
+        final pictures = handle.cache.pictureBuildCount;
+        final expectedPosition = reader.positions.last.anchor;
+        final userNavigation = reader.positions.last.hasUserNavigated;
+        final compatibilityRestore =
+            reader.positions.last.isReadOnlyCompatibilityRestore;
+        expect(await _canvasPixel(tester), [0, 255, 0, 255]);
+        expect(await _canvasPixel(tester, x: 15, y: 5), [255, 255, 0, 255]);
+        await _show(
+          tester,
+          reader,
+          theme: nextTheme,
+          active: !suspended,
+          startsAtBeginning: true,
+        );
+        await tester.pumpAndSettle();
+        if (suspended) {
+          expect(await _canvasPixel(tester), [0, 255, 0, 255]);
+          await _show(
+            tester,
+            reader,
+            theme: nextTheme,
+            startsAtBeginning: true,
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(await _canvasPixel(tester), [0, 0, 255, 255]);
+        expect(await _canvasPixel(tester, x: 15, y: 5), [255, 255, 0, 255]);
+        expect(reader.statuses.last.controller, same(controller));
+        expect(controller.visiblePageIndex, page);
+        // Suspension may release/revalidate view aliases as usual; it must not
+        // rebuild native layouts/pictures merely to accept a canvas color.
+        if (!suspended) {
+          expect(controller.viewForPage(page), same(view));
+          expect(
+            tester.renderObject(find.byType(ForumBodyParagraphSurface).first),
+            same(surface),
+          );
+        }
+        expect(reader.positions, hasLength(reports + (suspended ? 1 : 0)));
+        final actualPosition = reader.positions.last;
+        expect(
+          (
+            actualPosition.anchor.nodeId,
+            actualPosition.anchor.textOffset,
+            actualPosition.anchor.formatVersion,
+            actualPosition.anchor.textIdentity,
+          ),
+          (
+            expectedPosition.nodeId,
+            expectedPosition.textOffset,
+            expectedPosition.formatVersion,
+            expectedPosition.textIdentity,
+          ),
+        );
+        expect(
+          actualPosition.isReadOnlyCompatibilityRestore,
+          compatibilityRestore,
+        );
+        expect(
+          actualPosition.hasUserNavigated,
+          suspended ? false : userNavigation,
+        );
+        expect(handle.cache.layoutBuildCount, builds);
+        expect(handle.cache.pictureBuildCount, pictures);
+        expect(reader.service.calls, 1);
+        final activeView = controller.viewForPage(page);
+        final acceptedReports = reader.positions.length;
+        final activeSurface = tester.renderObject(
+          find.byType(ForumBodyParagraphSurface).first,
+        );
+        await _show(tester, reader, theme: theme, startsAtBeginning: true);
+        await tester.pumpAndSettle();
+        expect(await _canvasPixel(tester), [0, 255, 0, 255]);
+        expect(controller.viewForPage(page), same(activeView));
+        expect(
+          tester.renderObject(find.byType(ForumBodyParagraphSurface).first),
+          same(activeSurface),
+        );
+        expect(reader.positions, hasLength(acceptedReports));
+        expect(handle.cache.layoutBuildCount, builds);
+        expect(handle.cache.pictureBuildCount, pictures);
+        // Paragraph paint is a separate input: it must replace native objects,
+        // even though the canvas and all geometric preferences are unchanged.
+        await _show(
+          tester,
+          reader,
+          theme: nextTheme.copyWith(
+            colorScheme: nextTheme.colorScheme.copyWith(
+              onSurface: const Color(0xff123456),
+            ),
+          ),
+          startsAtBeginning: true,
+        );
+        await tester.pumpAndSettle();
+        expect(reader.statuses.last.controller, isNot(same(controller)));
+        expect(await _canvasPixel(tester, x: 5, y: 5), [18, 52, 86, 255]);
+        expect(await _canvasPixel(tester, x: 15, y: 5), [255, 255, 0, 255]);
+        expect(handle.cache.layoutBuildCount, greaterThan(builds));
+        expect(
+          tester
+              .widget<ForumBodyParagraphSurface>(
+                find.byType(ForumBodyParagraphSurface).first,
+              )
+              .lease
+              .content
+              .style
+              .textStyle
+              .color,
+          const Color(0xff123456),
+        );
+        handle.release();
+        await _unmount(tester, reader);
+      },
+    );
+  }
+  testWidgets(
+    'canvas paint neither extends a target deadline nor retries its failure',
+    (tester) async {
+      final reader = _Reader();
+      var held = false;
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      final scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          if (held) {
+            await gate.future;
+          } else {
+            await WidgetsBinding.instance.endOfFrame;
+          }
+        },
+      );
+      const policy = NovelReaderPaginationPerformancePolicy(
+        targetPageWait: Duration(seconds: 5),
+        backgroundIdle: Duration(seconds: 20),
+      );
+      final theme = ThemeData.light().copyWith(
+        scaffoldBackgroundColor: const Color(0xff00ff00),
+      );
+      await _show(
+        tester,
+        reader,
+        theme: theme,
+        scheduler: scheduler,
+        performance: policy,
+      );
+      await tester.pumpAndSettle();
+      final controller = reader.statuses.last.controller!;
+      final reports = reader.positions.length;
+      held = true;
+      expect(controller.requestPage(8), true);
+      await tester.pump(const Duration(seconds: 3));
+      await _show(
+        tester,
+        reader,
+        theme: theme.copyWith(scaffoldBackgroundColor: const Color(0xff0000ff)),
+        scheduler: scheduler,
+        performance: policy,
+      );
+      await tester.pump(const Duration(seconds: 3));
+      final error = controller.error;
+      expect(
+        error,
+        isA<NovelReaderPaginationException>().having(
+          (e) => e.code,
+          'code',
+          'targetPageWaitExceeded',
+        ),
+      );
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.positions, hasLength(reports));
+      await _show(
+        tester,
+        reader,
+        theme: theme.copyWith(scaffoldBackgroundColor: const Color(0xffff0000)),
+        scheduler: scheduler,
+        performance: policy,
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(controller.error, same(error));
+      expect(reader.statuses.last.controller, same(controller));
+      expect(reader.positions, hasLength(reports));
+      held = false;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(reader.positions, hasLength(reports));
+      await _unmount(tester, reader);
+    },
+  );
   testWidgets(
     'withdrawing a consumed beginning does not revalidate live paint',
     (tester) async {

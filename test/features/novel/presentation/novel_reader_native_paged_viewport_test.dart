@@ -81,6 +81,7 @@ Widget _reader(
   bool Function(NovelReaderChapterEdge)? onChapter,
   bool chapterInFlight = false,
   bool active = true,
+  Color? background,
 }) => Directionality(
   textDirection: TextDirection.ltr,
   child: Align(
@@ -94,6 +95,7 @@ Widget _reader(
         readingAuthorityIdentity: authority,
         reverse: reverse,
         active: active,
+        backgroundColor: background,
         navigationController: navigation,
         onTurnToAdjacentChapter: onChapter,
         chapterTurnIsInFlight: chapterInFlight,
@@ -139,6 +141,100 @@ Future<void> _startTapMotion(WidgetTester tester, int from) async {
 }
 
 void main() {
+  testWidgets(
+    'canvas updates follow the accepted controller and retain retired paint',
+    (tester) async {
+      const green = Color(0xff00ff00),
+          blue = Color(0xff0000ff),
+          red = Color(0xffff0000),
+          purple = Color(0xffaa00aa);
+      final first = _fixture();
+      final oldController = _controller(first, offset: 45);
+      final reports = <NovelReaderPaginationPosition>[];
+      final owner = Object(), authority = Object();
+      Finder color(Color value) => find.byWidgetPredicate(
+        (widget) => widget is ColoredBox && widget.color == value,
+      );
+      await tester.pumpWidget(
+        _reader(oldController, owner, authority, reports, background: green),
+      );
+      await tester.pumpAndSettle();
+      expect(color(green), findsWidgets);
+      final next = _fixture(
+        width: 60,
+        layoutId: 'new-canvas',
+        cache: first.cache,
+      );
+      final frames = _FrameGate();
+      final controller = _controller(next, offset: 45, frames: frames);
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          owner,
+          authority,
+          reports,
+          width: 60,
+          background: blue,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(color(green), findsWidgets);
+      expect(color(blue), findsNothing);
+      oldController.close();
+      await tester.pumpAndSettle();
+      expect(color(green), findsWidgets);
+      frames.release();
+      await tester.pumpAndSettle();
+      expect(color(blue), findsWidgets);
+      expect(color(green), findsNothing);
+      final count = reports.length;
+      final builds = first.cache.layoutBuildCount;
+      final pictures = first.cache.pictureBuildCount;
+      final surface = tester.renderObject(
+        find.byType(ForumBodyParagraphSurface).first,
+      );
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          owner,
+          authority,
+          reports,
+          width: 60,
+          active: false,
+          background: red,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(color(red), findsWidgets);
+      expect(color(blue), findsNothing);
+      expect(
+        tester.renderObject(find.byType(ForumBodyParagraphSurface).first),
+        same(surface),
+      );
+      expect(reports, hasLength(count));
+      expect(first.cache.layoutBuildCount, builds);
+      expect(first.cache.pictureBuildCount, pictures);
+      controller.close();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          owner,
+          authority,
+          reports,
+          width: 60,
+          active: false,
+          background: purple,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(color(red), findsWidgets);
+      expect(color(purple), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(first.cache.activeLeases, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final reverse in [false, true]) {
     testWidgets(
       'a ready neighbor begins motion without an extra post-frame delay (reverse=$reverse)',

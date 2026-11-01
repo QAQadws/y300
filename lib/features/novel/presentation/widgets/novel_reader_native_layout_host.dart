@@ -159,6 +159,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   int _readyEpoch = -1;
   int _terminalEpoch = -1;
   bool _needsLayout = true;
+  bool _contextOnlyLayout = false;
   bool _busy = true;
   bool _empty = false;
   bool _force = false;
@@ -191,9 +192,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _finishNavigation(NovelReaderNavigationOutcome.retired);
+    if (!_needsLayout) _contextOnlyLayout = true;
     _needsLayout = true;
-    _busy = true;
   }
 
   @override
@@ -325,6 +325,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         hintChanged ||
         resourcesChanged ||
         beginningChanged) {
+      _contextOnlyLayout = false;
       _needsLayout = true;
       _busy = true;
       _force =
@@ -352,6 +353,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     if (widget.owner.isClosed) _closeAll();
     if (_current?.handle.isCurrent == false) _stop(_current);
     setState(() {
+      _contextOnlyLayout = false;
       _needsLayout = true;
       _busy = true;
     });
@@ -368,6 +370,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     _lastActive = active;
     _pending?.cancel();
     _epoch++;
+    _contextOnlyLayout = false;
     _needsLayout = true;
     _busy = active;
     if (!active) {
@@ -435,6 +438,49 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       request.handle.isCurrent &&
       identical(request.authority, widget.readingAuthorityIdentity);
 
+  void _tryContextCanvas(BuildContext context, Size box) {
+    final request = _current;
+    if (!_contextOnlyLayout ||
+        !_needsLayout ||
+        _box != box ||
+        _force ||
+        _pending != null ||
+        request == null ||
+        !_live(request)) {
+      return;
+    }
+    final epoch = _epoch;
+    bool current() =>
+        mounted &&
+        _contextOnlyLayout &&
+        _needsLayout &&
+        _epoch == epoch &&
+        _live(request) &&
+        !request.controller.isClosed;
+    try {
+      final environment = NovelReaderNativeRenderEnvironment.capture(
+        context,
+        preferences: widget.preferences,
+        resolvedFont: widget.resolvedFont,
+        policy: widget.stylePolicy,
+      );
+      final updated = request.scope.tryUpdateCanvas(
+        environment: environment,
+        width: box.width,
+        height: box.height,
+        fontCollectionGeneration: widget.owner.fontGeneration,
+        isCurrent: current,
+      );
+      if (updated == null || !current()) return;
+      request.scope = updated;
+      _needsLayout = false;
+      _contextOnlyLayout = false;
+    } catch (_) {
+      // The normal configuration path owns errors and recovery. This check
+      // never suppresses invalid input or creates a new reading generation.
+    }
+  }
+
   void _notifyStatus() {
     final request = _current;
     if (request == null || !_live(request)) _chapterHintChanged(null);
@@ -493,6 +539,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           _epoch++;
           _box = box;
           _needsLayout = false;
+          _contextOnlyLayout = false;
           _busy = false;
           _error = const NovelReaderNativeLayoutInputException(
             NovelReaderNativeLayoutInputFailure.geometry,
@@ -507,14 +554,21 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             const SizedBox.shrink();
       }
       _invalidBox = false;
+      _tryContextCanvas(context, box);
+      if (widget.owner.isClosed) {
+        return widget.placeholderBuilder?.call(context, _status) ??
+            const SizedBox.shrink();
+      }
       if (!_active) {
         _pending?.cancel();
         _busy = false;
         _needsLayout = true;
+        _contextOnlyLayout = false;
       } else if (_needsLayout || _box != box) {
         _finishNavigation(NovelReaderNavigationOutcome.retired);
         _box = box;
         _needsLayout = false;
+        _contextOnlyLayout = false;
         _busy = true;
         _empty = false;
         _error = null;
@@ -686,6 +740,9 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           identical(old.owner, config.owner) &&
           old.handle.isCurrent) {
         old.epoch = epoch;
+        // A matching paragraph signature can carry a newer canvas color.
+        // Keep the session/views, but publish the accepted immutable inputs.
+        old.scope = scope;
         old.reverse =
             config.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
         old.controller.resume();
@@ -1198,7 +1255,7 @@ class _LayoutRequest {
     this.entry,
     this.beginning,
   );
-  final NovelReaderNativeLayoutScope scope;
+  NovelReaderNativeLayoutScope scope;
   final ForumBodyTextPageSession session;
   final NovelReaderNativePagedController controller;
   final NovelReaderNativeCacheHandle handle;

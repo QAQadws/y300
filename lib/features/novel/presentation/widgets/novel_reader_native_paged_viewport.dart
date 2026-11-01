@@ -109,6 +109,22 @@ class _NovelReaderNativePagedViewportState
       _unbind();
       _bind();
     }
+    final displayed = _displayed;
+    if (!controllerChanged &&
+        !widget.controller.isClosed &&
+        displayed != null &&
+        identical(displayed.controller, widget.controller) &&
+        oldWidget.backgroundColor != widget.backgroundColor) {
+      // Only repaint the accepted current delivery. A pending/failed replacement
+      // must retain the previous controller's canvas with its painted content.
+      _displayed = (
+        controller: displayed.controller,
+        width: displayed.width,
+        height: displayed.height,
+        page: displayed.page,
+        background: widget.backgroundColor,
+      );
+    }
     _startIfActive();
     if (controllerChanged || ownerChanged || !widget.active) {
       _publishHint(null);
