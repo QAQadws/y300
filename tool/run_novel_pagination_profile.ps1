@@ -7,7 +7,7 @@ param(
     [switch]$InlineSoftSpace,
     [ValidateSet('native', 'legacy', 'both')]
     [string]$Backend = 'both',
-    [ValidateSet('baseline', 'ruby-gaps')]
+    [ValidateSet('baseline', 'ruby-gaps', 'language')]
     [string]$Corpus = 'baseline',
     [switch]$PrepareOnly
 )
@@ -28,7 +28,7 @@ if ($InlineSoftSpace -and -not $MainPage) {
     throw '-InlineSoftSpace requires -MainPage.'
 }
 if ($Corpus -ne 'baseline' -and -not $MainPage) {
-    throw '-Corpus ruby-gaps requires -MainPage.'
+    throw "-Corpus $Corpus requires -MainPage."
 }
 
 function Read-Utf8([string]$Path) {

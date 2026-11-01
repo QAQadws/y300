@@ -38,6 +38,19 @@ void main() {
         'ruby-gaps-rtl',
         'ruby-gaps-dense',
       ]);
+      expect(
+        novelMainPageProfileFixtures('language'),
+        same(novelProfileLanguageFixtures),
+      );
+      expect(novelProfileLanguageFixtures.map((f) => f.name), [
+        'language-runs',
+        'language-ruby-ltr',
+        'language-ruby-rtl',
+      ]);
+      for (final fixture in novelProfileLanguageFixtures) {
+        expect(novelProfileExpectedLanguages(fixture.name), isNotEmpty);
+      }
+      expect(novelProfileExpectedLanguages('safe'), isNull);
       expect(() => novelMainPageProfileFixtures(''), throwsArgumentError);
       expect(
         () => novelMainPageProfileFixtures('ruby-gap'),
@@ -161,20 +174,22 @@ void main() {
   });
 
   for (final scenario in [
-    (native: false, mixed: false, gap: null),
-    (native: true, mixed: false, gap: null),
-    (native: true, mixed: true, gap: null),
+    (native: false, mixed: false, fixture: null),
+    (native: true, mixed: false, fixture: null),
+    (native: true, mixed: true, fixture: null),
     for (final fixture in novelProfileRubyGapFixtures)
-      (native: true, mixed: true, gap: fixture),
+      (native: true, mixed: true, fixture: fixture),
+    for (final fixture in novelProfileLanguageFixtures)
+      (native: true, mixed: true, fixture: fixture),
   ]) {
     final native = scenario.native;
     testWidgets(
-      'observes real ${native ? 'native' : 'legacy'} page and exit (mixed=${scenario.mixed}, gap=${scenario.gap?.name})',
+      'observes real ${native ? 'native' : 'legacy'} page and exit (mixed=${scenario.mixed}, fixture=${scenario.fixture?.name})',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final data = NovelMainPageProfileData();
         final source = data.add(
-          scenario.gap?.html ??
+          scenario.fixture?.html ??
               (scenario.mixed
                   ? novelProfileComplexHtml
                   : List.filled(
@@ -214,12 +229,12 @@ void main() {
         Future<ProfileReaderObservation> wait(
           bool Function(ProfileReaderObservation) accepts,
         ) async {
-          for (var i = 0; i < (scenario.gap == null ? 200 : 3000); i++) {
+          for (var i = 0; i < (scenario.fixture == null ? 200 : 3000); i++) {
             // Native work slices use real Stopwatch time. Do not turn every
             // short yield into 20 ms of fake stall under parallel tester load.
             // Performance and recovery deadlines use the real profile suite.
             await tester.pump(
-              Duration(milliseconds: scenario.gap == null ? 20 : 1),
+              Duration(milliseconds: scenario.fixture == null ? 20 : 1),
             );
             if (scenario.mixed) {
               // The production large-chapter executor uses Isolate.run, whose
@@ -265,6 +280,19 @@ void main() {
         }
 
         var observation = await wait((value) => value.ready && value.complete);
+        void checkLanguages(ProfileReaderObservation current) {
+          final expected = novelProfileExpectedLanguages(
+            scenario.fixture?.name ?? '',
+          );
+          if (expected == null) return;
+          final target = current.nativeController!.viewForPage(current.page!)!;
+          expect(
+            observeNativeProfileLanguages(key.currentContext!, target),
+            expected,
+          );
+        }
+
+        checkLanguages(observation);
         expect(observation.count, greaterThan(1));
         expect(observation.businessConfirmed, isTrue);
         if (native) {
@@ -289,7 +317,8 @@ void main() {
         // Read-only reflow may keep the old business key. The tool observes the
         // new mounted layout without asking the reader to confirm a new anchor.
         expect(observation.paginationKey, isNot(originalKey));
-        for (final page in scenario.gap == null ? [1] : [1, 2, 3, 2, 1]) {
+        checkLanguages(observation);
+        for (final page in scenario.fixture == null ? [1] : [1, 2, 3, 2, 1]) {
           (page > observation.page!
               ? observation.overlay!.onRightTap!
               : observation.overlay!.onLeftTap!)();
@@ -297,13 +326,27 @@ void main() {
             (value) =>
                 value.ready && value.businessConfirmed && value.page == page,
           );
+          checkLanguages(observation);
         }
         final owner = observation.nativeOwner;
+        final lastNativeView = observation.nativeController?.viewForPage(
+          observation.page!,
+        );
         final legacyReleased = observation.legacyCachesReleased;
         navigator.currentState!.pop();
         await tester.pumpAndSettle();
         await popped;
         expect(key.currentContext, isNull);
+        if (novelProfileExpectedLanguages(scenario.fixture?.name ?? '') !=
+            null) {
+          expect(
+            () => observeNativeProfileLanguages(
+              navigator.currentContext!,
+              lastNativeView!,
+            ),
+            throwsStateError,
+          );
+        }
         if (native) {
           expect(owner!.isClosed, isTrue);
           expect(owner.activeCacheHandles, 0);

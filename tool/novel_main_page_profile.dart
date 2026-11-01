@@ -382,6 +382,30 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       windowOpen = false;
     }
 
+    void checkLanguages(String phase, ProfileReaderObservation observation) {
+      final expected = novelProfileExpectedLanguages(fixture.name);
+      if (!native || expected == null) return;
+      final readerContext = key.currentContext;
+      final target = observation.nativeController?.viewForPage(
+        observation.page!,
+      );
+      if (readerContext == null || target == null) {
+        throw StateError('Native language delivery is missing');
+      }
+      final actual = observeNativeProfileLanguages(readerContext, target);
+      _emit({
+        'event': 'page_languages',
+        'run': id,
+        'phase': phase,
+        'page': observation.page,
+        'expected': expected.toList()..sort(),
+        'actual': actual.toList()..sort(),
+      });
+      if (!setEquals(actual, expected)) {
+        throw StateError('Mounted native language inputs differ from corpus');
+      }
+    }
+
     try {
       begin('open');
       unawaited(navigator.push(route));
@@ -394,6 +418,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       if (native) _emitPageWork(id, 'first', latest);
       run['firstReadableWasPartial'] = !latest.complete;
       end();
+      checkLanguages('first', latest);
       if (!latest.complete) {
         begin('background');
         latest = await _wait(
@@ -445,6 +470,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         }
         end();
         run['completedTurns'] = i + 1;
+        checkLanguages('turn-$i', latest);
       }
       run['commandToSettledUs'] = profileDistribution(turnUs);
       if (reflow) {
@@ -462,6 +488,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         run['reflowReadableUs'] = reflowClock.elapsedMicroseconds;
         if (native) _emitPageWork(id, 'reflow', latest);
         end();
+        checkLanguages('reflow', latest);
       }
       run['passed'] = true;
     } catch (error) {

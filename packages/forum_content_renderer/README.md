@@ -305,6 +305,18 @@ tool/run_novel_pagination_profile.ps1 -Device <设备 ID> -MainPage -Backend bot
 不能把预期超限混进成功矩阵，也不能扩大预算使它通过。机器记录包含 corpus 名称，
 缺少任一样本或未完成翻页均不能通过 suite。
 
+作者语言使用独立的 `-Corpus language`：普通多语言 runs、LTR ruby 和 RTL ruby 分别
+采样，保留既有 baseline/ruby-gaps 内容。覆盖语言继承、脚本/地区、空值退役、不同注音
+语言与独立文字方向，沿相同正式页面打开、重排、可见翻页及退出门槛验证。
+系统字体的实际 fallback/几何归同机观测，语言因果性另由测试专用 locl 字形核对。
+语言矩阵在计时窗口外，只读核对当前确切 mounted PageView 的 typed native 输入并记录
+page_languages；失配或页面未挂载会使该场景失败。不通过获取租约或准备邻页补充结果，
+也不把输入集合当作可见字形 coverage 证明，原有可见/位置核对继续独立执行。
+
+```powershell
+tool/run_novel_pagination_profile.ps1 -Device <设备 ID> -MainPage -Backend native -Corpus language
+```
+
 真实页面任务随已完成交付附带不可变 `NovelReaderNativePageWork` 数值记录。它只记录
 准备/覆盖阶段的 wall 时间、同步 advance 时间、主动等待下一帧次数与原生排字/录图次数，不持有
 内容、Context、owner 或租约，也不参与覆盖证明、恢复和布局 identity。同步调用耗时

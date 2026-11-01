@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_overlay_scaffold.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_page_work.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_page_view.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
@@ -31,6 +33,46 @@ final class ProfileReaderObservation {
   bool Function()? legacyCachesReleased;
   NovelReaderNativePageWork? nativeWork;
   NovelReaderNativePagedController? nativeController;
+}
+
+/// Read current typed inputs only for the exact mounted delivery, outside frame
+/// timing windows. This proves input propagation, not glyph coverage/locl by
+/// itself. It never acquires handles or asks an unmounted neighbor to prepare.
+Set<String> observeNativeProfileLanguages(
+  BuildContext context,
+  NovelReaderNativePageView target,
+) {
+  final languages = <String>{};
+  var found = false;
+  void collect(Element element) {
+    final widget = element.widget;
+    final runs = switch (widget) {
+      ForumBodyParagraphSurface() when widget.lease.isActive =>
+        widget.lease.content.runs,
+      ForumBodyInlineParagraphSurface() when widget.view.isActive =>
+        widget.view.content.runs,
+      _ => const <ForumBodyParagraphRun>[],
+    };
+    for (final run in runs) {
+      final locale = run.style.textStyle.locale;
+      languages.add(locale?.toLanguageTag() ?? 'unspecified');
+    }
+    element.visitChildElements(collect);
+  }
+
+  void find(Element element) {
+    if (element.widget.key case ObjectKey(value: final value)
+        when identical(value, target)) {
+      found = true;
+      collect(element);
+    } else {
+      element.visitChildElements(find);
+    }
+  }
+
+  context.visitChildElements(find);
+  if (!found) throw StateError('Native language delivery is not mounted');
+  return Set.unmodifiable(languages);
 }
 
 bool profileVisiblePageAccepted({
