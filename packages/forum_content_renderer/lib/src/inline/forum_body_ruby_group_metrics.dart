@@ -7,6 +7,8 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 
+part 'forum_body_ruby_numeric_work.dart';
+
 /// Numeric geometry for one original annotation rank. Empty positions remain
 /// in the list; they neither borrow a glyph handle nor reserve a gap by itself.
 final class ForumBodyRubyAnnotationMetrics {
@@ -180,63 +182,24 @@ final class ForumBodyRubyGroupMetrics {
   /// Only an actual annotation shift needs another parent layout. Padding a
   /// shorter unannotated column would not change its paint relative to baseline.
   bool needsLevelAlignment(ForumBodyRubyLevelMetrics level) {
-    if (!level.contains(this)) _invalid();
-    final positions = level._positions();
-    for (final (index, annotation) in annotations.indexed) {
-      if (annotation.hasAnnotation &&
-          ((annotation.fontBaseline + annotation.offset.dy - baseline) -
-                      positions[index].baseline)
-                  .abs() >
-              geometryTolerance) {
-        return true;
-      }
+    final work = ForumBodyRubyColumnAlignment(column: this, level: level);
+    while (!work.isComplete) {
+      work.advance(maxParts: 32);
     }
-    return false;
+    return work.hasChanges;
   }
 
   /// Reuses the same measured glyph baselines; no text is shaped or scaled.
   ForumBodyRubyGroupMetrics alignedTo(ForumBodyRubyLevelMetrics level) {
-    if (!level.contains(this)) _invalid();
-    return _positioned(level);
-  }
-
-  ForumBodyRubyGroupMetrics _positioned(ForumBodyRubyLevelMetrics level) {
-    final positions = level._positions();
-    var over = level.baseAscent;
-    var under = level.baseDescent;
-    for (final position in positions) {
-      over = math.max(over, -position.top);
-      under = math.max(under, position.bottom);
-    }
-    final height = over + under;
-    if (!height.isFinite ||
-        height <= 0 ||
-        height > 16384 ||
-        !over.isFinite ||
-        over < 0 ||
-        over > height) {
-      _invalid();
-    }
-    return ForumBodyRubyGroupMetrics._(
-      size: Size(size.width, height),
-      baseline: over,
-      baseOffset: Offset(baseOffset.dx, over - baseFontBaseline),
-      baseBandTop: over - level.baseAscent,
-      baseBandBottom: over + level.baseDescent,
-      baseFontBaseline: baseFontBaseline,
-      baseAscent: baseAscent,
-      baseDescent: baseDescent,
-      annotations: [
-        for (final (index, annotation) in annotations.indexed)
-          annotation._positioned(
-            width: size.width,
-            baseline: over,
-            relativeBaseline: positions[index].baseline,
-            top: positions[index].top,
-            bottom: positions[index].bottom,
-          ),
-      ],
+    final work = ForumBodyRubyColumnAlignment(
+      column: this,
+      level: level,
+      prepareResult: true,
     );
+    while (!work.isComplete) {
+      work.advance(maxParts: 32);
+    }
+    return work.result;
   }
 
   PlaceholderDimensions get placeholderDimensions => PlaceholderDimensions(
@@ -318,15 +281,14 @@ final class ForumBodyRubyLevelMetrics {
     required List<ForumBodyRubyAnnotationLevelMetrics> annotations,
   }) : annotations = List.unmodifiable(annotations);
 
-  factory ForumBodyRubyLevelMetrics.single(ForumBodyRubyGroupMetrics column) =>
-      ForumBodyRubyLevelMetrics._(
-        baseAscent: column.baseAscent,
-        baseDescent: column.baseDescent,
-        annotations: [
-          for (final item in column.annotations)
-            ForumBodyRubyAnnotationLevelMetrics._single(item),
-        ],
-      );
+  factory ForumBodyRubyLevelMetrics.single(ForumBodyRubyGroupMetrics column) {
+    final union = ForumBodyRubyLevelUnion();
+    final work = union.merge(column);
+    while (!work.isComplete) {
+      work.advance(maxParts: 32);
+    }
+    return union.value;
+  }
 
   final double baseAscent;
   final double baseDescent;
@@ -343,15 +305,12 @@ final class ForumBodyRubyLevelMetrics {
       );
 
   ForumBodyRubyLevelMetrics include(ForumBodyRubyGroupMetrics column) {
-    if (!_sameRanks(column)) ForumBodyRubyGroupMetrics._invalid();
-    return ForumBodyRubyLevelMetrics._(
-      baseAscent: math.max(baseAscent, column.baseAscent),
-      baseDescent: math.max(baseDescent, column.baseDescent),
-      annotations: [
-        for (final (index, item) in annotations.indexed)
-          item._include(column.annotations[index]),
-      ],
-    );
+    final union = ForumBodyRubyLevelUnion.fromLevel(this);
+    final work = union.merge(column);
+    while (!work.isComplete) {
+      work.advance(maxParts: 32);
+    }
+    return union.value;
   }
 
   bool contains(ForumBodyRubyGroupMetrics column) {
@@ -362,11 +321,6 @@ final class ForumBodyRubyLevelMetrics {
         annotations.indexed.every(
           (entry) => entry.$2._contains(column.annotations[entry.$1]),
         );
-  }
-
-  List<({double baseline, double top, double bottom})> _positions() {
-    final stack = _RubyStack(baseAscent, baseDescent);
-    return [for (final item in annotations) stack.append(item)];
   }
 }
 

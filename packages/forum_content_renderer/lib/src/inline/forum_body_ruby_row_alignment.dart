@@ -13,15 +13,18 @@ enum _Phase {
   done,
 }
 
-/// Bounded numeric alignment over actual parent rows. This retains no native
-/// owner, layout, callback or paint/coverage proof. The caller supplies actual
-/// measured rows and guards the owner around each step.
+/// Bounded numeric alignment over actual parent rows. Each base/rank merge,
+/// rank check and final rank position consumes its own work allowance. No native
+/// owner, layout, callback or paint/coverage proof is retained here.
 final class ForumBodyRubyRowAlignment {
   ForumBodyRubyRowAlignment({
-    required this.columns,
-    required this.levelIds,
-    required this.atomOffsets,
-  }) : _targets = List.filled(columns.length, null),
+    required List<ForumBodyRubyGroupMetrics> columns,
+    required List<int> levelIds,
+    required List<int> atomOffsets,
+  }) : columns = List.unmodifiable(columns),
+       levelIds = List.unmodifiable(levelIds),
+       atomOffsets = List.unmodifiable(atomOffsets),
+       _targets = List.filled(columns.length, null),
        _atomRows = List.filled(columns.length, -1) {
     if (levelIds.length != columns.length ||
         atomOffsets.length != columns.length) {
@@ -29,23 +32,23 @@ final class ForumBodyRubyRowAlignment {
     }
     if (columns.isEmpty) _phase = _Phase.done;
   }
-
   final List<ForumBodyRubyGroupMetrics> columns;
   final List<int> levelIds;
   final List<int> atomOffsets;
   final _dimensions = <PlaceholderDimensions>[];
   final List<ForumBodyRubyLevelMetrics?> _targets;
   final List<int> _atomRows;
-  final _globalLevels = <(int, String), ForumBodyRubyLevelMetrics>{};
-  final _rowLevels = <(int, int, String), ForumBodyRubyLevelMetrics>{};
+  final _globalLevels = <(int, String), ForumBodyRubyLevelUnion>{};
+  final _rowLevels = <(int, int, String), ForumBodyRubyLevelUnion>{};
   final _changedRows = <(int, int, String)>{};
+  ForumBodyRubyLevelMerge? _merge;
+  ForumBodyRubyColumnAlignment? _columnWork;
   List<ForumBodyParagraphLine>? _rows;
   var _phase = _Phase.globalUnion;
   var _cursor = 0;
   var _row = 0;
   var _rowCount = 0;
   var _verified = 0;
-
   bool get isComplete => _phase == _Phase.done;
   bool get needsRows => _phase == _Phase.needsRows;
   bool get hasChanges => _changedRows.isNotEmpty;
@@ -56,6 +59,7 @@ final class ForumBodyRubyRowAlignment {
   void attachRows(List<ForumBodyParagraphLine> rows) {
     if (!needsRows) throw StateError('Ruby alignment does not need rows');
     if (rows.isEmpty) _invalid();
+    _globalLevels.clear();
     _rows = rows;
     _rowCount = rows.length;
     _cursor = 0;
@@ -70,24 +74,37 @@ final class ForumBodyRubyRowAlignment {
         case _Phase.globalUnion:
           final column = columns[_cursor];
           final id = (levelIds[_cursor], column.alignmentSignature);
-          _globalLevels[id] =
-              _globalLevels[id]?.include(column) ??
-              ForumBodyRubyLevelMetrics.single(column);
-          _dimensions.add(column.placeholderDimensions);
-          if (++_cursor == columns.length) {
-            _cursor = 0;
-            _phase = _Phase.globalCheck;
+          final union = _globalLevels.putIfAbsent(
+            id,
+            ForumBodyRubyLevelUnion.new,
+          );
+          final merge = _merge ??= union.merge(column);
+          parts += merge.advance(maxParts: maxParts - parts);
+          if (merge.isComplete) {
+            _merge = null;
+            _dimensions.add(column.placeholderDimensions);
+            if (++_cursor == columns.length) {
+              _cursor = 0;
+              _phase = _Phase.globalCheck;
+            }
           }
         case _Phase.globalCheck:
-          if (columns[_cursor].needsLevelAlignment(
-            _globalLevels[(
-              levelIds[_cursor],
-              columns[_cursor].alignmentSignature,
-            )]!,
-          )) {
-            _phase = _Phase.needsRows;
-          } else if (++_cursor == columns.length) {
-            _phase = _Phase.done;
+          final column = columns[_cursor];
+          final level =
+              _globalLevels[(levelIds[_cursor], column.alignmentSignature)]!
+                  .value;
+          final work = _columnWork ??= ForumBodyRubyColumnAlignment(
+            column: column,
+            level: level,
+          );
+          parts += work.advance(maxParts: maxParts - parts);
+          if (work.isComplete) {
+            _columnWork = null;
+            if (work.hasChanges) {
+              _phase = _Phase.needsRows;
+            } else if (++_cursor == columns.length) {
+              _phase = _Phase.done;
+            }
           }
         case _Phase.rowUnion:
           if (_row >= _rows!.length) _invalid();
@@ -95,52 +112,78 @@ final class ForumBodyRubyRowAlignment {
           final offset = atomOffsets[_cursor];
           if (offset >= line.engineCoverageEndUtf16) {
             _row++;
+            parts++;
           } else {
             if (offset < line.engineCoverageStartUtf16) _invalid();
             final column = columns[_cursor];
             final key = (_row, levelIds[_cursor], column.alignmentSignature);
+            final union = _rowLevels.putIfAbsent(
+              key,
+              ForumBodyRubyLevelUnion.new,
+            );
             _atomRows[_cursor] = _row;
-            _rowLevels[key] =
-                _rowLevels[key]?.include(column) ??
-                ForumBodyRubyLevelMetrics.single(column);
-            if (++_cursor == columns.length) {
-              _cursor = 0;
-              _rows = null;
-              _phase = _Phase.rowCheck;
+            final merge = _merge ??= union.merge(column);
+            parts += merge.advance(maxParts: maxParts - parts);
+            if (merge.isComplete) {
+              _merge = null;
+              if (++_cursor == columns.length) {
+                _cursor = 0;
+                _rows = null;
+                _phase = _Phase.rowCheck;
+              }
             }
           }
         case _Phase.rowCheck:
+          final column = columns[_cursor];
           final key = (
             _atomRows[_cursor],
             levelIds[_cursor],
-            columns[_cursor].alignmentSignature,
+            column.alignmentSignature,
           );
-          if (columns[_cursor].needsLevelAlignment(_rowLevels[key]!)) {
-            _changedRows.add(key);
-          }
-          if (++_cursor == columns.length) {
-            _cursor = 0;
-            _phase = _Phase.rowApply;
+          final level = _rowLevels[key]!.value;
+          final work = _columnWork ??= ForumBodyRubyColumnAlignment(
+            column: column,
+            level: level,
+          );
+          parts += work.advance(maxParts: maxParts - parts);
+          if (work.isComplete) {
+            _columnWork = null;
+            if (work.hasChanges) _changedRows.add(key);
+            if (++_cursor == columns.length) {
+              _cursor = 0;
+              _phase = _Phase.rowApply;
+            }
           }
         case _Phase.rowApply:
+          final column = columns[_cursor];
           final key = (
             _atomRows[_cursor],
             levelIds[_cursor],
-            columns[_cursor].alignmentSignature,
+            column.alignmentSignature,
           );
-          if (_changedRows.contains(key)) {
-            final target = _rowLevels[key]!;
-            _targets[_cursor] = target;
-            _dimensions[_cursor] = columns[_cursor]
-                .alignedTo(target)
-                .placeholderDimensions;
+          if (!_changedRows.contains(key)) {
+            parts++;
+            _cursor++;
+          } else {
+            final target = _rowLevels[key]!.value;
+            final work = _columnWork ??= ForumBodyRubyColumnAlignment(
+              column: column,
+              level: target,
+              prepareResult: true,
+            );
+            parts += work.advance(maxParts: maxParts - parts);
+            if (work.isComplete) {
+              _columnWork = null;
+              _targets[_cursor] = target;
+              _dimensions[_cursor] = work.result.placeholderDimensions;
+              _cursor++;
+            }
           }
-          if (++_cursor == columns.length) _phase = _Phase.done;
+          if (_cursor == columns.length) _phase = _Phase.done;
         case _Phase.needsRows:
         case _Phase.done:
           throw StateError('Ruby alignment has no work in this phase');
       }
-      parts++;
     }
     return parts;
   }
