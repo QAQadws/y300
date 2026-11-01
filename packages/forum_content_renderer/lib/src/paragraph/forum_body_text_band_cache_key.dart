@@ -20,18 +20,16 @@ final class ForumBodyTextBandCacheKey {
       direction = content.contexts.first.style.textDirection,
       alignment = content.contexts.first.style.textAlign,
       locale = content.contexts.first.style.textStyle.locale,
-      paths = content.contexts.map((item) => item.path).toList(growable: false),
-      spans = content.contexts
-          .map((item) => item.textSpan)
-          .toList(growable: false),
-      projections = content.projection.children
-          .map((item) => item.display)
-          .toList(growable: false),
-      scales =
-          (effectiveScales.entries.toList()
-                ..sort((a, b) => a.key.compareTo(b.key)))
-              .map((item) => (item.key, item.value))
-              .toList(growable: false),
+      paths = List.unmodifiable(content.contexts.map((item) => item.path)),
+      spans = List.unmodifiable(content.contexts.map((item) => item.textSpan)),
+      projections = List.unmodifiable(
+        content.projection.children.map((item) => item.display),
+      ),
+      scales = List.unmodifiable(
+        (effectiveScales.entries.toList()
+              ..sort((a, b) => a.key.compareTo(b.key)))
+            .map((item) => (item.key, item.value)),
+      ),
       backendRevision = ForumBodyParagraphLayout.backendRevision,
       layoutRevision = ForumBodyTextBandLayout.revision,
       inputRevision = ForumBodyTextBandContent.revision,
@@ -58,6 +56,7 @@ final class ForumBodyTextBandCacheKey {
 
   @override
   bool operator ==(Object other) {
+    if (identical(this, other)) return true;
     if (other is! ForumBodyTextBandCacheKey ||
         identity != other.identity ||
         fontRevision != other.fontRevision ||
@@ -86,7 +85,8 @@ final class ForumBodyTextBandCacheKey {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => _hashCode;
+  late final int _hashCode = Object.hash(
     identity,
     fontRevision,
     styleRevision,
@@ -108,12 +108,6 @@ final class ForumBodyTextBandCacheKey {
 
 int forumBodyTextBandMinimumBytes(ForumBodyTextBandContent content) =>
     4096 +
-    content.contexts.fold<int>(
-      0,
-      (sum, item) =>
-          sum +
-          item.projection.text.length * 96 +
-          item.runs.length * 256 +
-          256 +
-          4096,
-    );
+    content.textCodeUnits * 96 +
+    content.runCount * 256 +
+    content.contexts.length * (256 + 4096);

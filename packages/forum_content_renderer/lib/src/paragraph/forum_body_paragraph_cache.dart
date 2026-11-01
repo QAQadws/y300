@@ -47,6 +47,9 @@ final class ForumBodyParagraphCache {
   final int maxEntries;
   final int maxEstimatedBytes;
   final _entries = <Object, _LayoutEntry>{};
+  // Only a live entry's last supplied band identity is indexed. This cannot
+  // retain evicted entries or bypass current scaler/gutter admission.
+  final _bandHints = Map<ForumBodyTextBandContent, _LayoutEntry>.identity();
   final _buildingKeys = <Object>{};
   int _bytes = 0;
   int _leases = 0;
@@ -258,11 +261,7 @@ final class ForumBodyParagraphCache {
       gutter: gutter,
     );
     if (_closed) throw StateError('Paragraph cache is closed');
-    final key = ForumBodyTextBandCacheKey(
-      content,
-      resolved.scales,
-      resolved.gutter,
-    );
+    final key = _bandKey(content, resolved.scales, resolved.gutter);
     final entry = _acquireEntry(
       key: key,
       allowBuild: allowBuild,
@@ -274,6 +273,7 @@ final class ForumBodyParagraphCache {
       ),
     );
     if (entry == null) return null;
+    _rememberBand(entry, content);
     try {
       return ForumBodyTextBandChildLease._(
         this,
@@ -286,6 +286,34 @@ final class ForumBodyParagraphCache {
       _release(entry);
       rethrow;
     }
+  }
+
+  ForumBodyTextBandCacheKey _bandKey(
+    ForumBodyTextBandContent content,
+    Map<double, double> scales,
+    double gutter,
+  ) {
+    final entry = _bandHints[content];
+    if (entry != null && !entry.retired) {
+      final key = entry.key as ForumBodyTextBandCacheKey;
+      if (key.gutter == gutter &&
+          key.scales.length == scales.length &&
+          key.scales.every((scale) => scales[scale.$1] == scale.$2)) {
+        return key;
+      }
+    }
+    return ForumBodyTextBandCacheKey(content, scales, gutter);
+  }
+
+  void _rememberBand(_LayoutEntry entry, ForumBodyTextBandContent content) {
+    final previous = entry.bandHint;
+    if (previous != null &&
+        !identical(previous, content) &&
+        identical(_bandHints[previous], entry)) {
+      _bandHints.remove(previous);
+    }
+    entry.bandHint = content;
+    _bandHints[content] = entry;
   }
 
   /// Cooperative work outside paint: record one child, admit its measured
@@ -520,6 +548,11 @@ final class ForumBodyParagraphCache {
   void _retire(_LayoutEntry entry) {
     if (entry.retired) return;
     entry.retired = true;
+    final hint = entry.bandHint;
+    if (hint != null && identical(_bandHints[hint], entry)) {
+      _bandHints.remove(hint);
+    }
+    entry.bandHint = null;
     _bytes -= entry.bytes;
     _leases -= entry.leases;
     entry.leases = 0;
@@ -670,7 +703,7 @@ final class ForumBodyParagraphBudgetProbe {
     }
     _include(
       cache,
-      ForumBodyTextBandCacheKey(content, resolved.scales, resolved.gutter),
+      cache._bandKey(content, resolved.scales, resolved.gutter),
       forumBodyTextBandMinimumBytes(content) +
           (content.contexts.length * 2 - 1) * 96,
     );
@@ -813,6 +846,7 @@ final class _LayoutEntry {
   int bytes;
   int leases = 0;
   bool retired = false;
+  ForumBodyTextBandContent? bandHint;
 }
 
 /// Complete process-local native input, including baked paint. Actual scaled

@@ -9,7 +9,12 @@ import '../paragraph/forum_body_paragraph_content.dart';
 /// Empty text needs no native slot. Incompatible root directions/alignment or
 /// locales belong in separate bounded bands; nothing is silently restyled.
 final class ForumBodyTextBandContent {
-  ForumBodyTextBandContent._(this.contexts, this.projection);
+  ForumBodyTextBandContent._(
+    this.contexts,
+    this.projection,
+    this.textCodeUnits,
+    this.runCount,
+  );
   static const revision = 1;
   factory ForumBodyTextBandContent({
     required List<ForumBodyParagraphContent> contexts,
@@ -34,6 +39,7 @@ final class ForumBodyTextBandContent {
     }
     final first = contexts.first;
     var runs = 0;
+    var textCodeUnits = 0;
     for (final context in contexts) {
       if (context.identity != first.identity ||
           context.fontRevision != first.fontRevision ||
@@ -53,6 +59,7 @@ final class ForumBodyTextBandContent {
         );
       }
       runs += context.runs.length;
+      textCodeUnits += context.projection.text.length;
       if (runs > maxRuns) {
         throw ForumBodyParagraphInputException(
           ForumBodyParagraphInputFailure.runLimit,
@@ -67,10 +74,14 @@ final class ForumBodyTextBandContent {
         maxChildren: maxChildren,
         maxDisplayCodeUnits: maxInputCodeUnits,
       ),
+      textCodeUnits,
+      runs,
     );
   }
   final List<ForumBodyParagraphContent> contexts;
   final HtmlTextBandProjection projection;
+  final int textCodeUnits;
+  final int runCount;
 
   /// Pure eligibility only. Scope, source order, root compatibility and total
   /// budgets still belong to construction. Native isolation is checked later.

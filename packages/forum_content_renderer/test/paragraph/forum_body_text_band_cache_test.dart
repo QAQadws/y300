@@ -50,6 +50,113 @@ ForumBodyTextBandContent heavyBand() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'the same band rechecks nonlinear values even for one equal mutable scaler',
+    () {
+      final owner = cache();
+      addTearDown(owner.close);
+      final input = band([
+        '<span style="font-size:10px">aa</span>',
+        '<span>b</span>',
+      ]);
+      final scaler = _BranchScaler();
+      final first = owner.acquireBandChild(
+        content: input,
+        childIndex: 0,
+        textScaler: scaler,
+      );
+      final firstWidth = first.layout.width;
+      scaler.ratio = 1.4;
+      final second = owner.acquireBandChild(
+        content: input,
+        childIndex: 0,
+        textScaler: scaler,
+      );
+      expect(second.layout.width, greaterThan(firstWidth));
+      expect(owner.layoutBuildCount, 2);
+      scaler.ratio = 1;
+      final returned = owner.tryAcquireBandChildCached(
+        content: input,
+        childIndex: 0,
+        textScaler: scaler,
+      )!;
+      expect(returned.layout.width, firstWidth);
+      expect(owner.layoutBuildCount, 2);
+      first.release();
+      returned.release();
+      owner.clearUnpinned();
+      expect(second.isActive, isTrue);
+      scaler.ratio = 1.4;
+      final alias = owner.tryAcquireBandChildCached(
+        content: input,
+        childIndex: 0,
+        textScaler: scaler,
+      )!;
+      expect(alias.layout.width, second.layout.width);
+      expect(owner.layoutBuildCount, 2);
+      second.release();
+      alias.release();
+      owner.clearUnpinned();
+      expect(owner.entryCount, 0);
+      expect(
+        owner.tryAcquireBandChildCached(
+          content: input,
+          childIndex: 0,
+          textScaler: scaler,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  for (final close in [false, true]) {
+    test(
+      'an indexed band can retire during current scaler validation close=$close',
+      () {
+        final owner = cache();
+        addTearDown(owner.close);
+        final input = band(['<span>a</span>', '<span>b</span>']);
+        final first = owner.acquireBandChild(content: input, childIndex: 0);
+        owner.prepareBandChildPaint(first);
+        first.release();
+        final scaler = _OnceScaler(close ? owner.close : owner.clearUnpinned);
+        if (close) {
+          expect(
+            () => owner.acquireBandChild(
+              content: input,
+              childIndex: 1,
+              textScaler: scaler,
+            ),
+            throwsStateError,
+          );
+          expect(owner.estimatedRetainedBytes, 0);
+        } else {
+          final next = owner.acquireBandChild(
+            content: input,
+            childIndex: 1,
+            textScaler: scaler,
+          );
+          expect(owner.layoutBuildCount, 2);
+          expect(next.layout.isPaintPrepared, isFalse);
+          expect(next.content, same(input.contexts[1]));
+          next.release();
+        }
+        expect(owner.activeLeases, 0);
+      },
+    );
+  }
+
+  test('immutable band summaries keep original UTF16 and run budget costs', () {
+    final owner = cache();
+    addTearDown(owner.close);
+    final input = band(['<span>a\u0301😀</span>', '<span><b>B</b>C</span>']);
+    expect(input.textCodeUnits, 6);
+    expect(input.runCount, 3);
+    final lease = owner.acquireBandChild(content: input, childIndex: 0);
+    expect(owner.estimatedRetainedBytes, 14432);
+    lease.release();
+  });
+
   test('64 unique children pin one entry and pictures prepare only once', () {
     final owner = cache(entries: 1);
     addTearDown(owner.close);
@@ -460,4 +567,33 @@ void main() {
       b.release();
     },
   );
+}
+
+class _BranchScaler extends TextScaler {
+  final _ratio = [1.0];
+  set ratio(double value) => _ratio[0] = value;
+  @override
+  double scale(double fontSize) =>
+      fontSize == 10 ? fontSize * _ratio.single : fontSize;
+  @override
+  double get textScaleFactor => 1;
+  @override
+  bool operator ==(Object other) => other is _BranchScaler;
+  @override
+  int get hashCode => 1;
+}
+
+class _OnceScaler extends TextScaler {
+  _OnceScaler(VoidCallback action) : _action = [action];
+  final List<VoidCallback?> _action;
+  @override
+  double scale(double size) {
+    final action = _action.single;
+    _action[0] = null;
+    action?.call();
+    return size;
+  }
+
+  @override
+  double get textScaleFactor => 1;
 }
