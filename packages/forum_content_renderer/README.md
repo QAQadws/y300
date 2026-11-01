@@ -71,7 +71,7 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 `placeholderDimensions` 是已经缩放的直接 TextPainter 行内几何；父排版不得再次进行 inline Widget 自动缩放。gap 使用已解析的逻辑像素；改变 gap 或有效最大宽度可重组几何而复用原生字形。空注音不建立额外布局或保留空白上行。组宽超过显式最大值、无效几何、不同来源/字体或非固有单行内容均明确失败；失败与 `close` 仅释放本组 lease，owner 关闭使活跃组立即失效，不能晚访问已销毁的 native 布局。
 
-作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 2，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
+作者给两侧设置紧行高时，组装使用同一个 native 布局的完整字体选区范围及行框共同保留空间；补偿偏移同时用于基线、绘制、选区和分侧命中，不裁掉超出小行框的字体部分，也不通过重新排字猜高度。分组几何 `ForumBodyRubyGroupLayout.revision` 为 3，父段落/页布局身份须纳入该值，和原生段落 backend revision 分开维护。
 
 单个孤立 RT 的匿名空基字使用所在 ruby 根的正文样式和实际空字体基线，注音保持自己的
 半字号及逐字号缩放。父显示和来源只含实际 RT；空基字区域的命中指向该 RT 且标为近似，
@@ -80,9 +80,15 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 `ForumBodyRubyGroupMetrics.measure` 从当前同 owner 的字形租约借用上述真实数值几何，
 不排字、不准备图片、不消费或释放调用方句柄，失败也保持借用规则。它同样核对实际
 注音上下文对象和完整输入范围；相同文字的旧上下文不能替代当前内容。返回值仅含尺寸、
-基线、偏移和分侧命中分界，不保留内容/native/owner，也不证明绘制或可见 coverage。
+基线、实际字体 ascent/descent、偏移和分侧命中分界，不保留内容/native/owner，也不证明绘制或可见 coverage。
 既有 `ForumBodyRubyGroupLayout.adopt` 复用唯一几何实现，继续接管句柄并要求图片已准备；
-批次字形可用于计划阶段，数值测量不能绕过可读交付门槛；几何 revision 为 2。
+批次字形可用于计划阶段，数值测量不能绕过可读交付门槛；几何 revision 为 3。
+
+`ForumBodyRubyLevelMetrics` 是同一实际 ruby 根、同一物理行内的纯数值层级并集，
+包含基字/注音的最大 ascent/descent 和 gap。`alignedTo` 只用当前真实字体基线计算
+偏移，不排字、不再次缩放；目标必须包含该列的实际字体范围。可读 `adopt` 和
+`fromRequests` 接收同一可选层级目标，重新核对当前租约的实际几何，绘制、选区与命中
+共用对齐后的偏移。它不是可见 coverage 或已读证明，不能将不同 ruby 根合成一层。
 
 计划阶段通过既有 `ForumBodyRubyGroupPreparation.forMetrics` 准备同一组请求：每次
 advance 仍在首次 native 排字后返回，cache-only 可使用未录图的字形，且两条路径均不
@@ -418,10 +424,22 @@ pre-wrap/NBSP 的字面空白不误折叠。sourceHint 使用实际来源包络�
 父普通文字换行。RB 外的首尾格式空白省略，中间空白交给父文字布局且不消耗 RT；
 `<rb> </rb>` 中的被标注空格保留在基字列内。原生 band 也按同一个显式 sourceOrder
 筛选实际子上下文，不能按显示列顺序装配或用源码点排序重建来源。原有结构、输入、
-条目/字节和单步 native 工作预算保持。不同字号/字体度量下的同层统一基线、跨物理行
-的层级几何及阅读末尾语义证明仍须联验，逐列配对不能代替这些验收。
+条目/字节和单步 native 工作预算保持。单层列按实际根及物理行统一基字与注音基线，
+跨页阅读末尾的语义证明仍须独立验收，逐列配对和对齐不能替代该证明。
+
+计划先有界检查原始列的数值层级；已对齐时只构建一次父段落。需要对齐时，用同一
+缓存的一次临时真实父排字确定物理行，再按行计算目标；全根并集只用于是否需要检查
+的快路径，不能作为换行后的发布几何。所有冲突列分到不同行时直接复用临时父布局，
+避免给其他行增加空白。确需修改时先释放临时父租约，再取得最终父布局，并有界核对
+实际行数与各列所属行，核对通过才发布 PageContent。纯数值扫描计入既有 maxParts，
+同一工作单元至多一次 native 排字，不预录制子图片、不改变缓存预算。
+
+`ForumBodyInlineParagraphLease.releaseProvisional` 只在最后一个别名释放时移除该临时
+缓存条目，保留仍活跃的别名与其他字形 band。取消、失败或 owner 退休释放当前临时
+租约；可读页继续使用同一会话、缓存及页面准备事务。PageContent 仅保留各列不可变
+数值层级目标，不保留测量 session 或 native 引用。
 
 当前正式计划接入隐式文本与显式 RB 基字、直接 RT 列及独立的非空孤立 RT 列；隐式纯空白基字、显式分层、嵌套及拟合混排
 仍明确失败，不丢弃或压平结构，不把隐式缩进空白当作显式 RB 的被标注空格。
 这些格式与长段、完整复杂正文性能门槛仍须完成，不能扩张预算或切回旧 renderer 绕过。
-Session.inlinePlanRevision 为 7，Host 指纹须纳入它及混排/批次/投影版本。
+Session.inlinePlanRevision 为 8，Host 指纹须纳入它及混排/批次/投影版本。

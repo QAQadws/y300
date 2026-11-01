@@ -82,6 +82,7 @@ final class ForumBodyRubyGroupPreparation {
     TextScaler textScaler = TextScaler.noScaling,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubyLevelMetrics? level,
   }) => _open(
     cache: cache,
     base: base,
@@ -92,6 +93,7 @@ final class ForumBodyRubyGroupPreparation {
     gap: gap,
     maxWidth: maxWidth,
     preparePaint: true,
+    level: level,
   );
 
   /// The same transaction for format planning: prepare only glyphs, measure
@@ -129,6 +131,7 @@ final class ForumBodyRubyGroupPreparation {
     required double gap,
     required double maxWidth,
     required bool preparePaint,
+    ForumBodyRubyLevelMetrics? level,
   }) {
     ForumBodyRubyGroupLayout.validateInputs(
       base: base.content,
@@ -148,6 +151,7 @@ final class ForumBodyRubyGroupPreparation {
       maxWidth,
       annotation.content.projection.text.isEmpty ? 1 : 2,
       preparePaint,
+      level,
     );
   }
 
@@ -162,6 +166,7 @@ final class ForumBodyRubyGroupPreparation {
     this.maxWidth,
     this.expectedPartCount,
     this._preparePaint,
+    this._level,
   ) : _requests = [base, annotation];
 
   ForumBodyParagraphCache? _cache;
@@ -174,6 +179,7 @@ final class ForumBodyRubyGroupPreparation {
   final double maxWidth;
   final int expectedPartCount;
   final bool _preparePaint;
+  final ForumBodyRubyLevelMetrics? _level;
   final _leases = <ForumBodyTextLease>[];
   ForumBodyRubyGroupLayout? _group;
   ForumBodyRubyGroupMetrics? _metrics;
@@ -331,6 +337,7 @@ final class ForumBodyRubyGroupPreparation {
         annotationLease: expectedPartCount == 2 ? _leases[1] : null,
         gap: gap,
         maxWidth: maxWidth,
+        level: _level,
       );
       _leases.clear();
       try {

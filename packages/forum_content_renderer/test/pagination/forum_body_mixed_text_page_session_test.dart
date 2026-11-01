@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
@@ -95,6 +97,272 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('aligned native paint matches independent native row formatting', () async {
+    final f = _Fixture(
+      '<ruby><rb style="font-size:30px">A</rb><rb>B</rb><rt>xx</rt><rt style="font-size:15px">yy</rt></ruby>',
+      width: 200,
+      height: 100,
+      entries: 2,
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    final painters = <TextPainter>[];
+    try {
+      expect(fragment.view.height, 45);
+      final leases = fragment.nativeLeases.toList();
+      TextSpan span(int index) =>
+          (leases[index] as ForumBodyTextLease).content.textSpan;
+      const gap = TextSpan(
+        text: ' ',
+        style: TextStyle(fontFamily: 'Ahem', fontSize: 5, height: 1),
+      );
+      for (final children in [
+        [span(1), gap, span(3), gap],
+        [gap, span(2), gap, span(4)],
+      ]) {
+        painters.add(
+          TextPainter(
+            text: TextSpan(
+              style: const TextStyle(
+                fontFamily: 'Ahem',
+                fontSize: 10,
+                height: 1,
+              ),
+              children: children,
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout(),
+        );
+      }
+      Future<List<int>> rgba(void Function(Canvas) paint) async {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder)
+          ..clipRect(const Rect.fromLTWH(0, 0, 200, 45), doAntiAlias: false);
+        paint(canvas);
+        final picture = recorder.endRecording();
+        try {
+          final image = await picture.toImage(200, 45);
+          try {
+            final bytes = (await image.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            ))!;
+            return bytes.buffer
+                .asUint8List(bytes.offsetInBytes, bytes.lengthInBytes)
+                .toList();
+          } finally {
+            image.dispose();
+          }
+        } finally {
+          picture.dispose();
+        }
+      }
+
+      final actual = await rgba(
+        (canvas) => fragment.view.paint(canvas, Offset.zero),
+      );
+      final expected = await rgba((canvas) {
+        // Independent native rows supply their own baselines. Ahem 5px gaps
+        // center these glyphs in two 30px columns; no planned offsets are read.
+        painters[0].paint(canvas, const Offset(0, 15));
+        painters[1].paint(canvas, Offset.zero);
+      });
+      var mismatches = 0;
+      for (var index = 0; index < actual.length; index++) {
+        if (actual[index] != expected[index]) mismatches++;
+      }
+      expect(mismatches, 0);
+    } finally {
+      for (final painter in painters) {
+        painter.dispose();
+      }
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+    expect(f.session.activeIssuedLeases, 0);
+  });
+
+  for (final (baseSize, rtFirst, rtSecond, tight, nonlinear) in [
+    (30, 10, 10, false, false),
+    (20, 10, 15, false, false),
+    (30, 8, 15, false, true),
+    (30, 10, 15, true, false),
+  ]) {
+    test(
+      'one ruby level aligns actual baselines (base=$baseSize, RT=$rtFirst/$rtSecond, tight=$tight, nonlinear=$nonlinear)',
+      () {
+        final lineHeight = tight ? '.25' : '1';
+        final f = _Fixture(
+          '<ruby><rb style="font-size:${baseSize}px;line-height:$lineHeight">A</rb><rb style="line-height:$lineHeight">B</rb><rt style="font-size:${rtFirst}px;line-height:$lineHeight">xx</rt><rt style="font-size:${rtSecond}px;line-height:$lineHeight">yy</rt></ruby>',
+          width: 300,
+          height: 200,
+          entries: 2,
+          textScaler: nonlinear
+              ? _Scaler((size) => size >= 20 ? size * 1.5 : size * 1.1)
+              : TextScaler.noScaling,
+        );
+        f.finish();
+        final builds = f.cache.layoutBuildCount;
+        final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          final leases = fragment.nativeLeases.toList();
+          double baseline(int start, int end, int leaseIndex) {
+            final lease = leases[leaseIndex] as ForumBodyTextLease;
+            final local = lease.layout
+                .selectionBoxes(0, lease.content.projection.text.length)
+                .single;
+            final visible = fragment.glyphBoxes(start, end).single;
+            return visible.top - local.top + lease.layout.alphabeticBaseline;
+          }
+
+          expect(baseline(1, 3, 2), closeTo(baseline(4, 6, 4), 1e-4));
+          expect(baseline(0, 1, 1), closeTo(baseline(3, 4, 3), 1e-4));
+          final a = fragment.glyphBoxes(1, 3).single;
+          final b = fragment.glyphBoxes(4, 6).single;
+          final bases = [
+            fragment.glyphBoxes(0, 1).single,
+            fragment.glyphBoxes(3, 4).single,
+          ];
+          for (final annotation in [a, b]) {
+            expect(annotation.top, greaterThanOrEqualTo(-1e-4));
+            for (final base in bases) {
+              expect(annotation.bottom, lessThanOrEqualTo(base.top + 1e-4));
+            }
+          }
+          final glyph = fragment.glyphBoxes(5, 6).single;
+          final hit = fragment.view.sourceAt(
+            Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+          );
+          expect(hit.sourceRune, 5);
+          expect(hit.isExact, isTrue);
+          expect(f.cache.layoutBuildCount, builds);
+          expect(f.cache.entryCount, 2);
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+        expect(f.session.activeIssuedLeases, 0);
+      },
+    );
+  }
+
+  test(
+    'wrapped ruby rows keep independent font extents and reuse their provisional parent',
+    () {
+      final f = _Fixture(
+        '<ruby><rb style="font-size:30px">A</rb><rb>B</rb><rt>xx</rt><rt>yy</rt></ruby>',
+        width: 30,
+        height: 40,
+        entries: 2,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(2));
+      expect(f.cache.layoutBuildCount, 2);
+      for (var page = 0; page < 2; page++) {
+        final fragment =
+            f.prepare(page).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.view.height, page == 0 ? 40 : 30);
+          final rt = fragment
+              .glyphBoxes(page == 0 ? 1 : 4, page == 0 ? 3 : 6)
+              .single;
+          expect(rt.top, 0);
+        } finally {
+          fragment.close();
+        }
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  for (final sameRoot in [true, false]) {
+    test(
+      'annotation level ownership follows the real ruby root (same=$sameRoot)',
+      () {
+        final f = _Fixture(
+          sameRoot
+              ? '<ruby><rb style="font-size:30px">A</rb><rt>xx</rt><rb>B</rb><rt>yy</rt></ruby>'
+              : '<ruby><rb style="font-size:30px">A</rb><rt>xx</rt></ruby><ruby><rb>B</rb><rt>yy</rt></ruby>',
+          width: 200,
+          height: 100,
+          entries: 2,
+        );
+        f.finish();
+        expect(f.cache.layoutBuildCount, sameRoot ? 3 : 2);
+        final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          final first = fragment.glyphBoxes(1, 3).single;
+          final second = fragment.glyphBoxes(4, 6).single;
+          expect(
+            (second.top - first.top).abs(),
+            sameRoot ? closeTo(0, 1e-4) : greaterThan(5),
+          );
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  test('canceling a pending row alignment drops its provisional shape', () {
+    final f = _Fixture(
+      '<ruby><rb style="font-size:30px">A</rb><rb>B</rb><rt>xx</rt><rt>yy</rt></ruby>',
+      width: 200,
+      height: 100,
+      entries: 2,
+    );
+    for (var step = 0; f.cache.layoutBuildCount < 2 && step < 100; step++) {
+      f.advance();
+    }
+    expect(f.cache.layoutBuildCount, 2);
+    expect(f.session.snapshot, isEmpty);
+    expect(f.cache.activeLeases, 1);
+    f.session.close();
+    expect(f.cache.activeLeases, 0);
+    expect(f.cache.entryCount, 1);
+    expect(f.session.activeIssuedLeases, 0);
+  });
+
+  test('many empty physical rows remain bounded while resolving ruby levels', () {
+    final f = _Fixture(
+      '<ruby style="white-space:pre-wrap"><rb style="font-size:30px">A</rb>${'\n' * 80}<rb>B</rb><rt>xx</rt><rt>yy</rt></ruby>',
+      width: 200,
+      height: 2000,
+      entries: 2,
+    );
+    f.finish();
+    expect(f.cache.layoutBuildCount, 2);
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    fragment.close();
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'dense level alignment evicts its probe without rebuilding glyph bands',
+    () {
+      final f = _Fixture(
+        '<ruby>${List.generate(60, (i) => '<rb style="font-size:${i.isEven ? 30 : 20}px">A</rb>').join()}${List.generate(60, (i) => '<rt>r$i</rt>').join()}</ruby>',
+        width: 600,
+        height: 200,
+        entries: 3,
+      );
+      f.finish();
+      expect(f.cache.layoutBuildCount, 4);
+      expect(f.cache.pictureBuildCount, 0);
+      expect(f.cache.entryCount, 3);
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.nativeLeases, hasLength(121));
+        expect(f.cache.layoutBuildCount, 4);
+        expect(f.cache.pictureBuildCount, 120);
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+    },
+  );
 
   test(
     'orphan RT uses a real empty font strut without invented display text',

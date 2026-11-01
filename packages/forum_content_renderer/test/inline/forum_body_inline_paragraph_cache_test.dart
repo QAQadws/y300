@@ -29,6 +29,80 @@ ForumBodyReaderStyle _reader(Color link) => ForumBodyReaderStyle(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('last provisional alias retires only its own native entry', () {
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 2,
+      maxEstimatedBytes: 1 << 20,
+    );
+    addTearDown(cache.close);
+    final input = mixedInlineInput();
+    final keep = cache.acquireInline(
+      content: input.content,
+      width: 200,
+      dimensions: _dimensions,
+    );
+    final probe = cache.acquireInline(
+      content: input.content,
+      width: 100,
+      dimensions: _dimensions,
+    );
+    final discarded = probe.layout;
+    final bytes = cache.estimatedRetainedBytes;
+    probe.releaseProvisional();
+    probe.releaseProvisional();
+    expect(discarded.isDisposed, isTrue);
+    expect(keep.isActive, isTrue);
+    expect(cache.entryCount, 1);
+    expect(cache.activeLeases, 1);
+    expect(cache.estimatedRetainedBytes, lessThan(bytes));
+    expect(
+      cache.tryAcquireInlineCached(
+        content: input.content,
+        width: 100,
+        dimensions: _dimensions,
+      ),
+      isNull,
+    );
+    keep.release();
+  });
+
+  test('provisional release preserves a live alias and its warm cache', () {
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 1,
+      maxEstimatedBytes: 1 << 20,
+    );
+    addTearDown(cache.close);
+    final input = mixedInlineInput();
+    final probe = cache.acquireInline(
+      content: input.content,
+      width: 100,
+      dimensions: _dimensions,
+    );
+    final alias = cache.acquireInline(
+      content: input.content,
+      width: 100,
+      dimensions: _dimensions,
+    );
+    final native = alias.layout;
+    probe.releaseProvisional();
+    expect(native.isDisposed, isFalse);
+    expect(alias.isActive, isTrue);
+    expect(cache.entryCount, 1);
+    expect(cache.activeLeases, 1);
+    alias.release();
+    final warm = cache.tryAcquireInlineCached(
+      content: input.content,
+      width: 100,
+      dimensions: _dimensions,
+    );
+    expect(warm, isNotNull);
+    expect(identical(warm!.layout, native), isTrue);
+    cache.close();
+    warm.releaseProvisional();
+    expect(cache.activeLeases, 0);
+    expect(cache.estimatedRetainedBytes, 0);
+  });
+
   test(
     'mixed aliases share one native entry but retain current child metadata',
     () {

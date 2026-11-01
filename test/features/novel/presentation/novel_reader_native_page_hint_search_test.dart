@@ -49,6 +49,39 @@ NovelReaderNativePageHintSearch _search(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'aligned ruby levels retain visible App anchor proof with unequal fonts',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p><ruby><rb style="font-size:30px">A</rb><rb style="font-size:20px">B</rb><rt style="font-size:10px">xx</rt><rt style="font-size:15px">yy</rt></ruby></p>',
+        width: 200,
+        height: 100,
+      );
+      final target = _anchor(fixture, 5);
+      final builds = fixture.cache.layoutBuildCount;
+      expect(_collect(_search(fixture, target)).map((hint) => hint.pageIndex), [
+        0,
+      ]);
+      expect(fixture.cache.layoutBuildCount, builds);
+      final view = await NovelReaderNativePageViewJob(
+        session: fixture.session,
+        anchors: fixture.anchors,
+        pageIndex: 0,
+        parent: fixture.parent,
+        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+      ).run();
+      try {
+        expect(view.coverage.locate(target), isNotNull);
+        expect(view.coverage.hasClippedGlyphs, isFalse);
+        expect(fixture.cache.layoutBuildCount, builds);
+      } finally {
+        view.close();
+      }
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
+
   test('explicit RB coarse hints cannot prove an interior base point on a neighboring page', () async {
     final fixture = NativeReaderTestFixture(
       '<p><ruby><rb>AA</rb><rb>BC</rb><rt>xx</rt><rt>yy</rt></ruby></p>',

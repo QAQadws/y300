@@ -159,9 +159,10 @@ final class ForumBodyRubyGroupLayout {
     ForumBodyTextLease? annotationLease,
     double gap = 0,
     double maxWidth = 16384,
+    ForumBodyRubyLevelMetrics? level,
   }) {
     try {
-      final metrics = ForumBodyRubyGroupMetrics.measure(
+      final measured = ForumBodyRubyGroupMetrics.measure(
         cache: cache,
         baseLease: baseLease,
         annotation: annotation,
@@ -169,6 +170,7 @@ final class ForumBodyRubyGroupLayout {
         gap: gap,
         maxWidth: maxWidth,
       );
+      final metrics = level == null ? measured : measured.alignedTo(level);
       final baseLayout = baseLease.layout;
       if (!baseLayout.isPaintPrepared ||
           (annotationLease != null &&

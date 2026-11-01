@@ -12,6 +12,87 @@ void main() {
   });
   tearDown(() => cache.close());
 
+  ({
+    ForumBodyRubyGroupMetrics metrics,
+    ForumBodyTextLease base,
+    ForumBodyTextLease rt,
+  })
+  measured(String baseText) {
+    final input = rubyPairInput(base: baseText, annotation: 'xx');
+    final base = cache.acquire(content: input.base, width: 100);
+    final rt = cache.acquire(content: input.annotation, width: 100);
+    addTearDown(base.release);
+    addTearDown(rt.release);
+    return (
+      metrics: ForumBodyRubyGroupMetrics.measure(
+        cache: cache,
+        baseLease: base,
+        annotation: rt.content,
+        annotationLease: rt,
+      ),
+      base: base,
+      rt: rt,
+    );
+  }
+
+  test(
+    'shared level uses actual font baselines without reshaping and is idempotent',
+    () {
+      final large = measured('<span style="font-size:30px">A</span>');
+      final small = measured('B');
+      final builds = cache.layoutBuildCount;
+      final level = ForumBodyRubyLevelMetrics.single(
+        large.metrics,
+      ).include(small.metrics);
+      final a = large.metrics.alignedTo(level);
+      final b = small.metrics.alignedTo(level);
+      expect(
+        a.baseOffset.dy + large.base.layout.alphabeticBaseline,
+        b.baseOffset.dy + small.base.layout.alphabeticBaseline,
+      );
+      expect(
+        a.annotationOffset.dy + large.rt.layout.alphabeticBaseline,
+        b.annotationOffset.dy + small.rt.layout.alphabeticBaseline,
+      );
+      final again = b.alignedTo(level);
+      expect(again.baseOffset, b.baseOffset);
+      expect(again.annotationOffset, b.annotationOffset);
+      expect(again.size, b.size);
+      expect(again.baseline, b.baseline);
+      expect(cache.layoutBuildCount, builds);
+      expect(cache.pictureBuildCount, 0);
+      expect(large.base.isActive && small.rt.isActive, isTrue);
+    },
+  );
+
+  test('undersized level fails adoption while preserving caller aliases', () {
+    final large = measured('<span style="font-size:30px">A</span>');
+    final small = measured('B');
+    final level = ForumBodyRubyLevelMetrics.single(small.metrics);
+    final baseAlias = cache.acquire(content: large.base.content, width: 100);
+    final rtAlias = cache.acquire(content: large.rt.content, width: 100);
+    expect(
+      () => ForumBodyRubyGroupLayout.adopt(
+        cache: cache,
+        baseLease: baseAlias,
+        annotation: rtAlias.content,
+        annotationLease: rtAlias,
+        level: level,
+      ),
+      throwsA(
+        isA<ForumBodyRubyGroupException>().having(
+          (error) => error.failure,
+          'failure',
+          ForumBodyRubyGroupFailure.geometry,
+        ),
+      ),
+    );
+    expect(baseAlias.isActive || rtAlias.isActive, isFalse);
+    expect(large.base.isActive && large.rt.isActive, isTrue);
+    expect(small.base.isActive && small.rt.isActive, isTrue);
+    expect(cache.activeLeases, 4);
+  });
+
   for (final tight in [false, true]) {
     test('glyph-only band metrics match readable geometry, tight=$tight', () {
       final input = rubyPairInput(

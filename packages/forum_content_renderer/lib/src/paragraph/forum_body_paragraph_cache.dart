@@ -496,11 +496,20 @@ final class ForumBodyParagraphCache {
     return ForumBodyParagraphBudgetProbe._(this);
   }
 
-  void _release(_LayoutEntry entry) {
+  void _release(_LayoutEntry entry, {bool discardIfUnused = false}) {
     if (entry.retired) return;
     entry.leases--;
     _leases--;
-    _budgetChanged();
+    try {
+      if (discardIfUnused &&
+          entry.leases == 0 &&
+          identical(_entries[entry.key], entry)) {
+        _entries.remove(entry.key);
+        _retire(entry);
+      }
+    } finally {
+      _budgetChanged();
+    }
   }
 
   void _budgetChanged() {
@@ -743,6 +752,15 @@ final class ForumBodyInlineParagraphLease
 
   /// Always the current child styles/interactions, not a cached engine's input.
   final ForumBodyInlineSpanContent content;
+
+  /// Drop a provisional shape only when this is its last handle. Existing
+  /// aliases keep their actual layout and ordinary cache lifetime unchanged.
+  void releaseProvisional() {
+    if (_released) return;
+    _released = true;
+    _owner._release(_entry, discardIfUnused: true);
+  }
+
   ForumBodyInlineParagraphLayout get layout {
     if (!isActive) throw StateError('Paragraph lease is retired');
     return _entry.layout as ForumBodyInlineParagraphLayout;

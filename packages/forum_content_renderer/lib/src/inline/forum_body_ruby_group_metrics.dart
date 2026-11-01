@@ -17,9 +17,17 @@ final class ForumBodyRubyGroupMetrics {
     required this.annotationOffset,
     required this.hasAnnotation,
     required this.annotationHitBoundary,
+    required this.baseFontBaseline,
+    required this.annotationFontBaseline,
+    required this.baseAscent,
+    required this.baseDescent,
+    required this.annotationAscent,
+    required this.annotationDescent,
+    required this.gap,
   });
 
-  static const revision = 2;
+  static const revision = 3;
+  static const geometryTolerance = 1e-4;
 
   /// Borrows current same-owner glyph leases. Does not shape, prepare pictures,
   /// transfer ownership or release the caller's handles, including on failure.
@@ -49,6 +57,9 @@ final class ForumBodyRubyGroupMetrics {
       );
     }
     final baseBounds = _textBounds(baseLease);
+    final baseFontBaseline = baseLease.layout.alphabeticBaseline;
+    final annotationFontBaseline =
+        annotationLease?.layout.alphabeticBaseline ?? 0;
     final annotationBounds = annotationLease == null
         ? Rect.zero
         : _textBounds(annotationLease);
@@ -77,6 +88,11 @@ final class ForumBodyRubyGroupMetrics {
         ForumBodyRubyGroupFailure.geometry,
       );
     }
+    if (!baseFontBaseline.isFinite || !annotationFontBaseline.isFinite) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.geometry,
+      );
+    }
     return ForumBodyRubyGroupMetrics._(
       size: Size(width, height),
       baseline: baseline,
@@ -87,6 +103,17 @@ final class ForumBodyRubyGroupMetrics {
       ),
       hasAnnotation: annotationLease != null,
       annotationHitBoundary: annotationBounds.height + gap / 2,
+      baseFontBaseline: baseFontBaseline,
+      annotationFontBaseline: annotationFontBaseline,
+      baseAscent: baseFontBaseline - baseBounds.top,
+      baseDescent: baseBounds.bottom - baseFontBaseline,
+      annotationAscent: annotationLease == null
+          ? 0
+          : annotationFontBaseline - annotationBounds.top,
+      annotationDescent: annotationLease == null
+          ? 0
+          : annotationBounds.bottom - annotationFontBaseline,
+      gap: gap,
     );
   }
 
@@ -96,6 +123,64 @@ final class ForumBodyRubyGroupMetrics {
   final Offset annotationOffset;
   final bool hasAnnotation;
   final double annotationHitBoundary;
+  final double baseFontBaseline;
+  final double annotationFontBaseline;
+  final double baseAscent;
+  final double baseDescent;
+  final double annotationAscent;
+  final double annotationDescent;
+  final double gap;
+
+  /// Only an actual annotation shift needs another parent layout. Padding a
+  /// shorter unannotated column would not change its paint relative to baseline.
+  bool needsLevelAlignment(ForumBodyRubyLevelMetrics level) =>
+      hasAnnotation &&
+      ((annotationFontBaseline + annotationOffset.dy - baseline) -
+                  (-level.baseAscent - level.gap - level.annotationDescent))
+              .abs() >
+          geometryTolerance;
+
+  /// Reuses the same measured glyph baselines; no text is shaped or scaled.
+  ForumBodyRubyGroupMetrics alignedTo(ForumBodyRubyLevelMetrics level) {
+    if (!level.contains(this)) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.geometry,
+      );
+    }
+    final annotationHeight = level.annotationAscent + level.annotationDescent;
+    final baseline = annotationHeight + level.gap + level.baseAscent;
+    final height = baseline + level.baseDescent;
+    if (!height.isFinite ||
+        height <= 0 ||
+        height > 16384 ||
+        !baseline.isFinite ||
+        baseline < 0 ||
+        baseline > height) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.geometry,
+      );
+    }
+    return ForumBodyRubyGroupMetrics._(
+      size: Size(size.width, height),
+      baseline: baseline,
+      baseOffset: Offset(baseOffset.dx, baseline - baseFontBaseline),
+      annotationOffset: hasAnnotation
+          ? Offset(
+              annotationOffset.dx,
+              level.annotationAscent - annotationFontBaseline,
+            )
+          : Offset.zero,
+      hasAnnotation: hasAnnotation,
+      annotationHitBoundary: annotationHeight + level.gap / 2,
+      baseFontBaseline: baseFontBaseline,
+      annotationFontBaseline: annotationFontBaseline,
+      baseAscent: baseAscent,
+      baseDescent: baseDescent,
+      annotationAscent: annotationAscent,
+      annotationDescent: annotationDescent,
+      gap: gap,
+    );
+  }
 
   PlaceholderDimensions get placeholderDimensions => PlaceholderDimensions(
     size: size,
@@ -116,5 +201,48 @@ final class ForumBodyRubyGroupMetrics {
       bounds = bounds.expandToInclude(box.toRect());
     }
     return bounds;
+  }
+}
+
+/// Numeric union for one annotation level on one physical line. It retains no
+/// glyphs, input, owner or coverage proof. Unions before wrapping are only a
+/// cheap alignment check, never the geometry used to publish a page.
+final class ForumBodyRubyLevelMetrics {
+  const ForumBodyRubyLevelMetrics._({
+    this.baseAscent = 0,
+    this.baseDescent = 0,
+    this.annotationAscent = 0,
+    this.annotationDescent = 0,
+    this.gap = 0,
+  });
+
+  factory ForumBodyRubyLevelMetrics.single(ForumBodyRubyGroupMetrics column) =>
+      const ForumBodyRubyLevelMetrics._().include(column);
+
+  final double baseAscent;
+  final double baseDescent;
+  final double annotationAscent;
+  final double annotationDescent;
+  final double gap;
+
+  ForumBodyRubyLevelMetrics include(ForumBodyRubyGroupMetrics column) =>
+      ForumBodyRubyLevelMetrics._(
+        baseAscent: math.max(baseAscent, column.baseAscent),
+        baseDescent: math.max(baseDescent, column.baseDescent),
+        annotationAscent: math.max(annotationAscent, column.annotationAscent),
+        annotationDescent: math.max(
+          annotationDescent,
+          column.annotationDescent,
+        ),
+        gap: math.max(gap, column.hasAnnotation ? column.gap : 0),
+      );
+
+  bool contains(ForumBodyRubyGroupMetrics column) {
+    const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
+    return column.baseAscent <= baseAscent + tolerance &&
+        column.baseDescent <= baseDescent + tolerance &&
+        column.annotationAscent <= annotationAscent + tolerance &&
+        column.annotationDescent <= annotationDescent + tolerance &&
+        (!column.hasAnnotation || column.gap <= gap + tolerance);
   }
 }

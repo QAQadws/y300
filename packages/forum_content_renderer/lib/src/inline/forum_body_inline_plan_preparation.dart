@@ -4,7 +4,9 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_inline_plan_input.dart';
+import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
+import 'forum_body_ruby_row_alignment.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_layout.dart';
 
@@ -30,10 +32,12 @@ final class ForumBodyInlinePlanPreparation {
   TextScaler? _textScaler;
   void Function()? _ensureOwner;
   final double width;
-  final _dimensions = <PlaceholderDimensions>[];
+  final _metrics = <ForumBodyRubyGroupMetrics>[];
+  ForumBodyRubyRowAlignment? _alignment;
   final _retriedBands = Set<ForumBodyTextBandContent>.identity();
   ForumBodyRubyGroupPreparation? _pair;
   ForumBodyInlineParagraphLease? _parent;
+  ForumBodyInlineParagraphLease? _probe;
   ForumBodyInlinePageContent? _result;
   var _state = _State.active;
   var _operating = false;
@@ -50,8 +54,8 @@ final class ForumBodyInlinePlanPreparation {
       final before = cache.layoutBuildCount;
       var parts = 0;
       var waiting = false;
-      while (_dimensions.length < _input!.groups.length && parts < maxParts) {
-        final request = _input!.groups[_dimensions.length];
+      while (_metrics.length < _input!.groups.length && parts < maxParts) {
+        final request = _input!.groups[_metrics.length];
         final pair = _pair ??= ForumBodyRubyGroupPreparation.forMetrics(
           cache: cache,
           base: request.base,
@@ -67,7 +71,7 @@ final class ForumBodyInlinePlanPreparation {
           final budgetChanged = cache.budgetRevision != revisionBefore;
           if (step.madeProgress || budgetChanged) parts++;
           if (step.isReady) {
-            _dimensions.add(pair.takeMetrics().placeholderDimensions);
+            _metrics.add(pair.takeMetrics());
             pair.close();
             _pair = null;
           }
@@ -106,35 +110,12 @@ final class ForumBodyInlinePlanPreparation {
           break;
         }
       }
-      if (_dimensions.length == _input!.groups.length && parts == 0) {
-        ForumBodyInlineParagraphLease? parent;
-        final rejectedAt = cache.budgetRevision;
-        try {
-          parent = cache.acquireInline(
-            content: _input!.content,
-            width: width,
-            dimensions: _dimensions,
-            textScaler: _textScaler!,
-          );
-          _guard();
-          _parent = parent;
-          _result = ForumBodyInlinePageContent(
-            content: _input!.content,
-            dimensions: _dimensions,
-            rubyGroups: _input!.groups,
-          );
-          _state = _State.ready;
-          parts++;
-        } on ForumBodyParagraphBudgetException catch (error) {
-          parent?.release();
-          _guard();
-          if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
-          waiting = cache.budgetRevision == rejectedAt;
-          if (!waiting) parts++;
-        } catch (_) {
-          parent?.release();
-          rethrow;
-        }
+      if (_metrics.length == _input!.groups.length &&
+          parts < maxParts &&
+          cache.layoutBuildCount == before) {
+        final step = _advanceLayout(maxParts: maxParts - parts);
+        parts += step.partsPrepared;
+        waiting = step.waitingForLayoutBudget;
       }
       return (
         partsPrepared: parts,
@@ -142,6 +123,126 @@ final class ForumBodyInlinePlanPreparation {
         waitingForLayoutBudget: waiting,
       );
     });
+  }
+
+  ({int partsPrepared, bool waitingForLayoutBudget}) _advanceLayout({
+    required int maxParts,
+  }) {
+    final alignment = _alignment ??= ForumBodyRubyRowAlignment(
+      columns: _metrics,
+      levelIds: _input!.rubyLevelIds,
+      atomOffsets: _input!.atomEngineOffsets,
+    );
+    var parts = 0;
+    if (!alignment.isComplete && !alignment.needsRows) {
+      parts += alignment.advance(maxParts: maxParts);
+      _guard();
+      if (parts == maxParts) {
+        return (partsPrepared: parts, waitingForLayoutBudget: false);
+      }
+    }
+    if (alignment.needsRows) {
+      final step = _acquireParent(alignment, provisional: true);
+      return (
+        partsPrepared: parts + step.partsPrepared,
+        waitingForLayoutBudget: step.waitingForLayoutBudget,
+      );
+    }
+    if (!alignment.isComplete) {
+      return (partsPrepared: parts, waitingForLayoutBudget: false);
+    }
+    if (!alignment.hasChanges) {
+      if (_probe != null) {
+        _parent = _probe;
+        _probe = null;
+        _makeReady(alignment);
+        return (partsPrepared: parts + 1, waitingForLayoutBudget: false);
+      }
+      final step = _acquireParent(alignment, provisional: false);
+      return (
+        partsPrepared: parts + step.partsPrepared,
+        waitingForLayoutBudget: step.waitingForLayoutBudget,
+      );
+    }
+    if (_probe != null) {
+      // Only the last alias evicts this unneeded provisional shape. Release
+      // before the final acquisition so it cannot displace a warm glyph band.
+      _probe!.releaseProvisional();
+      _probe = null;
+      _guard();
+      return (partsPrepared: parts + 1, waitingForLayoutBudget: false);
+    }
+    if (_parent == null) {
+      final step = _acquireParent(alignment, provisional: false);
+      return (
+        partsPrepared: parts + step.partsPrepared,
+        waitingForLayoutBudget: step.waitingForLayoutBudget,
+      );
+    }
+    parts += alignment.verifyRows(
+      _parent!.layout.lines,
+      maxParts: maxParts - parts,
+    );
+    _guard();
+    if (alignment.isVerified) _makeReady(alignment);
+    return (partsPrepared: parts, waitingForLayoutBudget: false);
+  }
+
+  ({int partsPrepared, bool waitingForLayoutBudget}) _acquireParent(
+    ForumBodyRubyRowAlignment alignment, {
+    required bool provisional,
+  }) {
+    final cache = _cache!;
+    final rejectedAt = cache.budgetRevision;
+    ForumBodyInlineParagraphLease? parent;
+    void release() {
+      if (identical(_parent, parent)) _parent = null;
+      if (identical(_probe, parent)) _probe = null;
+      if (provisional) {
+        parent?.releaseProvisional();
+      } else {
+        parent?.release();
+      }
+    }
+
+    try {
+      parent = cache.acquireInline(
+        content: _input!.content,
+        width: width,
+        dimensions: alignment.dimensions,
+        textScaler: _textScaler!,
+      );
+      _guard();
+      if (provisional) {
+        _probe = parent;
+        alignment.attachRows(parent.layout.lines);
+      } else {
+        _parent = parent;
+        if (!alignment.hasChanges) _makeReady(alignment);
+      }
+      return (partsPrepared: 1, waitingForLayoutBudget: false);
+    } on ForumBodyParagraphBudgetException catch (error) {
+      release();
+      _guard();
+      if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
+      final waiting = cache.budgetRevision == rejectedAt;
+      return (partsPrepared: waiting ? 0 : 1, waitingForLayoutBudget: waiting);
+    } catch (_) {
+      release();
+      rethrow;
+    }
+  }
+
+  void _makeReady(ForumBodyRubyRowAlignment alignment) {
+    _guard();
+    _result = ForumBodyInlinePageContent(
+      content: _input!.content,
+      dimensions: alignment.dimensions,
+      rubyGroups: _input!.groups,
+      rubyLevelMetrics: alignment.targets,
+    );
+    _guard();
+    _state = _State.ready;
   }
 
   ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})
@@ -177,6 +278,7 @@ final class ForumBodyInlinePlanPreparation {
     _ensureOwner!();
     if ((_state != _State.active && !isReady) ||
         _cache!.isClosed ||
+        (_probe != null && !_cache!.ownsLease(_probe!)) ||
         (_parent != null && !_cache!.ownsLease(_parent!))) {
       throw StateError('Inline plan owner is retired');
     }
@@ -187,9 +289,12 @@ final class ForumBodyInlinePlanPreparation {
     _pair = null;
     _parent?.release();
     _parent = null;
+    _probe?.releaseProvisional();
+    _probe = null;
     _input = null;
     _result = null;
-    _dimensions.clear();
+    _metrics.clear();
+    _alignment = null;
     _retriedBands.clear();
     _cache = null;
     _textScaler = null;

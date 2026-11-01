@@ -103,6 +103,7 @@ final class ForumBodyInlinePagePreparation {
           cache: cache,
           base: request.base,
           annotation: request.annotation,
+          level: input.rubyLevelMetrics[index],
           gap: request.gap,
           maxWidth: request.maxWidth,
           textScaler: _textScaler!,

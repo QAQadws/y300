@@ -12,8 +12,16 @@ import 'forum_body_text_band_content.dart';
 /// Pure source-bound parent input and child requests for the session's pending
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
-  ForumBodyInlinePlanInput._(this.content, this.groups, this.width);
-  static const revision = 7;
+  ForumBodyInlinePlanInput._(
+    this.content,
+    this.groups,
+    this.width,
+    List<int> levelIds,
+  ) : rubyLevelIds = List.unmodifiable(levelIds),
+      atomEngineOffsets = List.unmodifiable(
+        content.projection.atoms.map((atom) => atom.engineUtf16),
+      );
+  static const revision = 8;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -32,6 +40,8 @@ final class ForumBodyInlinePlanInput {
           })
         >[];
     final atoms = <({int startUtf16, int endUtf16})>[];
+    final levelIds = <int>[];
+    final roots = <String, int>{};
     var offset = 0;
     var previousCollapsibleSpace = false;
     var atLineStart = true;
@@ -80,6 +90,7 @@ final class ForumBodyInlinePlanInput {
       ForumBodyParagraphContent annotation,
       List<int> baseIndices,
       List<int> annotationIndices,
+      int levelId,
     ) {
       if (base.projection.text.isEmpty && annotation.projection.text.isEmpty) {
         _unsupported(base.path ?? annotation.path);
@@ -89,6 +100,7 @@ final class ForumBodyInlinePlanInput {
       if (!annotation.isSourceFree) annotationIndices.add(append(annotation));
       atoms.add((startUtf16: start, endUtf16: offset));
       pairs.add((base: base, annotation: annotation));
+      levelIds.add(levelId);
       previousCollapsibleSpace = false;
       atLineStart = false;
       lastPlain = null;
@@ -100,6 +112,7 @@ final class ForumBodyInlinePlanInput {
           sourceOrder.add(appendPlain(part.content));
         case ForumBodyInlineFlowRuby():
           final group = part.group;
+          final levelId = roots.putIfAbsent(group.rootPath, () => roots.length);
           if (group.identity != input.identity ||
               group.fontRevision != input.fontRevision ||
               group.styleRevision != input.styleRevision) {
@@ -167,6 +180,7 @@ final class ForumBodyInlinePlanInput {
                   : (anonymous ??= _anonymousBase(group)),
               sources,
               annotationIndices,
+              levelId,
             );
             column++;
             if (trailing != null) {
@@ -183,6 +197,7 @@ final class ForumBodyInlinePlanInput {
               annotations[column],
               const [],
               annotationIndices,
+              levelId,
             );
           }
           if (deferredTail != null) {
@@ -222,20 +237,27 @@ final class ForumBodyInlinePlanInput {
       for (final pair in pairs)
         if (pair.base.isSourceFree) pair.base,
     ]);
-    return ForumBodyInlinePlanInput._(content, [
-      for (final pair in pairs)
-        ForumBodyRubyPairRequest(
-          base: requests[pair.base]!,
-          annotation:
-              requests[pair.annotation] ??
-              ForumBodyTextRequest.paragraph(pair.annotation),
-          maxWidth: width,
-        ),
-    ], width);
+    return ForumBodyInlinePlanInput._(
+      content,
+      [
+        for (final pair in pairs)
+          ForumBodyRubyPairRequest(
+            base: requests[pair.base]!,
+            annotation:
+                requests[pair.annotation] ??
+                ForumBodyTextRequest.paragraph(pair.annotation),
+            maxWidth: width,
+          ),
+      ],
+      width,
+      levelIds,
+    );
   }
 
   final ForumBodyInlineSpanContent content;
   final double width;
+  final List<int> rubyLevelIds;
+  final List<int> atomEngineOffsets;
   // Rebound only before publication when native isolation supplies a new
   // request. Published PageContent freezes its own copy of this pure list.
   final List<ForumBodyRubyPairRequest> groups;

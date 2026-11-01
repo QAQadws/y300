@@ -3,6 +3,7 @@ import '../document/forum_body_document.dart';
 
 import '../inline/forum_body_inline_span_content.dart';
 import '../inline/forum_body_ruby_group_layout.dart';
+import '../inline/forum_body_ruby_group_metrics.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_text_page_binding.dart';
@@ -44,6 +45,7 @@ sealed class ForumBodyTextPageContent {
     required ForumBodyInlineSpanContent content,
     required List<PlaceholderDimensions> dimensions,
     required List<ForumBodyRubyPairRequest> rubyGroups,
+    List<ForumBodyRubyLevelMetrics?>? rubyLevelMetrics,
     ForumBodyParagraphLayoutMode layoutMode,
   }) = ForumBodyInlinePageContent;
   int get textCodeUnits;
@@ -91,12 +93,17 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     required this.content,
     required List<PlaceholderDimensions> dimensions,
     required List<ForumBodyRubyPairRequest> rubyGroups,
+    List<ForumBodyRubyLevelMetrics?>? rubyLevelMetrics,
     this.layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) : dimensions = List.unmodifiable(dimensions),
        rubyGroups = List.unmodifiable(rubyGroups),
+       rubyLevelMetrics = List.unmodifiable(
+         rubyLevelMetrics ?? List.filled(rubyGroups.length, null),
+       ),
        super._() {
     content.validateDimensions(this.dimensions);
     if (rubyGroups.length != content.projection.atoms.length ||
+        this.rubyLevelMetrics.length != rubyGroups.length ||
         layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine) {
       throw ArgumentError('Invalid inline page input');
     }
@@ -128,6 +135,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   final ForumBodyInlineSpanContent content;
   final List<PlaceholderDimensions> dimensions;
   final List<ForumBodyRubyPairRequest> rubyGroups;
+  final List<ForumBodyRubyLevelMetrics?> rubyLevelMetrics;
   final ForumBodyParagraphLayoutMode layoutMode;
   @override
   ForumBodyIdentity get identity => content.identity;
