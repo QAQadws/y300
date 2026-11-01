@@ -408,7 +408,9 @@ final class ForumBodyParagraphCache {
       if (_closed) throw StateError('Paragraph cache is closed');
       final bytes =
           minimumBytes +
-          built.lineCount * 96 +
+          // Only paragraph rows gained the two omitted-space coordinates.
+          // Text-band native lines retain their existing geometry accounting.
+          built.lineCount * (built is ForumBodyTextBandLayout ? 96 : 112) +
           (built is ForumBodyInlineParagraphLayout
               ? built.fragmentFrameBytes
               : 0);

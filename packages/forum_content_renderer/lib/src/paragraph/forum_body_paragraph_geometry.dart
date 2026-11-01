@@ -66,11 +66,17 @@ final class ForumBodyParagraphLine {
     int? engineEndUtf16,
     int? engineCoverageStartUtf16,
     int? engineCoverageEndUtf16,
+    int? unpaintedTrailingSpaceStartUtf16,
+    int? engineUnpaintedTrailingSpaceStartUtf16,
   }) : engineStartUtf16 = engineStartUtf16 ?? startUtf16,
        engineEndUtf16 = engineEndUtf16 ?? endUtf16,
        engineCoverageStartUtf16 =
            engineCoverageStartUtf16 ?? coverageStartUtf16,
-       engineCoverageEndUtf16 = engineCoverageEndUtf16 ?? coverageEndUtf16;
+       engineCoverageEndUtf16 = engineCoverageEndUtf16 ?? coverageEndUtf16,
+       unpaintedTrailingSpaceStartUtf16 =
+           unpaintedTrailingSpaceStartUtf16 ?? endUtf16,
+       engineUnpaintedTrailingSpaceStartUtf16 =
+           engineUnpaintedTrailingSpaceStartUtf16 ?? engineEndUtf16 ?? endUtf16;
   final double top;
   final double bottom;
   final double baseline;
@@ -84,6 +90,12 @@ final class ForumBodyParagraphLine {
   final int engineEndUtf16;
   final int engineCoverageStartUtf16;
   final int engineCoverageEndUtf16;
+
+  /// Native nonempty rows omit trailing ASCII SPACE from all paint passes.
+  /// Selection/coverage coordinates retain those characters. Other whitespace
+  /// and all-space rows remain conservative until independently verified.
+  final int unpaintedTrailingSpaceStartUtf16;
+  final int engineUnpaintedTrailingSpaceStartUtf16;
   final bool canBreakBefore;
   final bool canBreakAfter;
 
@@ -103,6 +115,9 @@ final class ForumBodyParagraphLine {
     engineEndUtf16: engineEndUtf16,
     engineCoverageStartUtf16: engineCoverageStartUtf16,
     engineCoverageEndUtf16: engineCoverageEndUtf16,
+    unpaintedTrailingSpaceStartUtf16: unpaintedTrailingSpaceStartUtf16,
+    engineUnpaintedTrailingSpaceStartUtf16:
+        engineUnpaintedTrailingSpaceStartUtf16,
     canBreakBefore: canBreakBefore,
     canBreakAfter: canBreakAfter,
   );
@@ -197,6 +212,30 @@ List<ForumBodyParagraphLine> forumBodyParagraphLines({
         ForumBodyParagraphLayoutFailure.coverage,
       );
     }
+    var paintedEnd = range.end;
+    if (metric.width > 0) {
+      while (paintedEnd > range.start &&
+          text.codeUnitAt(paintedEnd - 1) == 0x20) {
+        paintedEnd--;
+      }
+    }
+    if (paintedEnd < range.end) {
+      // A custom font may join SPACE into another glyph. The native API only
+      // returns whole glyphs; do not trim across an unverified glyph boundary.
+      final firstSpace = painter.getBoxesForSelection(
+        TextSelection(baseOffset: paintedEnd, extentOffset: paintedEnd + 1),
+      );
+      if (firstSpace.isEmpty ||
+          firstSpace.any(
+            (box) =>
+                !box.left.isFinite ||
+                !box.right.isFinite ||
+                !box.top.isFinite ||
+                !box.bottom.isFinite,
+          )) {
+        paintedEnd = range.end;
+      }
+    }
     lines.add(
       ForumBodyParagraphLine(
         top: (metric.baseline - metric.ascent) * paintScale,
@@ -212,6 +251,8 @@ List<ForumBodyParagraphLine> forumBodyParagraphLines({
         engineEndUtf16: range.end,
         engineCoverageStartUtf16: start,
         engineCoverageEndUtf16: end,
+        unpaintedTrailingSpaceStartUtf16: displayOffset(paintedEnd),
+        engineUnpaintedTrailingSpaceStartUtf16: paintedEnd,
         canBreakBefore: legal(start),
         canBreakAfter: legal(end),
       ),
@@ -224,4 +265,45 @@ List<ForumBodyParagraphLine> forumBodyParagraphLines({
     );
   }
   return List.unmodifiable(lines);
+}
+
+/// Exclude only the native row's verified omitted SPACE suffix. Keeping the
+/// original range across every other boundary preserves breaks and glyphs;
+/// no caller may use the omitted interval itself as painted-source evidence.
+Iterable<TextRange> forumBodyPaintedTextRanges(
+  List<ForumBodyParagraphLine> lines,
+  int start,
+  int end,
+) sync* {
+  if (start >= end) return;
+  var low = 0, high = lines.length;
+  while (low < high) {
+    final middle = (low + high) >> 1;
+    if (lines[middle].coverageEndUtf16 <= start) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  var cursor = start;
+  for (
+    var i = low;
+    i < lines.length && lines[i].coverageStartUtf16 < end;
+    i++
+  ) {
+    final line = lines[i];
+    final omittedStart = line.unpaintedTrailingSpaceStartUtf16.clamp(
+      cursor,
+      end,
+    );
+    final omittedEnd = line.endUtf16.clamp(cursor, end);
+    if (omittedStart >= omittedEnd) continue;
+    if (cursor < omittedStart) {
+      yield TextRange(start: cursor, end: omittedStart);
+    }
+    cursor = omittedEnd;
+  }
+  if (cursor < end) {
+    yield TextRange(start: cursor, end: end);
+  }
 }

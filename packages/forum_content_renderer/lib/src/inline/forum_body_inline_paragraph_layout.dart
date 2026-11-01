@@ -79,7 +79,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 8;
+  static const revision = 9;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
 
   factory ForumBodyInlineParagraphLayout.create({
@@ -475,6 +475,20 @@ final class ForumBodyInlineParagraphLayout
   }
 
   ForumBodyInlineSelection selection(int startUtf16, int endUtf16) {
+    return _selection(startUtf16, endUtf16, paintedOnly: false);
+  }
+
+  /// Parent selection excluding verified omitted SPACE suffixes, plus the
+  /// original atomic children. Parent omission never classifies child paint.
+  ForumBodyInlineSelection glyphSelection(int startUtf16, int endUtf16) {
+    return _selection(startUtf16, endUtf16, paintedOnly: true);
+  }
+
+  ForumBodyInlineSelection _selection(
+    int startUtf16,
+    int endUtf16, {
+    required bool paintedOnly,
+  }) {
     _ensureOpen();
     final display = projection.display;
     RangeError.checkValidRange(startUtf16, endUtf16, display.text.length);
@@ -489,16 +503,25 @@ final class ForumBodyInlineParagraphLayout
     final selectedAtoms = <ForumBodyInlineAtomSelection>[];
     void text(int from, int to) {
       if (from >= to) return;
-      boxes.addAll(
-        _painter
-            .getBoxesForSelection(
-              TextSelection(
-                baseOffset: projection.engineAtDisplayUtf16(from).engineUtf16,
-                extentOffset: projection.engineAtDisplayUtf16(to).engineUtf16,
-              ),
-            )
-            .map((box) => _shiftBox(box, _paintOffset)),
-      );
+      final ranges = paintedOnly
+          ? forumBodyPaintedTextRanges(lines, from, to)
+          : [TextRange(start: from, end: to)];
+      for (final range in ranges) {
+        boxes.addAll(
+          _painter
+              .getBoxesForSelection(
+                TextSelection(
+                  baseOffset: projection
+                      .engineAtDisplayUtf16(range.start)
+                      .engineUtf16,
+                  extentOffset: projection
+                      .engineAtDisplayUtf16(range.end)
+                      .engineUtf16,
+                ),
+              )
+              .map((box) => _shiftBox(box, _paintOffset)),
+        );
+      }
     }
 
     var cursor = start;

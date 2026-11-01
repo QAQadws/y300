@@ -147,6 +147,59 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final direction in TextDirection.values) {
+    for (final mixed in [false, true]) {
+      test(
+        'hanging row SPACE is not a clipped glyph or new source proof ($direction, mixed=$mixed)',
+        () {
+          final fixture = _Fixture(
+            '<p dir="${direction.name}" style="white-space:pre-wrap;letter-spacing:1px;word-spacing:7.5px">abc  '
+            '${mixed ? '<ruby>AB<rt>xy</rt></ruby>' : ''}def</p>',
+            width: 45,
+            height: 15,
+          );
+          final fragments = fixture.prepareFragments(0);
+          try {
+            final fragment = fragments.single;
+            final raw = switch (fragment) {
+              ForumBodyPreparedParagraphFragment(:final lease) =>
+                lease.layout.selectionBoxes(3, 5),
+              ForumBodyPreparedInlineFragment(:final view) =>
+                view.selectionBoxes(3, 5, clipToView: false),
+            };
+            expect(raw, isNotEmpty);
+            expect(raw.any((box) => box.left < 0 || box.right > 45), isTrue);
+            expect(fragment.glyphBoxes(3, 5), isEmpty);
+            final builds = fixture.cache.layoutBuildCount;
+            final coverage = _finish(fixture.preparedCursor(0, fragments));
+            expect(coverage.hasClippedGlyphs, isFalse);
+            expect(coverage.points.map((point) => point.displayUtf16).toSet(), {
+              0,
+              1,
+              2,
+              3,
+            });
+            expect(coverage.points.map((point) => point.sourceRune).toSet(), {
+              0,
+              1,
+              2,
+              3,
+            });
+            expect(coverage.locate(fixture.anchor(3)), isNotNull);
+            expect(fixture.cache.layoutBuildCount, builds);
+            expect(fragments.every((fragment) => fragment.isActive), isTrue);
+          } finally {
+            for (final fragment in fragments) {
+              fragment.close();
+            }
+          }
+          expect(fixture.cache.activeLeases, 0);
+          expect(fixture.session.activeIssuedLeases, 0);
+        },
+      );
+    }
+  }
+
   test('extracted base space preserves post-break native source coverage', () {
     final fixture = _Fixture(
       '<p>X <ruby> AB<rt>xy</rt></ruby>Y</p>',

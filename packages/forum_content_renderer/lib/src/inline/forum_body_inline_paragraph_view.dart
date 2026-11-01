@@ -211,6 +211,29 @@ final class ForumBodyInlineParagraphView {
     int endUtf16, {
     bool clipToView = true,
   }) {
+    return _selectionBoxes(
+      startUtf16,
+      endUtf16,
+      clipToView: clipToView,
+      paintedOnly: false,
+    );
+  }
+
+  /// Unclipped proof boxes. Atomic geometry still comes from its own prepared
+  /// child; only confirmed parent-row SPACE suffixes are excluded here.
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) => _selectionBoxes(
+    startUtf16,
+    endUtf16,
+    clipToView: false,
+    paintedOnly: true,
+  );
+
+  List<TextBox> _selectionBoxes(
+    int startUtf16,
+    int endUtf16, {
+    required bool clipToView,
+    required bool paintedOnly,
+  }) {
     _ensureActive();
     RangeError.checkValidRange(
       startUtf16,
@@ -220,7 +243,9 @@ final class ForumBodyInlineParagraphView {
     final start = startUtf16.clamp(coverageStartUtf16, coverageEndUtf16);
     final end = endUtf16.clamp(coverageStartUtf16, coverageEndUtf16);
     if (start >= end) return const [];
-    final selected = _fragment!.layout.selection(start, end);
+    final selected = paintedOnly
+        ? _fragment!.layout.glyphSelection(start, end)
+        : _fragment!.layout.selection(start, end);
     final result = <TextBox>[];
     void add(TextBox box, Offset translation) {
       final raw = box.toRect().shift(translation);

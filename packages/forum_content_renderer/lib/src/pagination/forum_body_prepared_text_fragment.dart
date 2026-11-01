@@ -5,6 +5,8 @@ import '../inline/forum_body_inline_paragraph_view.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_paragraph_geometry.dart'
+    show forumBodyPaintedTextRanges;
 
 /// One complete prepared fragment. Each concurrently mounted view must own
 /// distinct handles even when they share the same cache entry. These values
@@ -36,6 +38,8 @@ sealed class ForumBodyPreparedTextFragment {
   /// fragment's display range but deliberately NOT clipped to its frame. A
   /// coverage checker must reject a partly hidden glyph, not prove its clipped
   /// rectangle. Mixed atoms resolve through their actual prepared child glyphs.
+  /// Confirmed unpainted parent-row SPACE suffixes supply no glyph or anchor
+  /// evidence; ordinary UI selections still retain their native boxes.
   List<TextBox> glyphBoxes(int startUtf16, int endUtf16);
   void close();
 }
@@ -102,14 +106,19 @@ final class ForumBodyPreparedParagraphFragment
     );
     if (start >= end) return const [];
     return List.unmodifiable([
-      for (final box in lease.layout.selectionBoxes(start, end))
-        TextBox.fromLTRBD(
-          box.left,
-          box.top - window.top,
-          box.right,
-          box.bottom - window.top,
-          box.direction,
-        ),
+      for (final range in forumBodyPaintedTextRanges(
+        lease.layout.lines,
+        start,
+        end,
+      ))
+        for (final box in lease.layout.selectionBoxes(range.start, range.end))
+          TextBox.fromLTRBD(
+            box.left,
+            box.top - window.top,
+            box.right,
+            box.bottom - window.top,
+            box.direction,
+          ),
     ]);
   }
 
@@ -133,7 +142,7 @@ final class ForumBodyPreparedInlineFragment
   Iterable<ForumBodyParagraphLine> get lines => view.lines;
   @override
   List<TextBox> glyphBoxes(int startUtf16, int endUtf16) =>
-      view.selectionBoxes(startUtf16, endUtf16, clipToView: false);
+      view.glyphBoxes(startUtf16, endUtf16);
   @override
   void close() => view.close();
 }

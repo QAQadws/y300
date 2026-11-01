@@ -164,7 +164,7 @@ final class ForumBodyParagraphLayout
     return scales;
   }
 
-  static const backendRevision = 8;
+  static const backendRevision = 9;
 
   /// Physical edge reserve shared by paint, hit testing, lines and boxes.
   final double horizontalInset;
