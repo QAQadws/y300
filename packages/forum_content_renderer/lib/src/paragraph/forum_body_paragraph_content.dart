@@ -6,6 +6,7 @@ import '../flow/forum_body_styled_flow_cursor.dart';
 import '../style/forum_body_length.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
+import 'forum_body_paragraph_input_admission.dart';
 
 enum ForumBodyParagraphInputFailure {
   identity,
@@ -81,6 +82,17 @@ final class ForumBodyParagraphContent {
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyStyleIssue> issues;
   final bool isSourceFree;
+
+  // Pure immutable work only; width and actual TextScaler values remain
+  // request inputs. Slices/whitespace projections each own a new admission.
+  late final layoutInput = ForumBodyParagraphInputAdmission(
+    style: style,
+    runStyles: runs.map((run) => run.style),
+    displayText: projection.text,
+    wraps: layoutMode == ForumBodyParagraphLayoutMode.wrap,
+    allowsIndent:
+        layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+  );
 
   /// An explicit window of this display projection, retaining original source
   /// affinity and run ownership. This never slices HTML or semantic offsets.

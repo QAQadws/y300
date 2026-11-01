@@ -2,7 +2,6 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
-import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
 import 'forum_body_native_paragraph_layout.dart';
@@ -107,48 +106,8 @@ final class ForumBodyParagraphLayout
         ForumBodyParagraphLayoutFailure.width,
       );
     }
-    // Intrinsic inline text is not a paragraph's first line. Its containing
-    // block owns indentation; applying that inherited value here duplicates it.
-    if (content.style.indent.value != 0 &&
-        content.layoutMode !=
-            ForumBodyParagraphLayoutMode.intrinsicSingleLine) {
-      throw const ForumBodyParagraphLayoutException(
-        ForumBodyParagraphLayoutFailure.indent,
-      );
-    }
-    if (content.layoutMode != ForumBodyParagraphLayoutMode.wrap &&
-        content.projection.text.runes.any(
-          (rune) =>
-              forumBodyIsDisplayLineBreak(rune) || rune == 0x0d || rune == 0x85,
-        )) {
-      throw const ForumBodyParagraphLayoutException(
-        ForumBodyParagraphLayoutFailure.singleLine,
-      );
-    }
     final scales = <double, double>{};
-    for (final style in [
-      content.style,
-      ...content.runs.map((run) => run.style),
-    ]) {
-      if (style.textDirection != content.style.textDirection) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.direction,
-        );
-      }
-      if (style.whiteSpace == ForumBodyWhiteSpace.pre &&
-          content.layoutMode == ForumBodyParagraphLayoutMode.wrap) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.noWrap,
-        );
-      }
-      final size = style.textStyle.fontSize!;
-      final scaled = scales.putIfAbsent(size, () => textScaler.scale(size));
-      if (!scaled.isFinite || scaled <= 0 || scaled > 4096) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.scale,
-        );
-      }
-    }
+    content.layoutInput.resolveScalesInto(scales, textScaler: textScaler);
     return scales;
   }
 

@@ -78,6 +78,142 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'repeated input admission reads current values in original size order',
+    () {
+      final input = content(
+        '<p>A<span style="font-size:10px">B</span>'
+        '<b>C</b><span style="font-size:30px">D</span></p>',
+      );
+      final seen = <double>[];
+      var ratio = 1.0;
+      final scaler = _AdmissionScaler((size) {
+        seen.add(size);
+        return size * ratio;
+      });
+      Map<double, double> resolve() => ForumBodyParagraphLayout.validateInputs(
+        content: input,
+        width: 200,
+        textScaler: scaler,
+      );
+      expect(resolve(), {20: 20, 10: 10, 30: 30});
+      expect(seen, [20, 10, 30]);
+      seen.clear();
+      ratio = 1.5;
+      expect(resolve(), {20: 30, 10: 15, 30: 45});
+      expect(seen, [20, 10, 30]);
+      ratio = double.nan;
+      expect(
+        resolve,
+        throwsA(_admissionFailure(ForumBodyParagraphLayoutFailure.scale)),
+      );
+    },
+  );
+
+  test(
+    'a later invalid style keeps preceding scaler calls and failure order',
+    () {
+      final input = content(
+        '<p>A<span style="font-size:10px">B</span>'
+        '<span dir="rtl">C</span></p>',
+      );
+      final seen = <double>[];
+      var valid = true;
+      final scaler = _AdmissionScaler((size) {
+        seen.add(size);
+        return valid ? size : double.nan;
+      });
+      void resolve() => ForumBodyParagraphLayout.validateInputs(
+        content: input,
+        width: 200,
+        textScaler: scaler,
+      );
+      for (var repeat = 0; repeat < 2; repeat++) {
+        seen.clear();
+        expect(
+          resolve,
+          throwsA(_admissionFailure(ForumBodyParagraphLayoutFailure.direction)),
+        );
+        expect(seen, [20, 10]);
+      }
+      valid = false;
+      seen.clear();
+      expect(
+        resolve,
+        throwsA(_admissionFailure(ForumBodyParagraphLayoutFailure.scale)),
+      );
+      expect(seen, [20]);
+    },
+  );
+
+  test('width and immutable preconditions precede all scaler calls', () {
+    final scaler = _AdmissionScaler((size) => fail('Preflight must run first'));
+    for (final (html, mode, failure) in [
+      (
+        '<p style="text-indent:2em">a</p>',
+        ForumBodyParagraphLayoutMode.wrap,
+        ForumBodyParagraphLayoutFailure.indent,
+      ),
+      (
+        '<p>a<br>b</p>',
+        ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+        ForumBodyParagraphLayoutFailure.singleLine,
+      ),
+      (
+        '<p style="white-space:pre">a</p>',
+        ForumBodyParagraphLayoutMode.wrap,
+        ForumBodyParagraphLayoutFailure.noWrap,
+      ),
+    ]) {
+      final input = content(html, layoutMode: mode);
+      for (var repeat = 0; repeat < 2; repeat++) {
+        expect(
+          () => ForumBodyParagraphLayout.validateInputs(
+            content: input,
+            width: 200,
+            textScaler: scaler,
+          ),
+          throwsA(_admissionFailure(failure)),
+        );
+        expect(
+          () => ForumBodyParagraphLayout.validateInputs(
+            content: input,
+            width: 0,
+            textScaler: scaler,
+          ),
+          throwsA(_admissionFailure(ForumBodyParagraphLayoutFailure.width)),
+        );
+      }
+    }
+  });
+
+  test(
+    'display slices validate their own hard breaks, not their old input',
+    () {
+      final input = content(
+        '<p>ab<br>cd</p>',
+        layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      );
+      Map<double, double> resolve(ForumBodyParagraphContent value) =>
+          ForumBodyParagraphLayout.validateInputs(
+            content: value,
+            width: 200,
+            textScaler: TextScaler.noScaling,
+          );
+      expect(
+        () => resolve(input),
+        throwsA(_admissionFailure(ForumBodyParagraphLayoutFailure.singleLine)),
+      );
+      final slice = input.displayWindow(startUtf16: 0, endUtf16: 2);
+      expect(resolve(slice), {20: 20});
+      expect(resolve(slice), {20: 20});
+      expect(
+        () => resolve(input),
+        throwsA(_admissionFailure(ForumBodyParagraphLayoutFailure.singleLine)),
+      );
+    },
+  );
+
+  test(
     'empty native font baseline does not fabricate text rows or pixels',
     () async {
       final input = content('<p></p>');
@@ -722,4 +858,20 @@ final class _NonlinearScaler extends TextScaler {
   double scale(double size) => size <= 20 ? size * 2 : size * 1.25;
   @override
   double get textScaleFactor => 2;
+}
+
+Matcher _admissionFailure(ForumBodyParagraphLayoutFailure failure) =>
+    isA<ForumBodyParagraphLayoutException>().having(
+      (error) => error.failure,
+      'failure',
+      failure,
+    );
+
+final class _AdmissionScaler extends TextScaler {
+  const _AdmissionScaler(this.resolve);
+  final double Function(double) resolve;
+  @override
+  double scale(double size) => resolve(size);
+  @override
+  double get textScaleFactor => 1;
 }

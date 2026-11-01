@@ -62,6 +62,42 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'each band context still checks scaler consistency on every admission',
+    () {
+      final input = ForumBodyTextBandContent(
+        contexts: contexts(['<span>AB</span>', '<span>CD</span>']),
+      );
+      final seen = <double>[];
+      var stable = false;
+      final scaler = _Scaler((size) {
+        seen.add(size);
+        return stable ? size : size + seen.length;
+      });
+      Map<double, double> resolve() => ForumBodyTextBandLayout.validateInputs(
+        content: input,
+        textScaler: scaler,
+      ).scales;
+      expect(
+        resolve,
+        throwsA(
+          isA<ForumBodyParagraphLayoutException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyParagraphLayoutFailure.scale,
+          ),
+        ),
+      );
+      expect(seen, [20, 20]);
+      stable = true;
+      for (var repeat = 0; repeat < 2; repeat++) {
+        seen.clear();
+        expect(resolve(), {20: 20});
+        expect(seen, [20, 20]);
+      }
+    },
+  );
+
+  test(
     'different text and font sizes share one native band with independent geometry/source',
     () {
       final inputs = contexts([
