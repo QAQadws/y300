@@ -67,11 +67,15 @@ final class ForumBodyInlineParagraphLayout
     required Offset paintOffset,
     required Float64List frameTops,
     required Float64List frameBottoms,
+    Uint8List? trimmedAtoms,
+    Float64List? spaceAllocations,
   }) : _painter = painter,
        _frameTops = frameTops,
        _frameBottoms = frameBottoms,
-       _paintOffset = paintOffset;
-  static const revision = 3;
+       _paintOffset = paintOffset,
+       _trimmedAtoms = trimmedAtoms,
+       _spaceAllocations = spaceAllocations;
+  static const revision = 4;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,
@@ -90,14 +94,24 @@ final class ForumBodyInlineParagraphLayout
     );
     final intrinsic =
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
-    final painter = TextPainter(
-      text: content.textSpan,
-      textAlign: content.style.textAlign,
-      textDirection: content.style.textDirection,
-      textScaler: textScaler,
-      locale: content.style.textStyle.locale,
-      textWidthBasis: TextWidthBasis.parent,
-    )..setPlaceholderDimensions(snapshot);
+    final painter =
+        TextPainter(
+          text: content.projection.hasSoftSpaces
+              ? content.textSpanWithDimensions(snapshot)
+              : content.textSpan,
+          textAlign: content.style.textAlign,
+          textDirection: content.style.textDirection,
+          textScaler: textScaler,
+          locale: content.style.textStyle.locale,
+          textWidthBasis: TextWidthBasis.parent,
+        )..setPlaceholderDimensions(
+          content.projection.hasSoftSpaces
+              ? [
+                  for (final (i, atom) in content.projection.atoms.indexed)
+                    if (!atom.isSoftSpace) snapshot[i],
+                ]
+              : snapshot,
+        );
     try {
       painter.layout(
         minWidth: intrinsic ? 0 : width,
@@ -119,9 +133,17 @@ final class ForumBodyInlineParagraphLayout
           ForumBodyParagraphLayoutFailure.singleLine,
         );
       }
-      final boxes = List<TextBox>.unmodifiable(
+      final nativeBoxes = List<TextBox>.unmodifiable(
         painter.inlinePlaceholderBoxes ?? const [],
       );
+      final slots = _inlineSlots(
+        painter,
+        content,
+        snapshot,
+        lines,
+        nativeBoxes,
+      );
+      final boxes = slots.boxes;
       if (boxes.length != snapshot.length ||
           !painter.height.isFinite ||
           painter.height < 0) {
@@ -146,8 +168,13 @@ final class ForumBodyInlineParagraphLayout
             !box.left.isFinite ||
             !box.top.isFinite ||
             !box.right.isFinite ||
-            !box.bottom.isFinite ||
-            (box.right - box.left - dimension.size.width).abs() > 1e-3 ||
+            !box.bottom.isFinite) {
+          throw const ForumBodyParagraphLayoutException(
+            ForumBodyParagraphLayoutFailure.coverage,
+          );
+        }
+        if (slots.trimmed?[i] == 1) continue;
+        if ((box.right - box.left - dimension.size.width).abs() > 1e-3 ||
             (box.bottom - box.top - dimension.size.height).abs() > 1e-3 ||
             (box.top + dimension.baselineOffset! - lines[lineIndex].baseline)
                     .abs() >
@@ -173,6 +200,7 @@ final class ForumBodyInlineParagraphLayout
       var top = 0.0;
       var bottom = painter.height;
       for (var i = 0; i < boxes.length; i++) {
+        if (slots.trimmed?[i] == 1) continue;
         final box = boxes[i];
         if (box.top < top) top = box.top;
         if (box.bottom > bottom) bottom = box.bottom;
@@ -212,6 +240,8 @@ final class ForumBodyInlineParagraphLayout
         paintOffset: paintOffset,
         frameTops: frameTops,
         frameBottoms: frameBottoms,
+        trimmedAtoms: slots.trimmed,
+        spaceAllocations: slots.allocations,
       );
     } catch (_) {
       painter.dispose();
@@ -246,7 +276,11 @@ final class ForumBodyInlineParagraphLayout
     }
     content.validateDimensions(dimensions);
     if (!intrinsic &&
-        dimensions.any((dimension) => dimension.size.width > width)) {
+        dimensions.indexed.any(
+          (item) =>
+              !content.projection.atoms[item.$1].isSoftSpace &&
+              item.$2.size.width > width,
+        )) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.width,
       );
@@ -284,8 +318,29 @@ final class ForumBodyInlineParagraphLayout
   final Offset _paintOffset;
   final Float64List _frameTops;
   final Float64List _frameBottoms;
+  final Uint8List? _trimmedAtoms;
+  final Float64List? _spaceAllocations;
   int get fragmentFrameBytes =>
-      _frameTops.lengthInBytes + _frameBottoms.lengthInBytes;
+      _frameTops.lengthInBytes +
+      _frameBottoms.lengthInBytes +
+      (_trimmedAtoms?.lengthInBytes ?? 0) +
+      (_spaceAllocations?.lengthInBytes ?? 0);
+
+  bool isAtomTrimmed(int index) {
+    _ensureOpen();
+    RangeError.checkValidIndex(index, projection.atoms, 'index');
+    return _trimmedAtoms?[index] == 1;
+  }
+
+  Iterable<int> get trimmedAtomIndices sync* {
+    _ensureOpen();
+    final mask = _trimmedAtoms;
+    if (mask == null) return;
+    for (var i = 0; i < mask.length; i++) {
+      if (mask[i] == 1) yield i;
+    }
+  }
+
   final double width;
   final double height;
   final List<ForumBodyParagraphLine> lines;
@@ -320,23 +375,47 @@ final class ForumBodyInlineParagraphLayout
     }
     for (var i = 0; i < atomBoxes.length; i++) {
       final atom = projection.atoms[i];
+      if (_trimmedAtoms?[i] == 1) continue;
       if (atom.engineUtf16 < engineStart ||
           (engineEnd != null && atom.engineUtf16 >= engineEnd)) {
         continue;
       }
-      final rect = atomBoxes[i].toRect();
+      final box = atomBoxes[i];
+      final rect = atom.isSoftSpace
+          ? Rect.fromLTRB(
+              _spaceAllocations![i * 2],
+              box.top,
+              _spaceAllocations[i * 2 + 1],
+              box.bottom,
+            )
+          : box.toRect();
       if (rect.contains(offset)) {
-        return ForumBodyInlineAtomHit(i, offset - rect.topLeft);
+        return ForumBodyInlineAtomHit(i, offset - box.toRect().topLeft);
       }
     }
     final position = _painter.getPositionForOffset(offset - _paintOffset);
+    final source = projection.sourceAtEngineUtf16(
+      position.offset,
+      affinity: position.affinity == TextAffinity.upstream
+          ? HtmlProjectionAffinity.upstream
+          : HtmlProjectionAffinity.downstream,
+    );
+    final adjacentSpace =
+        projection.hasSoftSpaces &&
+        projection.atoms.any(
+          (atom) =>
+              atom.isSoftSpace &&
+              position.offset >= atom.engineUtf16 &&
+              position.offset <= atom.engineEndUtf16,
+        );
     return ForumBodyInlineTextHit(
-      projection.sourceAtEngineUtf16(
-        position.offset,
-        affinity: position.affinity == TextAffinity.upstream
-            ? HtmlProjectionAffinity.upstream
-            : HtmlProjectionAffinity.downstream,
-      ),
+      adjacentSpace
+          ? HtmlProjectedSourcePosition(
+              sourceRune: source.sourceRune,
+              displayUtf16: source.displayUtf16,
+              isExact: false,
+            )
+          : source,
     );
   }
 
@@ -372,13 +451,15 @@ final class ForumBodyInlineParagraphLayout
       if (atom.displayEndUtf16 <= start) continue;
       if (atom.displayStartUtf16 >= end) break;
       text(cursor, atom.displayStartUtf16.clamp(start, end));
-      selectedAtoms.add(
-        ForumBodyInlineAtomSelection(
-          atom.index,
-          atom.displayStartUtf16.clamp(start, end),
-          atom.displayEndUtf16.clamp(start, end),
-        ),
-      );
+      if (_trimmedAtoms?[atom.index] != 1) {
+        selectedAtoms.add(
+          ForumBodyInlineAtomSelection(
+            atom.index,
+            atom.displayStartUtf16.clamp(start, end),
+            atom.displayEndUtf16.clamp(start, end),
+          ),
+        );
+      }
       cursor = atom.displayEndUtf16.clamp(start, end);
     }
     text(cursor, end);
@@ -425,6 +506,117 @@ final class ForumBodyInlineParagraphLayout
   }
 }
 
+/// The whitespace marker has no ink or vertical metrics. Only actual neighbour
+/// rows decide whether it survives; a trimmed marker never grows a page frame.
+({List<TextBox> boxes, Uint8List? trimmed, Float64List? allocations})
+_inlineSlots(
+  TextPainter painter,
+  ForumBodyInlineSpanContent content,
+  List<PlaceholderDimensions> dimensions,
+  List<ForumBodyParagraphLine> lines,
+  List<TextBox> nativeBoxes,
+) {
+  final projection = content.projection;
+  if (!projection.hasSoftSpaces) {
+    return (boxes: nativeBoxes, trimmed: null, allocations: null);
+  }
+  final atoms = projection.atoms;
+  final rows = Int32List(atoms.length);
+  final trimmed = Uint8List(atoms.length);
+  final allocations = Float64List(atoms.length * 2);
+  final boxes = List<TextBox>.filled(
+    atoms.length,
+    TextBox.fromLTRBD(0, 0, 0, 0, content.style.textDirection),
+  );
+  var row = 0;
+  var native = 0;
+  Never invalid() => throw const ForumBodyParagraphLayoutException(
+    ForumBodyParagraphLayoutFailure.coverage,
+  );
+  for (final atom in atoms) {
+    while (row < lines.length &&
+        atom.engineUtf16 >= lines[row].engineCoverageEndUtf16) {
+      row++;
+    }
+    if (row == lines.length ||
+        atom.engineUtf16 < lines[row].engineCoverageStartUtf16) {
+      invalid();
+    }
+    rows[atom.index] = row;
+    if (!atom.isSoftSpace) {
+      if (native == nativeBoxes.length) invalid();
+      boxes[atom.index] = nativeBoxes[native++];
+    }
+  }
+  if (native != nativeBoxes.length) invalid();
+  for (final atom in atoms) {
+    if (!atom.isSoftSpace) continue;
+    final i = atom.index;
+    final line = lines[rows[i]];
+    if (rows[i - 1] != rows[i + 1] || rows[i] != rows[i - 1]) {
+      trimmed[i] = 1;
+      boxes[i] = TextBox.fromLTRBD(
+        0,
+        line.baseline,
+        0,
+        line.baseline,
+        content.style.textDirection,
+      );
+      continue;
+    }
+    final d = dimensions[i];
+    final nativeSpace = painter.getBoxesForSelection(
+      TextSelection(
+        baseOffset: atom.engineUtf16,
+        extentOffset: atom.engineEndUtf16,
+      ),
+    );
+    TextBox allocation;
+    if (nativeSpace.isEmpty && d.size.width == 0) {
+      final left = boxes[i - 1].right < boxes[i + 1].right
+          ? boxes[i - 1].right
+          : boxes[i + 1].right;
+      allocation = TextBox.fromLTRBD(
+        left,
+        line.baseline,
+        left,
+        line.baseline,
+        content.style.textDirection,
+      );
+    } else {
+      if (nativeSpace.length != 1) invalid();
+      allocation = nativeSpace.single;
+    }
+    // Detect a missing/replaced private font or changed native spacing instead
+    // of silently accepting the platform's ordinary SPACE fallback metrics.
+    final allocatedWidth = allocation.right - allocation.left;
+    if (!allocatedWidth.isFinite ||
+        allocatedWidth < d.size.width - 1e-3 ||
+        (content.style.textAlign != TextAlign.justify &&
+            (allocatedWidth - d.size.width).abs() > 1e-3) ||
+        (allocation.top - line.baseline).abs() > 1e-3 ||
+        (allocation.bottom - line.baseline).abs() > 1e-3) {
+      invalid();
+    }
+    allocations[i * 2] = allocation.left;
+    allocations[i * 2 + 1] = allocation.right;
+    final left = allocation.left + (allocatedWidth - d.size.width) / 2;
+    final top = line.baseline - d.baselineOffset!;
+    boxes[i] = TextBox.fromLTRBD(
+      left,
+      top,
+      left + d.size.width,
+      top + d.size.height,
+      allocation.direction,
+    );
+  }
+  return (
+    boxes: List.unmodifiable(boxes),
+    trimmed: trimmed,
+    allocations: allocations,
+  );
+}
+
 TextBox _shiftBox(TextBox box, Offset offset) => offset == Offset.zero
     ? box
     : TextBox.fromLTRBD(
@@ -459,7 +651,8 @@ final class ForumBodyInlineParagraphFragment {
     layout._ensureOpen();
     for (final atom in layout.projection.atoms) {
       if (atom.engineUtf16 >= engineCoverageStartUtf16 &&
-          atom.engineUtf16 < engineCoverageEndUtf16) {
+          atom.engineUtf16 < engineCoverageEndUtf16 &&
+          !layout.isAtomTrimmed(atom.index)) {
         yield atom.index;
       }
     }

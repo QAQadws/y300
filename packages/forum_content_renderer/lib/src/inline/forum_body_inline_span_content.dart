@@ -7,6 +7,7 @@ import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
+import 'forum_body_native_space_span.dart';
 
 /// Exact independently projected input retained for source-bound child binding.
 /// These are display coordinates, never inferred from equal text or HTML.
@@ -36,7 +37,7 @@ final class ForumBodyInlineSpanContent {
   }) : contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  static const revision = 5;
+  static const revision = 6;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -46,6 +47,7 @@ final class ForumBodyInlineSpanContent {
     required ForumBodyResolvedStyle style,
     required List<ForumBodyParagraphContent> contexts,
     required List<({int startUtf16, int endUtf16})> atomicRanges,
+    Set<int> softSpaceAtoms = const {},
     // Complete original-source ordering of the display contexts, when their
     // visual placement differs. The pure projection validates every range.
     List<int>? sourceOrder,
@@ -138,6 +140,7 @@ final class ForumBodyInlineSpanContent {
       projection: HtmlInlineTextProjection.build(
         display: display,
         atomicRanges: atomicRanges,
+        softSpaceAtoms: softSpaceAtoms,
         maxAtoms: maxAtoms,
         maxDisplayCodeUnits: maxInputCodeUnits,
         maxEngineCodeUnits: maxInputCodeUnits,
@@ -203,7 +206,24 @@ final class ForumBodyInlineSpanContent {
   /// Direct TextPainter input only. Set its placeholder dimensions in atom
   /// order, using the already-scaled child geometry. RichText/WidgetSpan scale
   /// extraction is intentionally outside this native span contract.
-  late final TextSpan textSpan = _parentInput.span;
+  TextSpan get textSpan {
+    if (projection.hasSoftSpaces) {
+      throw StateError(
+        'Soft inline spaces require explicit measured dimensions',
+      );
+    }
+    return _parentInput.span;
+  }
+
+  /// Builds engine glue from all logical atom dimensions. A direct TextPainter
+  /// consumer must pass only opaque-atom dimensions to setPlaceholderDimensions;
+  /// ForumBodyInlineParagraphLayout handles that mapping and native validation.
+  TextSpan textSpanWithDimensions(List<PlaceholderDimensions> dimensions) {
+    validateDimensions(dimensions);
+    return projection.hasSoftSpaces
+        ? _buildTextSpan(dimensions: dimensions).span
+        : textSpan;
+  }
 
   /// Only runs actually shaped by the parent. Atomic children retain their
   /// own direction and per-size scaling; those inputs must not be validated or
@@ -220,7 +240,9 @@ final class ForumBodyInlineSpanContent {
     }
   }
 
-  ({TextSpan span, List<ForumBodyParagraphRun> runs}) _buildTextSpan() {
+  ({TextSpan span, List<ForumBodyParagraphRun> runs}) _buildTextSpan({
+    List<PlaceholderDimensions>? dimensions,
+  }) {
     final children = <InlineSpan>[];
     final parentRunIndices = <int>{};
     final parts = projection.display.parts;
@@ -231,7 +253,11 @@ final class ForumBodyInlineSpanContent {
     while (cursor < projection.display.text.length) {
       if (atomIndex < atoms.length &&
           cursor == atoms[atomIndex].displayStartUtf16) {
-        children.add(const _NativeInlinePlaceholder());
+        children.add(
+          atoms[atomIndex].isSoftSpace
+              ? ForumBodyNativeSpaceSpan(dimensions?[atomIndex].size.width ?? 0)
+              : const _NativeInlinePlaceholder(),
+        );
         cursor = atoms[atomIndex++].displayEndUtf16;
         continue;
       }

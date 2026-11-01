@@ -65,17 +65,21 @@ Host，必须显式投影；不能用语义锚点直接切 HTML，也不能以�
 不额外常驻来源索引；增量消费者应合并新增窗口包络，避免反复扫描增长前缀。
 来源映射相等还需核对字素分段与边缘亲和性；只比较相同文字不足以复用来源映射。
 `displaySegmentationHash`/`hasSameDisplaySegmentation` 仅描述文字与独立字素边界，
-不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 7。
+不证明字体、样式或排版参数相等，也不证明语义身份或可见 coverage。投影 revision 为 8。
 
 `HtmlInlineTextProjection` 为父排版引擎单独建立 UTF-16 坐标：每个显式原子范围仅在
-`engineText` 中占一个 U+FFFC，原来的 `display` 仍保存子文字、独立字素和真实来源。
+`engineText` 中默认占一个 U+FFFC，原来的 `display` 仍保存子文字、独立字素和真实来源。
+格式处理者可显式传入 `softSpaceAtoms`，让两个紧邻不透明原子之间的真实 ASCII
+空白范围仅在引擎中占一个可折叠 SPACE。边缘、相邻软间隙、跨普通文字或非空白范围
+不准入；是否满足实际 CSS 可折叠规则仍由格式处理者决定。标记不会增加来源文字，
+与同范围的不透明原子拥有不同映射身份；宽度、行边修剪及真实字形仍须由 native 验证。
 原子范围必须非空、有序、不重叠且位于完整显示字素边界，受原子数、显示文字和引擎
 文字三个预算限制；普通正文中的 U+FFFC 仍是有真实来源的文字，不自动当作原子。
 `engineAtDisplayUtf16` / `displayAtEngineUtf16` 保留上下游亲和性，原子内部或普通
 字素内部的位置返回边界近似，不能冒充精确子命中。子布局必须提供其实际命中结果。
 `sourceAtEngineUtf16` 继续保留来源缺口；`displayRangeForEngineRange` 严格核对整字素
 和原子边界，但其结果不是可见 coverage。原子几何、绘制、分页与生命周期仍归 renderer。
-映射 revision 为 1；缓存还需核对完整样式、几何和 owner，映射相等不替代这些条件。
+映射 revision 为 2；缓存还需核对完整样式、几何和 owner，映射相等不替代这些条件。
 `displayOffsetAtEngineUtf16` 只做原始 UTF-16 变换，供真实物理行记录坐标：fallback
 字素可能跨行，原始偏移必须保留，同时用 `displayAtEngineUtf16.isExact` 禁止在其间
 分页。该原始值不是合法光标、语义锚点、显示窗口或 HTML 切片边界。

@@ -1,18 +1,23 @@
 import 'display_text_projection.dart';
 
-/// A parent engine placeholder. Its display range still contains the actual
-/// child text; the replacement character never acquires a source coordinate.
+/// A parent engine atom. Its display range still contains the actual child
+/// text; an opaque/soft-space marker never acquires a new source coordinate.
 final class HtmlInlineTextAtom {
   const HtmlInlineTextAtom._(
     this.index,
     this.displayStartUtf16,
     this.displayEndUtf16,
     this.engineUtf16,
+    this.isSoftSpace,
   );
   final int index;
   final int displayStartUtf16;
   final int displayEndUtf16;
   final int engineUtf16;
+
+  /// Engine-only collapsible glue between two actual opaque atoms. The caller
+  /// still proves native width, trimmed visibility and original child glyphs.
+  final bool isSoftSpace;
   int get engineEndUtf16 => engineUtf16 + 1;
 }
 
@@ -36,16 +41,23 @@ final class HtmlInlineTextLimitException implements Exception {
 }
 
 /// Pure parent-engine/display/source coordinates for opaque inline children.
-/// Each atom occupies one U+FFFC in the engine only. Hit testing inside a child
+/// Each atom occupies one U+FFFC (or explicit soft SPACE) in the engine only.
+/// Hit testing inside a child
 /// must use that child's layout, rather than interpolate through this atom.
 /// This map neither measures glyphs nor proves that a child has been painted.
 final class HtmlInlineTextProjection {
-  HtmlInlineTextProjection._(this.display, this.engineText, this.atoms);
-  static const revision = 1;
+  HtmlInlineTextProjection._(
+    this.display,
+    this.engineText,
+    this.atoms,
+    this.hasSoftSpaces,
+  );
+  static const revision = 2;
 
   factory HtmlInlineTextProjection.build({
     required HtmlDisplayTextProjection display,
     required List<({int startUtf16, int endUtf16})> atomicRanges,
+    Set<int> softSpaceAtoms = const {},
     int maxAtoms = 512,
     int maxDisplayCodeUnits = 16384,
     int maxEngineCodeUnits = 16384,
@@ -58,6 +70,17 @@ final class HtmlInlineTextProjection {
       throw const HtmlInlineTextLimitException();
     }
     final atoms = <HtmlInlineTextAtom>[];
+    for (final index in softSpaceAtoms) {
+      RangeError.checkValidIndex(index, atomicRanges, 'softSpaceAtoms');
+      if (index == 0 ||
+          index + 1 == atomicRanges.length ||
+          softSpaceAtoms.contains(index - 1) ||
+          softSpaceAtoms.contains(index + 1) ||
+          atomicRanges[index - 1].endUtf16 != atomicRanges[index].startUtf16 ||
+          atomicRanges[index].endUtf16 != atomicRanges[index + 1].startUtf16) {
+        throw ArgumentError('Soft spaces require two adjacent opaque atoms');
+      }
+    }
     var previousEnd = 0;
     var removed = 0;
     for (final range in atomicRanges) {
@@ -76,12 +99,23 @@ final class HtmlInlineTextProjection {
           'Atoms require ordered, complete display graphemes',
         );
       }
+      final soft = softSpaceAtoms.contains(atoms.length);
+      if (soft &&
+          !display.text
+              .substring(range.startUtf16, range.endUtf16)
+              .runes
+              .every((r) => r == 32 || r == 9)) {
+        throw ArgumentError(
+          'Soft-space atoms require actual collapsible whitespace',
+        );
+      }
       atoms.add(
         HtmlInlineTextAtom._(
           atoms.length,
           range.startUtf16,
           range.endUtf16,
           range.startUtf16 - removed,
+          soft,
         ),
       );
       removed += range.endUtf16 - range.startUtf16 - 1;
@@ -94,7 +128,7 @@ final class HtmlInlineTextProjection {
     previousEnd = 0;
     for (final atom in atoms) {
       engine.write(display.text.substring(previousEnd, atom.displayStartUtf16));
-      engine.writeCharCode(0xfffc);
+      engine.writeCharCode(atom.isSoftSpace ? 32 : 0xfffc);
       previousEnd = atom.displayEndUtf16;
     }
     engine.write(display.text.substring(previousEnd));
@@ -102,12 +136,14 @@ final class HtmlInlineTextProjection {
       display,
       engine.toString(),
       List.unmodifiable(atoms),
+      softSpaceAtoms.isNotEmpty,
     );
   }
 
   final HtmlDisplayTextProjection display;
   final String engineText;
   final List<HtmlInlineTextAtom> atoms;
+  final bool hasSoftSpaces;
 
   HtmlInlineTextPosition engineAtDisplayUtf16(
     int offset, {
@@ -205,7 +241,11 @@ final class HtmlInlineTextProjection {
     display.sourceMappingHash,
     Object.hashAll(
       atoms.map(
-        (atom) => Object.hash(atom.displayStartUtf16, atom.displayEndUtf16),
+        (atom) => Object.hash(
+          atom.displayStartUtf16,
+          atom.displayEndUtf16,
+          atom.isSoftSpace,
+        ),
       ),
     ),
   );
@@ -220,7 +260,8 @@ final class HtmlInlineTextProjection {
     for (var index = 0; index < atoms.length; index++) {
       if (atoms[index].displayStartUtf16 !=
               other.atoms[index].displayStartUtf16 ||
-          atoms[index].displayEndUtf16 != other.atoms[index].displayEndUtf16) {
+          atoms[index].displayEndUtf16 != other.atoms[index].displayEndUtf16 ||
+          atoms[index].isSoftSpace != other.atoms[index].isSoftSpace) {
         return false;
       }
     }

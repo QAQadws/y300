@@ -907,7 +907,9 @@ final class _InlineLayoutKey {
       projectionRevision = HtmlDisplayTextProjection.revision,
       inlineRevision = HtmlInlineTextProjection.revision,
       projection = content.projection,
-      span = content.textSpan,
+      span = content.projection.hasSoftSpaces
+          ? content.textSpanWithDimensions(dimensions)
+          : content.textSpan,
       align = content.style.textAlign,
       direction = content.style.textDirection,
       scales = _sortedScales(scales),
