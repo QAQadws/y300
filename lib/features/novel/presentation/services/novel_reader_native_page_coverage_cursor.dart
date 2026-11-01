@@ -136,6 +136,8 @@ final class NovelReaderNativePageCoverageCursor {
   bool _hasClippedGlyphs = false;
   Iterator<({int startUtf16, int endUtf16})>? _ranges;
   ForumBodyPreparedTextFragment? _fragment;
+  HtmlDisplayTextProjection? _projection;
+  List<ForumBodyParagraphRun> _runs = const [];
   Rect _clip = Rect.zero;
 
   NovelReaderNativeCoverageState get state => _state;
@@ -171,6 +173,8 @@ final class NovelReaderNativePageCoverageCursor {
           fragments++;
           _ranges = null;
           _fragment = null;
+          _projection = null;
+          _runs = const [];
           continue;
         }
         if (_graphemes >= limits.maxGraphemes) {
@@ -202,6 +206,11 @@ final class NovelReaderNativePageCoverageCursor {
   ) {
     final prepared = _fragments[_fragmentIndex];
     _fragment = prepared;
+    // These inputs are immutable for this delivery. Re-reading mixed fragment
+    // getters per grapheme repeatedly scans every child lease. Native geometry
+    // and the per-step lifetime guard still validate the current ownership.
+    final projection = _projection = prepared.projection;
+    _runs = prepared.runs;
     final snapshot = _snapshot!;
     _clip = Rect.fromLTWH(0, 0, fragment.width, fragment.height).intersect(
       Rect.fromLTWH(
@@ -214,7 +223,7 @@ final class NovelReaderNativePageCoverageCursor {
     if (_clip.isEmpty) {
       return const <({int startUtf16, int endUtf16})>[].iterator;
     }
-    return prepared.projection
+    return projection
         .graphemeRanges(
           startUtf16: fragment.coverageStartUtf16,
           endUtf16: fragment.coverageEndUtf16,
@@ -224,7 +233,8 @@ final class NovelReaderNativePageCoverageCursor {
 
   void _includeGrapheme(int start, int end) {
     final prepared = _fragment!;
-    if (!_visibleStyles(prepared.projection, prepared.runs, start, end)) return;
+    final projection = _projection!;
+    if (!_visibleStyles(projection, _runs, start, end)) return;
     final boxes = prepared.glyphBoxes(start, end);
     if (boxes.isEmpty) {
       // An explicit separator belongs to the preceding physical row, even
@@ -251,8 +261,8 @@ final class NovelReaderNativePageCoverageCursor {
       _hasClippedGlyphs = true;
       return;
     }
-    _addPoint(prepared.projection, start, HtmlProjectionAffinity.downstream);
-    _addPoint(prepared.projection, end, HtmlProjectionAffinity.upstream);
+    _addPoint(projection, start, HtmlProjectionAffinity.downstream);
+    _addPoint(projection, end, HtmlProjectionAffinity.upstream);
   }
 
   bool _contains(Rect box) =>
@@ -314,6 +324,8 @@ final class NovelReaderNativePageCoverageCursor {
     _fragments = const [];
     _ranges = null;
     _fragment = null;
+    _projection = null;
+    _runs = const [];
   }
 
   void close() {
