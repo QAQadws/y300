@@ -277,6 +277,197 @@ void main() {
     }
   });
 
+  test('consecutive RTs pair with one actual and one anonymous base', () {
+    final f = _Fixture(
+      '<ruby>AB<rt>xy</rt><rt>z</rt></ruby>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(fragment.projection.text, 'ABxyz');
+      expect(fragment.view.content.projection.engineText, '\uFFFC\uFFFC');
+      final leases = fragment.nativeLeases.toList();
+      expect(leases, hasLength(5));
+      expect((leases[1] as ForumBodyTextLease).content.projection.text, 'AB');
+      expect((leases[3] as ForumBodyTextLease).content.isSourceFree, isTrue);
+      expect(fragment.view.height, 30);
+      final first = fragment.glyphBoxes(2, 3).single;
+      final last = fragment.glyphBoxes(4, 5).single;
+      expect(last.left, greaterThan(first.right));
+      expect(last.top, first.top);
+      final hit = fragment.view.sourceAt(
+        Offset(last.left + .1, (last.top + last.bottom) / 2),
+      );
+      expect(hit.sourceRune, 4);
+      expect(hit.isExact, isTrue);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'base trailing space follows the whole annotation range with original source',
+    () {
+      final f = _Fixture(
+        '<p>X<ruby>AB <rt>xy</rt><rt>z</rt></ruby>Y</p>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.projection.text, 'XABxyz Y');
+        expect(fragment.view.content.projection.engineText, 'X\uFFFC\uFFFC Y');
+        expect(fragment.projection.sourceAtUtf16(6).sourceRune, 3);
+        expect(f.session.snapshot.single.fragments.single.sourceHint, (
+          runeStart: 0,
+          runeEnd: 8,
+        ));
+        final glyph = fragment.glyphBoxes(5, 6).single;
+        final hit = fragment.view.sourceAt(
+          Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+        );
+        expect(hit.sourceRune, 6);
+        expect(hit.isExact, isTrue);
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('extra annotation source retains fallback and hidden gaps', () {
+    final f = _Fixture(
+      '<ruby>AB<rt>xy</rt><rp>(</rp><span hidden>hidden</span><rt>zw</rt></ruby>',
+      width: 200,
+      height: 100,
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(fragment.projection.text, 'ABxyzw');
+      expect(fragment.projection.sourceAtUtf16(4).sourceRune, 11);
+      expect(fragment.projection.sourceAtUtf16(4).isExact, isFalse);
+      expect(f.session.snapshot.single.fragments.single.sourceHint, (
+        runeStart: 0,
+        runeEnd: 13,
+      ));
+      final glyph = fragment.glyphBoxes(5, 6).single;
+      final hit = fragment.view.sourceAt(
+        Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+      );
+      expect(hit.sourceRune, 12);
+      expect(hit.isExact, isTrue);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('actual and anonymous columns retain independent nonlinear scaling', () {
+    final f = _Fixture(
+      '<ruby>AB<rt>xy</rt><rt>z</rt></ruby>',
+      width: 200,
+      height: 100,
+      textScaler: _Scaler((size) => size >= 20 ? size * 2 : size),
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      final leases = fragment.nativeLeases.toList();
+      expect((leases[1] as ForumBodyTextLease).layout.height, 40);
+      expect((leases[3] as ForumBodyTextLease).layout.height, 40);
+      expect((leases[4] as ForumBodyTextLease).layout.height, 10);
+      expect(fragment.view.height, 50);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'an empty first RT preserves its base before the next annotation column',
+    () {
+      final f = _Fixture(
+        '<ruby>A<rt></rt><rt>z</rt></ruby>',
+        width: 200,
+        height: 100,
+      );
+      f.finish();
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.projection.text, 'Az');
+        expect(fragment.view.atomIndices, [0, 1]);
+        expect(fragment.nativeLeases, hasLength(4));
+        expect(f.cache.pictureBuildCount, 2);
+        expect(fragment.glyphBoxes(0, 2), hasLength(2));
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('one base with sixty RTs shares existing bounded native requests', () {
+    final f = _Fixture(
+      '<p><ruby>A${List.generate(60, (index) => '<rt>r$index</rt>').join()}</ruby></p>',
+      width: 600,
+      height: 100,
+      entries: 4,
+    );
+    f.finish();
+    expect(f.cache.layoutBuildCount, 3);
+    expect(f.cache.pictureBuildCount, 0);
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(fragment.view.atomIndices, hasLength(60));
+      expect(fragment.nativeLeases, hasLength(121));
+      expect(f.cache.entryCount, lessThanOrEqualTo(4));
+      expect(f.cache.pictureBuildCount, 61);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+    expect(f.session.activeIssuedLeases, 0);
+  });
+
+  test(
+    'consecutive RTs preserve actual source when their columns cross a page',
+    () {
+      final f = _Fixture(
+        '<ruby>A<rt>xy</rt><rt>zw</rt></ruby>',
+        width: 20,
+        height: 30,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(2));
+      for (var page = 0; page < 2; page++) {
+        final fragment =
+            f.prepare(page).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.view.atomIndices, [page]);
+          expect(f.session.snapshot[page].fragments.single.sourceHint, (
+            runeStart: page == 0 ? 0 : 3,
+            runeEnd: page == 0 ? 3 : 5,
+          ));
+          final glyph = fragment.glyphBoxes(page * 2 + 2, page * 2 + 3).single;
+          final hit = fragment.view.sourceAt(
+            Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
+          );
+          expect(hit.sourceRune, page * 2 + 2);
+          expect(hit.isExact, isTrue);
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+        expect(f.session.activeIssuedLeases, 0);
+      }
+    },
+  );
+
   test(
     'actual Session produces mixed pages and complete visible source-bound views',
     () {
@@ -952,7 +1143,7 @@ void main() {
 
   for (final html in [
     '<ruby> <rt>a</rt></ruby>',
-    '<ruby>A<rt>a</rt><rt>b</rt></ruby>',
+    '<ruby>A<rt>a</rt><rt><ruby>B<rt>b</rt></ruby></rt></ruby>',
     '<ruby><rt> </rt></ruby>',
     '<ruby>A<ruby>B<rt>b</rt></ruby><rt>a</rt></ruby>',
   ]) {
@@ -1008,7 +1199,7 @@ void main() {
 
   test('late unsupported input preserves the already published mixed prefix', () {
     final f = _Fixture(
-      '<span>X<ruby>AB<rt>xy</rt></ruby>Y<br>Z<br><ruby>A<rt>a</rt><rt>b</rt></ruby></span>',
+      '<span>X<ruby>AB<rt>xy</rt></ruby>Y<br>Z<br><ruby>A<rt><ruby>B<rt>b</rt></ruby></rt></ruby></span>',
     );
     while (f.session.snapshot.isEmpty) {
       f.advance();

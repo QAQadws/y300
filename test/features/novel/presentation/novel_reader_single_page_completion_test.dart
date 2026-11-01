@@ -38,7 +38,7 @@ const _work = 'novel:49:100';
 const _chapter = '$_work:5001';
 const _next = '$_work:5003';
 
-enum _BodySample { paragraphs, rubyPair, orphanRuby }
+enum _BodySample { paragraphs, rubyPair, orphanRuby, consecutiveRuby }
 
 void main() {
   sqfliteFfiInit();
@@ -530,6 +530,15 @@ final class _Fixture {
   static Future<_Fixture> create({
     _BodySample body = _BodySample.paragraphs,
   }) async {
+    final (rawHtml, plainText) = switch (body) {
+      _BodySample.paragraphs => ('', ''),
+      _BodySample.rubyPair => ('<p><ruby>A <rt>x</rt></ruby></p>', 'A x'),
+      _BodySample.orphanRuby => ('<p><ruby><rt>x</rt></ruby></p>', 'x'),
+      _BodySample.consecutiveRuby => (
+        '<p><ruby>A <rt>x</rt><rt>y</rt></ruby></p>',
+        'A xy',
+      ),
+    };
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);
     await seedNovelRepository(
       db,
@@ -546,11 +555,9 @@ final class _Fixture {
                 episodeTitle: '第1章 开始',
                 orderIndex: 0,
                 datelineText: '2026-05-03',
-                rawHtml: body == _BodySample.rubyPair
-                    ? '<p><ruby>A <rt>x</rt></ruby></p>'
-                    : '<p><ruby><rt>x</rt></ruby></p>',
-                plainText: body == _BodySample.rubyPair ? 'A x' : 'x',
-                paragraphs: [body == _BodySample.rubyPair ? 'A x' : 'x'],
+                rawHtml: rawHtml,
+                plainText: plainText,
+                paragraphs: [plainText],
               ),
               ...novelRepositorySeedEpisodes(
                 const NovelSourceSeed(fid: '49', tid: '100'),

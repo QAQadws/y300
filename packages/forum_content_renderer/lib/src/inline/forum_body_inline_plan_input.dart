@@ -12,7 +12,7 @@ import 'forum_body_text_band_content.dart';
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
   ForumBodyInlinePlanInput._(this.content, this.groups, this.width);
-  static const revision = 5;
+  static const revision = 6;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -90,42 +90,18 @@ final class ForumBodyInlinePlanInput {
           }
           if (group.base.length > 1 ||
               (group.base.isNotEmpty &&
-                  group.base.single is! ForumBodyRubyTextContent) ||
-              group.annotations.length > 1) {
+                  group.base.single is! ForumBodyRubyTextContent)) {
             _unsupported(group.rootPath);
           }
           var base = group.base.isEmpty
               ? null
               : (group.base.single as ForumBodyRubyTextContent).content;
-          final ForumBodyParagraphContent annotation;
           if (group.annotations.isEmpty) {
             if (base == null) _unsupported(group.rootPath);
             sourceOrder.add(appendPlain(base));
             continue;
-          } else {
-            final parts = group.annotations.single.parts;
-            if (parts.length != 1 ||
-                parts.single is! ForumBodyRubyTextContent) {
-              _unsupported(group.rootPath);
-            }
-            // An annotation is its own native line. Trim its collapsible line
-            // edges through source-bound windows, never into the base context.
-            annotation = _plainContext(
-              (parts.single as ForumBodyRubyTextContent).content,
-              leading: true,
-              trailing: true,
-            );
           }
-          base ??= ForumBodyParagraphContent.anonymousInline(
-            identity: group.identity,
-            fontRevision: group.fontRevision,
-            styleRevision: group.styleRevision,
-            style: group.style,
-          );
-          if (base.projection.text.isEmpty &&
-              annotation.projection.text.isEmpty) {
-            _unsupported(group.rootPath);
-          }
+          base ??= _anonymousBase(group);
           // Implicit whitespace-only bases need structural ruby pairing. Do
           // not mistake source indentation for an explicit annotated RB space.
           if (base.projection.text == ' ' &&
@@ -144,21 +120,46 @@ final class ForumBodyInlinePlanInput {
             trailing = _window(base, end - 1, end);
             base = _window(base, 0, end - 1);
           }
-          final start = offset;
-          final baseIndex = base.isSourceFree ? null : append(base);
-          final annotationIndex = append(annotation);
-          atoms.add((startUtf16: start, endUtf16: offset));
-          pairs.add((base: base, annotation: annotation));
+          final annotationIndices = <int>[];
+          ForumBodyParagraphContent? extraBase;
+          for (final (index, annotationContent) in group.annotations.indexed) {
+            final parts = annotationContent.parts;
+            if (parts.length != 1 ||
+                parts.single is! ForumBodyRubyTextContent) {
+              _unsupported(group.rootPath);
+            }
+            // Semantic annotations stay associated in the IR. In this single
+            // annotation level, excess RTs pair with anonymous empty bases.
+            final columnBase = index == 0
+                ? base
+                : (extraBase ??= _anonymousBase(group));
+            final annotation = _plainContext(
+              (parts.single as ForumBodyRubyTextContent).content,
+              leading: true,
+              trailing: true,
+            );
+            if (columnBase.projection.text.isEmpty &&
+                annotation.projection.text.isEmpty) {
+              _unsupported(group.rootPath);
+            }
+            final start = offset;
+            final baseIndex = columnBase.isSourceFree
+                ? null
+                : append(columnBase);
+            annotationIndices.add(append(annotation));
+            atoms.add((startUtf16: start, endUtf16: offset));
+            pairs.add((base: columnBase, annotation: annotation));
+            if (baseIndex != null) sourceOrder.add(baseIndex);
+          }
           previousCollapsibleSpace = false;
           atLineStart = false;
           lastPlain = null;
-          if (baseIndex != null) sourceOrder.add(baseIndex);
           if (trailing != null) {
-            // Display after the atom, but validate before RT in source order.
-            // Neither coordinate nor identity is inferred from text lengths.
+            // Display after the complete annotation range, but validate before
+            // every RT in source order. Never insert this space between columns.
             sourceOrder.add(appendPlain(trailing));
           }
-          sourceOrder.add(annotationIndex);
+          sourceOrder.addAll(annotationIndices);
       }
     }
     // Empty trailing source contexts must not keep a previous collapsed space
@@ -224,6 +225,14 @@ final class ForumBodyInlinePlanInput {
     }
   }
 }
+
+ForumBodyParagraphContent _anonymousBase(ForumBodyRubyGroupContent group) =>
+    ForumBodyParagraphContent.anonymousInline(
+      identity: group.identity,
+      fontRevision: group.fontRevision,
+      styleRevision: group.styleRevision,
+      style: group.style,
+    );
 
 ForumBodyParagraphContent _plainContext(
   ForumBodyParagraphContent context, {
