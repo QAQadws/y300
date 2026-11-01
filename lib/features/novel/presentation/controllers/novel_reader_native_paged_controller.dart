@@ -491,7 +491,7 @@ final class NovelReaderNativePagedController {
   }
 
   void forgetPage(int page, NovelReaderNativePageView view) {
-    _window?.forgetPage(page, view);
+    final retryNeighbors = _window?.forgetPage(page, view) ?? false;
     if (identical(_visible?.view, view)) _visible = null;
     if (identical(_target?.view, view)) {
       _target = null;
@@ -504,6 +504,11 @@ final class NovelReaderNativePagedController {
           );
         }
       }
+    } else if (retryNeighbors && !isClosed && !_suspended && _error == null) {
+      // At EOF there may be no more source publications to revisit optional
+      // pressure. Only an actual UI unmount triggers this retry, not our own
+      // preparation rollbacks. The source's first yield lets Surface release.
+      _restartProducer();
     }
   }
 

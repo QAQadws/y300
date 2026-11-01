@@ -158,11 +158,28 @@ final class NovelReaderNativeViewWindow {
 
   /// UI unmount/remount acknowledgement. A late old Element cannot remove a
   /// newer delivery for the same page. Actual Surface owns transferred leases.
-  void forgetPage(int index, NovelReaderNativePageView view) {
-    if (_closed || !identical(_views[index], view)) return;
-    _remove(index);
-    _deferred.remove(index);
-    _notify();
+  /// Returns whether this unmount may unblock deferred neighbors. The Host
+  /// retries on its existing source lane, after Surface releases its pins.
+  bool forgetPage(int index, NovelReaderNativePageView view) {
+    if (_closed || index != view.pageIndex || index < 0) return false;
+    final previous = _views[index];
+    if (previous != null && !identical(previous, view)) return false;
+    final snapshot = _session!.snapshot;
+    if (index >= snapshot.length ||
+        view.snapshot.identity != snapshot.identity ||
+        view.snapshot.layoutId != snapshot.layoutId ||
+        !identical(view.snapshot[index], snapshot[index])) {
+      return false;
+    }
+    bool optional(int page) => page != _center && _wanted(page);
+    final retry =
+        _deferred.keys.any(optional) || _capacityDeferred.any(optional);
+    if (identical(previous, view)) {
+      _remove(index);
+      _deferred.remove(index);
+      _notify();
+    }
+    return retry;
   }
 
   Future<void> prepareAvailable() {

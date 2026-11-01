@@ -18,12 +18,12 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 
 import '../test_support/native_reader_test_fixture.dart';
 
-Future<void> _until(bool Function() test) async {
+Future<void> _until(bool Function() test, {String context = ''}) async {
   for (var step = 0; step < 10000; step++) {
     if (test()) return;
     await Future<void>.value();
   }
-  fail('Native controller did not reach the expected state');
+  fail('Native controller did not reach the expected state $context');
 }
 
 NovelReaderTextAnchor _anchor(NativeReaderTestFixture fixture, int offset) =>
@@ -51,6 +51,8 @@ NovelReaderNativePagedController _controller(
   NovelReaderTextAnchor? conversionAnchor,
   NovelReaderChapterEdge? entry,
   NovelReaderNativeWorkScheduler? scheduler,
+  NovelReaderNativeViewWindowLimits windowLimits =
+      const NovelReaderNativeViewWindowLimits(radius: 0),
   NovelReaderPaginationPerformancePolicy performance =
       const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) {
@@ -66,7 +68,7 @@ NovelReaderNativePagedController _controller(
         scheduler ?? NovelReaderNativeWorkScheduler(nextFrame: () async {}),
     performance: performance,
     idleScheduler: () async {},
-    windowLimits: const NovelReaderNativeViewWindowLimits(radius: 0),
+    windowLimits: windowLimits,
   );
   addTearDown(value.close);
   return value;
@@ -110,6 +112,121 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final (targetPage, retirement) in [
+    (1, ''),
+    (2, ''),
+    (1, 'suspend'),
+    (1, 'close'),
+  ]) {
+    test(
+      'former mounted page release retries a deferred EOF neighbor target=$targetPage retire=$retirement',
+      () async {
+        const html = '<p>ab</p><p>cd</p><p>ef</p><p>gh</p>';
+        final fixture = NativeReaderTestFixture(
+          html,
+          width: 20,
+          height: 10,
+          cacheEntries: 2,
+        );
+        var frames = 0;
+        final controller = _controller(
+          fixture,
+          entry: NovelReaderChapterEdge.start,
+          windowLimits: const NovelReaderNativeViewWindowLimits(radius: 1),
+          scheduler: NovelReaderNativeWorkScheduler(
+            nextFrame: () async {
+              frames++;
+            },
+          ),
+        );
+        controller.start();
+        await _until(() => controller.readyTarget != null);
+        final original = controller.readyTarget!;
+        final originLeases = original.view.takeLeases();
+        addTearDown(() {
+          for (final lease in originLeases) {
+            lease.release();
+          }
+        });
+        expect(controller.confirmVisible(original, originLeases), isNotNull);
+        await _until(() => controller.viewForPage(1) != null);
+        expect(controller.requestPage(targetPage), isTrue);
+        await _until(() => controller.readyTarget != null);
+        final target = controller.readyTarget!;
+        final targetLeases = target.view.takeLeases();
+        addTearDown(() {
+          for (final lease in targetLeases) {
+            lease.release();
+          }
+        });
+        expect(controller.confirmVisible(target, targetLeases), isNotNull);
+        for (var step = 0; step < 100; step++) {
+          await Future<void>.value();
+        }
+        expect(controller.error, isNull);
+        expect(controller.snapshot!.isComplete, isTrue);
+        expect(controller.viewForPage(targetPage + 1), isNull);
+        expect(fixture.cache.activeLeases, 2);
+        expect(fixture.session.pendingPreparationCount, 0);
+        final revision = controller.navigationRevision;
+        if (targetPage == 2) {
+          // Identical source/layout strings do not make another session's page an
+          // unmount acknowledgement. The original page is already outside radius.
+          final other = NativeReaderTestFixture(html, width: 20, height: 10);
+          final obsolete = _controller(
+            other,
+            entry: NovelReaderChapterEdge.start,
+          );
+          obsolete.start();
+          await _until(() => obsolete.readyTarget != null);
+          final stale = obsolete.readyTarget!.view;
+          expect(stale.snapshot.identity, controller.snapshot!.identity);
+          expect(stale.snapshot.layoutId, controller.snapshot!.layoutId);
+          final before = frames;
+          controller.forgetPage(0, stale);
+          for (var step = 0; step < 100; step++) {
+            await Future<void>.value();
+          }
+          expect(frames, before);
+          expect(controller.viewForPage(targetPage + 1), isNull);
+          obsolete.close();
+        }
+        final builds = fixture.cache.layoutBuildCount;
+        // Cell disposal acknowledges unmount before releasing actual Surface pins.
+        controller.forgetPage(0, original.view);
+        if (retirement == 'suspend') controller.suspend();
+        if (retirement == 'close') controller.close();
+        final expectedRevision = retirement.isEmpty
+            ? revision
+            : controller.navigationRevision;
+        for (final lease in originLeases) {
+          lease.release();
+        }
+        if (retirement.isEmpty) {
+          await _until(
+            () =>
+                controller.viewForPage(targetPage + 1) != null ||
+                controller.error != null,
+            context:
+                'after former mounted page unmounted and released its pins',
+          );
+          expect(controller.viewForPage(targetPage + 1), isNotNull);
+          expect(controller.visiblePageIndex, targetPage);
+        } else {
+          for (var step = 0; step < 100; step++) {
+            await Future<void>.value();
+          }
+          expect(controller.viewForPage(targetPage + 1), isNull);
+          expect(fixture.cache.layoutBuildCount, builds);
+          expect(fixture.session.pendingPreparationCount, 0);
+        }
+        expect(controller.error, isNull);
+        expect(controller.navigationRevision, expectedRevision);
+        expect(controller.readyTarget, isNull);
+      },
+    );
+  }
+
   for (final size in [18.5, 17.3, 22.25]) {
     test('fractional ruby children retain complete coverage: $size', () async {
       final fixture = NativeReaderTestFixture(
@@ -132,12 +249,13 @@ void main() {
           isFalse,
           reason:
               'frame=${delivery.view.snapshot.single.fragments.single.height}'
-              '/glyphs=${fragment.glyphBoxes(0, fragment.projection.text.length)
-                  .map((box) => [box.top, box.bottom])}'
-              '/lines=${fragment.lines.map(
-                  (line) => [line.top, line.bottom, line.baseline])}',
+              '/glyphs=${fragment.glyphBoxes(0, fragment.projection.text.length).map((box) => [box.top, box.bottom])}'
+              '/lines=${fragment.lines.map((line) => [line.top, line.bottom, line.baseline])}',
         );
-        final position = controller.confirmPreparedVisible(delivery, fragments)!;
+        final position = controller.confirmPreparedVisible(
+          delivery,
+          fragments,
+        )!;
         expect(position.isWholeBodyVisible, isTrue);
         expect(position.isBodyEndVisible, isTrue);
       } finally {
