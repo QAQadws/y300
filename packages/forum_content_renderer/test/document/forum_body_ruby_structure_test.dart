@@ -73,10 +73,8 @@ void main() {
   for (final html in [
     '<ruby><rb>A<ruby>B<rt>b</rt></ruby></rb><rt>x</rt></ruby>',
     '<ruby><rb></rb><rt></rt></ruby>',
-    '<ruby>A<rtc>word</rtc></ruby>',
+    '<ruby><rb>A</rb><rb>B</rb><rtc>word</rtc></ruby>',
     '<ruby style="ruby-position:inter-character">A<rt>x</rt></ruby>',
-    '<ruby>A<rtc> </rtc></ruby>',
-    '<ruby>A<rtc>&nbsp;<rt>x</rt></rtc></ruby>',
     '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc></ruby>',
   ]) {
     test('leaf planning cannot flatten explicit structure: $html', () {

@@ -244,6 +244,17 @@ void main() {
   );
 
   for (final (html, display, handles) in [
+    ('<ruby>A<rtc>word</rtc></ruby>', 'Aword', 3),
+    ('<ruby><rtc>word</rtc></ruby>', 'word', 3),
+    ('<ruby>A<rtc> </rtc></ruby>', 'A', 2),
+    ('<ruby>A<rtc>word<b>bold</b></rtc></ruby>', 'Awordbold', 3),
+    ('<ruby>A<rtc>pre<rt>xx</rt>post</rtc></ruby>', 'Aprexxpost', 7),
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc>pre<rt>xx</rt></rtc></ruby>',
+      'ApreBxx',
+      5,
+    ),
+    ('<ruby>A<rt>xx</rt><rtc>word</rtc><rt>zz</rt></ruby>', 'Axxwordzz', 5),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt></rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby>',
       'AuuByy',
@@ -297,6 +308,37 @@ void main() {
       expect(f.session.activeIssuedLeases, 0);
     });
   }
+
+  test(
+    '100 actual anonymous RTC levels retain styles and complete native ownership',
+    () {
+      final f = _Fixture(
+        '<ruby>A${List.generate(100, (i) => '<rtc style="font-size:1px">r$i</rtc>').join()}</ruby>',
+        width: 100,
+        height: 200,
+      );
+      f.finish();
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(fragment.nativeLeases.length, 102);
+        expect(f.cache.pictureBuildCount, 101);
+        final last = fragment.projection.text.lastIndexOf('r99');
+        final box = fragment.glyphBoxes(last + 1, last + 2).single;
+        final hit = fragment.view.sourceAt(
+          Offset(box.left + .01, (box.top + box.bottom) / 2),
+        );
+        expect(hit.isExact, isTrue);
+        expect(hit.sourceRune, 289);
+        expect(fragment.runs.last.style.textStyle.fontSize, 1);
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.activeIssuedLeases, 0);
+      f.close();
+      expect(f.cache.estimatedRetainedBytes, 0);
+    },
+  );
 
   test('canceling raw dense level planning releases all current glyph work', () {
     final f = _Fixture(

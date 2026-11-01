@@ -35,6 +35,43 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final (html, display, parts) in [
     (
+      '<ruby>A<rtc>word</rtc></ruby>',
+      'Aword',
+      [
+        ['A', 'word'],
+      ],
+    ),
+    (
+      '<ruby>A<rtc> </rtc></ruby>',
+      'A',
+      [
+        ['A', ''],
+      ],
+    ),
+    (
+      '<ruby>A<rtc>&nbsp;<rt>x</rt></rtc></ruby>',
+      'A\u00a0x',
+      [
+        ['A', '\u00a0'],
+        ['', 'x'],
+      ],
+    ),
+    (
+      '<ruby>A<rtc><rt>x</rt></rtc><rtc>word</rtc></ruby>',
+      'Axword',
+      [
+        ['A', 'x', 'word'],
+      ],
+    ),
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc>pre<rt>xx</rt></rtc></ruby>',
+      'ApreBxx',
+      [
+        ['A', 'pre'],
+        ['B', 'xx'],
+      ],
+    ),
+    (
       '<ruby>A<rtc><rt>x</rt></rtc><rtc><rt>y</rt></rtc></ruby>',
       'Axy',
       [
@@ -133,10 +170,11 @@ void main() {
         }
       }
       // The actual batching order follows the original level-major DOM order.
-      final band =
-          (input.groups.first.annotations.last.request
-                  as ForumBodyTextBandChildRequest)
-              .band;
+      final band = input.groups
+          .expand((column) => column.nativeRequests)
+          .whereType<ForumBodyTextBandChildRequest>()
+          .first
+          .band;
       expect(band.contexts.toSet(), glyphs.toSet());
       final starts = band.contexts
           .map((context) => context.projection.sourceAtUtf16(0).sourceRune)
@@ -225,7 +263,7 @@ void main() {
   });
 
   for (final html in [
-    '<ruby>A<rtc><rt>x</rt></rtc><rtc>word</rtc></ruby>',
+    '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt></rtc><rtc>word</rtc></ruby>',
     '<ruby>A<rtc><rt>x</rt> <rt>y</rt></rtc><rt>z</rt></ruby>',
     '<ruby>A<rtc><rt>x<ruby>B<rt>b</rt></ruby></rt></rtc><rt>z</rt></ruby>',
     '<ruby>A<rtc><rt>x</rt></rtc><rtc style="ruby-position:inter-character"><rt>y</rt></rtc></ruby>',

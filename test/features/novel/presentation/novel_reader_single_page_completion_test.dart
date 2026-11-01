@@ -50,6 +50,8 @@ enum _BodySample {
   underRuby,
   layeredRuby,
   mixedRuby,
+  anonymousRuby,
+  mixedAnonymousRuby,
 }
 
 void main() {
@@ -728,6 +730,14 @@ final class _Fixture {
           _BodySample.mixedRuby => (
             '<p><ruby>A<rt>xx</rt><rtc><rt>u<br>v</rt></rtc><rt>zz</rt></ruby></p>',
             'Axxu\nvzz',
+          ),
+          _BodySample.anonymousRuby => (
+            '<p><ruby>A<rtc>word<b>bold</b></rtc></ruby></p>',
+            'Awordbold',
+          ),
+          _BodySample.mixedAnonymousRuby => (
+            '<p><ruby><rb>A</rb><rb>B</rb><rtc>pre<rt>xx</rt></rtc><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby></p>',
+            'ABprexxuuvv',
           ),
         };
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);

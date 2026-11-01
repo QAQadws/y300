@@ -6,6 +6,7 @@ import '../pagination/forum_body_text_page_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_span_content.dart';
 import 'forum_body_ruby_annotation_input.dart';
+import 'forum_body_ruby_annotation_pairing.dart';
 import 'forum_body_ruby_base_input.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_text_band_content.dart';
@@ -22,7 +23,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 11;
+  static const revision = 12;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -130,27 +131,30 @@ final class ForumBodyInlinePlanInput {
             );
           }
           final bases = resolveForumBodyRubyBaseInputs(group);
-          final levels = resolveForumBodyRubyAnnotationInputs(group);
-          final annotationCount = levels.fold(
-            0,
-            (count, level) =>
-                count > level.columns.length ? count : level.columns.length,
+          final unitCount = bases
+              .where((base) => base.kind != ForumBodyRubyBaseInputKind.gap)
+              .length;
+          final pairing = ForumBodyRubyAnnotationPairing(
+            group: group,
+            baseColumnCount: unitCount,
           );
+          // One spanning context cannot be copied into several placeholders.
+          // Multi-column intervals need the segment composition path.
+          if (pairing.hasMultiColumnSpans) _unsupported(group.rootPath);
+          final levels = pairing.levels;
+          final annotationCount = pairing.annotatedColumnCount;
           if (bases.isEmpty && annotationCount == 0) {
             _unsupported(group.rootPath);
           }
           final annotations = [
             for (final level in levels)
               [
-                for (final annotation in level.columns)
-                  _annotationInput(group, annotation),
+                for (final span in level.spans)
+                  _annotationInput(group, span.box),
               ],
           ];
           final baseSources = [for (final _ in bases) <int>[]];
           final annotationIndices = [for (final _ in levels) <int>[]];
-          final unitCount = bases
-              .where((base) => base.kind != ForumBodyRubyBaseInputKind.gap)
-              .length;
           var column = 0;
           ForumBodyParagraphContent? anonymous;
           List<({ForumBodyParagraphContent content, ForumBodyRubySide side})>
@@ -335,8 +339,12 @@ ForumBodyParagraphContent _anonymousBase(ForumBodyRubyGroupContent group) =>
 
 ForumBodyParagraphContent _annotationInput(
   ForumBodyRubyGroupContent group,
-  ForumBodyRubyTextAnnotationContent annotation,
+  ForumBodyRubyAnnotationBoxInput box,
 ) {
+  if (box is ForumBodyRubyAnonymousAnnotationInput) {
+    return _plainContext(box.content, leading: true, trailing: true);
+  }
+  final annotation = (box as ForumBodyRubyExplicitAnnotationInput).annotation;
   final parts = annotation.parts;
   if (parts.isEmpty) {
     return ForumBodyParagraphContent.anonymousInline(
