@@ -386,7 +386,9 @@ final class ForumBodyStyleBuilder {
       ForumBodyElementKind.hardBreak ||
       ForumBodyElementKind.image ||
       ForumBodyElementKind.ruby ||
+      ForumBodyElementKind.rubyBase ||
       ForumBodyElementKind.rubyText ||
+      ForumBodyElementKind.rubyAnnotationContainer ||
       ForumBodyElementKind.rubyFallback ||
       ForumBodyElementKind.unknown => ForumBodyDisplay.inline,
       ForumBodyElementKind.table => ForumBodyDisplay.table,

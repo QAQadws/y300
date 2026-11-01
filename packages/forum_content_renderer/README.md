@@ -125,6 +125,11 @@ takeMetrics 时也不常驻子句柄。数值结果不替代可读 layout，取�
 
 `openInlineSequence` 只为专门格式处理者提供已打开行内根中的纯文字片段，显式保留折叠边缘空格；它不把 ruby/资源包装节点变成普通段落。括号回退、隐藏子树和注音间空白通过 `takeIgnored` 返回来源记录，这些记录不证明阅读 coverage。样式诊断继续由借用 flow 的 owner 按批次取走。
 
+parser revision 为 2；显式 `rb` 与 `rtc` 分别保存为 `rubyBase` 与
+`rubyAnnotationContainer`，保留原始 child-path 和来源范围。它们默认保持行内继承，
+RTC 不提前缩小字体，真正的 RT 继续由唯一 resolver 设置注音字号。普通文字收集器和
+叶子计划不得把这些结构当作透明未知标签吞并；显式基字/注音范围的分组与排版仍待完成。
+
 `advance(maxEvents)` 同时限制实际读取及已缓冲空白的延后消费，返回二者区分的 `eventsRead/workDone`；在嵌套层累计核对文字、run、组、深度和结构条目上限。BR 同普通段落一样计一个原始字符和 run，不能在多个组间绕过总输入限制；空注音/回退元数据也计结构预算。隐藏同级节点不终止注音阶段，不把其相邻空白误分成新基字。关闭、错误或发现 flow 被其他消费者推进后，不发布半组，不关闭调用者的 flow；已交付的纯组不会被后续失败修改。分组 revision 为 4，不进行字体测量、DOM 切片、语义锚点迁移或页面发布。分层 ruby 几何仍待组合层完成，叶子计划和 App 页面经下述同一会话接入。
 
 没有实际基字的连续 RT 按 [CSS Ruby 的匿名基字配对](https://www.w3.org/TR/css-ruby-1/#ruby-pairing)

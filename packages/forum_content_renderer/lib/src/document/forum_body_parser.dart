@@ -36,7 +36,7 @@ final class ForumBodyParser {
     this.fragmentParser = const DefaultHtmlFragmentParser(),
     this.limits = const ForumBodyParseLimits(),
   });
-  static const revision = 1;
+  static const revision = 2;
   final HtmlFragmentParser fragmentParser;
   final ForumBodyParseLimits limits;
 
@@ -262,7 +262,9 @@ final class _BodyBuilder {
       'hr' => ForumBodyElementKind.rule,
       'img' => ForumBodyElementKind.image,
       'ruby' => ForumBodyElementKind.ruby,
+      'rb' => ForumBodyElementKind.rubyBase,
       'rt' => ForumBodyElementKind.rubyText,
+      'rtc' => ForumBodyElementKind.rubyAnnotationContainer,
       'rp' => ForumBodyElementKind.rubyFallback,
       'table' => ForumBodyElementKind.table,
       'thead' || 'tbody' || 'tfoot' => ForumBodyElementKind.tableSection,
