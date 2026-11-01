@@ -4,6 +4,7 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
+import 'forum_body_ruby_container_background.dart';
 
 typedef ForumBodyRubySoftSpaceMemberRequest = ({
   ForumBodyTextRequest request,
@@ -21,6 +22,7 @@ final class ForumBodyRubySoftSpaceRequest {
     required List<ForumBodyRubySide> sides,
     this.direction = TextDirection.ltr,
     this.maxWidth = 16384,
+    this.background,
   }) : members = List.unmodifiable(members),
        sides = List.unmodifiable(sides),
        nativeRequests = List.unmodifiable(members.map((m) => m.request)) {
@@ -33,6 +35,7 @@ final class ForumBodyRubySoftSpaceRequest {
     }
     if (members.isEmpty) _invalid(ForumBodyRubyGroupFailure.content);
     final scope = members.first.request.content;
+    background?.validateScope(scope);
     final seen = Set<ForumBodyParagraphContent>.identity();
     var previousRank = -1;
     for (final member in this.members) {
@@ -67,6 +70,7 @@ final class ForumBodyRubySoftSpaceRequest {
   }
 
   final int beforeColumn;
+  final ForumBodyRubyContainerBackground? background;
   final List<ForumBodyRubySoftSpaceMemberRequest> members;
   final List<ForumBodyRubySide> sides;
   final TextDirection direction;
@@ -77,6 +81,7 @@ final class ForumBodyRubySoftSpaceRequest {
   ForumBodyRubySoftSpaceRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   ) => ForumBodyRubySoftSpaceRequest(
+    background: background,
     beforeColumn: beforeColumn,
     members: [
       for (final member in members)

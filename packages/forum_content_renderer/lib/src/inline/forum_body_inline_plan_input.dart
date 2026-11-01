@@ -3,6 +3,7 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_column_request.dart';
+import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_atom_request.dart';
 import 'forum_body_ruby_segment_request.dart';
 import 'forum_body_ruby_soft_space_request.dart';
@@ -30,7 +31,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 18;
+  static const revision = 19;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -98,6 +99,7 @@ final class ForumBodyInlinePlanInput {
       int levelId, {
       int columnIndex = 0,
       Map<(int, int), List<ForumBodyParagraphContent>>? gapFences,
+      ForumBodyRubyContainerBackground? background,
     }) {
       if (base.projection.text.isEmpty &&
           annotations.every((item) => item.content.projection.text.isEmpty)) {
@@ -129,6 +131,7 @@ final class ForumBodyInlinePlanInput {
                 ),
             ],
             maxWidth: width,
+            background: background,
           ),
         ),
       );
@@ -144,6 +147,7 @@ final class ForumBodyInlinePlanInput {
           sourceOrder.add(appendPlain(part.content));
         case ForumBodyInlineFlowRuby():
           final group = part.group;
+          final background = ForumBodyRubyContainerBackground.fromGroup(group);
           final levelId = roots.putIfAbsent(group.rootPath, () => roots.length);
           if (group.identity != input.identity ||
               group.fontRevision != input.fontRevision ||
@@ -293,6 +297,7 @@ final class ForumBodyInlinePlanInput {
             requestsByAtom.add(
               ForumBodyRubyAtomRequest.segment(
                 ForumBodyRubySegmentRequest(
+                  background: background,
                   bases: [
                     for (final base in segmentBases)
                       ForumBodyTextRequest.paragraph(base),
@@ -406,6 +411,7 @@ final class ForumBodyInlinePlanInput {
             requestsByAtom.add(
               ForumBodyRubyAtomRequest.softSpace(
                 ForumBodyRubySoftSpaceRequest(
+                  background: background,
                   beforeColumn: edge,
                   members: members,
                   sides: [for (final level in levels) level.side],
@@ -473,6 +479,7 @@ final class ForumBodyInlinePlanInput {
               annotationIndices,
               levelId,
               columnIndex: column,
+              background: background,
               gapFences: (softEdges?.contains(column) ?? false)
                   ? null
                   : gapFences,
@@ -495,6 +502,7 @@ final class ForumBodyInlinePlanInput {
               annotationIndices,
               levelId,
               columnIndex: column,
+              background: background,
               gapFences: (softEdges?.contains(column) ?? false)
                   ? null
                   : gapFences,

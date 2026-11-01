@@ -4,6 +4,7 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
+import 'forum_body_ruby_container_background.dart';
 
 typedef ForumBodyRubySpanRequest = ({
   ForumBodyTextRequest request,
@@ -36,6 +37,7 @@ final class ForumBodyRubySegmentRequest {
     List<ForumBodyRubyAnnotationGapRequest> annotationGaps = const [],
     this.direction = TextDirection.ltr,
     this.maxWidth = 16384,
+    this.background,
   }) : bases = List.unmodifiable(bases),
        sides = List.unmodifiable(sides),
        spans = List.unmodifiable(spans),
@@ -52,6 +54,7 @@ final class ForumBodyRubySegmentRequest {
       _invalid(ForumBodyRubyGroupFailure.geometry);
     }
     final scope = bases.first.content;
+    background?.validateScope(scope);
     final seen = Set<ForumBodyParagraphContent>.identity();
     var hasText = false;
     void check(ForumBodyParagraphContent content) {
@@ -130,6 +133,7 @@ final class ForumBodyRubySegmentRequest {
     if (!hasText) _invalid(ForumBodyRubyGroupFailure.content);
   }
   final List<ForumBodyTextRequest> bases;
+  final ForumBodyRubyContainerBackground? background;
   final List<ForumBodyRubySide> sides;
   final List<ForumBodyRubySpanRequest> spans;
   final List<ForumBodyRubyGapRequest> gaps;
@@ -142,6 +146,7 @@ final class ForumBodyRubySegmentRequest {
   ForumBodyRubySegmentRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   ) => ForumBodyRubySegmentRequest(
+    background: background,
     bases: [for (final base in bases) map(base)],
     gaps: [
       for (final gap in gaps)

@@ -49,6 +49,7 @@ final class ForumBodyRubyColumnAtomRequest extends ForumBodyRubyAtomRequest {
           (request: map(a.request), gap: a.gap, side: a.side),
       ],
       maxWidth: value.maxWidth,
+      background: value.background,
     ),
   );
 }
