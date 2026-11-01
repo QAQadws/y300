@@ -22,11 +22,13 @@ final class _Fixture {
     double height = 180,
     String before = '',
     Color ink = const Color(0x00000000),
+    String rootBackground = 'rgba(255,0,0,.5)',
+    ForumBodyStyleScope backgroundScope = ForumBodyStyleScope.asDefault,
     TextScaler scaler = TextScaler.noScaling,
   }) {
     final document = const ForumBodyParser().parse(
       html:
-          '$before<p dir="${direction.name}" style="margin:0"><ruby style="font-size:${rootSize}px;line-height:1;ruby-position:${under ? 'under' : 'over'};background:rgba(255,0,0,.5)">$children</ruby></p>',
+          '$before<p dir="${direction.name}" style="margin:0"><ruby style="font-size:${rootSize}px;line-height:1;ruby-position:${under ? 'under' : 'over'};background:$rootBackground">$children</ruby></p>',
       sourceId: 'root-paint',
       conversionIdentity: 'none',
     );
@@ -43,6 +45,9 @@ final class _Fixture {
         linkColor: const Color(0x00000000),
         paragraphAfter: 0,
         textDirection: direction,
+        policy: ForumBodyStylePolicy({
+          ForumBodyStyleProperty.background: backgroundScope,
+        }),
       ),
       cache: cache,
       width: width,
@@ -398,4 +403,57 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     expect(fixture.cache.activeLeases, 0);
   });
+  for (final explicit in [false, true]) {
+    for (final inherit in [false, true]) {
+      for (final scope in ForumBodyStyleScope.values) {
+        testWidgets(
+          'RTC stays an abstract background container; explicit child inherit=$inherit, rt=$explicit, scope=$scope',
+          (tester) async {
+            final inner = explicit
+                ? '<rt${inherit ? ' style="background:inherit"' : ''}>x y</rt>'
+                : (inherit
+                      ? '<span style="background:inherit">x y</span>'
+                      : 'x y');
+            final fixture = _Fixture(
+              '<rb>A</rb><rb>B</rb><rtc style="background:#00ff00">$inner</rtc>',
+              rootBackground: 'transparent',
+              backgroundScope: scope,
+            );
+            addTearDown(fixture.close);
+            final fragments = _prepare(fixture, 0);
+            for (final fragment
+                in fragments.whereType<ForumBodyPreparedInlineFragment>()) {
+              expect(fragment.view.containerBackgrounds, isEmpty);
+            }
+            final image = await _mount(
+              tester,
+              fixture,
+              fragments,
+              GlobalKey(),
+              ratio: 3,
+            );
+            try {
+              final bytes = (await tester.runAsync(
+                () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+              ))!;
+              var green = false;
+              for (var i = 0; i < bytes.lengthInBytes; i += 4) {
+                if (bytes.getUint8(i) == 0 &&
+                    bytes.getUint8(i + 1) == 255 &&
+                    bytes.getUint8(i + 2) == 0) {
+                  green = true;
+                  break;
+                }
+              }
+              expect(green, inherit && scope != ForumBodyStyleScope.forceAll);
+            } finally {
+              image.dispose();
+            }
+            await tester.pumpWidget(const SizedBox.shrink());
+            expect(fixture.cache.activeLeases, 0);
+          },
+        );
+      }
+    }
+  }
 }
