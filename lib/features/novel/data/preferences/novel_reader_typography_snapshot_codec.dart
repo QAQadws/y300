@@ -16,6 +16,12 @@ final class NovelReaderTypographySnapshotCodec {
     maximum: NovelReaderParagraphSpacing.maximum,
     fields: ['before', 'after'],
   );
+  static const _letters = _NumericRequestCodec(
+    unit: 'logicalPixels',
+    minimum: NovelReaderLetterSpacing.minimum,
+    maximum: NovelReaderLetterSpacing.maximum,
+    fields: ['value'],
+  );
 
   NovelReaderTypographyOverrides normalize(
     NovelReaderTypographyOverrides input,
@@ -26,6 +32,9 @@ final class NovelReaderTypographySnapshotCodec {
     paragraphSpacing: input.paragraphSpacing?.isValid == true
         ? input.paragraphSpacing
         : null,
+    letterSpacing: input.letterSpacing?.isValid == true
+        ? input.letterSpacing
+        : null,
   );
 
   NovelReaderTypographyOverrides decode(Object? source) {
@@ -35,6 +44,7 @@ final class NovelReaderTypographySnapshotCodec {
     }
     final indent = _indent.decode(source['firstLineIndent']);
     final spacing = _spacing.decode(source['paragraphSpacing']);
+    final letters = _letters.decode(source['letterSpacing']);
     return NovelReaderTypographyOverrides(
       firstLineIndent: indent == null
           ? null
@@ -48,6 +58,12 @@ final class NovelReaderTypographySnapshotCodec {
               before: spacing.values['before']!,
               after: spacing.values['after']!,
               scope: spacing.scope,
+            ),
+      letterSpacing: letters == null
+          ? null
+          : NovelReaderLetterSpacing(
+              logicalPixels: letters.values['value']!,
+              scope: letters.scope,
             ),
     );
   }
@@ -65,8 +81,15 @@ final class NovelReaderTypographySnapshotCodec {
     final normalized = normalize(input);
     final indent = normalized.firstLineIndent;
     final spacing = normalized.paragraphSpacing;
+    final letters = normalized.letterSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
     final requests = {
+      'letterSpacing': _letters.encode(
+        prior?['letterSpacing'],
+        letters == null
+            ? null
+            : (scope: letters.scope, values: {'value': letters.logicalPixels}),
+      ),
       'firstLineIndent': _indent.encode(
         prior?['firstLineIndent'],
         indent == null
@@ -106,9 +129,11 @@ final class _NumericRequestCodec {
     required this.unit,
     required this.maximum,
     required this.fields,
+    this.minimum = 0,
   });
   final String unit;
   final double maximum;
+  final double minimum;
   final List<String> fields;
   static const _metadata = {'unit', 'scope', 'enabled'};
 
@@ -125,7 +150,10 @@ final class _NumericRequestCodec {
     final values = <String, double>{};
     for (final field in fields) {
       final value = raw[field];
-      if (value is! num || !value.isFinite || value < 0 || value > maximum) {
+      if (value is! num ||
+          !value.isFinite ||
+          value < minimum ||
+          value > maximum) {
         return null;
       }
       values[field] = value.toDouble();

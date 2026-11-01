@@ -266,6 +266,7 @@ void main() {
           fontSize: 24,
           typography: const NovelReaderTypographyOverrides(
             firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
+            letterSpacing: NovelReaderLetterSpacing(logicalPixels: -1.25),
             paragraphSpacing: NovelReaderParagraphSpacing(
               before: 12,
               after: 31,

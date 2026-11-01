@@ -2202,6 +2202,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelFirstLineIndent => '首行缩进';
 
   @override
+  String get novelLetterSpacing => '字距';
+
+  @override
+  String get novelLetterSpacingScope => '应用范围';
+
+  @override
+  String get novelLetterSpacingOriginal => '原始字距';
+
+  @override
+  String get novelLetterSpacingMissing => '补充缺省';
+
+  @override
+  String get novelLetterSpacingBody => '统一正文';
+
+  @override
+  String get novelLetterSpacingAll => '全部文字';
+
+  @override
+  String get novelLetterSpacingAmount => '字符间距';
+
+  @override
+  String novelLetterSpacingValue(String value) {
+    return '$value 像素';
+  }
+
+  @override
+  String get novelLetterSpacingHint => '负值收紧字符，正值放宽字符；“补充缺省”会保留作者指定的字距。';
+
+  @override
+  String get novelLetterSpacingUnavailable => '字距设置仅用于翻页阅读，切换到翻页模式后可调整。';
+
+  @override
+  String get novelLetterSpacingReset => '重置字距';
+
+  @override
   String get novelParagraphSpacing => '段落间距';
 
   @override
@@ -7800,6 +7835,41 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelFirstLineIndent => '首行縮排';
+
+  @override
+  String get novelLetterSpacing => '字距';
+
+  @override
+  String get novelLetterSpacingScope => '套用範圍';
+
+  @override
+  String get novelLetterSpacingOriginal => '原始字距';
+
+  @override
+  String get novelLetterSpacingMissing => '補充預設';
+
+  @override
+  String get novelLetterSpacingBody => '統一正文';
+
+  @override
+  String get novelLetterSpacingAll => '全部文字';
+
+  @override
+  String get novelLetterSpacingAmount => '字元間距';
+
+  @override
+  String novelLetterSpacingValue(String value) {
+    return '$value 像素';
+  }
+
+  @override
+  String get novelLetterSpacingHint => '負值收緊字元，正值放寬字元；「補充預設」會保留作者指定的字距。';
+
+  @override
+  String get novelLetterSpacingUnavailable => '字距設定僅用於翻頁閱讀，切換至翻頁模式後即可調整。';
+
+  @override
+  String get novelLetterSpacingReset => '重設字距';
 
   @override
   String get novelParagraphSpacing => '段落間距';

@@ -6,6 +6,7 @@ import '../../domain/models/novel_reader_preferences.dart';
   ForumBodyLength indent,
   double paragraphBefore,
   double paragraphAfter,
+  double? letterSpacing,
   ForumBodyStylePolicy policy,
 })
 resolveNovelReaderNativeTypography(
@@ -22,7 +23,12 @@ resolveNovelReaderNativeTypography(
     throw ArgumentError('Invalid reader paragraph spacing');
   }
   final effectiveSpacing = preferences.effectiveParagraphSpacing;
+  final letters = preferences.typography.letterSpacing;
+  if (letters != null && !letters.isValid) {
+    throw ArgumentError('Invalid reader letter spacing');
+  }
   return (
+    letterSpacing: letters?.logicalPixels,
     paragraphBefore: effectiveSpacing.before,
     paragraphAfter: effectiveSpacing.after,
     indent: ForumBodyLength(
@@ -31,7 +37,7 @@ resolveNovelReaderNativeTypography(
           ? ForumBodyLengthUnit.em
           : ForumBodyLengthUnit.px,
     ),
-    policy: request == null && spacing == null
+    policy: request == null && spacing == null && letters == null
         ? (base ?? ForumBodyStylePolicy())
         : ForumBodyStylePolicy({
             ...?base?.values,
@@ -39,6 +45,8 @@ resolveNovelReaderNativeTypography(
               ForumBodyStyleProperty.textIndent: _scope(request.scope),
             if (spacing != null)
               ForumBodyStyleProperty.paragraphSpacing: _scope(spacing.scope),
+            if (letters != null)
+              ForumBodyStyleProperty.letterSpacing: _scope(letters.scope),
           }),
   );
 }

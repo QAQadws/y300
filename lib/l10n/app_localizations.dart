@@ -3618,6 +3618,72 @@ abstract class AppLocalizations {
   /// **'首行缩进'**
   String get novelFirstLineIndent;
 
+  /// No description provided for @novelLetterSpacing.
+  ///
+  /// In zh, this message translates to:
+  /// **'字距'**
+  String get novelLetterSpacing;
+
+  /// No description provided for @novelLetterSpacingScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用范围'**
+  String get novelLetterSpacingScope;
+
+  /// No description provided for @novelLetterSpacingOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始字距'**
+  String get novelLetterSpacingOriginal;
+
+  /// No description provided for @novelLetterSpacingMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'补充缺省'**
+  String get novelLetterSpacingMissing;
+
+  /// No description provided for @novelLetterSpacingBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一正文'**
+  String get novelLetterSpacingBody;
+
+  /// No description provided for @novelLetterSpacingAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部文字'**
+  String get novelLetterSpacingAll;
+
+  /// No description provided for @novelLetterSpacingAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'字符间距'**
+  String get novelLetterSpacingAmount;
+
+  /// No description provided for @novelLetterSpacingValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value} 像素'**
+  String novelLetterSpacingValue(String value);
+
+  /// No description provided for @novelLetterSpacingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'负值收紧字符，正值放宽字符；“补充缺省”会保留作者指定的字距。'**
+  String get novelLetterSpacingHint;
+
+  /// No description provided for @novelLetterSpacingUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'字距设置仅用于翻页阅读，切换到翻页模式后可调整。'**
+  String get novelLetterSpacingUnavailable;
+
+  /// No description provided for @novelLetterSpacingReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置字距'**
+  String get novelLetterSpacingReset;
+
   /// No description provided for @novelParagraphSpacing.
   ///
   /// In zh, this message translates to:

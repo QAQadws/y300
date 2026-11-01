@@ -41,13 +41,17 @@ final class NovelReaderNativeRenderEnvironment {
     );
     // A fresh Theme baseline prevents copyWith(null)/inherited DefaultTextStyle
     // from retaining the previously selected imported family on system fallback.
-    final textStyle = (theme.textTheme.bodyMedium ?? const TextStyle())
-        .merge(typography.body)
-        .copyWith(inherit: false, locale: Localizations.maybeLocaleOf(context));
     final nativeTypography = resolveNovelReaderNativeTypography(
       preferences,
       policy,
     );
+    final textStyle = (theme.textTheme.bodyMedium ?? const TextStyle())
+        .merge(typography.body)
+        .copyWith(
+          inherit: false,
+          locale: Localizations.maybeLocaleOf(context),
+          letterSpacing: nativeTypography.letterSpacing,
+        );
     return NovelReaderNativeRenderEnvironment._(
       ForumBodyReaderStyle(
         textStyle: textStyle,

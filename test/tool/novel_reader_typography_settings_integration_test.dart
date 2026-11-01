@@ -16,6 +16,16 @@ import 'package:y300/l10n/app_localizations.dart';
 import '../../tool/novel_main_page_profile_data.dart';
 import '../../tool/novel_main_page_profile_observation.dart';
 
+enum _Setting {
+  indent('indent'),
+  paragraphSpacing('paragraph-spacing'),
+  letterSpacing('letter-spacing'),
+  letterSpacingRuby('letter-spacing');
+
+  const _Setting(this.keyPrefix);
+  final String keyPrefix;
+}
+
 void main() {
   setUpAll(() async {
     await (FontLoader('packages/forum_content_renderer/ForumBodyInlineSpace')
@@ -27,14 +37,17 @@ void main() {
         .load();
   });
 
-  for (final spacing in [false, true]) {
-    _testSettings(spacing: spacing);
+  for (final setting in _Setting.values) {
+    _testSettings(setting);
   }
 }
 
-void _testSettings({required bool spacing}) {
+void _testSettings(_Setting setting) {
+  final spacing = setting == _Setting.paragraphSpacing;
+  final mixed = setting == _Setting.letterSpacingRuby;
+  final letters = setting == _Setting.letterSpacing || mixed;
   testWidgets(
-    'settings reflow keeps coverage and persists across reader owners (spacing=$spacing)',
+    'settings reflow keeps coverage and persists across reader owners ($setting)',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       SharedPreferencesNovelReaderPreferencesRepository repository() =>
@@ -44,7 +57,15 @@ void _testSettings({required bool spacing}) {
           );
       await repository().save(
         profileReaderPreferences.copyWith(
-          typography: spacing
+          typography: letters
+              ? const NovelReaderTypographyOverrides(
+                  firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
+                  paragraphSpacing: NovelReaderParagraphSpacing(
+                    before: 12,
+                    after: 31,
+                  ),
+                )
+              : spacing
               ? const NovelReaderTypographyOverrides(
                   firstLineIndent: NovelReaderFirstLineIndent(em: 1.5),
                 )
@@ -58,6 +79,7 @@ void _testSettings({required bool spacing}) {
           32,
           (i) =>
               '<p style="text-indent:10px">Paragraph $i: '
+              '${mixed ? 'before <ruby>base<rt>note</rt></ruby> after. ' : ''}'
               'Synthetic text for checking actual native reading geometry.</p>',
         ).join(),
       );
@@ -71,6 +93,17 @@ void _testSettings({required bool spacing}) {
         data.scope(
           MaterialApp(
             navigatorKey: navigator,
+            theme: letters
+                ? ThemeData.light().copyWith(
+                    textTheme: const TextTheme(
+                      bodyMedium: TextStyle(
+                        fontFamily: 'Ahem',
+                        letterSpacing: .5,
+                        wordSpacing: 3.25,
+                      ),
+                    ),
+                  )
+                : null,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: const Scaffold(),
@@ -92,8 +125,13 @@ void _testSettings({required bool spacing}) {
       Future<ProfileReaderObservation> wait(
         bool Function(ProfileReaderObservation) accepts,
       ) async {
-        for (var i = 0; i < 400; i++) {
-          await tester.pump(const Duration(milliseconds: 20));
+        for (var i = 0; i < (mixed ? 3000 : 400); i++) {
+          await tester.pump(Duration(milliseconds: mixed ? 1 : 20));
+          if (mixed) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 1)),
+            );
+          }
           if (key.currentContext case final context?) {
             final value = observeProfileReader(context, args);
             expect(value.failed, isFalse);
@@ -159,6 +197,15 @@ void _testSettings({required bool spacing}) {
             );
             checked++;
           }
+          if (element.widget
+              case ForumBodyInlineParagraphSurface(view: final view)
+              when view.isActive && view.startLine == 0) {
+            expect(
+              view.selectionBoxes(0, 1).single.left,
+              closeTo(em * state().preferences.fontSize, .001),
+            );
+            checked++;
+          }
           element.visitChildElements(collect);
         }
 
@@ -182,11 +229,22 @@ void _testSettings({required bool spacing}) {
         final target = observation.nativeController!.viewForPage(
           observation.page!,
         )!;
-        final rectangles = <Rect>[];
+        final rectangles = <({Rect rect, String? path})>[];
         void collect(Element element) {
           if (element.widget case ForumBodyParagraphSurface(lease: final lease)
               when lease.isActive) {
-            rectangles.add(tester.getRect(find.byWidget(element.widget)));
+            rectangles.add((
+              rect: tester.getRect(find.byWidget(element.widget)),
+              path: lease.content.path,
+            ));
+          }
+          if (element.widget
+              case ForumBodyInlineParagraphSurface(view: final view)
+              when view.isActive) {
+            rectangles.add((
+              rect: tester.getRect(find.byWidget(element.widget)),
+              path: view.content.path,
+            ));
           }
           element.visitChildElements(collect);
         }
@@ -201,14 +259,70 @@ void _testSettings({required bool spacing}) {
         }
 
         key.currentContext!.visitChildElements(visit);
-        rectangles.sort((a, b) => a.top.compareTo(b.top));
+        rectangles.sort((a, b) => a.rect.top.compareTo(b.rect.top));
         expect(rectangles.length, greaterThan(1));
+        var gaps = 0;
         for (var i = 1; i < rectangles.length; i++) {
+          if (rectangles[i].path == rectangles[i - 1].path) continue;
           expect(
-            rectangles[i].top - rectangles[i - 1].bottom,
+            rectangles[i].rect.top - rectangles[i - 1].rect.bottom,
             closeTo(gap, .001),
           );
+          gaps++;
         }
+        expect(gaps, greaterThan(0));
+      }
+
+      void checkVisibleLetters(
+        ProfileReaderObservation observation,
+        double number,
+      ) {
+        final target = observation.nativeController!.viewForPage(
+          observation.page!,
+        )!;
+        var checked = 0;
+        void collect(Element element) {
+          if (element.widget
+              case ForumBodyParagraphSurface(lease: final lease, startLine: 0)
+              when lease.isActive) {
+            expect(lease.content.projection.text, startsWith('Paragraph'));
+            expect(lease.content.style.textStyle.wordSpacing, 3.25);
+            expect(
+              lease.layout.selectionBoxes(0, 1).single.right -
+                  lease.layout.selectionBoxes(0, 1).single.left,
+              closeTo(state().preferences.fontSize + number, .001),
+            );
+            checked++;
+          }
+          if (element.widget
+              case ForumBodyInlineParagraphSurface(view: final view)
+              when view.isActive && view.startLine == 0) {
+            expect(
+              view.content.projection.display.text,
+              startsWith('Paragraph'),
+            );
+            expect(view.content.style.textStyle.wordSpacing, 3.25);
+            final box = view.selectionBoxes(0, 1).single;
+            expect(
+              box.right - box.left,
+              closeTo(state().preferences.fontSize + number, .001),
+            );
+            checked++;
+          }
+          element.visitChildElements(collect);
+        }
+
+        void visit(Element element) {
+          if (element.widget.key case ObjectKey(value: final value)
+              when identical(value, target)) {
+            collect(element);
+          } else {
+            element.visitChildElements(visit);
+          }
+        }
+
+        key.currentContext!.visitChildElements(visit);
+        expect(checked, greaterThan(0));
       }
 
       await mount();
@@ -232,22 +346,27 @@ void _testSettings({required bool spacing}) {
       final oldKey = observation.paginationKey;
       final l10n = await settings();
       final policy = find.byKey(
-        Key(
-          spacing
-              ? 'novel-reader-paragraph-spacing-policy'
-              : 'novel-reader-indent-policy',
-        ),
+        Key('novel-reader-${setting.keyPrefix}-policy'),
       );
       final bodyChoice = find.descendant(
         of: policy,
-        matching: find.text(
-          spacing ? l10n.novelParagraphSpacingBody : l10n.novelIndentBody,
-        ),
+        matching: find.text(switch (setting) {
+          _Setting.indent => l10n.novelIndentBody,
+          _Setting.paragraphSpacing => l10n.novelParagraphSpacingBody,
+          _Setting.letterSpacing ||
+          _Setting.letterSpacingRuby => l10n.novelLetterSpacingBody,
+        }),
       );
       await tester.ensureVisible(bodyChoice);
       await tester.tap(bodyChoice);
       await tester.pump();
-      if (spacing) {
+      if (letters) {
+        tester
+            .widget<Slider>(
+              find.byKey(const Key('novel-reader-letter-spacing-slider')),
+            )
+            .onChanged!(-1.25);
+      } else if (spacing) {
         Slider slider(String key) => tester.widget<Slider>(
           find.descendant(
             of: find.byKey(Key(key)),
@@ -263,16 +382,24 @@ void _testSettings({required bool spacing}) {
             .onChanged!(1.5);
       }
       await closeSettings();
+      final expectedTypography = switch (setting) {
+        _Setting.indent => baseline.typography.withFirstLineIndent(
+          const NovelReaderFirstLineIndent(em: 1.5),
+        ),
+        _Setting.paragraphSpacing => baseline.typography.withParagraphSpacing(
+          const NovelReaderParagraphSpacing(before: 12, after: 31),
+        ),
+        _Setting.letterSpacing ||
+        _Setting.letterSpacingRuby => baseline.typography.withLetterSpacing(
+          const NovelReaderLetterSpacing(logicalPixels: -1.25),
+        ),
+      };
       observation = await wait(
         (value) =>
             value.ready &&
             value.complete &&
             value.paginationKey != oldKey &&
-            (spacing
-                ? state().persistedPreferences.typography.paragraphSpacing ==
-                      const NovelReaderParagraphSpacing(before: 12, after: 31)
-                : state().persistedPreferences.typography.firstLineIndent?.em ==
-                      1.5),
+            state().persistedPreferences.typography == expectedTypography,
       );
       expect(state().document, same(document));
       // Layout page indices/percentages may change. The canonical text position
@@ -286,8 +413,10 @@ void _testSettings({required bool spacing}) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing) checkVisibleSpacing(observation, 31);
+      if (spacing || letters) checkVisibleSpacing(observation, 31);
+      if (letters) checkVisibleLetters(observation, -1.25);
       final stored = await repository().load();
+      expect(stored.typography, expectedTypography);
       if (spacing) {
         expect(
           stored.typography.paragraphSpacing,
@@ -323,15 +452,10 @@ void _testSettings({required bool spacing}) {
         isNotNull,
       );
       checkVisibleIndent(observation, 1.5);
-      if (spacing) checkVisibleSpacing(observation, 31);
+      if (spacing || letters) checkVisibleSpacing(observation, 31);
+      if (letters) checkVisibleLetters(observation, -1.25);
       await settings();
-      final reset = find.byKey(
-        Key(
-          spacing
-              ? 'novel-reader-paragraph-spacing-reset'
-              : 'novel-reader-indent-reset',
-        ),
-      );
+      final reset = find.byKey(Key('novel-reader-${setting.keyPrefix}-reset'));
       await tester.ensureVisible(reset);
       await tester.tap(reset);
       await closeSettings();
@@ -339,15 +463,17 @@ void _testSettings({required bool spacing}) {
         (value) =>
             value.ready &&
             value.complete &&
-            (spacing
-                ? state().persistedPreferences.typography.paragraphSpacing ==
-                      null
-                : state().persistedPreferences.typography.isEmpty),
+            state().persistedPreferences.typography == baseline.typography,
       );
       expect(await repository().load(), baseline);
       if (spacing) {
         checkVisibleSpacing(observation, 10);
         checkVisibleIndent(observation, 1.5);
+      }
+      if (letters) {
+        checkVisibleIndent(observation, 1.5);
+        checkVisibleSpacing(observation, 31);
+        checkVisibleLetters(observation, .5);
       }
       final secondOwner = observation.nativeOwner!;
       navigator.currentState!.pop();
