@@ -14,6 +14,8 @@ import 'forum_body_ruby_row_alignment.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_layout.dart';
 import 'forum_body_ruby_container_background.dart';
+import 'forum_body_ruby_root_box.dart';
+import '../paragraph/forum_body_paragraph_content.dart';
 
 enum _State { active, ready, transferred, closed }
 
@@ -40,6 +42,7 @@ final class ForumBodyInlinePlanPreparation {
   final _metrics = <ForumBodyRubyAtomMetrics>[];
   final _backgroundFonts =
       <ForumBodyRubyContainerBackground, ForumBodyRubyContainerFontBox>{};
+  final _rootFonts = <ForumBodyRubyRootBoxInput, ForumBodyRubyRootFontBox>{};
   ForumBodyRubyRowAlignment? _alignment;
   final _retriedBands = Set<ForumBodyTextBandContent>.identity();
   ForumBodyRubyGroupPreparation? _pair;
@@ -66,9 +69,33 @@ final class ForumBodyInlinePlanPreparation {
       var waiting = false;
       while (_metrics.length < _input!.atoms.length && parts < maxParts) {
         final request = _input!.atoms[_metrics.length];
+        final root = request.rootBox;
+        if (root != null && !_rootFonts.containsKey(root)) {
+          final step = _prepareFont(root.fontStrut, (height, baseline) {
+            _rootFonts[root] = ForumBodyRubyRootFontBox(
+              input: root,
+              height: height,
+              alphabeticBaseline: baseline,
+            );
+          });
+          parts += step.partsPrepared;
+          waiting = step.waitingForLayoutBudget;
+          if (waiting ||
+              cache.layoutBuildCount != before ||
+              parts == maxParts) {
+            break;
+          }
+          continue;
+        }
         final background = request.background;
         if (background != null && !_backgroundFonts.containsKey(background)) {
-          final step = _prepareBackgroundFont(background);
+          final step = _prepareFont(background.fontStrut, (height, baseline) {
+            _backgroundFonts[background] = ForumBodyRubyContainerFontBox(
+              background: background,
+              height: height,
+              alphabeticBaseline: baseline,
+            );
+          });
           parts += step.partsPrepared;
           waiting = step.waitingForLayoutBudget;
           if (waiting ||
@@ -191,8 +218,9 @@ final class ForumBodyInlinePlanPreparation {
     }
   }
 
-  ({int partsPrepared, bool waitingForLayoutBudget}) _prepareBackgroundFont(
-    ForumBodyRubyContainerBackground background,
+  ({int partsPrepared, bool waitingForLayoutBudget}) _prepareFont(
+    ForumBodyParagraphContent font,
+    void Function(double height, double baseline) capture,
   ) {
     final cache = _cache!;
     final rejectedAt = cache.budgetRevision;
@@ -201,18 +229,12 @@ final class ForumBodyInlinePlanPreparation {
       // Use the same admission and single-shape quantum as glyph metrics.
       // This auxiliary strut is never issued as visible/source text.
       lease = cache.acquire(
-        content: background.fontStrut,
+        content: font,
         width: width,
         textScaler: _textScaler!,
       );
       _guard();
-      final box = ForumBodyRubyContainerFontBox(
-        background: background,
-        height: lease.layout.height,
-        alphabeticBaseline: lease.layout.alphabeticBaseline,
-      );
-      _guard();
-      _backgroundFonts[background] = box;
+      capture(lease.layout.height, lease.layout.alphabeticBaseline);
       return (partsPrepared: 1, waitingForLayoutBudget: false);
     } on ForumBodyParagraphBudgetException catch (error) {
       _guard();
@@ -240,6 +262,9 @@ final class ForumBodyInlinePlanPreparation {
       atoms: _metrics,
       levelIds: _input!.rubyLevelIds,
       atomOffsets: _input!.atomEngineOffsets,
+      rootFonts: [
+        for (final request in _input!.atoms) _rootFonts[request.rootBox],
+      ],
     );
     var parts = 0;
     if (!alignment.isComplete && !alignment.needsRows) {
@@ -360,6 +385,10 @@ final class ForumBodyInlinePlanPreparation {
     _result = ForumBodyInlinePageContent.atoms(
       content: _input!.content,
       dimensions: alignment.dimensions,
+      rootFonts: {
+        for (final (index, request) in _input!.atoms.indexed)
+          if (request.rootBox case final root?) index: _rootFonts[root]!,
+      },
       trimmedAtomIndices: _finalTrimmedAtoms,
       containerBackgrounds: {
         for (final (index, request) in _input!.atoms.indexed)
@@ -445,6 +474,7 @@ final class ForumBodyInlinePlanPreparation {
     _result = null;
     _metrics.clear();
     _backgroundFonts.clear();
+    _rootFonts.clear();
     _alignment = null;
     _retriedBands.clear();
     _cache = null;

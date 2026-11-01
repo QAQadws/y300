@@ -5,6 +5,7 @@ import '../paragraph/forum_body_text_request.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 import 'forum_body_ruby_container_background.dart';
+import 'forum_body_ruby_root_box.dart';
 
 typedef ForumBodyRubySpanRequest = ({
   ForumBodyTextRequest request,
@@ -38,6 +39,7 @@ final class ForumBodyRubySegmentRequest {
     this.direction = TextDirection.ltr,
     this.maxWidth = 16384,
     this.background,
+    this.rootBox,
   }) : bases = List.unmodifiable(bases),
        sides = List.unmodifiable(sides),
        spans = List.unmodifiable(spans),
@@ -55,6 +57,7 @@ final class ForumBodyRubySegmentRequest {
     }
     final scope = bases.first.content;
     background?.validateScope(scope);
+    rootBox?.validateScope(scope, background: background);
     final seen = Set<ForumBodyParagraphContent>.identity();
     var hasText = false;
     void check(ForumBodyParagraphContent content) {
@@ -134,6 +137,7 @@ final class ForumBodyRubySegmentRequest {
   }
   final List<ForumBodyTextRequest> bases;
   final ForumBodyRubyContainerBackground? background;
+  final ForumBodyRubyRootBoxInput? rootBox;
   final List<ForumBodyRubySide> sides;
   final List<ForumBodyRubySpanRequest> spans;
   final List<ForumBodyRubyGapRequest> gaps;
@@ -147,6 +151,7 @@ final class ForumBodyRubySegmentRequest {
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   ) => ForumBodyRubySegmentRequest(
     background: background,
+    rootBox: rootBox,
     bases: [for (final base in bases) map(base)],
     gaps: [
       for (final gap in gaps)

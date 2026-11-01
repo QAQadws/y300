@@ -19,6 +19,60 @@ sealed class _RubyBinding {
   void close();
 }
 
+/// Root leading translates the complete child once; annotation stacking and
+/// current source windows remain the child's own immutable geometry.
+final class _RubyRootFrameBinding extends _RubyBinding {
+  const _RubyRootFrameBinding(this.child, this.frame, this.rowAllocation);
+  final _RubyBinding child;
+  final ForumBodyRubyAtomFrame frame;
+  final Rect rowAllocation;
+  bool hitsOuterLeading(Offset point) =>
+      rowAllocation.contains(point) && !(Offset.zero & size).contains(point);
+  Offset get _offset => Offset(0, frame.childTop);
+  @override
+  Size get size => frame.size;
+  @override
+  double get baseline => frame.baseline;
+  @override
+  bool get isActive => child.isActive;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases =>
+      child.nativeLeases;
+  @override
+  void paint(Canvas canvas, Offset offset) =>
+      child.paint(canvas, offset + _offset);
+  @override
+  _RubySourceHit sourceAt(Offset point) {
+    final local = point - _offset;
+    final hit = child.sourceAt(local);
+    if ((Offset.zero & child.size).contains(local)) return hit;
+    // Root leading is allocation only. A clamped child caret cannot prove a
+    // glyph/source hit at an unpainted point in that newly reserved area.
+    return (
+      window: hit.window,
+      position: HtmlProjectedSourcePosition(
+        sourceRune: hit.position.sourceRune,
+        displayUtf16: hit.position.displayUtf16,
+        isExact: false,
+      ),
+    );
+  }
+
+  @override
+  List<TextBox> selectionBoxes(int start, int end) => [
+    for (final box in child.selectionBoxes(start, end))
+      TextBox.fromLTRBD(
+        box.left,
+        box.top + frame.childTop,
+        box.right,
+        box.bottom + frame.childTop,
+        box.direction,
+      ),
+  ];
+  @override
+  void close() => child.close();
+}
+
 final class _RubySpaceBinding extends _RubyBinding {
   const _RubySpaceBinding(this.space, this.windows);
   final ForumBodyRubySoftSpaceLayout space;

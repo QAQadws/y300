@@ -182,6 +182,9 @@ void main() {
           ensureOwner: () {},
         );
         addTearDown(prep.close);
+        expect(prep.advance(maxParts: 1).partsPrepared, 1);
+        expect(cache.activeLeases, 0);
+        cache.clearUnpinned();
         final rejected = prep.advance();
         expect(rejected.partsPrepared, 1);
         expect(cache.activeLeases, 0);

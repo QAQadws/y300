@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,8 @@ const _segment =
     '<rb style="font-size:20px;line-height:1">A</rb><rb style="font-size:20px;line-height:1">B</rb><rtc style="font-size:10px;line-height:1"><rt>x</rt><rt>y</rt></rtc><rtc style="font-size:10px;line-height:1">word</rtc>';
 const _space =
     '<rb style="font-size:20px;line-height:1">A</rb> <rb style="font-size:20px;line-height:1">B</rb><rt style="font-size:10px;line-height:1">x</rt> <rt style="font-size:10px;line-height:1">y</rt>';
+const _fixedSpace =
+    '<rb style="font-size:20px;line-height:1">A</rb><rb style="font-size:20px;line-height:1">B</rb><rtc style="font-size:10px;line-height:1"><rt>x</rt> <rt>y</rt></rtc>';
 
 final class _Fixture {
   _Fixture(
@@ -18,6 +21,7 @@ final class _Fixture {
     TextDirection direction = TextDirection.ltr,
     bool under = false,
     double rootSize = 20,
+    double rootHeight = 1,
     double width = 240,
     double height = 180,
     String before = '',
@@ -28,7 +32,7 @@ final class _Fixture {
   }) {
     final document = const ForumBodyParser().parse(
       html:
-          '$before<p dir="${direction.name}" style="margin:0"><ruby style="font-size:${rootSize}px;line-height:1;ruby-position:${under ? 'under' : 'over'};background:$rootBackground">$children</ruby></p>',
+          '$before<p dir="${direction.name}" style="margin:0"><ruby style="font-size:${rootSize}px;line-height:$rootHeight;ruby-position:${under ? 'under' : 'over'};background:$rootBackground">$children</ruby></p>',
       sourceId: 'root-paint',
       conversionIdentity: 'none',
     );
@@ -239,7 +243,12 @@ void main() {
     testWidgets(
       'root natural box can exceed child frame but remains clipped to the page (DPR$ratio)',
       (tester) async {
-        final fixture = _Fixture(_column, rootSize: 40, height: 32);
+        final fixture = _Fixture(
+          _column,
+          rootSize: 40,
+          rootHeight: .5,
+          height: 32,
+        );
         addTearDown(fixture.close);
         final fragments = _prepare(fixture, 0);
         final view = (fragments.single as ForumBodyPreparedInlineFragment).view;
@@ -306,17 +315,28 @@ void main() {
           '${List.filled(8, '<rb style="font-size:20px;line-height:1">A</rb>').join()}'
           '${List.filled(8, '<rt style="font-size:10px;line-height:1">x</rt>').join()}',
           width: 70,
-          height: 65,
+          height: 250,
+          rootSize: 40,
+          rootHeight: 3,
           direction: direction,
         );
         addTearDown(fixture.close);
         expect(fixture.session.snapshot.length, greaterThan(1));
         final atoms = <int>{};
+        var rows = 0;
         for (var page = 0; page < fixture.session.snapshot.length; page++) {
           final fragments = _prepare(fixture, page);
           final view =
               (fragments.single as ForumBodyPreparedInlineFragment).view;
           expect(view.containerBackgrounds.length, view.lines.length);
+          rows += view.lines.length;
+          for (final line in view.lines) {
+            expect(line.bottom - line.top, closeTo(120, 1e-3));
+          }
+          expect(
+            view.containerBackgrounds.map((r) => r.rect.height),
+            everyElement(40),
+          );
           for (final atom in view.atomIndices) {
             expect(atoms.add(atom), true);
           }
@@ -357,6 +377,7 @@ void main() {
           expect(fixture.cache.activeLeases, 0);
         }
         expect(atoms, Set.of(List.generate(8, (index) => index)));
+        expect(rows, 3);
       },
     );
   }
@@ -366,6 +387,7 @@ void main() {
     final fixture = _Fixture(
       _column,
       rootSize: 40,
+      rootHeight: .5,
       before: '<p style="margin:0;line-height:1">A</p>',
       ink: const Color(0xff000000),
     );
@@ -456,4 +478,177 @@ void main() {
       }
     }
   }
+  for (final (name, children) in [
+    ('column', _column),
+    ('segment', _segment),
+    ('space', _space),
+  ]) {
+    for (final direction in TextDirection.values) {
+      for (final under in [false, true]) {
+        for (final (scaleName, scaler) in [
+          ('none', TextScaler.noScaling),
+          ('nonlinear', const _RootScaler()),
+          ('fractional', const TextScaler.linear(1.27)),
+        ]) {
+          testWidgets(
+            'root font leading translates paint, hits and selection together ($name,$direction,under=$under,scale=$scaleName)',
+            (tester) async {
+              _Fixture fixture(double size, double leading) => _Fixture(
+                name == 'space' ? _fixedSpace : children,
+                rootSize: size,
+                rootHeight: leading,
+                rootBackground: 'transparent',
+                direction: direction,
+                under: under,
+                scaler: scaler,
+                ink: const Color(0xff000000),
+                height: 260,
+              );
+              final reference = fixture(20, 1);
+              final actual = fixture(40, 3);
+              addTearDown(reference.close);
+              addTearDown(actual.close);
+              final originalFragments = _prepare(reference, 0);
+              final fragments = _prepare(actual, 0);
+              final original =
+                  (originalFragments.single as ForumBodyPreparedInlineFragment)
+                      .view;
+              final view =
+                  (fragments.single as ForumBodyPreparedInlineFragment).view;
+              final native = TextPainter(
+                text: const TextSpan(
+                  text: '',
+                  style: TextStyle(fontFamily: 'Ahem', fontSize: 40, height: 3),
+                ),
+                textDirection: direction,
+                textScaler: scaler,
+              )..layout();
+              try {
+                final rootBaseline = native.computeDistanceToActualBaseline(
+                  TextBaseline.alphabetic,
+                );
+                final expectedBaseline = math.max(
+                  rootBaseline,
+                  original.lines.single.baseline,
+                );
+                final expectedHeight =
+                    expectedBaseline +
+                    math.max(
+                      native.height - rootBaseline,
+                      original.height - original.lines.single.baseline,
+                    );
+                final tolerance = scaleName == 'fractional' ? 1.001 : 1e-3;
+                expect(view.height, closeTo(expectedHeight, tolerance));
+                expect(
+                  view.lines.single.baseline,
+                  closeTo(expectedBaseline, tolerance),
+                );
+              } finally {
+                native.dispose();
+              }
+              expect(view.containerBackgrounds, isEmpty);
+              expect(
+                fragments.expand((f) => f.nativeLeases).length,
+                originalFragments.expand((f) => f.nativeLeases).length,
+              );
+              final delta =
+                  view.lines.single.baseline - original.lines.single.baseline;
+              expect(delta, greaterThan(0));
+              final originalBoxes = original.glyphBoxes(
+                0,
+                original.content.projection.display.text.length,
+              );
+              final boxes = view.glyphBoxes(
+                0,
+                view.content.projection.display.text.length,
+              );
+              expect(
+                view
+                    .sourceAt(Offset(boxes.first.toRect().center.dx, 0))
+                    .isExact,
+                false,
+              );
+              expect(boxes, hasLength(originalBoxes.length));
+              for (var i = 0; i < boxes.length; i++) {
+                expect(boxes[i].left, closeTo(originalBoxes[i].left, 1e-3));
+                expect(boxes[i].right, closeTo(originalBoxes[i].right, 1e-3));
+                expect(
+                  boxes[i].top,
+                  closeTo(originalBoxes[i].top + delta, 1e-3),
+                );
+                expect(
+                  boxes[i].bottom,
+                  closeTo(originalBoxes[i].bottom + delta, 1e-3),
+                );
+                final hit = view.sourceAt(boxes[i].toRect().center);
+                final originalHit = original.sourceAt(
+                  originalBoxes[i].toRect().center,
+                );
+                expect(
+                  (hit.sourceRune, hit.displayUtf16, hit.isExact),
+                  (
+                    originalHit.sourceRune,
+                    originalHit.displayUtf16,
+                    originalHit.isExact,
+                  ),
+                );
+              }
+              for (final fragment in originalFragments) {
+                fragment.close();
+              }
+              expect(reference.cache.activeLeases, 0);
+              final counts = (
+                actual.cache.layoutBuildCount,
+                actual.cache.pictureBuildCount,
+              );
+              final image = await _mount(
+                tester,
+                actual,
+                fragments,
+                GlobalKey(),
+                ratio: 3,
+              );
+              try {
+                final origin = Offset(
+                  20 + actual.session.snapshot[0].fragments.single.left,
+                  20 + actual.session.snapshot[0].fragments.single.top,
+                );
+                expect(
+                  await _pixel(
+                    tester,
+                    image,
+                    boxes.first.toRect().center + origin,
+                    3,
+                  ),
+                  [0, 0, 0, 255],
+                );
+                expect((
+                  actual.cache.layoutBuildCount,
+                  actual.cache.pictureBuildCount,
+                ), counts);
+              } finally {
+                image.dispose();
+              }
+              await tester.pumpWidget(const SizedBox.shrink());
+              expect(actual.cache.activeLeases, 0);
+            },
+          );
+        }
+      }
+    }
+  }
+}
+
+final class _RootScaler extends TextScaler {
+  const _RootScaler();
+  @override
+  double scale(double fontSize) =>
+      fontSize *
+      (fontSize >= 40
+          ? 1.5
+          : fontSize >= 20
+          ? 1.25
+          : 1.1);
+  @override
+  double get textScaleFactor => 1;
 }

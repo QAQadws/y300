@@ -60,7 +60,7 @@ void main() {
                 '<span style="color:#b22222;background-color:#ffe000">Author highlight</span> '
                 '<a href="https://example.invalid/synthetic">Link</a> '
                 '<strong>Bold</strong> '
-                '${mixed ? 'before <ruby style="color:#b22222;background:#ffe000"><rb style="background:#ffbb00">ba se</rb><rt style="background:inherit">no te</rt></ruby> <ruby style="background:#44bb88"><rb style="background:transparent">ro ot</rb><rt style="background:transparent">no te</rt></ruby> after ' : ''}'
+                '${mixed ? 'before <ruby style="color:#b22222;background:#ffe000"><rb style="background:#ffbb00">ba se</rb><rt style="background:inherit">no te</rt></ruby> <ruby style="font-size:40px;line-height:3;background:#44bb88"><rb style="font-size:20px;line-height:1;background:transparent">ro ot</rb><rt style="font-size:10px;line-height:1;background:transparent">no te</rt></ruby> after ' : ''}'
                 'Synthetic custom color settings preserve reading position and actual native coverage.</p>',
           ).join(),
         );
@@ -354,6 +354,23 @@ void main() {
                 expected.backgroundScope != NovelReaderStyleScope.forceBody &&
                 expected.backgroundScope != NovelReaderStyleScope.forceAll,
           );
+          if (mixed) {
+            expect(
+              find
+                  .byType(ForumBodyInlineParagraphSurface)
+                  .evaluate()
+                  .any(
+                    (element) =>
+                        (element.widget as ForumBodyInlineParagraphSurface)
+                            .view
+                            .lines
+                            .any(
+                              (line) => line.bottom - line.top >= 120 - 1e-3,
+                            ),
+                  ),
+              true,
+            );
+          }
           expect(
             runs.any(
               (r) =>

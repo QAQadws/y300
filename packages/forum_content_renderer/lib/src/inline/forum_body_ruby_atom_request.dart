@@ -3,6 +3,7 @@ import 'forum_body_ruby_column_request.dart';
 import 'forum_body_ruby_segment_request.dart';
 import 'forum_body_ruby_soft_space_request.dart';
 import 'forum_body_ruby_container_background.dart';
+import 'forum_body_ruby_root_box.dart';
 
 /// Internal pre-measurement variant of an actual parent atom. It borrows the
 /// existing immutable requests; numeric targets only enter the later AtomPlan.
@@ -19,6 +20,7 @@ sealed class ForumBodyRubyAtomRequest {
   ) = ForumBodyRubySoftSpaceAtomRequest;
   List<ForumBodyTextRequest> get nativeRequests;
   ForumBodyRubyContainerBackground? get background;
+  ForumBodyRubyRootBoxInput? get rootBox;
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   );
@@ -31,6 +33,8 @@ final class ForumBodyRubySoftSpaceAtomRequest extends ForumBodyRubyAtomRequest {
   List<ForumBodyTextRequest> get nativeRequests => value.nativeRequests;
   @override
   ForumBodyRubyContainerBackground? get background => value.background;
+  @override
+  ForumBodyRubyRootBoxInput? get rootBox => value.rootBox;
   @override
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
@@ -45,6 +49,8 @@ final class ForumBodyRubyColumnAtomRequest extends ForumBodyRubyAtomRequest {
   @override
   ForumBodyRubyContainerBackground? get background => value.background;
   @override
+  ForumBodyRubyRootBoxInput? get rootBox => value.rootBox;
+  @override
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   ) => ForumBodyRubyColumnAtomRequest(
@@ -56,6 +62,7 @@ final class ForumBodyRubyColumnAtomRequest extends ForumBodyRubyAtomRequest {
       ],
       maxWidth: value.maxWidth,
       background: value.background,
+      rootBox: value.rootBox,
     ),
   );
 }
@@ -67,6 +74,8 @@ final class ForumBodyRubySegmentAtomRequest extends ForumBodyRubyAtomRequest {
   List<ForumBodyTextRequest> get nativeRequests => value.nativeRequests;
   @override
   ForumBodyRubyContainerBackground? get background => value.background;
+  @override
+  ForumBodyRubyRootBoxInput? get rootBox => value.rootBox;
   @override
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,

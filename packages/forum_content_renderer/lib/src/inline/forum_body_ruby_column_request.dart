@@ -2,6 +2,7 @@ import '../paragraph/forum_body_text_request.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 import 'forum_body_ruby_container_background.dart';
+import 'forum_body_ruby_root_box.dart';
 
 /// Pure source-bound child requests. Dimensions belong to the measured parent
 /// plan, not these requests; visible preparation rechecks actual child metrics.
@@ -13,11 +14,13 @@ final class ForumBodyRubyColumnRequest {
     double maxWidth = 16384,
     ForumBodyRubySide side = ForumBodyRubySide.over,
     ForumBodyRubyContainerBackground? background,
+    ForumBodyRubyRootBoxInput? rootBox,
   }) : this.layers(
          base: base,
          annotations: [(request: annotation, gap: gap, side: side)],
          maxWidth: maxWidth,
          background: background,
+         rootBox: rootBox,
        );
 
   ForumBodyRubyColumnRequest.layers({
@@ -28,6 +31,7 @@ final class ForumBodyRubyColumnRequest {
     annotations,
     this.maxWidth = 16384,
     this.background,
+    this.rootBox,
   }) : annotations = List.unmodifiable(annotations),
        nativeRequests = List.unmodifiable([
          base,
@@ -35,6 +39,7 @@ final class ForumBodyRubyColumnRequest {
            if (item.request.content.projection.text.isNotEmpty) item.request,
        ]) {
     background?.validateScope(base.content);
+    rootBox?.validateScope(base.content, background: background);
     validateForumBodyRubyColumnInputs(
       base: base.content,
       annotations: [
@@ -46,6 +51,7 @@ final class ForumBodyRubyColumnRequest {
   }
   final ForumBodyTextRequest base;
   final ForumBodyRubyContainerBackground? background;
+  final ForumBodyRubyRootBoxInput? rootBox;
   final List<
     ({ForumBodyTextRequest request, double gap, ForumBodyRubySide side})
   >

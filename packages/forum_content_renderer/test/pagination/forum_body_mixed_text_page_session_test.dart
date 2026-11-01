@@ -15,6 +15,10 @@ final _reader = ForumBodyReaderStyle(
   paragraphAfter: 0,
 );
 
+// Exact native totals include the root's temporary empty font strut. It is
+// released before child metrics and never adds a visible handle or picture.
+// An identical anonymous base reuses that strut instead of shaping it twice.
+
 final class _Fixture {
   _Fixture(
     String html, {
@@ -656,7 +660,7 @@ void main() {
       );
       f.finish();
       expect(f.session.snapshot, hasLength(2));
-      expect(f.cache.layoutBuildCount, 2);
+      expect(f.cache.layoutBuildCount, 3);
       for (var page = 0; page < 2; page++) {
         final fragment =
             f.prepare(page).single as ForumBodyPreparedInlineFragment;
@@ -683,13 +687,13 @@ void main() {
       entries: 3,
     );
     f.finish();
-    expect(f.cache.layoutBuildCount, 4);
+    expect(f.cache.layoutBuildCount, 5);
     expect(f.cache.pictureBuildCount, 0);
     expect(f.cache.entryCount, 3);
     final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
     try {
       expect(fragment.nativeLeases, hasLength(121));
-      expect(f.cache.layoutBuildCount, 4);
+      expect(f.cache.layoutBuildCount, 5);
       expect(f.cache.pictureBuildCount, 120);
     } finally {
       fragment.close();
@@ -899,7 +903,7 @@ void main() {
       );
       f.finish();
       expect(f.session.snapshot, hasLength(2));
-      expect(f.cache.layoutBuildCount, 2);
+      expect(f.cache.layoutBuildCount, 3);
       for (var page = 0; page < 2; page++) {
         final fragment =
             f.prepare(page).single as ForumBodyPreparedInlineFragment;
@@ -930,7 +934,7 @@ void main() {
           entries: 2,
         );
         f.finish();
-        expect(f.cache.layoutBuildCount, sameRoot ? 3 : 2);
+        expect(f.cache.layoutBuildCount, sameRoot ? 4 : 3);
         final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
         try {
           final first = fragment.glyphBoxes(1, 3).single;
@@ -954,10 +958,10 @@ void main() {
       height: 100,
       entries: 2,
     );
-    for (var step = 0; f.cache.layoutBuildCount < 2 && step < 100; step++) {
+    for (var step = 0; f.cache.layoutBuildCount < 3 && step < 100; step++) {
       f.advance();
     }
-    expect(f.cache.layoutBuildCount, 2);
+    expect(f.cache.layoutBuildCount, 3);
     expect(f.session.snapshot, isEmpty);
     expect(f.cache.activeLeases, 1);
     f.session.close();
@@ -974,7 +978,7 @@ void main() {
       entries: 2,
     );
     f.finish();
-    expect(f.cache.layoutBuildCount, 2);
+    expect(f.cache.layoutBuildCount, 3);
     final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
     fragment.close();
     expect(f.cache.activeLeases, 0);
@@ -990,13 +994,13 @@ void main() {
         entries: 3,
       );
       f.finish();
-      expect(f.cache.layoutBuildCount, 4);
+      expect(f.cache.layoutBuildCount, 5);
       expect(f.cache.pictureBuildCount, 0);
       expect(f.cache.entryCount, 3);
       final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
       try {
         expect(fragment.nativeLeases, hasLength(121));
-        expect(f.cache.layoutBuildCount, 4);
+        expect(f.cache.layoutBuildCount, 5);
         expect(f.cache.pictureBuildCount, 120);
       } finally {
         fragment.close();
@@ -1354,7 +1358,7 @@ void main() {
         entries: 4,
       );
       f.finish();
-      expect(f.cache.layoutBuildCount, 3);
+      expect(f.cache.layoutBuildCount, 4);
       expect(f.cache.pictureBuildCount, 0);
       final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
       try {
@@ -1569,7 +1573,7 @@ void main() {
       expect(f.session.snapshot, hasLength(2));
       expect(f.session.retainedParagraphCount, 1);
       expect(f.session.retainedTextCodeUnits, 6);
-      expect(f.cache.layoutBuildCount, 2);
+      expect(f.cache.layoutBuildCount, 3);
       expect(f.cache.pictureBuildCount, 0);
       expect(f.cache.activeLeases, 0);
       final first = f.prepare(0).single as ForumBodyPreparedInlineFragment;
@@ -1641,7 +1645,7 @@ void main() {
         entries: 4,
       );
       f.finish();
-      expect(f.cache.layoutBuildCount, 5);
+      expect(f.cache.layoutBuildCount, 6);
       expect(f.cache.pictureBuildCount, 0);
       expect(f.cache.activeLeases, 0);
       expect(f.session.snapshot.length, greaterThan(1));
@@ -1652,7 +1656,7 @@ void main() {
         expect(visible, lessThan(120));
         expect(prepared.nativeLeases.length, 1 + visible * 2);
         expect(f.cache.pictureBuildCount, visible * 2);
-        expect(f.cache.layoutBuildCount, 6);
+        expect(f.cache.layoutBuildCount, 7);
         expect(f.cache.entryCount, lessThanOrEqualTo(4));
       } finally {
         prepared.close();
@@ -1672,7 +1676,7 @@ void main() {
       }
       expect(f.session.isComplete, isFalse);
       expect(f.session.resolvedNodeCount, lessThan(30));
-      expect(f.cache.layoutBuildCount, 2);
+      expect(f.cache.layoutBuildCount, 3);
       expect(f.cache.pictureBuildCount, 0);
       expect(f.cache.activeLeases, 0);
       final prefix = f.session.snapshot;
@@ -1694,7 +1698,7 @@ void main() {
         width: 100,
       );
       f.finish();
-      expect(f.cache.layoutBuildCount, 3);
+      expect(f.cache.layoutBuildCount, 4);
       expect(f.cache.pictureBuildCount, 0);
       final page = f.prepare(0).single;
       expect(page.nativeLeases, hasLength(3));
@@ -1721,7 +1725,7 @@ void main() {
         ),
       );
       f.finish();
-      expect(f.cache.layoutBuildCount, 3);
+      expect(f.cache.layoutBuildCount, 4);
       final page = f.prepare(0).single;
       expect(page.nativeLeases, hasLength(3));
       expect(f.cache.pictureBuildCount, 0);
@@ -1768,7 +1772,7 @@ void main() {
       f.finish();
       expect(f.session.snapshot, hasLength(2));
       expect(f.session.retainedParagraphCount, 2);
-      expect(f.cache.layoutBuildCount, 2);
+      expect(f.cache.layoutBuildCount, 3);
       expect(f.cache.pictureBuildCount, 0);
       final page = f.session.snapshot.last.fragments.single;
       expect((page.startLine, page.endLine), (1, 2));

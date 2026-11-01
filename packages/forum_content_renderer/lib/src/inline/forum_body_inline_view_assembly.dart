@@ -15,6 +15,7 @@ final class ForumBodyInlineViewAssembly {
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
     Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
+    Map<int, ForumBodyRubyRootFontBox> rootFonts = const {},
     void Function()? ensureOwner,
   }) : _cache = cache,
        _parent = parent,
@@ -22,6 +23,7 @@ final class ForumBodyInlineViewAssembly {
        _segments = Map.of(rubySegments),
        _spaces = Map.of(rubySpaces),
        _backgroundFonts = Map.of(containerBackgrounds),
+       _rootFonts = Map.of(rootFonts),
        _ensureOwner = ensureOwner;
   ForumBodyParagraphCache? _cache;
   ForumBodyInlineParagraphLease? _parent;
@@ -29,6 +31,7 @@ final class ForumBodyInlineViewAssembly {
   Map<int, ForumBodyRubySegmentLayout> _segments;
   Map<int, ForumBodyRubySoftSpaceLayout> _spaces;
   Map<int, ForumBodyRubyContainerFontBox> _backgroundFonts;
+  Map<int, ForumBodyRubyRootFontBox> _rootFonts;
   final _backgroundRegions = _RubyBackgroundRegions();
   void Function()? _ensureOwner;
   final int startLine;
@@ -37,6 +40,7 @@ final class ForumBodyInlineViewAssembly {
   Map<int, _RubyBinding> _bindings = {};
   final _checked = Set<ForumBodyNativeParagraphLease>.identity();
   _RubyBindingWork? _binding;
+  ForumBodyRubyAtomFrame? _bindingFrame;
   var _bindingIndex = -1;
   var _atom = 0;
   var _preparedAtoms = 0;
@@ -90,9 +94,18 @@ final class ForumBodyInlineViewAssembly {
         } else if (_binding != null) {
           work += _binding!.advance(maxParts: maxParts - work);
           if (_binding!.isComplete) {
-            _bindings[_bindingIndex] = _binding!.takeBinding();
+            final child = _binding!.takeBinding();
+            _bindings[_bindingIndex] = switch (_bindingFrame) {
+              final frame? => _RubyRootFrameBinding(
+                child,
+                frame,
+                _rootRowAllocation(_bindingIndex),
+              ),
+              null => child,
+            };
             _appendBackground(_bindingIndex, _bindings[_bindingIndex]!);
             _binding = null;
+            _bindingFrame = null;
             _preparedAtoms++;
           }
         } else if (_atom < _parent!.layout.projection.atoms.length) {
@@ -116,10 +129,28 @@ final class ForumBodyInlineViewAssembly {
             final size = group?.size ?? segment?.size ?? space!.size;
             final baseline =
                 group?.baseline ?? segment?.baseline ?? space!.baseline;
+            final root = _rootFonts[atom.index];
+            if (root != null) {
+              final parent = _parent!.content;
+              if (root.input.fontStrut.identity != parent.identity ||
+                  root.input.fontStrut.fontRevision != parent.fontRevision ||
+                  root.input.fontStrut.styleRevision != parent.styleRevision) {
+                _fail(ForumBodyInlineViewFailure.identity);
+              }
+            }
+            _bindingFrame = root?.enclose(
+              childSize: size,
+              childBaseline: baseline,
+            );
+            final frameSize = _bindingFrame?.size ?? size;
+            final frameBaseline = _bindingFrame?.baseline ?? baseline;
+            if (frameSize == size && frameBaseline == baseline) {
+              _bindingFrame = null;
+            }
             final dimension = _parent!.layout.dimensions[atom.index];
-            if ((dimension.size.width - size.width).abs() > 1e-4 ||
-                (dimension.size.height - size.height).abs() > 1e-4 ||
-                (dimension.baselineOffset! - baseline).abs() > 1e-4) {
+            if ((dimension.size.width - frameSize.width).abs() > 1e-4 ||
+                (dimension.size.height - frameSize.height).abs() > 1e-4 ||
+                (dimension.baselineOffset! - frameBaseline).abs() > 1e-4) {
               _fail(ForumBodyInlineViewFailure.geometry);
             }
             _bindingIndex = atom.index;
@@ -159,6 +190,38 @@ final class ForumBodyInlineViewAssembly {
       _fail(ForumBodyInlineViewFailure.identity);
     }
     final layout = _parent!.layout;
+    final row = _rowOfAtom(index);
+    final origin =
+        layout.atomBoxes[index].toRect().topLeft - Offset(0, _fragment!.top);
+    _backgroundRegions.add(
+      font,
+      row,
+      Rect.fromLTWH(
+        origin.dx,
+        origin.dy + binding.baseline - font.alphabeticBaseline,
+        binding.size.width,
+        font.height,
+      ),
+    );
+  }
+
+  Rect _rootRowAllocation(int index) {
+    final layout = _parent!.layout;
+    final row = _rowOfAtom(index);
+    // Use the published row frame: native line.top can exclude fractional
+    // paragraph leading even though that strip belongs to this fragment.
+    final allocation = layout.fragment(row, row + 1);
+    final box = layout.atomBoxes[index];
+    return Rect.fromLTRB(
+      0,
+      allocation.top - box.top,
+      box.right - box.left,
+      allocation.bottom - box.top,
+    );
+  }
+
+  int _rowOfAtom(int index) {
+    final layout = _parent!.layout;
     final engineOffset = layout.projection.atoms[index].engineUtf16;
     var low = startLine, high = endLine;
     while (low < high) {
@@ -173,18 +236,7 @@ final class ForumBodyInlineViewAssembly {
         layout.lines[low].engineCoverageStartUtf16 > engineOffset) {
       _fail(ForumBodyInlineViewFailure.coverage);
     }
-    final origin =
-        layout.atomBoxes[index].toRect().topLeft - Offset(0, _fragment!.top);
-    _backgroundRegions.add(
-      font,
-      low,
-      Rect.fromLTWH(
-        origin.dx,
-        origin.dy + binding.baseline - font.alphabeticBaseline,
-        binding.size.width,
-        font.height,
-      ),
-    );
+    return low;
   }
 
   void _own(ForumBodyTextLease lease) {
@@ -284,6 +336,8 @@ final class ForumBodyInlineViewAssembly {
     _ensureOwner = null;
     _checked.clear();
     _backgroundFonts = const {};
+    _rootFonts = const {};
+    _bindingFrame = null;
     _backgroundRegions.clear();
   }
 

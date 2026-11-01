@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_ruby_group_metrics.dart';
+import 'forum_body_ruby_root_box.dart';
 
 enum _Phase {
   globalUnion,
@@ -35,12 +36,18 @@ final class ForumBodyRubyRowAlignment {
     required List<ForumBodyRubyAtomMetrics> atoms,
     required List<int> levelIds,
     required List<int> atomOffsets,
+    List<ForumBodyRubyRootFontBox?>? rootFonts,
   }) : atoms = List.unmodifiable(atoms),
        levelIds = List.unmodifiable(levelIds),
        atomOffsets = List.unmodifiable(atomOffsets),
+       rootFonts = List.unmodifiable(
+         rootFonts ?? List.filled(atoms.length, null),
+       ),
        _targets = List.filled(atoms.length, null),
        _atomRows = List.filled(atoms.length, -1) {
-    if (levelIds.length != atoms.length || atomOffsets.length != atoms.length) {
+    if (levelIds.length != atoms.length ||
+        atomOffsets.length != atoms.length ||
+        this.rootFonts.length != atoms.length) {
       throw ArgumentError('Ruby alignment input lengths differ');
     }
     if (atoms.isEmpty) _phase = _Phase.done;
@@ -58,6 +65,15 @@ final class ForumBodyRubyRowAlignment {
   ]);
   final List<int> levelIds;
   final List<int> atomOffsets;
+  final List<ForumBodyRubyRootFontBox?> rootFonts;
+  PlaceholderDimensions _dimensionFor(
+    int index,
+    ForumBodyRubyAtomMetrics atom,
+  ) =>
+      rootFonts[index]
+          ?.enclose(childSize: atom.size, childBaseline: atom.baseline)
+          .dimensions ??
+      atom.placeholderDimensions;
   final _dimensions = <PlaceholderDimensions>[];
   late final List<PlaceholderDimensions>? _provisionalDimensions = hasSoftSpaces
       ? <PlaceholderDimensions>[]
@@ -144,7 +160,7 @@ final class ForumBodyRubyRowAlignment {
                     atomOffsets[_cursor + 1] != atomOffsets[_cursor] + 1)) {
               _invalid();
             }
-            _dimensions.add(column.placeholderDimensions);
+            _dimensions.add(_dimensionFor(_cursor, column));
             _provisionalDimensions!.add(
               soft
                   ? PlaceholderDimensions(
@@ -153,7 +169,7 @@ final class ForumBodyRubyRowAlignment {
                       baseline: TextBaseline.alphabetic,
                       baselineOffset: 0,
                     )
-                  : column.placeholderDimensions,
+                  : _dimensions.last,
             );
             _results.add(column);
             parts++;
@@ -172,7 +188,7 @@ final class ForumBodyRubyRowAlignment {
           parts += merge.advance(maxParts: maxParts - parts);
           if (merge.isComplete) {
             _merge = null;
-            _dimensions.add(column.placeholderDimensions);
+            _dimensions.add(_dimensionFor(_cursor, column));
             _results.add(column);
             if (++_cursor == atoms.length) {
               _cursor = 0;
@@ -283,7 +299,7 @@ final class ForumBodyRubyRowAlignment {
               _targets[_cursor] = target;
               final result = work.result;
               _results[_cursor] = result;
-              _dimensions[_cursor] = result.placeholderDimensions;
+              _dimensions[_cursor] = _dimensionFor(_cursor, result);
               _cursor++;
             }
           }

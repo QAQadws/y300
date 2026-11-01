@@ -479,10 +479,34 @@ void main() {
         );
         addTearDown(f.close);
         final metrics = f.measure(q);
+        final root = f.request.rootBox!;
+        final rootLease = f.cache.acquire(
+          content: root.fontStrut,
+          width: 300,
+          textScaler: f.scaler,
+        );
+        late final ForumBodyRubyRootFontBox rootFont;
+        try {
+          rootFont = ForumBodyRubyRootFontBox(
+            input: root,
+            height: rootLease.layout.height,
+            alphabeticBaseline: rootLease.layout.alphabeticBaseline,
+          );
+        } finally {
+          rootLease.release();
+        }
         final page = RubyAtomPageFixture.compose(
           input: ForumBodyInlinePageContent.atoms(
             content: f.input.content,
-            dimensions: [metrics.placeholderDimensions],
+            dimensions: [
+              rootFont
+                  .enclose(
+                    childSize: metrics.size,
+                    childBaseline: metrics.baseline,
+                  )
+                  .dimensions,
+            ],
+            rootFonts: {0: rootFont},
             rubyAtoms: [
               ForumBodyRubyAtomPlan.segment(
                 request: f.request,

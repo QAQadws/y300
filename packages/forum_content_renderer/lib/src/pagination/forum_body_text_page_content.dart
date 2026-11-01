@@ -9,6 +9,7 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../inline/forum_body_text_band_content.dart';
 import '../inline/forum_body_ruby_container_background.dart';
+import '../inline/forum_body_ruby_root_box.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 
@@ -28,6 +29,7 @@ sealed class ForumBodyTextPageContent {
     required List<ForumBodyRubyColumnRequest> rubyGroups,
     List<ForumBodyRubyLevelMetrics?>? rubyLevelMetrics,
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds,
+    Map<int, ForumBodyRubyRootFontBox> rootFonts,
     ForumBodyParagraphLayoutMode layoutMode,
   }) = ForumBodyInlinePageContent;
   factory ForumBodyTextPageContent.inlineAtoms({
@@ -36,6 +38,7 @@ sealed class ForumBodyTextPageContent {
     required List<ForumBodyRubyAtomPlan> rubyAtoms,
     Set<int> trimmedAtomIndices,
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds,
+    Map<int, ForumBodyRubyRootFontBox> rootFonts,
     ForumBodyParagraphLayoutMode layoutMode,
   }) = ForumBodyInlinePageContent.atoms;
   int get textCodeUnits;
@@ -85,12 +88,14 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     required List<ForumBodyRubyColumnRequest> rubyGroups,
     List<ForumBodyRubyLevelMetrics?>? rubyLevelMetrics,
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
+    Map<int, ForumBodyRubyRootFontBox> rootFonts = const {},
     ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) : this.atoms(
          content: content,
          dimensions: dimensions,
          rubyAtoms: _columnAtoms(rubyGroups, rubyLevelMetrics),
          containerBackgrounds: containerBackgrounds,
+         rootFonts: rootFonts,
          layoutMode: layoutMode,
        );
 
@@ -100,11 +105,13 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     required List<ForumBodyRubyAtomPlan> rubyAtoms,
     Set<int> trimmedAtomIndices = const {},
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
+    Map<int, ForumBodyRubyRootFontBox> rootFonts = const {},
     this.layoutMode = ForumBodyParagraphLayoutMode.wrap,
   }) : dimensions = List.unmodifiable(dimensions),
        rubyAtoms = List.unmodifiable(rubyAtoms),
        trimmedAtomIndices = Set.unmodifiable(trimmedAtomIndices),
        containerBackgrounds = Map.unmodifiable(containerBackgrounds),
+       rootFonts = Map.unmodifiable(rootFonts),
        _nativeHandlePrefix = List.filled(rubyAtoms.length + 1, 0),
        super._() {
     content.validateDimensions(this.dimensions);
@@ -115,6 +122,12 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     final retained = Set<ForumBodyParagraphContent>.identity()
       ..addAll(content.contexts.map((item) => item.content));
     final checkedBands = Set<ForumBodyTextBandContent>.identity();
+    if (this.rootFonts.length > rubyAtoms.length ||
+        this.rootFonts.keys.any(
+          (index) => index < 0 || index >= rubyAtoms.length,
+        )) {
+      throw ArgumentError('Invalid ruby root font snapshot index');
+    }
     if (this.containerBackgrounds.length > rubyAtoms.length ||
         this.containerBackgrounds.keys.any(
           (index) => index < 0 || index >= rubyAtoms.length,
@@ -129,6 +142,14 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       }
     }
     for (final (index, plan) in rubyAtoms.indexed) {
+      final root = switch (plan) {
+        ForumBodyRubyColumnPlan(:final request) => request.rootBox,
+        ForumBodyRubySegmentPlan(:final request) => request.rootBox,
+        ForumBodyRubySoftSpacePlan(:final request) => request.rootBox,
+      };
+      if (!identical(this.rootFonts[index]?.input, root)) {
+        throw ArgumentError('Ruby root font snapshot differs from request');
+      }
       final background = switch (plan) {
         ForumBodyRubyColumnPlan(:final request) => request.background,
         ForumBodyRubySegmentPlan(:final request) => request.background,
@@ -163,10 +184,16 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         _ => null,
       };
       if (target != null) {
+        final framed = this.rootFonts[index]?.enclose(
+          childSize: target.size,
+          childBaseline: target.baseline,
+        );
+        final size = framed?.size ?? target.size;
+        final baseline = framed?.baseline ?? target.baseline;
         final dimension = this.dimensions[index];
-        if ((dimension.size.width - target.size.width).abs() > 1e-4 ||
-            (dimension.size.height - target.size.height).abs() > 1e-4 ||
-            (dimension.baselineOffset! - target.baseline).abs() > 1e-4) {
+        if ((dimension.size.width - size.width).abs() > 1e-4 ||
+            (dimension.size.height - size.height).abs() > 1e-4 ||
+            (dimension.baselineOffset! - baseline).abs() > 1e-4) {
           throw ArgumentError(
             'Ruby atom dimensions do not match numeric target',
           );
@@ -196,6 +223,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   final List<ForumBodyRubyAtomPlan> rubyAtoms;
   final Set<int> trimmedAtomIndices;
   final Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds;
+  final Map<int, ForumBodyRubyRootFontBox> rootFonts;
   final List<int> _nativeHandlePrefix;
   // Legacy column-only access remains explicit: never drop component members
   // or silently present its first column as the complete parent atom.

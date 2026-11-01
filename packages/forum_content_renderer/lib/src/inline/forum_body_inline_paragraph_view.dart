@@ -13,6 +13,7 @@ import 'forum_body_ruby_group_layout.dart';
 import 'forum_body_ruby_segment_layout.dart';
 import 'forum_body_ruby_soft_space_layout.dart';
 import 'forum_body_ruby_container_background.dart';
+import 'forum_body_ruby_root_box.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
 part 'forum_body_inline_view_assembly.dart';
@@ -69,6 +70,7 @@ final class ForumBodyInlineParagraphView {
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
     Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
+    Map<int, ForumBodyRubyRootFontBox> rootFonts = const {},
   }) {
     final assembly = ForumBodyInlineViewAssembly(
       cache: cache,
@@ -79,6 +81,7 @@ final class ForumBodyInlineParagraphView {
       rubySegments: rubySegments,
       rubySpaces: rubySpaces,
       containerBackgrounds: containerBackgrounds,
+      rootFonts: rootFonts,
     );
     try {
       while (!assembly.isReady) {
@@ -195,19 +198,26 @@ final class ForumBodyInlineParagraphView {
       final binding = _children[hit.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
       final child = binding.sourceAt(hit.offset);
-      final window = child.window;
-      final parentDisplay = window.startUtf16 + child.position.displayUtf16;
-      final parent = display.sourceAtUtf16(parentDisplay);
-      position = HtmlProjectedSourcePosition(
-        sourceRune: child.position.sourceRune,
-        displayUtf16: parentDisplay,
-        isExact:
-            child.position.isExact &&
-            parent.isExact &&
-            child.position.sourceRune == parent.sourceRune,
-      );
+      position = _projectChildHit(child);
     } else {
       position = (hit as ForumBodyInlineTextHit).position;
+      // Native row rounding can leave a fractional strip outside an atom's
+      // frame. Root leading in that strip still belongs to the actual row,
+      // not an exact parent caret at a placeholder boundary.
+      for (final entry in _children.entries) {
+        if (entry.value case final _RubyRootFrameBinding binding) {
+          final atom = content.projection.atoms[entry.key];
+          if (position.displayUtf16 < atom.displayStartUtf16 ||
+              position.displayUtf16 > atom.displayEndUtf16) {
+            continue;
+          }
+          final local = point - _origin(entry.key);
+          if (binding.hitsOuterLeading(local)) {
+            position = _projectChildHit(binding.sourceAt(local));
+            break;
+          }
+        }
+      }
     }
     final within = position.displayUtf16.clamp(
       coverageStartUtf16,
@@ -225,6 +235,19 @@ final class ForumBodyInlineParagraphView {
       sourceRune: position.sourceRune,
       displayUtf16: position.displayUtf16,
       isExact: position.isExact && point == offset && height > 0,
+    );
+  }
+
+  HtmlProjectedSourcePosition _projectChildHit(_RubySourceHit child) {
+    final parentDisplay = child.window.startUtf16 + child.position.displayUtf16;
+    final parent = content.projection.display.sourceAtUtf16(parentDisplay);
+    return HtmlProjectedSourcePosition(
+      sourceRune: child.position.sourceRune,
+      displayUtf16: parentDisplay,
+      isExact:
+          child.position.isExact &&
+          parent.isExact &&
+          child.position.sourceRune == parent.sourceRune,
     );
   }
 

@@ -89,48 +89,106 @@ void main() {
       expect(cache.estimatedRetainedBytes, 0);
     },
   );
-  for (final warm in [false, true]) {
-    test(
-      'owner retirement during root font capture cannot retain or publish a late lease, warm=$warm',
-      () {
-        final input = _input(_column);
-        final cache = ForumBodyParagraphCache(
-          maxEntries: 4,
-          maxEstimatedBytes: 1 << 20,
-        );
-        addTearDown(cache.close);
-        late ForumBodyInlinePlanPreparation job;
-        var retire = false;
-        final scaler = _RetiringScaler(() {
-          if (retire) job.close();
-        });
-        if (warm) {
-          cache
-              .acquire(
-                content: input.atoms.single.background!.fontStrut,
-                width: 300,
-                textScaler: scaler,
-              )
-              .release();
-        }
-        job = ForumBodyInlinePlanPreparation(
-          input: input,
-          cache: cache,
-          textScaler: scaler,
-          ensureOwner: () {},
-        );
-        addTearDown(job.close);
-        retire = true;
-        expect(() => job.advance(maxParts: 1), throwsStateError);
-        expect(job.isReady, false);
-        expect(() => job.take(), throwsStateError);
-        expect(cache.activeLeases, 0);
-        expect(cache.pictureBuildCount, 0);
-        cache.clearUnpinned();
-        expect(cache.estimatedRetainedBytes, 0);
-      },
-    );
+  for (final backgroundPhase in [false, true]) {
+    for (final warm in [false, true]) {
+      test(
+        'owner retirement during font capture cannot publish a late lease, background=$backgroundPhase,warm=$warm',
+        () {
+          final input = _input(_column);
+          final cache = ForumBodyParagraphCache(
+            maxEntries: 4,
+            maxEstimatedBytes: 1 << 20,
+          );
+          addTearDown(cache.close);
+          late ForumBodyInlinePlanPreparation job;
+          var retire = false;
+          final scaler = _RetiringScaler(() {
+            if (retire) job.close();
+          });
+          if (warm) {
+            cache
+                .acquire(
+                  content: backgroundPhase
+                      ? input.atoms.single.background!.fontStrut
+                      : input.atoms.single.rootBox!.fontStrut,
+                  width: 300,
+                  textScaler: scaler,
+                )
+                .release();
+          }
+          job = ForumBodyInlinePlanPreparation(
+            input: input,
+            cache: cache,
+            textScaler: scaler,
+            ensureOwner: () {},
+          );
+          addTearDown(job.close);
+          if (backgroundPhase) {
+            expect(job.advance(maxParts: 1).partsPrepared, 1);
+            expect(cache.activeLeases, 0);
+          }
+          retire = true;
+          expect(() => job.advance(maxParts: 1), throwsStateError);
+          expect(job.isReady, false);
+          expect(() => job.take(), throwsStateError);
+          expect(cache.activeLeases, 0);
+          expect(cache.pictureBuildCount, 0);
+          cache.clearUnpinned();
+          expect(cache.estimatedRetainedBytes, 0);
+        },
+      );
+    }
   }
+  test(
+    'root font keeps effective native leading without a background or source request',
+    () {
+      final input = _input(_column, background: 'transparent');
+      final root = input.atoms.single.rootBox!;
+      expect(input.atoms.single.background, isNull);
+      expect(root.fontStrut.isSourceFree, true);
+      expect(root.fontStrut.projection.text, isEmpty);
+      expect(root.fontStrut.style.textStyle.height, 3);
+      expect(root.fontStrut.style.textStyle.fontSize, 40);
+      expect(
+        input.content.contexts.any((c) => identical(c.content, root.fontStrut)),
+        false,
+      );
+      expect(
+        input.atoms.single.nativeRequests.any(
+          (r) => identical(r.content, root.fontStrut),
+        ),
+        false,
+      );
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final lease = cache.acquire(
+        content: root.fontStrut,
+        width: 300,
+        textScaler: const TextScaler.linear(1.5),
+      );
+      final native = TextPainter(
+        text: TextSpan(text: '', style: root.fontStrut.style.textStyle),
+        textDirection: root.fontStrut.style.textDirection,
+        textScaler: const TextScaler.linear(1.5),
+      )..layout();
+      try {
+        expect(lease.layout.height, native.height);
+        expect(
+          lease.layout.alphabeticBaseline,
+          native.computeDistanceToActualBaseline(TextBaseline.alphabetic),
+        );
+        expect(lease.layout.height, 180);
+        expect(lease.layout.lines, isEmpty);
+      } finally {
+        lease.release();
+        native.dispose();
+      }
+      expect(cache.activeLeases, 0);
+    },
+  );
   test(
     'actual columns, spanning segments and soft spaces retain the same pure root paint input',
     () {
@@ -157,6 +215,8 @@ void main() {
             false,
           );
           expect(_background(atom.mapRequests((r) => r)), same(background));
+          expect(atom.mapRequests((r) => r).rootBox, same(atom.rootBox));
+          expect(atom.rootBox!.fontStrut.style.textStyle.height, 3);
         }
         final bands = <ForumBodyTextBandContent>{
           for (final atom in input.atoms)
@@ -164,11 +224,14 @@ void main() {
               if (request is ForumBodyTextBandChildRequest) request.band,
         };
         final originals = input.atoms.map(_background).toList();
+        final roots = input.atoms.map((a) => a.rootBox).toList();
         for (final band in bands) {
           input.replaceBand(band, 1);
           expect(input.atoms.map(_background), orderedEquals(originals));
+          expect(input.atoms.map((a) => a.rootBox), orderedEquals(roots));
           input.replaceBand(band, null);
           expect(input.atoms.map(_background), orderedEquals(originals));
+          expect(input.atoms.map((a) => a.rootBox), orderedEquals(roots));
         }
       }
       expect(
@@ -248,6 +311,26 @@ void main() {
         (_input('<rb>B</rb><rt>y</rt>').atoms.single
                 as ForumBodyRubyColumnAtomRequest)
             .value;
+    expect(
+      () => ForumBodyRubyColumnRequest.layers(
+        base: other.base,
+        annotations: other.annotations,
+        rootBox: original.rootBox,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => ForumBodyRubyColumnRequest.layers(
+        base: original.base,
+        annotations: original.annotations,
+        background: original.background,
+        rootBox: ForumBodyRubyRootBoxInput(
+          rootPath: 'foreign-root',
+          fontStrut: original.rootBox!.fontStrut,
+        ),
+      ),
+      throwsArgumentError,
+    );
     expect(
       () => ForumBodyRubyColumnRequest.layers(
         base: other.base,

@@ -54,6 +54,11 @@ void main() {
           ensureOwner: () {},
         );
         addTearDown(prepare.close);
+        // Root font capture is an independent native quantum and retains no
+        // lease. Its numeric result must survive eviction before band retry.
+        expect(prepare.advance(maxParts: 1).partsPrepared, 1);
+        expect(cache.activeLeases, 0);
+        cache.clearUnpinned();
         final rejected = prepare.advance();
         expect(rejected.partsPrepared, 1);
         expect(rejected.isReady, isFalse);
