@@ -5,6 +5,7 @@ import '../paragraph/forum_body_text_request.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_span_content.dart';
+import 'forum_body_ruby_annotation_input.dart';
 import 'forum_body_ruby_base_input.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_text_band_content.dart';
@@ -21,7 +22,7 @@ final class ForumBodyInlinePlanInput {
       atomEngineOffsets = List.unmodifiable(
         content.projection.atoms.map((atom) => atom.engineUtf16),
       );
-  static const revision = 8;
+  static const revision = 9;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -122,11 +123,12 @@ final class ForumBodyInlinePlanInput {
             );
           }
           final bases = resolveForumBodyRubyBaseInputs(group);
-          if (bases.isEmpty && group.annotations.isEmpty) {
+          final annotationColumns = resolveForumBodyRubyAnnotationInputs(group);
+          if (bases.isEmpty && annotationColumns.isEmpty) {
             _unsupported(group.rootPath);
           }
           final annotations = [
-            for (final annotation in group.annotations)
+            for (final annotation in annotationColumns)
               _annotationInput(annotation),
           ];
           final baseSources = [for (final _ in bases) <int>[]];
@@ -298,11 +300,8 @@ ForumBodyParagraphContent _anonymousBase(ForumBodyRubyGroupContent group) =>
     );
 
 ForumBodyParagraphContent _annotationInput(
-  ForumBodyRubyAnnotationContent annotation,
+  ForumBodyRubyTextAnnotationContent annotation,
 ) {
-  if (annotation is ForumBodyRubyAnnotationContainerContent) {
-    _unsupported(annotation.path);
-  }
   final parts = annotation.parts;
   if (parts.length != 1 || parts.single is! ForumBodyRubyTextContent) {
     _unsupported(annotation.path);

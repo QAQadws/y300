@@ -49,6 +49,45 @@ NovelReaderNativePageHintSearch _search(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final edges in [false, true]) {
+    test(
+      'RTC visible anchor proof skips only structural edge whitespace ($edges)',
+      () async {
+        final fixture = NativeReaderTestFixture(
+          '<p><ruby><rb>A</rb><rb>B</rb><rtc>${edges ? ' \n' : ''}<rt>x</rt><rt>y</rt>${edges ? '\n ' : ''}</rtc></ruby></p>',
+        );
+        final source = edges ? 5 : 3;
+        final target = fixture.anchors.anchorAtSourceRune(
+          source,
+          affinity: HtmlProjectionAffinity.downstream,
+          requireAdjacentOrigin: true,
+        )!;
+        final builds = fixture.cache.layoutBuildCount;
+        expect(
+          _collect(_search(fixture, target)).map((hint) => hint.pageIndex),
+          [0],
+        );
+        expect(fixture.cache.layoutBuildCount, builds);
+        final view = await NovelReaderNativePageViewJob(
+          session: fixture.session,
+          anchors: fixture.anchors,
+          pageIndex: 0,
+          parent: fixture.parent,
+          scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+        ).run();
+        try {
+          expect(view.coverage.locate(target)?.sourceRune, source);
+          expect(view.coverage.hasClippedGlyphs, isFalse);
+          expect(fixture.cache.layoutBuildCount, builds);
+        } finally {
+          view.close();
+        }
+        expect(fixture.session.activeIssuedLeases, 0);
+        expect(fixture.cache.activeLeases, 0);
+      },
+    );
+  }
+
   test(
     'aligned ruby levels retain visible App anchor proof with unequal fonts',
     () async {

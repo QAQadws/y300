@@ -46,6 +46,7 @@ enum _BodySample {
   explicitRuby,
   alignedRuby,
   breakRuby,
+  rtcRuby,
 }
 
 void main() {
@@ -53,10 +54,15 @@ void main() {
   databaseFactory = databaseFactoryFfi;
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  for (final rtl in [false, true]) {
+  for (final (rtl, rtc) in [
+    (false, false),
+    (true, false),
+    (false, true),
+    (true, true),
+  ]) {
     for (final readOnlyRestore in [false, true]) {
       testWidgets(
-        'reordered ruby completes only at its actual final page (rtl=$rtl, readOnly=$readOnlyRestore)',
+        'reordered ruby completes only at its actual final page (rtl=$rtl, RTC=$rtc, readOnly=$readOnlyRestore)',
         (tester) async {
           tester.view.physicalSize = const Size(360, 480);
           tester.view.devicePixelRatio = 1;
@@ -65,7 +71,7 @@ void main() {
           final fixture = (await tester.runAsync(
             () => _Fixture.create(
               rawBody: (
-                '<p><ruby style="line-height:1"><rb style="font-size:200px">A</rb><rb style="font-size:200px">B</rb><rt style="font-size:100px">xx</rt></ruby></p>',
+                '<p><ruby style="line-height:1"><rb style="font-size:200px">A</rb><rb style="font-size:200px">B</rb>${rtc ? '<rtc>' : ''}<rt style="font-size:100px">xx</rt>${rtc ? '</rtc>' : ''}</ruby></p>',
                 'ABxx',
               ),
             ),
@@ -698,6 +704,10 @@ final class _Fixture {
           _BodySample.breakRuby => (
             '<p><ruby>A<rt>x<br>y</rt></ruby></p>',
             'Ax\ny',
+          ),
+          _BodySample.rtcRuby => (
+            '<p><ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt><rt>y</rt></rtc></ruby></p>',
+            'ABxy',
           ),
         };
     final db = await AppDatabase.open(databaseName: inMemoryDatabasePath);

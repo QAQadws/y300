@@ -98,6 +98,139 @@ final class _Fixture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final (html, expected, source, exact) in [
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt><rt>y</rt></rtc></ruby>',
+      'AxBy',
+      3,
+      false,
+    ),
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc> \n<rt>x</rt><rt>y</rt>\n </rtc></ruby>',
+      'AxBy',
+      5,
+      false,
+    ),
+    ('<ruby>A<rtc><rt>x</rt><rt>y</rt></rtc></ruby>', 'Axy', 2, true),
+    ('<ruby><rtc><rt>x</rt><rt>y</rt></rtc></ruby>', 'xy', 1, true),
+    ('<ruby>A<rtc></rtc></ruby>', 'A', 0, true),
+  ]) {
+    test(
+      'one actual RTC level pairs native columns without flattening: $html',
+      () {
+        final f = _Fixture(html, width: 100, height: 40, entries: 3);
+        f.finish();
+        expect(f.session.snapshot, hasLength(1));
+        expect(f.cache.pictureBuildCount, 0);
+        final builds = f.cache.layoutBuildCount;
+        final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.projection.text, expected);
+          final box = fragment
+              .glyphBoxes(expected.length - 1, expected.length)
+              .single;
+          final hit = fragment.view.sourceAt(
+            Offset(box.left + .1, (box.top + box.bottom) / 2),
+          );
+          expect(hit.sourceRune, source);
+          // The B/RT join has an actual source gap after column reordering.
+          expect(hit.isExact, exact);
+          expect(f.cache.layoutBuildCount, builds);
+        } finally {
+          fragment.close();
+        }
+        expect(f.cache.activeLeases, 0);
+        expect(f.session.activeIssuedLeases, 0);
+      },
+    );
+  }
+
+  test(
+    'RTC font inheritance uses current native RT styles and one shared baseline',
+    () {
+      final f = _Fixture(
+        '<ruby><rb>A</rb><rb>B</rb><rtc style="font-size:30px"><rt>x</rt><rt style="font-size:12px">y</rt></rtc></ruby>',
+        width: 100,
+        height: 60,
+        entries: 2,
+      );
+      f.finish();
+      final builds = f.cache.layoutBuildCount;
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        final leases = fragment.nativeLeases.toList();
+        final first = leases[2] as ForumBodyTextLease;
+        final second = leases[4] as ForumBodyTextLease;
+        expect(first.content.runs.single.style.textStyle.fontSize, 15);
+        expect(second.content.runs.single.style.textStyle.fontSize, 12);
+        double baseline(ForumBodyTextLease lease, int display) {
+          final local = lease.layout.selectionBoxes(0, 1).single;
+          final visible = fragment.glyphBoxes(display, display + 1).single;
+          return visible.top - local.top + lease.layout.alphabeticBaseline;
+        }
+
+        expect(baseline(first, 1), closeTo(baseline(second, 3), 1e-4));
+        expect(f.cache.layoutBuildCount, builds);
+      } finally {
+        fragment.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'RTC columns retain actual font alignment and independent wrapped rows',
+    () {
+      final f = _Fixture(
+        '<ruby><rb style="font-size:30px">A</rb><rb>B</rb><rtc><rt>xx</rt><rt>yy</rt></rtc></ruby>',
+        width: 30,
+        height: 40,
+        entries: 2,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(2));
+      expect(f.cache.layoutBuildCount, 2);
+      for (var page = 0; page < 2; page++) {
+        final fragment =
+            f.prepare(page).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(fragment.view.height, page == 0 ? 40 : 30);
+          final last = fragment
+              .glyphBoxes(page == 0 ? 2 : 5, page == 0 ? 3 : 6)
+              .single;
+          expect(last.top, greaterThanOrEqualTo(0));
+          expect(last.bottom, lessThanOrEqualTo(fragment.view.height));
+        } finally {
+          fragment.close();
+        }
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('dense RTC keeps its actual children in the shared bounded cache', () {
+    final f = _Fixture(
+      '<ruby>${List.generate(60, (i) => '<rb style="font-size:${i.isEven ? 30 : 20}px">A</rb>').join()}<rtc>${List.generate(60, (i) => '<rt>r$i</rt>').join()}</rtc></ruby>',
+      width: 600,
+      height: 200,
+      entries: 3,
+    );
+    f.finish();
+    expect(f.cache.layoutBuildCount, 4);
+    expect(f.cache.pictureBuildCount, 0);
+    expect(f.cache.entryCount, 3);
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(fragment.nativeLeases, hasLength(121));
+      expect(f.cache.layoutBuildCount, 4);
+      expect(f.cache.pictureBuildCount, 120);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+    expect(f.session.activeIssuedLeases, 0);
+  });
+
   for (final mode in ['normal', 'pre', 'pre-wrap', 'pre-line']) {
     test('actual annotation BR lays out once on one native line ($mode)', () {
       final f = _Fixture(
