@@ -376,7 +376,12 @@ final class ForumBodyParagraphCache {
       built = build();
       _builds++;
       if (_closed) throw StateError('Paragraph cache is closed');
-      final bytes = minimumBytes + built.lineCount * 96;
+      final bytes =
+          minimumBytes +
+          built.lineCount * 96 +
+          (built is ForumBodyInlineParagraphLayout
+              ? built.fragmentFrameBytes
+              : 0);
       // TextScaler is caller code: a nested request can acquire another entry
       // while the engine shapes. Recheck actual pins before admission/eviction.
       _makeRoom(bytes, newEntry: true);

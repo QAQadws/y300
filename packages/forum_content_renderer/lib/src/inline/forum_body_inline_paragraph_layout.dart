@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -63,9 +65,13 @@ final class ForumBodyInlineParagraphLayout
     required this.atomBoxes,
     required this.dimensions,
     required Offset paintOffset,
+    required Float64List frameTops,
+    required Float64List frameBottoms,
   }) : _painter = painter,
+       _frameTops = frameTops,
+       _frameBottoms = frameBottoms,
        _paintOffset = paintOffset;
-  static const revision = 2;
+  static const revision = 3;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,
@@ -123,6 +129,10 @@ final class ForumBodyInlineParagraphLayout
           ForumBodyParagraphLayoutFailure.coverage,
         );
       }
+      final frameTops = Float64List(lines.length)
+        ..fillRange(0, lines.length, double.infinity);
+      final frameBottoms = Float64List(lines.length)
+        ..fillRange(0, lines.length, double.negativeInfinity);
       var lineIndex = 0;
       for (var i = 0; i < boxes.length; i++) {
         final box = boxes[i];
@@ -148,6 +158,14 @@ final class ForumBodyInlineParagraphLayout
             ForumBodyParagraphLayoutFailure.coverage,
           );
         }
+        if (box.top < frameTops[lineIndex]) frameTops[lineIndex] = box.top;
+        final childBottom = box.top + dimension.size.height;
+        if (box.bottom > frameBottoms[lineIndex]) {
+          frameBottoms[lineIndex] = box.bottom;
+        }
+        if (childBottom > frameBottoms[lineIndex]) {
+          frameBottoms[lineIndex] = childBottom;
+        }
       }
       // Native paragraph height rounds independently of placeholder metrics.
       // Keep the actual shaped baselines and reserve any outer slot overhang,
@@ -162,6 +180,21 @@ final class ForumBodyInlineParagraphLayout
         if (childBottom > bottom) bottom = childBottom;
       }
       final paintOffset = Offset(0, -top);
+      // Adjacent native row intervals can overlap at fractional slot edges.
+      // Monotone envelopes contain every owned child in O(1) per fragment;
+      // baselines and full-paragraph geometry are never rounded or summed.
+      var minTop = double.infinity;
+      for (var i = lines.length - 1; i >= 0; i--) {
+        if (frameTops[i] < minTop) minTop = frameTops[i];
+        final logical = i == 0 ? top : lines[i].top;
+        frameTops[i] = (minTop < logical ? minTop : logical) - top;
+      }
+      var maxBottom = double.negativeInfinity;
+      for (var i = 0; i < lines.length; i++) {
+        if (frameBottoms[i] > maxBottom) maxBottom = frameBottoms[i];
+        final logical = i + 1 == lines.length ? bottom : lines[i + 1].top;
+        frameBottoms[i] = (maxBottom > logical ? maxBottom : logical) - top;
+      }
       return ForumBodyInlineParagraphLayout._(
         projection: content.projection,
         painter: painter,
@@ -177,6 +210,8 @@ final class ForumBodyInlineParagraphLayout
               ),
         dimensions: snapshot,
         paintOffset: paintOffset,
+        frameTops: frameTops,
+        frameBottoms: frameBottoms,
       );
     } catch (_) {
       painter.dispose();
@@ -247,6 +282,10 @@ final class ForumBodyInlineParagraphLayout
   final HtmlInlineTextProjection projection;
   final TextPainter _painter;
   final Offset _paintOffset;
+  final Float64List _frameTops;
+  final Float64List _frameBottoms;
+  int get fragmentFrameBytes =>
+      _frameTops.lengthInBytes + _frameBottoms.lengthInBytes;
   final double width;
   final double height;
   final List<ForumBodyParagraphLine> lines;
@@ -268,12 +307,23 @@ final class ForumBodyInlineParagraphLayout
     _painter.paint(canvas, offset + _paintOffset);
   }
 
-  ForumBodyInlineHit hitAt(Offset offset) {
+  ForumBodyInlineHit hitAt(Offset offset) => _hitAt(offset);
+
+  ForumBodyInlineHit _hitAt(
+    Offset offset, {
+    int engineStart = 0,
+    int? engineEnd,
+  }) {
     _ensureOpen();
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
     }
     for (var i = 0; i < atomBoxes.length; i++) {
+      final atom = projection.atoms[i];
+      if (atom.engineUtf16 < engineStart ||
+          (engineEnd != null && atom.engineUtf16 >= engineEnd)) {
+        continue;
+      }
       final rect = atomBoxes[i].toRect();
       if (rect.contains(offset)) {
         return ForumBodyInlineAtomHit(i, offset - rect.topLeft);
@@ -395,10 +445,8 @@ final class ForumBodyInlineParagraphFragment {
   final ForumBodyInlineParagraphLayout layout;
   final int startLine;
   final int endLine;
-  double get top => startLine == 0 ? 0 : layout.lines[startLine].top;
-  double get bottom => endLine == layout.lines.length
-      ? layout.height
-      : layout.lines[endLine].top;
+  double get top => layout._frameTops[startLine];
+  double get bottom => layout._frameBottoms[endLine - 1];
   double get height => bottom - top;
   int get coverageStartUtf16 => layout.lines[startLine].coverageStartUtf16;
   int get coverageEndUtf16 => layout.lines[endLine - 1].coverageEndUtf16;
@@ -426,7 +474,18 @@ final class ForumBodyInlineParagraphFragment {
     canvas.save();
     try {
       canvas.clipRect(
-        Rect.fromLTWH(offset.dx, offset.dy, layout.width, height),
+        // Expanded child frames must not expose ordinary text outside the
+        // original parent row window. Children are painted independently.
+        Rect.fromLTRB(
+          offset.dx,
+          offset.dy + (startLine == 0 ? 0 : layout.lines[startLine].top) - top,
+          offset.dx + layout.width,
+          offset.dy +
+              (endLine == layout.lines.length
+                  ? layout.height
+                  : layout.lines[endLine].top) -
+              top,
+        ),
       );
       layout.paintParent(canvas, offset - Offset(0, top));
     } finally {
@@ -434,6 +493,9 @@ final class ForumBodyInlineParagraphFragment {
     }
   }
 
-  ForumBodyInlineHit hitAt(Offset offset) =>
-      layout.hitAt(offset + Offset(0, top));
+  ForumBodyInlineHit hitAt(Offset offset) => layout._hitAt(
+    offset + Offset(0, top),
+    engineStart: engineCoverageStartUtf16,
+    engineEnd: engineCoverageEndUtf16,
+  );
 }
