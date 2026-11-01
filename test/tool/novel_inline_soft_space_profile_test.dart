@@ -23,14 +23,17 @@ void main() {
     final records = profileInlineSoftSpaces();
     expect(
       records.map((r) => r['mode']),
-      orderedEquals(List.generate(10, (i) => i)),
+      orderedEquals(List.generate(14, (i) => i)),
     );
     for (final record in records) {
       final mode = record['mode']! as int;
       expect(record['passed'], isTrue);
       expect(record['direction'], mode.isOdd ? 'rtl' : 'ltr');
       expect(record['trimmed'], mode >= 2 && mode <= 5);
-      expect(record['rows'], mode >= 2 && mode <= 5 || mode >= 8 ? 2 : 1);
+      expect(
+        record['rows'],
+        mode >= 2 && mode <= 5 || mode == 8 || mode == 9 ? 2 : 1,
+      );
       expect(record['coldBuilds'], 1);
       expect(record['warmBuilds'], 0);
       expect(record['exitPins'], 0);

@@ -75,7 +75,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 4;
+  static const revision = 5;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,

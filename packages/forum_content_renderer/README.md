@@ -244,12 +244,15 @@ native 段高舍入与实际占位框可能不同；外层画框保留占位框�
 选区分别返回普通字形框和实际子 display 窗口，不把矩形占位框冒充注音/基字选区。
 分片借用同一引擎，按合法行框裁剪并保持两套 coverage；`paintParent` 只绘制父文字，
 consumer 仍须准备、核对并绘制实际子布局，不能据此单独发布可读页。父布局只拥有自己
-的 native 对象，dispose 使其全部借用分片失效，不关闭子 owner。混排布局 revision 为 4；
+的 native 对象，dispose 使其全部借用分片失效，不关闭子 owner。混排布局 revision 为 5；
 正式 Session 使用同一父布局分页，不引入整段常驻子租约。
 
 显式软间隙原子通过 `textSpanWithDimensions` 消费已经测量、缩放的逻辑尺寸；父
 TextPainter 只接收真正不透明占位框的尺寸。引擎 SPACE 使用包内 1004 字节的
-`ForumBodyInlineSpace` 布局资源：仅含空白字形，单 em advance，零垂直度量和零墨迹。
+`ForumBodyInlineSpace` 布局资源：仅含空白字形，1024 units/em 中的一个单位 advance，
+零垂直度量和零墨迹。内部字号为已测逻辑宽度乘 1024，以保留 Android 原生字号量化
+之前的细分系统字体宽度；这是资源单位换算，不再应用读者缩放。最大逻辑宽度仍为
+16384，严格原生 advance/零字体框/coverage 误差标准保持不变。
 它不进入用户字体列表，也不代替基字/注音的真实字体；既有字体解析和缩放保持。
 资源通过包 pubspec 的字体清单装配，生成来源为 `tool/generate_inline_space_font.py`，
 使用固定 FontTools 版本与时间戳可重复生成。资源变更须重建 bundle 并验证引擎注册，
@@ -261,7 +264,7 @@ TextPainter 只接收真正不透明占位框的尺寸。引擎 SPACE 使用包�
 tool/run_novel_pagination_profile.ps1 -Device <设备 ID> -MainPage -Backend native -InlineSoftSpace
 ```
 
-启动检查不调用 FontLoader；十组实际父布局覆盖双向、换行裁边、超大间隙、
+启动检查不调用 FontLoader；十四组实际父布局覆盖双向、换行裁边、超大间隙、
 分数缩放和两端对齐，并核对 warm 不排字及 owner 释放。请求该检查后，缺少任一组
 都会使整套 suite 失败。系统字体的原生行高取整以同机对照核对，不固定为跨平台像素值。
 这项检查证明 bundle 启动与几何/生命周期；帧耗时仍由随后真实页面的 profile 窗口统计，

@@ -302,7 +302,7 @@ void main() {
       );
     },
   );
-  for (final advance in [0.0, 16000.375]) {
+  for (final advance in [0.0, 9.90234375, 12.571334838867188, 16000.375]) {
     test(
       'native glue keeps an exact zero or large fractional advance $advance',
       () {

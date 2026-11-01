@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 
 /// Engine-only collapsible glue: its advance is already measured/scaled.
-/// The private blank font has one-em SPACE and zero ascent/descent/ink. Actual
+/// The private blank font has one-unit SPACE and zero ascent/descent/ink. Actual
 /// base/annotation glyphs keep their original fonts, sources and native owners.
 final class ForumBodyNativeSpaceSpan extends TextSpan {
   ForumBodyNativeSpaceSpan(this.advance) : super(text: ' ') {
@@ -14,6 +14,7 @@ final class ForumBodyNativeSpaceSpan extends TextSpan {
 
   static const fontFamily =
       'packages/forum_content_renderer/ForumBodyInlineSpace';
+  static const unitsPerEm = 1024;
   final double advance;
 
   @override
@@ -38,7 +39,10 @@ final class ForumBodyNativeSpaceSpan extends TextSpan {
     builder.pushStyle(
       ui.TextStyle(
         fontFamily: fontFamily,
-        fontSize: advance,
+        // The font's advance is 1/1024 em. This preserves actual system-font
+        // subpixel widths through Android's native font-size quantization;
+        // it is an internal font-unit conversion, not another reader scale.
+        fontSize: advance * unitsPerEm,
         height: 0,
         fontWeight: FontWeight.normal,
         fontStyle: FontStyle.normal,

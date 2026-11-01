@@ -4,15 +4,26 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 /// Startup coverage for the package font and the real parent cache. Deliberately
 /// never calls FontLoader: the newly launched engine must load its own bundle.
 /// These geometry/lifetime checks are not frame-time or throughput measurements.
+const profileInlineSoftSpaceCaseCount = 14;
+
 List<Map<String, Object>> profileInlineSoftSpaces() {
   final records = <Map<String, Object>>[];
-  for (var mode = 0; mode < 10; mode++) {
+  for (var mode = 0; mode < profileInlineSoftSpaceCaseCount; mode++) {
     final direction = mode.isOdd ? TextDirection.rtl : TextDirection.ltr;
     final large = mode == 4 || mode == 5;
-    final fractional = mode == 6 || mode == 7;
-    final justified = mode >= 8;
+    final fractional = mode == 6 || mode == 7 || mode >= 12;
+    final justified = mode == 8 || mode == 9;
     final wraps = large || mode == 2 || mode == 3;
-    final width = large
+    final gap = mode >= 12
+        ? 12.571334838867188
+        : mode >= 10
+        ? 9.90234375
+        : large
+        ? 1000.0
+        : (fractional ? 10.375 : 10.0);
+    final width = mode >= 10
+        ? 40 + gap
+        : large
         ? 20.0
         : mode == 2 || mode == 3
         ? 49.0
@@ -21,7 +32,6 @@ List<Map<String, Object>> profileInlineSoftSpaces() {
         : fractional
         ? 50.375
         : 50.0;
-    final gap = large ? 1000.0 : (fractional ? 10.375 : 10.0);
     final document = const ForumBodyParser().parse(
       html:
           '<p dir="${direction.name}" '

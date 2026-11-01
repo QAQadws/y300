@@ -293,7 +293,8 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     }
     final passed =
         kProfileMode &&
-        (!_inlineSoftSpace || inlineSoftSpaceCases == 10) &&
+        (!_inlineSoftSpace ||
+            inlineSoftSpaceCases == profileInlineSoftSpaceCaseCount) &&
         matrix.every((entry) => entry['samplingCompleted'] == true) &&
         _runtimeErrors.isEmpty &&
         !_frames.overflowed &&
