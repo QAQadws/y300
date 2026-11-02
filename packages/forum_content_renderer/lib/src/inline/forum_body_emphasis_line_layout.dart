@@ -7,15 +7,18 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_text_layout.dart';
+import '../paragraph/forum_body_native_request.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_emphasis_mark.dart';
+import 'forum_body_emphasis_mark_request.dart';
 import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_emphasis_text_input.dart';
 
 part 'forum_body_emphasis_line_preparation.dart';
+part 'forum_body_emphasis_line_metrics.dart';
 
-enum ForumBodyEmphasisLineFailure { source, lines, geometry }
+enum ForumBodyEmphasisLineFailure { source, lines, geometry, metrics }
 
 final class ForumBodyEmphasisLineException implements Exception {
   const ForumBodyEmphasisLineException(this.failure);
@@ -46,34 +49,28 @@ final class ForumBodyEmphasisLineMark {
 /// Multiline paragraphs require their own row-placement transaction.
 final class ForumBodyEmphasisLineLayout implements ForumBodyTextLayout {
   ForumBodyEmphasisLineLayout._({
-    required this.input,
+    required this.metrics,
     required ForumBodyTextLease base,
     required ForumBodyTextPictureLease picture,
-    required this.baseOffset,
-    required this.fontBounds,
-    required this.width,
-    required this.height,
-    required this.alphabeticBaseline,
-    required List<ForumBodyEmphasisLineMark> marks,
     required void Function() ensureOwner,
   }) : _base = base,
        _picture = picture,
-       _ensureOwner = ensureOwner,
-       marks = UnmodifiableListView(marks);
+       _ensureOwner = ensureOwner;
   static const revision = 1;
-  final ForumBodyEmphasisTextInput input;
+  final ForumBodyEmphasisLineMetrics metrics;
+  ForumBodyEmphasisTextInput get input => metrics.input;
   ForumBodyTextLease? _base;
   ForumBodyTextPictureLease? _picture;
   void Function()? _ensureOwner;
-  final Offset baseOffset;
-  final Rect fontBounds;
-  final List<ForumBodyEmphasisLineMark> marks;
+  Offset get baseOffset => metrics.baseOffset;
+  Rect get fontBounds => metrics.fontBounds;
+  List<ForumBodyEmphasisLineMark> get marks => metrics.marks;
   @override
-  final double width;
+  double get width => metrics.width;
   @override
-  final double height;
+  double get height => metrics.height;
   @override
-  final double alphabeticBaseline;
+  double get alphabeticBaseline => metrics.alphabeticBaseline;
   @override
   HtmlDisplayTextProjection get projection => input.content.projection;
   @override

@@ -1,6 +1,7 @@
 part of 'forum_body_emphasis_line_layout.dart';
 
 enum _LinePhase {
+  verifyScales,
   fonts,
   inputs,
   probeBase,
@@ -14,9 +15,11 @@ enum _LinePhase {
   alignMarks,
   frame,
   commands,
+  sealMetrics,
   basePaint,
   scene,
   releaseMarks,
+  releaseBase,
   publish,
   ready,
   transferred,
@@ -40,12 +43,53 @@ final class ForumBodyEmphasisLinePreparation {
     required ForumBodyParagraphCache cache,
     required void Function() ensureOwner,
     ForumBodyTextRequest? baseRequest,
-    this.width = 16384,
+    double width = 16384,
     TextScaler textScaler = TextScaler.noScaling,
+  }) : this._work(
+         input: input,
+         cache: cache,
+         ensureOwner: ensureOwner,
+         baseRequest: baseRequest,
+         width: width,
+         textScaler: textScaler,
+         measureOnly: false,
+       );
+
+  /// Rebind a pure plan to current source/fonts. The current caller supplies
+  /// width and actual scaling; equal-size text cannot substitute its source.
+  ForumBodyEmphasisLinePreparation.fromMetrics({
+    required ForumBodyEmphasisTextInput input,
+    required ForumBodyEmphasisLineMetrics metrics,
+    required ForumBodyParagraphCache cache,
+    required void Function() ensureOwner,
+    required double width,
+    required TextScaler expectedTextScaler,
+  }) : this._work(
+         input: input,
+         cache: cache,
+         ensureOwner: ensureOwner,
+         baseRequest: metrics.baseRequest,
+         width: width,
+         textScaler: expectedTextScaler,
+         measureOnly: false,
+         metrics: metrics,
+       );
+
+  ForumBodyEmphasisLinePreparation._work({
+    required ForumBodyEmphasisTextInput input,
+    required ForumBodyParagraphCache cache,
+    required void Function() ensureOwner,
+    required this.width,
+    required TextScaler textScaler,
+    required bool measureOnly,
+    ForumBodyTextRequest? baseRequest,
+    ForumBodyEmphasisLineMetrics? metrics,
   }) : _input = input,
        _cache = cache,
        _ensureOwner = ensureOwner,
        _callerScaler = textScaler,
+       _measureOnly = measureOnly,
+       _expected = metrics,
        _request =
            baseRequest ??
            ForumBodyTextRequest.paragraph(input.glyphInput.glyphs) {
@@ -61,6 +105,10 @@ final class ForumBodyEmphasisLinePreparation {
           ForumBodyEmphasisLineFailure.source,
         );
       }
+      if (metrics != null &&
+          (!identical(input, metrics.input) || width != metrics.requestWidth)) {
+        _mismatch();
+      }
       if (input.units.length > 512) {
         throw ForumBodyParagraphInputException(
           ForumBodyParagraphInputFailure.inputLimit,
@@ -71,12 +119,23 @@ final class ForumBodyEmphasisLinePreparation {
         ForumBodyParagraphTextRequest() => [input.glyphInput.glyphs],
         ForumBodyTextBandChildRequest value => value.band.contexts,
       };
+      if (metrics != null) {
+        _contexts = const [];
+        _scaler = metrics.textScaler as _LineScaler;
+        _scaleChecks = metrics.effectiveScales.entries.iterator;
+        _markInputs = metrics._markInputs;
+        _unitMarks = metrics._unitMarks;
+        _phase = _LinePhase.verifyScales;
+      }
     } catch (_) {
       close();
       rethrow;
     }
   }
   final double width;
+  final bool _measureOnly;
+  ForumBodyEmphasisLineMetrics? _expected;
+  Iterator<MapEntry<double, double>>? _scaleChecks;
   ForumBodyEmphasisTextInput? _input;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
@@ -86,10 +145,11 @@ final class ForumBodyEmphasisLinePreparation {
   Map<double, double> _scales = {};
   _LineScaler? _scaler;
   var _context = 0, _run = -1, _index = 0, _blockedAt = -1;
-  final _markInputs = <ForumBodyEmphasisMarkInput>[];
+  List<ForumBodyEmphasisMarkInput> _markInputs = [];
   final _markIndex = <ForumBodyEmphasisMarkInput, int>{};
   final _runMarks = <int, int>{};
-  final _unitMarks = <int>[];
+  List<int> _unitMarks = [];
+  List<Object> _markKeys = [];
   final _markLeases = <ForumBodyEmphasisMarkLease>[];
   final _rawMarks = <_RawMark>[];
   List<ForumBodyEmphasisLineMark>? _positioned = [];
@@ -106,6 +166,7 @@ final class ForumBodyEmphasisLinePreparation {
   double _overDescent = 0, _underAscent = 0;
   ForumBodyTextPicturePreparation? _pictureJob;
   ForumBodyTextPictureLease? _picture;
+  ForumBodyEmphasisLineMetrics? _numeric;
   ForumBodyEmphasisLineLayout? _result;
   var _phase = _LinePhase.fonts;
   bool _operating = false;
@@ -163,6 +224,23 @@ final class ForumBodyEmphasisLinePreparation {
         final rejectedAt = cache.budgetRevision;
         try {
           switch (_phase) {
+            case _LinePhase.verifyScales:
+              if (_scaleChecks!.moveNext()) {
+                final sample = _scaleChecks!.current;
+                final value = _callerScaler!.scale(sample.key);
+                _guard();
+                if (!value.isFinite ||
+                    value <= 0 ||
+                    value > 4096 ||
+                    value != sample.value) {
+                  _mismatch();
+                }
+              } else {
+                _scaleChecks = null;
+                _callerScaler = null;
+                _probe = cache.createBudgetProbe();
+                _phase = _LinePhase.probeBase;
+              }
             case _LinePhase.fonts:
               if (_context < _contexts.length) {
                 final content = _contexts[_context];
@@ -258,6 +336,10 @@ final class ForumBodyEmphasisLinePreparation {
                 rethrow;
               }
               _base = found;
+              if (_expected != null &&
+                  found.nativeInputIdentity != _expected!._baseKey) {
+                _mismatch();
+              }
               if (found is ForumBodyParagraphLease &&
                   found.layout.lineCount > 1) {
                 throw const ForumBodyEmphasisLineException(
@@ -323,6 +405,11 @@ final class ForumBodyEmphasisLinePreparation {
                   rethrow;
                 }
                 _markLeases.add(found);
+                final key = found.nativeInputIdentity;
+                if (_expected != null && key != _expected!._markKeys[_index]) {
+                  _mismatch();
+                }
+                _markKeys.add(key);
                 _index++;
               } else {
                 _index = 0;
@@ -440,9 +527,68 @@ final class ForumBodyEmphasisLinePreparation {
                     fitScale: _fitScale,
                   ),
                 );
+                if (_expected != null) {
+                  final actual = _positioned!.last,
+                      expected = _expected!.marks[_index - 1];
+                  if (actual.unitIndex != expected.unitIndex ||
+                      actual.input != expected.input ||
+                      actual.offset != expected.offset ||
+                      actual.fontBounds != expected.fontBounds ||
+                      actual.fitScale != expected.fitScale) {
+                    _mismatch();
+                  }
+                }
               } else {
-                _phase = _LinePhase.basePaint;
+                _phase = _LinePhase.sealMetrics;
               }
+            case _LinePhase.sealMetrics:
+              final pictureInput = ForumBodyTextPictureInput(
+                commands: _commands,
+                maxCommands: 513,
+              );
+              final bounds = _envelope!.shift(_baseOffset);
+              final base = _base!.layout;
+              final baseline = base.alphabeticBaseline + _baseOffset.dy;
+              if (_expected != null) {
+                final expected = _expected!;
+                if (_baseOffset != expected.baseOffset ||
+                    bounds != expected.fontBounds ||
+                    base.width != expected.width ||
+                    _height != expected.height ||
+                    baseline != expected.alphabeticBaseline ||
+                    pictureInput != expected.pictureInput ||
+                    _positioned!.length != expected.marks.length) {
+                  _mismatch();
+                }
+                _numeric = expected;
+              } else {
+                _numeric = ForumBodyEmphasisLineMetrics._(
+                  input: input,
+                  baseRequest: _request!,
+                  requestWidth: width,
+                  textScaler: _scaler!,
+                  baseOffset: _baseOffset,
+                  fontBounds: bounds,
+                  width: base.width,
+                  height: _height,
+                  alphabeticBaseline: baseline,
+                  pictureInput: pictureInput,
+                  baseKey: _base!.nativeInputIdentity,
+                  markKeys: _markKeys,
+                  markInputs: _markInputs,
+                  unitMarks: _unitMarks,
+                  marks: _positioned!,
+                );
+                // Transfer retired writers; cleanup cannot mutate a pure plan.
+                _markKeys = [];
+                _markInputs = [];
+                _unitMarks = [];
+              }
+              _positioned = null;
+              _index = 0;
+              _phase = _measureOnly
+                  ? _LinePhase.releaseMarks
+                  : _LinePhase.basePaint;
             case _LinePhase.basePaint:
               if (_base is ForumBodyTextBandChildLease &&
                   !_base!.layout.isPaintPrepared) {
@@ -459,10 +605,7 @@ final class ForumBodyEmphasisLinePreparation {
               }
               _pictureJob = ForumBodyTextPicturePreparation(
                 cache: cache,
-                input: ForumBodyTextPictureInput(
-                  commands: _commands,
-                  maxCommands: 513,
-                ),
+                input: _numeric!.pictureInput,
                 text: [_base!],
                 marks: _markLeases,
                 ensureOwner: _guard,
@@ -492,23 +635,22 @@ final class ForumBodyEmphasisLinePreparation {
                 _markLeases[_index++].release();
               } else {
                 _markLeases.clear();
-                _phase = _LinePhase.publish;
+                _phase = _measureOnly
+                    ? _LinePhase.releaseBase
+                    : _LinePhase.publish;
               }
+            case _LinePhase.releaseBase:
+              _base!.release();
+              _base = null;
+              _phase = _LinePhase.ready;
             case _LinePhase.publish:
               _result = ForumBodyEmphasisLineLayout._(
-                input: input,
+                metrics: _numeric!,
                 base: _base!,
                 picture: _picture!,
-                baseOffset: _baseOffset,
-                fontBounds: _envelope!.shift(_baseOffset),
-                width: _base!.layout.width,
-                height: _height,
-                alphabeticBaseline:
-                    _base!.layout.alphabeticBaseline + _baseOffset.dy,
-                marks: _positioned!,
                 ensureOwner: _ensureOwner!,
               );
-              _positioned = null;
+              _numeric = null;
               _base = null;
               _picture = null;
               _phase = _LinePhase.ready;
@@ -551,9 +693,32 @@ final class ForumBodyEmphasisLinePreparation {
     _operating = true;
     try {
       _guard();
-      if (!isReady) throw StateError('Emphasis line preparation is incomplete');
+      if (!isReady || _measureOnly) {
+        throw StateError('Emphasis line preparation is incomplete');
+      }
       final result = _result!;
       _result = null;
+      _phase = _LinePhase.transferred;
+      _dropInputs();
+      return result;
+    } catch (_) {
+      close();
+      rethrow;
+    } finally {
+      _operating = false;
+    }
+  }
+
+  ForumBodyEmphasisLineMetrics _takeMetrics() {
+    if (_operating) throw StateError('Emphasis line preparation is reentrant');
+    _operating = true;
+    try {
+      _guard();
+      if (!isReady || !_measureOnly) {
+        throw StateError('Emphasis metrics are incomplete');
+      }
+      final result = _numeric!;
+      _numeric = null;
       _phase = _LinePhase.transferred;
       _dropInputs();
       return result;
@@ -594,6 +759,9 @@ final class ForumBodyEmphasisLinePreparation {
   static Never _invalid() => throw const ForumBodyEmphasisLineException(
     ForumBodyEmphasisLineFailure.geometry,
   );
+  static Never _mismatch() => throw const ForumBodyEmphasisLineException(
+    ForumBodyEmphasisLineFailure.metrics,
+  );
 
   static void _checkOffset(Offset offset) {
     if (!offset.dx.isFinite ||
@@ -611,6 +779,9 @@ final class ForumBodyEmphasisLinePreparation {
     _request = null;
     _callerScaler = null;
     _scaler = null;
+    _expected = null;
+    _scaleChecks = null;
+    _numeric = null;
     _contexts = const [];
     _geometry = null;
     _fontBoxes = null;
@@ -618,10 +789,11 @@ final class ForumBodyEmphasisLinePreparation {
     _cache = null;
     _ensureOwner = null;
     _scales.clear();
-    _markInputs.clear();
+    _markInputs = [];
     _markIndex.clear();
     _runMarks.clear();
-    _unitMarks.clear();
+    _unitMarks = [];
+    _markKeys = [];
     _rawMarks.clear();
     _commands.clear();
   }
