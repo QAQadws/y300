@@ -59,7 +59,13 @@ final class ForumBodyRubyGroupMeasurement {
         ForumBodyRubyGroupFailure.content,
       );
     }
-    _geometry.addBase(_capture(lease));
+    _geometry.addBase(
+      ForumBodyRubyChildMetrics.measure(
+        cache: cache,
+        lease: lease,
+        content: _baseContent!,
+      ),
+    );
   }
 
   void addAnnotation(ForumBodyParagraphCache cache, ForumBodyTextLease? lease) {
@@ -78,14 +84,16 @@ final class ForumBodyRubyGroupMeasurement {
         ForumBodyRubyGroupFailure.content,
       );
     }
-    _geometry.addAnnotation(lease == null ? null : _capture(lease));
+    _geometry.addAnnotation(
+      lease == null
+          ? null
+          : ForumBodyRubyChildMetrics.measure(
+              cache: cache,
+              lease: lease,
+              content: item.content,
+            ),
+    );
   }
-
-  static ForumBodyRubyChildMetrics _capture(ForumBodyTextLease lease) =>
-      ForumBodyRubyChildMetrics(
-        bounds: ForumBodyRubyGroupMetrics._textBounds(lease),
-        alphabeticBaseline: lease.layout.alphabeticBaseline,
-      );
 
   int advance({required int maxParts}) => _geometry.advance(maxParts: maxParts);
   ForumBodyRubyGroupMetrics takeMetrics() {

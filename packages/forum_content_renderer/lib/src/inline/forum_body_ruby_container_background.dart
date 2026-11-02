@@ -1,5 +1,6 @@
 import 'package:flutter/painting.dart';
 
+import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_ruby_content.dart';
@@ -24,19 +25,35 @@ final class ForumBodyRubyContainerBackground {
 
   static ForumBodyRubyContainerBackground? fromGroup(
     ForumBodyRubyGroupContent group,
-  ) {
-    final color = group.style.boxBackground;
+  ) => fromContainer(
+    identity: group.identity,
+    fontRevision: group.fontRevision,
+    styleRevision: group.styleRevision,
+    path: group.rootPath,
+    style: group.style,
+  );
+
+  /// Only resolved box paint becomes a surface. RB/RT native text highlights
+  /// stay in TextStyle; promoting ownBackground here would repeat their alpha.
+  /// Anonymous wrappers must not paint the original root's background again.
+  static ForumBodyRubyContainerBackground? fromContainer({
+    required ForumBodyIdentity identity,
+    required String fontRevision,
+    required int styleRevision,
+    required String path,
+    required ForumBodyResolvedStyle style,
+  }) {
+    final color = style.boxBackground;
     if (color == null) return null;
     final frozen = _snapshotColor(color);
     if (frozen.a <= 0) return null;
-    final style = group.style;
     return ForumBodyRubyContainerBackground(
-      rootPath: group.rootPath,
+      rootPath: path,
       color: frozen,
       fontStrut: ForumBodyParagraphContent.anonymousInline(
-        identity: group.identity,
-        fontRevision: group.fontRevision,
-        styleRevision: group.styleRevision,
+        identity: identity,
+        fontRevision: fontRevision,
+        styleRevision: styleRevision,
         style: ForumBodyResolvedStyle(
           // Inline backgrounds use the container's own natural font box, not
           // author line-height or the tallest of its independently sized RBs.

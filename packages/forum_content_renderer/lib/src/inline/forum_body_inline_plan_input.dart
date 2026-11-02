@@ -16,6 +16,7 @@ import 'forum_body_ruby_base_input.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_ruby_child_input.dart';
 import 'forum_body_ruby_whitespace.dart';
+import 'forum_body_inline_text_window.dart';
 import 'forum_body_text_band_content.dart';
 
 /// Pure source-bound parent input and child requests for the session's pending
@@ -64,7 +65,11 @@ final class ForumBodyInlinePlanInput {
       final index = lastPlain;
       if (index == null) return;
       final old = contexts[index];
-      final trimmed = _plainContext(old, leading: false, trailing: true);
+      final trimmed = trimForumBodyInlineText(
+        old,
+        leading: false,
+        trailing: true,
+      );
       contexts[index] = trimmed;
       offset -= old.projection.text.length - trimmed.projection.text.length;
       previousCollapsibleSpace = false;
@@ -76,7 +81,7 @@ final class ForumBodyInlinePlanInput {
           forumBodyIsDisplayLineBreak(context.projection.text.codeUnitAt(0))) {
         trimTrailingPlain();
       }
-      final plain = _plainContext(
+      final plain = trimForumBodyInlineText(
         context,
         leading: atLineStart || previousCollapsibleSpace,
         trailing: false,
@@ -84,7 +89,10 @@ final class ForumBodyInlinePlanInput {
       final index = append(plain);
       if (plain.projection.text.isNotEmpty) {
         lastPlain = index;
-        previousCollapsibleSpace = _collapsibleEdge(plain, leading: false);
+        previousCollapsibleSpace = forumBodyInlineHasCollapsibleEdge(
+          plain,
+          leading: false,
+        );
         atLineStart = forumBodyIsDisplayLineBreak(
           plain.projection.text.codeUnitAt(plain.projection.text.length - 1),
         );
@@ -222,21 +230,27 @@ final class ForumBodyInlinePlanInput {
                 // bases below; edge indentation remains a structural omission.
                 if (column != 0 && column != unitCount) continue;
                 final end = base.projection.text.length;
-                sources.add(append(_window(base, end, end)));
+                sources.add(append(windowForumBodyInlineText(base, end, end)));
                 continue;
               }
               if (unit.kind == ForumBodyRubyBaseInputKind.implicit) {
-                if (_collapsibleEdge(base, leading: true)) {
+                if (forumBodyInlineHasCollapsibleEdge(base, leading: true)) {
                   if (column != 0) _unsupported(group.rootPath);
-                  sources.add(appendPlain(_window(base, 0, 1)));
-                  base = _window(base, 1, base.projection.text.length);
+                  sources.add(
+                    appendPlain(windowForumBodyInlineText(base, 0, 1)),
+                  );
+                  base = windowForumBodyInlineText(
+                    base,
+                    1,
+                    base.projection.text.length,
+                  );
                 }
-                if (_collapsibleEdge(base, leading: false)) {
+                if (forumBodyInlineHasCollapsibleEdge(base, leading: false)) {
                   if (column + 1 != unitCount) _unsupported(group.rootPath);
                   final end = base.projection.text.length;
-                  tail = _window(base, end - 1, end);
+                  tail = windowForumBodyInlineText(base, end - 1, end);
                   tailSource = sources;
-                  base = _window(base, 0, end - 1);
+                  base = windowForumBodyInlineText(base, 0, end - 1);
                 }
               }
               segmentBases.add(base);
@@ -450,7 +464,7 @@ final class ForumBodyInlinePlanInput {
               // uses the actual parent's text layout, without consuming an RT.
               final end = base.projection.text.length;
               if (column == 0 || column == unitCount) {
-                sources.add(append(_window(base, end, end)));
+                sources.add(append(windowForumBodyInlineText(base, end, end)));
               } else {
                 appendBaseSpace(base, sources, column);
               }
@@ -465,17 +479,25 @@ final class ForumBodyInlinePlanInput {
             ForumBodyParagraphContent? trailing;
             if (unit.kind == ForumBodyRubyBaseInputKind.implicit) {
               if (base.projection.text == ' ' &&
-                  _collapsibleEdge(base, leading: false)) {
+                  forumBodyInlineHasCollapsibleEdge(base, leading: false)) {
                 _unsupported(group.rootPath);
               }
-              if (_collapsibleEdge(base, leading: true)) {
-                appendBaseSpace(_window(base, 0, 1), sources, column);
-                base = _window(base, 1, base.projection.text.length);
+              if (forumBodyInlineHasCollapsibleEdge(base, leading: true)) {
+                appendBaseSpace(
+                  windowForumBodyInlineText(base, 0, 1),
+                  sources,
+                  column,
+                );
+                base = windowForumBodyInlineText(
+                  base,
+                  1,
+                  base.projection.text.length,
+                );
               }
-              if (_collapsibleEdge(base, leading: false)) {
+              if (forumBodyInlineHasCollapsibleEdge(base, leading: false)) {
                 final end = base.projection.text.length;
-                trailing = _window(base, end - 1, end);
-                base = _window(base, 0, end - 1);
+                trailing = windowForumBodyInlineText(base, end - 1, end);
+                base = windowForumBodyInlineText(base, 0, end - 1);
               }
             }
             appendEdge(column);
@@ -620,57 +642,14 @@ ForumBodyParagraphContent _annotationInput(
   ForumBodyRubyAnnotationBoxInput box,
 ) {
   if (box is ForumBodyRubyAnonymousAnnotationInput) {
-    return _plainContext(box.content, leading: true, trailing: true);
+    return trimForumBodyInlineText(box.content, leading: true, trailing: true);
   }
   final annotation = (box as ForumBodyRubyExplicitAnnotationInput).annotation;
-  return _plainContext(
+  return trimForumBodyInlineText(
     ForumBodyRubyChildInput.annotation(group, annotation).requireText(),
     leading: true,
     trailing: true,
   );
-}
-
-ForumBodyParagraphContent _plainContext(
-  ForumBodyParagraphContent context, {
-  required bool leading,
-  required bool trailing,
-}) {
-  var start = 0;
-  var end = context.projection.text.length;
-  if (leading && _collapsibleEdge(context, leading: true)) start++;
-  if (trailing && end > start && _collapsibleEdge(context, leading: false)) {
-    end--;
-  }
-  if (start == 0 && end == context.projection.text.length) return context;
-  return _window(context, start, end);
-}
-
-ForumBodyParagraphContent _window(
-  ForumBodyParagraphContent context,
-  int start,
-  int end,
-) {
-  // Preserve complete graphemes and actual source affinity. A raw whitespace
-  // normalizer must resolve a space joined to a combining mark, not split it.
-  if (context.projection.sourceAtUtf16(start).displayUtf16 != start ||
-      context.projection.sourceAtUtf16(end).displayUtf16 != end) {
-    _unsupported(context.path);
-  }
-  return context.displayWindow(startUtf16: start, endUtf16: end);
-}
-
-bool _collapsibleEdge(
-  ForumBodyParagraphContent context, {
-  required bool leading,
-}) {
-  final projection = context.projection;
-  if (projection.text.isEmpty) return false;
-  final part = leading ? projection.parts.first : projection.parts.last;
-  final index = leading ? 0 : projection.text.length - 1;
-  final mode = context.runs[part.runIndex].style.whiteSpace;
-  return projection.text.codeUnitAt(index) == 32 &&
-      (mode == ForumBodyWhiteSpace.normal ||
-          mode == ForumBodyWhiteSpace.preLine);
 }
 
 bool _isCollapsibleGap(ForumBodyParagraphContent context) =>

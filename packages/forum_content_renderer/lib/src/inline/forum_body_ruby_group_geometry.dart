@@ -3,6 +3,28 @@ part of 'forum_body_ruby_group_metrics.dart';
 /// Pure measured geometry of a text or composite inline child, in that child's
 /// local coordinates. Only numeric values survive; no render/source proof does.
 final class ForumBodyRubyChildMetrics {
+  /// Capture the real native row and glyph overhang only after checking the
+  /// current cache owner and the exact original leaf. Composite children use
+  /// the numeric constructor; they never masquerade as native text leases.
+  factory ForumBodyRubyChildMetrics.measure({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextLease lease,
+    required ForumBodyParagraphContent content,
+  }) {
+    if (!cache.ownsLease(lease)) {
+      throw StateError('Ruby child owner is retired');
+    }
+    if (!identical(lease.content, content)) {
+      throw const ForumBodyRubyGroupException(
+        ForumBodyRubyGroupFailure.content,
+      );
+    }
+    return ForumBodyRubyChildMetrics(
+      bounds: ForumBodyRubyGroupMetrics._textBounds(lease),
+      alphabeticBaseline: lease.layout.alphabeticBaseline,
+    );
+  }
+
   ForumBodyRubyChildMetrics({
     required Rect bounds,
     required this.alphabeticBaseline,

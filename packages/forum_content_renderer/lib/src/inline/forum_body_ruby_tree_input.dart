@@ -1,0 +1,311 @@
+import 'dart:collection';
+
+import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_text_request.dart';
+import '../style/forum_body_style_options.dart';
+import 'forum_body_inline_text_window.dart';
+import 'forum_body_ruby_annotation_input.dart';
+import 'forum_body_ruby_annotation_pairing.dart';
+import 'forum_body_ruby_child_input.dart';
+import 'forum_body_ruby_container_background.dart';
+import 'forum_body_ruby_content.dart';
+import 'forum_body_ruby_root_box.dart';
+
+/// Internal postorder graph of real single-column nested boxes. Source leaves
+/// stay in original base/annotation order; their IDs are not DOM offsets.
+/// Mixed child sequences need a native inline context and are refused here.
+final class ForumBodyRubyTreeInput {
+  // Both lists transfer from the retired builder; neither is mutated again.
+  ForumBodyRubyTreeInput._(
+    List<ForumBodyRubyTreeNode> nodes,
+    List<ForumBodyTextRequest> requests,
+    this.maxWidth,
+  ) : nodes = UnmodifiableListView(nodes),
+      nativeRequests = UnmodifiableListView(requests);
+  final List<ForumBodyRubyTreeNode> nodes;
+  final double maxWidth;
+  final List<ForumBodyTextRequest> nativeRequests;
+  int get root => nodes.length - 1;
+}
+
+sealed class ForumBodyRubyTreeNode {
+  const ForumBodyRubyTreeNode();
+}
+
+final class ForumBodyRubyTreeText extends ForumBodyRubyTreeNode {
+  ForumBodyRubyTreeText._(this.original, this.content, this.needsNative)
+    : request = ForumBodyTextRequest.paragraph(content);
+  final ForumBodyParagraphContent original;
+  final ForumBodyParagraphContent content;
+  // Empty annotation contexts remain in the graph, with no native glyph lease.
+  // An empty base still requires its actual native font box.
+  final bool needsNative;
+  final ForumBodyTextRequest request;
+}
+
+sealed class ForumBodyRubyTreeContainer extends ForumBodyRubyTreeNode {
+  const ForumBodyRubyTreeContainer(this.font, this.background);
+  final ForumBodyRubyRootBoxInput font;
+  final ForumBodyRubyContainerBackground? background;
+}
+
+final class ForumBodyRubyTreeFrame extends ForumBodyRubyTreeContainer {
+  const ForumBodyRubyTreeFrame._(
+    super.font,
+    super.background,
+    this.input,
+    this.child,
+  );
+  final ForumBodyRubySequenceChildInput input;
+  final int child;
+}
+
+final class ForumBodyRubyTreeGroup extends ForumBodyRubyTreeContainer {
+  ForumBodyRubyTreeGroup._(
+    super.font,
+    super.background,
+    this.group,
+    this.base,
+    List<({int? child, ForumBodyRubySide side})> annotations,
+  ) : annotations = UnmodifiableListView(annotations);
+  final ForumBodyRubyGroupContent group;
+  final int base;
+  final List<({int? child, ForumBodyRubySide side})> annotations;
+}
+
+/// Pure, iterative structural preparation. It does not recursively scan a
+/// descendant tree or imply that Session can yet publish its source coverage.
+/// Each unit enters a group/child, follows one edge, or seals one container.
+final class ForumBodyRubyTreeInputPreparation {
+  ForumBodyRubyTreeInputPreparation({
+    required ForumBodyRubyGroupContent group,
+    required this.maxWidth,
+  }) : _scope = group,
+       _stack = [_GroupWork(group)] {
+    if (!maxWidth.isFinite || maxWidth <= 0 || maxWidth > 16384) {
+      throw ArgumentError.value(maxWidth, 'maxWidth');
+    }
+  }
+  ForumBodyRubyGroupContent? _scope;
+  List<_TreeWork> _stack;
+  List<ForumBodyRubyTreeNode> _nodes = [];
+  List<ForumBodyTextRequest> _requests = [];
+  final double maxWidth;
+  int? _completedChild;
+  bool _retired = false;
+  bool get isReady => !_retired && _stack.isEmpty;
+
+  int advance({required int maxParts}) {
+    if (_retired) throw StateError('Ruby tree input is retired');
+    if (maxParts <= 0) throw ArgumentError.value(maxParts);
+    var units = 0;
+    try {
+      while (_stack.isNotEmpty && units < maxParts) {
+        _stack.last.advance(this);
+        units++;
+      }
+      return units;
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
+
+  void _finish(ForumBodyRubyTreeNode node) {
+    _completedChild = _nodes.length;
+    _nodes.add(node);
+    if (node is ForumBodyRubyTreeText && node.needsNative) {
+      _requests.add(node.request);
+    }
+    _stack.removeLast();
+  }
+
+  int _takeChild() {
+    final child = _completedChild;
+    if (child == null) throw StateError('Ruby child is incomplete');
+    _completedChild = null;
+    return child;
+  }
+
+  void _validate(ForumBodyRubyGroupContent group) {
+    final scope = _scope!;
+    if (group.identity != scope.identity ||
+        group.fontRevision != scope.fontRevision ||
+        group.styleRevision != scope.styleRevision) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        group.rootPath,
+      );
+    }
+  }
+
+  ForumBodyRubyTreeInput takeInput() {
+    if (!isReady) throw StateError('Ruby tree input is incomplete');
+    final result = ForumBodyRubyTreeInput._(_nodes, _requests, maxWidth);
+    close();
+    return result;
+  }
+
+  void close() {
+    if (_retired) return;
+    _retired = true;
+    _scope = null;
+    _stack = [];
+    _nodes = [];
+    _requests = [];
+    _completedChild = null;
+  }
+}
+
+sealed class _TreeWork {
+  void advance(ForumBodyRubyTreeInputPreparation owner);
+}
+
+final class _GroupWork extends _TreeWork {
+  _GroupWork(this.group);
+  final ForumBodyRubyGroupContent group;
+  ForumBodyRubyAnnotationPairing? pairing;
+  ForumBodyRubyRootBoxInput? font;
+  ForumBodyRubyContainerBackground? background;
+  int? base;
+  int rank = 0;
+  bool awaitingChild = false;
+  final annotations = <({int? child, ForumBodyRubySide side})>[];
+  @override
+  void advance(ForumBodyRubyTreeInputPreparation owner) {
+    if (pairing == null) {
+      owner._validate(group);
+      final actual = ForumBodyRubyAnnotationPairing(
+        group: group,
+        baseColumnCount: 1,
+      );
+      if (actual.columnCount != 1 || actual.hasAnnotationGaps) {
+        _unsupported(group.rootPath);
+      }
+      pairing = actual;
+      font = ForumBodyRubyRootBoxInput.fromGroup(group);
+      background = ForumBodyRubyContainerBackground.fromGroup(group);
+      final explicit = group.base.whereType<ForumBodyRubyBaseContent>();
+      final ForumBodyRubyChildInput child;
+      if (explicit.isNotEmpty) {
+        if (group.base.length != 1) _unsupported(group.rootPath);
+        child = ForumBodyRubyChildInput.base(group, explicit.single);
+      } else {
+        child = ForumBodyRubyChildInput.implicit(group, group.base);
+        if (child is ForumBodyRubyTextChildInput &&
+            (forumBodyInlineHasCollapsibleEdge(child.content, leading: true) ||
+                forumBodyInlineHasCollapsibleEdge(
+                  child.content,
+                  leading: false,
+                ))) {
+          // Such edges belong to the real containing inline context. A closed
+          // tree must not trap them in an unbreakable placeholder.
+          _unsupported(child.path);
+        }
+      }
+      owner._stack.add(_ChildWork(child, annotation: false));
+      return;
+    }
+    if (base == null) {
+      base = owner._takeChild();
+      return;
+    }
+    if (awaitingChild) {
+      annotations.add((
+        child: owner._takeChild(),
+        side: pairing!.levels[rank].side,
+      ));
+      awaitingChild = false;
+      rank++;
+      return;
+    }
+    if (rank < pairing!.levels.length) {
+      final level = pairing!.levels[rank];
+      if (level.spans.isEmpty) {
+        annotations.add((child: null, side: level.side));
+        rank++;
+      } else {
+        final box = level.spans.single.box;
+        final child = switch (box) {
+          ForumBodyRubyExplicitAnnotationInput() =>
+            ForumBodyRubyChildInput.annotation(group, box.annotation),
+          ForumBodyRubyAnonymousAnnotationInput() =>
+            ForumBodyRubyChildInput.implicit(group, [
+              ForumBodyRubyTextContent(box.content),
+            ]),
+        };
+        awaitingChild = true;
+        owner._stack.add(_ChildWork(child, annotation: true));
+      }
+      return;
+    }
+    owner._finish(
+      ForumBodyRubyTreeGroup._(font!, background, group, base!, annotations),
+    );
+  }
+}
+
+final class _ChildWork extends _TreeWork {
+  _ChildWork(this.input, {required this.annotation});
+  final ForumBodyRubyChildInput input;
+  final bool annotation;
+  bool awaitingChild = false;
+  @override
+  void advance(ForumBodyRubyTreeInputPreparation owner) {
+    switch (input) {
+      case ForumBodyRubyTextChildInput(:final content):
+        final actual = annotation
+            ? trimForumBodyInlineText(content, leading: true, trailing: true)
+            : content;
+        owner._finish(
+          ForumBodyRubyTreeText._(
+            content,
+            actual,
+            !annotation || actual.projection.text.isNotEmpty,
+          ),
+        );
+      case ForumBodyRubySequenceChildInput():
+        final sequence = input as ForumBodyRubySequenceChildInput;
+        if (!awaitingChild) {
+          if (sequence.parts.length != 1 ||
+              sequence.parts.single is! ForumBodyRubyNestedContent) {
+            _unsupported(sequence.path);
+          }
+          final nested = sequence.parts.single as ForumBodyRubyNestedContent;
+          if (nested.groups.length != 1) _unsupported(nested.path);
+          awaitingChild = true;
+          owner._stack.add(_GroupWork(nested.groups.single));
+          return;
+        }
+        owner._finish(
+          ForumBodyRubyTreeFrame._(
+            ForumBodyRubyRootBoxInput(
+              rootPath: sequence.path,
+              fontStrut: ForumBodyParagraphContent.anonymousInline(
+                identity: sequence.identity,
+                fontRevision: sequence.fontRevision,
+                styleRevision: sequence.styleRevision,
+                style: sequence.style,
+              ),
+            ),
+            sequence.source == null
+                ? null
+                : ForumBodyRubyContainerBackground.fromContainer(
+                    identity: sequence.identity,
+                    fontRevision: sequence.fontRevision,
+                    styleRevision: sequence.styleRevision,
+                    path: sequence.path,
+                    style: sequence.style,
+                  ),
+            sequence,
+            owner._takeChild(),
+          ),
+        );
+    }
+  }
+}
+
+Never _unsupported(String? path) => throw ForumBodyParagraphInputException(
+  ForumBodyParagraphInputFailure.structure,
+  path,
+);
