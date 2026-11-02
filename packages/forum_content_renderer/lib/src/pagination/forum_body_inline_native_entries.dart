@@ -10,10 +10,13 @@ import 'forum_body_text_page_content.dart';
 final class ForumBodyInlineNativeEntries {
   ForumBodyInlineNativeEntries._(this._input, this._parent, this._atoms);
   final ForumBodyInlinePageContent _input;
-  final Object _parent;
-  final List<Set<Object>> _atoms;
+  final ForumBodyNativeInputCost _parent;
+  final List<List<ForumBodyNativeInputCost>> _atoms;
 
-  Iterable<Object> inRange(int start, int end) sync* {
+  Iterable<Object> inRange(int start, int end) =>
+      costsInRange(start, end).map((cost) => cost.identity);
+
+  Iterable<ForumBodyNativeInputCost> costsInRange(int start, int end) sync* {
     // Reuse the authoritative legal atom/range checks and indexed boundaries.
     _input.nativeHandleCountInRange(start, end);
     yield _parent;
@@ -48,7 +51,10 @@ final class ForumBodyInlineNativeEntriesPreparation {
     required TextScaler textScaler,
     required void Function() ensureOwner,
   }) : _input = input,
-       _parent = parent.nativeInputIdentity,
+       _parent = (
+         identity: parent.nativeInputIdentity,
+         estimatedBytes: parent.nativeLayoutEstimatedBytes,
+       ),
        _cache = cache,
        _scaler = textScaler,
        _ensureOwner = ensureOwner {
@@ -57,11 +63,11 @@ final class ForumBodyInlineNativeEntriesPreparation {
     }
   }
   ForumBodyInlinePageContent? _input;
-  Object? _parent;
+  ForumBodyNativeInputCost? _parent;
   ForumBodyParagraphCache? _cache;
   TextScaler? _scaler;
   void Function()? _ensureOwner;
-  List<Set<Object>> _atoms = [];
+  List<List<ForumBodyNativeInputCost>> _atoms = [];
   Iterator<ForumBodyNativeRequestSlot>? _requests;
   ForumBodyParagraphBudgetProbe? _probe;
   bool _ready = false;
@@ -82,7 +88,9 @@ final class ForumBodyInlineNativeEntriesPreparation {
         } else {
           final requests = _requests ??=
               _input!.rubyAtoms[_atoms.length].nativeFootprint.iterator;
-          final probe = _probe ??= _cache!.createBudgetProbe();
+          final probe = _probe ??= _cache!.createBudgetProbe(
+            captureInputEstimates: true,
+          );
           if (requests.moveNext()) {
             final slot = requests.current;
             slot.request.includeBudget(
@@ -93,7 +101,7 @@ final class ForumBodyInlineNativeEntriesPreparation {
             );
             _guard();
           } else {
-            _atoms.add(probe.snapshotNativeIdentities());
+            _atoms.add(probe.snapshotNativeEstimates());
             probe.close();
             _probe = null;
             _requests = null;

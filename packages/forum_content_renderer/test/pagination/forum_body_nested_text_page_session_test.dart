@@ -17,16 +17,21 @@ final class _Fixture {
     int maxIssued = 512,
     int cacheEntries = 64,
     int? pageEntries,
+    int cacheBytes = 1 << 24,
+    int? pageBytes,
+    ForumBodyParagraphCache? sharedCache,
   }) {
     final document = const ForumBodyParser().parse(
       html: html,
       sourceId: 'formal-nested-session',
       conversionIdentity: 'none',
     );
-    cache = ForumBodyParagraphCache(
-      maxEntries: cacheEntries,
-      maxEstimatedBytes: 1 << 24,
-    );
+    cache =
+        sharedCache ??
+        ForumBodyParagraphCache(
+          maxEntries: cacheEntries,
+          maxEstimatedBytes: cacheBytes,
+        );
     session = ForumBodyTextPageSession(
       document: document,
       reader: ForumBodyReaderStyle(
@@ -51,6 +56,7 @@ final class _Fixture {
       height: height,
       textScaler: scaler,
       maxNativeEntriesPerPage: pageEntries,
+      maxNativeEstimatedBytesPerPage: pageBytes,
     );
     addTearDown(() {
       session.close();
@@ -146,6 +152,140 @@ void main() {
       } finally {
         previous?.close();
       }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('byte admission seals mixed rows so actual adjacent pages coexist', () {
+    final html = List.filled(
+      24,
+      '<p><ruby><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt>z</rt></ruby></p>',
+    ).join();
+    final f = _Fixture(
+      html,
+      width: 120,
+      height: 1000,
+      cacheBytes: 200000,
+      pageBytes: 60000,
+    );
+    f.finish();
+    expect(f.session.snapshot.length, greaterThan(2));
+    final prefix = f.session.snapshot.first;
+    List<ForumBodyPreparedTextFragment> previous = [];
+    try {
+      for (var p = 0; p < f.session.snapshot.length; p++) {
+        final current = f.prepare(p);
+        expect(current.every((v) => v.isActive), isTrue);
+        expect(previous.every((v) => v.isActive), isTrue);
+        expect(f.cache.estimatedRetainedBytes, lessThanOrEqualTo(200000));
+        validateForumBodyPreparedTextPageBinding(
+          snapshot: f.session.snapshot,
+          pageIndex: p,
+          layoutId: 'formal-nested',
+          fragments: current,
+        );
+        for (final old in previous) {
+          old.close();
+        }
+        previous = current;
+      }
+    } finally {
+      for (final old in previous) {
+        old.close();
+      }
+    }
+    expect(f.cache.activeLeases, 0);
+    expect(f.session.snapshot.first, same(prefix));
+    final replay = _Fixture(
+      html,
+      width: 120,
+      height: 1000,
+      pageBytes: 60000,
+      sharedCache: f.cache,
+    );
+    replay.finish();
+    Object partitions(_Fixture value) => [
+      for (final p in value.session.snapshot)
+        [
+          for (final fragment in p.fragments)
+            (fragment.paragraphIndex, fragment.startLine, fragment.endLine),
+        ],
+    ];
+    expect(partitions(replay), partitions(f));
+  });
+
+  test(
+    'byte cost deduplicates the entire shared band across repeated rows',
+    () {
+      final f = _Fixture(
+        List.filled(12, '<ruby>A<rt>x</rt></ruby>').join(),
+        width: 100,
+        height: 1000,
+        pageBytes: 200000,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(1));
+      f.cache.clearUnpinned();
+      final current = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(current.nativeLeases, hasLength(25));
+        expect(f.cache.entryCount, 2);
+      } finally {
+        current.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'ordinary native paragraphs obey the same byte seal and pair budget',
+    () {
+      final f = _Fixture(
+        List.filled(6, '<p style="font-size:2px">${'A' * 1000}</p>').join(),
+        width: 100,
+        height: 1000,
+        cacheBytes: 500000,
+        pageBytes: 140000,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(6));
+      var previous = f.prepare(0);
+      try {
+        for (var p = 1; p < 6; p++) {
+          final next = f.prepare(p);
+          expect(previous.every((v) => v.isActive), isTrue);
+          for (final old in previous) {
+            old.close();
+          }
+          previous = next;
+        }
+      } finally {
+        for (final old in previous) {
+          old.close();
+        }
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'indivisible native rows fail the explicit byte cap without a fake page',
+    () {
+      final f = _Fixture(
+        '<ruby><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt>z</rt></ruby>',
+        pageBytes: 1,
+      );
+      expect(
+        f.finish,
+        throwsA(
+          isA<ForumBodyTextPageException>().having(
+            (e) => e.failure,
+            'failure',
+            ForumBodyTextPageFailure.nativeByteLimit,
+          ),
+        ),
+      );
+      expect(f.session.snapshot, isEmpty);
       expect(f.cache.activeLeases, 0);
     },
   );

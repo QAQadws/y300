@@ -39,11 +39,12 @@ final class NovelReaderNativeLayoutScope {
     required this.paginationKey,
     required this.maxNativeHandlesPerPage,
     required this.maxNativeEntriesPerPage,
+    required this.maxNativeEstimatedBytesPerPage,
     required int fontCollectionGeneration,
     required String paragraphInputs,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs;
-  static const fingerprintRevision = 8;
+  static const fingerprintRevision = 9;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -55,6 +56,7 @@ final class NovelReaderNativeLayoutScope {
   final String paginationKey;
   final int maxNativeHandlesPerPage;
   final int? maxNativeEntriesPerPage;
+  final int? maxNativeEstimatedBytesPerPage;
   final int _fontCollectionGeneration;
   final String _paragraphInputs;
 
@@ -68,6 +70,7 @@ final class NovelReaderNativeLayoutScope {
     int fontCollectionGeneration = 0,
     int maxIssuedLeases = 512,
     int? maxParagraphCacheEntries,
+    int? maxParagraphCacheEstimatedBytes,
   }) async {
     cancellation.throwIfCancelled();
     final pageHandleLimit = _pageHandleLimit(maxIssuedLeases);
@@ -83,6 +86,25 @@ final class NovelReaderNativeLayoutScope {
         ? null
         : maxParagraphCacheEntries > 3
         ? (maxParagraphCacheEntries - 2) ~/ 2
+        : 1;
+    if (maxParagraphCacheEstimatedBytes != null &&
+        maxParagraphCacheEstimatedBytes <= 0) {
+      throw ArgumentError.value(
+        maxParagraphCacheEstimatedBytes,
+        'maxParagraphCacheEstimatedBytes',
+      );
+    }
+    const fontReserve =
+        2 * ForumBodyParagraphCache.sourceFreeFontEstimatedBytes;
+    // The current and target pages share the original owner budget. Keep
+    // source-free font measurements outside both page estimates; actual paint
+    // growth still goes through the cache's existing aggregate admission.
+    final pageByteLimit = maxParagraphCacheEstimatedBytes == null
+        ? null
+        : maxParagraphCacheEstimatedBytes > fontReserve + 1
+        ? (maxParagraphCacheEstimatedBytes - fontReserve) ~/ 2
+        : maxParagraphCacheEstimatedBytes > 1
+        ? maxParagraphCacheEstimatedBytes ~/ 2
         : 1;
     if (!width.isFinite ||
         width <= 0 ||
@@ -131,6 +153,7 @@ final class NovelReaderNativeLayoutScope {
       height,
       pageHandleLimit,
       pageEntryLimit,
+      pageByteLimit,
       ...readerValues,
       // The canvas is painted outside native paragraphs. Text/inline colors
       // above remain part of this signature and still replace painted inputs.
@@ -145,6 +168,7 @@ final class NovelReaderNativeLayoutScope {
       height: height,
       maxNativeHandlesPerPage: pageHandleLimit,
       maxNativeEntriesPerPage: pageEntryLimit,
+      maxNativeEstimatedBytesPerPage: pageByteLimit,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: jsonEncode([...revisions, ...readerValues]),
       paginationKey:
@@ -193,6 +217,7 @@ final class NovelReaderNativeLayoutScope {
       height: height,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
+      maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: _paragraphInputs,
       paginationKey: paginationKey,
@@ -222,6 +247,7 @@ final class NovelReaderNativeLayoutScope {
       // their shared issued-handle budget before publishing legal physical rows.
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
+      maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
       // A mixed run retains text parts, annotation containers and groups in
       // addition to its glyph runs. Budget these pure values separately; native
       // cache and issued-handle admission remain under their existing limits.

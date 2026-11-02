@@ -42,6 +42,48 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'pre-paint native estimates are readonly and independent of residency',
+    () {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      final input = content(
+        '<p>abc</p>',
+        layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      );
+      List<ForumBodyNativeInputCost> inspect() {
+        final probe = cache.createBudgetProbe(captureInputEstimates: true);
+        try {
+          probe.include(
+            content: input,
+            width: 100,
+            minimumLineCount: 1,
+            textScaler: TextScaler.noScaling,
+          );
+          return probe.snapshotNativeEstimates();
+        } finally {
+          probe.close();
+        }
+      }
+
+      final cold = inspect();
+      expect(cache.layoutBuildCount, 0);
+      final lease = cache.acquire(content: input, width: 100);
+      expect(cold.single.identity, lease.nativeInputIdentity);
+      expect(cold.single.estimatedBytes, lease.nativeLayoutEstimatedBytes);
+      expect(inspect(), cold);
+      expect(() => cold.clear(), throwsUnsupportedError);
+      lease.release();
+      cache.clearUnpinned();
+      expect(inspect(), cold);
+      cache.close();
+      expect(cold.single.estimatedBytes, greaterThan(0));
+      expect(() => lease.nativeLayoutEstimatedBytes, throwsStateError);
+    },
+  );
+
+  test(
     'native input identities are readonly pure values without live ownership',
     () {
       final cache = ForumBodyParagraphCache(

@@ -17,6 +17,7 @@ enum ForumBodyTextPageFailure {
   fragmentLimit,
   nativeHandleLimit,
   nativeEntryLimit,
+  nativeByteLimit,
 }
 
 enum ForumBodyTextPageFragmentKind { paragraph, inline }
@@ -142,6 +143,7 @@ final class ForumBodyTextPageComposer {
     required this.maxFragments,
     this.maxNativeHandlesPerPage,
     this.maxNativeEntriesPerPage,
+    this.maxNativeEstimatedBytesPerPage,
   }) {
     if (layoutId.isEmpty ||
         !width.isFinite ||
@@ -151,11 +153,13 @@ final class ForumBodyTextPageComposer {
         maxPages <= 0 ||
         maxFragments <= 0 ||
         (maxNativeHandlesPerPage != null && maxNativeHandlesPerPage! <= 0) ||
-        (maxNativeEntriesPerPage != null && maxNativeEntriesPerPage! <= 0)) {
+        (maxNativeEntriesPerPage != null && maxNativeEntriesPerPage! <= 0) ||
+        (maxNativeEstimatedBytesPerPage != null &&
+            maxNativeEstimatedBytesPerPage! <= 0)) {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 10;
+  static const revision = 11;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -166,7 +170,9 @@ final class ForumBodyTextPageComposer {
   final int maxFragments;
   final int? maxNativeHandlesPerPage;
   final int? maxNativeEntriesPerPage;
-  final _nativeEntries = <Object>{};
+  final int? maxNativeEstimatedBytesPerPage;
+  final _nativeEntries = <Object, int>{};
+  int _nativeBytes = 0;
   int _usedNativeHandles = 0;
   int _lastFragmentNativeHandles = 0;
   final _pages = <ForumBodyTextPage>[];
@@ -233,11 +239,14 @@ final class ForumBodyTextPageComposer {
     int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange,
     Iterable<Object> Function(int startUtf16, int endUtf16)?
     nativeEntriesInRange,
+    Iterable<ForumBodyNativeInputCost> Function(int startUtf16, int endUtf16)?
+    nativeCostsInRange,
   }) => _append(
     input: _CompositionParagraph.inline(
       lease,
       nativeHandleCountInRange,
       nativeEntriesInRange,
+      nativeCostsInRange,
     ),
     paragraphIndex: paragraphIndex,
     left: left,
@@ -277,9 +286,17 @@ final class ForumBodyTextPageComposer {
     }
     if (maxNativeEntriesPerPage != null &&
         input.kind == ForumBodyTextPageFragmentKind.inline &&
-        input.nativeEntriesInRange == null) {
+        input.nativeEntriesInRange == null &&
+        input.nativeCostsInRange == null) {
       throw ArgumentError(
         'Bounded inline composition requires native entry identities',
+      );
+    }
+    if (maxNativeEstimatedBytesPerPage != null &&
+        input.kind == ForumBodyTextPageFragmentKind.inline &&
+        input.nativeCostsInRange == null) {
+      throw ArgumentError(
+        'Bounded inline composition requires native input costs',
       );
     }
     _active = _ActiveParagraph(
@@ -441,19 +458,49 @@ final class ForumBodyTextPageComposer {
           _seal();
           return _result(inspected, pagesBefore, false);
         }
-        Set<Object>? addedEntries;
+        Map<Object, int>? addedEntries;
         final entryLimit = maxNativeEntriesPerPage;
-        if (entryLimit != null) {
+        final byteLimit = maxNativeEstimatedBytesPerPage;
+        var addedBytes = 0;
+        if (entryLimit != null || byteLimit != null) {
           final from = layout.lines.isEmpty
               ? 0
               : layout.lines[active.nextLine].coverageStartUtf16;
-          addedEntries =
-              (layout.nativeEntriesInRange?.call(
-                        from,
-                        view?.coverageEndUtf16 ?? 0,
-                      ) ??
-                      [layout.lease.nativeInputIdentity])
-                  .toSet();
+          addedEntries = <Object, int>{};
+          if (byteLimit != null) {
+            final costs =
+                layout.nativeCostsInRange?.call(
+                  from,
+                  view?.coverageEndUtf16 ?? 0,
+                ) ??
+                [
+                  (
+                    identity: layout.lease.nativeInputIdentity,
+                    estimatedBytes: layout.lease.nativeLayoutEstimatedBytes,
+                  ),
+                ];
+            for (final cost in costs) {
+              if (cost.estimatedBytes <= 0) {
+                _fail(ForumBodyTextPageFailure.invalidGeometry);
+              }
+              addedEntries[cost.identity] = math.max(
+                addedEntries[cost.identity] ?? 0,
+                cost.estimatedBytes,
+              );
+            }
+          } else {
+            for (final entry
+                in layout.nativeEntriesInRange?.call(
+                      from,
+                      view?.coverageEndUtf16 ?? 0,
+                    ) ??
+                    layout.nativeCostsInRange
+                        ?.call(from, view?.coverageEndUtf16 ?? 0)
+                        .map((cost) => cost.identity) ??
+                    [layout.lease.nativeInputIdentity]) {
+              addedEntries[entry] = 0;
+            }
+          }
           _ensureOpen();
           layout.ensureActive();
           if (addedEntries.isEmpty) {
@@ -461,12 +508,24 @@ final class ForumBodyTextPageComposer {
           }
           final proposedEntries =
               _nativeEntries.length +
-              addedEntries
-                  .where((entry) => !_nativeEntries.contains(entry))
+              addedEntries.keys
+                  .where((entry) => !_nativeEntries.containsKey(entry))
                   .length;
-          if (proposedEntries > entryLimit) {
+          if (entryLimit != null && proposedEntries > entryLimit) {
             if (_draft.isEmpty && _usedHeight == 0) {
               _fail(ForumBodyTextPageFailure.nativeEntryLimit);
+            }
+            _seal();
+            return _result(inspected, pagesBefore, false);
+          }
+          for (final entry in addedEntries.entries) {
+            final old = _nativeEntries[entry.key] ?? 0;
+            addedBytes += math.max(0, entry.value - old);
+            addedEntries[entry.key] = math.max(old, entry.value);
+          }
+          if (byteLimit != null && _nativeBytes + addedBytes > byteLimit) {
+            if (_draft.isEmpty && _usedHeight == 0) {
+              _fail(ForumBodyTextPageFailure.nativeByteLimit);
             }
             _seal();
             return _result(inspected, pagesBefore, false);
@@ -518,6 +577,7 @@ final class ForumBodyTextPageComposer {
         }
         _usedNativeHandles = proposed;
         if (addedEntries != null) _nativeEntries.addAll(addedEntries);
+        _nativeBytes += addedBytes;
         _lastFragmentNativeHandles = handles;
         _flowHeight = bottom;
         _usedHeight = math.max(_usedHeight, bottom);
@@ -574,6 +634,7 @@ final class ForumBodyTextPageComposer {
     _draft.clear();
     _usedNativeHandles = 0;
     _nativeEntries.clear();
+    _nativeBytes = 0;
     _lastFragmentNativeHandles = 0;
     _usedHeight = 0;
     _flowHeight = 0;
@@ -597,6 +658,7 @@ final class ForumBodyTextPageComposer {
     _draft.clear();
     _usedNativeHandles = 0;
     _nativeEntries.clear();
+    _nativeBytes = 0;
     _lastFragmentNativeHandles = 0;
     _usedHeight = 0;
     _flowHeight = 0;
@@ -611,6 +673,7 @@ final class _CompositionParagraph {
     : lease = current,
       nativeHandleCountInRange = null,
       nativeEntriesInRange = null,
+      nativeCostsInRange = null,
       _text = current.layout,
       _inline = null,
       identity = current.content.identity,
@@ -627,6 +690,7 @@ final class _CompositionParagraph {
     ForumBodyInlineParagraphLease current,
     this.nativeHandleCountInRange,
     this.nativeEntriesInRange,
+    this.nativeCostsInRange,
   ) : lease = current,
       _text = null,
       _inline = current.layout,
@@ -640,6 +704,11 @@ final class _CompositionParagraph {
   final int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange;
   final Iterable<Object> Function(int startUtf16, int endUtf16)?
   nativeEntriesInRange;
+  final Iterable<ForumBodyNativeInputCost> Function(
+    int startUtf16,
+    int endUtf16,
+  )?
+  nativeCostsInRange;
   final ForumBodyParagraphLayout? _text;
   final ForumBodyInlineParagraphLayout? _inline;
   final ForumBodyIdentity identity;

@@ -64,6 +64,7 @@ class _Reader {
     String? html,
     this.episodeId = 'episode',
     this.maxParagraphEntries = 64,
+    this.maxParagraphEstimatedBytes = 16 * 1024 * 1024,
   }) {
     rawHtml =
         html ?? '<p>${List.filled(20, 'abcdefghijklmnopqrst').join()}</p>';
@@ -97,6 +98,7 @@ class _Reader {
   }
   final String episodeId;
   final int maxParagraphEntries;
+  final int maxParagraphEstimatedBytes;
   late final String rawHtml;
   late final NovelReaderDocument semantic;
   late NovelReaderProgressSnapshot snapshot;
@@ -104,6 +106,7 @@ class _Reader {
   late final owner = NovelReaderNativeOwner(
     fontChanges: fonts,
     maxParagraphEntries: maxParagraphEntries,
+    maxParagraphEstimatedBytes: maxParagraphEstimatedBytes,
   );
   final service = _Preparation();
   final authority = Object();
@@ -272,6 +275,38 @@ Future<List<int>> _canvasPixel(WidgetTester tester, {int? x, int? y}) async {
 }
 
 void main() {
+  testWidgets(
+    'real Host seals by actual owner bytes and turns without waiting on its visible page',
+    (tester) async {
+      final reader = _Reader(
+        html: List.filled(
+          6,
+          '<p style="font-size:2px">${'A' * 1000}</p>',
+        ).join(),
+        maxParagraphEstimatedBytes: 500000,
+      );
+      await _show(tester, reader, startsAtBeginning: true, height: 400);
+      await tester.pumpAndSettle();
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+      final controller = reader.statuses.last.controller!;
+      expect(controller.snapshot!.length, 3);
+      final cache = reader.owner.acquireCache();
+      try {
+        expect(controller.requestPage(1), isTrue);
+        await tester.pumpAndSettle();
+        expect(controller.visiblePageIndex, 1);
+        expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+        expect(cache.cache.estimatedRetainedBytes, lessThanOrEqualTo(500000));
+        expect(controller.requestPage(2), isTrue);
+        await tester.pumpAndSettle();
+        expect(controller.visiblePageIndex, 2);
+        expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+      } finally {
+        cache.release();
+      }
+      await _unmount(tester, reader);
+    },
+  );
   testWidgets(
     'reflow can replace a mounted page when its old cache is fully pinned',
     (tester) async {

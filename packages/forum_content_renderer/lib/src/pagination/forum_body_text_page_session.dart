@@ -138,6 +138,7 @@ final class ForumBodyTextPageSession {
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
     int? maxNativeHandlesPerPage,
     int? maxNativeEntriesPerPage,
+    int? maxNativeEstimatedBytesPerPage,
   }) {
     limits._validate();
     if (maxNativeHandlesPerPage != null &&
@@ -158,6 +159,7 @@ final class ForumBodyTextPageSession {
       maxFragments: limits.maxFragments,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
+      maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
     );
     try {
       return ForumBodyTextPageSession._(
@@ -322,7 +324,8 @@ final class ForumBodyTextPageSession {
             final ready = _readyInline = prepare.take();
             prepare.close();
             _inlinePreparation = null;
-            if (_composer.maxNativeEntriesPerPage != null) {
+            if (_composer.maxNativeEntriesPerPage != null ||
+                _composer.maxNativeEstimatedBytesPerPage != null) {
               _entryPreparation = ForumBodyInlineNativeEntriesPreparation(
                 input: ready.content,
                 parent: ready.lease,
@@ -352,6 +355,7 @@ final class ForumBodyTextPageSession {
               window: mixed.paragraph.window,
               nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
               nativeEntriesInRange: entries?.inRange,
+              nativeCostsInRange: entries?.costsInRange,
             );
           } catch (_) {
             ready.lease.release();

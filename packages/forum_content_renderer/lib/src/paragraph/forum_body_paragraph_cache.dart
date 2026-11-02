@@ -21,6 +21,10 @@ import 'forum_body_text_layout.dart';
 /// leases release. Callers must not spin/restart a source traversal for either.
 enum ForumBodyParagraphBudgetFailure { content, pinned }
 
+/// Pure native-input cost for composition, without live ownership. Bytes are
+/// an estimate of layout plus reserved paint, never measured native/GPU memory.
+typedef ForumBodyNativeInputCost = ({Object identity, int estimatedBytes});
+
 final class ForumBodyParagraphBudgetException implements Exception {
   const ForumBodyParagraphBudgetException(
     this.failure, {
@@ -38,6 +42,10 @@ final class ForumBodyParagraphBudgetException implements Exception {
 /// not measured engine/font/GPU memory; calibrate the estimate on device.
 /// Visible/neighbor views hold leases and cannot be evicted by background work.
 final class ForumBodyParagraphCache {
+  /// One empty, single-run source-free font row under this admission model.
+  /// Hosts may reserve temporary font measurements alongside visible pages.
+  static const sourceFreeFontEstimatedBytes = 4096 + 256 + 112;
+
   ForumBodyParagraphCache({
     required this.maxEntries,
     required this.maxEstimatedBytes,
@@ -523,9 +531,11 @@ final class ForumBodyParagraphCache {
 
   /// Internal transactional-view admission. It only proves lower-bound
   /// impossibility; a successful probe does not reserve or guarantee capacity.
-  ForumBodyParagraphBudgetProbe createBudgetProbe() {
+  ForumBodyParagraphBudgetProbe createBudgetProbe({
+    bool captureInputEstimates = false,
+  }) {
     if (_closed) throw StateError('Paragraph cache is closed');
-    return ForumBodyParagraphBudgetProbe._(this);
+    return ForumBodyParagraphBudgetProbe._(this, captureInputEstimates);
   }
 
   void _release(_LayoutEntry entry, {bool discardIfUnused = false}) {
@@ -611,9 +621,11 @@ final class ForumBodyParagraphCache {
 /// No shaping, lease, LRU/hit mutation or native object is retained. Close drops
 /// both the cache owner and temporary pure keys; callers bound inspected inputs.
 final class ForumBodyParagraphBudgetProbe {
-  ForumBodyParagraphBudgetProbe._(this._cache);
+  ForumBodyParagraphBudgetProbe._(this._cache, this._captureInputEstimates);
+  final bool _captureInputEstimates;
   ForumBodyParagraphCache? _cache;
   final _bytesByKey = <Object, int>{};
+  final _inputEstimates = <Object, int>{};
   int _bytes = 0;
 
   /// Immutable native-input identities only, for numeric page admission. The
@@ -625,6 +637,25 @@ final class ForumBodyParagraphBudgetProbe {
     return Set.unmodifiable(_bytesByKey.keys.map(_NativeInputIdentity.new));
   }
 
+  /// Stable pre-paint inputs, independent of resident picture growth or cache
+  /// eviction. Request row counts remain the caller's explicit known minimum;
+  /// composition uses exact single-line children and the actual parent lease.
+  List<ForumBodyNativeInputCost> snapshotNativeEstimates() {
+    if (_cache == null || _cache!.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    if (!_captureInputEstimates) {
+      throw StateError('Native input estimates were not enabled');
+    }
+    return List.unmodifiable([
+      for (final entry in _inputEstimates.entries)
+        (
+          identity: _NativeInputIdentity(entry.key),
+          estimatedBytes: entry.value,
+        ),
+    ]);
+  }
+
   /// Include a caller-owned prefix using its actual cache key and retained
   /// bytes. Aliases deduplicate with later requests; no new lease is acquired.
   void includeLease(ForumBodyNativeParagraphLease lease) {
@@ -632,7 +663,12 @@ final class ForumBodyParagraphBudgetProbe {
     if (cache == null || !cache.ownsLease(lease)) {
       throw StateError('Paragraph budget prefix is retired or foreign');
     }
-    _include(cache, lease._entry.key, lease._entry.bytes);
+    _include(
+      cache,
+      lease._entry.key,
+      lease._entry.bytes,
+      inputEstimate: lease._entry.initialBytes,
+    );
   }
 
   void include({
@@ -660,6 +696,10 @@ final class ForumBodyParagraphBudgetProbe {
       cache,
       key,
       _minimumEstimatedBytes(content) + key.indentBytes + minimumLineCount * 96,
+      inputEstimate:
+          _minimumEstimatedBytes(content) +
+          key.indentBytes +
+          minimumLineCount * 112,
     );
   }
 
@@ -694,6 +734,13 @@ final class ForumBodyParagraphBudgetProbe {
       _minimumInlineEstimatedBytes(content) +
           key.indentBytes +
           minimumLineCount * 96,
+      // Both line-frame arrays and optional trim/allocation arrays are bounded
+      // by these pure input counts; no paint or native request is performed.
+      inputEstimate:
+          _minimumInlineEstimatedBytes(content) +
+          key.indentBytes +
+          minimumLineCount * 128 +
+          content.projection.atoms.length * 9,
     );
   }
 
@@ -724,7 +771,16 @@ final class ForumBodyParagraphBudgetProbe {
     );
   }
 
-  void _include(ForumBodyParagraphCache cache, Object key, int bytes) {
+  void _include(
+    ForumBodyParagraphCache cache,
+    Object key,
+    int bytes, {
+    int? inputEstimate,
+  }) {
+    final estimate = inputEstimate ?? bytes;
+    if (_captureInputEstimates && estimate > (_inputEstimates[key] ?? 0)) {
+      _inputEstimates[key] = estimate;
+    }
     final resident = cache._entries[key];
     if (resident != null &&
         !resident.layout.isDisposed &&
@@ -748,6 +804,7 @@ final class ForumBodyParagraphBudgetProbe {
   void close() {
     _cache = null;
     _bytesByKey.clear();
+    _inputEstimates.clear();
     _bytes = 0;
   }
 }
@@ -773,6 +830,13 @@ sealed class ForumBodyNativeParagraphLease {
   Object get nativeInputIdentity {
     if (!isActive) throw StateError('Native paragraph lease is retired');
     return _entry.nativeInputIdentity;
+  }
+
+  /// Captured native layout admission, including its reserved paint capacity.
+  /// Later picture growth is enforced by the cache and does not rewrite pages.
+  int get nativeLayoutEstimatedBytes {
+    if (!isActive) throw StateError('Native paragraph lease is retired');
+    return _entry.initialBytes;
   }
 
   /// Owner proof for aggregate prepared views without exposing the cache or

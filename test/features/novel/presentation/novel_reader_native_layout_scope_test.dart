@@ -89,6 +89,7 @@ Future<NovelReaderNativeLayoutScope> _scope(
   int maxSizes = 2048,
   int maxIssuedLeases = 128,
   int? cacheEntries,
+  int? cacheBytes,
 }) => NovelReaderNativeLayoutScope.prepare(
   chapter: chapter,
   environment: environment,
@@ -96,6 +97,7 @@ Future<NovelReaderNativeLayoutScope> _scope(
   height: height,
   maxIssuedLeases: maxIssuedLeases,
   maxParagraphCacheEntries: cacheEntries,
+  maxParagraphCacheEstimatedBytes: cacheBytes,
   cancellation: cancellation ?? NovelReaderPaginationCancellationToken(),
   maxScaledFontSizes: maxSizes,
 );
@@ -110,6 +112,55 @@ const _limits = ForumBodyTextPageSessionLimits(
 );
 
 void main() {
+  testWidgets(
+    'actual cache byte capacity limits and identifies both visible pages',
+    (tester) async {
+      final chapter = await _chapter();
+      final environment = await _environment(tester);
+      final first = await _scope(
+        chapter,
+        environment,
+        cacheBytes: 16 * 1024 * 1024,
+      );
+      final smaller = await _scope(
+        chapter,
+        environment,
+        cacheBytes: 8 * 1024 * 1024,
+      );
+      final same = await _scope(
+        chapter,
+        environment,
+        cacheBytes: 16 * 1024 * 1024,
+      );
+      expect(first.paginationKey, same.paginationKey);
+      expect(first.paginationKey, isNot(smaller.paginationKey));
+      expect(
+        first.maxNativeEstimatedBytesPerPage! * 2 +
+            2 * ForumBodyParagraphCache.sourceFreeFontEstimatedBytes,
+        16 * 1024 * 1024,
+      );
+      expect(
+        smaller.maxNativeEstimatedBytesPerPage,
+        lessThan(first.maxNativeEstimatedBytesPerPage!),
+      );
+      expect(
+        first
+            .tryUpdateCanvas(
+              environment: environment,
+              width: 200,
+              height: 200,
+              fontCollectionGeneration: 0,
+              isCurrent: () => true,
+            )!
+            .maxNativeEstimatedBytesPerPage,
+        first.maxNativeEstimatedBytesPerPage,
+      );
+      await expectLater(
+        _scope(chapter, environment, cacheBytes: 0),
+        throwsArgumentError,
+      );
+    },
+  );
   testWidgets('actual cache entry capacity participates in layout identity', (
     tester,
   ) async {
