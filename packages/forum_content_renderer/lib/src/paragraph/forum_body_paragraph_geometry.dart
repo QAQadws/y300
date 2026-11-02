@@ -1,6 +1,8 @@
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
+import 'forum_body_paragraph_painter.dart';
+
 enum ForumBodyParagraphLayoutFailure {
   width,
   scale,
@@ -170,6 +172,18 @@ List<ForumBodyParagraphLine> forumBodyParagraphLines({
   required HtmlDisplayTextProjection display,
   HtmlInlineTextProjection? inline,
   double paintScale = 1,
+}) => forumBodyParagraphLinesWithPainter(
+  painter: ForumBodyBorrowedTextPainter(painter),
+  display: display,
+  inline: inline,
+  paintScale: paintScale,
+);
+
+List<ForumBodyParagraphLine> forumBodyParagraphLinesWithPainter({
+  required ForumBodyParagraphPainter painter,
+  required HtmlDisplayTextProjection display,
+  HtmlInlineTextProjection? inline,
+  double paintScale = 1,
 }) {
   final text = inline?.engineText ?? display.text;
   int displayOffset(int engine) =>
@@ -181,7 +195,8 @@ List<ForumBodyParagraphLine> forumBodyParagraphLines({
   final lines = <ForumBodyParagraphLine>[];
   var start = 0;
   for (final metric in metrics) {
-    var range = painter.getLineBoundary(TextPosition(offset: start));
+    final boundary = painter.lineBoundaryForRow(metric.lineNumber, start);
+    var range = boundary.range;
     if (range.start < 0 || range.end < range.start || range.end > text.length) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.coverage,
@@ -200,8 +215,9 @@ List<ForumBodyParagraphLine> forumBodyParagraphLines({
         forumBodyIsDisplayLineBreak(text.codeUnitAt(range.end - 1))) {
       range = TextRange(start: range.start, end: range.end - 1);
     }
-    var end = range.end;
-    if (metric.hardBreak &&
+    var end = boundary.coverageEndUtf16 ?? range.end;
+    if (boundary.coverageEndUtf16 == null &&
+        metric.hardBreak &&
         end < text.length &&
         forumBodyIsDisplayLineBreak(text.codeUnitAt(end))) {
       end++;

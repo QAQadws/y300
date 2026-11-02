@@ -4,6 +4,7 @@ import '../style/forum_body_length.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
+import 'forum_body_paragraph_painter.dart';
 
 /// Resolve one current request, never a source edit or a second reader scale.
 double resolveForumBodyFirstLineIndent(
@@ -82,6 +83,16 @@ double resolveForumBodyFirstLineIndentValue({
 
 void validateForumBodyFirstLineIndentAdvance(
   TextPainter painter,
+  int prefixLength,
+  double advance,
+) => validateForumBodyFirstLineIndentAdvanceWithPainter(
+  ForumBodyBorrowedTextPainter(painter),
+  prefixLength,
+  advance,
+);
+
+void validateForumBodyFirstLineIndentAdvanceWithPainter(
+  ForumBodyParagraphPainter painter,
   int prefixLength,
   double advance,
 ) {

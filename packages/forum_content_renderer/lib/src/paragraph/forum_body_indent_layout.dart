@@ -4,12 +4,29 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../inline/forum_body_native_space_span.dart';
 import 'forum_body_first_line_indent.dart';
 import 'forum_body_paragraph_geometry.dart';
+import 'forum_body_paragraph_painter.dart';
 
 /// Shape the real paragraph first. A source-free row or actual first-row
 /// overflow can trigger fitting; only a reader request can be reduced. Three
 /// layouts at most retain the same painter, dimensions, map and ownership.
 ForumBodyFirstLineIndentGeometry layoutForumBodyFirstLineIndent({
   required TextPainter painter,
+  required TextSpan body,
+  required HtmlInlineTextProjection projection,
+  required double width,
+  required double requestedAdvance,
+  required bool canReduce,
+}) => layoutForumBodyFirstLineIndentWithPainter(
+  painter: ForumBodyBorrowedTextPainter(painter),
+  body: body,
+  projection: projection,
+  width: width,
+  requestedAdvance: requestedAdvance,
+  canReduce: canReduce,
+);
+
+ForumBodyFirstLineIndentGeometry layoutForumBodyFirstLineIndentWithPainter({
+  required ForumBodyParagraphPainter painter,
   required TextSpan body,
   required HtmlInlineTextProjection projection,
   required double width,
@@ -28,7 +45,7 @@ ForumBodyFirstLineIndentGeometry layoutForumBodyFirstLineIndent({
     );
     painter.layout(minWidth: width, maxWidth: width);
     passes++;
-    validateForumBodyFirstLineIndentAdvance(
+    validateForumBodyFirstLineIndentAdvanceWithPainter(
       painter,
       projection.enginePrefix.length,
       advance,
@@ -36,8 +53,8 @@ ForumBodyFirstLineIndentGeometry layoutForumBodyFirstLineIndent({
   }
 
   bool prefixOnly() {
-    final end = painter.getLineBoundary(const TextPosition(offset: 0)).end;
-    // getLineBoundary excludes a real hard separator. Such an intentionally
+    final end = painter.lineBoundaryForRow(0, 0).range.end;
+    // The paint range excludes a real hard separator. Such an intentionally
     // empty source row still owns the separator and must not be fitted away.
     if (end < projection.engineText.length &&
         forumBodyIsDisplayLineBreak(projection.engineText.codeUnitAt(end))) {

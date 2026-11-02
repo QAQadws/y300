@@ -11,6 +11,7 @@ import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_geometry.dart';
 import 'forum_body_native_paragraph_layout.dart';
 import 'forum_body_text_layout.dart';
+import 'forum_body_native_paragraph_painter.dart';
 
 export 'forum_body_paragraph_geometry.dart'
     show
@@ -20,7 +21,7 @@ export 'forum_body_paragraph_geometry.dart'
         ForumBodyFirstLineIndentGeometry,
         ForumBodyParagraphLine;
 
-/// Owns one TextPainter layout, shared by geometry, paint, hit-test and boxes.
+/// Owns one native paragraph, shared by geometry, paint, hit-test and boxes.
 /// No caller can mutate the painter. The owner must dispose it after all views
 /// release it; a disposed view fails before touching an engine resource.
 final class ForumBodyParagraphLayout
@@ -63,13 +64,12 @@ final class ForumBodyParagraphLayout
         : forumBodyInnerTextWidth(width, inset);
     final indent = resolveForumBodyFirstLineIndent(content, innerWidth, scales);
     final engine = indent > 0 ? content.indentedProjection : null;
-    final painter = TextPainter(
+    final painter = ForumBodyNativeParagraphPainter(
       text: content.textSpan,
       textAlign: content.style.textAlign,
       textDirection: content.style.textDirection,
       textScaler: textScaler,
       locale: content.style.textStyle.locale,
-      textWidthBasis: TextWidthBasis.parent,
       // The requested separation is already physical; compensate only the
       // strut height for the actual scaled root font, leaving glyphs unchanged.
       strutStyle: rowIsolationPitch == null
@@ -87,7 +87,7 @@ final class ForumBodyParagraphLayout
       // layout, rather than measuring repeatedly at guessed smaller font sizes.
       final indentGeometry = engine == null
           ? const ForumBodyFirstLineIndentGeometry.none()
-          : layoutForumBodyFirstLineIndent(
+          : layoutForumBodyFirstLineIndentWithPainter(
               painter: painter,
               body: content.textSpan,
               projection: engine,
@@ -128,7 +128,7 @@ final class ForumBodyParagraphLayout
           ForumBodyParagraphLayoutFailure.singleLine,
         );
       }
-      final nativeLines = forumBodyParagraphLines(
+      final nativeLines = forumBodyParagraphLinesWithPainter(
         painter: painter,
         display: content.projection,
         paintScale: paintScale,
@@ -197,7 +197,7 @@ final class ForumBodyParagraphLayout
     return scales;
   }
 
-  static const backendRevision = 10;
+  static const backendRevision = 11;
 
   /// Native-only requested baseline separation, in logical pixels after actual
   /// font scaling. It is neither the author's line height nor page allocation.
@@ -212,7 +212,7 @@ final class ForumBodyParagraphLayout
   final String? path;
   @override
   final HtmlDisplayTextProjection projection;
-  final TextPainter _painter;
+  final ForumBodyNativeParagraphPainter _painter;
   @override
   final double width;
   @override
