@@ -14,8 +14,7 @@ String normalizeDartSourcePath(String path) =>
 Iterable<String> dartDependencyDirectiveUris(String source) sync* {
   final tokens = _sourceTokens(source).toList();
   for (var index = 0; index < tokens.length; index++) {
-    final token = tokens[index];
-    if (token.isString || !{'import', 'export', 'part'}.contains(token.text)) {
+    if (!_isUriDirective(tokens, index)) {
       continue;
     }
     var expectsUri = true;
@@ -42,7 +41,7 @@ Iterable<List<String>?> dartExportShowLists(String source) sync* {
   final tokens = _sourceTokens(source).toList();
   for (var index = 0; index < tokens.length; index++) {
     final token = tokens[index];
-    if (token.isString || token.text != 'export') continue;
+    if (token.text != 'export' || !_isUriDirective(tokens, index)) continue;
     List<String>? names;
     var showing = false;
     var parentheses = 0;
@@ -63,6 +62,20 @@ Iterable<List<String>?> dartExportShowLists(String source) sync* {
     }
     yield names;
   }
+}
+
+bool _isUriDirective(List<_SourceToken> tokens, int index) {
+  final token = tokens[index];
+  if (token.isString || !{'import', 'export', 'part'}.contains(token.text)) {
+    return false;
+  }
+  // `part` is also a valid identifier. Only the directive grammar can start
+  // URI collection; a comparison/call must not consume later quoted values.
+  if (index + 1 < tokens.length && tokens[index + 1].isString) return true;
+  return token.text == 'part' &&
+      index + 2 < tokens.length &&
+      tokens[index + 1].text == 'of' &&
+      tokens[index + 2].isString;
 }
 
 class _SourceToken {
