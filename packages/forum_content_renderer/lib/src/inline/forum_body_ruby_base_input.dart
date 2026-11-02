@@ -1,5 +1,6 @@
 import '../paragraph/forum_body_paragraph_content.dart';
 import 'forum_body_ruby_content.dart';
+import 'forum_body_ruby_child_input.dart';
 
 enum ForumBodyRubyBaseInputKind { implicit, explicit, gap }
 
@@ -28,21 +29,13 @@ List<ForumBodyRubyBaseInput> resolveForumBodyRubyBaseInputs(
               : ForumBodyRubyBaseInputKind.implicit,
         ),
         ForumBodyRubyBaseContent() => (
-          content: _explicitText(part),
+          content: ForumBodyRubyChildInput.base(group, part).requireText(),
           kind: ForumBodyRubyBaseInputKind.explicit,
         ),
         ForumBodyRubyNestedContent() => _unsupported(part.path),
         ForumBodyRubyAnnotationContent() => _unsupported(part.path),
       },
   ]);
-}
-
-ForumBodyParagraphContent _explicitText(ForumBodyRubyBaseContent base) {
-  if (base.parts.length != 1 ||
-      base.parts.single is! ForumBodyRubyTextContent) {
-    _unsupported(base.path);
-  }
-  return (base.parts.single as ForumBodyRubyTextContent).content;
 }
 
 bool _space(int rune) => const {9, 10, 12, 13, 32}.contains(rune);

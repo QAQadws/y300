@@ -14,6 +14,7 @@ import 'forum_body_ruby_annotation_input.dart';
 import 'forum_body_ruby_annotation_pairing.dart';
 import 'forum_body_ruby_base_input.dart';
 import 'forum_body_ruby_content.dart';
+import 'forum_body_ruby_child_input.dart';
 import 'forum_body_ruby_whitespace.dart';
 import 'forum_body_text_band_content.dart';
 
@@ -622,20 +623,8 @@ ForumBodyParagraphContent _annotationInput(
     return _plainContext(box.content, leading: true, trailing: true);
   }
   final annotation = (box as ForumBodyRubyExplicitAnnotationInput).annotation;
-  final parts = annotation.parts;
-  if (parts.isEmpty) {
-    return ForumBodyParagraphContent.anonymousInline(
-      identity: group.identity,
-      fontRevision: group.fontRevision,
-      styleRevision: group.styleRevision,
-      style: annotation.style,
-    );
-  }
-  if (parts.length != 1 || parts.single is! ForumBodyRubyTextContent) {
-    _unsupported(annotation.path);
-  }
   return _plainContext(
-    (parts.single as ForumBodyRubyTextContent).content,
+    ForumBodyRubyChildInput.annotation(group, annotation).requireText(),
     leading: true,
     trailing: true,
   );
