@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/painting.dart';
@@ -16,6 +17,8 @@ import 'forum_body_first_line_indent.dart';
 import '../inline/forum_body_native_space_span.dart';
 import 'forum_body_text_band_cache_key.dart';
 import 'forum_body_text_layout.dart';
+
+part 'forum_body_text_picture.dart';
 
 /// Content cannot fit the total budget; pinned pressure may clear when visible
 /// leases release. Callers must not spin/restart a source traversal for either.
@@ -83,9 +86,73 @@ final class ForumBodyParagraphCache {
         sum +
         (entry.layout is ForumBodyTextBandLayout
             ? (entry.layout as ForumBodyTextBandLayout).preparedPictureCount
+            : entry.layout is _TextPictureLayout
+            ? 1
             : 0),
   );
   bool get isClosed => _closed;
+
+  /// A prepared text scene shares this owner's entry/byte budget. A miss never
+  /// records or shapes; the cooperative preparation owns recording separately.
+  ForumBodyTextPictureLease? tryAcquireTextPicture(
+    ForumBodyTextPictureInput input,
+  ) {
+    if (_closed) throw StateError('Paragraph cache is closed');
+    final entry = _acquireEntry(
+      key: input,
+      allowBuild: false,
+      minimumBytes: input.estimatedBytes,
+      build: () => throw StateError('Cached text picture cannot build'),
+      countAsPicture: true,
+    );
+    return entry == null
+        ? null
+        : ForumBodyTextPictureLease._(this, entry, input);
+  }
+
+  ForumBodyTextPictureLease _adoptTextPicture(
+    ForumBodyTextPictureInput input,
+    _TextPictureTicket ticket,
+    bool Function() isCurrent,
+  ) {
+    if (_closed) throw StateError('Paragraph cache is closed');
+    final measured = input.estimatedInputBytes + ticket.bytes;
+    final entry = _acquireEntry(
+      key: input,
+      allowBuild: true,
+      minimumBytes: measured > input.estimatedBytes
+          ? measured
+          : input.estimatedBytes,
+      build: () => _TextPictureLayout(ticket.take()),
+      countAsPicture: true,
+      isCurrent: isCurrent,
+    )!;
+    return ForumBodyTextPictureLease._(this, entry, input);
+  }
+
+  ForumBodyTextLease _aliasTextLease(ForumBodyTextLease lease) {
+    if (!ownsLease(lease) || !lease.layout.isPaintPrepared) {
+      throw StateError('Text picture requires current prepared text');
+    }
+    final entry = lease._entry;
+    final alias = switch (lease) {
+      ForumBodyParagraphLease() => ForumBodyParagraphLease._(
+        this,
+        entry,
+        lease.content,
+      ),
+      ForumBodyTextBandChildLease() => ForumBodyTextBandChildLease._(
+        this,
+        entry,
+        lease.bandContent,
+        lease.childIndex,
+        (entry.layout as ForumBodyTextBandLayout).view(lease.childIndex),
+      ),
+    };
+    entry.leases++;
+    _leases++;
+    return alias;
+  }
 
   /// Proves the supplied live handle belongs to this reading owner. Does not
   /// acquire an alias, touch the LRU or invoke native/user callbacks.
@@ -374,6 +441,8 @@ final class ForumBodyParagraphCache {
     required bool allowBuild,
     required int minimumBytes,
     required ForumBodyNativeParagraphLayout Function() build,
+    bool countAsPicture = false,
+    bool Function()? isCurrent,
   }) {
     if (_buildingKeys.contains(key)) {
       throw StateError('Native paragraph shaping is reentrant');
@@ -396,6 +465,9 @@ final class ForumBodyParagraphCache {
         _retire(entry);
       }
       if (_closed) throw StateError('Paragraph cache is closed');
+      if (isCurrent != null && !isCurrent()) {
+        throw StateError('Native request is retired');
+      }
       if (!allowBuild) return null;
       final pinned = _pinnedFootprint();
       if (minimumBytes > maxEstimatedBytes) {
@@ -412,8 +484,11 @@ final class ForumBodyParagraphCache {
         );
       }
       built = build();
-      _builds++;
+      if (!countAsPicture) _builds++;
       if (_closed) throw StateError('Paragraph cache is closed');
+      if (isCurrent != null && !isCurrent()) {
+        throw StateError('Native request is retired');
+      }
       final bytes =
           minimumBytes +
           // Only paragraph rows gained the two omitted-space coordinates.
@@ -425,10 +500,16 @@ final class ForumBodyParagraphCache {
       // TextScaler is caller code: a nested request can acquire another entry
       // while the engine shapes. Recheck actual pins before admission/eviction.
       _makeRoom(bytes, newEntry: true);
+      // Native disposal observers may cancel this transaction without closing
+      // its shared cache. A retired recorder must not refill that cache late.
+      if (isCurrent != null && !isCurrent()) {
+        throw StateError('Native request is retired');
+      }
       entry = _LayoutEntry(built, bytes, key);
       _bytes += bytes;
       _entries[key] = entry;
       installed = true;
+      if (countAsPicture) _pictureBuilds++;
       entry.leases++;
       _leases++;
       return entry;
@@ -669,6 +750,14 @@ final class ForumBodyParagraphBudgetProbe {
       lease._entry.bytes,
       inputEstimate: lease._entry.initialBytes,
     );
+  }
+
+  void includeTextPicture(ForumBodyTextPictureInput input) {
+    final cache = _cache;
+    if (cache == null || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    _include(cache, input, input.estimatedBytes);
   }
 
   void include({
