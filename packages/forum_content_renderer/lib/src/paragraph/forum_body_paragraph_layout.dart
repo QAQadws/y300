@@ -20,6 +20,7 @@ export 'forum_body_paragraph_geometry.dart'
         ForumBodyParagraphWindow,
         ForumBodyFirstLineIndentGeometry,
         ForumBodyParagraphGlyphGeometry,
+        ForumBodyParagraphMaximumLineFrame,
         ForumBodyParagraphLine;
 
 /// Owns one native paragraph, shared by geometry, paint, hit-test and boxes.
@@ -263,6 +264,37 @@ final class ForumBodyParagraphLayout
   final List<ForumBodyParagraphLine> lines;
   @override
   int get lineCount => lines.length;
+
+  /// One full native geometry query, without shaping or paint preparation.
+  /// Records remain in native order, including duplicate boxes within a row.
+  /// They alone do not identify source ranges or authorize physical slicing.
+  List<ForumBodyParagraphMaximumLineFrame> queryMaximumLineFrames() {
+    _ensureOpen();
+    return List.unmodifiable([
+      for (final frame in _painter.maximumLineFrames(
+        _engineProjection?.engineText.length ?? projection.text.length,
+      ))
+        (top: frame.top * _paintScale, bottom: frame.bottom * _paintScale),
+    ]);
+  }
+
+  bool get hasTerminalEmptyLine {
+    _ensureOpen();
+    return forumBodyHasTerminalEmptyLine(
+      lines: lines,
+      displayText: projection.text,
+      engineText: _engineProjection?.engineText ?? projection.text,
+    );
+  }
+
+  /// Native paragraph's first-line metric before paint rounding. This can
+  /// differ from the logical first LineMetrics baseline exposed by this layout.
+  double get nativeAlphabeticBaseline {
+    _ensureOpen();
+    return _painter.computeDistanceToActualBaseline(TextBaseline.alphabetic) *
+        _paintScale;
+  }
+
   @override
   double get alphabeticBaseline {
     _ensureOpen();

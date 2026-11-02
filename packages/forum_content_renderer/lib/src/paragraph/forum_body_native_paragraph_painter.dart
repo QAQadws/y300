@@ -243,6 +243,20 @@ final class ForumBodyNativeParagraphPainter
 
   TextPosition getPositionForOffset(Offset offset) =>
       _laidOut.getPositionForOffset(offset - _paintOffset);
+
+  /// Full engine text only. Maximum-height boxes retain native order and
+  /// duplicates; no partial grapheme selection or visual row lookup is used.
+  List<ForumBodyParagraphMaximumLineFrame> maximumLineFrames(
+    int engineLength,
+  ) => [
+    for (final box in _laidOut.getBoxesForRange(
+      0,
+      engineLength,
+      boxHeightStyle: ui.BoxHeightStyle.max,
+    ))
+      (top: box.top, bottom: box.bottom),
+  ];
+
   ui.GlyphInfo? glyphInfoAt(int offset) {
     final glyph = _laidOut.getGlyphInfoAt(offset);
     return glyph == null

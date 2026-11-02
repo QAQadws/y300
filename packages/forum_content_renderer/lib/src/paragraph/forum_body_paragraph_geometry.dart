@@ -21,6 +21,10 @@ enum ForumBodyParagraphWindow {
   terminalEmptyLine,
 }
 
+/// Actual vertical output from one native maximum-height selection box.
+/// The top may include leading adjustment; it is not a row flow origin.
+typedef ForumBodyParagraphMaximumLineFrame = ({double top, double bottom});
+
 /// One actual native glyph query at an explicit display code unit. The engine
 /// cluster range may cross physical rows or split a source grapheme at a style
 /// seam; it is diagnostic native UTF-16, never a legal source slicing boundary.
@@ -146,6 +150,24 @@ final class ForumBodyParagraphLine {
 bool forumBodyIsDisplayLineBreak(int codeUnit) =>
     codeUnit == 0x0a || codeUnit == 0x2028 || codeUnit == 0x2029;
 
+bool forumBodyHasTerminalEmptyLine({
+  required List<ForumBodyParagraphLine> lines,
+  required String displayText,
+  required String engineText,
+}) =>
+    lines.length >= 2 &&
+    displayText.isNotEmpty &&
+    engineText.isNotEmpty &&
+    forumBodyIsDisplayLineBreak(
+      displayText.codeUnitAt(displayText.length - 1),
+    ) &&
+    forumBodyIsDisplayLineBreak(engineText.codeUnitAt(engineText.length - 1)) &&
+    lines.last.width == 0 &&
+    lines.last.coverageStartUtf16 == displayText.length &&
+    lines.last.coverageEndUtf16 == displayText.length &&
+    lines.last.engineCoverageStartUtf16 == engineText.length &&
+    lines.last.engineCoverageEndUtf16 == engineText.length;
+
 /// Restricted windows over actual native rows, never a source/HTML slice. Both
 /// coordinate axes must prove the terminal empty hard-break row; annotation
 /// text hidden behind an atom cannot manufacture a parent terminal separator.
@@ -158,20 +180,11 @@ bool forumBodyIsDisplayLineBreak(int codeUnit) =>
   if (window == ForumBodyParagraphWindow.full) {
     return (startLine: 0, endLine: lines.length);
   }
-  if (lines.length < 2 ||
-      displayText.isEmpty ||
-      engineText.isEmpty ||
-      !forumBodyIsDisplayLineBreak(
-        displayText.codeUnitAt(displayText.length - 1),
-      ) ||
-      !forumBodyIsDisplayLineBreak(
-        engineText.codeUnitAt(engineText.length - 1),
-      ) ||
-      lines.last.width != 0 ||
-      lines.last.coverageStartUtf16 != displayText.length ||
-      lines.last.coverageEndUtf16 != displayText.length ||
-      lines.last.engineCoverageStartUtf16 != engineText.length ||
-      lines.last.engineCoverageEndUtf16 != engineText.length) {
+  if (!forumBodyHasTerminalEmptyLine(
+    lines: lines,
+    displayText: displayText,
+    engineText: engineText,
+  )) {
     throw const ForumBodyParagraphLayoutException(
       ForumBodyParagraphLayoutFailure.coverage,
     );
