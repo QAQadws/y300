@@ -117,6 +117,70 @@ String _heavyText() => [
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'fitted band commands keep child selection and sibling transforms',
+    () async {
+      final f = _Fixture(band: true);
+      final input = ForumBodyTextPictureInput(
+        commands: [
+          ForumBodyTextPictureCommand.fromText(
+            f.text[0],
+            const Offset(5, 25),
+            fitScale: .63,
+          ),
+          ForumBodyTextPictureCommand.fromText(
+            f.text[1],
+            const Offset(15, 5),
+            fitScale: .37,
+          ),
+          ForumBodyTextPictureCommand.fromText(f.text[0], const Offset(65, 25)),
+        ],
+      );
+      final job = ForumBodyTextPicturePreparation(
+        cache: f.cache,
+        input: input,
+        text: f.text,
+        ensureOwner: () {},
+      );
+      final controls = [
+        for (final text in f.text)
+          TextPainter(
+            text: text.content.textSpan,
+            textDirection: TextDirection.ltr,
+          )..layout(maxWidth: double.infinity),
+      ];
+      final scene = f.finish(job);
+      try {
+        for (final text in f.text) {
+          text.release();
+        }
+        f.cache.clearUnpinned();
+        expect(f.cache.entryCount, 1);
+        final expected = await _pixels((canvas) {
+          void fitted(TextPainter text, Offset offset, double scale) {
+            canvas.save();
+            canvas.translate(offset.dx, offset.dy);
+            canvas.scale(scale, scale);
+            text.paint(canvas, Offset.zero);
+            canvas.restore();
+          }
+
+          fitted(controls[0], const Offset(5, 25), .63);
+          fitted(controls[1], const Offset(15, 5), .37);
+          controls[0].paint(canvas, const Offset(65, 25));
+        }, 3);
+        expect(
+          await _pixels((canvas) => scene.paint(canvas, Offset.zero), 3),
+          expected,
+        );
+      } finally {
+        scene.release();
+        for (final text in controls) {
+          text.dispose();
+        }
+      }
+    },
+  );
   for (final band in [false, true]) {
     for (final ratio in [1, 3]) {
       test(

@@ -422,6 +422,8 @@ void main() {
       addTearDown(natural.dispose);
       addTearDown(fitted.dispose);
       expect(natural.lines.single.width, 400);
+      expect(natural.paintScale, 1);
+      expect(fitted.paintScale, .25);
       expect(fitted.lines, hasLength(1));
       expect(fitted.width, 100);
       expect(fitted.height, closeTo(natural.height / 4, 1e-6));

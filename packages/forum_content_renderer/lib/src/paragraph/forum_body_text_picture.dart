@@ -7,26 +7,35 @@ final class ForumBodyTextPictureCommand {
     required this.nativeInputIdentity,
     required this.offset,
     this.bandChildIndex,
+    this.fitScale = 1,
   });
   factory ForumBodyTextPictureCommand.fromText(
     ForumBodyTextLease text,
-    Offset offset,
-  ) => ForumBodyTextPictureCommand(
+    Offset offset, {
+    double fitScale = 1,
+  }) => ForumBodyTextPictureCommand(
     nativeInputIdentity: text.nativeInputIdentity,
     offset: offset,
+    fitScale: fitScale,
     bandChildIndex: text is ForumBodyTextBandChildLease
         ? text.childIndex
         : null,
   );
   factory ForumBodyTextPictureCommand.fromEmphasisMark(
     ForumBodyEmphasisMarkLease mark,
-    Offset offset,
-  ) => ForumBodyTextPictureCommand(
+    Offset offset, {
+    double fitScale = 1,
+  }) => ForumBodyTextPictureCommand(
     nativeInputIdentity: mark.nativeInputIdentity,
     offset: offset,
+    fitScale: fitScale,
   );
   final Object nativeInputIdentity;
   final Offset offset;
+
+  /// A uniform fitting transform around the resource's local origin. Offset
+  /// stays in scene coordinates; this does not resample the font TextScaler.
+  final double fitScale;
   // Several source-bound views share a band key but paint different strips.
   final int? bandChildIndex;
   _TextPictureDependency get _dependency =>
@@ -37,9 +46,11 @@ final class ForumBodyTextPictureCommand {
       other is ForumBodyTextPictureCommand &&
           nativeInputIdentity == other.nativeInputIdentity &&
           offset == other.offset &&
-          bandChildIndex == other.bandChildIndex;
+          bandChildIndex == other.bandChildIndex &&
+          fitScale == other.fitScale;
   @override
-  int get hashCode => Object.hash(nativeInputIdentity, offset, bandChildIndex);
+  int get hashCode =>
+      Object.hash(nativeInputIdentity, offset, bandChildIndex, fitScale);
 }
 
 /// A finite draw list over actual opaque native inputs. No source authority,
@@ -64,6 +75,11 @@ final class ForumBodyTextPictureInput {
           command.offset.dy.abs() > 32768) {
         throw ArgumentError('Invalid native text picture command');
       }
+      if (!command.fitScale.isFinite ||
+          command.fitScale <= 0 ||
+          command.fitScale > 1) {
+        throw ArgumentError('Invalid native text picture fitting scale');
+      }
       final key = identity._key;
       if (key is ForumBodyTextBandCacheKey) {
         final child = command.bandChildIndex;
@@ -84,7 +100,7 @@ final class ForumBodyTextPictureInput {
     );
   }
   final List<ForumBodyTextPictureCommand> commands;
-  static const revision = 2;
+  static const revision = 3;
 
   /// Conservative display-list admission, not font/native/GPU memory. Actual
   /// engine picture bytes can grow this cost before the owner publishes it.
@@ -290,13 +306,25 @@ final class ForumBodyTextPicturePreparation {
               }
               if (_index < input.commands.length) {
                 final command = input.commands[_index++];
-                switch (_resources[command._dependency]!) {
-                  case ForumBodyTextLease resource:
-                    resource.layout.paint(_canvas!, command.offset);
-                  case ForumBodyEmphasisMarkLease resource:
-                    resource.layout.paint(_canvas!, command.offset);
-                  default:
-                    throw StateError('Unsupported text picture resource');
+                final canvas = _canvas!;
+                final fitted = command.fitScale != 1;
+                if (fitted) {
+                  canvas.save();
+                  canvas.translate(command.offset.dx, command.offset.dy);
+                  canvas.scale(command.fitScale, command.fitScale);
+                }
+                try {
+                  final offset = fitted ? Offset.zero : command.offset;
+                  switch (_resources[command._dependency]!) {
+                    case ForumBodyTextLease resource:
+                      resource.layout.paint(canvas, offset);
+                    case ForumBodyEmphasisMarkLease resource:
+                      resource.layout.paint(canvas, offset);
+                    default:
+                      throw StateError('Unsupported text picture resource');
+                  }
+                } finally {
+                  if (fitted) canvas.restore();
                 }
               } else {
                 final recorder = _recorder!;

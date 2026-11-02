@@ -179,6 +179,10 @@ final class ForumBodyParagraphLayout
   @override
   final double height;
   final double _paintScale;
+
+  /// The actual uniform single-line fitting transform, after per-size scaling.
+  /// Decorations must share this value rather than infer it from text width.
+  double get paintScale => _paintScale;
   final HtmlInlineTextProjection? _engineProjection;
   final List<ForumBodyParagraphLine> lines;
   @override

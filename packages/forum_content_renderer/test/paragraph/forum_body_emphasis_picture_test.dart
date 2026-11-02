@@ -7,7 +7,14 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 const _blue = Color(0xff0000ff), _red = Color(0xffff0000);
 
 final class _Fixture {
-  _Fixture({this.direction = TextDirection.ltr, int entries = 12}) {
+  _Fixture({
+    this.direction = TextDirection.ltr,
+    int entries = 12,
+    ForumBodyParagraphLayoutMode mode =
+        ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+    double width = 400,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) {
     cache = ForumBodyParagraphCache(
       maxEntries: entries,
       maxEstimatedBytes: 1 << 24,
@@ -34,9 +41,13 @@ final class _Fixture {
       document: doc,
       styles: styles,
       path: '0',
-      layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      layoutMode: mode,
     );
-    base = cache.acquire(content: content, width: 400);
+    base = cache.acquire(
+      content: content,
+      width: width,
+      textScaler: textScaler,
+    );
     ForumBodyEmphasisMarkLease mark(Color color) => cache.acquireEmphasisMark(
       input: ForumBodyEmphasisMarkInput(
         style: ForumBodyResolvedStyle(
@@ -53,6 +64,7 @@ final class _Fixture {
         fontRevision: 'ahem',
         styleRevision: styles.resolverRevision,
       ),
+      textScaler: textScaler,
     );
     blue = mark(_blue);
     red = mark(_red);
@@ -126,8 +138,145 @@ Future<List<int>> _pixels(void Function(Canvas) draw, int dpr) async {
   }
 }
 
+final class _Nonlinear extends TextScaler {
+  const _Nonlinear();
+  @override
+  double scale(double fontSize) =>
+      fontSize < 20 ? fontSize * 1.4 : fontSize * 1.1;
+  @override
+  double get textScaleFactor => throw StateError('Use actual sizes');
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final direction in TextDirection.values) {
+    for (final dpr in [1, 3]) {
+      for (final scaler in [TextScaler.noScaling, const _Nonlinear()]) {
+        test('fitted base and marks $direction DPR$dpr $scaler', () async {
+          final f = _Fixture(
+            direction: direction,
+            mode: ForumBodyParagraphLayoutMode.fitSingleLine,
+            width: 80,
+            textScaler: scaler,
+          );
+          final native = TextPainter(
+            text: f.content.textSpan,
+            textDirection: direction,
+            textScaler: scaler,
+          )..layout(maxWidth: double.infinity);
+          final marker = TextPainter(
+            text: TextSpan(
+              text: 'X',
+              style: const TextStyle(
+                inherit: false,
+                fontFamily: 'Ahem',
+                fontSize: 10,
+                color: _blue,
+                height: kTextHeightNone,
+                decoration: TextDecoration.none,
+                fontFeatures: [FontFeature.enable('ruby')],
+              ),
+            ),
+            textDirection: direction,
+            textScaler: scaler,
+          )..layout(maxWidth: double.infinity);
+          addTearDown(() {
+            native.dispose();
+            marker.dispose();
+          });
+          final fitScale = 80 / native.width;
+          expect(f.base.layout.paintScale, fitScale);
+          final input = ForumBodyTextPictureInput(
+            commands: [
+              ForumBodyTextPictureCommand.fromText(f.base, const Offset(5, 35)),
+              ForumBodyTextPictureCommand.fromEmphasisMark(
+                f.blue,
+                const Offset(25, 10),
+                fitScale: f.base.layout.paintScale,
+              ),
+              // A following unscaled command detects leaked canvas transforms.
+              ForumBodyTextPictureCommand.fromEmphasisMark(
+                f.blue,
+                const Offset(120, 35),
+              ),
+              ForumBodyTextPictureCommand.fromText(
+                f.base,
+                const Offset(25, 70),
+                fitScale: .5,
+              ),
+            ],
+          );
+          final job = ForumBodyTextPicturePreparation(
+            cache: f.cache,
+            input: input,
+            text: [f.base],
+            marks: [f.blue],
+            ensureOwner: () {},
+          );
+          f.base.release();
+          f.blue.release();
+          f.red.release();
+          final scene = f.finish(job);
+          addTearDown(scene.release);
+          f.cache.clearUnpinned();
+          expect(f.cache.entryCount, 1);
+          final actual = await _pixels((c) => scene.paint(c, Offset.zero), dpr);
+          final expected = await _pixels((c) {
+            void fitted(TextPainter painter, Offset offset, double scale) {
+              c.save();
+              c.translate(offset.dx, offset.dy);
+              c.scale(scale, scale);
+              painter.paint(c, Offset.zero);
+              c.restore();
+            }
+
+            fitted(native, const Offset(5, 35), fitScale);
+            fitted(marker, const Offset(25, 10), fitScale);
+            marker.paint(c, const Offset(120, 35));
+            fitted(native, const Offset(25, 70), fitScale * .5);
+          }, dpr);
+          expect(actual, expected);
+          final hits = f.cache.hitCount;
+          final warm = f.cache.tryAcquireTextPicture(input);
+          expect(warm, isNotNull);
+          warm!.release();
+          expect(f.cache.hitCount, hits + 1);
+          final unscaled = ForumBodyTextPictureInput(
+            commands: [
+              for (final command in input.commands)
+                ForumBodyTextPictureCommand(
+                  nativeInputIdentity: command.nativeInputIdentity,
+                  offset: command.offset,
+                  bandChildIndex: command.bandChildIndex,
+                ),
+            ],
+          );
+          expect(unscaled, isNot(input));
+          expect(f.cache.tryAcquireTextPicture(unscaled), isNull);
+          expect(unscaled.estimatedBytes, input.estimatedBytes);
+        });
+      }
+    }
+  }
+  test('invalid fit transforms fail before recording or cache mutation', () {
+    final f = _Fixture();
+    for (final scale in [0.0, -1.0, 1.01, double.nan, double.infinity]) {
+      expect(
+        () => ForumBodyTextPictureInput(
+          commands: [
+            ForumBodyTextPictureCommand.fromEmphasisMark(
+              f.blue,
+              Offset.zero,
+              fitScale: scale,
+            ),
+          ],
+        ),
+        throwsArgumentError,
+      );
+    }
+    expect(f.cache.pictureBuildCount, 0);
+    expect(f.cache.activeLeases, 3);
+  });
   for (final direction in TextDirection.values) {
     for (final dpr in [1, 3]) {
       test(
