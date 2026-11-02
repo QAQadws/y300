@@ -139,13 +139,28 @@ import 'dart:ffi';
       },
     );
     expect(
-      _violationTargets('${_packageRoot}test/new_test.dart', '''
+      _violationTargets('${_packageRoot}example/lib/new_example.dart', '''
 import 'package:forum_content_renderer/forum_content_renderer.dart'
   if (dart.library.io == 'true') 'package:forum_content_renderer/src/private.dart';
-import '../../../test/test_support/localized_test_app.dart';
+import '../../../../test/test_support/localized_test_app.dart';
 '''),
       {
         '${_packageLib}src/private.dart',
+        'test/test_support/localized_test_app.dart',
+      },
+    );
+  });
+
+  test('package unit tests may inspect internals without importing App Host', () {
+    expect(
+      _violationTargets('${_packageRoot}test/new_test.dart', '''
+import 'package:forum_content_renderer/src/paragraph/internal.dart';
+import '../lib/src/inline/internal.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import '../../../test/test_support/localized_test_app.dart';
+'''),
+      {
+        _publicEntry,
         'test/test_support/localized_test_app.dart',
       },
     );
@@ -180,27 +195,24 @@ import '../../../test/test_support/localized_test_app.dart';
     expect(violations, isEmpty, reason: violations.join('\n'));
   });
 
-  test(
-    'shared code rejects retired entries and thread or app Host dependencies',
-    () {
-      const source =
-          '${_sharedRoot}presentation/html_rendering/new_renderer.dart';
-      expect(
-        _violationTargets(source, '''
+  test('shared code rejects retired entries and thread or app Host dependencies', () {
+    const source =
+        '${_sharedRoot}presentation/html_rendering/new_renderer.dart';
+    expect(
+      _violationTargets(source, '''
 import 'package:y300/features/thread/presentation/services/new_session.dart';
 export '../../../thread/presentation/thread_detail_page.dart';
 import 'package:y300/app/content_rendering/new_host.dart';
 import 'forum_html_render_preparer.dart';
 '''),
-        {
-          'lib/features/thread/presentation/services/new_session.dart',
-          'lib/features/thread/presentation/thread_detail_page.dart',
-          'lib/app/content_rendering/new_host.dart',
-          '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
-        },
-      );
-    },
-  );
+      {
+        'lib/features/thread/presentation/services/new_session.dart',
+        'lib/features/thread/presentation/thread_detail_page.dart',
+        'lib/app/content_rendering/new_host.dart',
+        '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
+      },
+    );
+  });
 
   test(
     'consumers cannot bypass the facade or reuse retired rendering entries',
@@ -380,6 +392,11 @@ bool _isForbidden(String source, String target) {
     if (target.startsWith(_packageRoot)) {
       if (library) {
         return !target.startsWith('${_packageLib}src/');
+      }
+      // Unit tests belong to this package; examples remain public consumers.
+      if (source.startsWith('${_packageRoot}test/') &&
+          target.startsWith('${_packageLib}src/')) {
+        return false;
       }
       return target != _packageEntry &&
           !target.startsWith('${_packageRoot}test/') &&
