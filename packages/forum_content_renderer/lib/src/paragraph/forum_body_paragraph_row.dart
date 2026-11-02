@@ -44,8 +44,10 @@ final class ForumBodyParagraphRowMetrics {
     required this.height,
     required this.alphabeticBaseline,
     required this.fontBounds,
+    required this.rowIsolationPitch,
+    required this.parentLineCount,
   });
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyParagraphContent parentContent;
   final ForumBodyParagraphContent content;
   final Object nativeInputIdentity;
@@ -53,6 +55,13 @@ final class ForumBodyParagraphRowMetrics {
   final int startUtf16, endUtf16;
   final double width, height, alphabeticBaseline;
   final Rect fontBounds;
+
+  /// The exact whole-parent request, needed when only this numeric window
+  /// survives eviction. The local group cannot be shaped as its replacement.
+  final double rowIsolationPitch;
+
+  /// Admission counts the entire shared resource, not just this group's rows.
+  final int parentLineCount;
   int get lineCount => selector.endLine - selector.startLine;
 }
 
@@ -441,6 +450,8 @@ final class ForumBodyParagraphRowPreparation {
       height: font.bottom.ceilToDouble() - origin,
       alphabeticBaseline: layout.lines[_startLine].baseline - origin,
       fontBounds: font.shift(Offset(0, -origin)),
+      rowIsolationPitch: pitch,
+      parentLineCount: layout.lineCount,
     );
   }
 

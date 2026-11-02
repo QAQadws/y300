@@ -6,6 +6,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
+import '../paragraph/forum_body_paragraph_row.dart';
 import '../paragraph/forum_body_text_layout.dart';
 import '../paragraph/forum_body_native_request.dart';
 import '../paragraph/forum_body_text_request.dart';
@@ -14,6 +15,7 @@ import 'forum_body_emphasis_mark.dart';
 import 'forum_body_emphasis_mark_request.dart';
 import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_emphasis_text_input.dart';
+import 'forum_body_emphasis_row_input.dart';
 
 part 'forum_body_emphasis_line_preparation.dart';
 part 'forum_body_emphasis_line_metrics.dart';
@@ -36,31 +38,39 @@ final class ForumBodyEmphasisLineMark {
     required this.offset,
     required this.fontBounds,
     required this.fitScale,
+    required this.lineIndex,
   });
   final int unitIndex;
   final ForumBodyEmphasisMarkInput input;
   final Offset offset;
   final Rect fontBounds;
   final double fitScale;
+
+  /// Actual governing physical row in this component's source context.
+  final int lineIndex;
 }
 
 /// One prepared actual base with source-free decorations. Owns the base source
 /// lease and a shared-cache picture; marker font leases retire after recording.
-/// Multiline paragraphs require their own row-placement transaction.
+/// An explicit row-group input retains its actual physical rows and source
+/// window. An ordinary paragraph input must still be genuinely single-line.
 final class ForumBodyEmphasisLineLayout implements ForumBodyTextLayout {
   ForumBodyEmphasisLineLayout._({
     required this.metrics,
     required ForumBodyTextLease base,
     required ForumBodyTextPictureLease picture,
     required void Function() ensureOwner,
+    ForumBodyParagraphRowView? row,
   }) : _base = base,
        _picture = picture,
+       _row = row,
        _ensureOwner = ensureOwner;
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyEmphasisLineMetrics metrics;
   ForumBodyEmphasisTextInput get input => metrics.input;
   ForumBodyTextLease? _base;
   ForumBodyTextPictureLease? _picture;
+  ForumBodyParagraphRowView? _row;
   void Function()? _ensureOwner;
   Offset get baseOffset => metrics.baseOffset;
   Rect get fontBounds => metrics.fontBounds;
@@ -119,14 +129,17 @@ final class ForumBodyEmphasisLineLayout implements ForumBodyTextLayout {
         isExact: false,
       );
     }
-    return _base!.layout.sourceAt(offset - baseOffset);
+    return (_row ?? _base!.layout).sourceAt(offset - baseOffset);
   }
 
   @override
   List<TextBox> selectionBoxes(int startUtf16, int endUtf16) {
     _guard();
     return List.unmodifiable([
-      for (final box in _base!.layout.selectionBoxes(startUtf16, endUtf16))
+      for (final box in (_row ?? _base!.layout).selectionBoxes(
+        startUtf16,
+        endUtf16,
+      ))
         TextBox.fromLTRBD(
           box.left + baseOffset.dx,
           box.top + baseOffset.dy,
@@ -141,6 +154,7 @@ final class ForumBodyEmphasisLineLayout implements ForumBodyTextLayout {
     final base = _base, picture = _picture;
     _base = null;
     _picture = null;
+    _row = null;
     _ensureOwner = null;
     try {
       picture?.release();

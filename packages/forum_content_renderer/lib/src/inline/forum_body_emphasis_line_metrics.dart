@@ -5,6 +5,7 @@ part of 'forum_body_emphasis_line_layout.dart';
 final class ForumBodyEmphasisLineMetrics {
   ForumBodyEmphasisLineMetrics._({
     required this.input,
+    required this.rowInput,
     required this.baseRequest,
     required this.requestWidth,
     required this.textScaler,
@@ -24,8 +25,9 @@ final class ForumBodyEmphasisLineMetrics {
        _markInputs = UnmodifiableListView(markInputs),
        _unitMarks = UnmodifiableListView(unitMarks),
        marks = UnmodifiableListView(marks);
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyEmphasisTextInput input;
+  final ForumBodyEmphasisRowInput? rowInput;
   final ForumBodyTextRequest baseRequest;
   final double requestWidth;
   final TextScaler textScaler;
@@ -51,7 +53,9 @@ final class ForumBodyEmphasisLineMetrics {
     yield (
       request: baseRequest,
       width: requestWidth,
-      minimumLineCount: input.content.projection.text.isEmpty ? 0 : 1,
+      minimumLineCount:
+          rowInput?.row.parentLineCount ??
+          (input.content.projection.text.isEmpty ? 0 : 1),
     );
     for (final mark in _markInputs) {
       yield (
@@ -66,6 +70,22 @@ final class ForumBodyEmphasisLineMetrics {
 /// Uses the exact same native measurement and placement transaction as visible
 /// preparation, but retires font leases and returns numbers without recording.
 final class ForumBodyEmphasisLineMetricsPreparation {
+  ForumBodyEmphasisLineMetricsPreparation.row({
+    required ForumBodyEmphasisRowInput input,
+    required ForumBodyParagraphCache cache,
+    required void Function() ensureOwner,
+    TextScaler textScaler = TextScaler.noScaling,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
+  }) : _work = ForumBodyEmphasisLinePreparation._work(
+         input: input.text,
+         rowInput: input,
+         cache: cache,
+         ensureOwner: ensureOwner,
+         width: input.row.width,
+         textScaler: textScaler,
+         measureOnly: true,
+         additionalOwnedLeases: additionalOwnedLeases,
+       );
   ForumBodyEmphasisLineMetricsPreparation({
     required ForumBodyEmphasisTextInput input,
     required ForumBodyParagraphCache cache,

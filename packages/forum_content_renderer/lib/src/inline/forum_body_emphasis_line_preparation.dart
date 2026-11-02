@@ -34,13 +34,58 @@ typedef ForumBodyEmphasisLineStep = ({
   bool waitingForLayoutBudget,
 });
 
-typedef _RawMark = ({int unit, int mark, Offset offset, Rect bounds});
+typedef _RawMark = ({int unit, int mark, int line, Offset offset, Rect bounds});
+
+/// One actual physical row, not a chapter-wide annotation baseline. Font
+/// fallback and mixed sizes share its side metrics; source groups stay intact.
+final class _LineMarkAlignment {
+  double? overTop, underBottom;
+  double overDescent = 0, underAscent = 0;
+  void include(
+    Rect base,
+    double ascent,
+    double descent,
+    ForumBodyEmphasisSide side,
+  ) {
+    if (side == ForumBodyEmphasisSide.over) {
+      if (overTop == null || base.top < overTop!) overTop = base.top;
+      if (descent > overDescent) overDescent = descent;
+    } else {
+      if (underBottom == null || base.bottom > underBottom!) {
+        underBottom = base.bottom;
+      }
+      if (ascent > underAscent) underAscent = ascent;
+    }
+  }
+
+  double baseline(ForumBodyEmphasisSide side) =>
+      side == ForumBodyEmphasisSide.over
+      ? overTop! - overDescent
+      : underBottom! + underAscent;
+}
 
 /// One cooperative transaction over the owner's existing native cache. The
 /// caller's full/half-size scaler samples freeze before any native request.
 /// An optional page prefix is borrowed for admission and pin classification;
 /// cancellation never releases those caller-owned handles.
 final class ForumBodyEmphasisLinePreparation {
+  ForumBodyEmphasisLinePreparation.row({
+    required ForumBodyEmphasisRowInput input,
+    required ForumBodyParagraphCache cache,
+    required void Function() ensureOwner,
+    TextScaler textScaler = TextScaler.noScaling,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
+  }) : this._work(
+         input: input.text,
+         rowInput: input,
+         cache: cache,
+         ensureOwner: ensureOwner,
+         width: input.row.width,
+         textScaler: textScaler,
+         measureOnly: false,
+         additionalOwnedLeases: additionalOwnedLeases,
+       );
+
   ForumBodyEmphasisLinePreparation({
     required ForumBodyEmphasisTextInput input,
     required ForumBodyParagraphCache cache,
@@ -75,6 +120,7 @@ final class ForumBodyEmphasisLinePreparation {
          cache: cache,
          ensureOwner: ensureOwner,
          baseRequest: metrics.baseRequest,
+         rowInput: metrics.rowInput,
          width: width,
          textScaler: expectedTextScaler,
          measureOnly: false,
@@ -91,8 +137,10 @@ final class ForumBodyEmphasisLinePreparation {
     required bool measureOnly,
     ForumBodyTextRequest? baseRequest,
     ForumBodyEmphasisLineMetrics? metrics,
+    ForumBodyEmphasisRowInput? rowInput,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
+       _rowInput = rowInput,
        _cache = cache,
        _ensureOwner = ensureOwner,
        _callerScaler = textScaler,
@@ -101,7 +149,10 @@ final class ForumBodyEmphasisLinePreparation {
        _additionalOwned = additionalOwnedLeases,
        _request =
            baseRequest ??
-           ForumBodyTextRequest.paragraph(input.glyphInput.glyphs) {
+           ForumBodyTextRequest.paragraph(
+             rowInput?.parentGlyphInput.glyphs ?? input.glyphInput.glyphs,
+             rowIsolationPitch: rowInput?.row.rowIsolationPitch,
+           ) {
     try {
       _guard();
       if (!width.isFinite || width <= 0 || width > 16384) {
@@ -109,13 +160,25 @@ final class ForumBodyEmphasisLinePreparation {
           ForumBodyParagraphLayoutFailure.width,
         );
       }
-      if (!identical(_request!.content, input.glyphInput.glyphs)) {
+      if (!identical(
+            _request!.content,
+            rowInput?.parentGlyphInput.glyphs ?? input.glyphInput.glyphs,
+          ) ||
+          (rowInput != null &&
+              (!identical(input, rowInput.text) ||
+                  width != rowInput.row.width ||
+                  _request is! ForumBodyParagraphTextRequest ||
+                  (_request as ForumBodyParagraphTextRequest)
+                          .rowIsolationPitch !=
+                      rowInput.row.rowIsolationPitch))) {
         throw const ForumBodyEmphasisLineException(
           ForumBodyEmphasisLineFailure.source,
         );
       }
       if (metrics != null &&
-          (!identical(input, metrics.input) || width != metrics.requestWidth)) {
+          (!identical(input, metrics.input) ||
+              !identical(rowInput, metrics.rowInput) ||
+              width != metrics.requestWidth)) {
         _mismatch();
       }
       if (input.units.length > 512) {
@@ -125,7 +188,7 @@ final class ForumBodyEmphasisLinePreparation {
         );
       }
       _contexts = switch (_request!) {
-        ForumBodyParagraphTextRequest() => [input.glyphInput.glyphs],
+        ForumBodyParagraphTextRequest() => [_request!.content],
         ForumBodyTextBandChildRequest value => value.band.contexts,
       };
       if (metrics != null) {
@@ -149,6 +212,8 @@ final class ForumBodyEmphasisLinePreparation {
   Iterator<ForumBodyNativeParagraphLease>? _prefix;
   bool _prefixStarted = false;
   ForumBodyEmphasisTextInput? _input;
+  ForumBodyEmphasisRowInput? _rowInput;
+  ForumBodyParagraphRowView? _rowView;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
   ForumBodyTextRequest? _request;
@@ -174,8 +239,7 @@ final class ForumBodyEmphasisLinePreparation {
   Rect? _envelope;
   Offset _baseOffset = Offset.zero;
   double _height = 0;
-  double? _overTop, _underBottom;
-  double _overDescent = 0, _underAscent = 0;
+  final _alignments = <int, _LineMarkAlignment>{};
   ForumBodyTextPicturePreparation? _pictureJob;
   ForumBodyTextPictureLease? _picture;
   ForumBodyEmphasisLineMetrics? _numeric;
@@ -322,7 +386,9 @@ final class ForumBodyEmphasisLinePreparation {
                 _probe!,
                 width: width,
                 textScaler: _scaler!,
-                minimumLineCount: input.content.projection.text.isEmpty ? 0 : 1,
+                minimumLineCount:
+                    _rowInput?.row.parentLineCount ??
+                    (input.content.projection.text.isEmpty ? 0 : 1),
               );
               _phase = _LinePhase.probeMarks;
             case _LinePhase.probeMarks:
@@ -374,17 +440,37 @@ final class ForumBodyEmphasisLinePreparation {
                   found.nativeInputIdentity != _expected!._baseKey) {
                 _mismatch();
               }
-              if (found is ForumBodyParagraphLease &&
+              final rowInput = _rowInput;
+              if (rowInput != null) {
+                if (found.nativeInputIdentity !=
+                    rowInput.row.nativeInputIdentity) {
+                  _mismatch();
+                }
+                _rowView = ForumBodyParagraphRowView.bind(
+                  parent: found as ForumBodyParagraphLease,
+                  metrics: rowInput.row,
+                  ensureOwner: _guard,
+                );
+                _guard();
+              }
+              if (rowInput == null &&
+                  found is ForumBodyParagraphLease &&
                   found.layout.lineCount > 1) {
                 throw const ForumBodyEmphasisLineException(
                   ForumBodyEmphasisLineFailure.lines,
                 );
               }
-              _geometryJob = ForumBodyEmphasisGeometryPreparation(
-                input: input,
-                base: found,
-                ensureOwner: _guard,
-              );
+              _geometryJob = rowInput == null
+                  ? ForumBodyEmphasisGeometryPreparation(
+                      input: input,
+                      base: found,
+                      ensureOwner: _guard,
+                    )
+                  : ForumBodyEmphasisGeometryPreparation.row(
+                      input: rowInput,
+                      base: _rowView!,
+                      ensureOwner: _guard,
+                    );
               _phase = _LinePhase.geometry;
             case _LinePhase.geometry:
               final job = _geometryJob!;
@@ -395,12 +481,14 @@ final class ForumBodyEmphasisLinePreparation {
                 _phase = _LinePhase.queryBounds;
               }
             case _LinePhase.queryBounds:
-              final layout = _base!.layout;
+              final layout = _textLayout;
               _envelope = Rect.fromLTWH(0, 0, layout.width, layout.height);
-              _fontBoxes = layout.selectionBoxes(
+              final boxes = layout.selectionBoxes(
                 0,
                 input.content.projection.text.length,
               );
+              _guard();
+              _fontBoxes = boxes;
               if (_fontBoxes!.length > 4096) _invalid();
               _phase = _LinePhase.bounds;
             case _LinePhase.bounds:
@@ -472,27 +560,19 @@ final class ForumBodyEmphasisLinePreparation {
                     (rect.bottom - mark.layout.alphabeticBaseline) * scale;
                 final ascent =
                     (mark.layout.alphabeticBaseline - rect.top) * scale;
-                if (side == ForumBodyEmphasisSide.over) {
-                  if (_overTop == null || target.fontBounds.top < _overTop!) {
-                    _overTop = target.fontBounds.top;
-                  }
-                  if (descent > _overDescent) _overDescent = descent;
-                } else {
-                  if (_underBottom == null ||
-                      target.fontBounds.bottom > _underBottom!) {
-                    _underBottom = target.fontBounds.bottom;
-                  }
-                  if (ascent > _underAscent) _underAscent = ascent;
-                }
-                final offset = Offset(
-                  target.fontBounds.center.dx - size.center.dx,
-                  0,
-                );
+                final baseBounds = _rowInput == null
+                    ? target.fontBounds
+                    : target.governingFontBounds;
+                _alignments
+                    .putIfAbsent(target.lineIndex, _LineMarkAlignment.new)
+                    .include(baseBounds, ascent, descent, side);
+                final offset = Offset(baseBounds.center.dx - size.center.dx, 0);
                 final bounds = size.shift(offset);
                 _checkRect(bounds);
                 _rawMarks.add((
                   unit: _index,
                   mark: _unitMarks[_index],
+                  line: target.lineIndex,
                   offset: offset,
                   bounds: bounds,
                 ));
@@ -509,9 +589,7 @@ final class ForumBodyEmphasisLinePreparation {
                     input.content.runs[unit.runIndex].style.textEmphasis.side;
                 // Font fallback and mixed sizes still share one physical
                 // annotation baseline per side, just like one ruby text row.
-                final baseline = side == ForumBodyEmphasisSide.over
-                    ? _overTop! - _overDescent
-                    : _underBottom! + _underAscent;
+                final baseline = _alignments[raw.line]!.baseline(side);
                 final offset = Offset(
                   raw.offset.dx,
                   baseline -
@@ -522,6 +600,7 @@ final class ForumBodyEmphasisLinePreparation {
                 _rawMarks[_index++] = (
                   unit: raw.unit,
                   mark: raw.mark,
+                  line: raw.line,
                   offset: offset,
                   bounds: bounds,
                 );
@@ -536,7 +615,12 @@ final class ForumBodyEmphasisLinePreparation {
               _height = _envelope!.bottom.ceilToDouble() + _baseOffset.dy;
               if (!_height.isFinite || _height > 1048576) _invalid();
               _commands.add(
-                ForumBodyTextPictureCommand.fromText(_base!, _baseOffset),
+                _rowView == null
+                    ? ForumBodyTextPictureCommand.fromText(_base!, _baseOffset)
+                    : ForumBodyTextPictureCommand.fromParagraphRow(
+                        _rowView!,
+                        _baseOffset,
+                      ),
               );
               _index = 0;
               _phase = _LinePhase.commands;
@@ -559,12 +643,14 @@ final class ForumBodyEmphasisLinePreparation {
                     offset: offset,
                     fontBounds: raw.bounds.shift(_baseOffset),
                     fitScale: _fitScale,
+                    lineIndex: raw.line,
                   ),
                 );
                 if (_expected != null) {
                   final actual = _positioned!.last,
                       expected = _expected!.marks[_index - 1];
                   if (actual.unitIndex != expected.unitIndex ||
+                      actual.lineIndex != expected.lineIndex ||
                       actual.input != expected.input ||
                       actual.offset != expected.offset ||
                       actual.fontBounds != expected.fontBounds ||
@@ -581,7 +667,7 @@ final class ForumBodyEmphasisLinePreparation {
                 maxCommands: 513,
               );
               final bounds = _envelope!.shift(_baseOffset);
-              final base = _base!.layout;
+              final base = _textLayout;
               final baseline = base.alphabeticBaseline + _baseOffset.dy;
               if (_expected != null) {
                 final expected = _expected!;
@@ -598,6 +684,7 @@ final class ForumBodyEmphasisLinePreparation {
               } else {
                 _numeric = ForumBodyEmphasisLineMetrics._(
                   input: input,
+                  rowInput: _rowInput,
                   baseRequest: _request!,
                   requestWidth: width,
                   textScaler: _scaler!,
@@ -637,7 +724,8 @@ final class ForumBodyEmphasisLinePreparation {
               _pictureJob = ForumBodyTextPicturePreparation(
                 cache: cache,
                 input: _numeric!.pictureInput,
-                text: [_base!],
+                text: _rowView == null ? [_base!] : const [],
+                paragraphRows: _rowView == null ? const [] : [_rowView!],
                 marks: _markLeases,
                 ensureOwner: _guard,
                 additionalOwnedLeases: _additionalOwned,
@@ -676,11 +764,20 @@ final class ForumBodyEmphasisLinePreparation {
               _base = null;
               _phase = _LinePhase.ready;
             case _LinePhase.publish:
+              final row = _rowInput == null
+                  ? null
+                  : ForumBodyParagraphRowView.bind(
+                      parent: _base! as ForumBodyParagraphLease,
+                      metrics: _rowInput!.row,
+                      ensureOwner: _ensureOwner!,
+                    );
+              _guard();
               _result = ForumBodyEmphasisLineLayout._(
                 metrics: _numeric!,
                 base: _base!,
                 picture: _picture!,
                 ensureOwner: _ensureOwner!,
+                row: row,
               );
               _numeric = null;
               _base = null;
@@ -727,6 +824,7 @@ final class ForumBodyEmphasisLinePreparation {
   double get _fitScale => _base is ForumBodyParagraphLease
       ? (_base! as ForumBodyParagraphLease).layout.paintScale
       : 1;
+  ForumBodyTextLayout get _textLayout => _rowView ?? _base!.layout;
 
   ForumBodyEmphasisLineLayout takeLayout() {
     if (_operating) throw StateError('Emphasis line preparation is reentrant');
@@ -816,6 +914,8 @@ final class ForumBodyEmphasisLinePreparation {
     _probe?.close();
     _probe = null;
     _input = null;
+    _rowInput = null;
+    _rowView = null;
     _request = null;
     _callerScaler = null;
     _scaler = null;
@@ -837,6 +937,7 @@ final class ForumBodyEmphasisLinePreparation {
     _unitMarks = [];
     _markKeys = [];
     _rawMarks.clear();
+    _alignments.clear();
     _commands.clear();
   }
 
