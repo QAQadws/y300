@@ -24,7 +24,17 @@ ForumBodyTextEmphasis resolveForumBodyTextEmphasis({
   required ForumBodyTextEmphasis inherited,
   required ForumBodyEmphasisColorParser parseColor,
   required void Function(String property, String value) onUnsupported,
+  bool rubyAnnotation = false,
 }) {
+  // CSS Ruby's UA shorthand `rtc, rt { text-emphasis: none }` resets style
+  // and color, but not position. Explicit author inherit still sees the real
+  // parent, rather than this lower-priority default.
+  final fallback = rubyAnnotation
+      ? ForumBodyTextEmphasis(
+          side: inherited.side,
+          verticalSide: inherited.verticalSide,
+        )
+      : inherited;
   // Most reader nodes only inherit this value. Avoid allocating cascade jobs,
   // maps and a new computed object on that ordinary style-resolution path.
   if (!declarations.declarations.any(
@@ -35,15 +45,15 @@ ForumBodyTextEmphasis resolveForumBodyTextEmphasis({
       'text-emphasis-position',
     }.contains(declaration.property),
   )) {
-    return inherited;
+    return fallback;
   }
   final inheritedMark = (
     shape: inherited.shape,
     fill: inherited.fill,
     custom: inherited.customMark,
   );
-  var mark = inheritedMark;
-  Color? color = inherited.color;
+  var mark = rubyAnnotation ? _none : inheritedMark;
+  Color? color = fallback.color;
   var side = inherited.side;
   var vertical = inherited.verticalSide;
   final parsed = <ForumBodyDeclaration, ({_Mark mark, Color? color})?>{};
@@ -126,7 +136,9 @@ ForumBodyTextEmphasis resolveForumBodyTextEmphasis({
       }
     } else if (keyword == 'initial' || keyword == 'currentcolor') {
       color = null;
-    } else if (keyword != 'inherit' && keyword != 'unset') {
+    } else if (keyword == 'inherit' || keyword == 'unset') {
+      color = inherited.color;
+    } else {
       final value = parseColor(keyword);
       if (value.unsupported || (!value.transparent && value.color == null)) {
         report(colorDeclaration);

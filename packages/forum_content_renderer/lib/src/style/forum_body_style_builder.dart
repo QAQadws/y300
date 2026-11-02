@@ -9,7 +9,7 @@ import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 
-const forumBodyStyleRevision = 13;
+const forumBodyStyleRevision = 14;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -486,6 +486,9 @@ final class ForumBodyStyleBuilder {
       textEmphasis: resolveForumBodyTextEmphasis(
         declarations: declarations,
         inherited: parent.textEmphasis,
+        rubyAnnotation:
+            node.kind == ForumBodyElementKind.rubyText ||
+            node.kind == ForumBodyElementKind.rubyAnnotationContainer,
         parseColor: (raw) =>
             _colors.putIfAbsent(raw, () => _colorParser.parseValue(raw)),
         onUnsupported: (property, value) => _issue(node, property, value),

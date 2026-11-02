@@ -8,11 +8,13 @@ import 'package:forum_content_renderer/src/style/forum_body_text_emphasis_resolv
 ({ForumBodyTextEmphasis value, List<(String, String)> issues}) _parse(
   List<ForumBodyDeclaration> declarations, {
   ForumBodyTextEmphasis inherited = const ForumBodyTextEmphasis(),
+  bool rubyAnnotation = false,
 }) {
   final issues = <(String, String)>[];
   final value = resolveForumBodyTextEmphasis(
     declarations: ForumBodyAuthorStyle(declarations: declarations),
     inherited: inherited,
+    rubyAnnotation: rubyAnnotation,
     parseColor: const CsslibAuthorColorParser().parseValue,
     onUnsupported: (property, value) => issues.add((property, value)),
   );
@@ -71,6 +73,121 @@ void main() {
       ], inherited: inherited).value,
       same(inherited),
     );
+  });
+  group('ruby annotation UA emphasis default', () {
+    const inherited = ForumBodyTextEmphasis(
+      shape: ForumBodyEmphasisShape.custom,
+      customMark: 'X',
+      color: Color(0xff123456),
+      side: ForumBodyEmphasisSide.under,
+      verticalSide: ForumBodyEmphasisVerticalSide.left,
+    );
+    const fallback = ForumBodyTextEmphasis(
+      side: ForumBodyEmphasisSide.under,
+      verticalSide: ForumBodyEmphasisVerticalSide.left,
+    );
+    ({ForumBodyTextEmphasis value, List<(String, String)> issues}) annotation(
+      List<ForumBodyDeclaration> declarations,
+    ) => _parse(declarations, inherited: inherited, rubyAnnotation: true);
+    test('resets style and color while preserving inherited position', () {
+      expect(annotation([]).value, fallback);
+      expect(annotation([_decl('font-size', '10px')]).value, fallback);
+      expect(inherited.mark, 'X');
+    });
+    for (final keyword in ['inherit', 'unset']) {
+      test('author shorthand $keyword beats the UA default', () {
+        expect(annotation([_decl('text-emphasis', keyword)]).value, inherited);
+      });
+      test('author longhands $keyword independently see the real parent', () {
+        expect(
+          annotation([
+            _decl('text-emphasis-style', keyword),
+            _decl('text-emphasis-color', keyword),
+          ]).value,
+          inherited,
+        );
+        final colorOnly = annotation([
+          _decl('text-emphasis-color', keyword),
+        ]).value;
+        expect(colorOnly.isEnabled, isFalse);
+        expect(colorOnly.color, inherited.color);
+        final styleOnly = annotation([
+          _decl('text-emphasis-style', keyword),
+        ]).value;
+        expect(styleOnly.mark, inherited.mark);
+        expect(styleOnly.color, isNull);
+      });
+    }
+    test('invalid declarations leave the lower-priority default intact', () {
+      final result = annotation([_decl('text-emphasis', 'invalid', true)]);
+      expect(result.value, fallback);
+      expect(result.issues, [('text-emphasis', 'invalid')]);
+      expect(
+        annotation([
+          _decl('text-emphasis-style', 'circle'),
+          _decl('text-emphasis', 'invalid', true),
+        ]).value.mark,
+        '●',
+      );
+    });
+    test('author mark does not accidentally inherit the parent mark color', () {
+      final value = annotation([
+        _decl('text-emphasis-style', 'open triangle'),
+      ]).value;
+      expect(value.mark, '△');
+      expect(value.color, isNull);
+      expect(value.side, inherited.side);
+      expect(value.verticalSide, inherited.verticalSide);
+    });
+    test(
+      'real RT and RTC reset, and ordinary descendants inherit that result',
+      () {
+        final result = _resolve(
+          '<p style="text-emphasis:circle red;text-emphasis-position:under left">'
+          '<ruby><rb>基</rb><rt><span>音</span></rt></ruby>'
+          '<ruby><rb>字</rb><rtc><span>匿</span><rt>注</rt></rtc></ruby></p>',
+        );
+        final seen = <String>[];
+        for (final entry in result.styles.byPath.entries) {
+          final node = result.document.nodeAtPath(entry.key);
+          if (node is! ForumBodyElement) continue;
+          final emphasis = entry.value.textEmphasis;
+          if (const {'rt', 'rtc', 'span'}.contains(node.tag)) {
+            expect(emphasis, fallback, reason: node.path);
+            seen.add(node.tag);
+          } else if (const {'ruby', 'rb'}.contains(node.tag)) {
+            expect(emphasis.mark, '●', reason: node.path);
+            expect(emphasis.color, const Color(0xffff0000));
+          }
+        }
+        expect(seen, ['rt', 'span', 'rtc', 'span', 'rt']);
+      },
+    );
+    test('explicit annotation author styles apply above the UA layer', () {
+      final result = _resolve(
+        '<ruby style="text-emphasis:circle red">基'
+        '<rtc style="text-emphasis:triangle blue">'
+        '<span>匿</span><rt style="text-emphasis:inherit"><b>音</b></rt>'
+        '<rt style="text-emphasis-color:inherit">空</rt></rtc></ruby>',
+      );
+      final elements = [
+        for (final entry in result.styles.byPath.entries)
+          if (result.document.nodeAtPath(entry.key) case ForumBodyElement node)
+            (node.tag, entry.value.textEmphasis),
+      ];
+      for (final (tag, emphasis) in elements) {
+        if (const {'rtc', 'span', 'b'}.contains(tag)) {
+          expect(emphasis.mark, '▲');
+          expect(emphasis.color, const Color(0xff0000ff));
+        }
+      }
+      final annotations = elements.where((value) => value.$1 == 'rt').toList();
+      expect(annotations, hasLength(2));
+      expect(annotations.first.$2.mark, '▲');
+      expect(annotations.first.$2.color, const Color(0xff0000ff));
+      expect(annotations.last.$2.isEnabled, isFalse);
+      expect(annotations.last.$2.color, const Color(0xff0000ff));
+    });
   });
   for (final (name, filled, open) in [
     ('dot', '•', '◦'),
@@ -275,10 +392,14 @@ void main() {
           result.styles.byPath[node.path]!.textEmphasis,
       ];
       expect(values.first.mark, 'X');
-      expect(
-        values.take(values.length - 1).every((v) => v.mark == 'X'),
-        isTrue,
-      );
+      expect(elements.map((node) => node.tag), [
+        'div',
+        'span',
+        'ruby',
+        'rt',
+        'span',
+      ]);
+      expect(values.map((value) => value.mark), ['X', 'X', 'X', null, null]);
       expect(values.first.side, ForumBodyEmphasisSide.under);
       expect(values.first.verticalSide, ForumBodyEmphasisVerticalSide.left);
       expect(values.last.isEnabled, isFalse);
