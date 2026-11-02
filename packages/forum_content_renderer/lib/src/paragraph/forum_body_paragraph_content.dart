@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
@@ -241,18 +242,29 @@ final class ForumBodyParagraphContent {
   }
 
   /// No recognizers are retained; interaction uses the same layout coordinates.
-  late final TextSpan textSpan = TextSpan(
-    style: _paintStyle(style.textStyle),
+  late final TextSpan textSpan = _span(
+    style: style.textStyle,
     children: [
       for (final part in projection.parts)
-        TextSpan(
+        _span(
           text: part.text,
-          style: _paintStyle(
-            forumBodyPaintTextStyle(runs[part.runIndex].style),
-          ),
+          style: forumBodyPaintTextStyle(runs[part.runIndex].style),
         ),
     ],
   );
+
+  TextSpan _span({
+    required TextStyle style,
+    String? text,
+    List<InlineSpan>? children,
+  }) => paintLayer == ForumBodyParagraphPaintLayer.decoration
+      ? _ForumBodyDecorationSpan(
+          sourceColor: style.color,
+          style: _paintStyle(style),
+          text: text,
+          children: children,
+        )
+      : TextSpan(style: _paintStyle(style), text: text, children: children);
 
   TextStyle _paintStyle(TextStyle visible) => switch (paintLayer) {
     ForumBodyParagraphPaintLayer.all => visible,
@@ -263,6 +275,12 @@ final class ForumBodyParagraphContent {
     ),
     ForumBodyParagraphPaintLayer.foreground => visible.copyWith(
       background: Paint()..color = const Color(0x00000000),
+      decoration: TextDecoration.none,
+    ),
+    ForumBodyParagraphPaintLayer.decoration => visible.copyWith(
+      foreground: Paint()..color = const Color(0x00000000),
+      background: Paint()..color = const Color(0x00000000),
+      shadows: const [],
     ),
   };
 }

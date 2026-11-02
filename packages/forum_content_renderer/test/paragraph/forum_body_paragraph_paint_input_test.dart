@@ -18,6 +18,7 @@ ForumBodyParagraphContent _content({
   String height = '.4',
   bool indent = false,
   String? html,
+  TextStyle? readerTextStyle,
 }) {
   final doc = const ForumBodyParser().parse(
     html:
@@ -36,18 +37,20 @@ ForumBodyParagraphContent _content({
     styles: const ForumBodyStyleResolver().resolve(
       doc,
       ForumBodyReaderStyle(
-        textStyle: const TextStyle(
-          fontFamily: 'Ahem',
-          fontSize: 20,
-          color: Color(0xff123456),
-          shadows: [
-            Shadow(
-              color: Color(0xffaa0000),
-              offset: Offset(2, -3),
-              blurRadius: 2,
+        textStyle:
+            readerTextStyle ??
+            const TextStyle(
+              fontFamily: 'Ahem',
+              fontSize: 20,
+              color: Color(0xff123456),
+              shadows: [
+                Shadow(
+                  color: Color(0xffaa0000),
+                  offset: Offset(2, -3),
+                  blurRadius: 2,
+                ),
+              ],
             ),
-          ],
-        ),
         fontRevision: 'paint-input-ahem',
         linkColor: const Color(0xff0000ff),
         textDirection: direction,
@@ -115,7 +118,11 @@ void main() {
               expect(input.original, same(original));
               expect(original.paintLayer, ForumBodyParagraphPaintLayer.all);
               expect(cache.layoutBuildCount, 0);
-              for (final phase in [input.background, input.foreground]) {
+              for (final phase in [
+                input.background,
+                input.foreground,
+                input.decoration,
+              ]) {
                 expect(phase.projection, same(original.projection));
                 expect(phase.runs, same(original.runs));
                 expect(phase.issues, same(original.issues));
@@ -134,6 +141,7 @@ void main() {
                   original,
                   input.background,
                   input.foreground,
+                  input.decoration,
                 ])
                   cache.acquire(
                     content: content,
@@ -145,9 +153,9 @@ void main() {
               final source = leases[0].layout;
               expect(
                 leases.map((l) => l.nativeInputIdentity).toSet().length,
-                3,
+                4,
               );
-              expect(cache.layoutBuildCount, 3);
+              expect(cache.layoutBuildCount, 4);
               expect(cache.pictureBuildCount, 0);
               for (final lease in leases.skip(1)) {
                 final layout = lease.layout;
@@ -224,6 +232,7 @@ void main() {
                   (c) {
                     leases[1].layout.paint(c, const Offset(50, 80));
                     leases[2].layout.paint(c, const Offset(50, 80));
+                    leases[3].layout.paint(c, const Offset(50, 80));
                   },
                   h,
                   dpr,
@@ -261,7 +270,11 @@ void main() {
       );
       final input = ForumBodyParagraphPaintInput(original), cache = _cache();
       final expected = cache.acquire(content: original, width: 45);
-      for (final content in [input.background, input.foreground]) {
+      for (final content in [
+        input.background,
+        input.foreground,
+        input.decoration,
+      ]) {
         final lease = cache.acquire(content: content, width: 45);
         expect(
           lease.layout.firstLineIndent.requestedAdvance,
@@ -295,7 +308,11 @@ void main() {
           html: '<p style="visibility:hidden;background-color:red">ABC</p>',
         ),
       );
-      for (final content in [hidden.background, hidden.foreground]) {
+      for (final content in [
+        hidden.background,
+        hidden.foreground,
+        hidden.decoration,
+      ]) {
         for (final span in content.textSpan.children!.cast<TextSpan>()) {
           expect(span.style!.foreground!.color.a, 0);
           expect(span.style!.background!.color.a, 0);
@@ -308,9 +325,9 @@ void main() {
   test('overlapping natural rows require native per-row layer order', () async {
     final input = ForumBodyParagraphPaintInput(
       _content(
-          html:
-              '<p style="line-height:.4;white-space:pre-wrap"><span style="background-color:rgba(0,255,0,.5)">'
-              'MMM\nA B\nCCC\nD E</span></p>',
+        html:
+            '<p style="line-height:.4;white-space:pre-wrap"><span style="background-color:rgba(0,255,0,.5)">'
+            'MMM\nA B\nCCC\nD E</span></p>',
       ),
     );
     final cache = _cache();
@@ -319,6 +336,7 @@ void main() {
         input.original,
         input.background,
         input.foreground,
+        input.decoration,
       ])
         cache.acquire(content: content, width: 140),
     ];
@@ -333,6 +351,7 @@ void main() {
       (c) {
         leases[1].layout.paint(c, const Offset(50, 80));
         leases[2].layout.paint(c, const Offset(50, 80));
+        leases[3].layout.paint(c, const Offset(50, 80));
       },
       h,
       3,
@@ -347,6 +366,110 @@ void main() {
     }
   });
 
+  for (final fixture in <(String, TextStyle)>[
+    ('native-default', const TextStyle()),
+    ('implicit-color', const TextStyle(color: Color(0xffad1246))),
+    (
+      'paint-color',
+      TextStyle(foreground: Paint()..color = const Color(0xffad1246)),
+    ),
+    (
+      'paint-shader',
+      TextStyle(
+        foreground: Paint()
+          ..shader = ui.Gradient.linear(
+            const Offset(0, 0),
+            const Offset(120, 0),
+            const [Color(0xffff0000), Color(0xff0000ff)],
+          ),
+      ),
+    ),
+    (
+      'explicit-color',
+      const TextStyle(
+        color: Color(0xffad1246),
+        decorationColor: Color(0xff00bc32),
+      ),
+    ),
+    (
+      'transparent-sentinel',
+      const TextStyle(
+        color: Color(0xffad1246),
+        decorationColor: Color(0x00000000),
+      ),
+    ),
+    (
+      'transparent-rgb',
+      const TextStyle(
+        color: Color(0xffad1246),
+        decorationColor: Color(0x00ff0000),
+      ),
+    ),
+    ('transparent-text', const TextStyle(color: Color(0x00000000))),
+    (
+      'decoration-on-transparent-text',
+      const TextStyle(
+        color: Color(0x00000000),
+        decorationColor: Color(0xff00bc32),
+      ),
+    ),
+  ]) {
+    test('native decoration fallback ${fixture.$1}', () async {
+      final original = _content(
+        html: '<p>AB <span style="font-size:31px">lp g</span> CD EF</p>',
+        readerTextStyle: fixture.$2.copyWith(
+          fontFamily: 'Ahem',
+          fontSize: 20,
+          decoration: TextDecoration.combine([
+            TextDecoration.underline,
+            TextDecoration.overline,
+            TextDecoration.lineThrough,
+          ]),
+          decorationStyle: TextDecorationStyle.double,
+          decorationThickness: 1.5,
+        ),
+      );
+      final input = ForumBodyParagraphPaintInput(original), cache = _cache();
+      final leases = [
+        for (final content in [
+          original,
+          input.background,
+          input.foreground,
+          input.decoration,
+        ])
+          cache.acquire(content: content, width: 140, rowIsolationPitch: 256),
+      ];
+      for (final lease in leases) {
+        cache.prepareTextPaint(lease);
+      }
+      final h = leases[0].layout.height.ceil() + 160;
+      for (final dpr in [1, 3]) {
+        final expected = await _pixels(
+          (c) => leases[0].layout.paint(c, const Offset(50, 80)),
+          h,
+          dpr,
+        );
+        final actual = await _pixels(
+          (c) {
+            for (final lease in leases.skip(1)) {
+              lease.layout.paint(c, const Offset(50, 80));
+            }
+          },
+          h,
+          dpr,
+        );
+        expect(
+          actual,
+          expected,
+          reason: 'Decoration fallback must match native text paint',
+        );
+      }
+      for (final lease in leases) {
+        lease.release();
+      }
+    });
+  }
+
   test('phases use shared request, cache-only, probe and owner contracts', () {
     final input = ForumBodyParagraphPaintInput(_content());
     final cache = _cache(), probe = cache.createBudgetProbe();
@@ -355,6 +478,7 @@ void main() {
         input.original,
         input.background,
         input.foreground,
+        input.decoration,
       ])
         ForumBodyTextRequest.paragraph(content, rowIsolationPitch: 256),
     ];
@@ -374,7 +498,7 @@ void main() {
         isNull,
       );
     }
-    expect(probe.snapshotNativeIdentities().length, 3);
+    expect(probe.snapshotNativeIdentities().length, 4);
     expect(cache.layoutBuildCount, 0);
     expect(cache.pictureBuildCount, 0);
     final leases = [
@@ -386,7 +510,7 @@ void main() {
           cachedOnly: false,
         )!,
     ];
-    expect(cache.entryCount, 3);
+    expect(cache.entryCount, 4);
     for (var i = 0; i < requests.length; i++) {
       final alias = requests[i].acquire(
         cache,
@@ -442,6 +566,63 @@ void main() {
     probe.close();
   });
 
+  for (final decorationStyle in TextDecorationStyle.values) {
+    test('native decoration run boundaries $decorationStyle', () async {
+      final original = _content(
+        html:
+            '<p>AB<span style="color:red">CD</span>EF<span style="color:blue">GH</span>'
+            'IJ<span>KL</span>MN<span>OP</span>QR</p>',
+        readerTextStyle: TextStyle(
+          fontFamily: 'Ahem',
+          fontSize: 20,
+          color: const Color(0xff123456),
+          decoration: TextDecoration.underline,
+          decorationColor: const Color(0xff00bc32),
+          decorationStyle: decorationStyle,
+          decorationThickness: 2,
+        ),
+      );
+      final input = ForumBodyParagraphPaintInput(original), cache = _cache();
+      final leases = [
+        for (final content in [
+          original,
+          input.background,
+          input.foreground,
+          input.decoration,
+        ])
+          cache.acquire(content: content, width: 240, rowIsolationPitch: 256),
+      ];
+      for (final lease in leases) {
+        cache.prepareTextPaint(lease);
+      }
+      final h = leases[0].layout.height.ceil() + 160;
+      for (final dpr in [1, 3]) {
+        final expected = await _pixels(
+          (c) => leases[0].layout.paint(c, const Offset(20, 80)),
+          h,
+          dpr,
+        );
+        final actual = await _pixels(
+          (c) {
+            for (final lease in leases.skip(1)) {
+              lease.layout.paint(c, const Offset(20, 80));
+            }
+          },
+          h,
+          dpr,
+        );
+        expect(
+          actual,
+          expected,
+          reason: 'Native paint runs must not coalesce after clearing glyphs',
+        );
+      }
+      for (final lease in leases) {
+        lease.release();
+      }
+    });
+  }
+
   test(
     'paint-only and source-free derivations cannot impersonate an original',
     () {
@@ -450,6 +631,7 @@ void main() {
       for (final content in [
         input.background,
         input.foreground,
+        input.decoration,
         ForumBodyParagraphContent.anonymousInline(
           identity: original.identity,
           fontRevision: original.fontRevision,
