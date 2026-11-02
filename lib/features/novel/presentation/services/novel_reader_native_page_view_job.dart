@@ -5,6 +5,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import '../models/novel_reader_native_anchor_map.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_native_page_work.dart';
+import 'novel_reader_native_advance_meter.dart';
 import 'novel_reader_native_page_coverage_cursor.dart';
 import 'novel_reader_native_work_scheduler.dart';
 import 'novel_reader_pagination_cancellation.dart';
@@ -182,10 +183,12 @@ final class NovelReaderNativePageViewJob {
 
   Future<NovelReaderNativePageView> _drive() async {
     final elapsed = Stopwatch()..start();
-    var preparationAdvanceUs = 0;
-    var coverageAdvanceUs = 0;
-    var preparationSteps = 0;
-    var coverageSteps = 0;
+    final preparationWork = NovelReaderNativeAdvanceMeter(
+      budget: limits.frameBudget,
+    );
+    final coverageWork = NovelReaderNativeAdvanceMeter(
+      budget: limits.frameBudget,
+    );
     var layoutsBuilt = 0;
     var picturesBuilt = 0;
     try {
@@ -202,8 +205,7 @@ final class NovelReaderNativePageViewJob {
         final step = preparation.advance(
           maxFragments: limits.preparationFragments,
         );
-        preparationAdvanceUs += elapsed.elapsedMicroseconds - start;
-        preparationSteps++;
+        preparationWork.record(elapsed.elapsedMicroseconds - start);
         layoutsBuilt += step.layoutsBuilt;
         picturesBuilt += step.picturesBuilt;
         _guard();
@@ -248,8 +250,7 @@ final class NovelReaderNativePageViewJob {
           maxGraphemes: limits.coverageGraphemes,
           maxFragments: limits.coverageFragments,
         );
-        coverageAdvanceUs += elapsed.elapsedMicroseconds - start;
-        coverageSteps++;
+        coverageWork.record(elapsed.elapsedMicroseconds - start);
         _guard();
       }
       final view = NovelReaderNativePageView.ownPrepared(
@@ -261,12 +262,10 @@ final class NovelReaderNativePageViewJob {
         work: NovelReaderNativePageWork(
           preparationUs: preparationUs,
           coverageUs: elapsed.elapsedMicroseconds - preparationUs,
-          preparationAdvanceUs: preparationAdvanceUs,
-          coverageAdvanceUs: coverageAdvanceUs,
+          preparationAdvances: preparationWork.snapshot,
+          coverageAdvances: coverageWork.snapshot,
           preparationFrames: preparationFrames,
           coverageFrames: _frames - preparationFrames,
-          preparationSteps: preparationSteps,
-          coverageSteps: coverageSteps,
           layoutsBuilt: layoutsBuilt,
           picturesBuilt: picturesBuilt,
           checkedGraphemes: coverage.checkedGraphemes,

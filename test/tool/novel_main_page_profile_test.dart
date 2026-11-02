@@ -313,6 +313,10 @@ void main() {
             same(observation.nativeWork),
           );
           expect(observation.nativeWork!.preparationFrames, greaterThan(0));
+          final advances = observation.nativeWork!.preparationAdvances;
+          expect(advances.budgetUs, 3000);
+          expect(advances.maxUs, inInclusiveRange(1, advances.totalUs));
+          expect(advances.overBudgetSteps, inInclusiveRange(0, advances.steps));
         }
         final originalKey = observation.paginationKey;
         observation.businessController!.previewPreferences(

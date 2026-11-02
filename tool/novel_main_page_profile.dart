@@ -572,6 +572,21 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'picturesBuilt': work.picturesBuilt,
       'checkedGraphemes': work.checkedGraphemes,
     });
+    // Keep cumulative work and single-call warnings in distinct short records.
+    // Neither is a frame percentile; a native call cannot be preempted by the
+    // outer slice budget merely because its operation count is bounded.
+    _emit({
+      'event': 'page_advance_budget',
+      'run': run,
+      'phase': phase,
+      'page': observation.page,
+      'targetPreparedBeforeCommand': ?targetPreparedBeforeCommand,
+      'budgetUs': work.preparationAdvances.budgetUs,
+      'preparationMaxUs': work.preparationAdvances.maxUs,
+      'coverageMaxUs': work.coverageAdvances.maxUs,
+      'preparationOverBudgetSteps': work.preparationAdvances.overBudgetSteps,
+      'coverageOverBudgetSteps': work.coverageAdvances.overBudgetSteps,
+    });
   }
 
   @override

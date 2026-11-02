@@ -102,6 +102,14 @@ void main() {
         inInclusiveRange(0, work.preparationUs),
       );
       expect(work.coverageAdvanceUs, inInclusiveRange(0, work.coverageUs));
+      for (final advances in [
+        work.preparationAdvances,
+        work.coverageAdvances,
+      ]) {
+        expect(advances.budgetUs, const Duration(days: 1).inMicroseconds);
+        expect(advances.maxUs, inInclusiveRange(1, advances.totalUs));
+        expect(advances.overBudgetSteps, 0);
+      }
       if (warm) {
         expect(work.layoutsBuilt, 0);
         expect(work.picturesBuilt, 0);
