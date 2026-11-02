@@ -6,6 +6,7 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 import 'forum_body_ruby_group_metrics.dart';
+import 'forum_body_ruby_hit_band.dart';
 
 export 'forum_body_ruby_group_contract.dart'
     show ForumBodyRubyGroupFailure, ForumBodyRubyGroupException;
@@ -382,39 +383,14 @@ final class ForumBodyRubyGroupLayout {
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
     }
-    double distance(double top, double bottom) => offset.dy < top
-        ? top - offset.dy
-        : offset.dy > bottom
-        ? offset.dy - bottom
-        : 0;
-    var selected = -1;
-    var bestTop = metrics.baseBandTop;
-    var bestDistance = distance(metrics.baseBandTop, metrics.baseBandBottom);
-    var nearest = -1;
-    var nearestDistance = double.infinity;
-    var nearestTop = double.negativeInfinity;
-    for (final (index, item) in _annotations.indexed) {
-      if (item.lease == null) continue;
-      final band = metrics.annotations[index];
-      final delta = distance(band.bandTop, band.bandBottom);
-      // At an exact midpoint choose the physically lower band, matching the
-      // original over/under boundary convention without sorting source ranks.
-      if (delta < nearestDistance ||
-          (delta == nearestDistance && band.bandTop > nearestTop)) {
-        nearestDistance = delta;
-        nearestTop = band.bandTop;
-        nearest = index;
-      }
-      if (delta < bestDistance ||
-          (delta == bestDistance && band.bandTop > bestTop)) {
-        bestDistance = delta;
-        bestTop = band.bandTop;
-        selected = index;
-      }
-    }
-    final forcedAnnotation =
-        selected < 0 && _base!.content.projection.text.isEmpty;
-    if (forcedAnnotation) selected = nearest;
+    final band = resolveForumBodyRubyHitBand(
+      metrics: metrics,
+      y: offset.dy,
+      baseHasText: _base!.content.projection.text.isNotEmpty,
+      annotationHasText: (rank) => _annotations[rank].lease != null,
+    );
+    final selected = band.annotationIndex;
+    final forcedAnnotation = band.forced;
     final useAnnotation = selected >= 0;
     final lease = useAnnotation ? _annotations[selected].lease! : _base!;
     final origin = useAnnotation

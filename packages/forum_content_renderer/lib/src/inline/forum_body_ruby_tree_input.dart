@@ -26,6 +26,33 @@ final class ForumBodyRubyTreeInput {
   final double maxWidth;
   final List<ForumBodyTextRequest> nativeRequests;
   int get root => nodes.length - 1;
+
+  /// Batch rebinding changes only actual native requests, never a leaf's
+  /// current source/style object or the structural graph.
+  ForumBodyRubyTreeInput mapRequests(
+    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
+  ) {
+    final mapped = <ForumBodyRubyTreeNode>[];
+    final requests = <ForumBodyTextRequest>[];
+    for (final node in nodes) {
+      if (node is ForumBodyRubyTreeText && node.needsNative) {
+        final request = map(node.request);
+        if (!identical(request.content, node.content)) {
+          throw ForumBodyParagraphInputException(
+            ForumBodyParagraphInputFailure.identity,
+            node.content.path,
+          );
+        }
+        mapped.add(
+          ForumBodyRubyTreeText._request(node.original, node.content, request),
+        );
+        requests.add(request);
+      } else {
+        mapped.add(node);
+      }
+    }
+    return ForumBodyRubyTreeInput._(mapped, requests, maxWidth);
+  }
 }
 
 sealed class ForumBodyRubyTreeNode {
@@ -35,6 +62,8 @@ sealed class ForumBodyRubyTreeNode {
 final class ForumBodyRubyTreeText extends ForumBodyRubyTreeNode {
   ForumBodyRubyTreeText._(this.original, this.content, this.needsNative)
     : request = ForumBodyTextRequest.paragraph(content);
+  ForumBodyRubyTreeText._request(this.original, this.content, this.request)
+    : needsNative = true;
   final ForumBodyParagraphContent original;
   final ForumBodyParagraphContent content;
   // Empty annotation contexts remain in the graph, with no native glyph lease.

@@ -10,14 +10,33 @@ import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
 import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_input.dart';
+import 'forum_body_text_band_content.dart';
 
 /// Numeric postorder snapshot. It has no native handles, paint, source hit or
 /// coverage authority; a readable binding must qualify actual current leaves.
 final class ForumBodyRubyTreeMetrics {
-  ForumBodyRubyTreeMetrics._(List<ForumBodyRubyTreeNodeMetrics> nodes)
+  ForumBodyRubyTreeMetrics._(
+    this.input,
+    List<ForumBodyRubyTreeNodeMetrics> nodes,
+    Map<double, double> scales,
+  )
     // The worker seals before transferring this append-only list.
-    : nodes = UnmodifiableListView(nodes);
+    : nodes = UnmodifiableListView(nodes),
+      textScaler = _TreeNativeTextScaler(
+        UnmodifiableMapView(scales),
+        (input.nodes.last as ForumBodyRubyTreeContainer)
+            .font
+            .fontStrut
+            .style
+            .textStyle
+            .fontSize!,
+      );
+  final ForumBodyRubyTreeInput input;
   final List<ForumBodyRubyTreeNodeMetrics> nodes;
+
+  /// Exact per-font inputs used for native planning, including root/background
+  /// fonts and the complete native band when a leaf borrows a shared band key.
+  final TextScaler textScaler;
   ForumBodyRubyChildMetrics get box => nodes.last.box!;
 }
 
@@ -72,6 +91,8 @@ final class ForumBodyRubyTreeMetricsPreparation {
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
   TextScaler? _scaler;
+  Map<double, double> _scales = {};
+  Map<ForumBodyTextBandContent, TextScaler> _bandScalers = Map.identity();
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
   ForumBodyTextRequestPreparation? _member;
   ForumBodyRubyGroupGeometry? _geometry;
@@ -135,7 +156,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
 
   int _advanceNode(bool cachedOnly) {
     if (_nodes.length == _input!.nodes.length) {
-      _result = ForumBodyRubyTreeMetrics._(_nodes);
+      _result = ForumBodyRubyTreeMetrics._(_input!, _nodes, _scales);
       _state = _State.ready;
       return 1;
     }
@@ -262,7 +283,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
       request: request,
       ensureOwner: _guard,
       preparePaint: false,
-      textScaler: _scaler!,
+      textScaler: _captureScaler(request),
       width: _input!.maxWidth,
       additionalOwnedLeases: _additionalOwned,
     );
@@ -282,6 +303,41 @@ final class ForumBodyRubyTreeMetricsPreparation {
       }
     }
     return step.units;
+  }
+
+  TextScaler _captureScaler(ForumBodyTextRequest request) {
+    final band = request is ForumBodyTextBandChildRequest ? request.band : null;
+    final captured = _bandScalers[band];
+    if (captured != null) return captured;
+    final sampler = _TreeScaleCapture((size) {
+      final old = _scales[size];
+      if (old != null) return old;
+      final actual = _scaler!.scale(size);
+      _guard();
+      _scales[size] = actual;
+      return actual;
+    });
+    final contexts = switch (request) {
+      ForumBodyParagraphTextRequest() => [request.content],
+      ForumBodyTextBandChildRequest() => request.band.contexts,
+    };
+    final scratch = <double, double>{};
+    final requestSamples = <double, double>{};
+    for (final context in contexts) {
+      context.layoutInput.resolveScalesInto(scratch, textScaler: sampler);
+      _guard();
+      requestSamples.addAll(scratch);
+    }
+    // A cached native painter may retain this scaler. It must never retain the
+    // owner callback/raw scaler or observe later additions to the sampled map.
+    final result = _TreeNativeTextScaler(
+      Map.unmodifiable(requestSamples),
+      (band?.contexts.first ?? request.content).style.textStyle.fontSize!,
+    );
+    // A band is one native key. Its later children do not scan/copy all sibling
+    // font inputs again; the frozen sample never retains this preparation.
+    if (band != null) _bandScalers[band] = result;
+    return result;
   }
 
   ForumBodyRubyTreeMetrics takeMetrics() => _operate(() {
@@ -327,6 +383,8 @@ final class ForumBodyRubyTreeMetricsPreparation {
     _input = null;
     _cache = null;
     _scaler = null;
+    _scales = {};
+    _bandScalers = Map.identity();
     _ensureOwner = null;
     _additionalOwned = null;
   }
@@ -338,4 +396,25 @@ final class ForumBodyRubyTreeMetricsPreparation {
   }
 
   void close() => _retire(_State.closed);
+}
+
+final class _TreeNativeTextScaler extends TextScaler {
+  const _TreeNativeTextScaler(this.samples, this.rootSize);
+  final Map<double, double> samples;
+  final double rootSize;
+  @override
+  double scale(double fontSize) =>
+      samples[fontSize] ??
+      (throw StateError('Ruby native font input was not captured'));
+  @override
+  double get textScaleFactor => scale(rootSize) / rootSize;
+}
+
+final class _TreeScaleCapture extends TextScaler {
+  const _TreeScaleCapture(this.sample);
+  final double Function(double) sample;
+  @override
+  double scale(double fontSize) => sample(fontSize);
+  @override
+  double get textScaleFactor => throw StateError('Use per-font ruby scaling');
 }
