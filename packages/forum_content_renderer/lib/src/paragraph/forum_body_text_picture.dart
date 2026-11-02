@@ -18,6 +18,13 @@ final class ForumBodyTextPictureCommand {
         ? text.childIndex
         : null,
   );
+  factory ForumBodyTextPictureCommand.fromEmphasisMark(
+    ForumBodyEmphasisMarkLease mark,
+    Offset offset,
+  ) => ForumBodyTextPictureCommand(
+    nativeInputIdentity: mark.nativeInputIdentity,
+    offset: offset,
+  );
   final Object nativeInputIdentity;
   final Offset offset;
   // Several source-bound views share a band key but paint different strips.
@@ -63,7 +70,8 @@ final class ForumBodyTextPictureInput {
         if (child == null || child < 0 || child >= key.projections.length) {
           throw ArgumentError('Invalid native band picture selector');
         }
-      } else if (key is! _LayoutKey || command.bandChildIndex != null) {
+      } else if ((key is! _LayoutKey && key is! _EmphasisMarkKey) ||
+          command.bandChildIndex != null) {
         throw ArgumentError('Text picture requires an actual text input');
       }
       inputs.add(identity);
@@ -76,7 +84,7 @@ final class ForumBodyTextPictureInput {
     );
   }
   final List<ForumBodyTextPictureCommand> commands;
-  static const revision = 1;
+  static const revision = 2;
 
   /// Conservative display-list admission, not font/native/GPU memory. Actual
   /// engine picture bytes can grow this cost before the owner publishes it.
@@ -120,7 +128,7 @@ final class ForumBodyTextPictureLease extends ForumBodyNativeParagraphLease {
 enum _TextPicturePhase { probe, lookup, record, ready, transferred, closed }
 
 /// Records bounded commands outside visible paint. Dependencies are qualified
-/// current same-owner text leases; private aliases keep them pinned even if a
+/// current same-owner text/mark leases; private aliases keep them pinned even if a
 /// caller releases its handle. Cancellation drops aliases and unfinished work.
 final class ForumBodyTextPicturePreparation {
   ForumBodyTextPicturePreparation({
@@ -128,6 +136,7 @@ final class ForumBodyTextPicturePreparation {
     required ForumBodyTextPictureInput input,
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
+    Iterable<ForumBodyEmphasisMarkLease> marks = const [],
   }) : _input = input,
        _cache = cache,
        _ensureOwner = ensureOwner {
@@ -138,29 +147,42 @@ final class ForumBodyTextPicturePreparation {
       };
       // Caller input is bounded by the scene, including otherwise unused text.
       var inspected = 0;
-      for (final lease in text) {
-        if (++inspected > input.commands.length) {
-          throw ArgumentError('Excess text picture dependencies');
+      for (final resources in <Iterable<ForumBodyNativeParagraphLease>>[
+        text,
+        marks,
+      ]) {
+        for (final lease in resources) {
+          if (++inspected > input.commands.length) {
+            throw ArgumentError('Excess text picture dependencies');
+          }
+          _guard();
+          if (!cache.ownsLease(lease)) {
+            throw StateError('Foreign text picture dependency');
+          }
+          final key = (
+            identity: lease.nativeInputIdentity,
+            bandChildIndex: lease is ForumBodyTextBandChildLease
+                ? lease.childIndex
+                : null,
+          );
+          if (!wanted.contains(key)) {
+            throw ArgumentError('Unrequested text picture dependency');
+          }
+          if (!_resources.containsKey(key)) {
+            _resources[key] = switch (lease) {
+              ForumBodyTextLease() => cache._aliasTextLease(lease),
+              ForumBodyEmphasisMarkLease() => cache._aliasEmphasisMarkLease(
+                lease,
+              ),
+              _ => throw ArgumentError('Unsupported text picture resource'),
+            };
+          }
         }
-        _guard();
-        if (!cache.ownsLease(lease)) {
-          throw StateError('Foreign text picture dependency');
-        }
-        final key = (
-          identity: lease.nativeInputIdentity,
-          bandChildIndex: lease is ForumBodyTextBandChildLease
-              ? lease.childIndex
-              : null,
-        );
-        if (!wanted.contains(key)) {
-          throw ArgumentError('Unrequested text picture dependency');
-        }
-        if (!_text.containsKey(key)) _text[key] = cache._aliasTextLease(lease);
       }
-      if (_text.length != wanted.length) {
+      if (_resources.length != wanted.length) {
         throw ArgumentError('Missing text picture dependency');
       }
-      _dependencies = _text.values.toList(growable: false);
+      _dependencies = _resources.values.toList(growable: false);
       _probe = cache.createBudgetProbe();
       _guard();
     } catch (_) {
@@ -173,8 +195,8 @@ final class ForumBodyTextPicturePreparation {
       _input ?? (throw StateError('Text picture preparation is retired'));
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
-  final _text = <_TextPictureDependency, ForumBodyTextLease>{};
-  List<ForumBodyTextLease> _dependencies = const [];
+  final _resources = <_TextPictureDependency, ForumBodyNativeParagraphLease>{};
+  List<ForumBodyNativeParagraphLease> _dependencies = const [];
   ForumBodyParagraphBudgetProbe? _probe;
   ForumBodyTextPictureLease? _pending;
   ui.PictureRecorder? _recorder;
@@ -268,10 +290,14 @@ final class ForumBodyTextPicturePreparation {
               }
               if (_index < input.commands.length) {
                 final command = input.commands[_index++];
-                _text[command._dependency]!.layout.paint(
-                  _canvas!,
-                  command.offset,
-                );
+                switch (_resources[command._dependency]!) {
+                  case ForumBodyTextLease resource:
+                    resource.layout.paint(_canvas!, command.offset);
+                  case ForumBodyEmphasisMarkLease resource:
+                    resource.layout.paint(_canvas!, command.offset);
+                  default:
+                    throw StateError('Unsupported text picture resource');
+                }
               } else {
                 final recorder = _recorder!;
                 _recorder = null;
@@ -388,8 +414,8 @@ final class ForumBodyTextPicturePreparation {
   void _dropOwner() {
     _probe?.close();
     _probe = null;
-    final text = _text.values.toList(growable: false);
-    _text.clear();
+    final resources = _resources.values.toList(growable: false);
+    _resources.clear();
     _dependencies = const [];
     _ensureOwner = null;
     _cache = null;
@@ -402,7 +428,7 @@ final class ForumBodyTextPicturePreparation {
       failure = error;
       stack = trace;
     }
-    for (final lease in text) {
+    for (final lease in resources) {
       try {
         lease.release();
       } catch (error, trace) {
@@ -431,6 +457,7 @@ final class ForumBodyTextPicturePreparation {
 
 int _textPictureInputBytes(_NativeInputIdentity input) {
   final key = input._key;
+  if (key is _EmphasisMarkKey) return key.input.estimatedInputBytes + 16;
   // Both admitted key kinds come from ParagraphContent's flat native spans.
   // Count those retained children without rescanning source text or run trees.
   int spans(TextSpan root) => 1 + (root.children?.length ?? 0);

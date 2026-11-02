@@ -188,6 +188,15 @@ final class ForumBodyParagraphCache {
     return alias;
   }
 
+  ForumBodyEmphasisMarkLease _aliasEmphasisMarkLease(
+    ForumBodyEmphasisMarkLease lease,
+  ) {
+    if (!ownsLease(lease)) throw StateError('Emphasis mark owner is retired');
+    lease._entry.leases++;
+    _leases++;
+    return ForumBodyEmphasisMarkLease._(this, lease._entry, lease.input);
+  }
+
   /// Proves the supplied live handle belongs to this reading owner. Does not
   /// acquire an alias, touch the LRU or invoke native/user callbacks.
   bool ownsLease(ForumBodyNativeParagraphLease lease) =>
