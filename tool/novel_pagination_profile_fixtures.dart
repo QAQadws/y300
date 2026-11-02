@@ -35,6 +35,13 @@ final novelProfileNestedRubyFixtures = <({String name, String html})>[
   (name: 'ruby-nested-rtl', html: _nestedRuby(rtl: true)),
 ];
 
+/// Mixed RB/RT children use real intrinsic parents. Keep this separate from
+/// closed-tree corpora so earlier performance measurements remain comparable.
+final novelProfileMixedNestedRubyFixtures = <({String name, String html})>[
+  (name: 'ruby-mixed-nested-ltr', html: _mixedNestedRuby()),
+  (name: 'ruby-mixed-nested-rtl', html: _mixedNestedRuby(rtl: true)),
+];
+
 // Deliberately exceeds the reader's issued-handle budget within one page.
 // Keep this independent failure fixture when profiling the admitted corpus.
 final novelProfileRubyGapOverflowHtml = _rubyGaps(
@@ -50,8 +57,25 @@ List<({String name, String html})> novelMainPageProfileFixtures(
   'ruby-gaps' => novelProfileRubyGapFixtures,
   'language' => novelProfileLanguageFixtures,
   'ruby-nested' => novelProfileNestedRubyFixtures,
+  'ruby-mixed-nested' => novelProfileMixedNestedRubyFixtures,
   _ => throw ArgumentError.value(corpus, 'corpus', 'Unknown profile corpus'),
 };
+
+String _mixedNestedRuby({bool rtl = false}) => List.generate(
+  32,
+  (p) =>
+      '<p dir="${rtl ? 'rtl' : 'ltr'}">${rtl ? 'نص تجريبي' : '合成混合嵌套'} $p '
+      '<ruby><rb>前<ruby>漢😀<rt style="font-size:8px">kan</rt></ruby>後</rb>'
+      '<rt style="font-size:8px">outer</rt></ruby>，'
+      '<ruby>字<rt>先<ruby style="font-size:10px">に'
+      '<rt style="font-size:6px">ni</rt></ruby>後</rt></ruby>，'
+      '<ruby style="background:rgba(255,0,0,.2)"><rb>左'
+      '<ruby style="background:rgba(0,255,0,.2)"><rb>同</rb><rb>根</rb>'
+      '<rtc><rt rbspan="2">shared</rt></rtc></ruby>右</rb><rt>outside</rt></ruby>，'
+      '<ruby style="font-size:30px;line-height:1.35"><rb style="font-size:18.5px;line-height:1.15">'
+      '前<ruby>空<rt></rt></ruby>後</rb><rt style="font-size:7.5px">end</rt></ruby>。'
+      '${rtl ? 'نهاية الفقرة.' : '原始来源与实际原生父段落保持独立。'}</p>',
+).join();
 
 String _nestedRuby({bool rtl = false}) => List.generate(
   48,

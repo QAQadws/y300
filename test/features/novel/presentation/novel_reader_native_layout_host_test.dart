@@ -272,49 +272,71 @@ Future<List<int>> _canvasPixel(WidgetTester tester, {int? x, int? y}) async {
 }
 
 void main() {
-  testWidgets('reflow can replace a mounted page that fills its native cache', (
-    tester,
-  ) async {
-    final reader = _Reader(
-      html: '<p>abcdefghij</p><p>klmnopqrst</p>',
-      maxParagraphEntries: 2,
-    );
-    await _show(tester, reader, startsAtBeginning: true);
-    await tester.pumpAndSettle();
-    final oldController = reader.statuses.last.controller!;
-    final old = reader.owner.acquireCache();
-    expect(old.cache.activeLeases, 2);
-    final oldBuilds = old.cache.layoutBuildCount;
-    await _show(
-      tester,
-      reader,
-      startsAtBeginning: true,
-      preferences: reader.preferences.copyWith(fontSize: 12),
-    );
-    for (var i = 0; i < 100; i++) {
-      await tester.pump(const Duration(milliseconds: 10));
-      if (reader.statuses.last.phase == NovelReaderNativeHostPhase.reading &&
-          !identical(reader.statuses.last.controller, oldController) &&
-          reader.statuses.last.controller!.visiblePageIndex == 0) {
-        break;
+  testWidgets(
+    'reflow can replace a mounted page when its old cache is fully pinned',
+    (tester) async {
+      final reader = _Reader(
+        html: '<p>abcdefghij</p><p>klmnopqrst</p>',
+        maxParagraphEntries: 2,
+      );
+      await _show(tester, reader, startsAtBeginning: true);
+      await tester.pumpAndSettle();
+      final oldController = reader.statuses.last.controller!;
+      final old = reader.owner.acquireCache();
+      ForumBodyParagraphLease? pinnedFont;
+      if (old.cache.activeLeases < 2) {
+        // Neighbor prefetch is optional. Fill the remaining slot explicitly so
+        // parallel tester timing cannot weaken this handoff pressure regression.
+        final content = tester
+            .widget<ForumBodyParagraphSurface>(
+              find.byType(ForumBodyParagraphSurface).first,
+            )
+            .lease
+            .content;
+        pinnedFont = old.cache.acquire(
+          content: ForumBodyParagraphContent.anonymousInline(
+            identity: content.identity,
+            fontRevision: content.fontRevision,
+            styleRevision: content.styleRevision,
+            style: content.style,
+          ),
+          width: 100,
+        );
       }
-    }
-    expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
-    expect(reader.statuses.last.controller, isNot(same(oldController)));
-    expect(reader.statuses.last.controller!.visiblePageIndex, 0);
-    expect(find.byType(ForumBodyParagraphSurface), findsWidgets);
-    expect(
-      tester
-          .widgetList<ForumBodyParagraphSurface>(
-            find.byType(ForumBodyParagraphSurface),
-          )
-          .every((surface) => surface.lease.isActive),
-      isTrue,
-    );
-    expect(old.cache.layoutBuildCount, oldBuilds);
-    old.release();
-    await _unmount(tester, reader);
-  });
+      expect(old.cache.activeLeases, 2);
+      final oldBuilds = old.cache.layoutBuildCount;
+      await _show(
+        tester,
+        reader,
+        startsAtBeginning: true,
+        preferences: reader.preferences.copyWith(fontSize: 12),
+      );
+      for (var i = 0; i < 100; i++) {
+        await tester.pump(const Duration(milliseconds: 10));
+        if (reader.statuses.last.phase == NovelReaderNativeHostPhase.reading &&
+            !identical(reader.statuses.last.controller, oldController) &&
+            reader.statuses.last.controller!.visiblePageIndex == 0) {
+          break;
+        }
+      }
+      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+      expect(reader.statuses.last.controller, isNot(same(oldController)));
+      expect(reader.statuses.last.controller!.visiblePageIndex, 0);
+      expect(find.byType(ForumBodyParagraphSurface), findsWidgets);
+      expect(
+        tester
+            .widgetList<ForumBodyParagraphSurface>(
+              find.byType(ForumBodyParagraphSurface),
+            )
+            .every((surface) => surface.lease.isActive),
+        isTrue,
+      );
+      expect(old.cache.layoutBuildCount, oldBuilds);
+      pinnedFont?.release();
+      old.release();
+      await _unmount(tester, reader);
+    },
+  );
 
   testWidgets(
     'color preference canvas reuses moving navigation but a concurrent font change relayouts',

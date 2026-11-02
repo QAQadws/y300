@@ -88,12 +88,14 @@ Future<NovelReaderNativeLayoutScope> _scope(
   NovelReaderPaginationCancellationToken? cancellation,
   int maxSizes = 2048,
   int maxIssuedLeases = 128,
+  int? cacheEntries,
 }) => NovelReaderNativeLayoutScope.prepare(
   chapter: chapter,
   environment: environment,
   width: width,
   height: height,
   maxIssuedLeases: maxIssuedLeases,
+  maxParagraphCacheEntries: cacheEntries,
   cancellation: cancellation ?? NovelReaderPaginationCancellationToken(),
   maxScaledFontSizes: maxSizes,
 );
@@ -108,6 +110,25 @@ const _limits = ForumBodyTextPageSessionLimits(
 );
 
 void main() {
+  testWidgets('actual cache entry capacity participates in layout identity', (
+    tester,
+  ) async {
+    final chapter = await _chapter();
+    final environment = await _environment(tester);
+    final a = await _scope(chapter, environment, cacheEntries: 64);
+    final b = await _scope(chapter, environment, cacheEntries: 32);
+    final same = await _scope(chapter, environment, cacheEntries: 64);
+    expect(a.maxNativeEntriesPerPage, 31);
+    expect(b.maxNativeEntriesPerPage, 15);
+    expect(a.paginationKey, isNot(b.paginationKey));
+    expect(a.paginationKey, same.paginationKey);
+    expect(a.maxNativeHandlesPerPage, b.maxNativeHandlesPerPage);
+    await expectLater(
+      _scope(chapter, environment, cacheEntries: 0),
+      throwsArgumentError,
+    );
+  });
+
   testWidgets('page handle capacity is frozen into layout identity', (
     tester,
   ) async {

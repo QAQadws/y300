@@ -38,11 +38,12 @@ final class NovelReaderNativeLayoutScope {
     required this.height,
     required this.paginationKey,
     required this.maxNativeHandlesPerPage,
+    required this.maxNativeEntriesPerPage,
     required int fontCollectionGeneration,
     required String paragraphInputs,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs;
-  static const fingerprintRevision = 7;
+  static const fingerprintRevision = 8;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -53,6 +54,7 @@ final class NovelReaderNativeLayoutScope {
   final double height;
   final String paginationKey;
   final int maxNativeHandlesPerPage;
+  final int? maxNativeEntriesPerPage;
   final int _fontCollectionGeneration;
   final String _paragraphInputs;
 
@@ -65,9 +67,23 @@ final class NovelReaderNativeLayoutScope {
     int maxScaledFontSizes = 2048,
     int fontCollectionGeneration = 0,
     int maxIssuedLeases = 512,
+    int? maxParagraphCacheEntries,
   }) async {
     cancellation.throwIfCancelled();
     final pageHandleLimit = _pageHandleLimit(maxIssuedLeases);
+    if (maxParagraphCacheEntries != null && maxParagraphCacheEntries <= 0) {
+      throw ArgumentError.value(
+        maxParagraphCacheEntries,
+        'maxParagraphCacheEntries',
+      );
+    }
+    // Current and target must coexist. Keep two native slots for temporary
+    // source metrics; glyph bands deduplicate independently of logical handles.
+    final pageEntryLimit = maxParagraphCacheEntries == null
+        ? null
+        : maxParagraphCacheEntries > 3
+        ? (maxParagraphCacheEntries - 2) ~/ 2
+        : 1;
     if (!width.isFinite ||
         width <= 0 ||
         width > 16384 ||
@@ -114,6 +130,7 @@ final class NovelReaderNativeLayoutScope {
       width,
       height,
       pageHandleLimit,
+      pageEntryLimit,
       ...readerValues,
       // The canvas is painted outside native paragraphs. Text/inline colors
       // above remain part of this signature and still replace painted inputs.
@@ -127,6 +144,7 @@ final class NovelReaderNativeLayoutScope {
       width: width,
       height: height,
       maxNativeHandlesPerPage: pageHandleLimit,
+      maxNativeEntriesPerPage: pageEntryLimit,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: jsonEncode([...revisions, ...readerValues]),
       paginationKey:
@@ -174,6 +192,7 @@ final class NovelReaderNativeLayoutScope {
       width: width,
       height: height,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+      maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: _paragraphInputs,
       paginationKey: paginationKey,
@@ -202,6 +221,7 @@ final class NovelReaderNativeLayoutScope {
       // Current and target pages coexist during a real PageView turn. Reserve
       // their shared issued-handle budget before publishing legal physical rows.
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+      maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       // A mixed run retains text parts, annotation containers and groups in
       // addition to its glyph runs. Budget these pure values separately; native
       // cache and issued-handle admission remain under their existing limits.

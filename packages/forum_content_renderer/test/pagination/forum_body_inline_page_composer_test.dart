@@ -168,7 +168,7 @@ void main() {
       expect(prefix.single.fragments.single, same(first));
       expect(lease.isActive, isFalse);
       expect(child.isActive, isTrue);
-      expect(target.snapshot.composerRevision, 9);
+      expect(target.snapshot.composerRevision, 10);
     },
   );
 

@@ -15,13 +15,18 @@ final class _Fixture {
     int maxText = 100000,
     int maxRuns = 10000,
     int maxIssued = 512,
+    int cacheEntries = 64,
+    int? pageEntries,
   }) {
     final document = const ForumBodyParser().parse(
       html: html,
       sourceId: 'formal-nested-session',
       conversionIdentity: 'none',
     );
-    cache = ForumBodyParagraphCache(maxEntries: 64, maxEstimatedBytes: 1 << 24);
+    cache = ForumBodyParagraphCache(
+      maxEntries: cacheEntries,
+      maxEstimatedBytes: 1 << 24,
+    );
     session = ForumBodyTextPageSession(
       document: document,
       reader: ForumBodyReaderStyle(
@@ -45,6 +50,7 @@ final class _Fixture {
       width: width,
       height: height,
       textScaler: scaler,
+      maxNativeEntriesPerPage: pageEntries,
     );
     addTearDown(() {
       session.close();
@@ -105,6 +111,112 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
+
+  test(
+    'actual entry budget seals native rows before dense adjacent pages starve',
+    () {
+      final f = _Fixture(
+        List.filled(
+          12,
+          '<ruby><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt>z</rt></ruby>',
+        ).join(),
+        width: 100,
+        height: 600,
+        cacheEntries: 10,
+        pageEntries: 4,
+      );
+      f.finish();
+      expect(f.session.snapshot.length, greaterThan(1));
+      ForumBodyPreparedTextFragment? previous;
+      try {
+        for (var page = 0; page < f.session.snapshot.length; page++) {
+          final current = f.prepare(page).single;
+          expect(current.isActive, isTrue);
+          expect(previous?.isActive ?? true, isTrue);
+          expect(f.cache.entryCount, lessThanOrEqualTo(10));
+          validateForumBodyPreparedTextPageBinding(
+            snapshot: f.session.snapshot,
+            pageIndex: page,
+            layoutId: 'formal-nested',
+            fragments: [current],
+          );
+          previous?.close();
+          previous = current;
+        }
+      } finally {
+        previous?.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'shared band deduplicates actual keys without lowering logical handle limits',
+    () {
+      final f = _Fixture(
+        List.filled(12, '<ruby>A<rt>x</rt></ruby>').join(),
+        width: 100,
+        height: 600,
+        pageEntries: 2,
+      );
+      f.finish();
+      expect(f.session.snapshot, hasLength(1));
+      f.cache.clearUnpinned();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(prepared.nativeLeases, hasLength(25));
+        expect(f.cache.entryCount, 2);
+      } finally {
+        prepared.close();
+      }
+    },
+  );
+
+  test(
+    'an indivisible native group cannot exceed its explicit entry budget',
+    () {
+      final f = _Fixture(
+        '<ruby><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt>z</rt></ruby>',
+        pageEntries: 1,
+      );
+      expect(
+        f.finish,
+        throwsA(
+          isA<ForumBodyTextPageException>().having(
+            (e) => e.failure,
+            'failure',
+            ForumBodyTextPageFailure.nativeEntryLimit,
+          ),
+        ),
+      );
+      expect(f.session.snapshot, isEmpty);
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'retirement while indexing real request keys releases its pending parent',
+    () {
+      late final _Fixture f;
+      var retiredWhilePinned = false;
+      f = _Fixture(
+        '<ruby>A<rt>x</rt></ruby>',
+        pageEntries: 4,
+        scaler: _CallbackScaler((size) {
+          if (f.cache.activeLeases != 0) {
+            retiredWhilePinned = true;
+            f.session.close();
+          }
+          return size;
+        }),
+      );
+      expect(f.finish, throwsStateError);
+      expect(retiredWhilePinned, isTrue);
+      expect(f.session.state, ForumBodyTextPageSessionState.closed);
+      expect(f.cache.activeLeases, 0);
+      expect(f.session.snapshot, isEmpty);
+    },
+  );
 
   for (final ratio in [1, 3]) {
     for (final backgrounds in [false, true]) {

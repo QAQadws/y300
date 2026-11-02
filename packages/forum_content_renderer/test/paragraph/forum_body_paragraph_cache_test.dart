@@ -42,6 +42,39 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'native input identities are readonly pure values without live ownership',
+    () {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      final input = content('<p>ab</p>');
+      final lease = cache.acquire(content: input, width: 100);
+      final key = lease.nativeInputIdentity;
+      final builds = cache.layoutBuildCount;
+      final probe = cache.createBudgetProbe();
+      probe.include(
+        content: input,
+        width: 100,
+        minimumLineCount: 1,
+        textScaler: TextScaler.noScaling,
+      );
+      final keys = probe.snapshotNativeIdentities();
+      expect(keys, {key});
+      expect(cache.layoutBuildCount, builds);
+      expect(cache.activeLeases, 1);
+      expect(() => keys.clear(), throwsUnsupportedError);
+      probe.close();
+      expect(() => probe.snapshotNativeIdentities(), throwsStateError);
+      lease.release();
+      cache.close();
+      expect(keys.contains(key), isTrue);
+      expect(cache.estimatedRetainedBytes, 0);
+      expect(() => lease.nativeInputIdentity, throwsStateError);
+    },
+  );
+
+  test(
     'intrinsic layouts reuse natural geometry across valid request widths only',
     () {
       final cache = ForumBodyParagraphCache(

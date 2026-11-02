@@ -55,6 +55,14 @@ void main() {
         'ruby-nested-ltr',
         'ruby-nested-rtl',
       ]);
+      expect(
+        novelMainPageProfileFixtures('ruby-mixed-nested'),
+        same(novelProfileMixedNestedRubyFixtures),
+      );
+      expect(novelProfileMixedNestedRubyFixtures.map((f) => f.name), [
+        'ruby-mixed-nested-ltr',
+        'ruby-mixed-nested-rtl',
+      ]);
       for (final fixture in novelProfileLanguageFixtures) {
         expect(novelProfileExpectedLanguages(fixture.name), isNotEmpty);
       }
@@ -191,6 +199,8 @@ void main() {
       (native: true, mixed: true, fixture: fixture),
     for (final fixture in novelProfileNestedRubyFixtures)
       (native: true, mixed: true, fixture: fixture),
+    for (final fixture in novelProfileMixedNestedRubyFixtures)
+      (native: true, mixed: true, fixture: fixture),
   ]) {
     final native = scenario.native;
     testWidgets(
@@ -280,11 +290,19 @@ void main() {
                 (element) => (element.widget as NovelReaderNativePagedViewport)
                     .controller,
               );
+          final diagnosticHandle = observation.nativeOwner?.acquireCache();
+          final cache = diagnosticHandle?.cache;
+          final diagnostic = cache == null
+              ? ''
+              : 'cache=${cache.entryCount}/${cache.maxEntries} pins=${cache.activeLeases} '
+                    'builds=${cache.layoutBuildCount} pictures=${cache.pictureBuildCount}';
+          diagnosticHandle?.release();
           throw StateError(
             'Profile never observed the mounted page: '
             'ready=${observation.ready} complete=${observation.complete} '
             'page=${observation.page} count=${observation.count} '
             'business=${observation.businessConfirmed} '
+            '$diagnostic '
             '${controllers.map((controller) => '${controller.phase}/${controller.error}/target:${controller.readyTarget != null}').join(', ')}',
           );
         }

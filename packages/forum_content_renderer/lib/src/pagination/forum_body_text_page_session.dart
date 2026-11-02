@@ -15,6 +15,7 @@ import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_preparation.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_content.dart';
+import 'forum_body_inline_native_entries.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -136,6 +137,7 @@ final class ForumBodyTextPageSession {
         const ForumBodyParagraphContentBuilder(),
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
     int? maxNativeHandlesPerPage,
+    int? maxNativeEntriesPerPage,
   }) {
     limits._validate();
     if (maxNativeHandlesPerPage != null &&
@@ -155,6 +157,7 @@ final class ForumBodyTextPageSession {
       maxPages: limits.maxPages,
       maxFragments: limits.maxFragments,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+      maxNativeEntriesPerPage: maxNativeEntriesPerPage,
     );
     try {
       return ForumBodyTextPageSession._(
@@ -198,6 +201,9 @@ final class ForumBodyTextPageSession {
   ForumBodyBlockFlowParagraph? _pendingParagraph;
   ForumBodyBlockFlowInline? _pendingInline;
   ForumBodyInlinePlanPreparation? _inlinePreparation;
+  ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})?
+  _readyInline;
+  ForumBodyInlineNativeEntriesPreparation? _entryPreparation;
   double _margin = 0;
   int _publishedPageCount = 0;
   int _publishedParagraphCount = 0;
@@ -307,14 +313,35 @@ final class ForumBodyTextPageSession {
         }
         final mixed = _pendingInline;
         if (mixed != null) {
-          final prepare = _inlinePreparation ??= _openInlinePlan(mixed);
-          final step = prepare.advance();
-          formatUnits += step.partsPrepared;
-          _waiting = step.waitingForLayoutBudget;
-          if (!step.isReady) return result();
-          final ready = prepare.take();
-          prepare.close();
-          _inlinePreparation = null;
+          if (_readyInline == null) {
+            final prepare = _inlinePreparation ??= _openInlinePlan(mixed);
+            final step = prepare.advance();
+            formatUnits += step.partsPrepared;
+            _waiting = step.waitingForLayoutBudget;
+            if (!step.isReady) return result();
+            final ready = _readyInline = prepare.take();
+            prepare.close();
+            _inlinePreparation = null;
+            if (_composer.maxNativeEntriesPerPage != null) {
+              _entryPreparation = ForumBodyInlineNativeEntriesPreparation(
+                input: ready.content,
+                parent: ready.lease,
+                cache: _cache,
+                textScaler: _textScaler,
+                ensureOwner: _ensureActivePlan,
+              );
+              return result();
+            }
+          }
+          ForumBodyInlineNativeEntries? entries;
+          final entryJob = _entryPreparation;
+          if (entryJob != null) {
+            formatUnits += entryJob.advance();
+            if (!entryJob.isReady) return result();
+            entries = entryJob.take();
+            _entryPreparation = null;
+          }
+          final ready = _readyInline!;
           try {
             _composer.appendInline(
               lease: ready.lease,
@@ -324,11 +351,13 @@ final class ForumBodyTextPageSession {
               spaceAtPageStart: 0,
               window: mixed.paragraph.window,
               nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
+              nativeEntriesInRange: entries?.inRange,
             );
           } catch (_) {
             ready.lease.release();
             rethrow;
           }
+          _readyInline = null;
           _content.add(ready.content);
           _pendingInline = null;
           _margin = 0;
@@ -573,12 +602,21 @@ final class ForumBodyTextPageSession {
     );
   }
 
+  void _closeInlineAdmission() {
+    _entryPreparation?.close();
+    _entryPreparation = null;
+    _readyInline?.lease.release();
+    _readyInline = null;
+  }
+
   void _fail() {
     if (isClosed) return;
     _recordPublished();
     _flow.close();
     _composer.close();
     _pendingParagraph = null;
+    _closeInlineAdmission();
+    _closeInlineAdmission();
     _inlinePreparation?.close();
     _inlinePreparation = null;
     _pendingInline = null;
@@ -604,6 +642,8 @@ final class ForumBodyTextPageSession {
     _issued.clear();
     _content.retain(0);
     _pendingParagraph = null;
+    _closeInlineAdmission();
+    _closeInlineAdmission();
     _inlinePreparation?.close();
     _inlinePreparation = null;
     _pendingInline = null;

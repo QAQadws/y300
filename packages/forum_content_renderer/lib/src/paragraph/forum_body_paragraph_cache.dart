@@ -616,6 +616,15 @@ final class ForumBodyParagraphBudgetProbe {
   final _bytesByKey = <Object, int>{};
   int _bytes = 0;
 
+  /// Immutable native-input identities only, for numeric page admission. The
+  /// keys retain no cache, lease or painter and do not authorize visible use.
+  Set<Object> snapshotNativeIdentities() {
+    if (_cache == null || _cache!.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    return Set.unmodifiable(_bytesByKey.keys.map(_NativeInputIdentity.new));
+  }
+
   /// Include a caller-owned prefix using its actual cache key and retained
   /// bytes. Aliases deduplicate with later requests; no new lease is acquired.
   void includeLease(ForumBodyNativeParagraphLease lease) {
@@ -759,6 +768,13 @@ sealed class ForumBodyNativeParagraphLease {
   bool _released = false;
   bool get isActive => !_released && !_entry.retired;
 
+  /// Pure opaque input identity. It identifies a deduplicated cache entry,
+  /// never a logical handle or an independently projected source context.
+  Object get nativeInputIdentity {
+    if (!isActive) throw StateError('Native paragraph lease is retired');
+    return _entry.nativeInputIdentity;
+  }
+
   /// Owner proof for aggregate prepared views without exposing the cache or
   /// acquiring another handle. Closed owners and retired aliases never match.
   bool hasSameActiveOwner(ForumBodyNativeParagraphLease other) =>
@@ -844,10 +860,25 @@ final class ForumBodyTextBandChildLease extends ForumBodyTextLease {
   }
 }
 
+/// Opaque equality token: callers cannot mutate internal key tables or retain
+/// the cache entry through it. Repeated row admission reuses the captured hash.
+final class _NativeInputIdentity {
+  _NativeInputIdentity(this._key);
+  final Object _key;
+  late final int _hash = _key.hashCode;
+  @override
+  int get hashCode => _hash;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _NativeInputIdentity && _key == other._key;
+}
+
 final class _LayoutEntry {
   _LayoutEntry(this.layout, this.bytes, this.key) : initialBytes = bytes;
   final ForumBodyNativeParagraphLayout layout;
   final Object key;
+  late final Object nativeInputIdentity = _NativeInputIdentity(key);
   final int initialBytes;
   int bytes;
   int leases = 0;

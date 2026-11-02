@@ -724,6 +724,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         cancellation: token,
         fontCollectionGeneration: handle.fontGeneration,
         maxIssuedLeases: config.sessionLimits.maxIssuedLeases,
+        maxParagraphCacheEntries: config.owner.maxParagraphEntries,
       );
       token.throwIfCancelled();
       if (!current() || !handle.isCurrent) return;
