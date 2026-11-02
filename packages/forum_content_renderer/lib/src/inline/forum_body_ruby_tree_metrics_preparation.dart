@@ -17,6 +17,8 @@ import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_layout.dart';
 
+part 'forum_body_ruby_tree_segment_metrics.dart';
+
 /// Pure postorder plan. Intrinsic children retain their actual source-bound
 /// page input; no native handle or owner is retained. Visible binding must
 /// qualify every actual leaf AND inner parent before claiming coverage.
@@ -65,6 +67,9 @@ final class ForumBodyRubyTreeMetrics {
   ForumBodyRubyChildMetrics get box => nodes.last.box!;
   ForumBodyRubyTreeContainerMetrics get root =>
       nodes.last as ForumBodyRubyTreeContainerMetrics;
+  ForumBodyRubyAtomMetrics get rootAtom => root.segment == null
+      ? ForumBodyRubyAtomMetrics.column(root.group!)
+      : ForumBodyRubyAtomMetrics.segment(root.segment!);
   ForumBodyRubyTreeMetrics._copy(
     this.input,
     this.nodes,
@@ -91,8 +96,9 @@ final class ForumBodyRubyTreeMetrics {
   /// Only the existing row alignment may reposition the outer stack. Require
   /// the same actual child extents; inner nodes never move relative to each other.
   ForumBodyRubyTreeMetrics withRootGroup(ForumBodyRubyGroupMetrics value) {
-    final old = root.group!;
-    if (old.size.width != value.size.width ||
+    final old = root.group;
+    if (old == null ||
+        old.size.width != value.size.width ||
         old.baseFontBaseline != value.baseFontBaseline ||
         old.baseAscent != value.baseAscent ||
         old.baseDescent != value.baseDescent ||
@@ -118,6 +124,29 @@ final class ForumBodyRubyTreeMetrics {
       font: root.font,
       backgroundFont: root.backgroundFont,
       group: value,
+      frame: root.font.enclose(
+        childSize: value.size,
+        childBaseline: value.baseline,
+      ),
+    );
+    return ForumBodyRubyTreeMetrics._copy(
+      input,
+      UnmodifiableListView(_TreeRootMetricsView(nodes, replacement)),
+      textScaler,
+      nativeHandleCount,
+    );
+  }
+
+  ForumBodyRubyTreeMetrics withRootSegment(ForumBodyRubySegmentMetrics value) {
+    final old = root.segment;
+    if (old == null || !old.hasSameMeasuredInput(value)) {
+      throw ArgumentError('Ruby tree segment changed measured members');
+    }
+    if (identical(old, value)) return this;
+    final replacement = ForumBodyRubyTreeContainerMetrics(
+      font: root.font,
+      backgroundFont: root.backgroundFont,
+      segment: value,
       frame: root.font.enclose(
         childSize: value.size,
         childBaseline: value.baseline,
@@ -171,6 +200,7 @@ final class ForumBodyRubyTreeContainerMetrics
     required this.frame,
     this.group,
     this.inline,
+    this.segment,
   }) : box = ForumBodyRubyChildMetrics(
          bounds: Offset.zero & frame.size,
          alphabeticBaseline: frame.baseline,
@@ -180,6 +210,7 @@ final class ForumBodyRubyTreeContainerMetrics
   final ForumBodyRubyAtomFrame frame;
   final ForumBodyRubyGroupMetrics? group;
   final ForumBodyRubyInlineChildMetrics? inline;
+  final ForumBodyRubySegmentMetrics? segment;
   @override
   final ForumBodyRubyChildMetrics box;
 }
@@ -226,6 +257,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
   ForumBodyTextRequest? _failedRequest;
   ForumBodyTextRequest? get failedRequest => _failedRequest;
   ForumBodyRubyGroupGeometry? _geometry;
+  _TreeSegmentMetricsWork? _segment;
   ForumBodyInlinePlanPreparation? _inline;
   Iterator<double>? _inlineFonts;
   Map<double, double> _inlineScales = {};
@@ -349,6 +381,24 @@ final class ForumBodyRubyTreeMetricsPreparation {
       );
     }
     switch (container) {
+      case ForumBodyRubyTreeSegment():
+        final work = _segment ??= _TreeSegmentMetricsWork(
+          container,
+          _nodes,
+          _input!.maxWidth,
+        );
+        work.advance();
+        if (work.isReady) {
+          final value = work.result!;
+          _seal(
+            _font!.enclose(
+              childSize: value.size,
+              childBaseline: value.baseline,
+            ),
+            segment: value,
+          );
+        }
+        return 1;
       case ForumBodyRubyTreeInline():
         return _advanceInline(container, cachedOnly);
       case ForumBodyRubyTreeFrame(:final child):
@@ -405,6 +455,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
     ForumBodyRubyAtomFrame frame, {
     ForumBodyRubyGroupMetrics? group,
     ForumBodyRubyInlineChildMetrics? inline,
+    ForumBodyRubySegmentMetrics? segment,
   }) {
     _nodes.add(
       ForumBodyRubyTreeContainerMetrics(
@@ -413,10 +464,13 @@ final class ForumBodyRubyTreeMetricsPreparation {
         frame: frame,
         group: group,
         inline: inline,
+        segment: segment,
       ),
     );
     _geometry?.close();
     _geometry = null;
+    _segment?.close();
+    _segment = null;
     _font = null;
     _backgroundFont = null;
     _rank = -1;
@@ -617,6 +671,8 @@ final class ForumBodyRubyTreeMetricsPreparation {
   }
 
   void _dropOwner() {
+    _segment?.close();
+    _segment = null;
     _member?.close();
     _member = null;
     _inline?.close();

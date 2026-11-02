@@ -7,13 +7,17 @@ import 'forum_body_inline_text_window.dart';
 import 'forum_body_ruby_annotation_input.dart';
 import 'forum_body_ruby_annotation_pairing.dart';
 import 'forum_body_ruby_child_input.dart';
+import 'forum_body_ruby_base_input.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_ruby_root_box.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_inline_source_preparation.dart';
+import 'forum_body_ruby_whitespace.dart';
 
-/// Internal postorder graph of real single-column nested boxes. Source leaves
+part 'forum_body_ruby_tree_segment_input.dart';
+
+/// Internal postorder graph of real nested columns and segments. Source leaves
 /// stay in original base/annotation order; their IDs are not DOM offsets.
 /// Mixed sequences keep a real intrinsic inline plan, not summed text widths.
 final class ForumBodyRubyTreeInput {
@@ -41,7 +45,7 @@ final class ForumBodyRubyTreeInput {
     (sum, node) => sum + node.input.retainedRuns,
   );
   int get root => nodes.length - 1;
-  ForumBodyRubyTreeGroup get rootGroup => nodes.last as ForumBodyRubyTreeGroup;
+  ForumBodyRubyTreeRoot get rootGroup => nodes.last as ForumBodyRubyTreeRoot;
   bool hasSameStructure(ForumBodyRubyTreeInput other) =>
       identical(_structure, other._structure);
 
@@ -132,17 +136,78 @@ final class ForumBodyRubyTreeInline extends ForumBodyRubyTreeContainer {
   final List<ForumBodyRubyTreeSource> sources;
 }
 
-final class ForumBodyRubyTreeGroup extends ForumBodyRubyTreeContainer {
+sealed class ForumBodyRubyTreeRoot extends ForumBodyRubyTreeContainer {
+  const ForumBodyRubyTreeRoot(super.font, super.background, this.group);
+  final ForumBodyRubyGroupContent group;
+}
+
+final class ForumBodyRubyTreeGroup extends ForumBodyRubyTreeRoot {
   ForumBodyRubyTreeGroup._(
     super.font,
     super.background,
-    this.group,
+    super.group,
     this.base,
     List<({int? child, ForumBodyRubySide side})> annotations,
   ) : annotations = UnmodifiableListView(annotations);
-  final ForumBodyRubyGroupContent group;
   final int base;
   final List<({int? child, ForumBodyRubySide side})> annotations;
+}
+
+enum ForumBodyRubyTreeSegmentChildKind { base, gap, span, annotationGap, fence }
+
+typedef ForumBodyRubyTreeSegmentChild = ({
+  int node,
+  ForumBodyRubyTreeSegmentChildKind kind,
+  int index,
+});
+typedef ForumBodyRubyTreeSegmentSpan = ({
+  int child,
+  int startColumn,
+  int endColumn,
+  int rank,
+});
+typedef ForumBodyRubyTreeSegmentGap = ({int child, int beforeColumn});
+typedef ForumBodyRubyTreeSegmentAnnotationGap = ({int child, int beforeSpan});
+typedef ForumBodyRubyTreeSegmentFence = ({
+  int child,
+  int beforeColumn,
+  int? rank,
+});
+
+/// One original multi-column group. Every child still has its original source;
+/// the shared segment numeric worker allocates spans, never a fake text parent.
+final class ForumBodyRubyTreeSegment extends ForumBodyRubyTreeRoot {
+  ForumBodyRubyTreeSegment._(
+    super.font,
+    super.background,
+    super.group, {
+    required List<int> bases,
+    required List<ForumBodyRubyTreeSegmentSpan> spans,
+    required List<ForumBodyRubyTreeSegmentGap> gaps,
+    required List<ForumBodyRubyTreeSegmentAnnotationGap> annotationGaps,
+    required List<ForumBodyRubyTreeSegmentFence> fences,
+    required List<ForumBodyRubyTreeSegmentChild> children,
+    required List<ForumBodyRubySide> sides,
+    required Map<int, List<int>> spanRanks,
+    required Map<int, List<int>> annotationGapRanks,
+  }) : bases = UnmodifiableListView(bases),
+       spans = UnmodifiableListView(spans),
+       gaps = UnmodifiableListView(gaps),
+       annotationGaps = UnmodifiableListView(annotationGaps),
+       fences = UnmodifiableListView(fences),
+       children = UnmodifiableListView(children),
+       sides = List.unmodifiable(sides),
+       spanRanks = UnmodifiableMapView(spanRanks),
+       annotationGapRanks = UnmodifiableMapView(annotationGapRanks);
+  final List<int> bases;
+  final List<ForumBodyRubyTreeSegmentSpan> spans;
+  final List<ForumBodyRubyTreeSegmentGap> gaps;
+  final List<ForumBodyRubyTreeSegmentAnnotationGap> annotationGaps;
+  final List<ForumBodyRubyTreeSegmentFence> fences;
+  final List<ForumBodyRubyTreeSegmentChild> children;
+  final List<ForumBodyRubySide> sides;
+  final Map<int, List<int>> spanRanks;
+  final Map<int, List<int>> annotationGapRanks;
 }
 
 /// Pure, iterative structural preparation. It does not recursively scan a
@@ -261,23 +326,25 @@ final class _GroupWork extends _TreeWork {
   void advance(ForumBodyRubyTreeInputPreparation owner) {
     if (pairing == null) {
       owner._validate(group);
+      final units = resolveForumBodyRubyBaseChildInputs(group);
       final actual = ForumBodyRubyAnnotationPairing(
         group: group,
-        baseColumnCount: 1,
+        baseColumnCount: units
+            .where((unit) => unit.kind != ForumBodyRubyBaseInputKind.gap)
+            .length,
       );
-      if (actual.columnCount != 1 || actual.hasAnnotationGaps) {
-        _unsupported(group.rootPath);
+      if (actual.columnCount != 1 ||
+          actual.hasAnnotationGaps ||
+          units.length != 1) {
+        owner._stack.removeLast().close();
+        owner._stack.add(_SegmentGroupWork(group, units, actual));
+        return;
       }
       pairing = actual;
       font = ForumBodyRubyRootBoxInput.fromGroup(group);
       background = ForumBodyRubyContainerBackground.fromGroup(group);
-      final explicit = group.base.whereType<ForumBodyRubyBaseContent>();
-      final ForumBodyRubyChildInput child;
-      if (explicit.isNotEmpty) {
-        if (group.base.length != 1) _unsupported(group.rootPath);
-        child = ForumBodyRubyChildInput.base(group, explicit.single);
-      } else {
-        child = ForumBodyRubyChildInput.implicit(group, group.base);
+      final child = units.single.child;
+      if (units.single.kind == ForumBodyRubyBaseInputKind.implicit) {
         if (child is ForumBodyRubyTextChildInput &&
             (forumBodyInlineHasCollapsibleEdge(child.content, leading: true) ||
                 forumBodyInlineHasCollapsibleEdge(
@@ -312,14 +379,7 @@ final class _GroupWork extends _TreeWork {
         rank++;
       } else {
         final box = level.spans.single.box;
-        final child = switch (box) {
-          ForumBodyRubyExplicitAnnotationInput() =>
-            ForumBodyRubyChildInput.annotation(group, box.annotation),
-          ForumBodyRubyAnonymousAnnotationInput() =>
-            ForumBodyRubyChildInput.implicit(group, [
-              ForumBodyRubyTextContent(box.content),
-            ]),
-        };
+        final child = _annotationChild(group, box);
         awaitingChild = true;
         owner._stack.add(_ChildWork(child, annotation: true));
       }
@@ -332,9 +392,10 @@ final class _GroupWork extends _TreeWork {
 }
 
 final class _ChildWork extends _TreeWork {
-  _ChildWork(this.input, {required this.annotation});
+  _ChildWork(this.input, {required this.annotation, this.emptyNeedsNative});
   final ForumBodyRubyChildInput input;
   final bool annotation;
+  final bool? emptyNeedsNative;
   bool awaitingChild = false;
   ForumBodyInlineSourcePreparation? _inline;
   ForumBodyInlinePlanInput? _inlineInput;
@@ -350,7 +411,8 @@ final class _ChildWork extends _TreeWork {
           ForumBodyRubyTreeText._(
             content,
             actual,
-            !annotation || actual.projection.text.isNotEmpty,
+            (emptyNeedsNative ?? !annotation) ||
+                actual.projection.text.isNotEmpty,
           ),
         );
       case ForumBodyRubySequenceChildInput():
@@ -447,3 +509,17 @@ Never _unsupported(String? path) => throw ForumBodyParagraphInputException(
   ForumBodyParagraphInputFailure.structure,
   path,
 );
+
+ForumBodyRubyChildInput _annotationChild(
+  ForumBodyRubyGroupContent group,
+  ForumBodyRubyAnnotationBoxInput box,
+) => switch (box) {
+  ForumBodyRubyExplicitAnnotationInput() => ForumBodyRubyChildInput.annotation(
+    group,
+    box.annotation,
+  ),
+  ForumBodyRubyAnonymousAnnotationInput() => ForumBodyRubyChildInput.implicit(
+    group,
+    [ForumBodyRubyTextContent(box.content)],
+  ),
+};

@@ -2268,7 +2268,6 @@ void main() {
 
   for (final html in [
     '<ruby> <rt>a</rt></ruby>',
-    '<ruby>A<rt>a</rt><rt><ruby>B<rt>b</rt></ruby></rt></ruby>',
     '<ruby><rt> </rt></ruby>',
     '<ruby style="ruby-position:inter-character">A<rt>a</rt></ruby>',
   ]) {
@@ -2281,6 +2280,27 @@ void main() {
       expect(f.cache.activeLeases, 0);
     });
   }
+
+  test(
+    'admitted nested extra annotation still obeys the actual page height',
+    () {
+      final f = _Fixture(
+        '<ruby>A<rt>a</rt><rt><ruby>B<rt>b</rt></ruby></rt></ruby>',
+      );
+      expect(
+        f.finish,
+        throwsA(
+          isA<ForumBodyTextPageException>().having(
+            (e) => e.failure,
+            'failure',
+            ForumBodyTextPageFailure.oversizedGroup,
+          ),
+        ),
+      );
+      expect(f.session.snapshot, isEmpty);
+      expect(f.cache.activeLeases, 0);
+    },
+  );
 
   for (final (text, runs, failure) in [
     (1, 100, ForumBodyTextPageSessionFailure.textLimit),

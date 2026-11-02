@@ -6,6 +6,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import 'forum_body_ruby_group_layout.dart';
+import 'forum_body_ruby_segment_hit_route.dart';
 import 'forum_body_ruby_group_metrics.dart';
 
 part 'forum_body_ruby_segment_assembly.dart';
@@ -222,131 +223,23 @@ final class ForumBodyRubySegmentLayout {
     }
   }
 
-  int? _spanFor(int column, int rank) {
-    for (final index in _spanRanks[rank] ?? const <int>[]) {
-      final span = metrics.spans[index];
-      if (span.input.startColumn > column) break;
-      if (column < span.input.endColumn && span.metrics.hasAnnotation) {
-        return index;
-      }
-    }
-    return null;
-  }
-
   ForumBodyRubySegmentHit sourceAt(Offset point) {
     _ensureActive();
-    if (!point.dx.isFinite || !point.dy.isFinite) {
-      throw ArgumentError.value(point);
-    }
-    double distance(double coordinate, double start, double end) =>
-        coordinate < start
-        ? start - coordinate
-        : coordinate > end
-        ? coordinate - end
-        : 0;
-    var column = 0;
-    int? gap;
-    var horizontal = double.infinity;
-    var left = double.negativeInfinity;
-    for (var i = 0; i < columnCount; i++) {
-      final start = metrics.columnLefts[i];
-      final delta = distance(point.dx, start, start + metrics.columnWidths[i]);
-      if (delta < horizontal || (delta == horizontal && start > left)) {
-        column = i;
-        horizontal = delta;
-        left = start;
-      }
-    }
-    for (var i = 0; i < _gaps.length; i++) {
-      final item = metrics.gaps[i];
-      final delta = distance(point.dx, item.left, item.left + item.width);
-      if (delta < horizontal || (delta == horizontal && item.left > left)) {
-        gap = i;
-        horizontal = delta;
-        left = item.left;
-      }
-    }
-    int? edge = gap == null ? null : metrics.gaps[gap].input.beforeColumn;
-    for (var i = 1; _annotationGaps.isNotEmpty && i < columnCount; i++) {
-      final start = metrics.direction == TextDirection.ltr
-          ? metrics.columnLefts[i - 1] + metrics.columnWidths[i - 1]
-          : metrics.columnLefts[i] + metrics.columnWidths[i];
-      final end = metrics.direction == TextDirection.ltr
-          ? metrics.columnLefts[i]
-          : metrics.columnLefts[i - 1];
-      if (point.dx > start && point.dx < end) {
-        edge = i;
-        break;
-      }
-    }
-    int? spanFor(int rank) {
-      if (edge == null) return _spanFor(column, rank);
-      for (final i in _spanRanks[rank] ?? const <int>[]) {
-        final span = metrics.spans[i];
-        if (span.input.startColumn >= edge) break;
-        if (span.input.endColumn > edge && span.metrics.hasAnnotation) {
-          return i;
-        }
-      }
-      return null;
-    }
-
-    int? annotationGapFor(int rank) {
-      if (edge == null) return null;
-      int? found;
-      var bestDistance = double.infinity;
-      var bestLeft = double.negativeInfinity;
-      for (final i in _annotationGapRanks[rank] ?? const <int>[]) {
-        final item = metrics.annotationGaps[i];
-        if (item.input.beforeColumn != edge) continue;
-        final delta = distance(point.dx, item.left, item.left + item.width);
-        if (delta < bestDistance ||
-            (delta == bestDistance && item.left > bestLeft)) {
-          found = i;
-          bestDistance = delta;
-          bestLeft = item.left;
-        }
-      }
-      return found;
-    }
-
-    final own = gap == null ? metrics.columns[column] : metrics.gaps[gap].font;
-    var selected = -1;
-    var bestTop = own.baseBandTop;
-    var best = distance(point.dy, own.baseBandTop, own.baseBandBottom);
-    var nearest = -1;
-    var nearestDistance = double.infinity;
-    var nearestTop = double.negativeInfinity;
-    for (var rank = 0; rank < own.annotations.length; rank++) {
-      if (!(edge == null && own.annotations[rank].hasAnnotation) &&
-          spanFor(rank) == null &&
-          annotationGapFor(rank) == null) {
-        continue;
-      }
-      final band = own.annotations[rank];
-      final delta = distance(point.dy, band.bandTop, band.bandBottom);
-      if (delta < nearestDistance ||
-          (delta == nearestDistance && band.bandTop > nearestTop)) {
-        nearest = rank;
-        nearestDistance = delta;
-        nearestTop = band.bandTop;
-      }
-      if (delta < best || (delta == best && band.bandTop > bestTop)) {
-        selected = rank;
-        best = delta;
-        bestTop = band.bandTop;
-      }
-    }
-    final forced =
-        selected < 0 &&
-        gap == null &&
-        _columns[column]
-            .contentFor(ForumBodyRubyPart.base)
-            .projection
-            .text
-            .isEmpty;
-    if (forced) selected = nearest;
-    final annotationGap = selected < 0 ? null : annotationGapFor(selected);
+    final route = resolveForumBodyRubySegmentHitRoute(
+      metrics: metrics,
+      point: point,
+      spanRanks: _spanRanks,
+      annotationGapRanks: _annotationGapRanks,
+      baseHasText: (column) => _columns[column]
+          .contentFor(ForumBodyRubyPart.base)
+          .projection
+          .text
+          .isNotEmpty,
+    );
+    final forced = route.forced;
+    final gap = route.gapIndex;
+    final column = route.columnIndex;
+    final annotationGap = route.annotationGapIndex;
     if (annotationGap != null) {
       final position = _annotationGaps[annotationGap].lease!.layout.sourceAt(
         point - metrics.annotationGaps[annotationGap].offset,
@@ -362,7 +255,7 @@ final class ForumBodyRubySegmentLayout {
             : position,
       );
     }
-    final span = selected < 0 ? null : spanFor(selected);
+    final span = route.spanIndex;
     if (span != null) {
       final position = _spans[span].lease!.layout.sourceAt(
         point - metrics.spans[span].offset,

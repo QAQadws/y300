@@ -195,8 +195,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       }
       final target = switch (plan) {
         ForumBodyRubyTreePlan(:final metrics) => (
-          size: metrics.root.group!.size,
-          baseline: metrics.root.group!.baseline,
+          size: metrics.rootAtom.size,
+          baseline: metrics.rootAtom.baseline,
         ),
         ForumBodyRubySegmentPlan(:final metrics) => (
           size: metrics.size,

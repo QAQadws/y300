@@ -80,6 +80,18 @@ final class ForumBodyRubyAnnotationMetrics {
     );
   }
 
+  /// A complete measured child box, including nested native parents. Geometry
+  /// alone does not grant ownership, source association or paint readiness.
+  factory ForumBodyRubyAnnotationMetrics.fromChild({
+    required ForumBodyRubyChildMetrics? child,
+    required ForumBodyRubySide side,
+    double gap = 0,
+  }) => ForumBodyRubyAnnotationMetrics._fromGeometry(
+    child: child,
+    side: side,
+    gap: gap,
+  );
+
   final ForumBodyRubySide side;
   final double gap;
   final bool hasAnnotation;

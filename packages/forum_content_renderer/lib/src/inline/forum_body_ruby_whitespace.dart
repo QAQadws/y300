@@ -13,9 +13,19 @@ ForumBodyParagraphContent resolveForumBodyRubyGapWhitespace({
   required ForumBodyParagraphContent gap,
   required ForumBodyParagraphContent previous,
   required ForumBodyParagraphContent next,
-}) => gap.resolveWhitespaceSegmentBreaks(
+}) => resolveForumBodyRubyGapWhitespaceAtEdges(
+  gap: gap,
   precedingGrapheme: previous.projection.lastGrapheme,
   followingGrapheme: next.projection.firstGrapheme,
+);
+
+ForumBodyParagraphContent resolveForumBodyRubyGapWhitespaceAtEdges({
+  required ForumBodyParagraphContent gap,
+  required String? precedingGrapheme,
+  required String? followingGrapheme,
+}) => gap.resolveWhitespaceSegmentBreaks(
+  precedingGrapheme: precedingGrapheme,
+  followingGrapheme: followingGrapheme,
   shouldRemove: (before, after) =>
       before != null &&
       after != null &&

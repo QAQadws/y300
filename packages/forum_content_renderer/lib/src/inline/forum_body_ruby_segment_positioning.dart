@@ -5,6 +5,7 @@ part of 'forum_body_ruby_group_metrics.dart';
 sealed class _RubySegmentHorizontal {
   const _RubySegmentHorizontal();
   List<ForumBodyRubyGroupMetrics> get columns;
+  Object get measuredIdentity;
   List<double> get widths;
   List<double> get edgeWidths;
   TextDirection get direction;
@@ -22,7 +23,7 @@ sealed class _RubySegmentHorizontal {
 }
 
 final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
-  const _RubyComposedHorizontal({
+  _RubyComposedHorizontal({
     required this.columns,
     required this.widths,
     required this.prefix,
@@ -39,6 +40,8 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
   });
   @override
   final List<ForumBodyRubyGroupMetrics> columns;
+  @override
+  final Object measuredIdentity = Object();
   @override
   final List<double> widths;
   final List<double> prefix;
@@ -121,6 +124,8 @@ final class _RubyComposedHorizontal extends _RubySegmentHorizontal {
 final class _RubyExistingHorizontal extends _RubySegmentHorizontal {
   const _RubyExistingHorizontal(this.metrics);
   final ForumBodyRubySegmentMetrics metrics;
+  @override
+  Object get measuredIdentity => metrics._measuredIdentity;
   @override
   List<ForumBodyRubyGroupMetrics> get columns => metrics.columns;
   @override
@@ -311,6 +316,7 @@ final class _RubySegmentPositioning {
           work++;
         case _RubyPositionPhase.publish:
           _result = ForumBodyRubySegmentMetrics._(
+            measuredIdentity: horizontal.measuredIdentity,
             direction: horizontal.direction,
             size: Size(horizontal.width, _over + _under),
             baseline: _over,

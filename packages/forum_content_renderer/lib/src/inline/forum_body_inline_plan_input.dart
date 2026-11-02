@@ -39,7 +39,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 24;
+  static const revision = 25;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,

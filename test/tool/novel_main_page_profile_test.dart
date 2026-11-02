@@ -63,6 +63,14 @@ void main() {
         'ruby-mixed-nested-ltr',
         'ruby-mixed-nested-rtl',
       ]);
+      expect(
+        novelMainPageProfileFixtures('ruby-nested-columns'),
+        same(novelProfileNestedColumnFixtures),
+      );
+      expect(novelProfileNestedColumnFixtures.map((f) => f.name), [
+        'ruby-nested-columns-ltr',
+        'ruby-nested-columns-rtl',
+      ]);
       for (final fixture in novelProfileLanguageFixtures) {
         expect(novelProfileExpectedLanguages(fixture.name), isNotEmpty);
       }
@@ -200,6 +208,8 @@ void main() {
     for (final fixture in novelProfileNestedRubyFixtures)
       (native: true, mixed: true, fixture: fixture),
     for (final fixture in novelProfileMixedNestedRubyFixtures)
+      (native: true, mixed: true, fixture: fixture),
+    for (final fixture in novelProfileNestedColumnFixtures)
       (native: true, mixed: true, fixture: fixture),
   ]) {
     final native = scenario.native;

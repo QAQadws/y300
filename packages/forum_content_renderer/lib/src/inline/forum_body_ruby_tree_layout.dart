@@ -18,6 +18,7 @@ import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
 import 'forum_body_ruby_hit_band.dart';
 import 'forum_body_ruby_tree_input.dart';
+import 'forum_body_ruby_segment_hit_route.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
 
 part 'forum_body_ruby_tree_preparation.dart';
@@ -145,6 +146,36 @@ final class ForumBodyRubyTreeLayout {
       final node = input.nodes[id];
       final numeric = metrics.nodes[id];
       switch (node) {
+        case ForumBodyRubyTreeSegment():
+          final box = numeric as ForumBodyRubyTreeContainerMetrics;
+          final segment = box.segment!;
+          point -= Offset(0, box.frame.childTop);
+          if (!(Offset.zero & segment.size).contains(point)) approximate = true;
+          final route = resolveForumBodyRubySegmentHitRoute(
+            metrics: segment,
+            point: point,
+            spanRanks: node.spanRanks,
+            annotationGapRanks: node.annotationGapRanks,
+            baseHasText: (column) => _hasText[node.bases[column]]!,
+          );
+          if (route.forced) approximate = true;
+          if (route.annotationGapIndex case final gap?) {
+            id = node.annotationGaps[gap].child;
+            point -= segment.annotationGaps[gap].offset;
+          } else if (route.spanIndex case final span?) {
+            id = node.spans[span].child;
+            point -= segment.spans[span].offset;
+          } else if (route.gapIndex case final gap?) {
+            id = node.gaps[gap].child;
+            point -=
+                segment.gaps[gap].offset + segment.gaps[gap].font.baseOffset;
+          } else {
+            final column = route.columnIndex;
+            id = node.bases[column];
+            point -=
+                segment.columnOffsets[column] +
+                segment.columns[column].baseOffset;
+          }
         case ForumBodyRubyTreeInline():
           final box = numeric as ForumBodyRubyTreeContainerMetrics;
           point -= Offset(0, box.frame.childTop);

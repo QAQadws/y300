@@ -257,6 +257,9 @@ final class ForumBodyRubyTreePreparation {
               node.annotations.any(
                 (a) => a.child != null && _hasText[a.child!]!,
               ),
+        ForumBodyRubyTreeSegment() => node.children.any(
+          (child) => _hasText[child.node]!,
+        ),
       };
       _nextNode++;
       return 1;
@@ -325,6 +328,31 @@ final class ForumBodyRubyTreePreparation {
     final origin = work.offset + Offset(0, box.frame.childTop);
     final container = node as ForumBodyRubyTreeContainer;
     switch (container) {
+      case ForumBodyRubyTreeSegment():
+        if (work.rank == -1) work.rank = 0;
+        if (work.rank == container.children.length) {
+          _positions.removeLast();
+        } else {
+          final child = container.children[work.rank++];
+          final segment = box.segment!;
+          final delta = switch (child.kind) {
+            ForumBodyRubyTreeSegmentChildKind.base =>
+              segment.columnOffsets[child.index] +
+                  segment.columns[child.index].baseOffset,
+            ForumBodyRubyTreeSegmentChildKind.gap =>
+              segment.gaps[child.index].offset +
+                  segment.gaps[child.index].font.baseOffset,
+            ForumBodyRubyTreeSegmentChildKind.span =>
+              segment.spans[child.index].offset,
+            ForumBodyRubyTreeSegmentChildKind.annotationGap =>
+              segment.annotationGaps[child.index].offset,
+            ForumBodyRubyTreeSegmentChildKind.fence => _fenceOffset(
+              segment,
+              container.fences[child.index],
+            ),
+          };
+          _positions.add(_TreePosition(child.node, origin + delta));
+        }
       case ForumBodyRubyTreeInline():
         final view = _inlineViews[work.id]!;
         if (work.background < view.backgroundSurfaces.length) {
@@ -380,6 +408,22 @@ final class ForumBodyRubyTreePreparation {
           _positions.removeLast();
         }
     }
+  }
+
+  Offset _fenceOffset(
+    ForumBodyRubySegmentMetrics segment,
+    ForumBodyRubyTreeSegmentFence fence,
+  ) {
+    final atEnd = fence.beforeColumn == segment.columns.length;
+    final rtl = segment.direction == TextDirection.rtl;
+    final x = atEnd
+        ? (rtl ? 0.0 : segment.size.width)
+        : segment.columnLefts[fence.beforeColumn] +
+              (rtl ? segment.columnWidths[fence.beforeColumn] : 0);
+    final y = fence.rank == null
+        ? segment.baseline
+        : segment.columns.first.annotations[fence.rank!].bandTop;
+    return Offset(x, y);
   }
 
   ForumBodyRubyTreeLayout takeLayout() => _operate(() {

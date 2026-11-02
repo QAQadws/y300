@@ -105,6 +105,7 @@ final class ForumBodyRubySegmentMetrics {
   }
 
   ForumBodyRubySegmentMetrics._({
+    required Object measuredIdentity,
     required this.size,
     required this.baseline,
     required this.level,
@@ -119,7 +120,8 @@ final class ForumBodyRubySegmentMetrics {
     required List<double> edgeWidths,
     // Only the terminal positioning worker transfers its private buffers here.
     // Reused horizontal vectors are already frozen. Publication never rescans N.
-  }) : columns = UnmodifiableListView(columns),
+  }) : _measuredIdentity = measuredIdentity,
+       columns = UnmodifiableListView(columns),
        columnWidths = UnmodifiableListView(columnWidths),
        columnLefts = UnmodifiableListView(columnLefts),
        columnOffsets = UnmodifiableListView(columnOffsets),
@@ -128,6 +130,11 @@ final class ForumBodyRubySegmentMetrics {
        annotationGaps = UnmodifiableListView(annotationGaps),
        edgeWidths = UnmodifiableListView(edgeWidths);
   static const revision = 4;
+  final Object _measuredIdentity;
+
+  /// Numeric extent equality cannot identify another measured source graph.
+  bool hasSameMeasuredInput(ForumBodyRubySegmentMetrics other) =>
+      identical(_measuredIdentity, other._measuredIdentity);
   final Size size;
   final double baseline;
   final ForumBodyRubyLevelMetrics level;

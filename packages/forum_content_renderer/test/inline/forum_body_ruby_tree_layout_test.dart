@@ -110,6 +110,10 @@ const _mixedHtml =
     '<ruby><rb>L<ruby>A<rt style="font-size:10px">x</rt></ruby>R</rb>'
     '<rt style="font-size:8px">z</rt></ruby>';
 
+const _outerColumnsHtml =
+    '<ruby><rb><ruby>A<rt style="font-size:10px">x</rt></ruby></rb>'
+    '<rb>B</rb><rtc style="font-size:8px"><rt>a</rt><rt>b</rt></rtc></ruby>';
+
 Future<List<int>> _pixels(void Function(Canvas) paint, int ratio) async {
   final recorder = ui.PictureRecorder();
   paint(Canvas(recorder)..scale(ratio.toDouble()));
@@ -135,6 +139,86 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
+
+  test(
+    'multi-column tree only rebinds alignment from the same measured graph',
+    () {
+      final input = _input(_outerColumnsHtml);
+      final cache = _cache(16);
+      try {
+        final metrics = _measure(input, cache);
+        final segment = metrics.root.segment!;
+        final aligned = segment.alignedTo(segment.level);
+        expect(segment.hasSameMeasuredInput(aligned), isTrue);
+        final current = metrics.withRootSegment(aligned);
+        expect(current.input, same(input));
+        expect(current.root.segment, same(aligned));
+        final foreign = _measure(
+          _input(_outerColumnsHtml),
+          cache,
+        ).root.segment!;
+        expect(segment.hasSameMeasuredInput(foreign), isFalse);
+        expect(() => metrics.withRootSegment(foreign), throwsArgumentError);
+        final view = _prepare(input, current, cache);
+        view.close();
+        expect(cache.activeLeases, 0);
+      } finally {
+        cache.close();
+      }
+    },
+  );
+
+  test(
+    'multi-column visible cache miss and foreign pins preserve the same transaction',
+    () {
+      final input = _input(_outerColumnsHtml);
+      final sourceCache = _cache(16);
+      final metrics = _measure(input, sourceCache);
+      sourceCache.close();
+      final cache = _cache(5);
+      final extra = _input('<ruby>Z<rt>z</rt></ruby>');
+      final pinned = cache.acquire(
+        content: (extra.nodes.first as ForumBodyRubyTreeText).content,
+        width: 500,
+      );
+      final work = ForumBodyRubyTreePreparation(
+        input: input,
+        metrics: metrics,
+        cache: cache,
+        ensureOwner: () {},
+      );
+      try {
+        while (!work.cacheMiss) {
+          work.advance(maxParts: 1, cachedOnly: true);
+        }
+        expect(cache.layoutBuildCount, 1);
+        var waiting = false;
+        for (var i = 0; !waiting && i < 10000; i++) {
+          waiting = work.advance(maxParts: 1).waitingForLayoutBudget;
+        }
+        expect(waiting, isTrue);
+        final held = work.nativeLeases.toList();
+        expect(held, hasLength(4));
+        final builds = cache.layoutBuildCount;
+        expect(work.advance().formatUnitsPrepared, 0);
+        expect(work.nativeLeases, orderedEquals(held));
+        expect(cache.layoutBuildCount, builds);
+        pinned.release();
+        while (!work.isReady) {
+          work.advance(maxParts: 1);
+        }
+        final view = work.takeLayout();
+        expect(view.nativeLeases, containsAll(held));
+        expect(view.nativeLeases, hasLength(5));
+        view.close();
+        expect(cache.activeLeases, 0);
+      } finally {
+        work.close();
+        pinned.release();
+        cache.close();
+      }
+    },
+  );
 
   test(
     'mixed metrics and visible cold-cache paths resume without native work',

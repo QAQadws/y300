@@ -42,6 +42,13 @@ final novelProfileMixedNestedRubyFixtures = <({String name, String html})>[
   (name: 'ruby-mixed-nested-rtl', html: _mixedNestedRuby(rtl: true)),
 ];
 
+/// General outer columns retain their own mixed bases, annotation spans and
+/// real gaps. Anonymous RTC text deliberately exercises actual spanning.
+final novelProfileNestedColumnFixtures = <({String name, String html})>[
+  (name: 'ruby-nested-columns-ltr', html: _nestedColumns()),
+  (name: 'ruby-nested-columns-rtl', html: _nestedColumns(rtl: true)),
+];
+
 // Deliberately exceeds the reader's issued-handle budget within one page.
 // Keep this independent failure fixture when profiling the admitted corpus.
 final novelProfileRubyGapOverflowHtml = _rubyGaps(
@@ -58,8 +65,23 @@ List<({String name, String html})> novelMainPageProfileFixtures(
   'language' => novelProfileLanguageFixtures,
   'ruby-nested' => novelProfileNestedRubyFixtures,
   'ruby-mixed-nested' => novelProfileMixedNestedRubyFixtures,
+  'ruby-nested-columns' => novelProfileNestedColumnFixtures,
   _ => throw ArgumentError.value(corpus, 'corpus', 'Unknown profile corpus'),
 };
+
+String _nestedColumns({bool rtl = false}) => List.generate(
+  32,
+  (p) =>
+      '<p dir="${rtl ? 'rtl' : 'ltr'}">${rtl ? 'نص تجريبي' : '合成原始多列'} $p '
+      '<ruby><rb>前<ruby>漢😀<rt style="font-size:8px">kan</rt></ruby>後</rb>'
+      '<rb>列</rb><rtc style="font-size:8px"><rt>first</rt><rt>second</rt></rtc></ruby>，'
+      '<ruby style="background:rgba(255,0,0,.2)"><rb><ruby>同<rt>in</rt></ruby></rb>'
+      '<rb>根</rb><rtc style="font-size:10px">shared annotation</rtc>'
+      '<rtc style="font-size:8px;ruby-position:under"><rt>下</rt><rt>层</rt></rtc></ruby>，'
+      '<ruby><rb><ruby>中<rt>latin</rt></ruby></rb>\n<rb>文</rb>'
+      '<rtc style="font-size:8px"><rt>先<ruby>に<rt>ni</rt></ruby>後</rt> <rt>end</rt></rtc></ruby>。'
+      '${rtl ? 'نهاية الفقرة.' : '原始分列、跨列注音与空白来源。'}</p>',
+).join();
 
 String _mixedNestedRuby({bool rtl = false}) => List.generate(
   32,

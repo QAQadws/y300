@@ -252,7 +252,7 @@ final class ForumBodyInlinePlanPreparation {
           final metrics = tree.takeMetrics();
           _treeSnapshots[_metrics.length] = metrics;
           _rootFonts[value.rootGroup.font] = metrics.root.font;
-          _metrics.add(ForumBodyRubyAtomMetrics.column(metrics.root.group!));
+          _metrics.add(metrics.rootAtom);
           _closeMetric();
         }
         return step;
@@ -523,6 +523,16 @@ final class ForumBodyInlinePlanPreparation {
       rubyAtoms: [
         for (final (index, request) in _input!.atoms.indexed)
           switch ((request, alignment.results[index])) {
+            (
+              ForumBodyRubyTreeAtomRequest(:final value),
+              ForumBodyRubyComponentMetrics(value: final metrics),
+            ) =>
+              ForumBodyRubyAtomPlan.tree(
+                request: value,
+                metrics: _treeSnapshots[index]!
+                    .rebindInput(value)
+                    .withRootSegment(metrics),
+              ),
             (
               ForumBodyRubyTreeAtomRequest(:final value),
               ForumBodyRubyColumnMetrics(value: final metrics),
