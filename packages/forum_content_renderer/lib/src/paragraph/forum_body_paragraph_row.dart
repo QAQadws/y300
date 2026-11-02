@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
@@ -6,7 +7,10 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import 'forum_body_paragraph_cache.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
+import 'forum_body_paragraph_line_frames.dart';
 import 'forum_body_text_layout.dart';
+
+part 'forum_body_paragraph_physical_line.dart';
 
 enum ForumBodyParagraphRowFailure { source, geometry, isolation, limit }
 
@@ -46,8 +50,9 @@ final class ForumBodyParagraphRowMetrics {
     required this.fontBounds,
     required this.rowIsolationPitch,
     required this.parentLineCount,
-  });
-  static const revision = 2;
+    required ({double top, double bottom}) paintClearance,
+  }) : _paintClearance = paintClearance;
+  static const revision = 3;
   final ForumBodyParagraphContent parentContent;
   final ForumBodyParagraphContent content;
   final Object nativeInputIdentity;
@@ -62,6 +67,7 @@ final class ForumBodyParagraphRowMetrics {
 
   /// Admission counts the entire shared resource, not just this group's rows.
   final int parentLineCount;
+  final ({double top, double bottom}) _paintClearance;
   int get lineCount => selector.endLine - selector.startLine;
 }
 
@@ -114,7 +120,38 @@ final class ForumBodyParagraphRowView implements ForumBodyTextLayout {
   }
 
   @override
-  void paint(Canvas canvas, Offset offset) {
+  void paint(Canvas canvas, Offset offset) => _paint(
+    canvas,
+    offset,
+    selector,
+    empty: metrics.startUtf16 == metrics.endUtf16,
+  );
+
+  /// Paint-only subdivision inside this complete legal source group. It does
+  /// not create a text window, hit target, selection range or coverage claim.
+  void paintPhysicalLine(
+    Canvas canvas,
+    Offset offset,
+    ForumBodyParagraphPhysicalLineSelector line,
+  ) {
+    _guard();
+    if (!line.matchesInput(
+      nativeInputIdentity: parent.nativeInputIdentity,
+      group: selector,
+    )) {
+      throw const ForumBodyParagraphRowException(
+        ForumBodyParagraphRowFailure.source,
+      );
+    }
+    _paint(canvas, offset, line.selector, empty: line._empty);
+  }
+
+  void _paint(
+    Canvas canvas,
+    Offset offset,
+    ForumBodyParagraphRowSelector selected, {
+    required bool empty,
+  }) {
     _guard();
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
@@ -124,16 +161,16 @@ final class ForumBodyParagraphRowView implements ForumBodyTextLayout {
     }
     // A real terminal empty row retains its font frame and source endpoint,
     // without accidentally drawing a neighbouring glyph through its strip.
-    if (metrics.startUtf16 == metrics.endUtf16) return;
+    if (empty) return;
     canvas.save();
     try {
-      canvas.translate(offset.dx, offset.dy - selector.originY);
+      canvas.translate(offset.dx, offset.dy - selected.originY);
       canvas.clipRect(
         Rect.fromLTRB(
           -16384,
-          selector.clipTop,
+          selected.clipTop,
           width + 16384,
-          selector.clipBottom,
+          selected.clipBottom,
         ),
         doAntiAlias: false,
       );
@@ -452,6 +489,10 @@ final class ForumBodyParagraphRowPreparation {
       fontBounds: font.shift(Offset(0, -origin)),
       rowIsolationPitch: pitch,
       parentLineCount: layout.lineCount,
+      paintClearance: (
+        top: _decorationGuard + _shadowTop,
+        bottom: _decorationGuard + _shadowBottom,
+      ),
     );
   }
 

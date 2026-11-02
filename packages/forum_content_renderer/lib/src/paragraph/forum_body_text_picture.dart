@@ -12,6 +12,7 @@ final class ForumBodyTextPictureCommand {
     required this.offset,
     this.bandChildIndex,
     this.paragraphRow,
+    this.physicalLine,
     this.fitScale = 1,
   });
   factory ForumBodyTextPictureCommand.fromText(
@@ -45,6 +46,27 @@ final class ForumBodyTextPictureCommand {
     fitScale: fitScale,
     paragraphRow: row.selector,
   );
+  factory ForumBodyTextPictureCommand.fromPhysicalLine(
+    ForumBodyParagraphRowView group,
+    ForumBodyParagraphPhysicalLineSelector line,
+    Offset offset, {
+    double fitScale = 1,
+  }) {
+    final identity = group.nativeInputIdentity;
+    if (!line.matchesInput(
+      nativeInputIdentity: identity,
+      group: group.selector,
+    )) {
+      throw ArgumentError('Physical line belongs to another paragraph group');
+    }
+    return ForumBodyTextPictureCommand(
+      nativeInputIdentity: identity,
+      offset: offset,
+      fitScale: fitScale,
+      paragraphRow: group.selector,
+      physicalLine: line,
+    );
+  }
   final Object nativeInputIdentity;
   final Offset offset;
 
@@ -54,6 +76,7 @@ final class ForumBodyTextPictureCommand {
   // Several source-bound views share a band key but paint different strips.
   final int? bandChildIndex;
   final ForumBodyParagraphRowSelector? paragraphRow;
+  final ForumBodyParagraphPhysicalLineSelector? physicalLine;
   _TextPictureDependency get _dependency => (
     identity: nativeInputIdentity,
     bandChildIndex: bandChildIndex,
@@ -67,6 +90,7 @@ final class ForumBodyTextPictureCommand {
           offset == other.offset &&
           bandChildIndex == other.bandChildIndex &&
           paragraphRow == other.paragraphRow &&
+          physicalLine == other.physicalLine &&
           fitScale == other.fitScale;
   @override
   int get hashCode => Object.hash(
@@ -74,6 +98,7 @@ final class ForumBodyTextPictureCommand {
     offset,
     bandChildIndex,
     paragraphRow,
+    physicalLine,
     fitScale,
   );
 }
@@ -119,19 +144,29 @@ final class ForumBodyTextPictureInput {
         throw ArgumentError('Text picture requires an actual text input');
       }
       final row = command.paragraphRow;
-      if (row != null &&
-          (key is! _LayoutKey ||
-              key.rowIsolationPitch == null ||
-              row.startLine < 0 ||
-              row.endLine <= row.startLine ||
-              !row.originY.isFinite ||
-              !row.clipTop.isFinite ||
-              !row.clipBottom.isFinite ||
-              row.clipBottom <= row.clipTop ||
-              row.originY.abs() > 1048576 ||
-              row.clipTop.abs() > 1114112 ||
-              row.clipBottom.abs() > 1114112)) {
-        throw ArgumentError('Invalid native paragraph row selector');
+      final physical = command.physicalLine;
+      if (physical != null &&
+          (row == null ||
+              !physical.matchesInput(
+                nativeInputIdentity: identity,
+                group: row,
+              ))) {
+        throw ArgumentError('Invalid physical line input');
+      }
+      for (final selected in [?row, ?physical?.selector]) {
+        if ((key is! _LayoutKey ||
+            key.rowIsolationPitch == null ||
+            selected.startLine < 0 ||
+            selected.endLine <= selected.startLine ||
+            !selected.originY.isFinite ||
+            !selected.clipTop.isFinite ||
+            !selected.clipBottom.isFinite ||
+            selected.clipBottom <= selected.clipTop ||
+            selected.originY.abs() > 1048576 ||
+            selected.clipTop.abs() > 1114112 ||
+            selected.clipBottom.abs() > 1114112)) {
+          throw ArgumentError('Invalid native paragraph row selector');
+        }
       }
       inputs.add(identity);
     }
@@ -140,11 +175,12 @@ final class ForumBodyTextPictureInput {
       4096 +
           frozen.length * 128 +
           frozen.where((command) => command.paragraphRow != null).length * 64 +
+          frozen.where((command) => command.physicalLine != null).length * 128 +
           inputs.fold(0, (sum, value) => sum + _textPictureInputBytes(value)),
     );
   }
   final List<ForumBodyTextPictureCommand> commands;
-  static const revision = 4;
+  static const revision = 5;
 
   /// Conservative display-list admission, not font/native/GPU memory. Actual
   /// engine picture bytes can grow this cost before the owner publishes it.
@@ -413,7 +449,12 @@ final class ForumBodyTextPicturePreparation {
                   final offset = fitted ? Offset.zero : command.offset;
                   final row = _rowViews[command._dependency];
                   if (row != null) {
-                    row.paint(canvas, offset);
+                    final physical = command.physicalLine;
+                    if (physical == null) {
+                      row.paint(canvas, offset);
+                    } else {
+                      row.paintPhysicalLine(canvas, offset, physical);
+                    }
                   } else {
                     switch (_resources[command._dependency]!) {
                       case ForumBodyTextLease resource:
