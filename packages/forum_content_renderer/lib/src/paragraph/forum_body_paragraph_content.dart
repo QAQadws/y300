@@ -76,6 +76,24 @@ final class ForumBodyParagraphContent {
       isSourceFree = original.isSourceFree,
       appliesFirstLineIndent = original.appliesFirstLineIndent;
 
+  // Only the projection and explicit first-line ownership change. Both source
+  // tables already belong to immutable content; a bounded row preparation must
+  // not copy the entire run/diagnostic table when it creates one window.
+  ForumBodyParagraphContent._window(
+    ForumBodyParagraphContent original,
+    this.projection,
+    bool? appliesIndent,
+  ) : identity = original.identity,
+      path = original.path,
+      fontRevision = original.fontRevision,
+      styleRevision = original.styleRevision,
+      style = original.style,
+      layoutMode = original.layoutMode,
+      runs = original.runs,
+      issues = original.issues,
+      isSourceFree = original.isSourceFree,
+      appliesFirstLineIndent = appliesIndent ?? original.appliesFirstLineIndent;
+
   /// A format-generated empty font strut, not a DOM/text context. Its empty
   /// projection's zero never claims source rune zero and must not enter the
   /// parent's display segments. Identical struts can share the existing cache.
@@ -165,18 +183,11 @@ final class ForumBodyParagraphContent {
   ForumBodyParagraphContent displayWindow({
     required int startUtf16,
     required int endUtf16,
-  }) => ForumBodyParagraphContent._(
-    identity: identity,
-    path: path,
-    fontRevision: fontRevision,
-    styleRevision: styleRevision,
-    style: style,
-    layoutMode: layoutMode,
-    projection: projection.slice(startUtf16: startUtf16, endUtf16: endUtf16),
-    runs: runs,
-    issues: issues,
-    isSourceFree: isSourceFree,
-    appliesFirstLineIndent: appliesFirstLineIndent,
+    bool? appliesFirstLineIndent,
+  }) => ForumBodyParagraphContent._window(
+    this,
+    projection.slice(startUtf16: startUtf16, endUtf16: endUtf16),
+    appliesFirstLineIndent,
   );
 
   /// Resolve one actual whitespace context without changing source/run owners.

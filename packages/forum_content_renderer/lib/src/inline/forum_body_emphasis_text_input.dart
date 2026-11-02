@@ -40,13 +40,29 @@ final class ForumBodyEmphasisTextInput {
 final class ForumBodyEmphasisTextPreparation {
   ForumBodyEmphasisTextPreparation({
     required ForumBodyParagraphContent content,
-    this.maxUnits = 512,
-  }) : _content = content {
+    int maxUnits = 512,
+  }) : this._(content, null, maxUnits);
+
+  /// Reuse a qualified pure source/glyph derivation. In particular, local row
+  /// windows need no second traversal of the whole parent's glyph style table.
+  ForumBodyEmphasisTextPreparation.fromGlyphInput({
+    required ForumBodyEmphasisGlyphInput glyphInput,
+    int maxUnits = 512,
+  }) : this._(glyphInput.original, glyphInput, maxUnits);
+
+  ForumBodyEmphasisTextPreparation._(
+    ForumBodyParagraphContent content,
+    ForumBodyEmphasisGlyphInput? glyphInput,
+    this.maxUnits,
+  ) : _content = content,
+      _glyphInput = glyphInput {
     if (maxUnits < 0) throw ArgumentError.value(maxUnits);
     if (content.isSourceFree) {
       throw ArgumentError('Emphasis requires actual source text');
     }
-    _glyphPreparation = ForumBodyEmphasisGlyphPreparation(content: content);
+    if (glyphInput == null) {
+      _glyphPreparation = ForumBodyEmphasisGlyphPreparation(content: content);
+    }
     _ranges = content.projection
         .graphemeRanges(startUtf16: 0, endUtf16: content.projection.text.length)
         .iterator;

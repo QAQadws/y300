@@ -21,6 +21,22 @@ enum ForumBodyParagraphWindow {
   terminalEmptyLine,
 }
 
+/// One actual native glyph query at an explicit display code unit. The engine
+/// cluster range may cross physical rows or split a source grapheme at a style
+/// seam; it is diagnostic native UTF-16, never a legal source slicing boundary.
+final class ForumBodyParagraphGlyphGeometry {
+  const ForumBodyParagraphGlyphGeometry({
+    required this.lineIndex,
+    required this.fontBounds,
+    required this.engineClusterRange,
+    required this.direction,
+  });
+  final int lineIndex;
+  final Rect fontBounds;
+  final TextRange engineClusterRange;
+  final TextDirection direction;
+}
+
 /// Actual first-line geometry after source policy and width fitting. This is
 /// layout output, never a replacement for the reader's stored request.
 final class ForumBodyFirstLineIndentGeometry {

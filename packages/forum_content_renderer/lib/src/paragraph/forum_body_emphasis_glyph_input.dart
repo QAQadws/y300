@@ -8,6 +8,31 @@ final class ForumBodyEmphasisGlyphInput {
   static const revision = 1;
   final ForumBodyParagraphContent original;
   final ForumBodyParagraphContent glyphs;
+
+  /// Derive both sides from the same legal display window. Source/run identity
+  /// and the already suppressed glyph styles are retained without preparing
+  /// the full style table again or shaping any row in isolation.
+  ForumBodyEmphasisGlyphInput displayWindow({
+    required int startUtf16,
+    required int endUtf16,
+    bool? appliesFirstLineIndent,
+  }) {
+    final source = original.displayWindow(
+      startUtf16: startUtf16,
+      endUtf16: endUtf16,
+      appliesFirstLineIndent: appliesFirstLineIndent,
+    );
+    return ForumBodyEmphasisGlyphInput._(
+      source,
+      identical(original, glyphs)
+          ? source
+          : ForumBodyParagraphContent._emphasisGlyphs(
+              source,
+              glyphs.style,
+              glyphs.runs,
+            ),
+    );
+  }
 }
 
 /// One root or run style per work unit; no shaping, parsing, source splitting,

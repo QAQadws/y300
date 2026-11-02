@@ -189,6 +189,27 @@ final class ForumBodyParagraphRowView implements ForumBodyTextLayout {
         ),
     ]);
   }
+
+  ForumBodyParagraphGlyphGeometry? glyphAtDisplayUtf16(int displayUtf16) {
+    _guard();
+    RangeError.checkValidIndex(displayUtf16, projection.text, 'displayUtf16');
+    final glyph = parent.layout.glyphAtDisplayUtf16(
+      displayUtf16 + metrics.startUtf16,
+    );
+    if (glyph == null) return null;
+    if (glyph.lineIndex < selector.startLine ||
+        glyph.lineIndex >= selector.endLine) {
+      throw const ForumBodyParagraphRowException(
+        ForumBodyParagraphRowFailure.source,
+      );
+    }
+    return ForumBodyParagraphGlyphGeometry(
+      lineIndex: glyph.lineIndex - selector.startLine,
+      fontBounds: glyph.fontBounds.shift(Offset(0, -selector.originY)),
+      engineClusterRange: glyph.engineClusterRange,
+      direction: glyph.direction,
+    );
+  }
 }
 
 /// Prepares one complete legal row group and its two neighbours. Every work

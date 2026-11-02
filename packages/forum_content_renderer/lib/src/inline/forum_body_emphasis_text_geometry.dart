@@ -3,6 +3,10 @@ import 'dart:collection';
 import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
+import '../paragraph/forum_body_paragraph_layout.dart';
+import '../paragraph/forum_body_paragraph_row.dart';
+import '../paragraph/forum_body_text_layout.dart';
+import 'forum_body_emphasis_row_input.dart';
 import 'forum_body_emphasis_text_input.dart';
 
 enum ForumBodyEmphasisGeometryFailure { source, line, boxes, limit }
@@ -22,12 +26,30 @@ final class ForumBodyEmphasisTargetGeometry {
     this.lineIndex,
     this.baseline,
     this.fontBounds,
-    List<TextBox> boxes,
-  ) : boxes = UnmodifiableListView(boxes);
+    List<TextBox> boxes, {
+    int? sourceStartLine,
+    int? sourceEndLine,
+    Rect? governingFontBounds,
+  }) : boxes = UnmodifiableListView(boxes),
+       sourceStartLine = sourceStartLine ?? lineIndex,
+       sourceEndLine = sourceEndLine ?? lineIndex + 1,
+       governingFontBounds = governingFontBounds ?? fontBounds;
   final ForumBodyEmphasisTextUnit unit;
+
+  /// Governing row in this geometry's context. A complete source unit may
+  /// start on an earlier row when a format/prepend scalar precedes its base.
   final int lineIndex;
+
+  /// Half-open physical row span of the entire original display grapheme.
+  final int sourceStartLine, sourceEndLine;
   final double baseline;
+
+  /// Union of the complete unit's native selection boxes, across all its rows.
   final Rect fontBounds;
+
+  /// Row inputs query the actual governing scalar. Whole/band inputs preserve
+  /// their existing complete-unit bounds; these are font frames, not ink.
+  final Rect governingFontBounds;
   final List<TextBox> boxes;
 }
 
@@ -39,12 +61,14 @@ final class ForumBodyEmphasisTextGeometry {
     this.nativeInputIdentity,
     this.lineCount,
     List<ForumBodyEmphasisTargetGeometry> targets,
+    this.rowInput,
   ) : targets = UnmodifiableListView(targets);
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyEmphasisTextInput input;
   final Object nativeInputIdentity;
   final int lineCount;
   final List<ForumBodyEmphasisTargetGeometry> targets;
+  final ForumBodyEmphasisRowInput? rowInput;
 }
 
 /// Borrows the caller's actual base lease. One part advances a physical line,
@@ -55,26 +79,61 @@ final class ForumBodyEmphasisGeometryPreparation {
     required ForumBodyEmphasisTextInput input,
     required ForumBodyTextLease base,
     required void Function() ensureOwner,
-    this.maxBoxes = 4096,
+    int maxBoxes = 4096,
+  }) : this._(
+         input: input,
+         base: base,
+         ensureOwner: ensureOwner,
+         maxBoxes: maxBoxes,
+       );
+
+  ForumBodyEmphasisGeometryPreparation.row({
+    required ForumBodyEmphasisRowInput input,
+    required ForumBodyParagraphRowView base,
+    required void Function() ensureOwner,
+    int maxBoxes = 4096,
+  }) : this._(
+         input: input.text,
+         base: base.parent,
+         row: base,
+         rowInput: input,
+         ensureOwner: ensureOwner,
+         maxBoxes: maxBoxes,
+       );
+
+  ForumBodyEmphasisGeometryPreparation._({
+    required ForumBodyEmphasisTextInput input,
+    required ForumBodyTextLease base,
+    required void Function() ensureOwner,
+    required this.maxBoxes,
+    ForumBodyParagraphRowView? row,
+    ForumBodyEmphasisRowInput? rowInput,
   }) : _input = input,
        _base = base,
+       _row = row,
+       _rowInput = rowInput,
        _ensureOwner = ensureOwner {
     if (maxBoxes < 0) throw ArgumentError.value(maxBoxes);
     try {
       _guard();
       // Same text, equal metrics or an equal native key cannot establish the
       // explicit derivation from the original author-emphasis source input.
-      if (!identical(base.content, input.glyphInput.glyphs)) {
+      if (row == null
+          ? !identical(base.content, input.glyphInput.glyphs)
+          : !identical(row.metrics, rowInput!.row) ||
+                !identical(base.content, rowInput.parentGlyphInput.glyphs)) {
         throw const ForumBodyEmphasisGeometryException(
           ForumBodyEmphasisGeometryFailure.source,
         );
       }
       _nativeInputIdentity = base.nativeInputIdentity;
-      _lineCount = switch (base) {
-        ForumBodyParagraphLease() => base.layout.lineCount,
-        ForumBodyTextBandChildLease() =>
-          base.content.projection.text.isEmpty ? 0 : 1,
-      };
+      _lineCount =
+          row?.metrics.lineCount ??
+          switch (base) {
+            ForumBodyParagraphLease() => base.layout.lineCount,
+            ForumBodyTextBandChildLease() =>
+              base.content.projection.text.isEmpty ? 0 : 1,
+          };
       _guard();
     } catch (_) {
       close();
@@ -84,9 +143,13 @@ final class ForumBodyEmphasisGeometryPreparation {
   final int maxBoxes;
   ForumBodyEmphasisTextInput? _input;
   ForumBodyTextLease? _base;
+  ForumBodyParagraphRowView? _row;
+  ForumBodyEmphasisRowInput? _rowInput;
   void Function()? _ensureOwner;
   Object? _nativeInputIdentity;
   var _lineCount = 0, _line = 0, _unit = 0, _box = 0, _boxCount = 0;
+  int? _unitEndLine;
+  ForumBodyParagraphGlyphGeometry? _governing;
   List<TextBox>? _boxes;
   Rect? _bounds;
   List<ForumBodyEmphasisTargetGeometry>? _targets = [];
@@ -103,41 +166,37 @@ final class ForumBodyEmphasisGeometryPreparation {
       _guard();
       while (used < maxParts && !isReady) {
         _guard();
-        final input = _input!, base = _base!;
+        final input = _input!;
         if (_unit == input.units.length) {
           _result = ForumBodyEmphasisTextGeometry._(
             input,
             _nativeInputIdentity!,
             _lineCount,
             _targets!,
+            _rowInput,
           );
           _targets = null;
         } else {
           final unit = input.units[_unit];
-          final end = switch (base) {
-            ForumBodyParagraphLease() when _line < _lineCount =>
-              base.layout.lines[_line].coverageEndUtf16,
-            ForumBodyTextBandChildLease() when _line == 0 =>
-              base.content.projection.text.length,
-            _ => throw const ForumBodyEmphasisGeometryException(
-              ForumBodyEmphasisGeometryFailure.line,
-            ),
-          };
+          final end = _lineEnd(_line);
           if (unit.startUtf16 >= end) {
             _line++;
+          } else if (_row != null && _unitEndLine == null) {
+            _unitEndLine = _line;
+          } else if (_row != null && unit.endUtf16 > _lineEnd(_unitEndLine!)) {
+            _unitEndLine = _unitEndLine! + 1;
           } else if (_boxes == null) {
-            final start = base is ForumBodyParagraphLease
-                ? base.layout.lines[_line].coverageStartUtf16
-                : 0;
-            if (unit.startUtf16 < start || unit.endUtf16 > end) {
+            if (unit.startUtf16 < _lineStart(_line) ||
+                unit.endUtf16 > _lineEnd(_unitEndLine ?? _line)) {
               throw const ForumBodyEmphasisGeometryException(
                 ForumBodyEmphasisGeometryFailure.line,
               );
             }
-            final boxes = base.layout.selectionBoxes(
+            final boxes = _selectionLayout.selectionBoxes(
               unit.startUtf16,
               unit.endUtf16,
             );
+            _guard();
             if (boxes.isEmpty) {
               throw const ForumBodyEmphasisGeometryException(
                 ForumBodyEmphasisGeometryFailure.boxes,
@@ -165,20 +224,52 @@ final class ForumBodyEmphasisGeometryPreparation {
               );
             }
             _bounds = _bounds?.expandToInclude(rect) ?? rect;
+          } else if (_row != null && _governing == null) {
+            if (_boxCount >= maxBoxes) {
+              throw const ForumBodyEmphasisGeometryException(
+                ForumBodyEmphasisGeometryFailure.limit,
+              );
+            }
+            _boxCount++;
+            final glyph = _row!.glyphAtDisplayUtf16(unit.governingUtf16);
+            _guard();
+            if (glyph == null ||
+                glyph.lineIndex < _line ||
+                glyph.lineIndex > _unitEndLine!) {
+              throw const ForumBodyEmphasisGeometryException(
+                ForumBodyEmphasisGeometryFailure.boxes,
+              );
+            }
+            final rect = glyph.fontBounds;
+            if (!rect.left.isFinite ||
+                !rect.top.isFinite ||
+                !rect.right.isFinite ||
+                !rect.bottom.isFinite ||
+                rect.width < 0 ||
+                rect.height < 0) {
+              throw const ForumBodyEmphasisGeometryException(
+                ForumBodyEmphasisGeometryFailure.boxes,
+              );
+            }
+            _governing = glyph;
           } else {
+            final governingLine = _governing?.lineIndex ?? _line;
             _targets!.add(
               ForumBodyEmphasisTargetGeometry._(
                 unit,
-                _line,
-                base is ForumBodyParagraphLease
-                    ? base.layout.lines[_line].baseline
-                    : base.layout.alphabeticBaseline,
+                governingLine,
+                _baseline(governingLine),
                 _bounds!,
                 _boxes!,
+                sourceStartLine: _line,
+                sourceEndLine: (_unitEndLine ?? _line) + 1,
+                governingFontBounds: _governing?.fontBounds,
               ),
             );
             _boxes = null;
             _bounds = null;
+            _unitEndLine = null;
+            _governing = null;
             _unit++;
           }
         }
@@ -217,6 +308,44 @@ final class ForumBodyEmphasisGeometryPreparation {
     if (_closed || !_base!.isActive || _base!.layout.isDisposed) {
       throw StateError('Emphasis geometry owner is retired');
     }
+    final row = _row;
+    if (row != null) {
+      row.nativeInputIdentity;
+      if (_closed) throw StateError('Emphasis row geometry owner is retired');
+    }
+  }
+
+  ForumBodyTextLayout get _selectionLayout => _row ?? _base!.layout;
+  int _lineStart(int line) {
+    final actual = _paragraphLine(line);
+    return actual == null
+        ? 0
+        : actual.coverageStartUtf16 - (_row?.metrics.startUtf16 ?? 0);
+  }
+
+  int _lineEnd(int line) {
+    final actual = _paragraphLine(line);
+    return actual == null
+        ? _base!.content.projection.text.length
+        : actual.coverageEndUtf16 - (_row?.metrics.startUtf16 ?? 0);
+  }
+
+  double _baseline(int line) {
+    final actual = _paragraphLine(line);
+    return actual == null
+        ? _base!.layout.alphabeticBaseline
+        : actual.baseline - (_row?.selector.originY ?? 0);
+  }
+
+  ForumBodyParagraphLine? _paragraphLine(int line) {
+    if (line < 0 || line >= _lineCount) {
+      throw const ForumBodyEmphasisGeometryException(
+        ForumBodyEmphasisGeometryFailure.line,
+      );
+    }
+    final base = _base!;
+    if (base is! ForumBodyParagraphLease) return null;
+    return base.layout.lines[line + (_row?.selector.startLine ?? 0)];
   }
 
   void close() {
@@ -224,11 +353,14 @@ final class ForumBodyEmphasisGeometryPreparation {
     _closed = true;
     _input = null;
     _base = null;
+    _row = null;
+    _rowInput = null;
     _ensureOwner = null;
     _nativeInputIdentity = null;
     _targets = null;
     _boxes = null;
     _bounds = null;
+    _governing = null;
     _result = null;
   }
 }

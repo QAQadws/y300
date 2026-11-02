@@ -243,6 +243,17 @@ final class ForumBodyNativeParagraphPainter
 
   TextPosition getPositionForOffset(Offset offset) =>
       _laidOut.getPositionForOffset(offset - _paintOffset);
+  ui.GlyphInfo? glyphInfoAt(int offset) {
+    final glyph = _laidOut.getGlyphInfoAt(offset);
+    return glyph == null
+        ? null
+        : ui.GlyphInfo(
+            glyph.graphemeClusterLayoutBounds.shift(_paintOffset),
+            glyph.graphemeClusterCodeUnitRange,
+            glyph.writingDirection,
+          );
+  }
+
   void paint(Canvas canvas, Offset offset) =>
       canvas.drawParagraph(_laidOut, offset + _paintOffset);
   void dispose() {

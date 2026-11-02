@@ -19,6 +19,7 @@ export 'forum_body_paragraph_geometry.dart'
         ForumBodyParagraphLayoutException,
         ForumBodyParagraphWindow,
         ForumBodyFirstLineIndentGeometry,
+        ForumBodyParagraphGlyphGeometry,
         ForumBodyParagraphLine;
 
 /// Owns one native paragraph, shared by geometry, paint, hit-test and boxes.
@@ -397,6 +398,41 @@ final class ForumBodyParagraphLayout
             box.direction,
           ),
     ]);
+  }
+
+  /// Query the actual governing scalar inside a complete source grapheme.
+  /// Ordinary paragraphs only add an optional mechanical prefix: do not use
+  /// the source projection's legal-boundary normalization to move this query
+  /// back to an earlier format/control scalar or a different physical row.
+  ForumBodyParagraphGlyphGeometry? glyphAtDisplayUtf16(int displayUtf16) {
+    _ensureOpen();
+    RangeError.checkValidIndex(displayUtf16, projection.text, 'displayUtf16');
+    final engineOffset =
+        displayUtf16 + (_engineProjection?.enginePrefix.length ?? 0);
+    final glyph = _painter.glyphInfoAt(engineOffset);
+    final line = _painter.getLineNumberAt(engineOffset);
+    if (glyph == null || line == null) return null;
+    final range = glyph.graphemeClusterCodeUnitRange;
+    if (line < 0 ||
+        line >= lines.length ||
+        range.start > engineOffset ||
+        range.end <= engineOffset) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    final rect = glyph.graphemeClusterLayoutBounds;
+    return ForumBodyParagraphGlyphGeometry(
+      lineIndex: line,
+      fontBounds: Rect.fromLTRB(
+        rect.left * _paintScale + horizontalInset,
+        rect.top * _paintScale,
+        rect.right * _paintScale + horizontalInset,
+        rect.bottom * _paintScale,
+      ),
+      engineClusterRange: range,
+      direction: glyph.writingDirection,
+    );
   }
 
   ForumBodyParagraphFragment fragment(int startLine, int endLine) {
