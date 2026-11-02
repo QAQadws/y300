@@ -13,6 +13,7 @@ import 'forum_body_paragraph_input_admission.dart';
 import 'forum_body_horizontal_text_frame.dart';
 
 part 'forum_body_emphasis_glyph_input.dart';
+part 'forum_body_paragraph_paint_input.dart';
 
 enum ForumBodyParagraphInputFailure {
   identity,
@@ -55,6 +56,7 @@ final class ForumBodyParagraphContent {
     required List<ForumBodyStyleIssue> issues,
     this.isSourceFree = false,
     this.appliesFirstLineIndent = true,
+    this.paintLayer = ForumBodyParagraphPaintLayer.all,
   }) : runs = List.unmodifiable(runs),
        issues = List.unmodifiable(issues);
 
@@ -74,7 +76,8 @@ final class ForumBodyParagraphContent {
       runs = UnmodifiableListView(runs),
       issues = original.issues,
       isSourceFree = original.isSourceFree,
-      appliesFirstLineIndent = original.appliesFirstLineIndent;
+      appliesFirstLineIndent = original.appliesFirstLineIndent,
+      paintLayer = original.paintLayer;
 
   // Only the projection and explicit first-line ownership change. Both source
   // tables already belong to immutable content; a bounded row preparation must
@@ -92,7 +95,23 @@ final class ForumBodyParagraphContent {
       runs = original.runs,
       issues = original.issues,
       isSourceFree = original.isSourceFree,
-      appliesFirstLineIndent = appliesIndent ?? original.appliesFirstLineIndent;
+      appliesFirstLineIndent = appliesIndent ?? original.appliesFirstLineIndent,
+      paintLayer = original.paintLayer;
+
+  ForumBodyParagraphContent._paintLayer(
+    ForumBodyParagraphContent original,
+    this.paintLayer,
+  ) : identity = original.identity,
+      path = original.path,
+      fontRevision = original.fontRevision,
+      styleRevision = original.styleRevision,
+      style = original.style,
+      layoutMode = original.layoutMode,
+      projection = original.projection,
+      runs = original.runs,
+      issues = original.issues,
+      isSourceFree = original.isSourceFree,
+      appliesFirstLineIndent = original.appliesFirstLineIndent;
 
   /// A format-generated empty font strut, not a DOM/text context. Its empty
   /// projection's zero never claims source rune zero and must not enter the
@@ -129,6 +148,7 @@ final class ForumBodyParagraphContent {
 
   /// BR partitions keep source/style but do not start a new formatting context.
   final bool appliesFirstLineIndent;
+  final ForumBodyParagraphPaintLayer paintLayer;
 
   // Frozen style work is shared by cold layouts and warm-cache admission.
   late final horizontalInset =
@@ -152,6 +172,7 @@ final class ForumBodyParagraphContent {
           issues: issues,
           isSourceFree: isSourceFree,
           appliesFirstLineIndent: applies,
+          paintLayer: paintLayer,
         );
 
   late final indentedProjection = HtmlInlineTextProjection.build(
@@ -215,20 +236,35 @@ final class ForumBodyParagraphContent {
       issues: issues,
       isSourceFree: isSourceFree,
       appliesFirstLineIndent: appliesFirstLineIndent,
+      paintLayer: paintLayer,
     );
   }
 
   /// No recognizers are retained; interaction uses the same layout coordinates.
   late final TextSpan textSpan = TextSpan(
-    style: style.textStyle,
+    style: _paintStyle(style.textStyle),
     children: [
       for (final part in projection.parts)
         TextSpan(
           text: part.text,
-          style: forumBodyPaintTextStyle(runs[part.runIndex].style),
+          style: _paintStyle(
+            forumBodyPaintTextStyle(runs[part.runIndex].style),
+          ),
         ),
     ],
   );
+
+  TextStyle _paintStyle(TextStyle visible) => switch (paintLayer) {
+    ForumBodyParagraphPaintLayer.all => visible,
+    ForumBodyParagraphPaintLayer.background => visible.copyWith(
+      foreground: Paint()..color = const Color(0x00000000),
+      shadows: const [],
+      decoration: TextDecoration.none,
+    ),
+    ForumBodyParagraphPaintLayer.foreground => visible.copyWith(
+      background: Paint()..color = const Color(0x00000000),
+    ),
+  };
 }
 
 /// Complex containers/resources require their own block/inline layout. They

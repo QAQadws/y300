@@ -1005,7 +1005,10 @@ final class ForumBodyParagraphBudgetProbe {
 }
 
 int _minimumEstimatedBytes(ForumBodyParagraphContent content) =>
-    4096 + content.projection.text.length * 96 + content.runs.length * 256;
+    4096 +
+    content.projection.text.length * 96 +
+    content.runs.length * 256 +
+    (content.paintLayer == ForumBodyParagraphPaintLayer.all ? 0 : 16);
 
 int _minimumInlineEstimatedBytes(ForumBodyInlineSpanContent content) =>
     4096 +
@@ -1203,6 +1206,7 @@ final class _LayoutKey {
       projectionRevision = HtmlDisplayTextProjection.revision,
       projection = content.projection,
       span = content.textSpan,
+      paintLayer = content.paintLayer,
       layoutMode = content.layoutMode,
       align = content.style.textAlign,
       direction = content.style.textDirection,
@@ -1220,6 +1224,7 @@ final class _LayoutKey {
   final int projectionRevision;
   final HtmlDisplayTextProjection projection;
   final TextSpan span;
+  final ForumBodyParagraphPaintLayer paintLayer;
   final ForumBodyParagraphLayoutMode layoutMode;
   final TextAlign align;
   final TextDirection direction;
@@ -1247,6 +1252,7 @@ final class _LayoutKey {
       projectionRevision == other.projectionRevision &&
       projection.hasSameSourceMapping(other.projection) &&
       span == other.span &&
+      paintLayer == other.paintLayer &&
       layoutMode == other.layoutMode &&
       align == other.align &&
       direction == other.direction &&
@@ -1263,6 +1269,7 @@ final class _LayoutKey {
     projectionRevision,
     projection.sourceMappingHash,
     span,
+    paintLayer,
     layoutMode,
     align,
     direction,
