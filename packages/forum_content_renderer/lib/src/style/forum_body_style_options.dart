@@ -143,6 +143,34 @@ final class ForumBodyResolvedStyle {
   final bool visibilityHidden;
   final bool indentFromReader;
   final bool alignmentFromReader;
+
+  ForumBodyResolvedStyle withTextEmphasis(ForumBodyTextEmphasis value) =>
+      value == textEmphasis
+      ? this
+      : ForumBodyResolvedStyle(
+          textStyle: textStyle,
+          role: role,
+          textAlign: textAlign,
+          textDirection: textDirection,
+          whiteSpace: whiteSpace,
+          rubyPosition: rubyPosition,
+          textEmphasis: value,
+          indent: indent,
+          margin: margin,
+          padding: padding,
+          box: box,
+          lineHeight: lineHeight,
+          hidden: hidden,
+          strong: strong,
+          ownDecoration: ownDecoration,
+          ownBackground: ownBackground,
+          linkTarget: linkTarget,
+          boxBackground: boxBackground,
+          display: display,
+          visibilityHidden: visibilityHidden,
+          indentFromReader: indentFromReader,
+          alignmentFromReader: alignmentFromReader,
+        );
 }
 
 /// CSS numeric line-height inherits as a factor; length/percentage computes

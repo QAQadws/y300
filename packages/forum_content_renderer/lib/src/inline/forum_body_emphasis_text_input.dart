@@ -25,11 +25,12 @@ final class ForumBodyEmphasisTextUnit {
 /// The actual paragraph identity is retained for subsequent qualified binding.
 final class ForumBodyEmphasisTextInput {
   ForumBodyEmphasisTextInput._(
-    this.content,
+    this.glyphInput,
     List<ForumBodyEmphasisTextUnit> units,
   ) : units = UnmodifiableListView(units);
-  static const revision = 1;
-  final ForumBodyParagraphContent content;
+  static const revision = 2;
+  final ForumBodyEmphasisGlyphInput glyphInput;
+  ForumBodyParagraphContent get content => glyphInput.original;
   final List<ForumBodyEmphasisTextUnit> units;
 }
 
@@ -45,12 +46,15 @@ final class ForumBodyEmphasisTextPreparation {
     if (content.isSourceFree) {
       throw ArgumentError('Emphasis requires actual source text');
     }
+    _glyphPreparation = ForumBodyEmphasisGlyphPreparation(content: content);
     _ranges = content.projection
         .graphemeRanges(startUtf16: 0, endUtf16: content.projection.text.length)
         .iterator;
   }
   final int maxUnits;
   ForumBodyParagraphContent? _content;
+  ForumBodyEmphasisGlyphPreparation? _glyphPreparation;
+  ForumBodyEmphasisGlyphInput? _glyphInput;
   Iterator<_Range>? _ranges;
   List<ForumBodyEmphasisTextUnit>? _units = [];
   ForumBodyEmphasisTextInput? _result;
@@ -68,6 +72,15 @@ final class ForumBodyEmphasisTextPreparation {
     var used = 0;
     try {
       while (used < maxParts && !isReady) {
+        if (_glyphInput == null) {
+          final preparation = _glyphPreparation!;
+          used += preparation.advance(maxParts: maxParts - used);
+          if (preparation.isReady) {
+            _glyphInput = preparation.takeInput();
+            _glyphPreparation = null;
+          }
+          continue;
+        }
         final content = _content!;
         final range = _range;
         if (range == null) {
@@ -80,7 +93,8 @@ final class ForumBodyEmphasisTextPreparation {
           } else {
             // Transfer the retired write list; finalization never rescans or
             // copies the accumulated targets in one nominal work unit.
-            _result = ForumBodyEmphasisTextInput._(content, _units!);
+            _result = ForumBodyEmphasisTextInput._(_glyphInput!, _units!);
+            _glyphInput = null;
             _units = null;
             _ranges = null;
             _content = null;
@@ -163,6 +177,9 @@ final class ForumBodyEmphasisTextPreparation {
   void close() {
     if (_closed) return;
     _closed = true;
+    _glyphPreparation?.close();
+    _glyphPreparation = null;
+    _glyphInput = null;
     _content = null;
     _ranges = null;
     _range = null;
