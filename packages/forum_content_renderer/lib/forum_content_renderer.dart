@@ -92,6 +92,7 @@ export 'src/inline/forum_body_emphasis_mark.dart'
 export 'src/inline/forum_body_emphasis_mark_request.dart';
 export 'src/inline/forum_body_emphasis_text_input.dart';
 export 'src/inline/forum_body_emphasis_text_geometry.dart';
+export 'src/inline/forum_body_emphasis_line_layout.dart';
 export 'src/paragraph/forum_body_paragraph_surface.dart';
 export 'src/style/forum_body_length.dart';
 export 'src/style/forum_body_box_style.dart';

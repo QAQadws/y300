@@ -148,8 +148,9 @@ final class ForumBodyEmphasisMarkLayout
     this.width,
     this.height,
     this.alphabeticBaseline,
+    this.fontBounds,
   );
-  static const revision = 1;
+  static const revision = 2;
   static double resolveScale(
     ForumBodyEmphasisMarkInput input,
     TextScaler textScaler,
@@ -193,11 +194,18 @@ final class ForumBodyEmphasisMarkLayout
           ForumBodyParagraphLayoutFailure.width,
         );
       }
+      var bounds = Rect.fromLTWH(0, 0, painter.width, painter.height);
+      for (final box in painter.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: input.mark.length),
+      )) {
+        bounds = bounds.expandToInclude(box.toRect());
+      }
       return ForumBodyEmphasisMarkLayout._(
         painter,
         painter.width,
         painter.height,
         lines.single.baseline,
+        bounds,
       );
     } catch (_) {
       painter.dispose();
@@ -208,6 +216,9 @@ final class ForumBodyEmphasisMarkLayout
   final double width;
   final double height;
   final double alphabeticBaseline;
+
+  /// Native row plus complete marker font selection, not measured glyph ink.
+  final Rect fontBounds;
   @override
   int get lineCount => 1;
   @override
